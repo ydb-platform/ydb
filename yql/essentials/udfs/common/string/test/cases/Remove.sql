@@ -1,4 +1,12 @@
-/* syntax version 1 */
+$input = AsList(
+    <|value:"fdsa"|>,
+    <|value:"aswedfg"|>,
+    <|value:"asdadsaasd"|>,
+    <|value:"gdsfsassas"|>,
+    <|value:""|>,
+    <|value:"`Привет, мир!`"|>
+);
+
 SELECT
     value,
     String::RemoveAll(value, "as") AS all,
@@ -11,4 +19,4 @@ SELECT
     String::RemoveAll(value, "`") AS hwruall,
     String::RemoveFirst(value, "`") AS hwrufirst,
     String::RemoveLast(value, "`") AS hwrulast,
-FROM Input;
+FROM AS_TABLE($input);

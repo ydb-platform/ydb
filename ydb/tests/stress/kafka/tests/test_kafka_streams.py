@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import pytest
+import library.python.port_manager
 import yatest
 
 from ydb.tests.library.stress.fixtures import StressFixture
@@ -9,7 +10,7 @@ from ydb.tests.library.stress.fixtures import StressFixture
 class TestYdbTopicWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        port_manager = yatest.common.network.PortManager()
+        port_manager = library.python.port_manager.PortManager()
         self.kafka_api_port = port_manager.get_port()
         yield from self.setup_cluster(
             kafka_api_port=self.kafka_api_port,
@@ -20,15 +21,37 @@ class TestYdbTopicWorkload(StressFixture):
             ],
         )
 
-    def test(self):
+    def get_kafka_api_ports(self):
+        ports = []
+        for node in self.cluster.nodes.values():
+            ports.append(node.get_kafka_api_port())
+        return ports
+
+    def get_kafka_api_port(self, database):
+        tenant_slots = [
+            slot for slot in self.cluster.slots.values()
+            if getattr(slot, "_tenant_affiliation", None) == database
+        ]
+        if tenant_slots:
+            return tenant_slots[-1].get_kafka_api_port()
+
+        if database == self.database:
+            return self.get_kafka_api_ports()[-1]
+
+        raise RuntimeError(f"Cannot find Kafka proxy port for database {database}")
+
+    def run_workload(self, database):
         yatest.common.execute([
             yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
             "--endpoint", self.endpoint,
-            "--database", self.database,
-            "--bootstrap", f"http://localhost:{self.kafka_api_port}",
+            "--database", database,
+            "--bootstrap", f"http://localhost:{self.get_kafka_api_port(database)}",
             "--source-path", "test-topic",
             "--target-path", "target-topic",
             "--consumer", "workload-consumer-0",
             "--num-workers", "2",
-            "--duration", "120"
+            "--duration", "280"
         ])
+
+    def test(self):
+        self.run_workload(self.database)

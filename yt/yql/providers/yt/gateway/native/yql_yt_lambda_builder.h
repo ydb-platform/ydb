@@ -32,10 +32,10 @@ struct TSession;
 struct TNativeYtLambdaBuilder: public TGatewayLambdaBuilder {
     TNativeYtLambdaBuilder(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TSession& session, const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider,
-        TLangVersion langver);
+        TLangVersion langver, TRuntimeSettings::TConstPtr runtimeSettings);
 
     TNativeYtLambdaBuilder(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TYtNativeServices& services, const TSession& session,
-        TLangVersion langver);
+        TLangVersion langver, TRuntimeSettings::TConstPtr runtimeSettings);
 };
 
 NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(NYql::NCommon::TCodecContext* codecCtx,

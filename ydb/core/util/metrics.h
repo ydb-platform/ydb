@@ -7,10 +7,13 @@
 
 namespace std {
 
+Y_PRAGMA_DIAGNOSTIC_PUSH
+Y_PRAGMA("GCC diagnostic ignored \"-Winvalid-specialization\"")
 template <>
 struct make_signed<double> {
     using type = double;
 };
+Y_PRAGMA_DIAGNOSTIC_POP
 
 }
 

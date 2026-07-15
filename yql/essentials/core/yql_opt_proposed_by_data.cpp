@@ -1,5 +1,7 @@
 #include "yql_opt_proposed_by_data.h"
 
+#include <utility>
+
 namespace NYql {
 
 namespace {
@@ -61,7 +63,7 @@ private:
         }
 
         ChooseRoot(std::move(input), output);
-        return TStatus(TStatus::Repeat, true);
+        return TStatus(TStatus::Repeat, /*hasRestart=*/true);
     }
 
     void Rewind() final {
@@ -136,7 +138,7 @@ private:
         }
 
         ChooseRoot(std::move(input), output);
-        return TStatus(TStatus::Repeat, true);
+        return TStatus(TStatus::Repeat, /*hasRestart=*/true);
     }
 
     void ChooseRoot(TExprNode::TPtr&& input, TExprNode::TPtr& output) {
@@ -156,10 +158,10 @@ private:
 template <ESource Source, typename TGetTransformer, typename TFinish>
 class TSpecificDataProposalsInspector : public TGraphTransformerBase {
 public:
-    TSpecificDataProposalsInspector(const TTypeAnnotationContext& types, const TString& provider, TGetTransformer getTransformer,
+    TSpecificDataProposalsInspector(const TTypeAnnotationContext& types, TString provider, TGetTransformer getTransformer,
         TFinish finish)
         : Types_(types)
-        , Provider_(provider)
+        , Provider_(std::move(provider))
         , GetTransformer_(getTransformer)
         , Finish_(finish)
     {}
@@ -197,7 +199,7 @@ private:
         }
 
         ChooseRoot(std::move(input), output);
-        return TStatus(TStatus::Repeat, true);
+        return TStatus(TStatus::Repeat, /*hasRestart=*/true);
     }
 
     void Rewind() final {
@@ -267,7 +269,7 @@ private:
         }
 
         ChooseRoot(std::move(input), output);
-        return TStatus(TStatus::Repeat, true);
+        return TStatus(TStatus::Repeat, /*hasRestart=*/true);
     }
 
     void ChooseRoot(TExprNode::TPtr&& input, TExprNode::TPtr& output) {

@@ -58,7 +58,7 @@ public:
             TStringOutput rqs(req);
             TStringBuf userAgent = "User-Agent: Mozilla/5.0 (compatible; YQL/1.0)";
 
-            IOutputStream::TPart request[] = {
+            auto request = std::to_array<IOutputStream::TPart>({
                 IOutputStream::TPart(method),
                 IOutputStream::TPart(" ", 1),
                 IOutputStream::TPart(path.data(), path.size()),
@@ -69,8 +69,9 @@ public:
                 IOutputStream::TPart::CrLf(),
                 IOutputStream::TPart(userAgent.data(), userAgent.size()),
                 IOutputStream::TPart::CrLf(),
-            };
-            rqs.Write(request, Y_ARRAY_SIZE(request));
+            });
+
+            rqs.Write(request.data(), request.size());
             if (!additionalHeaders.Empty()) {
                 additionalHeaders.OutTo(&rqs);
             }

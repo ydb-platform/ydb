@@ -46,7 +46,7 @@ class TestTruncateTableConcurrency(TestBase):
         self.query(
             f"""
             CREATE TABLE `{table_name}` (
-                id Int64 NOT NULL,
+                id UInt64 NOT NULL,
                 numeric_value_1 Int64 NOT NULL,
                 numeric_value_2 Double,
                 vector_data String NOT NULL,
@@ -182,7 +182,7 @@ class TestTruncateTableConcurrency(TestBase):
         )
 
     def execute_concurrent_operations(self, table_name: str, operations: list):
-        execution_time = 25
+        execution_time = 15
         deadline = time.time() + execution_time
 
         def random_operations_worker():

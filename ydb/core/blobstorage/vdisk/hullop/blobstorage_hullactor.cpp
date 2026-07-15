@@ -1,12 +1,17 @@
 #include "blobstorage_hullactor.h"
 #include "blobstorage_hullcommit.h"
 #include "blobstorage_hullcompact.h"
+#include "blobstorage_hullcompactbroker.h"
 #include "blobstorage_buildslice.h"
 #include "hullop_compactfreshappendix.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_selector.h>
 #include <ydb/core/blobstorage/vdisk/hullop/hullcompdelete/blobstorage_hullcompdelete.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_fullsyncsst_add.h>
+
+#include <type_traits>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_HULLCOMP
 
 namespace NKikimr {
 
@@ -64,7 +69,7 @@ namespace NKikimr {
         }
 
         void Compacted(const TActorContext& ctx, const std::pair<std::optional<NHullComp::TFullCompactionAttrs>, bool>& info) {
-            if (Enabled() && FullCompactionAttrs == info.first && info.second) {
+            if (bool(FullCompactionAttrs) && FullCompactionAttrs == info.first && info.second) {
                 // full compaction finished
                 for (const auto &x : Requests) {
                     ctx.Send(x.Recipient, new TEvHullCompactResult(x.Type, x.RequestId));
@@ -126,9 +131,7 @@ namespace NKikimr {
             std::move(barriersSnap), std::move(levelSnap), it, firstLsn, lastLsn, TDuration::Max(), {},
             allowGarbageCollection, false));
 
-        LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
-                VDISKP(hullCtx->VCtx->VDiskLogPrefix,
-                    "%s: fresh scheduled", PDiskSignatureForHullDbKey<TKey>().ToString().data()));
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(hullCtx->VCtx->VDiskLogPrefix, "%s: fresh scheduled", PDiskSignatureForHullDbKey<TKey>().ToString().data()));
 
         Y_VERIFY_S(lastLsn <= rtCtx->LsnMngr->GetConfirmedLsnForHull(), hullCtx->VCtx->VDiskLogPrefix
                 << "Last fresh lsn MUST be confirmed; lastLsn# " << lastLsn
@@ -136,6 +139,8 @@ namespace NKikimr {
 
         auto actorId = RunInBatchPool(ctx, compaction.release());
         rtCtx->LevelIndex->ActorCtx->ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+
+        ctx.Send(rtCtx->SkeletonId, new TEvFreshCompactionStarted);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -195,7 +200,43 @@ namespace NKikimr {
         THugeBlobCtxPtr HugeBlobCtx;
         ui32 MinHugeBlobInBytes;
 
+        enum class ECompactionTokenState {
+            NotNeeded,
+            Idle,
+            Requested,
+            Acquired,
+            InProgress,
+        };
+
+        ECompactionTokenState CompactionTokenState = ECompactionTokenState::NotNeeded;
+        TCompactionTokenId CompactionToken = 0;
+
+        TMonotonic CompactionWaitingStartTime;
+        TMonotonic CompactionWorkingStartTime;
+
         friend class TActorBootstrapped<TThis>;
+
+        void UpdateTimingMetrics(const TActorContext& ctx) {
+            if (CompactionTokenState == ECompactionTokenState::NotNeeded) {
+                return;
+            }
+            auto& group = HullDs->HullCtx->LsmHullGroup;
+            const TMonotonic now = ctx.Monotonic();
+
+            if (CompactionWaitingStartTime != TMonotonic()) {
+                group.LsmCompactionWaitingTimeSeconds() =
+                    (now - CompactionWaitingStartTime).Seconds();
+            } else {
+                group.LsmCompactionWaitingTimeSeconds() = 0;
+            }
+
+            if (CompactionWorkingStartTime != TMonotonic()) {
+                group.LsmCompactionWorkingTimeSeconds() =
+                    (now - CompactionWorkingStartTime).Seconds();
+            } else {
+                group.LsmCompactionWorkingTimeSeconds() = 0;
+            }
+        }
 
         void Bootstrap(const TActorContext &ctx) {
             TThis::Become(&TThis::StateFunc);
@@ -239,8 +280,9 @@ namespace NKikimr {
         void HandleWakeup(const TActorContext& ctx) {
             Y_VERIFY_S(CompactionScheduled, HullDs->HullCtx->VCtx->VDiskLogPrefix);
             CompactionScheduled = false;
+            UpdateTimingMetrics(ctx);
             if (ctx.Monotonic() >= NextCompactionWakeup) {
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, "Try to schedule compactions");
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Try to schedule compactions");
                 ScheduleCompaction(ctx);
             } else {
                 ScheduleCompactionWakeup(ctx);
@@ -260,6 +302,8 @@ namespace NKikimr {
         void RunLevelCompaction(const TActorContext &ctx, TVector<TOrderedLevelSegmentsPtr> &vec, bool isFullCompaction) {
             RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateCompInProgress);
 
+            CompactionWorkingStartTime = ctx.Monotonic();
+
             // set up lsns + find out number of elements to merge
             ui64 firstLsn = ui64(-1);
             ui64 lastLsn = 0;
@@ -274,14 +318,78 @@ namespace NKikimr {
             // set up iterator
             TLevelSliceForwardIterator it(HullDs->HullCtx, vec);
             it.SeekToFirst();
-            // set using trottle, enable only for full compaction
-            bool useThrottle = isFullCompaction;
+            // set using throttler, enable only for full compaction
+            bool useThrottler = isFullCompaction;
 
             std::unique_ptr<TLevelCompaction> compaction(new TLevelCompaction(HullDs->HullCtx, RTCtx, HugeBlobCtx,
                 MinHugeBlobInBytes, nullptr, nullptr, std::move(barriersSnap), std::move(levelSnap),
-                it, firstLsn, lastLsn, TDuration::Minutes(2), {}, AllowGarbageCollection, useThrottle));
+                it, firstLsn, lastLsn, TDuration::Minutes(2), {}, AllowGarbageCollection, useThrottler));
             NActors::TActorId actorId = RunInBatchPool(ctx, compaction.release());
             ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+        }
+
+        void AccountSelectedStrategy() {
+            auto& group = HullDs->HullCtx->CompactionStrategyGroup;
+
+            if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
+                switch (CompactionTask->SelectStrategy) {
+                    case NHullComp::ESelectStrategy::DelSst:
+                        ++group.BlobsDelSst();
+                        break;
+                    case NHullComp::ESelectStrategy::PromoteSsts:
+                        ++group.BlobsPromoteSsts();
+                        break;
+                    case NHullComp::ESelectStrategy::Explicit:
+                        ++group.BlobsExplicit();
+                        break;
+                    case NHullComp::ESelectStrategy::BalanceLevel:
+                        ++group.BlobsBalance();
+                        ++group.BlobsBalanceLevel();
+                        break;
+                    case NHullComp::ESelectStrategy::BalanceFull:
+                        ++group.BlobsBalance();
+                        ++group.BlobsBalanceFull();
+                        break;
+                    case NHullComp::ESelectStrategy::FreeSpace:
+                        ++group.BlobsFreeSpace();
+                        break;
+                    case NHullComp::ESelectStrategy::Squeeze:
+                        ++group.BlobsSqueeze();
+                        break;
+                    case NHullComp::ESelectStrategy::None:
+                        break;
+                }
+            } else if constexpr (std::is_same_v<TKey, TKeyBlock>) {
+                switch (CompactionTask->SelectStrategy) {
+                    case NHullComp::ESelectStrategy::PromoteSsts:
+                        ++group.BlocksPromoteSsts();
+                        break;
+                    case NHullComp::ESelectStrategy::Explicit:
+                        ++group.BlocksExplicit();
+                        break;
+                    case NHullComp::ESelectStrategy::BalanceLevel:
+                    case NHullComp::ESelectStrategy::BalanceFull:
+                        ++group.BlocksBalance();
+                        break;
+                    default:
+                        break;
+                }
+            } else if constexpr (std::is_same_v<TKey, TKeyBarrier>) {
+                switch (CompactionTask->SelectStrategy) {
+                    case NHullComp::ESelectStrategy::PromoteSsts:
+                        ++group.BarriersPromoteSsts();
+                        break;
+                    case NHullComp::ESelectStrategy::Explicit:
+                        ++group.BarriersExplicit();
+                        break;
+                    case NHullComp::ESelectStrategy::BalanceLevel:
+                    case NHullComp::ESelectStrategy::BalanceFull:
+                        ++group.BarriersBalance();
+                        break;
+                    default:
+                        break;
+                }
+            }
         }
 
         void Handle(typename TSelected::TPtr &ev, const TActorContext &ctx) {
@@ -293,9 +401,7 @@ namespace NKikimr {
             NHullComp::EAction action = ev->Get()->Action;
             CompactionTask = std::move(ev->Get()->CompactionTask);
 
-            LOG_LOG(ctx, action != NHullComp::ActNothing ? NLog::PRI_INFO : NLog::PRI_DEBUG,
-                NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: selected compaction %s",
-                PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionTask->ToString().data()));
+            YDB_LOG_CTX_COMP(ctx, action != NHullComp::ActNothing ? NLog::PRI_INFO : NLog::PRI_DEBUG, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: selected compaction %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionTask->ToString().data()));
 
             switch (action) {
                 case NHullComp::ActNothing: {
@@ -311,14 +417,15 @@ namespace NKikimr {
                     Y_VERIFY_S(CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty(),
                         HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     if (CompactionTask->GetHugeBlobsToDelete().Empty() && CompactionTask->GetHugeBlobsAllocated().Empty()) {
+                        AccountSelectedStrategy();
                         ApplyCompactionResult(ctx, {}, {}, 0);
                     } else {
                         // switch compaction state to pre-compaction to block any attempts of concurrent compaction
                         RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateWaitPreCompact);
 
                         const ui64 cookie = NextPreCompactCookie++;
-                        LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
-                            << "requesting PreCompact for ActDeleteSsts");
+                        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Requesting PreCompact for ActDeleteSsts",
+                            {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix});
                         ctx.Send(HullLogCtx->HugeKeeperId, new TEvHugePreCompact, 0, cookie);
                         PreCompactCallbacks.emplace(cookie, [this, ev](ui64 wId, const TActorContext& ctx) mutable {
                             Y_VERIFY_S(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateWaitPreCompact,
@@ -326,8 +433,10 @@ namespace NKikimr {
                             RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateNoComp);
 
                             Y_VERIFY_S(wId, HullDs->HullCtx->VCtx->VDiskLogPrefix);
-                            LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
-                                << "got PreCompactResult for ActDeleteSsts, wId# " << wId);
+                            YDB_LOG_DEBUG_CTX(ctx, "Got PreCompactResult for ActDeleteSsts,",
+                                {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                                {"wId", wId});
+                            AccountSelectedStrategy();
                             ApplyCompactionResult(ctx, {}, {}, wId);
                             RTCtx->LevelIndex->UpdateLevelStat(LevelStat);
                         });
@@ -338,15 +447,36 @@ namespace NKikimr {
                 case NHullComp::ActMoveSsts: {
                     Y_VERIFY_S(!CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty(),
                         HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    AccountSelectedStrategy();
                     ApplyCompactionResult(ctx, {}, {}, 0);
                     break;
                 }
                 case NHullComp::ActCompactSsts: {
                     // start compaction
-                    LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
-                             VDISKP(HullDs->HullCtx->VCtx, "%s: level scheduled",
+                    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: level scheduled", PDiskSignatureForHullDbKey<TKey>().ToString().data()));
+
+                    if (CompactionTokenState == ECompactionTokenState::NotNeeded || !HullDs->HullCtx->VCfg->MaxActiveCompactionsPerPDisk) {
+                        CancelOrReleaseCompactionTokenIfNeeded(ctx);
+                        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx, "%s: compaction token not needed, starting compaction",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data()));
-                    RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains, CompactionTask->IsFullCompaction);
+                        AccountSelectedStrategy();
+                        RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains, CompactionTask->IsFullCompaction);
+                        break;
+                    }
+
+                    if (CompactionTokenState == ECompactionTokenState::Acquired) {
+                        CompactionTokenState = ECompactionTokenState::InProgress;
+                        YDB_LOG_INFO_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx, "%s: token already acquired (token# %" PRIu64 "), starting compaction",
+                                PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionToken));
+                        AccountSelectedStrategy();
+                        RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains, CompactionTask->IsFullCompaction);
+                    } else {
+                        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: requesting compaction token", PDiskSignatureForHullDbKey<TKey>().ToString().data()));
+                        TryStartCompaction(ctx, CompactionTask->MaxRatio);
+                        CompactionTask->Clear();
+                        ScheduleCompactionWakeup(ctx);
+                        UpdateStorageRatio(RTCtx->LevelIndex->CurSlice);
+                    }
                     break;
                 }
                 default:
@@ -354,6 +484,57 @@ namespace NKikimr {
             }
 
             RTCtx->LevelIndex->UpdateLevelStat(LevelStat);
+        }
+
+        void CancelOrReleaseCompactionTokenIfNeeded(const TActorContext &ctx) {
+            switch (CompactionTokenState) {
+                case ECompactionTokenState::Requested:
+                case ECompactionTokenState::Acquired:
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: cancelling pending compaction token request", PDiskSignatureForHullDbKey<TKey>().ToString().data()));
+                    ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(
+                        Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, true));
+                    CompactionTokenState = ECompactionTokenState::Idle;
+                    CompactionWaitingStartTime = TMonotonic();
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        void TryStartCompaction(const TActorContext &ctx, double maxRatio) {
+            Y_VERIFY_S(CompactionTokenState == ECompactionTokenState::Idle ||
+                       CompactionTokenState == ECompactionTokenState::Requested,
+                HullDs->HullCtx->VCtx->VDiskLogPrefix << " Unexpected compaction token state: " << (int)CompactionTokenState);
+
+            if (CompactionTokenState == ECompactionTokenState::Idle) {
+                CompactionWaitingStartTime = ctx.Monotonic();
+            }
+
+            CompactionTokenState = ECompactionTokenState::Requested;
+            ctx.Send(MakeBlobStorageCompBrokerID(), new TEvCompactionTokenRequest(
+                Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, maxRatio));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: compaction requested with ratio %f", PDiskSignatureForHullDbKey<TKey>().ToString().data(), maxRatio));
+
+        }
+
+        void Handle(typename TEvCompactionTokenResult::TPtr &ev, const TActorContext &ctx) {
+            if (CompactionTokenState == ECompactionTokenState::Idle) {
+                const TCompactionTokenId token = ev->Get()->Token;
+                ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(
+                    Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, token));
+                return;
+            }
+
+            Y_VERIFY_S(CompactionTokenState == ECompactionTokenState::Requested,
+                HullDs->HullCtx->VCtx->VDiskLogPrefix << " Unexpected compaction token state: " << (int)CompactionTokenState);
+
+            CompactionToken = ev->Get()->Token;
+            CompactionTokenState = ECompactionTokenState::Acquired;
+            CompactionWaitingStartTime = TMonotonic();
+
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: got compaction token# %" PRIu64 ", scheduling compaction", PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionToken));
+
+            ScheduleCompaction(ctx);
         }
 
         void CalculateStorageRatio(TLevelSlicePtr slice) {
@@ -388,11 +569,7 @@ namespace NKikimr {
                 Sort(v1.begin(), v1.end());
                 Sort(v2.begin(), v2.end());
                 if (v1 != v2) {
-                    LOG_CRIT(ctx, NKikimrServices::BS_HULLCOMP,
-                             VDISKP(HullDs->HullCtx->VCtx, "HUGE BLOBS REMOVAL INCONSISTENCY: ctask# %s level# %s"
-                                   " calcVec# %s checkVec# %s", CompactionTask->ToString().data(),
-                                   (level ? "true" : "false"), calcVec.ToString().data(),
-                                   checkVec.ToString().data()));
+                    YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "HUGE BLOBS REMOVAL INCONSISTENCY: ctask# %s level# %s" " calcVec# %s checkVec# %s", CompactionTask->ToString().data(), (level ? "true" : "false"), calcVec.ToString().data(), checkVec.ToString().data()));
                 }
             }
         }
@@ -460,10 +637,7 @@ namespace NKikimr {
 
         void LogRemovedHugeBlobs(const TActorContext &ctx, const TDiskPartVec &vec, bool level) const {
             for (const auto &x : vec) {
-                LOG_DEBUG(ctx, NKikimrServices::BS_HULLHUGE,
-                          VDISKP(HullDs->HullCtx->VCtx, "%s: LogRemovedHugeBlobs: one slot: addr# %s level# %s",
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                x.ToString().data(), (level ? "true" : "false")));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLHUGE, VDISKP(HullDs->HullCtx->VCtx, "%s: LogRemovedHugeBlobs: one slot: addr# %s level# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), x.ToString().data(), (level ? "true" : "false")));
             }
         }
 
@@ -475,13 +649,14 @@ namespace NKikimr {
 
             if ((!msg->FreedHugeBlobs.Empty() || !msg->AllocatedHugeBlobs.Empty()) && !wId && !msg->Aborted) {
                 const ui64 cookie = NextPreCompactCookie++;
-                LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
-                    << "requesting PreCompact for THullChange");
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Requesting PreCompact for THullChange",
+                    {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix});
                 ctx.Send(HullLogCtx->HugeKeeperId, new TEvHugePreCompact, 0, cookie);
                 PreCompactCallbacks.emplace(cookie, [this, ev](ui64 wId, const TActorContext& ctx) mutable {
                     Y_VERIFY_S(wId, HullDs->HullCtx->VCtx->VDiskLogPrefix);
-                    LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
-                        << "got PreCompactResult for THullChange, wId# " << wId);
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Got PreCompactResult for THullChange,",
+                        {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                        {"WId", wId});
                     Handle(ev, ctx, wId);
                 });
                 return;
@@ -492,45 +667,50 @@ namespace NKikimr {
             //       of log messages
 
             // handle commit msg differently
-            if (msg->FreshSegment) {
-                TStringStream dbg;
-                dbg << "{commiter# fresh"
-                    << " firstLsn# "<< msg->FreshSegment->GetFirstLsn()
-                    << " lastLsn# " << msg->FreshSegment->GetLastLsn()
-                    << "}";
+            if (msg->FreshCompaction) {
+                if (msg->Aborted) {
 
-                // update compacted lsn
-                const ui64 lastLsnFromFresh = msg->FreshSegment->GetLastLsn();
-                if (lastLsnFromFresh > 0)
-                    RTCtx->LevelIndex->UpdateCompactedLsn(lastLsnFromFresh);
-                // check huge blobs
-                if (Config->CheckHugeBlobs) {
-                    TDiskPartVec checkVec = THullOpUtil::FindRemovedHugeBlobsAfterFreshCompaction(
-                        HullDs->HullCtx->VCtx->VDiskLogPrefix, ctx, msg->FreshSegment, msg->SegVec);
-                    CheckRemovedHugeBlobs(ctx, msg->FreedHugeBlobs, checkVec, false);
-                    LogRemovedHugeBlobs(ctx, msg->FreedHugeBlobs, false);
+                } else {
+                    TStringStream dbg;
+                    dbg << "{commiter# fresh"
+                        << " firstLsn# "<< msg->FreshSegment->GetFirstLsn()
+                        << " lastLsn# " << msg->FreshSegment->GetLastLsn()
+                        << "}";
+
+                    // update compacted lsn
+                    const ui64 lastLsnFromFresh = msg->FreshSegment->GetLastLsn();
+                    if (lastLsnFromFresh > 0)
+                        RTCtx->LevelIndex->UpdateCompactedLsn(lastLsnFromFresh);
+                    // check huge blobs
+                    if (Config->CheckHugeBlobs) {
+                        TDiskPartVec checkVec = THullOpUtil::FindRemovedHugeBlobsAfterFreshCompaction(
+                            HullDs->HullCtx->VCtx->VDiskLogPrefix, ctx, msg->FreshSegment, msg->SegVec);
+                        CheckRemovedHugeBlobs(ctx, msg->FreedHugeBlobs, checkVec, false);
+                        LogRemovedHugeBlobs(ctx, msg->FreedHugeBlobs, false);
+                    }
+                    // remove fresh segment
+                    RTCtx->LevelIndex->FreshCompactionSstCreated(std::move(msg->FreshSegment));
+
+                    // put new sstable into zero level
+                    if (msg->SegVec.Get()) {
+                        for (auto &seg : msg->SegVec->Segments)
+                            RTCtx->LevelIndex->InsertSstAtLevel0(seg, HullDs->HullCtx);
+                    }
+
+                    // run fresh committer
+                    auto committer = std::make_unique<TAsyncFreshCommitter>(HullLogCtx, HullDbCommitterCtx, RTCtx->LevelIndex,
+                            ctx.SelfID, std::move(msg->CommitChunks), std::move(msg->ReservedChunks),
+                            std::move(msg->FreedHugeBlobs), std::move(msg->AllocatedHugeBlobs), dbg.Str(), wId);
+                    auto aid = ctx.RegisterWithSameMailbox(committer.release());
+                    ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 }
-                // remove fresh segment
-                RTCtx->LevelIndex->FreshCompactionSstCreated(std::move(msg->FreshSegment));
-
-                // put new sstable into zero level
-                if (msg->SegVec.Get()) {
-                    for (auto &seg : msg->SegVec->Segments)
-                        RTCtx->LevelIndex->InsertSstAtLevel0(seg, HullDs->HullCtx);
-                }
-
-                // run fresh committer
-                auto committer = std::make_unique<TAsyncFreshCommitter>(HullLogCtx, HullDbCommitterCtx, RTCtx->LevelIndex,
-                        ctx.SelfID, std::move(msg->CommitChunks), std::move(msg->ReservedChunks),
-                        std::move(msg->FreedHugeBlobs), std::move(msg->AllocatedHugeBlobs), dbg.Str(), wId);
-                auto aid = ctx.RegisterWithSameMailbox(committer.release());
-                ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             } else {
                 Y_VERIFY_S(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateCompInProgress,
-                    HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    HullDs->HullCtx->VCtx->VDiskLogPrefix << "CompState# " <<
+                    TLevelIndexBase::LevelCompStateToStr(RTCtx->LevelIndex->GetCompState()));
 
                 // assign VolatileOrderId for any new SSTables at level 0 to allow merging them to level 0 below
-                if (const auto& cs = CompactionTask->CompactSsts; cs.TargetLevel == 0) {
+                if (const auto& cs = CompactionTask->CompactSsts; cs.TargetLevel == 0 && msg->SegVec.Get()) {
                     for (auto& seg : msg->SegVec->Segments) {
                         const ui64 prev = std::exchange(seg->VolatileOrderId,
                             ++RTCtx->LevelIndex->CurSlice->Ctx->VolatileOrderId);
@@ -614,6 +794,15 @@ namespace NKikimr {
             ActiveActors.Erase(ev->Sender);
             switch (ev->Get()->Type) {
                 case THullCommitFinished::CommitLevel:
+                    if (CompactionTokenState == ECompactionTokenState::InProgress) {
+                        Y_VERIFY_S(CompactionToken != 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                        ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(
+                            Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, CompactionToken));
+                        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: compaction token# %" PRIu64 " released", PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionToken));
+                        CompactionTokenState = ECompactionTokenState::Idle;
+                        CompactionToken = 0;
+                    }
+                    CompactionWorkingStartTime = TMonotonic();
                     Y_VERIFY_DEBUG_S(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateWaitCommit,
                         HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateNoComp);
@@ -678,12 +867,7 @@ namespace NKikimr {
                 ctx.Send(RTCtx->GetLogNotifierActorId(), new TEvents::TEvCompleted());
             }
 
-            LOG_DEBUG(ctx, NKikimrServices::BS_LOGCUTTER,
-                VDISKP(HullDs->HullCtx->VCtx, "TLevelIndexActor::Handle(NPDisk::TEvCutLog): freshCompStarted# %d"
-                    " moveEntryPointStarted# %d justNotifyLogCutter# %d freeUpToLsn# %" PRIu64
-                    " CurEntryPointLsn# %" PRIu64 " PrevEntryPointLsn# %" PRIu64,
-                    int(freshCompStarted), int(moveEntryPointStarted), int(justNotifyLogCutter),
-                    freeUpToLsn, RTCtx->LevelIndex->CurEntryPointLsn, RTCtx->LevelIndex->PrevEntryPointLsn));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_LOGCUTTER, VDISKP(HullDs->HullCtx->VCtx, "TLevelIndexActor::Handle(NPDisk::TEvCutLog): freshCompStarted# %d" " moveEntryPointStarted# %d justNotifyLogCutter# %d freeUpToLsn# %" PRIu64 " CurEntryPointLsn# %" PRIu64 " PrevEntryPointLsn# %" PRIu64, int(freshCompStarted), int(moveEntryPointStarted), int(justNotifyLogCutter), freeUpToLsn, RTCtx->LevelIndex->CurEntryPointLsn, RTCtx->LevelIndex->PrevEntryPointLsn));
         }
 
         std::deque<std::pair<ui64, TEvHullCompact::TPtr>> FreshOnlyCompactQ;
@@ -692,9 +876,11 @@ namespace NKikimr {
         void Handle(TEvHullCompact::TPtr &ev, const TActorContext &ctx) {
             const ui64 confirmedLsn = RTCtx->LsnMngr->GetConfirmedLsnForHull();
             auto *msg = ev->Get();
-            STLOG(PRI_INFO, BS_HULLCOMP, VDHC01, VDISKP(HullDs->HullCtx->VCtx, "TEvHullCompact"),
-                (ConfirmedLsn, confirmedLsn), (Msg, *msg),
-                (CompState, TLevelIndexBase::LevelCompStateToStr(RTCtx->LevelIndex->GetCompState())));
+            YDB_LOG_INFO_COMP(BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "TEvHullCompact"),
+                {"marker", "VDHC01"},
+                {"confirmedLsn", confirmedLsn},
+                {"msg", *msg},
+                {"compState", TLevelIndexBase::LevelCompStateToStr(RTCtx->LevelIndex->GetCompState())});
             Y_VERIFY_S(TKeyToEHullDbType<TKey>() == msg->Type, HullDs->HullCtx->VCtx->VDiskLogPrefix);
 
             Y_VERIFY_S(ForceFreshCompactLsn <= confirmedLsn, HullDs->HullCtx->VCtx->VDiskLogPrefix);
@@ -729,6 +915,13 @@ namespace NKikimr {
 
         void HandlePoison(const TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
+            if (CompactionTokenState == ECompactionTokenState::Acquired ||
+                CompactionTokenState == ECompactionTokenState::InProgress) {
+                Y_VERIFY_S(CompactionToken != 0, HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(
+                    Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, CompactionToken));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "Releasing compaction token# %" PRIu64 " on shutdown", CompactionToken));
+            }
             ActiveActors.KillAndClear(ctx);
             TThis::Die(ctx);
         }
@@ -755,6 +948,7 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvPermitGarbageCollection, HandlePermitGarbageCollection)
             HFunc(TEvHugePreCompactResult, Handle)
             HFunc(TEvMinHugeBlobSizeUpdate, Handle)
+            HFunc(TEvCompactionTokenResult, Handle)
         )
 
     public:
@@ -770,7 +964,8 @@ namespace NKikimr {
                 ui32 minHugeBlobInBytes,
                 TActorId loggerId,
                 std::shared_ptr<TRunTimeCtx> rtCtx,
-                std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep)
+                std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep,
+                bool needCompactionToken = false)
             : TActorBootstrapped<TThis>()
             , Config(std::move(config))
             , HullDs(std::move(hullDs))
@@ -793,6 +988,7 @@ namespace NKikimr {
             , FullCompactionState(Config)
             , HugeBlobCtx(std::move(hugeBlobCtx))
             , MinHugeBlobInBytes(minHugeBlobInBytes)
+            , CompactionTokenState(needCompactionToken ? ECompactionTokenState::Idle : ECompactionTokenState::NotNeeded)
         {}
     };
 
@@ -806,7 +1002,7 @@ namespace NKikimr {
             std::shared_ptr<TLevelIndexRunTimeCtx<TKeyLogoBlob, TMemRecLogoBlob>> rtCtx,
             std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep) {
         return new TLevelIndexActor<TKeyLogoBlob, TMemRecLogoBlob>(config, hullDs, hullLogCtx, std::move(hugeBlobCtx),
-            minHugeBlobInBytes, loggerId, rtCtx,syncLogFirstLsnToKeep);
+            minHugeBlobInBytes, loggerId, rtCtx, syncLogFirstLsnToKeep, true);
     }
 
     NActors::IActor* CreateBlocksActor(

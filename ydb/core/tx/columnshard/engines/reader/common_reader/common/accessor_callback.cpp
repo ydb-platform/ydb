@@ -12,6 +12,13 @@ void TPortionAccessorFetchingSubscriber::DoOnRequestsFinished(TDataAccessorsResu
         Source->GetContext()->GetCommonContext()->AbortWithError("has errors on portion accessors restore");
         return;
     }
+
+    if (result.HasRemovedData()) {
+        Source->GetContext()->GetCommonContext()->AbortWithError(
+            TStringBuilder{} << "there is a removed accessors restore, count: " << result.GetRemovedData().size());
+        return;
+    }
+
     AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
     Source->SetPortionAccessor(std::move(result.ExtractPortions().begin()->second));
     auto task = std::make_shared<NReader::NCommon::TStepAction>(std::move(Source), std::move(Step), ScanActorId, false);
@@ -22,7 +29,8 @@ TPortionAccessorFetchingSubscriber::TPortionAccessorFetchingSubscriber(
     const TFetchingScriptCursor& step, const std::shared_ptr<IDataSource>& source)
     : Step(step)
     , Source(source)
-    , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetcherAcessorsGuard()) {
+    , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetcherAcessorsGuard())
+{
     const auto& commonContext = *Source->GetContext()->GetCommonContext();
     ConveyorProcessId = commonContext.GetConveyorProcessId();
     ScanActorId = commonContext.GetScanActorId();

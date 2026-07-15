@@ -1,17 +1,12 @@
 #pragma once
 
-#include "yql_kikimr_provider.h"
+#include "yql_kikimr_expr_nodes.h"
 
-#include <ydb/core/external_sources/external_source_factory.h>
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
-
-#include <yql/essentials/providers/common/provider/yql_provider.h>
-
+#include <yql/essentials/core/yql_graph_transformer.h>
 
 namespace NYql {
 
-class TKiSourceVisitorTransformer: public TSyncTransformerBase {
+class TKiSourceVisitorTransformer : public TSyncTransformerBase {
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
 
@@ -26,7 +21,7 @@ private:
 
 class TKiSinkVisitorTransformer : public TSyncTransformerBase {
 public:
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
 
     void Rewind() override {
     }
@@ -273,26 +268,43 @@ struct TWriteBackupCollectionSettings {
 };
 
 struct TWriteSecretSettings {
+public:
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtom> Value;
+    NNodes::TMaybeNode<NNodes::TCoAtom> ValueParamName;
     NNodes::TMaybeNode<NNodes::TCoAtom> InheritPermissions;
+    bool HasError = false;
 
+public:
     TWriteSecretSettings(
         NNodes::TMaybeNode<NNodes::TCoAtom>&& mode,
         NNodes::TMaybeNode<NNodes::TCoAtom>&& value,
+        NNodes::TMaybeNode<NNodes::TCoAtom>&& valueParamName,
         NNodes::TMaybeNode<NNodes::TCoAtom>&& inheritPermissions
     )
         : Mode(std::move(mode))
         , Value(std::move(value))
+        , ValueParamName(std::move(valueParamName))
         , InheritPermissions(std::move(inheritPermissions))
     {
     }
+
+    static TWriteSecretSettings CreateWithError() {
+        TWriteSecretSettings result;
+        result.HasError = true;
+        return result;
+    }
+
+private:
+    TWriteSecretSettings() = default;
 };
 
 TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types);
+TAutoPtr<IGraphTransformer> CreateKiSourceConstraintsTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
+TAutoPtr<IGraphTransformer> CreateKiSinkConstraintsTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
 TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
@@ -343,7 +355,7 @@ void FillLiteralProto(const NNodes::TCoPgConst& literal, Ydb::TypedValue& proto)
 
 // Optimizer rules
 TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
-    TTypeAnnotationContext& types, bool sequentialResults);
+    TTypeAnnotationContext& types, bool concurrentResults, bool isolateEffects = false);
 TExprNode::TPtr KiBuildResult(NNodes::TExprBase node,  const TString& cluster, TExprContext& ctx);
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions();
@@ -362,6 +374,19 @@ bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, 
 
 TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content);
 TString FillAuthProperties(THashMap<TString, TString>& properties, const TExternalSource& externalSource);
+
+// Single source of truth for the SHOW CREATE setting names attached to
+// KiReadTable nodes and the corresponding PathType values understood by
+// the .sys/show_create system view.
+bool IsShowCreateSettingName(TStringBuf name);
+// Returns the PathType ("Table" / "View" / "ExternalDataSource") for a
+// SHOW CREATE setting name, or an empty string-buf if `name` is not one
+// of the known SHOW CREATE settings.
+TStringBuf ShowCreateSettingToPathType(TStringBuf name);
+// Returns the first SHOW CREATE setting name found in `settings`, or an
+// empty string-buf if none is present. The returned view is backed by static
+// storage and outlives any TExprNode.
+TStringBuf GetShowCreateSetting(const TExprNode& settings);
 
 TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(NNodes::TExprList node, TExprContext& ctx);
 

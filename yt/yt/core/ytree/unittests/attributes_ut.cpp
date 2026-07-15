@@ -27,13 +27,13 @@ protected:
 TEST(TAttributesTest, CheckAccessors)
 {
     auto attributes = CreateEphemeralAttributes();
-    attributes->Set<TString>("name", "Petr");
+    attributes->Set<std::string>("name", "Petr");
     attributes->Set<int>("age", 30);
     attributes->Set<double>("weight", 70.5);
 
     auto keys_ = attributes->ListKeys();
-    THashSet<TString> keys(keys_.begin(), keys_.end());
-    THashSet<TString> expectedKeys{
+    THashSet<std::string> keys(keys_.begin(), keys_.end());
+    THashSet<std::string> expectedKeys{
         "name",
         "age",
         "weight",
@@ -49,7 +49,7 @@ TEST(TAttributesTest, CheckAccessors)
     };
     EXPECT_EQ(pairs, expectedPairs);
 
-    EXPECT_EQ("Petr", attributes->Get<TString>("name"));
+    EXPECT_EQ("Petr", attributes->Get<std::string>("name"));
     EXPECT_THROW(attributes->Get<int>("name"), std::exception);
 
     EXPECT_EQ(30, attributes->Find<int>("age"));
@@ -57,7 +57,7 @@ TEST(TAttributesTest, CheckAccessors)
     EXPECT_THROW(attributes->Get<char>("age"), std::exception);
 
     EXPECT_EQ(70.5, attributes->Get<double>("weight"));
-    EXPECT_THROW(attributes->Get<TString>("weight"), std::exception);
+    EXPECT_THROW(attributes->Get<std::string>("weight"), std::exception);
 
     EXPECT_FALSE(attributes->Find<int>("unknown_key"));
     EXPECT_EQ(42, attributes->Get<int>("unknown_key", 42));
@@ -67,26 +67,26 @@ TEST(TAttributesTest, CheckAccessors)
 TEST(TAttributesTest, MergeFromTest)
 {
     auto attributesX = CreateEphemeralAttributes();
-    attributesX->Set<TString>("name", "Petr");
+    attributesX->Set<std::string>("name", "Petr");
     attributesX->Set<int>("age", 30);
 
     auto attributesY = CreateEphemeralAttributes();
-    attributesY->Set<TString>("name", "Oleg");
+    attributesY->Set<std::string>("name", "Oleg");
 
     attributesX->MergeFrom(*attributesY);
-    EXPECT_EQ("Oleg", attributesX->Get<TString>("name"));
+    EXPECT_EQ("Oleg", attributesX->Get<std::string>("name"));
     EXPECT_EQ(30, attributesX->Get<int>("age"));
 
     auto node = ConvertToNode(TYsonString(TStringBuf("{age=20}")));
     attributesX->MergeFrom(node->AsMap());
-    EXPECT_EQ("Oleg", attributesX->Get<TString>("name"));
+    EXPECT_EQ("Oleg", attributesX->Get<std::string>("name"));
     EXPECT_EQ(20, attributesX->Get<int>("age"));
 }
 
 TEST(TAttributesTest, SerializeToNode)
 {
     auto attributes = CreateEphemeralAttributes();
-    attributes->Set<TString>("name", "Petr");
+    attributes->Set<std::string>("name", "Petr");
     attributes->Set<int>("age", 30);
 
     auto node = ConvertToNode(*attributes);
@@ -97,7 +97,7 @@ TEST(TAttributesTest, SerializeToNode)
 TEST(TAttributesTest, TrySerializeProtoToRef)
 {
     auto attributes = CreateEphemeralAttributes();
-    attributes->Set<TString>("name", "Petr");
+    attributes->Set<std::string>("name", "Petr");
     attributes->Set<int>("age", 30);
 
     NProto::TAttributeDictionary protoAttributes;

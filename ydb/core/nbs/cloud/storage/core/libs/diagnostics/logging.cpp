@@ -2,12 +2,12 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/thread.h>
 
-#include <library/cpp/unified_agent_client/client.h>
-#include <library/cpp/unified_agent_client/backend.h>
-#include <library/cpp/unified_agent_client/enum.h>
-
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/prof/tag.h>
+
+#include <library/cpp/unified_agent_client/backend.h>
+#include <library/cpp/unified_agent_client/client.h>
+#include <library/cpp/unified_agent_client/enum.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/deque.h>
@@ -27,8 +27,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TComponentLogBackend final
-    : public TLogBackend
+class TComponentLogBackend final: public TLogBackend
 {
 private:
     const TString Component;
@@ -38,10 +37,10 @@ private:
 
 public:
     TComponentLogBackend(
-            TString component,
-            std::shared_ptr<TLogBackend> backend,
-            IAsyncLoggerPtr asyncLogger,
-            const TLogSettings& logSettings)
+        TString component,
+        std::shared_ptr<TLogBackend> backend,
+        IAsyncLoggerPtr asyncLogger,
+        const TLogSettings& logSettings)
         : Component(std::move(component))
         , Backend(std::move(backend))
         , AsyncLogger(std::move(asyncLogger))
@@ -63,10 +62,8 @@ public:
             logRecord << ts;
         }
 
-        logRecord
-            << " :" << Component
-            << " "  << PriorityToString(rec.Priority)
-            << ": " << TrimWhitespaces({ rec.Data, rec.Len });
+        logRecord << " :" << Component << " " << PriorityToString(rec.Priority)
+                  << ": " << TrimWhitespaces({rec.Data, rec.Len});
 
         if (!LogSettings.SuppressNewLine) {
             logRecord << Endl;
@@ -146,8 +143,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMultiLogBackend final
-    : public TLogBackend
+class TMultiLogBackend final: public TLogBackend
 {
 private:
     const TVector<std::shared_ptr<TLogBackend>> Backends;
@@ -181,8 +177,7 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TLoggingService final
-    : public ILoggingService
+class TLoggingService final: public ILoggingService
 {
 private:
     const std::shared_ptr<TLogBackend> Backend;
@@ -190,8 +185,8 @@ private:
 
 public:
     TLoggingService(
-            std::shared_ptr<TLogBackend> backend,
-            const TLogSettings& logSettings)
+        std::shared_ptr<TLogBackend> backend,
+        const TLogSettings& logSettings)
         : Backend(std::move(backend))
         , LogSettings(logSettings)
     {}
@@ -255,11 +250,7 @@ public:
         ELogPriority logPriority,
         TString logRecord) override
     {
-        Queue.Enqueue({
-            std::move(backend),
-            logPriority,
-            std::move(logRecord)
-        });
+        Queue.Enqueue({std::move(backend), logPriority, std::move(logRecord)});
 
         ThreadPark.Signal();
     }
@@ -290,10 +281,8 @@ private:
         Queue.DequeueAllSingleConsumer(&Items);
 
         for (auto it = Items.rbegin(); it != Items.rend(); ++it) {
-            it->Backend->WriteData({
-                it->LogPriority,
-                it->LogRecord.data(),
-                it->LogRecord.size()});
+            it->Backend->WriteData(
+                {it->LogPriority, it->LogRecord.data(), it->LogRecord.size()});
         }
 
         Items.clear();
@@ -302,8 +291,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TStorageRecordConverter final
-    : public IRecordConverter
+class TStorageRecordConverter final: public IRecordConverter
 {
 private:
     const bool StripTrailingNewLine;
@@ -311,16 +299,15 @@ private:
 
 public:
     TStorageRecordConverter(
-            bool stripTrailingNewLine,
-            const TString& syslogIdentifier)
+        bool stripTrailingNewLine,
+        const TString& syslogIdentifier)
         : StripTrailingNewLine(stripTrailingNewLine)
         , SyslogIdentifier(syslogIdentifier)
-    {
-    }
+    {}
 
     TClientMessage Convert(const TLogRecord& rec) const override
     {
-        TStringBuf data {rec.Data, rec.Len};
+        TStringBuf data{rec.Data, rec.Len};
 
         if (StripTrailingNewLine && data.ends_with('\n')) {
             data.remove_suffix(1);
@@ -328,12 +315,10 @@ public:
 
         return {
             ToString(data),
-            THashMap<TString, TString> {
+            THashMap<TString, TString>{
                 {"_priority", NameOf(rec.Priority)},
                 {"SYSLOG_IDENTIFIER", SyslogIdentifier},
-                {"HOSTNAME", FQDNHostName()}
-            }
-        };
+                {"HOSTNAME", FQDNHostName()}}};
     }
 };
 
@@ -342,12 +327,11 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 static const TMap<TString, ELogPriority> LogLevels = {
-    { "error",    TLOG_ERR       },
-    { "warn",     TLOG_WARNING   },
-    { "info",     TLOG_INFO      },
-    { "debug",    TLOG_DEBUG     },
-    { "trace",    TLOG_RESOURCES }
-};
+    {"error", TLOG_ERR},
+    {"warn", TLOG_WARNING},
+    {"info", TLOG_INFO},
+    {"debug", TLOG_DEBUG},
+    {"trace", TLOG_RESOURCES}};
 
 TMaybe<ELogPriority> GetLogLevel(const TString& levelStr)
 {
@@ -378,9 +362,7 @@ ILoggingServicePtr CreateLoggingService(
     std::shared_ptr<TLogBackend> backend,
     const TLogSettings& logSettings)
 {
-    return std::make_shared<TLoggingService>(
-        std::move(backend),
-        logSettings);
+    return std::make_shared<TLoggingService>(std::move(backend), logSettings);
 }
 
 TLog CreateComponentLog(
@@ -389,13 +371,11 @@ TLog CreateComponentLog(
     IAsyncLoggerPtr asyncLogger,
     const TLogSettings& logSettings)
 {
-    return {
-        MakeHolder<TComponentLogBackend>(
-            std::move(component),
-            std::move(backend),
-            std::move(asyncLogger),
-            logSettings)
-    };
+    return {MakeHolder<TComponentLogBackend>(
+        std::move(component),
+        std::move(backend),
+        std::move(asyncLogger),
+        logSettings)};
 }
 
 std::shared_ptr<TLogBackend> CreateMultiLogBackend(
@@ -419,16 +399,13 @@ ILoggingServicePtr CreateUnifiedAgentLoggingService(
     }
 
     auto backend = MakeLogBackend(
-        TClientParameters {endpoint},
-        TSessionParameters {},
-        MakeHolder<TStorageRecordConverter>(true, syslogService)
-    );
+        TClientParameters{endpoint},
+        TSessionParameters{},
+        MakeHolder<TStorageRecordConverter>(true, syslogService));
 
     return CreateLoggingService(
         std::shared_ptr<TLogBackend>(backend.Release()),
-        TLogSettings{}
-    );
-
+        TLogSettings{});
 }
 
 }   // namespace NYdb::NBS

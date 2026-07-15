@@ -370,3 +370,7 @@ WhitespaceSensitiveMacros:
   - NS_SWIFT_NAME
   - PP_STRINGIZE
   - STRINGIZE
+
+# Use unpatched ContinuationIndenter,
+# remove this line if you use vanilla clang-format code
+VanillaContinuationIndenter: true

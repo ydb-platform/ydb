@@ -34,14 +34,14 @@ private:
             return 0;
         }
 
-        // When using WaitFor, we protect ourselves from TFiberCancelledException by
+        // When using SuspendFiber, we protect ourselves from TFiberCancelledException by
         // introducing our own read buffer and additional data copying. In case of
-        // Get, there are no means of cancellation, so reading directly to the destination
+        // BlockThread, there are no means of cancellation, so reading directly to the destination
         // buffer is just fine.
         TSharedMutableRef readBuffer;
-        if (Strategy_ == EWaitForStrategy::WaitFor) {
+        if (Strategy_ == EWaitForStrategy::SuspendFiber) {
             struct TSyncInputStreamAdapterIntermediateBufferTag { };
-            readBuffer = TSharedMutableRef::Allocate<TSyncInputStreamAdapterIntermediateBufferTag>(length);
+            readBuffer = TSharedMutableRef::Allocate<TSyncInputStreamAdapterIntermediateBufferTag>(length, {.InitializeStorage = false});
         } else {
             readBuffer = TSharedMutableRef(buffer, length, /*holder*/ nullptr);
         }
@@ -49,7 +49,7 @@ private:
         auto bytesRead = WaitForWithStrategy(UnderlyingStream_->Read(readBuffer), Strategy_)
             .ValueOrThrow();
 
-        if (Strategy_ == EWaitForStrategy::WaitFor) {
+        if (Strategy_ == EWaitForStrategy::SuspendFiber) {
             memcpy(buffer, readBuffer.Begin(), bytesRead);
         }
 
@@ -178,14 +178,6 @@ public:
         Reset();
     }
 
-    virtual ~TSyncBufferedOutputStreamAdapter()
-    {
-        try {
-            Finish();
-        } catch (...) {
-        }
-    }
-
 private:
     const IAsyncOutputStreamPtr UnderlyingStream_;
     const EWaitForStrategy Strategy_;
@@ -199,7 +191,7 @@ private:
     void Reset()
     {
         CurrentBufferSize_ = 0;
-        Buffer_ = TSharedMutableRef::Allocate<TBufferTag>(BufferCapacity_);
+        Buffer_ = TSharedMutableRef::Allocate<TBufferTag>(BufferCapacity_, {.InitializeStorage = false});
     }
 
     void* WriteToBuffer(const void* data, size_t length)

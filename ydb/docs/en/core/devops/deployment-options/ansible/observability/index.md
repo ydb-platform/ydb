@@ -1,6 +1,6 @@
 # Ensuring Observability of a {{ ydb-short-name }} Cluster Deployed with Ansible
 
-This section of {{ ydb-short-name }} documentation covers various observability-related topics specific to clusters [deployed with Ansible](../initial-deployment.md).
+This section of {{ ydb-short-name }} documentation covers various observability-related topics specific to clusters [deployed with Ansible](../initial-deployment/index.md).
 
 * [{#T}](logging.md)
 

@@ -1,13 +1,8 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: muted */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
-SELECT
-    Ensure(0, FALSE, 'muted: flaky: Name not found: Discount')
-;
-/*
 SELECT
     Sum(ws_ext_discount_amt) AS `Excess Discount Amount`
 FROM
@@ -40,4 +35,3 @@ WHERE
 ORDER BY
     Sum(ws_ext_discount_amt)
 LIMIT 100;
-*/

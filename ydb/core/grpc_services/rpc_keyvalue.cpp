@@ -553,6 +553,10 @@ Ydb::StatusIds::StatusCode PullStatus(const TResult &result) {
         return Ydb::StatusIds::NOT_FOUND;
     case NKikimrKeyValue::Statuses::RSTATUS_WRONG_LOCK_GENERATION:
         return Ydb::StatusIds::PRECONDITION_FAILED;
+    case NKikimrKeyValue::Statuses::RSTATUS_BLOCKED:
+        return Ydb::StatusIds::UNAVAILABLE;
+    case NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST:
+        return Ydb::StatusIds::BAD_REQUEST;
     default:
         return Ydb::StatusIds::INTERNAL_ERROR;
     }
@@ -1521,6 +1525,11 @@ void DoGetStorageChannelStatusKeyValue(std::unique_ptr<IRequestOpCtx> p, const I
 
 void DoGetStorageChannelStatusKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TGetStorageChannelStatusRequest<false>(p.release()));
+}
+
+template<>
+IActor* TEvCreateVolumeKeyValueRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TCreateVolumeRequest(msg);
 }
 
 } // namespace NKikimr::NGRpcService

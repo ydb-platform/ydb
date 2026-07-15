@@ -43,7 +43,7 @@ struct TInversePresortString {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return CallUnaryUnboxedValueFunction<&Presort>(Type::getInt128Ty(ctx.Codegen.GetContext()), arg, ctx.Codegen, block);
+        return EmitFunctionCall<&Presort>(Type::getInt128Ty(ctx.Codegen.GetContext()), {arg}, ctx, block);
     }
 #endif
 };
@@ -58,7 +58,7 @@ struct TInverseString {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return CallUnaryUnboxedValueFunction<&Inverse>(Type::getInt128Ty(ctx.Codegen.GetContext()), arg, ctx.Codegen, block);
+        return EmitFunctionCall<&Inverse>(Type::getInt128Ty(ctx.Codegen.GetContext()), {arg}, ctx, block);
     }
 #endif
 };

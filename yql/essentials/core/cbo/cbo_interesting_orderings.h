@@ -58,7 +58,7 @@ struct TOrdering {
               std::move(items),
               std::vector<TItem::EDirection>{},
               type,
-              false)
+              /*isNatural=*/false)
     {
     }
 
@@ -181,13 +181,7 @@ struct TShuffling {
     {
     }
 
-    TShuffling& SetNatural() {
-        IsNatural = true;
-        return *this;
-    }
-
     std::vector<TJoinColumn> Ordering;
-    bool IsNatural = false; // look at the IsNatural field at the Ordering struct
 };
 
 /*

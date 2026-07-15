@@ -10,6 +10,8 @@
 #include <yt/yt/core/rpc/private.h>
 
 #include <yt/yt/core/bus/bus.h>
+#include <yt/yt/core/bus/helpers.h>
+#include <yt/yt/core/bus/message_handler.h>
 
 #include <yt/yt/core/bus/tcp/config.h>
 #include <yt/yt/core/bus/tcp/client.h>
@@ -183,7 +185,7 @@ private:
     TSessionPtr GetOrCreateSession(const TSendOptions& options)
     {
         auto& bucket = Buckets_[options.MultiplexingBand];
-        auto parallelism = TTcpDispatcher::Get()->GetMultiplexingParallelism(
+        auto parallelism = NBus::NTcp::TDispatcher::Get()->GetMultiplexingParallelism(
             options.MultiplexingBand,
             options.MultiplexingParallelism);
         auto index = parallelism <= 1 ? 0 : bucket.CurrentSessionIndex++ % parallelism;
@@ -226,10 +228,12 @@ private:
                     });
 
                 const auto& attrs = bus->GetEndpointAttributes();
+                // NB: Some bus backends (e.g. UCX) do not expose verification/encryption
+                // attributes, so read them optionally to avoid throwing here.
                 YT_LOG_DEBUG("Created bus (ConnectionType: Client, VerificationMode: %v, EncryptionMode: %v, Endpoint: %v)",
-                    attrs.Get<EVerificationMode>("verification_mode"),
-                    attrs.Get<EEncryptionMode>("encryption_mode"),
-                    attrs.Get<std::string>("address"));
+                    attrs.Find<EVerificationMode>("verification_mode"),
+                    attrs.Find<EEncryptionMode>("encryption_mode"),
+                    attrs.Find<std::string>("address"));
 
                 session->Initialize(bus);
                 bucket.Sessions.push_back(session);
@@ -282,10 +286,14 @@ private:
             : Session_(std::move(session))
         { }
 
-        void HandleMessage(TSharedRefArray message, IBusPtr replyBus) noexcept override
+        void HandleMessage(
+            TSharedRefArray message,
+            IBusPtr replyBus,
+            NYT::NBus::IDirectPlacementTransferPtr transfer,
+            NYT::NBus::TPacketId packetId) noexcept override
         {
             if (auto session_ = Session_.Lock()) {
-                session_->HandleMessage(std::move(message), std::move(replyBus));
+                session_->HandleMessage(std::move(message), std::move(replyBus), std::move(transfer), packetId);
             }
         }
 
@@ -302,7 +310,7 @@ private:
         TSession(
             EMultiplexingBand band,
             IMemoryUsageTrackerPtr memoryUsageTracker)
-            : TosLevel_(TTcpDispatcher::Get()->GetTosLevelForBand(band))
+            : TosLevel_(NBus::NTcp::TDispatcher::Get()->GetTosLevelForBand(band))
             , MemoryUsageTracker_(std::move(memoryUsageTracker))
         {
             YT_VERIFY(MemoryUsageTracker_);
@@ -372,18 +380,18 @@ private:
                 // NB: Requests without timeout are rare but may occur.
                 // For these requests we still need to register a timeout cookie with TDelayedExecutor
                 // since this also provides proper cleanup and cancellation when global shutdown happens.
-                if (TDispatcher::Get()->ShouldAlertOnUnsetRequestTimeout() && !options.Timeout.has_value()) {
+                if (NRpc::TDispatcher::Get()->ShouldAlertOnUnsetRequestTimeout() && !options.Timeout.has_value()) {
                     YT_LOG_ALERT("Request without timeout (RequestId: %v, Method: %v.%v, Endpoint: %v)",
                         requestControl->GetRequestId(),
                         requestControl->GetService(),
                         requestControl->GetMethod(),
                         Bus_->GetEndpointDescription());
                 }
-                auto effectiveTimeout = options.Timeout.value_or(TDispatcher::Get()->GetDefaultRequestTimeout());
+                auto effectiveTimeout = options.Timeout.value_or(NRpc::TDispatcher::Get()->GetDefaultRequestTimeout());
                 auto timeoutCookie = TDelayedExecutor::Submit(
                     BIND(&TSession::HandleTimeout, MakeWeak(this), requestControl),
                     effectiveTimeout,
-                    TDispatcher::Get()->GetHeavyInvoker());
+                    NRpc::TDispatcher::Get()->GetHeavyInvoker());
                 requestControl->SetTimeoutCookie(std::move(timeoutCookie));
             }
 
@@ -410,7 +418,7 @@ private:
                             requestControl,
                             options);
                     })
-                    .Via(TDispatcher::Get()->GetHeavyInvoker()));
+                    .Via(NRpc::TDispatcher::Get()->GetHeavyInvoker()));
             } else {
                 DoSendRequest(
                     std::move(request),
@@ -462,7 +470,7 @@ private:
                     TError(NYT::EErrorCode::Canceled, "Request canceled"));
                 --Depth;
             } else {
-                TDispatcher::Get()->GetHeavyInvoker()->Invoke(BIND(
+                NRpc::TDispatcher::Get()->GetHeavyInvoker()->Invoke(BIND(
                     &TSession::NotifyError,
                     MakeStrong(this),
                     requestControl,
@@ -620,14 +628,33 @@ private:
             Bus_->Terminate(error);
         }
 
-        void HandleMessage(TSharedRefArray message, IBusPtr /*replyBus*/) noexcept override
+        void HandleMessage(
+            TSharedRefArray message,
+            IBusPtr replyBus,
+            NYT::NBus::IDirectPlacementTransferPtr transfer,
+            NYT::NBus::TPacketId packetId) noexcept override
         {
             YT_ASSERT_THREAD_AFFINITY_ANY();
 
             auto messageType = GetMessageType(message);
+
+            // Only response attachments may arrive via direct placement transfer; the
+            // transfer is handed to the response handler, which exposes it lazily. Any
+            // other message type carrying a transfer is unexpected; fall back to
+            // materializing it inline.
+            if (transfer && messageType != EMessageType::Response) {
+                MaterializeTransferAndReinvoke(
+                    MakeStrong(this),
+                    std::move(message),
+                    std::move(replyBus),
+                    std::move(transfer),
+                    packetId);
+                return;
+            }
+
             switch (messageType) {
                 case EMessageType::Response:
-                    OnResponseMessage(std::move(message));
+                    OnResponseMessage(std::move(message), std::move(transfer), packetId);
                     break;
 
                 case EMessageType::StreamingPayload:
@@ -700,7 +727,7 @@ private:
 
         TFuture<void> GetBusReadyFuture()
         {
-            if (Y_LIKELY(BusReady_.load(std::memory_order::relaxed))) {
+            if (BusReady_.load(std::memory_order::relaxed)) [[likely]] {
                 return {};
             }
 
@@ -728,7 +755,7 @@ private:
 
             if (options.RequestHeavy || (request->IsAttachmentCompressionEnabled() && request->HasAttachments())) {
                 BIND(&IClientRequest::Serialize, request)
-                    .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
+                    .AsyncVia(NRpc::TDispatcher::Get()->GetHeavyInvoker())
                     .Run()
                     .Subscribe(BIND(
                         &TSession::OnRequestSerialized,
@@ -843,7 +870,7 @@ private:
                     auto timeoutCookie = TDelayedExecutor::Submit(
                         BIND(&TSession::HandleAcknowledgementTimeout, MakeWeak(this), requestControl),
                         *options.AcknowledgementTimeout,
-                        TDispatcher::Get()->GetHeavyInvoker());
+                        NRpc::TDispatcher::Get()->GetHeavyInvoker());
                     requestControl->SetAcknowledgementTimeoutCookie(std::move(timeoutCookie));
                 }
             }
@@ -869,6 +896,15 @@ private:
             busOptions.ChecksummedPartCount = options.GenerateAttachmentChecksums
                 ? NBus::TSendOptions::AllParts
                 : 2; // RPC header + request body
+            if (request->RequestAttachmentsDptParameters().Enabled) {
+                // The request's attachments are the trailing parts of the message;
+                // deliver them via direct placement transfer.
+                busOptions.DirectPlacementTransferPartCount = GetMessageAttachmentCount(requestMessage);
+            }
+
+            // Pass RequestId to Bus layer so that RPC-level and Bus-level log entries
+            // can be correlated on both sender and receiver sides.
+            busOptions.RequestId = requestId;
             Bus_->Send(requestMessage, busOptions).Subscribe(BIND(
                 &TSession::OnAcknowledgement,
                 MakeStrong(this),
@@ -893,11 +929,11 @@ private:
         }
 
 
-        void OnResponseMessage(TSharedRefArray message)
+        void OnResponseMessage(TSharedRefArray message, NYT::NBus::IDirectPlacementTransferPtr transfer, NYT::NBus::TPacketId packetId)
         {
             NProto::TResponseHeader header;
             if (!TryParseResponseHeader(message, &header)) {
-                YT_LOG_ERROR("Error parsing response header");
+                YT_LOG_ERROR("Error parsing response header (PacketId: %v)", packetId);
                 return;
             }
 
@@ -911,8 +947,9 @@ private:
 
                 if (bucket->Terminated) {
                     YT_LOG_WARNING("Response received via a terminated channel "
-                        "(RequestId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
+                        "(RequestId: %v, PacketId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
                         requestId,
+                        packetId,
                         header.service(),
                         header.method(),
                         GetMessageBodySize(message),
@@ -925,8 +962,9 @@ private:
                 if (it == bucket->ActiveRequestMap.end()) {
                     // This may happen when the other party responds to an already timed-out request.
                     YT_LOG_DEBUG("Response for an incorrect or obsolete request received "
-                        "(RequestId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
+                        "(RequestId: %v, PacketId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
                         requestId,
+                        packetId,
                         header.service(),
                         header.method(),
                         GetMessageBodySize(message),
@@ -966,7 +1004,8 @@ private:
                         requestId,
                         requestControl,
                         responseHandler,
-                        std::move(message));
+                        std::move(message),
+                        std::move(transfer));
                 } else {
                     requestControl->ProfileError(error);
                     if (error.GetCode() == EErrorCode::PoisonPill) {
@@ -1157,7 +1196,8 @@ private:
             TRequestId requestId,
             const TClientRequestControlPtr& requestControl,
             const IClientResponseHandlerPtr& responseHandler,
-            TSharedRefArray message) noexcept
+            TSharedRefArray message,
+            NYT::NBus::IDirectPlacementTransferPtr transfer) noexcept
         {
             YT_LOG_DEBUG("Response received (RequestId: %v, Method: %v.%v, TotalTime: %v, AttachmentsSize: %v)",
                 requestId,
@@ -1166,7 +1206,10 @@ private:
                 requestControl->GetTotalTime(),
                 GetTotalMessageAttachmentSize(message));
 
-            responseHandler->HandleResponse(std::move(message), Bus_->GetEndpointAddress());
+            responseHandler->HandleResponse(
+                std::move(message),
+                Bus_->GetEndpointAddress(),
+                std::move(transfer));
         }
     };
 
@@ -1328,7 +1371,7 @@ class TTcpBusChannelFactory
 {
 public:
     TTcpBusChannelFactory(
-        TBusConfigPtr config,
+        NTcp::TBusConfigPtr config,
         IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(ConvertToNode(std::move(config)))
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
@@ -1338,11 +1381,11 @@ public:
 
     IChannelPtr CreateChannel(const std::string& address) override
     {
-        auto config = TBusClientConfig::CreateTcp(address);
+        auto config = NTcp::TBusClientConfig::CreateTcp(address);
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
-        auto client = CreateBusClient(
+        auto client = NTcp::CreateBusClient(
             std::move(config),
-            GetYTPacketTranscoderFactory(),
+            NTcp::GetYTPacketTranscoderFactory(),
             MemoryUsageTracker_);
         return CreateBusChannel(
             std::move(client),
@@ -1355,7 +1398,7 @@ private:
 };
 
 IChannelFactoryPtr CreateTcpBusChannelFactory(
-    TBusConfigPtr config,
+    NTcp::TBusConfigPtr config,
     IMemoryUsageTrackerPtr memoryUsageTracker)
 {
     return New<TTcpBusChannelFactory>(
@@ -1370,7 +1413,7 @@ class TUdsBusChannelFactory
 {
 public:
     TUdsBusChannelFactory(
-        TBusConfigPtr config,
+        NTcp::TBusConfigPtr config,
         IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(ConvertToNode(std::move(config)))
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
@@ -1380,11 +1423,11 @@ public:
 
     IChannelPtr CreateChannel(const std::string& address) override
     {
-        auto config = TBusClientConfig::CreateUds(address);
+        auto config = NTcp::TBusClientConfig::CreateUds(address);
         config->Load(Config_, /*postprocess*/ true, /*setDefaults*/ false);
-        auto client = CreateBusClient(
+        auto client = NTcp::CreateBusClient(
             std::move(config),
-            GetYTPacketTranscoderFactory(),
+            NTcp::GetYTPacketTranscoderFactory(),
             MemoryUsageTracker_);
         return CreateBusChannel(
             std::move(client),
@@ -1397,7 +1440,7 @@ private:
 };
 
 IChannelFactoryPtr CreateUdsBusChannelFactory(
-    TBusConfigPtr config,
+    NTcp::TBusConfigPtr config,
     IMemoryUsageTrackerPtr memoryUsageTracker)
 {
     return New<TUdsBusChannelFactory>(

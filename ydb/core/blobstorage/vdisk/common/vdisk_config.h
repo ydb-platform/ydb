@@ -127,7 +127,7 @@ namespace NKikimr {
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
         double HullCompLevelRateThreshold;
-        double HullCompFreeSpaceThreshold;
+        TControlWrapper HullCompFreeSpaceThresholdPerMille;
         TControlWrapper FreshCompMaxInFlightWrites;
         TControlWrapper FreshCompMaxInFlightReads;
         TControlWrapper HullCompMaxInFlightWrites;
@@ -135,6 +135,7 @@ namespace NKikimr {
         TControlWrapper HullCompFullCompPeriodSec;
         TControlWrapper HullCompThrottlerBytesRate;
         TControlWrapper DefragThrottlerBytesRate;
+        TControlWrapper MaxActiveCompactionsPerPDisk;
         double HullCompReadBatchEfficiencyThreshold;
         ui64 AnubisOsirisMaxInFly;
         EBlobHeaderMode BlobHeaderMode;
@@ -170,7 +171,7 @@ namespace NKikimr {
         TControlWrapper EnableLocalSyncLogDataCutting;
         TControlWrapper EnableSyncLogChunkCompression;
         TControlWrapper MaxSyncLogChunksInFlight;
-        ui32 MaxSyncLogChunkSize;
+        ui32 MaxSyncDataCutterChunkSize;
 
         ///////////// REPL SETTINGS /////////////////////////
         TDuration ReplTimeInterval;
@@ -227,7 +228,7 @@ namespace NKikimr {
         ui32 MaxResponseSize;
         TDuration DskTrackerInterval;
         bool BarrierValidation;
-        TDuration WhiteboardUpdateInterval;
+        TDuration StatsUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
         bool UseActorSystemTimeInBSQueue = false;
@@ -277,7 +278,13 @@ namespace NKikimr {
         ///////////// SYNC SETTINGS //////////////////
         TControlWrapper MaxInProgressSyncCount;
         TControlWrapper EnablePhantomFlagStorage;
+        bool EnablePersistentPhantomFlagStorage = false;
         TControlWrapper PhantomFlagStorageLimit;
+        TControlWrapper VolatilePhantomFlagStorageBlobSizeLimit;
+        TControlWrapper EnableFreshSyncDataThrottling;
+
+        ///////////// CHUNK Keeper //////////////////
+        TControlWrapper EnableChunkKeeper;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

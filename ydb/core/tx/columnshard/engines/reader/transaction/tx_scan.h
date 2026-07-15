@@ -14,11 +14,13 @@ public:
 
     TTxScan(NColumnShard::TColumnShard* self, TEvDataShard::TEvKqpScan::TPtr& ev)
         : TBase(self)
-        , Ev(ev) {
+        , Ev(ev)
+    {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
+
     TTxType GetTxType() const override {
         return NColumnShard::TXTYPE_START_SCAN;
     }

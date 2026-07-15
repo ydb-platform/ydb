@@ -13,6 +13,7 @@ static const size_t OPERATION_ID_MAX_LENGTH = 24;
 static const size_t THREAD_NAME_MAX_LENGTH = 16;
 
 struct TDebugInfo {
+    // NOLINTNEXTLINE(modernize-avoid-c-arrays)
     char OperationId[OPERATION_ID_MAX_LENGTH + 1];
 };
 

@@ -12,8 +12,6 @@ namespace sdk
 namespace metrics
 {
 
-MetricReader::MetricReader() : metric_producer_(nullptr), shutdown_(false) {}
-
 void MetricReader::SetMetricProducer(MetricProducer *metric_producer)
 {
   metric_producer_ = metric_producer;

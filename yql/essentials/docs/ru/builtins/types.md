@@ -129,6 +129,23 @@ SELECT FormatType(OptionalType(DataType("Bool"))); -- Bool?
 SELECT FormatType(OptionalType(ParseType("List<String?>"))); -- List<String?>?
 ```
 
+## AsOptionalType {#asoptionaltype}
+
+#### Сигнатура
+
+```yql
+AsOptionalType(Type)->опциональный Type
+```
+
+Доступна начиная с версии [2026.01](../changelog/2026.01.md). Идемпотентно добавляет в переданный тип возможность содержать `NULL`. Если тип уже является опциональным, PostgreSQL типом или `NULL`, возвращает его без изменений. В отличие от [OptionalType](#optionaltype), не добавляет дополнительный уровень вложенности для уже опциональных типов.
+
+#### Примеры
+
+```yql
+SELECT FormatType(AsOptionalType(DataType("Bool"))); -- Bool?
+SELECT FormatType(AsOptionalType(ParseType("Bool?"))); -- Bool?
+```
+
 ## ListType и StreamType {#listtype}
 
 #### Сигнатура

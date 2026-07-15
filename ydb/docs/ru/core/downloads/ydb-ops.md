@@ -6,16 +6,16 @@
 
 | Версия | Дата выпуска | Скачать | Список изменений |
 | :--- | :--- | :--- | :--- |
-| v0.0.14 | 09/12/2024 | [Бинарный файл](https://github.com/ydb-platform/ydbops/releases/download/v0.0.14/ydbops) |  |
+| v0.0.25 | 03/12/2026 | [Бинарный файл](https://github.com/ydb-platform/ydbops/releases/download/v0.0.25/ydbops) |  |
 
 ## macOS (Intel)
 
 | Версия | Дата выпуска | Скачать | Список изменений |
 | :--- | :--- | :--- | :--- |
-| v0.0.14 | 09/12/2024 | [Бинарный файл](https://github.com/ydb-platform/ydbops/releases/download/v0.0.14/ydbops_darwin_amd64) |  |
+| v0.0.25 | 03/12/2026 | [Бинарный файл](https://github.com/ydb-platform/ydbops/releases/download/v0.0.25/ydbops_darwin_amd64) |  |
 
 ## macOS (Apple Silicon)
 
 | Версия | Дата выпуска | Скачать | Список изменений |
 | :--- | :--- | :--- | :--- |
-| v0.0.14 | 09/12/2024 | [Бинарный файл](https://github.com/ydb-platform/ydbops/releases/download/v0.0.14/ydbops_darwin_arm64) |  |
+| v0.0.25 | 03/12/2026 | [Бинарный файл](https://github.com/ydb-platform/ydbops/releases/download/v0.0.25/ydbops_darwin_arm64) |  |

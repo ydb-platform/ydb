@@ -385,6 +385,76 @@ WHERE IntervalEnd BETWEEN Timestamp("2000-01-01T00:00:00Z") AND Timestamp("2099-
 ORDER BY IntervalEnd desc, LocksBroken desc
 ```
 
+{% if feature_resource_pool %}
+
+## Resource pool information {#resource_pools}
+
+The `resource_pools` system view contains information about [settings](../yql/reference/syntax/create-resource-pool.md#parameters) of [resource pools](../concepts/glossary.md#resource-pool).
+
+System view structure:
+
+| Column | Description |
+| ------- | -------- |
+| `Name` | Resource pool name.<br/>Type: `Utf8`.<br/>Key: `0`. |
+| `ConcurrentQueryLimit` | Maximum number of concurrently executing queries in the resource pool.<br/>Type: `Int32`. |
+| `QueueSize` | Maximum queue size.<br/>Type: `Int32`. |
+| `DatabaseLoadCpuThreshold` | CPU load threshold for the entire database, in percent, after which queries are not sent for execution and remain in the queue.<br/>Type: `Double`. |
+| `ResourceWeight` | [Weights](../dev/resource-consumption-management.md#resources_weight) for distributing resources between pools.<br/>Type: `Double`. |
+| `TotalCpuLimitPercentPerNode` | Percentage of available CPU that all queries on a node in this resource pool can use.<br/>Type: `Double`. |
+| `QueryCpuLimitPercentPerNode` | Percentage of available CPU on a node for a single query in the resource pool.<br/>Type: `Double`. |
+| `QueryMemoryLimitPercentPerNode` | Percentage of available memory on a node that a query in this resource pool can use.<br/>Type: `Double`. |
+
+### Example {#resource_pools-examples}
+
+The following query outputs information about settings of the resource pool named `default`:
+
+```yql
+SELECT
+    Name,
+    ConcurrentQueryLimit,
+    QueueSize,
+    DatabaseLoadCpuThreshold,
+    ResourceWeight,
+    TotalCpuLimitPercentPerNode,
+    QueryCpuLimitPercentPerNode,
+    QueryMemoryLimitPercentPerNode
+FROM `.sys/resource_pools`
+WHERE Name = "default";
+```
+
+{% endif %}
+
+{% if feature_resource_pool_classifier %}
+
+## Resource pool classifier information {#resource_pools_classifiers}
+
+The `resource_pools_classifiers` system view contains information about [settings](../yql/reference/syntax/create-resource-pool-classifier.md#parameters) of [resource pool classifiers](../concepts/glossary.md#resource-pool-classifier).
+
+System view structure:
+
+| Column | Description |
+| ------- | -------- |
+| `Name` | Resource pool classifier name.<br/>Type: `Utf8`.<br/>Key: `0`. |
+| `Rank` | Priority for selecting the resource pool classifier.<br/>Type: `Int64`. |
+| `MemberName` | User or user group that will be sent to the specified resource pool.<br/>Type: `Utf8`. |
+| `ResourcePool` | Name of the resource pool where queries will be sent.<br/>Type: `Utf8`. |
+
+### Example {#resource_pools_classifiers-examples}
+
+The following query outputs information about settings of the resource pool classifier named `olap`:
+
+```yql
+SELECT
+    Name,
+    Rank,
+    MemberName,
+    ResourcePool
+FROM `.sys/resource_pools_classifiers`
+WHERE Name = "olap";
+```
+
+{% endif %}
+
 ## Users, groups, and access rights {#auth}
 
 The following system views contain information about users, access groups, user membership in groups, and access rights granted to groups or directly to users.
@@ -490,3 +560,27 @@ Table structure:
 |--------|-------------|
 | `Path` | Path to the access object.<br />Type: `Utf8`.<br />Key: `0`. |
 | `Sid` | SID of the access object owner.<br />Type: `Utf8`. |
+
+## Streaming queries {#streaming}
+
+### View streaming query metadata {#streaming_queries}
+
+The `streaming_queries` system view lists all created [streaming queries](../concepts/streaming-query.md).
+
+Users only see [streaming queries](../concepts/streaming-query.md) for which they have the `ydb.granular.describe_schema` permission.
+
+Table structure:
+
+| Column           | Description |
+|------------------|-------------|
+| `Path`           | Full path to the query.<br />Type: `Utf8`.<br />Key: `0`. |
+| `Status`         | Execution status, one of:<br />`CREATING` — query is being created<br />`CREATED` — query exists but is not running<br />`STARTING` — query is starting<br />`RUNNING` — query is running<br />`STOPPING` — query is stopping<br />`STOPPED` — query is stopped<br />`SUSPENDED` — query failed and is waiting for backoff before retry<br />Type: `Utf8` |
+| `Issues`         | Execution issues in JSON format.<br />Type: `Utf8` |
+| `Plan`           | Query plan in JSON format.<br />Type: `Utf8` |
+| `Ast`            | Query AST.<br />Type: `Utf8` |
+| `Text`           | Query text.<br />Type: `Utf8` |
+| `Run`            | Whether the query is currently running as requested by the user.<br />Type: `Bool` |
+| `ResourcePool`   | Resource pool bound to the query ([example](../yql/reference/syntax/create-streaming-query.md#examples)).<br />Type: `Utf8` |
+| `RetryCount`     | Number of query restarts.<br />Type: `Uint64` |
+| `LastFailAt`     | Timestamp of the last execution failure.<br />Type: `Timestamp` |
+| `SuspendedUntil` | Time when a stopped query will be retried.<br />Type: `Timestamp` |

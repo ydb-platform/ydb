@@ -50,6 +50,7 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 requestType,                                                           \
                 YDB_API_DEFAULT_COUNTER_BLOCK(query, methodName),                      \
                 auditMode,                                                             \
+                EEmptyDatabaseMode::EmptyDatabaseForbidden,                            \
                 COMMON,                                                                \
                 ::NKikimr::NGRpcService::TGrpcRequestNoOperationCall,                  \
                 GRpcProxies_[proxyCounter % GRpcProxies_.size()],                      \

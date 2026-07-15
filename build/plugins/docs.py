@@ -1,5 +1,7 @@
 import json
 
+from ymake import Unit, macro
+
 
 def extract_macro_calls(unit, macro_value_name):
     value = unit.get_subst(macro_value_name).strip()
@@ -36,7 +38,8 @@ def get_variables(unit):
     return {k: unit.get(k) or v for k, v in orig_variables.items()}
 
 
-def onprocess_docs(unit, *args):
+@macro
+def PROCESS_DOCS(unit: Unit, *args: tuple[str, ...]):
     if unit.enabled('_DOCS_USE_PLANTUML'):
         unit.on_docs_yfm_use_plantuml([])
 
@@ -46,3 +49,15 @@ def onprocess_docs(unit, *args):
     variables = get_variables(unit)
     if variables:
         unit.set(['_DOCS_VARS_FLAG', '--vars {}'.format(json.dumps(json.dumps(variables, sort_keys=True)))])
+
+
+@macro
+def _APPEND_DOCS_DIR_FLAG(unit: Unit, *args: tuple[str, ...]):
+    assert len(args) == 1
+    docs_dir = args[0]
+
+    ns = unit.get('_DOCS_DIR_INTERNAL_NAMESPACE')
+    if not ns:
+        ns = docs_dir
+    last = unit.get('_DOCS_DIR_VALUE')
+    unit.set(['_DOCS_DIR_VALUE', f'{last} --docs-dir {docs_dir} {ns}'])

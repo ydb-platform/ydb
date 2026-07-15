@@ -6,7 +6,7 @@
 namespace NKikimr::NMiniKQL {
 
 class TTypeKindWrapper: public TMutableComputationNode<TTypeKindWrapper> {
-    typedef TMutableComputationNode<TTypeKindWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TTypeKindWrapper>;
 
 public:
     TTypeKindWrapper(TComputationMutables& mutables, IComputationNode* handle)

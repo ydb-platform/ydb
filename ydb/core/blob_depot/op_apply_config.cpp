@@ -1,10 +1,15 @@
 #include "blob_depot_tablet.h"
 #include "schema.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvApplyConfig::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT15, "TEvApplyConfig", (Id, GetLogId()), (Msg, ev->Get()->Record));
+        YDB_LOG_DEBUG("TEvApplyConfig",
+            {"marker", "BDT15"},
+            {"id", GetLogId()},
+            {"msg", ev->Get()->Record});
 
         class TTxApplyConfig : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             std::unique_ptr<IEventHandle> Response;
@@ -26,7 +31,9 @@ namespace NKikimr::NBlobDepot {
             }
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT16, "TTxApplyConfig::Execute", (Id, Self->GetLogId()));
+                YDB_LOG_DEBUG("TTxApplyConfig::Execute",
+                    {"marker", "BDT16"},
+                    {"id", Self->GetLogId()});
 
                 NIceDb::TNiceDb db(txc.DB);
 
@@ -46,7 +53,9 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT17, "TTxApplyConfig::Complete", (Id, Self->GetLogId()));
+                YDB_LOG_DEBUG("TTxApplyConfig::Complete",
+                    {"marker", "BDT17"},
+                    {"id", Self->GetLogId()});
 
                 if (!std::exchange(Self->Configured, true)) {
                     Self->StartOperation();
@@ -59,7 +68,14 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        auto responseEvent = std::make_unique<TEvBlobDepot::TEvApplyConfigResult>(TabletID(), ev->Get()->Record.GetTxId());
+        const auto& record = ev->Get()->Record;
+        if (record.HasGroupInfo()) {
+            TStringStream err;
+            GroupInfo = TBlobStorageGroupInfo::Parse(record.GetGroupInfo(), nullptr, &err);
+            Y_DEBUG_ABORT_UNLESS(GroupInfo);
+        }
+
+        auto responseEvent = std::make_unique<TEvBlobDepot::TEvApplyConfigResult>(TabletID(), record.GetTxId());
         auto response = std::make_unique<IEventHandle>(ev->Sender, SelfId(), responseEvent.release(), 0, ev->Cookie);
         Execute(std::make_unique<TTxApplyConfig>(this, *ev->Get(), std::move(response), ev->InterconnectSession));
     }

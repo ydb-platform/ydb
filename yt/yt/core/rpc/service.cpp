@@ -28,6 +28,24 @@ void IServiceContext::ReplyFrom(TFuture<TSharedRefArray> asyncMessage)
     }));
 }
 
+void IServiceContext::ReplyAndLogFrom(
+    bool incremental,
+    TFuture<std::pair<TSharedRefArray, std::string>> asyncMessages)
+{
+    asyncMessages.Subscribe(BIND([this, this_ = MakeStrong(this), incremental] (const TErrorOr<std::pair<TSharedRefArray, std::string>>& result) {
+        if (result.IsOK()) {
+            const auto& [response, logMessage] = result.Value();
+            SetRawResponseInfo(logMessage, incremental);
+            Reply(response);
+        } else {
+            Reply(TError(result));
+        }
+    }));
+    SubscribeCanceled(BIND([asyncMessages = std::move(asyncMessages)] (const TError& error) {
+        asyncMessages.Cancel(error);
+    }));
+}
+
 void IServiceContext::ReplyFrom(TFuture<void> asyncError)
 {
     asyncError.Subscribe(BIND([this, this_ = MakeStrong(this)] (const TError& error) {

@@ -87,11 +87,11 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PingChaosLease);
 
     // Queues
-    // COMPAT(nadya73): For compatability with old versions of clients.
+    // COMPAT(nadya73): For compatibility with old versions of clients.
     DEFINE_RPC_PROXY_METHOD_GENERIC(AdvanceConsumer, NRpcProxy::NProto::TReqAdvanceQueueConsumer, NRpcProxy::NProto::TRspAdvanceQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AdvanceQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PullQueue);
-    // COMPAT(nadya73): For compatability with old versions of clients.
+    // COMPAT(nadya73): For compatibility with old versions of clients.
     DEFINE_RPC_PROXY_METHOD_GENERIC(PullConsumer, NRpcProxy::NProto::TReqPullQueueConsumer, NRpcProxy::NProto::TRspPullQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PullQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RegisterQueueConsumer);

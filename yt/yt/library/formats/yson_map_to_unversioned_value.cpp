@@ -24,7 +24,7 @@ void TYsonMapToUnversionedValueConverter::Reset()
 
 void TYsonMapToUnversionedValueConverter::OnStringScalar(TStringBuf value)
 {
-    if (Y_LIKELY(InsideValue_)) {
+    if (InsideValue_) [[likely]] {
         ColumnConsumer_.OnStringScalar(value);
     } else {
         THROW_ERROR_EXCEPTION("YSON map expected");
@@ -33,7 +33,7 @@ void TYsonMapToUnversionedValueConverter::OnStringScalar(TStringBuf value)
 
 void TYsonMapToUnversionedValueConverter::OnInt64Scalar(i64 value)
 {
-    if (Y_LIKELY(InsideValue_)) {
+    if (InsideValue_) [[likely]] {
         ColumnConsumer_.OnInt64Scalar(value);
     } else {
         THROW_ERROR_EXCEPTION("YSON map expected");
@@ -42,7 +42,7 @@ void TYsonMapToUnversionedValueConverter::OnInt64Scalar(i64 value)
 
 void TYsonMapToUnversionedValueConverter::OnUint64Scalar(ui64 value)
 {
-    if (Y_LIKELY(InsideValue_)) {
+    if (InsideValue_) [[likely]] {
         ColumnConsumer_.OnUint64Scalar(value);
     } else {
         THROW_ERROR_EXCEPTION("YSON map expected");
@@ -51,7 +51,7 @@ void TYsonMapToUnversionedValueConverter::OnUint64Scalar(ui64 value)
 
 void TYsonMapToUnversionedValueConverter::OnDoubleScalar(double value)
 {
-    if (Y_LIKELY(InsideValue_)) {
+    if (InsideValue_) [[likely]] {
         ColumnConsumer_.OnDoubleScalar(value);
     } else {
         THROW_ERROR_EXCEPTION("YSON map expected");
@@ -60,7 +60,7 @@ void TYsonMapToUnversionedValueConverter::OnDoubleScalar(double value)
 
 void TYsonMapToUnversionedValueConverter::OnBooleanScalar(bool value)
 {
-    if (Y_LIKELY(InsideValue_)) {
+    if (InsideValue_) [[likely]] {
         ColumnConsumer_.OnBooleanScalar(value);
     } else {
         THROW_ERROR_EXCEPTION("YSON map expected");
@@ -69,7 +69,7 @@ void TYsonMapToUnversionedValueConverter::OnBooleanScalar(bool value)
 
 void TYsonMapToUnversionedValueConverter::OnEntity()
 {
-    if (Y_LIKELY(InsideValue_)) {
+    if (InsideValue_) [[likely]] {
         ColumnConsumer_.OnEntity();
     } else {
         THROW_ERROR_EXCEPTION("YSON map expected");
@@ -78,7 +78,7 @@ void TYsonMapToUnversionedValueConverter::OnEntity()
 
 void TYsonMapToUnversionedValueConverter::OnBeginList()
 {
-    if (Y_LIKELY(InsideValue_)) {
+    if (InsideValue_) [[likely]] {
         ColumnConsumer_.OnBeginList();
     } else {
         THROW_ERROR_EXCEPTION("YSON map expected");
@@ -93,14 +93,14 @@ void TYsonMapToUnversionedValueConverter::OnListItem()
 
 void TYsonMapToUnversionedValueConverter::OnBeginMap()
 {
-    if (Y_LIKELY(InsideValue_)) {
+    if (InsideValue_) [[likely]] {
         ColumnConsumer_.OnBeginMap();
     }
 }
 
 void TYsonMapToUnversionedValueConverter::OnKeyedItem(TStringBuf name)
 {
-    if (Y_LIKELY(InsideValue_)) {
+    if (InsideValue_) [[likely]] {
         ColumnConsumer_.OnKeyedItem(name);
     } else {
         InsideValue_ = true;
@@ -119,14 +119,14 @@ void TYsonMapToUnversionedValueConverter::OnKeyedItem(TStringBuf name)
 
 void TYsonMapToUnversionedValueConverter::OnEndMap()
 {
-    if (Y_LIKELY(InsideValue_)) {
+    if (InsideValue_) [[likely]] {
         ColumnConsumer_.OnEndMap();
     }
 }
 
 void TYsonMapToUnversionedValueConverter::OnBeginAttributes()
 {
-    if (Y_LIKELY(InsideValue_)) {
+    if (InsideValue_) [[likely]] {
         ColumnConsumer_.OnBeginAttributes();
     } else {
         THROW_ERROR_EXCEPTION("YSON map without attributes expected");

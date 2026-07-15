@@ -32,7 +32,7 @@ To change the logging level:
 
 1. Click `Create new item` to create a new configuration item (or click the pencil button to edit a previously created item).
 
-1. To change the default logging level, select the desired logging level from the `Level` drop-down list under `Default log settings`.
+1. To change the default logging level, select the desired logging level from the `Level` drop-down list under `Default log settings`. The default global setting is `NOTICE`.
 
 1. To change the logging level for individual components, use the table under `Component log settings`. In the line with the name of the component whose logging level you want to change, in the `Component` column, select the desired logging level from the drop-down list in the `Log level` column.
 

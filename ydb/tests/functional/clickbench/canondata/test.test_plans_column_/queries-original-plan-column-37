@@ -60,6 +60,7 @@
                                                 "PlanNodeId": 3,
                                                 "Plans": [
                                                     {
+                                                        "Blocks": "True",
                                                         "HashFunc": "HashV2",
                                                         "KeyColumns": [
                                                             "Title"

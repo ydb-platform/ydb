@@ -9,9 +9,9 @@
 #include <ydb/library/signals/owner.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
-#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_profile_span.h>
 
@@ -49,6 +49,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RetryTimeoutCount;
     NMonitoring::TDynamicCounters::TCounterPtr RetryBySubscribeOnOverloadCount;
     NMonitoring::TDynamicCounters::TCounterPtr RetryBySubscribeOnOverloadLimitExceededCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MemoryInflightBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr MemoryInflightLimit;
 
 public:
     TCSUploadCounters()
@@ -67,6 +69,8 @@ public:
         , RetryTimeoutCount(TBase::GetDeriviative("RetryTimeouts"))
         , RetryBySubscribeOnOverloadCount(TBase::GetDeriviative("RetryBySubscribeOnOverload"))
         , RetryBySubscribeOnOverloadLimitExceededCount(TBase::GetDeriviative("RetryBySubscribeOnOverloadLimitExceeded"))
+        , MemoryInflightBytes(TBase::GetValue("MemoryInflightBytes"))
+        , MemoryInflightLimit(TBase::GetValue("MemoryInflightLimit"))
     {
     }
 
@@ -112,6 +116,11 @@ public:
     void OnFailedFullReply(const TDuration d) const {
         FailedFullReplyDuration->Collect(d.MilliSeconds());
     }
+
+    void OnMemoryInflight(const ui64 bytes, const ui64 limit) const {
+        MemoryInflightBytes->Set(bytes);
+        MemoryInflightLimit->Set(limit);
+    }
 };
 // External transaction controller class
 class TWritersController {
@@ -128,7 +137,7 @@ private:
     std::vector<TWriteIdForShard> WriteIds;
     const TMonotonic StartInstant = TMonotonic::Now();
     YDB_READONLY_DEF(NLongTxService::TLongTxId, LongTxId);
-    YDB_READONLY(std::shared_ptr<TCSUploadCounters>, Counters, std::make_shared<TCSUploadCounters>());
+    YDB_READONLY_DEF(std::shared_ptr<TCSUploadCounters>, Counters);
     void SendReply() {
         if (FailsCount.Val()) {
             Counters->OnFailedFullReply(TMonotonic::Now() - StartInstant);
@@ -163,7 +172,8 @@ public:
         };
     };
 
-    TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId);
+    TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId,
+                      std::shared_ptr<TCSUploadCounters> counters);
     void OnSuccess(const ui64 shardId, const ui64 writeId, const ui32 writePartId);
     void OnFail(const Ydb::StatusIds::StatusCode code, const TString& message);
 };
@@ -188,12 +198,10 @@ private:
     const std::optional<TDuration> Timeout;
     const bool RetryBySubscription;
     ui64 LastOverloadSeqNo = 0;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
     void SendWriteRequest();
-    static TDuration OverloadTimeout() {
-        ui32 overloadedDelayMs = std::min(AppData() ? AppData()->ColumnShardConfig.GetProxyOverloadedDelayMs() : OverloadedDelayMs, ui32(TDuration::Hours(1).MilliSeconds()));
-        return TDuration::MilliSeconds(overloadedDelayMs + RandomNumber<ui32>(overloadedDelayMs));
-    }
+    static TDuration OverloadTimeout() noexcept;
     void SendToTablet(THolder<IEventBase> event) {
         Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), ShardId, true), IEventHandle::FlagTrackDelivery, 0,
             ActorSpan.GetTraceId());
@@ -202,7 +210,8 @@ private:
 public:
     TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
-        const std::optional<TDuration> timeout = std::nullopt);
+        const std::optional<TDuration> timeout = std::nullopt,
+        TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr);
 
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {

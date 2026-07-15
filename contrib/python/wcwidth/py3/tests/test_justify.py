@@ -1,4 +1,5 @@
 """Tests for text justification functions."""
+
 # local
 from wcwidth import ljust, rjust, width, center
 

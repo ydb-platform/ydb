@@ -16,14 +16,18 @@ private:
         if (!DeadlockControlInstant) {
             DeadlockControlInstant = now;
         } else if (now - *DeadlockControlInstant > TDuration::Seconds(2)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "tx_timeout")("lock", LockId)("tx_id", GetTxId())(
-                "d", now - *DeadlockControlInstant);
+            YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "tx_timeout"},
+                {"lock", LockId},
+                {"txId", GetTxId()},
+                {"d", now - *DeadlockControlInstant});
             DeadlockControlInstant = now;
             OnTimeout(owner);
             return true;
         }
         return false;
     }
+
     virtual void DoSerializeToProto(NKikimrTxColumnShard::TCommitWriteTxBody& result) const = 0;
 
 public:
@@ -40,11 +44,8 @@ public:
     }
 
     static bool SendPersistent(TColumnShard& owner, std::unique_ptr<IEventBase> event, ui64 tabletDest, ui64 cookie) {
-        return owner.Send(
-            MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
-            new TEvPipeCache::TEvForward(event.release(), tabletDest, true),
-            IEventHandle::FlagTrackDelivery, cookie
-        );
+        return owner.Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent), new TEvPipeCache::TEvForward(event.release(), tabletDest, true),
+            IEventHandle::FlagTrackDelivery, cookie);
     }
 
     static bool SendBrokenFlagAck(TColumnShard& owner, ui64 step, ui64 txId, ui64 tabletDest) {
@@ -55,6 +56,7 @@ public:
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveResultAckTx(TColumnShard& owner, const ui64 recvTabletId) const = 0;
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveBrokenFlagTx(
         TColumnShard& owner, const ui64 sendTabletId, const bool broken) const = 0;
+
     NKikimrTxColumnShard::TCommitWriteTxBody SerializeToProto() {
         NKikimrTxColumnShard::TCommitWriteTxBody result;
         AFL_VERIFY(LockId);

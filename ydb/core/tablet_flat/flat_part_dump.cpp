@@ -46,7 +46,9 @@ namespace {
         if (auto *frames = part.Small.Get()) Frames(*frames, "Small");
         if (auto *frames = part.Large.Get()) Frames(*frames, "Large");
         if (auto *blobs = part.Blobs.Get())  Blobs(*blobs);
-        if (auto *bloom = part.ByKey.Get())  Bloom(*bloom);
+        for (const auto& [prefixLen, bloom] : part.ByKeyPrefixes) {
+            if (bloom) Bloom(*bloom);
+        }
 
         Index(part, depth);
         BTreeIndex(part);

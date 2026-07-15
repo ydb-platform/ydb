@@ -25,6 +25,7 @@ private:
 protected:
     virtual TConclusionStatus DoStart(
         NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions) override;
+
     virtual THashSet<TInternalPathId> GetPathIdsForStart() const override {
         THashSet<TInternalPathId> result;
         for (auto&& i : PathIds) {
@@ -36,7 +37,8 @@ protected:
 public:
     TSourceSession(const TTabletId selfTabletId)
         : TBase("source_proto")
-        , SelfTabletId(selfTabletId) {
+        , SelfTabletId(selfTabletId)
+    {
     }
 
     TSourceSession(const TString& sessionId, const TTransferContext& transfer, const TTabletId selfTabletId,
@@ -44,7 +46,8 @@ public:
         : TBase(sessionId, "source_base", transfer)
         , SelfTabletId(selfTabletId)
         , PathIds(pathIds)
-        , DestinationTabletId(destTabletId) {
+        , DestinationTabletId(destTabletId)
+    {
     }
 
     TTabletId GetDestinationTabletId() const {

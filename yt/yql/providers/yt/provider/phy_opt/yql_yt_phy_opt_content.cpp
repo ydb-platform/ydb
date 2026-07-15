@@ -161,7 +161,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
                                         materialize = true;
                                         break;
                                     }
-                                    else if (tableInfo->Meta->IsDynamic) {
+                                    else if (tableInfo->Meta->IsDynamic || tableInfo->Meta->HasRLS) {
                                         materialize = true;
                                         break;
                                     }
@@ -319,4 +319,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
     return TExprBase(res);
 }
 
-}  // namespace NYql
+} // namespace NYql

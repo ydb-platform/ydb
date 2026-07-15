@@ -2,6 +2,7 @@
 
 #include <yt/yt/core/concurrency/public.h>
 #include <yt/yt/core/concurrency/fair_share_action_queue.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 #include <yt/yt/core/concurrency/thread_pool.h>
 
 #include <yt/yt/core/actions/new_with_offloaded_dtor.h>
@@ -11,12 +12,15 @@
 
 #include <yt/yt/library/profiling/testing.h>
 
+#include <util/generic/strbuf.h>
+
 #include <random>
 
 namespace NYT {
 namespace {
 
 using namespace NProfiling;
+using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -309,7 +313,7 @@ TEST(TAsyncSlruCacheTest, Resurrection)
         EXPECT_EQ(cache->Find(i), nullptr);
         // But lookup can find and restore it (and make some other values expired)
         // because the value is alive in 'values' vector.
-        EXPECT_EQ(cache->Lookup(i).Get().ValueOrThrow(), values[i]);
+        EXPECT_EQ(WaitForFast(cache->Lookup(i)).ValueOrThrow(), values[i]);
     }
 }
 
@@ -332,8 +336,8 @@ TEST(TAsyncSlruCacheTest, LookupBetweenBeginAndEndInsert)
     cookie.EndInsert(value);
 
     EXPECT_TRUE(future.IsSet());
-    EXPECT_TRUE(future.Get().IsOK());
-    EXPECT_EQ(value, future.Get().Value());
+    EXPECT_TRUE(WaitForFast(future).IsOK());
+    EXPECT_EQ(value, WaitForFast(future).Value());
 }
 
 TEST(TAsyncSlruCacheTest, UpdateWeight)
@@ -486,8 +490,7 @@ TEST(TAsyncSlruCacheTest, AddRemoveWithResurrection)
 
     for (int iter = 0; iter < 5; ++iter) {
         for (int i = 0; i < valueCount; ++i) {
-            auto value = cache->Lookup(i)
-                .Get()
+            auto value = WaitForFast(cache->Lookup(i))
                 .ValueOrThrow();
             EXPECT_EQ(value->Value, i);
             EXPECT_EQ(cache->GetItemCount(), 2);
@@ -496,8 +499,7 @@ TEST(TAsyncSlruCacheTest, AddRemoveWithResurrection)
         for (int i = 0; i < valueCount; ++i) {
             auto cookie = cache->BeginInsert(i);
             EXPECT_TRUE(!cookie.IsActive());
-            auto value = cookie.GetValue()
-                .Get()
+            auto value = WaitForFast(cookie.GetValue())
                 .ValueOrThrow();
             EXPECT_EQ(value->Value, i);
             EXPECT_EQ(cache->GetItemCount(), 2);
@@ -582,8 +584,7 @@ TEST(TAsyncSlruCacheTest, AddThenImmediatelyRemove)
     }
 
     {
-        auto value = cache->Lookup(0)
-            .Get()
+        auto value = WaitForFast(cache->Lookup(0))
             .ValueOrThrow();
         EXPECT_EQ(cache->GetItemCount(), 0);
         EXPECT_EQ(value->Value, 42);
@@ -999,8 +1000,8 @@ TEST(TAsyncSlruGhostCacheTest, Disable)
 
         auto value2 = cache->Lookup(2);
         ASSERT_TRUE(value2.IsSet());
-        ASSERT_TRUE(value2.Get().IsOK());
-        ASSERT_EQ(value2.Get().Value()->Value, 57);
+        ASSERT_TRUE(WaitForFast(value2).IsOK());
+        ASSERT_EQ(WaitForFast(value2).Value()->Value, 57);
 
         auto smallCount = cache->ReadSmallGhostCounters() - oldSmallCounters;
         auto largeCount = cache->ReadLargeGhostCounters() - oldLargeCounters;
@@ -1102,7 +1103,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
     std::uniform_int_distribution<int> capacityDistribution(static_cast<int>(cacheSize * 0.5), static_cast<int>(cacheSize * 1.5));
     std::uniform_real_distribution<double> youngerSizeFractionDistribution(0.0, 1.0);
 
-    NThreading::TSpinLock lock;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, lock);
 
     std::vector<TCountingSlruCache::TInsertCookie> activeInsertCookies;
 
@@ -1151,8 +1152,8 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
                 }
 
                 if (valueFuture.IsSet()) {
-                    ASSERT_TRUE(valueFuture.Get().IsOK());
-                    const auto& value = valueFuture.Get().Value();
+                    ASSERT_TRUE(WaitForFast(valueFuture).IsOK());
+                    auto value = WaitForFast(valueFuture).Value();
                     ASSERT_EQ(lastInsertedValues[key].Lock(), value);
                 } else {
                     // The value insertion is in progress, so lastInsertedValues must contain nullptr
@@ -1182,8 +1183,8 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
                     auto valueFuture = cookie.GetValue();
                     ASSERT_TRUE(static_cast<bool>(valueFuture));
                     if (valueFuture.IsSet()) {
-                        ASSERT_TRUE(valueFuture.Get().IsOK());
-                        const auto& value = valueFuture.Get().Value();
+                        ASSERT_TRUE(WaitForFast(valueFuture).IsOK());
+                        auto value = WaitForFast(valueFuture).Value();
                         ASSERT_EQ(lastInsertedValues[value->GetKey()].Lock(), value);
                     } else {
                         // The value insertion is in progress, so lastInsertedValues must contain nullptr
@@ -1375,6 +1376,53 @@ INSTANTIATE_TEST_SUITE_P(Stress, TAsyncSlruCacheStressTest, ::testing::Values(
         .ThreadCount = 16,
     }
 ));
+
+////////////////////////////////////////////////////////////////////////////////
+
+DECLARE_REFCOUNTED_STRUCT(TStringCachedValue)
+
+struct TStringCachedValue
+    : public TAsyncCacheValueBase<std::string, TStringCachedValue>
+{
+    TStringCachedValue(std::string key, int value)
+        : TAsyncCacheValueBase(std::move(key))
+        , Value(value)
+    { }
+
+    int Value;
+};
+
+DEFINE_REFCOUNTED_TYPE(TStringCachedValue)
+
+DECLARE_REFCOUNTED_CLASS(TStringSlruCache)
+
+class TStringSlruCache
+    : public TAsyncSlruCacheBase<std::string, TStringCachedValue>
+{
+public:
+    explicit TStringSlruCache(TSlruCacheConfigPtr config)
+        : TAsyncSlruCacheBase(std::move(config))
+    { }
+};
+
+DEFINE_REFCOUNTED_TYPE(TStringSlruCache)
+
+TEST(TAsyncSlruCacheTest, HeterogeneousLookup)
+{
+    auto config = CreateCacheConfig(/*cacheSize*/ 10);
+    auto cache = New<TStringSlruCache>(config);
+
+    auto cookie = cache->BeginInsert(std::string("alpha"));
+    ASSERT_TRUE(cookie.IsActive());
+    cookie.EndInsert(New<TStringCachedValue>("alpha", 1));
+
+    // Lookup via TStringBuf must not materialize a std::string key.
+    auto value = cache->Find(TStringBuf("alpha"));
+    ASSERT_TRUE(value);
+    EXPECT_EQ(value->Value, 1);
+    EXPECT_FALSE(cache->Find(TStringBuf("beta")).operator bool());
+    EXPECT_EQ(WaitForFast(cache->Lookup(TStringBuf("alpha"))).ValueOrThrow()->Value, 1);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

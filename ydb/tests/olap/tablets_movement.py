@@ -35,6 +35,11 @@ class TestTabletsMovement(object):
         cls.mon_url = f"http://{node.host}:{node.mon_port}"
         cls.ydb_client.wait_connection()
 
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
+
     def write_data(
         self,
         table: str,

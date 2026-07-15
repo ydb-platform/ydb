@@ -37,7 +37,7 @@ TString Symbolize(const TString& input, const THashMap<TString, TString>& mappin
                     modulePath = it->second;
                 }
                 usedFilenames.emplace_back(std::move(modulePath));
-                frames.emplace_back(TStackFrame{usedFilenames.back().c_str(), address - offset});
+                frames.emplace_back(TStackFrame{.File = usedFilenames.back().c_str(), .Address = address - offset});
             }
         } else {
             out << line << "\n";

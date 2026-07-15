@@ -15,6 +15,7 @@ namespace NPython {
 
 namespace {
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 PyMethodDef ModuleMethods[] = {
     {nullptr, nullptr, 0, nullptr} /* sentinel */
 };
@@ -215,7 +216,9 @@ void InitYqlModule(NYql::NUdf::EPythonFlavor pythonFlavor, bool standalone) {
             if (obj) {
                 return;
             }
-            PyObject *ptype, *pvalue, *ptraceback;
+            PyObject* ptype;
+            PyObject* pvalue;
+            PyObject* ptraceback;
             PyErr_Fetch(&ptype, &pvalue, &ptraceback);
             if (pvalue) {
                 auto pstr = PyObject_Str(pvalue);

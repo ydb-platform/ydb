@@ -7,3 +7,9 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    async_jobs
+    import
+    iscan
+)

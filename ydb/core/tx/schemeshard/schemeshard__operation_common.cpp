@@ -1,6 +1,6 @@
 #include "schemeshard__operation_common.h"
 
-#include "schemeshard__shred_manager.h"
+#include "schemeshard__tenant_shred_manager.h"
 
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
@@ -8,6 +8,7 @@
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/test_tablet/events.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
@@ -17,16 +18,16 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context)
+THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TSchemeShard* ss)
 {
-    auto tablePartitionConfig = context.SS->GetTablePartitionConfigWithAlterData(targetPath->PathId);
-    const auto& shard = context.SS->ShardInfos[shardIdx];
+    auto tablePartitionConfig = ss->GetTablePartitionConfigWithAlterData(targetPath->PathId);
+    const auto& shard = ss->ShardInfos[shardIdx];
 
     if (shard.TabletType == ETabletType::BlockStorePartition ||
         shard.TabletType == ETabletType::BlockStorePartition2 ||
         shard.TabletType == ETabletType::BlockStorePartitionDirect)
     {
-        auto it = context.SS->BlockStoreVolumes.FindPtr(targetPath->PathId);
+        auto it = ss->BlockStoreVolumes.FindPtr(targetPath->PathId);
         Y_ABORT_UNLESS(it, "Missing BlockStoreVolume while creating BlockStorePartition tablet");
         auto volume = *it;
         /*const auto* volumeConfig = &volume->VolumeConfig;
@@ -37,20 +38,20 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
 
     THolder<TEvHive::TEvCreateTablet> ev = MakeHolder<TEvHive::TEvCreateTablet>(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()), shard.TabletType, shard.BindedChannels);
 
-    TPathId domainId = context.SS->ResolvePathIdForDomain(targetPath);
+    TPathId domainId = ss->ResolvePathIdForDomain(targetPath);
 
-    TPathElement::TPtr domainEl = context.SS->PathsById.at(domainId);
+    TPathElement::TPtr domainEl = ss->PathsById.at(domainId);
     auto objectDomain = ev->Record.MutableObjectDomain();
     if (domainEl->IsRoot()) {
-        objectDomain->SetSchemeShard(context.SS->ParentDomainId.OwnerId);
-        objectDomain->SetPathId(context.SS->ParentDomainId.LocalPathId);
+        objectDomain->SetSchemeShard(ss->ParentDomainId.OwnerId);
+        objectDomain->SetPathId(ss->ParentDomainId.LocalPathId);
     } else {
         objectDomain->SetSchemeShard(domainId.OwnerId);
         objectDomain->SetPathId(domainId.LocalPathId);
     }
 
-    Y_ABORT_UNLESS(context.SS->SubDomains.contains(domainId));
-    TSubDomainInfo::TPtr subDomain = context.SS->SubDomains.at(domainId);
+    Y_ABORT_UNLESS(ss->SubDomains.contains(domainId));
+    TSubDomainInfo::TPtr subDomain = ss->SubDomains.at(domainId);
 
     TPathId resourcesDomainId;
     if (subDomain->GetResourcesDomainId()) {
@@ -226,7 +227,7 @@ bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperati
         context.OnComplete.UnbindMsgFromPipe(OperationId, hive, shardIdx);
 
         auto path = context.SS->PathsById.at(txState.TargetPathId);
-        auto request = CreateEvCreateTablet(path, shardIdx, context);
+        auto request = CreateEvCreateTablet(path, shardIdx, context.SS);
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     DebugHint() << " CreateRequest"
@@ -260,6 +261,9 @@ bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperati
             break;
         case ETabletType::BackupController:
             context.SS->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Add(1);
+            break;
+        case ETabletType::TestShard:
+            context.SS->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Add(1);
             break;
         default:
             break;
@@ -351,7 +355,7 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
             context.OnComplete.BindMsgToPipe(OperationId, context.SS->GetGlobalHive(), shard.Idx, ev.Release());
         } else {
             auto path = context.SS->PathsById.at(txState->TargetPathId);
-            auto ev = CreateEvCreateTablet(path, shard.Idx, context);
+            auto ev = CreateEvCreateTablet(path, shard.Idx, context.SS);
 
             auto hiveToRequest = context.SS->ResolveHive(shard.Idx);
 
@@ -650,7 +654,10 @@ bool CollectSchemaChangedImpl(
 
     if (TEvSchemaChangedTraits<TEvent>::HasOpResult(ev)) {
         // TODO: remove TxBackup handling
-        Y_DEBUG_ABORT_UNLESS(txState.TxType == TTxState::TxBackup || txState.TxType == TTxState::TxRestore);
+        Y_DEBUG_ABORT_UNLESS(
+            txState.TxType == TTxState::TxBackup ||
+            txState.TxType == TTxState::TxRestore ||
+            txState.TxType == TTxState::TxRestoreIncrementalBackupAtTable);
     }
 
     if (!txState.ReadyForNotifications) {
@@ -735,8 +742,8 @@ bool CheckPartitioningChangedForTableModificationImpl(TTxState &txState, TOperat
     TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
 
     THashSet<TShardIdx> shardIdxsLeft;
-    for (auto& shard : table->GetPartitions()) {
-        shardIdxsLeft.insert(shard.ShardIdx);
+    for (const auto* shard : table->GetPartitions()) {
+        shardIdxsLeft.insert(shard->ShardIdx);
     }
 
     for (auto& shardOp : txState.Shards) {
@@ -813,6 +820,8 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxFinalizeBuildIndex) {
         commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxPrepareIndexValidation) {
+        commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxDropTableIndexAtMainTable) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxUpdateMainTableOnIndexMove) {
@@ -861,8 +870,8 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
     }
 
     // Fill new list of tx shards
-    for (auto& shard : table->GetPartitions()) {
-        auto shardIdx = shard.ShardIdx;
+    for (const auto* shard : table->GetPartitions()) {
+        auto shardIdx = shard->ShardIdx;
         Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx));
         auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
 
@@ -906,8 +915,8 @@ bool SourceTablePartitioningChangedForCopyTable(const TTxState &txState, TOperat
     const TTableInfo::TPtr srcTableInfo = *context.SS->Tables.FindPtr(txState.SourcePathId);
 
     THashSet<TShardIdx> srcShardIdxsLeft;
-    for (const auto& p : srcTableInfo->GetPartitions()) {
-        srcShardIdxsLeft.insert(p.ShardIdx);
+    for (const auto* p : srcTableInfo->GetPartitions()) {
+        srcShardIdxsLeft.insert(p->ShardIdx);
     }
 
     for (const auto& shard : txState.Shards) {
@@ -955,7 +964,6 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
             context.SS->ShardInfos.erase(shard.Idx);
             domainInfo->RemoveInternalShard(shard.Idx, context.SS);
             context.SS->DecrementPathDbRefCount(pathId, "remove shard from txState");
-            context.SS->OnShardRemoved(shard.Idx);
         }
     }
     txState.Shards.clear();
@@ -1004,8 +1012,8 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     for (const auto& part : newPartitioning) {
         newShardsIdx.push_back(part.ShardIdx);
     }
-    context.SS->SetPartitioning(txState.TargetPathId, dstTableInfo, std::move(newPartitioning));
-    if (context.SS->EnableShred && context.SS->ShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+    context.SS->CopyPartitioning(txState.TargetPathId, dstTableInfo, std::move(newPartitioning));
+    if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
         context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
     }
 
@@ -1020,15 +1028,15 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     context.SS->PersistUpdateNextPathId(db);
     context.SS->PersistUpdateNextShardIdx(db);
     // Persist new shards info
-    for (const auto& shard : dstTableInfo->GetPartitions()) {
-        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.ShardIdx), "shard info is set before");
-        const auto tabletType = context.SS->ShardInfos[shard.ShardIdx].TabletType;
-        context.SS->PersistShardMapping(db, shard.ShardIdx, InvalidTabletId, txState.TargetPathId, operationId.GetTxId(), tabletType);
-        context.SS->PersistChannelsBinding(db, shard.ShardIdx, channelsBinding);
+    for (const auto* shard : dstTableInfo->GetPartitions()) {
+        Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard->ShardIdx), "shard info is set before");
+        const auto tabletType = context.SS->ShardInfos[shard->ShardIdx].TabletType;
+        context.SS->PersistShardMapping(db, shard->ShardIdx, InvalidTabletId, txState.TargetPathId, operationId.GetTxId(), tabletType);
+        context.SS->PersistChannelsBinding(db, shard->ShardIdx, channelsBinding);
 
         if (storePerShardConfig) {
-            dstTableInfo->PerShardPartitionConfig[shard.ShardIdx].CopyFrom(perShardConfig);
-            context.SS->PersistAddTableShardPartitionConfig(db, shard.ShardIdx, perShardConfig);
+            dstTableInfo->PerShardPartitionConfig[shard->ShardIdx].CopyFrom(perShardConfig);
+            context.SS->PersistAddTableShardPartitionConfig(db, shard->ShardIdx, perShardConfig);
         }
     }
 
@@ -1036,14 +1044,22 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
 }
 
 TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDatashardInfo, TTableInfo::TPtr srcTableInfo, TTxState &txState, TSchemeShard *ss) {
-    TVector<TTableShardInfo> dstPartitions = srcTableInfo->GetPartitions();
+    // Build a mutable copy of src partitions for the dst table.
+    TVector<TTableShardInfo> dstPartitions;
+    {
+        const auto& srcParts = srcTableInfo->GetPartitions();
+        dstPartitions.reserve(srcParts.size());
+        for (const auto* p : srcParts) {
+            dstPartitions.push_back(*p);
+        }
+    }
 
     // Source table must not be altered or drop while we are performing copying. So we put it into a special state.
     ui64 count = dstPartitions.size();
     txState.Shards.reserve(count*2);
     for (ui64 i = 0; i < count; ++i) {
         // Source shards need to get "Send parts" transaction
-        auto srcShardIdx = srcTableInfo->GetPartitions()[i].ShardIdx;
+        auto srcShardIdx = srcTableInfo->GetPartitions()[i]->ShardIdx;
         Y_ABORT_UNLESS(ss->ShardInfos.contains(srcShardIdx), "Source table shard not found");
         auto srcTabletId = ss->ShardInfos[srcShardIdx].TabletID;
         Y_ABORT_UNLESS(srcTabletId != InvalidTabletId);
@@ -1229,7 +1245,45 @@ void ValidateNoTransactionOnPaths(TOperationId operationId, const THashSet<TPath
     }
 }
 
+void AbortRelatedOperations(TOperationId operationId, const THashSet<TTxId>& relatedTx, TOperationContext& context, TStringBuf logPrefix) {
+    const TTabletId ssId = context.SS->SelfTabletId();
+
+    for (auto otherTxId: relatedTx) {
+        if (otherTxId == operationId.GetTxId()) {
+            continue;
+        }
+
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     logPrefix
+                         << ", dependent transaction: " << operationId.GetTxId()
+                         << ", parent transaction: " << otherTxId
+                         << ", at schemeshard: " << ssId);
+
+        context.OnComplete.Dependence(otherTxId, operationId.GetTxId());
+
+        Y_ABORT_UNLESS(context.SS->Operations.contains(otherTxId));
+        auto otherOperation = context.SS->Operations.at(otherTxId);
+        // AbortUnsafe marks parts as done; clear active barriers first to avoid
+        // IsDoneBarrier() VERIFY when a blocked part is force-aborted.
+        otherOperation->ForceClearBarriers();
+        for (ui32 partId = 0; partId < otherOperation->Parts.size(); ++partId) {
+            if (auto part = otherOperation->Parts.at(partId)) {
+                part->AbortUnsafe(operationId.GetTxId(), context);
+            }
+        }
+    }
+}
+
 }  // namespace NForceDrop
+
+void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath) {
+    if (parentPath.Base()->HasActiveChanges()) {
+        const TTxId parentTxId = parentPath.Base()->PlannedToCreate()
+                                    ? parentPath.Base()->CreateTxId
+                                    : parentPath.Base()->LastTxId;
+        context.OnComplete.Dependence(parentTxId, operationId.GetTxId());
+    }
+}
 
 void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeShard* ss, TSideEffects& onComplete) {
     auto parent = path.Parent();
@@ -1328,6 +1382,19 @@ NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& 
     auto operation = scheme.MutableMoveTableIndex();
     operation->SetSrcPath(src.PathString());
     operation->SetDstPath(dst.PathString());
+
+    return scheme;
+}
+
+NKikimrSchemeOp::TModifyScheme MoveLocalIndexTask(const TString& tablePath, const TString& srcIndexPath, const TString& dstIndexName) {
+    NKikimrSchemeOp::TModifyScheme scheme;
+
+    scheme.SetWorkingDir(tablePath);
+    scheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
+    auto operation = scheme.MutableMoveIndex();
+    operation->SetTablePath(tablePath);
+    operation->SetSrcPath(srcIndexPath);
+    operation->SetDstPath(dstIndexName);
 
     return scheme;
 }

@@ -1,19 +1,30 @@
-
 #include <ydb/core/http_proxy/ut/datastreams_fixture/datastreams_fixture.h>
-
 #include <ydb/core/http_proxy/http_req.h>
+#include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
-
+#include <ydb/public/sdk/cpp/src/library/kafka/ut/ut_common.h>
+#include <ydb/services/sqs_topic/receipt.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h>
+#include <ydb/core/metering/stream_ru_calculator.h>
+#include <ydb/core/quoter/public/quoter.h>
+#include <ydb/services/sqs_topic/billing.h>
+
+#include <util/system/mutex.h>
+
+#include <memory>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json_value.h>
-#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/string_utils/url/url.h>
+#include <library/cpp/testing/unittest/registar.h>
 
+#include <array>
 #include <format>
 
 using namespace NKikimr::NHttpProxy;
@@ -23,10 +34,61 @@ using namespace NActors;
 
 using TFixture = THttpProxyTestMockForSQSTopic;
 
+
 namespace {
+    class TNoAuthFixture: public THttpProxyTestMockForSQSTopic {
+    public:
+        void SetUp(NUnitTest::TTestContext& ctx) override {
+            THttpProxyTestMockForSQSTopic::SetUp(ctx);
+            DisableAuthorization();
+        }
+    };
+
+    class TWithEnforceUserTokenRequirementFixture: public THttpProxyTestMock {
+    public:
+        void SetUp(NUnitTest::TTestContext&) override {
+            InitAll(TInitParameters{
+                .EnableSqsTopic = true,
+                .EnforceUserTokenRequirement = true,
+            });
+        }
+    };
+
+
+    class TNoAuthWithEnforceUserTokenRequirementFixture: public TWithEnforceUserTokenRequirementFixture {
+    public:
+        void SetUp(NUnitTest::TTestContext& ctx) override {
+            TWithEnforceUserTokenRequirementFixture::SetUp(ctx);
+            DisableAuthorization();
+        }
+    };
+
+    class TWithTopicBatchingFixture: public THttpProxyTestMock {
+    public:
+        void SetUp(NUnitTest::TTestContext&) override {
+            InitAll(TInitParameters{
+                .EnableSqsTopic = true,
+                .EnableTopicMessagesBatching = true,
+            });
+        }
+    };
+
+    class TNonFirstClassCitizenFixture: public THttpProxyTestMock {
+    public:
+        static constexpr TStringBuf FederationDatabase = "/Root/federation";
+
+        void SetUp(NUnitTest::TTestContext&) override {
+            InitAll(TInitParameters{
+                .EnableSqsTopic = true,
+                .TopicsAreFirstClassCitizen = false,
+            });
+        }
+    };
 
     using NYdb::TDriver;
     using NYdb::NTopic::TTopicClient;
+
+    constexpr TStringBuf NON_EXISTING_QUEUE_URL = "/v1/5//Root/16/NonExistentQueue/16/ydb-sqs-consumer";
 
     TString GetPathFromFullQueueUrl(const TString& url) {
         auto [host, path] = NUrl::SplitUrlToHostAndPath(url);
@@ -42,10 +104,8 @@ namespace {
         return GetPathFromFullQueueUrl(url);
     }
 
-    NYdb::TDriverConfig MakeDriverConfig(TFixture& fixture) {
+    NYdb::TDriverConfig MakeDriverConfig(std::derived_from<THttpProxyTestMock> auto& fixture) {
         NYdb::TDriverConfig config;
-
-        config.SetEndpoint("localhost:" + ToString(fixture.GRpcServerPort));
         config.SetEndpoint("localhost:" + ToString(fixture.KikimrGrpcPort));
         config.SetDatabase("/Root");
         config.SetAuthToken("root@builtin");
@@ -53,7 +113,7 @@ namespace {
         return config;
     }
 
-    NYdb::TDriver MakeDriver(TFixture& fixture) {
+    NYdb::TDriver MakeDriver(std::derived_from<THttpProxyTestMock> auto& fixture) {
         return TDriver(MakeDriverConfig(fixture));
     }
 
@@ -68,6 +128,7 @@ namespace {
         }
         {
             auto desc = client.DescribeTopic(topicName, NYdb::NTopic::TDescribeTopicSettings{}.IncludeLocation(true)).GetValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), topicName);
             auto description = desc.GetTopicDescription();
             desc.Out(Cerr);
             for (const auto& c : description.GetConsumers()) {
@@ -145,6 +206,156 @@ namespace {
         auto messages = ReadMessagesSync(topicClient.CreateReadSession(settings), commit, count, timeout);
         return messages;
     }
+
+    void WriteMessageViaTopicSdk(
+        NYdb::TDriver& driver,
+        const TString& topicPath,
+        const TString& messageBody,
+        NYdb::NTopic::ECodec codec = NYdb::NTopic::ECodec::RAW)
+    {
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        auto writeSettings = NYdb::NTopic::TWriteSessionSettings()
+            .Path(topicPath)
+            .Codec(codec);
+        auto writer = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
+        UNIT_ASSERT(writer->Write(messageBody));
+        writer->Close();
+    }
+
+    // Serverless rate-limiter path stored in the database user-attributes.
+    // When a topic is metered by Request Units, the sqs_topic actors read these
+    // attributes and build the rate-limiter context from them.
+    struct TRuTopicSetup {
+        TString CoordinationNodePath = "/Root/ru-coordination-node";
+        TString ResourcePath = "root-topic-resource-ru";
+    };
+
+    void SetupServerlessRuAttributes(std::derived_from<THttpProxyTestMock> auto& fixture, const TRuTopicSetup& setup) {
+        NYdb::TClient client(*(fixture.KikimrServer->ServerSettings));
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+            client.AlterUserAttributes("/", "Root",
+                {{"serverless_rt_coordination_node_path", setup.CoordinationNodePath},
+                 {"serverless_rt_topic_resource_ru", setup.ResourcePath}},
+                {}, {}, "root@builtin"));
+    }
+
+    bool CreateRequestUnitsTopic(NYdb::TDriver& driver, const TString& topicName, const TString& consumerName) {
+        // Force the RAW codec (no compression) so that the payload bytes written
+        // equal the payload bytes read back. This keeps the RU block accounting
+        // deterministic: the metering tests below rely on the exact transferred
+        // size, which compression would otherwise change.
+        return CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
+            .MeteringMode(NYdb::NTopic::EMeteringMode::RequestUnits)
+            .SetSupportedCodecs({NYdb::NTopic::ECodec::RAW})
+            .BeginAddSharedConsumer(consumerName)
+                .KeepMessagesOrder(false)
+                .DefaultProcessingTimeout(TDuration::Seconds(20))
+            .EndAddConsumer());
+    }
+
+    // Replicates TStreamRequestUnitsCalculator::CalcConsumption for a freshly
+    // constructed calculator (Remainder == blockSize). Each RU-metered request
+    // uses its own actor and therefore its own fresh calculator, so a single
+    // charge maps its payload onto blocks with this formula. Used by the
+    // metering tests to predict the block-based part of a write/read charge.
+    ui64 RuPayloadBlocks(ui64 payloadSize, ui64 blockSize) {
+        if (payloadSize <= blockSize) {
+            return 0;
+        }
+        payloadSize -= blockSize;
+        return payloadSize / blockSize + ((payloadSize % blockSize) ? 1 : 0);
+    }
+
+    struct TRuCharge {
+        TString Quoter;
+        TString Resource;
+        ui64 Amount = 0;
+    };
+
+    // Mock quoter service actor. The fixture runs the embedded Kikimr actor
+    // system on real executor threads, where SetObserverFunc cannot intercept
+    // events (observers only see events on the single-threaded dispatcher).
+    // Instead we register this actor under MakeQuoterServiceID(), overriding the
+    // real quoter service, so it receives the TEvQuota::TEvRequest that
+    // TAcquireRateLimiterResourceRPC sends when a RU charge fires. It records the
+    // charged amount / quoter / resource (for requests matching the configured
+    // resource) into a shared, mutex-guarded vector, then grants a Success
+    // clearance so the HTTP request can complete without a real Kesus resource.
+    class TRuQuoterServiceMock : public TActor<TRuQuoterServiceMock> {
+    public:
+        TRuQuoterServiceMock(std::shared_ptr<TMutex> lock,
+                             std::shared_ptr<TVector<TRuCharge>> charges,
+                             TString resourceFilter)
+            : TActor(&TRuQuoterServiceMock::StateWork)
+            , Lock_(std::move(lock))
+            , Charges_(std::move(charges))
+            , ResourceFilter_(std::move(resourceFilter))
+        {}
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvQuota::TEvRequest, Handle);
+            }
+        }
+
+        void Handle(TEvQuota::TEvRequest::TPtr& ev) {
+            {
+                TGuard<TMutex> guard(*Lock_);
+                for (const auto& leaf : ev->Get()->Reqs) {
+                    if (leaf.Resource == ResourceFilter_) {
+                        Charges_->push_back(TRuCharge{leaf.Quoter, leaf.Resource, leaf.Amount});
+                    }
+                }
+            }
+            Send(ev->Sender,
+                 new TEvQuota::TEvClearance(TEvQuota::TEvClearance::EResult::Success),
+                 0, ev->Cookie);
+        }
+
+    private:
+        std::shared_ptr<TMutex> Lock_;
+        std::shared_ptr<TVector<TRuCharge>> Charges_;
+        TString ResourceFilter_;
+    };
+
+    // Registers a TRuQuoterServiceMock in place of the real quoter service and
+    // exposes the recorded charges. Because a RU-metered operation only replies
+    // (and thus the blocking HTTP call only returns) after the quota clearance is
+    // granted, any charge for a completed operation is guaranteed to have been
+    // recorded by the time the corresponding HTTP helper returns. Take() still
+    // polls briefly to be robust against cross-thread memory ordering.
+    class TRuRecorder {
+    public:
+        TRuRecorder(TTestActorRuntime* runtime, TString resourceFilter)
+            : Lock_(std::make_shared<TMutex>())
+            , Charges_(std::make_shared<TVector<TRuCharge>>())
+        {
+            const ui32 nodeIndex = 0;
+            const ui32 systemPoolId = runtime->GetAppData().SystemPoolId;
+            auto* actor = new TRuQuoterServiceMock(Lock_, Charges_, std::move(resourceFilter));
+            const TActorId actorId = runtime->Register(actor, nodeIndex, systemPoolId);
+            runtime->RegisterService(MakeQuoterServiceID(), actorId);
+        }
+
+        TVector<TRuCharge> Take(size_t expected = 1, TDuration timeout = TDuration::Seconds(10)) {
+            const TInstant deadline = TInstant::Now() + timeout;
+            for (;;) {
+                {
+                    TGuard<TMutex> guard(*Lock_);
+                    if (Charges_->size() >= expected || TInstant::Now() >= deadline) {
+                        TVector<TRuCharge> result = std::move(*Charges_);
+                        Charges_->clear();
+                        return result;
+                    }
+                }
+                Sleep(TDuration::MilliSeconds(10));
+            }
+        }
+
+    private:
+        std::shared_ptr<TMutex> Lock_;
+        std::shared_ptr<TVector<TRuCharge>> Charges_;
+    };
 } // namespace
 
 Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
@@ -155,8 +366,14 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         }
 
         Y_UNIT_TEST_F(TestGetQueueUrl, TFixture) {
-            const TString queueUrl = "/v1/5//Root/16/ExampleQueueName/16/ydb-sqs-consumer";
-            auto queueName = "ExampleQueueName";
+            auto driver = MakeDriver(*this);
+            const TString topicName = "ExampleQueueName";
+            const TString consumer = "ydb-sqs-consumer";
+
+            Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+            const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+            auto queueName = topicName;
             auto json = GetQueueUrl({{"QueueName", queueName}});
             UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetPathFromQueueUrlMap(json));
 
@@ -169,25 +386,639 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         }
 
         Y_UNIT_TEST_F(TestGetQueueUrlOfNotExistingQueue, TFixture) {
-            if ("X-Fail") {
-                return;
-            }
             auto json = GetQueueUrl({{"QueueName", "not-existing-queue"}}, 400);
             TString resultType = GetByPath<TString>(json, "__type");
             UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
             TString resultMessage = GetByPath<TString>(json, "message");
-            UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+            UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist");
         }
 
         Y_UNIT_TEST_F(TestGetQueueUrlWithConsumer, TFixture) {
+            auto driver = MakeDriver(*this);
             const TString consumer = "user_consumer";
             const TString queueName = "ExampleQueueName";
-            const TString queueUrl = "/v1/5//Root/16/ExampleQueueName/13/user_consumer";
+            Y_ENSURE(CreateTopic(driver, queueName, consumer));
+            const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", queueName.size(), queueName.c_str(), consumer.size(), consumer.c_str());
             const TString requestQueueName = queueName + "@" + consumer;
             auto json = GetQueueUrl({
                 {"QueueName", requestQueueName},
             });
             UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetPathFromQueueUrlMap(json));
+
+            const TString requestQueueNameWithWrongConsumer = queueName + "@" + "wrong_consumer";
+            json = GetQueueUrl({
+                {"QueueName", requestQueueNameWithWrongConsumer},
+            }, 400);
+            TString resultType = GetByPath<TString>(json, "__type");
+            UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        void TestGetQueueUrlWithAtSignInConsumerNameInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            auto driver = MakeDriver(fixture);
+
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicName = "my_topic";
+            const TString topicPath = TStringBuilder() << "federation/" << topicName;
+            const TString consumerName = "my@consumer";
+            const TString consumerInQueueName = "my/consumer";
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer(consumerName)
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+
+            const TString expectedQueueUrl = std::format(
+                "/v1/{}/{}/{}/{}/{}/{}",
+                database.size(),
+                database.c_str(),
+                topicName.size(),
+                topicName.c_str(),
+                consumerInQueueName.size(),
+                consumerInQueueName.c_str());
+            auto res = fixture.SendHttpRequest(
+                database,
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", requestQueueName}},
+                fixture.FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            UNIT_ASSERT_VALUES_EQUAL(expectedQueueUrl, GetPathFromQueueUrlMap(json));
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestGetQueueUrlWithAtSignInConsumerNameInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestGetQueueUrlWithAtSignInConsumerNameInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestDeleteQueueInFederation, TNonFirstClassCitizenFixture) {
+            auto driver = MakeDriver(*this);
+
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicPath = "federation/my_topic";
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer("my@consumer")
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+
+            auto getUrlRes = SendHttpRequest(
+                database,
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", "my_topic@my/consumer"}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(getUrlRes.HttpCode, 200, getUrlRes.Body);
+            NJson::TJsonMap getUrlJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(getUrlRes.Body, &getUrlJson, true));
+            const TString queueUrl = GetByPath<TString>(getUrlJson, "QueueUrl");
+
+            auto deleteRes = SendHttpRequest(
+                database,
+                "AmazonSQS.DeleteQueue",
+                NJson::TJsonMap{{"QueueUrl", queueUrl}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(deleteRes.HttpCode, 400, deleteRes.Body);
+            NJson::TJsonMap deleteJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(deleteRes.Body, &deleteJson, true));
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(deleteJson, "__type"), "AWS.SimpleQueueService.UnsupportedOperation");
+
+            auto verifyRes = SendHttpRequest(
+                database,
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", "my_topic@my/consumer"}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(verifyRes.HttpCode, 200, verifyRes.Body);
+        }
+
+        Y_UNIT_TEST_F(TestCreateQueueInFederation, TNonFirstClassCitizenFixture) {
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+
+            auto assertUnsupported = [&](const TString& queueName) {
+                auto res = SendHttpRequest(
+                    database,
+                    "AmazonSQS.CreateQueue",
+                    NJson::TJsonMap{{"QueueName", queueName}},
+                    FormAuthorizationStr("ru-central1"));
+                UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 400, res.Body);
+                NJson::TJsonMap json;
+                UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+                UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.UnsupportedOperation");
+            };
+
+            assertUnsupported("my_topic");
+            assertUnsupported("my_topic@my/consumer");
+            assertUnsupported("my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestSetQueueAttributesInFederation, TNonFirstClassCitizenFixture) {
+            auto driver = MakeDriver(*this);
+
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicPath = "federation/my_topic";
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer("my@consumer")
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+
+            auto getUrlRes = SendHttpRequest(
+                database,
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", "my_topic@my/consumer"}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(getUrlRes.HttpCode, 200, getUrlRes.Body);
+            NJson::TJsonMap getUrlJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(getUrlRes.Body, &getUrlJson, true));
+            const TString queueUrl = GetByPath<TString>(getUrlJson, "QueueUrl");
+
+            auto setAttrsRes = SendHttpRequest(
+                database,
+                "AmazonSQS.SetQueueAttributes",
+                NJson::TJsonMap{
+                    {"QueueUrl", queueUrl},
+                    {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "30"}}},
+                },
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(setAttrsRes.HttpCode, 400, setAttrsRes.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(setAttrsRes.Body, &json, true));
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.UnsupportedOperation");
+        }
+
+        struct TFederationQueueContext {
+            TString Database;
+            TString QueueUrl;
+        };
+
+        TFederationQueueContext SetupFederationQueue(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            auto driver = MakeDriver(fixture);
+
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicPath = TStringBuilder() << "federation/my_topic";
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer("my@consumer")
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+
+            auto getUrlRes = fixture.SendHttpRequest(
+                database,
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", requestQueueName}},
+                fixture.FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(getUrlRes.HttpCode, 200, getUrlRes.Body);
+            NJson::TJsonMap getUrlJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(getUrlRes.Body, &getUrlJson, true));
+
+            return {
+                .Database = database,
+                .QueueUrl = GetByPath<TString>(getUrlJson, "QueueUrl"),
+            };
+        }
+
+        NJson::TJsonMap FederationSqsRequest(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& database,
+            const TString& method,
+            const NJson::TJsonMap& request,
+            ui32 expectedHttpCode = 200)
+        {
+            auto res = fixture.SendHttpRequest(
+                database,
+                TStringBuilder() << "AmazonSQS." << method,
+                request,
+                fixture.FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, expectedHttpCode, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            return json;
+        }
+
+        void CreateFederationTopicWithConsumer(TNonFirstClassCitizenFixture& fixture) {
+            auto driver = MakeDriver(fixture);
+            const TString topicPath = TStringBuilder() << "federation/my_topic";
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer("my@consumer")
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+        }
+
+        TString MakeFederationWrongQueueUrl() {
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicName = "my_topic";
+            const TString wrongConsumer = "wrong/consumer";
+            return std::format(
+                "/v1/{}/{}/{}/{}/{}/{}",
+                database.size(),
+                database.c_str(),
+                topicName.size(),
+                topicName.c_str(),
+                wrongConsumer.size(),
+                wrongConsumer.c_str());
+        }
+
+        void TestSendMessageInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            constexpr TStringBuf messageBody = "MessageBody-federation";
+
+            auto sendJson = FederationSqsRequest(fixture, queue.Database, "SendMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"MessageBody", messageBody},
+            });
+            UNIT_ASSERT(!GetByPath<TString>(sendJson, "MessageId").empty());
+            UNIT_ASSERT(!GetByPath<TString>(sendJson, "MD5OfMessageBody").empty());
+        }
+
+        Y_UNIT_TEST_F(TestSendMessageWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestSendMessageInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestSendMessageWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestSendMessageInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        void TestReceiveMessageInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            constexpr TStringBuf messageBody = "MessageBody-federation-receive";
+
+            FederationSqsRequest(fixture, queue.Database, "SendMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"MessageBody", messageBody},
+            });
+
+            auto receiveJson = FederationSqsRequest(fixture, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 20},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(receiveJson["Messages"].GetArraySafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(receiveJson["Messages"][0]["Body"], messageBody);
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestReceiveMessageInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestReceiveMessageInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageNonExistentConsumerInFederation, TNonFirstClassCitizenFixture) {
+            CreateFederationTopicWithConsumer(*this);
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+
+            auto receiveJson = FederationSqsRequest(*this, database, "ReceiveMessage", {
+                {"QueueUrl", MakeFederationWrongQueueUrl()},
+                {"WaitTimeSeconds", 1},
+            }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(receiveJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        void TestDeleteMessageInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            constexpr TStringBuf messageBody = "MessageBody-federation-delete";
+
+            FederationSqsRequest(fixture, queue.Database, "SendMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"MessageBody", messageBody},
+            });
+
+            auto receiveJson = FederationSqsRequest(fixture, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 20},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(receiveJson["Messages"].GetArraySafe().size(), 1);
+            const TString receiptHandle = receiveJson["Messages"][0]["ReceiptHandle"].GetString();
+            UNIT_ASSERT(!receiptHandle.empty());
+
+            FederationSqsRequest(fixture, queue.Database, "DeleteMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"ReceiptHandle", receiptHandle},
+            });
+
+            auto emptyReceiveJson = FederationSqsRequest(fixture, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 1},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(emptyReceiveJson["Messages"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestDeleteMessageWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestDeleteMessageInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestDeleteMessageWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestDeleteMessageInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestDeleteMessageNonExistentConsumerInFederation, TNonFirstClassCitizenFixture) {
+            const auto queue = SetupFederationQueue(*this, "my_topic@my/consumer");
+            constexpr TStringBuf messageBody = "MessageBody-federation-delete-wrong-consumer";
+
+            FederationSqsRequest(*this, queue.Database, "SendMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"MessageBody", messageBody},
+            });
+
+            auto receiveJson = FederationSqsRequest(*this, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 20},
+            });
+            const TString receiptHandle = receiveJson["Messages"][0]["ReceiptHandle"].GetString();
+
+            auto deleteJson = FederationSqsRequest(*this, queue.Database, "DeleteMessage", {
+                {"QueueUrl", MakeFederationWrongQueueUrl()},
+                {"ReceiptHandle", receiptHandle},
+            }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(deleteJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        void TestPurgeQueueInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            constexpr int nMessages = 3;
+
+            for (int i = 0; i < nMessages; ++i) {
+                FederationSqsRequest(fixture, queue.Database, "SendMessage", {
+                    {"QueueUrl", queue.QueueUrl},
+                    {"MessageBody", TStringBuilder() << "MessageBody-federation-purge-" << i},
+                });
+            }
+
+            FederationSqsRequest(fixture, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"MaxNumberOfMessages", 1},
+                {"VisibilityTimeout", 43000},
+            });
+
+            FederationSqsRequest(fixture, queue.Database, "PurgeQueue", {
+                {"QueueUrl", queue.QueueUrl},
+            });
+
+            auto receiveJson = FederationSqsRequest(fixture, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 1},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(receiveJson["Messages"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestPurgeQueueWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestPurgeQueueInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestPurgeQueueWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestPurgeQueueInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestPurgeQueueNonExistentConsumerInFederation, TNonFirstClassCitizenFixture) {
+            CreateFederationTopicWithConsumer(*this);
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+
+            auto purgeJson = FederationSqsRequest(*this, database, "PurgeQueue", {
+                {"QueueUrl", MakeFederationWrongQueueUrl()},
+            }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(purgeJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        void TestChangeMessageVisibilityInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            constexpr TStringBuf messageBody = "MessageBody-federation-change-visibility";
+
+            FederationSqsRequest(fixture, queue.Database, "SendMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"MessageBody", messageBody},
+            });
+
+            auto receiveJson = FederationSqsRequest(fixture, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 20},
+                {"VisibilityTimeout", 60},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(receiveJson["Messages"].GetArraySafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(receiveJson["Messages"][0]["Body"], messageBody);
+
+            const TString receiptHandle = receiveJson["Messages"][0]["ReceiptHandle"].GetString();
+            UNIT_ASSERT(!receiptHandle.empty());
+
+            auto changeJson = FederationSqsRequest(fixture, queue.Database, "ChangeMessageVisibility", {
+                {"QueueUrl", queue.QueueUrl},
+                {"ReceiptHandle", receiptHandle},
+                {"VisibilityTimeout", 120},
+            });
+            UNIT_ASSERT(!changeJson.Has("__type"));
+        }
+
+        Y_UNIT_TEST_F(TestChangeMessageVisibilityWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestChangeMessageVisibilityInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestChangeMessageVisibilityWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestChangeMessageVisibilityInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestChangeMessageVisibilityNonExistentConsumerInFederation, TNonFirstClassCitizenFixture) {
+            const auto queue = SetupFederationQueue(*this, "my_topic@my/consumer");
+            constexpr TStringBuf messageBody = "MessageBody-federation-change-visibility-wrong-consumer";
+
+            FederationSqsRequest(*this, queue.Database, "SendMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"MessageBody", messageBody},
+            });
+
+            auto receiveJson = FederationSqsRequest(*this, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 20},
+            });
+            const TString receiptHandle = receiveJson["Messages"][0]["ReceiptHandle"].GetString();
+
+            auto changeJson = FederationSqsRequest(*this, queue.Database, "ChangeMessageVisibility", {
+                {"QueueUrl", MakeFederationWrongQueueUrl()},
+                {"ReceiptHandle", receiptHandle},
+                {"VisibilityTimeout", 120},
+            }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(changeJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        void TestSendMessageBatchInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+
+            auto batchJson = FederationSqsRequest(fixture, queue.Database, "SendMessageBatch", {
+                {"QueueUrl", queue.QueueUrl},
+                {"Entries", NJson::TJsonArray{
+                    NJson::TJsonMap{{"Id", "Id-0"}, {"MessageBody", "MessageBody-federation-batch-0"}},
+                    NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "MessageBody-federation-batch-1"}},
+                }},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(batchJson["Successful"].GetArray().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(batchJson["Failed"].GetArray().size(), 0);
+            UNIT_ASSERT(!GetByPath<TString>(batchJson["Successful"][0], "MessageId").empty());
+            UNIT_ASSERT(!GetByPath<TString>(batchJson["Successful"][1], "MessageId").empty());
+        }
+
+        Y_UNIT_TEST_F(TestSendMessageBatchWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestSendMessageBatchInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestSendMessageBatchWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestSendMessageBatchInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        void TestChangeMessageVisibilityBatchInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            constexpr size_t nMessages = 2;
+
+            FederationSqsRequest(fixture, queue.Database, "SendMessageBatch", {
+                {"QueueUrl", queue.QueueUrl},
+                {"Entries", NJson::TJsonArray{
+                    NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "MessageBody-federation-batch-1"}},
+                    NJson::TJsonMap{{"Id", "Id-2"}, {"MessageBody", "MessageBody-federation-batch-2"}},
+                }},
+            });
+
+            THashMap<TString, TString> receiptHandles;
+            while (receiptHandles.size() < nMessages) {
+                auto receiveJson = FederationSqsRequest(fixture, queue.Database, "ReceiveMessage", {
+                    {"QueueUrl", queue.QueueUrl},
+                    {"WaitTimeSeconds", 5},
+                    {"MaxNumberOfMessages", 10},
+                    {"VisibilityTimeout", 60},
+                });
+                for (const auto& message : receiveJson["Messages"].GetArray()) {
+                    receiptHandles.try_emplace(message["Body"].GetString(), message["ReceiptHandle"].GetString());
+                }
+            }
+
+            NJson::TJsonArray entries;
+            for (const auto& [body, receiptHandle] : receiptHandles) {
+                entries.AppendValue(NJson::TJsonMap{
+                    {"Id", body},
+                    {"ReceiptHandle", receiptHandle},
+                    {"VisibilityTimeout", 120},
+                });
+            }
+
+            auto changeJson = FederationSqsRequest(fixture, queue.Database, "ChangeMessageVisibilityBatch", {
+                {"QueueUrl", queue.QueueUrl},
+                {"Entries", entries},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(changeJson["Successful"].GetArray().size(), nMessages);
+            UNIT_ASSERT_VALUES_EQUAL(changeJson["Failed"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestChangeMessageVisibilityBatchWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestChangeMessageVisibilityBatchInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestChangeMessageVisibilityBatchWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestChangeMessageVisibilityBatchInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestChangeMessageVisibilityBatchNonExistentConsumerInFederation, TNonFirstClassCitizenFixture) {
+            const auto queue = SetupFederationQueue(*this, "my_topic@my/consumer");
+
+            FederationSqsRequest(*this, queue.Database, "SendMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"MessageBody", "MessageBody-federation-change-visibility-batch-wrong-consumer"},
+            });
+
+            auto receiveJson = FederationSqsRequest(*this, queue.Database, "ReceiveMessage", {
+                {"QueueUrl", queue.QueueUrl},
+                {"WaitTimeSeconds", 20},
+            });
+            const TString receiptHandle = receiveJson["Messages"][0]["ReceiptHandle"].GetString();
+
+            auto changeJson = FederationSqsRequest(*this, queue.Database, "ChangeMessageVisibilityBatch", {
+                {"QueueUrl", MakeFederationWrongQueueUrl()},
+                {"Entries", NJson::TJsonArray{
+                    NJson::TJsonMap{
+                        {"Id", "change-id-0"},
+                        {"ReceiptHandle", receiptHandle},
+                        {"VisibilityTimeout", 120},
+                    },
+                }},
+            }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(changeJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        void TestGetQueueAttributesInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            const TString expectedQueueArnSuffix = std::format(
+                "/v1/{}/{}/{}/{}/{}/{}",
+                queue.Database.size(),
+                queue.Database.c_str(),
+                8,
+                "my_topic",
+                11,
+                "my/consumer");
+
+            auto attrsJson = FederationSqsRequest(fixture, queue.Database, "GetQueueAttributes", {
+                {"QueueUrl", queue.QueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"All"}},
+            });
+            UNIT_ASSERT(attrsJson["Attributes"].IsDefined());
+            UNIT_ASSERT_VALUES_EQUAL(attrsJson["Attributes"]["VisibilityTimeout"], "20");
+            UNIT_ASSERT_VALUES_EQUAL(attrsJson["Attributes"]["FifoQueue"], "false");
+            UNIT_ASSERT_C(
+                GetByPath<TString>(attrsJson["Attributes"], "QueueArn").EndsWith(expectedQueueArnSuffix),
+                attrsJson["Attributes"]["QueueArn"].GetString());
+            UNIT_ASSERT_GT(attrsJson["Attributes"].GetMapSafe().size(), 3);
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueAttributesWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestGetQueueAttributesInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueAttributesWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestGetQueueAttributesInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueAttributesNonExistentConsumerInFederation, TNonFirstClassCitizenFixture) {
+            CreateFederationTopicWithConsumer(*this);
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+
+            auto attrsJson = FederationSqsRequest(*this, database, "GetQueueAttributes", {
+                {"QueueUrl", MakeFederationWrongQueueUrl()},
+                {"AttributeNames", NJson::TJsonArray{"All"}},
+            }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(attrsJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
         }
 
         Y_UNIT_TEST_F(TestListQueues, TFixture) {
@@ -300,7 +1131,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json0, "__type"), "MissingParameter");
 
             auto json1 = SendMessage({
-                {"QueueUrl", "/v1/5//Root/16/ExampleQueueName/13/user_consumer"},
+                {"QueueUrl", NON_EXISTING_QUEUE_URL},
                 {"MessageBody", "MessageBody-0"}
             }, 400);
             UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json1, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
@@ -317,6 +1148,113 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 {"MessageBody", TString(2_MB, 'x')},
             },  400);
             UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json0, "__type"), "InvalidParameterValue");
+        }
+
+        // Same scenario as TopicAutoscaling.PartitionSplit_AutosplitByLoad_KllSketchBasedSplit; partitioning key is MessageGroupId.
+        // Message body is capped at NSQS::TLimits::MaxMessageSize (~256 KiB), so we send more messages per phase than the topic ut.
+        // autopartitioning_manager: writeSpeedUsagePercent = SumWrittenBytes * 100 / (ScaleThresholdSeconds * WriteSpeedInBytesPerSecond);
+        // must be >= UpUtilizationPercent. Cap WriteSpeed at a PQConfig-allowed value (see InitKikimr AddValidWriteSpeedLimitsKbPerSec)
+        // so ~one max-sized message per 1s stabilization window yields high utilization and NEED_SPLIT together with KLL keys.
+        Y_UNIT_TEST_F(PartitionSplit_AutosplitByLoad_KllSketchBasedSplit_MessageGroupId, THttpProxyTestMockForSQSTopicWithKllAutosplit) {
+            static constexpr std::array<const char*, 7> MessageGroupKeys = {
+                "kll-sketch-key-a",
+                "kll-sketch-key-b",
+                "kll-sketch-key-c",
+                "kll-sketch-key-d",
+                "kll-sketch-key-e",
+                "kll-sketch-key-f",
+                "kll-sketch-key-g",
+            };
+
+            struct TKllAutosplitPaths {
+                TString Database = "/Root";
+                TString TopicName = "sqs_kll_autosplit_topic";
+                TString ConsumerName = "sqs_kll_autosplit_consumer";
+                TString QueueUrl = std::format("/v1/{}/{}/{}/{}/{}/{}", Database.size(), Database.c_str(), TopicName.size(), TopicName.c_str(), ConsumerName.size(), ConsumerName.c_str());
+            };
+
+            auto driver = MakeDriver(*this);
+            const TKllAutosplitPaths path;
+
+            constexpr ui64 partitionWriteSpeedBytesPerSec = 512 * 1_KB;
+
+            NYdb::NTopic::TCreateTopicSettings createSettings;
+            createSettings
+                .BeginAddSharedConsumer(path.ConsumerName)
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()
+                .BeginConfigurePartitioningSettings()
+                .MinActivePartitions(1)
+                .MaxActivePartitions(100)
+                    .BeginConfigureAutoPartitioningSettings()
+                    .UpUtilizationPercent(1)
+                    .DownUtilizationPercent(1)
+                    .StabilizationWindow(TDuration::Seconds(1))
+                    .Strategy(NYdb::NTopic::EAutoPartitioningStrategy::ScaleUp)
+                    .EndConfigureAutoPartitioningSettings()
+                .EndConfigurePartitioningSettings()
+                .PartitionWriteSpeedBytesPerSecond(partitionWriteSpeedBytesPerSec)
+                .PartitionWriteBurstBytes(partitionWriteSpeedBytesPerSec);
+            UNIT_ASSERT(CreateTopic(driver, path.TopicName, createSettings));
+
+            TTopicClient topicClient(driver);
+            auto describeResult = topicClient.DescribeTopic(path.TopicName).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult);
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTopicDescription().GetPartitions().size(), 1);
+
+            auto describePartitionCount = [&]() -> size_t {
+                auto d = topicClient.DescribeTopic(path.TopicName).GetValueSync();
+                UNIT_ASSERT_C(d.IsSuccess(), d);
+                return d.GetTopicDescription().GetPartitions().size();
+            };
+
+            // Autosplit is async: balancer may skip TEvPartitionScaleStatusChanged with
+            // "partition ... not found" until PartitionGraph updates after a prior split; the
+            // partition then stays NEED_SPLIT without re-sending the direct event. Allow time
+            // for stats-driven retries and SchemeShard alters (debug builds are slow).
+            auto waitAtLeastPartitions = [&](size_t minPartitions, TDuration maxWait) -> size_t {
+                const TInstant deadline = TInstant::Now() + maxWait;
+                size_t last = describePartitionCount();
+                while (last < minPartitions && TInstant::Now() < deadline) {
+                    Sleep(TDuration::Seconds(1));
+                    last = describePartitionCount();
+                }
+                return last;
+            };
+
+            auto sendMessage = [&](const TString& body, ui64 seqNo) {
+                SendMessageWithRetries({
+                    {"QueueUrl", path.QueueUrl},
+                    {"MessageBody", body},
+                    {"MessageGroupId", TString(MessageGroupKeys[seqNo % MessageGroupKeys.size()])},
+                });
+            };
+
+            // SQS SendMessage caps body (+ attributes) at NSQS::TLimits::MaxMessageSize (256 KiB); topic ut uses 1 MiB.
+            const TString msg(NKikimr::NSQS::TLimits::MaxMessageSize - 1, 'a');
+
+            {
+                for (ui64 seq = 1; seq <= 2; ++seq) {
+                    sendMessage(msg, seq);
+                }
+                auto partitionsCount = waitAtLeastPartitions(3, TDuration::Seconds(45));
+                UNIT_ASSERT_C(partitionsCount >= 3, "partitions: " << partitionsCount << " expected: >= 3");
+            }
+            {
+                for (ui64 seq = 3; seq <= 6; ++seq) {
+                    sendMessage(msg, seq);
+                }
+                auto partitionsCount = waitAtLeastPartitions(5, TDuration::Seconds(60));
+                UNIT_ASSERT_C(partitionsCount >= 5, "partitions: " << partitionsCount << " expected: >= 5");
+            }
+            {
+                for (ui64 seq = 7; seq <= 10; ++seq) {
+                    sendMessage(msg, seq);
+                }
+                auto partitionsCount = waitAtLeastPartitions(7, TDuration::Seconds(60));
+                UNIT_ASSERT_C(partitionsCount >= 7, "partitions: " << partitionsCount << " expected: >= 7");
+            }
         }
 
         Y_UNIT_TEST_F(TestSendMessageBatch, TFixture) {
@@ -435,10 +1373,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         Y_UNIT_TEST_F(TestReceiveMessageInvalidQueueUrl, TFixture) {
             auto jsonReceived = ReceiveMessage({{"QueueUrl", "/invalid/queue/url/"}, {"WaitTimeSeconds", 1}}, 400);
             TString resultType = GetByPath<TString>(jsonReceived, "__type");
+            UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidArgumentException");
         }
 
         Y_UNIT_TEST_F(TestReceiveMessageNonExistingQueue, TFixture) {
-            auto jsonReceived = ReceiveMessage({{"QueueUrl", "/v1/5//Root/16/ExampleQueueName/16/ydb-sqs-consumer"}, {"WaitTimeSeconds", 1}}, 400);
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", NON_EXISTING_QUEUE_URL}, {"WaitTimeSeconds", 1}}, 400);
             TString resultType = GetByPath<TString>(jsonReceived, "__type");
             UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
         }
@@ -456,7 +1395,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             }
         }
 
-         Y_UNIT_TEST_F(TestReceiveMessage, TFixture) {
+        Y_UNIT_TEST_F(TestReceiveMessage, TFixture) {
             auto driver = MakeDriver(*this);
             const TSqsTopicPaths path;
             bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
@@ -474,6 +1413,147 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             // Second call during visibility timeout
             jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageKafkaBatches, TWithTopicBatchingFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            NYdb::NTopic::TTopicClient topicClient(driver);
+            constexpr size_t dataSize = 16;
+            NKikimr::NPQ::NTest::WriteKafkaBatchMessages(
+                topicClient,
+                path.TopicPath,
+                "sqs-batch-producer",
+                dataSize,
+                3,
+                {
+                    {1, 3, 'a'},
+                    {4, 3, 'b'},
+                    {7, 3, 'c'},
+                });
+
+            const TVector<char> expectedFills = {'a', 'b', 'c'};
+            size_t receivedCount = 0;
+            while (receivedCount < 3) {
+                auto jsonReceived = ReceiveMessage({
+                    {"QueueUrl", path.QueueUrl},
+                    {"WaitTimeSeconds", 20},
+                    {"MaxNumberOfMessages", 10},
+                });
+                const auto& messages = jsonReceived["Messages"].GetArraySafe();
+                UNIT_ASSERT_C(!messages.empty(), "received " << receivedCount << " messages");
+
+                for (const auto& message : messages) {
+                    UNIT_ASSERT_C(receivedCount < expectedFills.size(), LabeledOutput(receivedCount));
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        message["Attributes"]["BodyEncoding"].GetString(),
+                        ToString(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH)));
+                    NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, expectedFills[receivedCount], dataSize);
+                    ++receivedCount;
+                }
+            }
+
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestDeleteKafkaBatchMiddleOffsetDoesNotDeleteBatch, TWithTopicBatchingFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            NYdb::NTopic::TTopicClient topicClient(driver);
+            constexpr size_t dataSize = 16;
+            NKikimr::NPQ::NTest::WriteKafkaBatchMessages(
+                topicClient,
+                path.TopicPath,
+                "sqs-batch-middle-delete-producer",
+                dataSize,
+                3,
+                {
+                    {1, 3, 'a'},
+                });
+
+            auto jsonReceived = ReceiveMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"WaitTimeSeconds", 20},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
+
+            const auto& message = jsonReceived["Messages"][0];
+            const TString receiptHandle = message["ReceiptHandle"].GetString();
+            auto messageId = NKikimr::NSqsTopic::V1::DeserializeReceipt(receiptHandle);
+            UNIT_ASSERT_C(messageId.has_value(), messageId.error());
+
+            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, 'a', dataSize);
+
+            const TString middleReceiptHandle = NKikimr::NSqsTopic::V1::SerializeReceipt({
+                .PartitionId = messageId->PartitionId,
+                .Offset = messageId->Offset + 1,
+            });
+            DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", middleReceiptHandle}});
+
+            ChangeMessageVisibility({
+                {"QueueUrl", path.QueueUrl},
+                {"ReceiptHandle", receiptHandle},
+                {"VisibilityTimeout", 0},
+            });
+
+            jsonReceived = ReceiveMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"WaitTimeSeconds", 20},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
+            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(jsonReceived["Messages"][0]["Body"].GetString()), 3, 'a', dataSize);
+
+            DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", jsonReceived["Messages"][0]["ReceiptHandle"].GetString()}});
+
+            jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageZstdCompressed, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            const TString messageBody = "MessageBody-0";
+            WriteMessageViaTopicSdk(driver, path.TopicPath, messageBody, NYdb::NTopic::ECodec::ZSTD);
+
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
+
+            const auto& message = jsonReceived["Messages"][0];
+            UNIT_ASSERT_VALUES_EQUAL(message["Attributes"]["BodyEncoding"].GetString(), "zstd");
+
+            const NYdb::NTopic::ICodec* codec = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(
+                static_cast<uint32_t>(NYdb::NTopic::ECodec::ZSTD));
+            const TString decompressed = codec->Decompress(Base64Decode(message["Body"].GetString()));
+            UNIT_ASSERT_VALUES_EQUAL(decompressed, messageBody);
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageNotUtf8, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            const TString messageBody = "\xc3\x28";
+            WriteMessageViaTopicSdk(driver, path.TopicPath, messageBody, NYdb::NTopic::ECodec::RAW);
+
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
+
+            const auto& message = jsonReceived["Messages"][0];
+            UNIT_ASSERT_VALUES_EQUAL(message["Attributes"]["BodyEncoding"].GetString(), "base64");
+
+            const TString decompressed = Base64Decode(message["Body"].GetString());
+            UNIT_ASSERT_VALUES_EQUAL(decompressed, messageBody);
         }
 
         Y_UNIT_TEST_F(TestReceiveMessageReturnToQueue, TFixture) {
@@ -502,6 +1582,164 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
             CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageWithAttemptId, TFixture) {
+            auto json = CreateQueue({
+                {"QueueName", "ReceiveAttemptQueue.fifo"},
+                {"Attributes", NJson::TJsonMap{
+                    {"FifoQueue", "true"},
+                    {"VisibilityTimeout", "0"}
+                }}
+            });
+            TString queueUrl = GetPathFromQueueUrlMap(json);
+
+            SendMessage({
+                {"QueueUrl", queueUrl},
+                {"MessageBody", "message-body-0"},
+                {"MessageGroupId", "message-group-0"},
+                {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+            });
+
+            auto json1 = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"ReceiveRequestAttemptId", "attempt-0"},
+                {"VisibilityTimeout", 40000}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json1["Messages"].GetArray().size(), 1);
+            auto messageId = json1["Messages"][0]["MessageId"];
+
+            auto json2 = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"ReceiveRequestAttemptId", "attempt-0"},
+                {"VisibilityTimeout", 40000}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json2["Messages"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(messageId.GetStringSafe(), json2["Messages"][0]["MessageId"].GetStringSafe());
+            UNIT_ASSERT_VALUES_EQUAL(
+                json1["Messages"][0]["ReceiptHandle"].GetStringSafe(),
+                json2["Messages"][0]["ReceiptHandle"].GetStringSafe());
+
+            // ReceiveMessage with ReceiveRequestAttemptId should reset VisibilityTimeout.
+            auto json3 = ReceiveMessage({{"QueueUrl", queueUrl}, {"ReceiveRequestAttemptId", "attempt-0"}});
+            UNIT_ASSERT_VALUES_EQUAL(json3["Messages"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(messageId.GetStringSafe(), json3["Messages"][0]["MessageId"].GetStringSafe());
+
+            auto json4 = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}});
+            UNIT_ASSERT_VALUES_EQUAL(json4["Messages"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(messageId.GetStringSafe(), json4["Messages"][0]["MessageId"].GetStringSafe());
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageWithDifferentAttemptIds, TFixture) {
+            auto json = CreateQueue({
+                {"QueueName", "ReceiveAttemptDifferentIds.fifo"},
+                {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+            });
+            TString queueUrl = GetPathFromQueueUrlMap(json);
+
+            SendMessage({
+                {"QueueUrl", queueUrl},
+                {"MessageBody", "message-body-0"},
+                {"MessageGroupId", "message-group-0"},
+                {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+            });
+            SendMessage({
+                {"QueueUrl", queueUrl},
+                {"MessageBody", "message-body-1"},
+                {"MessageGroupId", "message-group-1"},
+                {"MessageDeduplicationId", "MessageDeduplicationId-1"}
+            });
+
+            auto json1 = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"ReceiveRequestAttemptId", "attempt-1"},
+                {"VisibilityTimeout", 3600},
+                {"MaxNumberOfMessages", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json1["Messages"].GetArray().size(), 1);
+            TString messageId1 = json1["Messages"][0]["MessageId"].GetStringSafe();
+
+            auto json2 = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"ReceiveRequestAttemptId", "attempt-2"},
+                {"VisibilityTimeout", 3600},
+                {"MaxNumberOfMessages", 10},
+                {"WaitTimeSeconds", 1}
+            });
+            UNIT_ASSERT_VALUES_UNEQUAL(json2["Messages"].GetArray().size(), 0);
+            bool foundDifferentMessage = false;
+            for (const auto& message : json2["Messages"].GetArray()) {
+                if (message["MessageId"].GetStringSafe() != messageId1) {
+                    foundDifferentMessage = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundDifferentMessage, "Different attempt ids must not share replay state");
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageWithAttemptIdChangeVisibilityInvalidatesReplay, TFixture) {
+            auto json = CreateQueue({
+                {"QueueName", "ReceiveAttemptVisibility.fifo"},
+                {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+            });
+            TString queueUrl = GetPathFromQueueUrlMap(json);
+
+            SendMessage({
+                {"QueueUrl", queueUrl},
+                {"MessageBody", "message-body"},
+                {"MessageGroupId", "message-group-0"},
+                {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+            });
+
+            const TString attemptId = "attempt-visibility";
+            auto json1 = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"ReceiveRequestAttemptId", attemptId},
+                {"VisibilityTimeout", 3600}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json1["Messages"].GetArray().size(), 1);
+            TString receiptHandle = json1["Messages"][0]["ReceiptHandle"].GetStringSafe();
+
+            ChangeMessageVisibility({
+                {"QueueUrl", queueUrl},
+                {"ReceiptHandle", receiptHandle},
+                {"VisibilityTimeout", 3600}
+            });
+
+            auto json2 = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"ReceiveRequestAttemptId", attemptId},
+                {"VisibilityTimeout", 3600},
+                {"WaitTimeSeconds", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json2["Messages"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageInvalidReceiveRequestAttemptId, TFixture) {
+            auto json = CreateQueue({
+                {"QueueName", "ReceiveAttemptValidation.fifo"},
+                {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+            });
+            TString queueUrl = GetPathFromQueueUrlMap(json);
+
+            SendMessage({
+                {"QueueUrl", queueUrl},
+                {"MessageBody", "message-body-0"},
+                {"MessageGroupId", "message-group-0"},
+                {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+            });
+
+            const auto checkInvalid = [&](const TString& attemptId) {
+                auto jsonReceived = ReceiveMessage({
+                    {"QueueUrl", queueUrl},
+                    {"ReceiveRequestAttemptId", attemptId},
+                }, 400);
+                UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(jsonReceived, "__type"), "InvalidParameterValue");
+            };
+
+            checkInvalid("§");
+            checkInvalid(
+                "very_big_0000000000111111111122222222223333333333444444444455555555556666666666777777777788888888889999999999000000000011111111112222222222");
         }
 
         Y_UNIT_TEST_F(TestReceiveMessageGroup, TFixture) {
@@ -619,9 +1857,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT(!receiptHandle.empty());
 
         DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
-        if (!"X-Fail") { // TODO MLP commit idempotence
-            DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
-        }
+        DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
     }
 
     Y_UNIT_TEST_F(TestDeleteMessageBatch, TFixture) {
@@ -675,6 +1911,191 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         UNIT_ASSERT_VALUES_EQUAL(deleteJson["Failed"].GetArray().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(deleteJson["Failed"][0]["Id"], "delete-invalid");
+    }
+
+    // Per-message size shared by the RU metering tests.
+    // The bodies sum to 24 KiB (> 8 KiB) so that a single request transfers more
+    // than one payload block. Each body is exactly READ_BLOCK_SIZE bytes, and the
+    // topic uses the RAW codec (see CreateRequestUnitsTopic), so the bytes read
+    // back equal the bytes written and the block accounting is deterministic.
+    static constexpr size_t RuMetering_MessageCount = 3;
+    static constexpr size_t RuMetering_MessageSize =
+        NKikimr::NSqsTopic::V1::NBilling::READ_BLOCK_SIZE;
+
+    static TVector<TString> MakeRuMeteringBodies() {
+        TVector<TString> bodies;
+        bodies.reserve(RuMetering_MessageCount);
+        for (size_t i = 0; i < RuMetering_MessageCount; ++i) {
+            // Distinct bodies (used as map keys on receive) of identical size.
+            bodies.push_back(TString(RuMetering_MessageSize, static_cast<char>('a' + i)));
+        }
+        return bodies;
+    }
+
+    static NJson::TJsonArray MakeRuMeteringSendEntries(const TVector<TString>& bodies) {
+        NJson::TJsonArray entries;
+        for (size_t i = 0; i < bodies.size(); ++i) {
+            entries.AppendValue(NJson::TJsonMap{
+                {"Id", std::format("Id-{}", i)},
+                {"MessageBody", bodies[i]},
+            });
+        }
+        return entries;
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageChargesRequestUnits, TFixture) {
+        namespace NBilling = NKikimr::NSqsTopic::V1::NBilling;
+
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateRequestUnitsTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+
+        // Send several messages (total payload > 8 KiB) in a single SendMessage
+        // (batch) call. The whole batch produces exactly one write RU charge.
+        const auto bodies = MakeRuMeteringBodies();
+        auto json = SendMessageBatch({
+            {"QueueUrl", path.QueueUrl},
+            {"Entries", MakeRuMeteringSendEntries(bodies)},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"].GetArray().size(), RuMetering_MessageCount);
+
+        auto charges = recorder.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one write RU charge");
+        // Total payload = count * size (24 KiB) mapped onto WRITE_BLOCK_SIZE
+        // blocks by a fresh calculator. 
+        // => Cost = base + blocks
+        const ui64 blocks = RuPayloadBlocks(
+            RuMetering_MessageCount * RuMetering_MessageSize, NBilling::WRITE_BLOCK_SIZE);
+        const ui64 expected = NBilling::CalcRu(blocks, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, false, false);
+        UNIT_ASSERT_VALUES_EQUAL(blocks, 5);
+        UNIT_ASSERT_VALUES_EQUAL(expected, 7);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
+    }
+
+    Y_UNIT_TEST_F(TestReceiveMessageChargesRequestUnits, TFixture) {
+        namespace NBilling = NKikimr::NSqsTopic::V1::NBilling;
+
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateRequestUnitsTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+
+        const auto bodies = MakeRuMeteringBodies();
+        SendMessageBatch({
+            {"QueueUrl", path.QueueUrl},
+            {"Entries", MakeRuMeteringSendEntries(bodies)},
+        });
+        // Drop the single write charge; we only assert on the read charges below.
+        recorder.Take();
+
+        // Receive all messages. Each ReceiveMessage call returns at least one
+        // message (they are all available) and produces exactly one read RU
+        // charge, which the blocking HTTP call has recorded by the time it
+        // returns. Messages may be split across several responses.
+        ui64 totalReadRu = 0;
+        size_t collected = 0;
+        while (collected < RuMetering_MessageCount) {
+            auto json = ReceiveMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"WaitTimeSeconds", 20},
+                {"MaxNumberOfMessages", static_cast<int>(RuMetering_MessageCount)},
+            });
+            const size_t k = json["Messages"].GetArray().size();
+            UNIT_ASSERT_C(k >= 1, "receive returned no messages");
+
+            auto charges = recorder.Take(1);
+            UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one read RU charge");
+            UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
+            UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
+
+            totalReadRu += charges[0].Amount;
+            collected += k;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(collected, RuMetering_MessageCount);
+        // Total payload = count * size (24 KiB) mapped onto READ_BLOCK_SIZE
+        // blocks by a fresh calculator. 
+        // => Cost = base + blocks
+        const ui64 blocks = RuPayloadBlocks(
+            RuMetering_MessageCount * RuMetering_MessageSize, NBilling::READ_BLOCK_SIZE);
+        const ui64 expected = NBilling::CalcRu(blocks, NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, false, false);
+        UNIT_ASSERT_VALUES_EQUAL(totalReadRu, expected);
+    }
+
+    Y_UNIT_TEST_F(TestDeleteMessageChargesRequestUnits, TFixture) {
+        namespace NBilling = NKikimr::NSqsTopic::V1::NBilling;
+
+        const TRuTopicSetup ru;
+        SetupServerlessRuAttributes(*this, ru);
+
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        UNIT_ASSERT(CreateRequestUnitsTopic(driver, path.TopicName, path.ConsumerName));
+
+        TRuRecorder recorder(ActorRuntime, ru.ResourcePath);
+
+        const auto bodies = MakeRuMeteringBodies();
+        SendMessageBatch({
+            {"QueueUrl", path.QueueUrl},
+            {"Entries", MakeRuMeteringSendEntries(bodies)},
+        });
+        // Drop the single write charge.
+        recorder.Take();
+
+        // Receive all messages, collecting their receipt handles and dropping the
+        // per-response read charges.
+        THashMap<TString, TString> receipts;
+        while (receipts.size() < RuMetering_MessageCount) {
+            auto json = ReceiveMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"WaitTimeSeconds", 20},
+                {"MaxNumberOfMessages", static_cast<int>(RuMetering_MessageCount)},
+            });
+            const auto& messages = json["Messages"].GetArray();
+            UNIT_ASSERT_C(messages.size() >= 1, "receive returned no messages");
+            for (const auto& message : messages) {
+                receipts.try_emplace(message["Body"].GetString(), message["ReceiptHandle"].GetString());
+            }
+            // Each non-empty receive produces exactly one read charge; drop it.
+            recorder.Take(1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(receipts.size(), RuMetering_MessageCount);
+
+        // Delete all messages in a single DeleteMessage (batch) call. The whole
+        // batch produces exactly one delete RU charge.
+        NJson::TJsonArray entries;
+        size_t idx = 0;
+        for (const auto& [body, handle] : receipts) {
+            entries.AppendValue(NJson::TJsonMap{
+                {"Id", std::format("del-{}", idx++)},
+                {"ReceiptHandle", handle},
+            });
+        }
+        auto deleteJson = DeleteMessageBatch({
+            {"QueueUrl", path.QueueUrl},
+            {"Entries", entries},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(deleteJson["Successful"].GetArray().size(), RuMetering_MessageCount);
+
+        auto charges = recorder.Take();
+        UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one delete RU charge");
+        // adjunct 0.
+        // Cost = base(2).
+        const ui64 expected = NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0, false, false);
+        UNIT_ASSERT_VALUES_EQUAL(expected, 2);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
+        UNIT_ASSERT_VALUES_EQUAL(charges[0].Resource, ru.ResourcePath);
     }
 
     Y_UNIT_TEST_F(TestChangeMessageVisibilityInvalid, TFixture) {
@@ -953,6 +2374,8 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             for (int i = 0; i < params.SharedConsumers; ++i) {
                 auto& consumer = settings.BeginAddSharedConsumer(consumerName(i));
                 consumer.KeepMessagesOrder(params.Fifo);
+                consumer.ReceiveMessageWaitTime(TDuration::Seconds(10));
+                consumer.ReceiveMessageDelay(TDuration::Seconds(1));
                 consumer.DefaultProcessingTimeout(TDuration::Seconds(25));
                 if (params.Dlq) {
                     auto&& dlqSettings = consumer.BeginDeadLetterPolicy();
@@ -990,7 +2413,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         auto checkDlq = [&params](const NJson::TJsonValue& json, bool expectRedrivePolicyIfHasDlq = true, std::source_location loc = std::source_location::current()) {
             const TString subcase = std::format("line={}", loc.line());
             if (expectRedrivePolicyIfHasDlq && params.Dlq) {
-                UNIT_ASSERT_C(json["Attributes"].Has("RedrivePolicy"), subcase);
+                UNIT_ASSERT_C(json["Attributes"].Has("RedrivePolicy"), TStringBuilder() << subcase << " " << json.GetStringRobust());
                 TString redrivePolicyJson = json["Attributes"]["RedrivePolicy"].GetString();
                 NJson::TJsonValue redrivePolicy;
                 UNIT_ASSERT_C(ReadJsonTree(redrivePolicyJson, &redrivePolicy), subcase);
@@ -1035,7 +2458,8 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 {"QueueUrl", resultQueueUrl},
                 {"AttributeNames", NJson::TJsonArray{"All"}}
             });
-            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "0");
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["ReceiveMessageWaitTimeSeconds"], "10");
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["VisibilityTimeout"], "25");
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["MessageRetentionPeriod"], ToString(Max(retentionPeriod, params.RetentionPeriod).Seconds()));
             UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
@@ -1165,6 +2589,208 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT(queueUrl.Contains("ydb-sqs-consumer"));
     }
 
+    Y_UNIT_TEST_F(TestCreateQueueWithSecurityToken, TWithEnforceUserTokenRequirementFixture) {
+        const TString queueName = "SecurityTokenQueue";
+        auto json = CreateQueueWithSecurityToken({{"QueueName", queueName}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+        UNIT_ASSERT(queueUrl.Contains(queueName));
+        UNIT_ASSERT(queueUrl.Contains("ydb-sqs-consumer"));
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithBadSecurityToken, TWithEnforceUserTokenRequirementFixture) {
+        const TString queueName = "SecurityTokenQueue";
+        auto json = CreateQueueWithSecurityToken({{"QueueName", queueName}}, "invalid_token", 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AccessDeniedException");
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithEmptySecurityToken, TWithEnforceUserTokenRequirementFixture) {
+        const TString queueName = "SecurityTokenQueue";
+        auto json = CreateQueueWithSecurityToken({{"QueueName", queueName}}, "", 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestAuthPriority, TFixture) {
+        // AWS temporary credentials send x-amz-security-token together with SigV4 signature.
+        const TString queueName = "SigV4WithSessionTokenQueue";
+
+        ActorRuntime->GetAppData().EnforceUserTokenRequirement = true;
+
+        {
+            auto res = SendHttpRequest(
+                "/Root",
+                "AmazonSQS.CreateQueue",
+                NJson::TJsonMap{{"QueueName", queueName}},
+                FormAuthorizationStr("unknown-region"),
+                "application/json",
+                "");
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 400, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            TString resultType = GetByPath<TString>(json, "__type");
+            UNIT_ASSERT_VALUES_EQUAL(resultType, "IncompleteSignature");
+            TString message = GetByPath<TString>(json, "message");
+            UNIT_ASSERT_VALUES_EQUAL(message, "Wrong service region: got unknown-region expected ru-central1");
+        }
+
+        {
+            auto res = SendHttpRequest(
+                "/Root",
+                "AmazonSQS.CreateQueue",
+                NJson::TJsonMap{{"QueueName", queueName}},
+                FormAuthorizationStr("unknown-region"),
+                "application/json",
+                "__wrong_token__");
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 400, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            TString resultType = GetByPath<TString>(json, "__type");
+            UNIT_ASSERT_VALUES_EQUAL(resultType, "AccessDeniedException");
+            TString message = GetByPath<TString>(json, "message");
+            UNIT_ASSERT_VALUES_EQUAL(message, "Permission Denied");
+        }
+
+        {
+            auto res = SendHttpRequest(
+                "/Root",
+                "AmazonSQS.CreateQueue",
+                NJson::TJsonMap{{"QueueName", queueName}},
+                FormAuthorizationStr("unknown-region"),
+                "application/json",
+                "root@builtin");
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+            TString queueUrl = GetPathFromQueueUrlMap(json);
+            UNIT_ASSERT(queueUrl.Contains(queueName));
+            UNIT_ASSERT(queueUrl.Contains("ydb-sqs-consumer"));
+        }
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueSetsDefaultTopicMessageRateLimit, TFixture) {
+        const TString queueName = "CreateQueueDefaultRateLimit";
+
+        auto json = CreateQueue({{"QueueName", queueName}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+
+        auto driver = MakeDriver(*this);
+        auto client = TTopicClient(driver);
+
+        auto desc = client.DescribeTopic(queueName).GetValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        auto description = desc.GetTopicDescription();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteSpeedMessagesPerSecond(),
+            NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteBurstMessages(),
+            NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+        );
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueSetsContentBasedDeduplicationMessageRateLimit, TFixture) {
+        const TString queueName = "CreateQueueDefaultRateLimit.fifo";
+
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+
+        auto driver = MakeDriver(*this);
+        auto client = TTopicClient(driver);
+
+        auto desc = client.DescribeTopic(queueName).GetValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        auto description = desc.GetTopicDescription();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteSpeedMessagesPerSecond(),
+            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteBurstMessages(),
+            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST
+        );
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestEnableContentBasedDeduplicationMessageRateLimit, TFixture) {
+        const TString queueName = "CreateQueueDefaultRateLimit.fifo";
+
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "false"}}}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"ContentBasedDeduplication", "true"}}}
+        });
+
+        auto driver = MakeDriver(*this);
+        auto client = TTopicClient(driver);
+
+        auto desc = client.DescribeTopic(queueName).GetValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        auto description = desc.GetTopicDescription();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteSpeedMessagesPerSecond(),
+            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteBurstMessages(),
+            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST
+        );
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestDisableContentBasedDeduplicationMessageRateLimit, TFixture) {
+        const TString queueName = "CreateQueueDefaultRateLimit.fifo";
+
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"ContentBasedDeduplication", "false"}}}
+        });
+
+        auto driver = MakeDriver(*this);
+        auto client = TTopicClient(driver);
+
+        auto desc = client.DescribeTopic(queueName).GetValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        auto description = desc.GetTopicDescription();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteSpeedMessagesPerSecond(),
+            NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteBurstMessages(),
+            NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+        );
+
+        driver.Stop(true);
+    }
+
     Y_UNIT_TEST_F(TestCreateQueueWithCustomConsumer, TFixture) {
         auto json = CreateQueue({{"QueueName", "ExampleQueueName@custom-consumer"}});
         UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
@@ -1195,7 +2821,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
     Y_UNIT_TEST_F(TestCreateQueueWithBadQueueName, TFixture) {
         auto json = CreateQueue({
-            {"QueueName", "B/d_queue_name"},
+            {"QueueName", "B?d_queue_name"},
             {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
         }, 400);
         TString resultType = GetByPath<TString>(json, "__type");
@@ -1215,6 +2841,35 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         });
         TString queueUrl = GetPathFromQueueUrlMap(json);
         UNIT_ASSERT(queueUrl.Contains("ExampleQueue.fifo"));
+    }
+
+    Y_UNIT_TEST_F(TestCreateFifoQueueWithoutSuffix, TFixture) {
+        const TString queueName = "CreateQueueWithoutSuffix";
+
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+        Cerr << (TStringBuilder() << "queueUrl: " << queueUrl << Endl);
+        UNIT_ASSERT_C(queueUrl.Contains(queueName), queueUrl);
+
+        json = GetQueueAttributes({{"QueueUrl", queueUrl}, {"AttributeNames", NJson::TJsonArray{"FifoQueue"}}});
+        UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["FifoQueue"], "true");
+
+        json = GetQueueUrl({{"QueueName", queueName}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        queueUrl = GetPathFromQueueUrlMap(json);
+        Cerr << (TStringBuilder() << "queueUrl: " << queueUrl << Endl);
+        UNIT_ASSERT_C(queueUrl.Contains(queueName), queueUrl);
+
+        json = SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "test"}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}});
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithAttributes, TFixture) {
@@ -1310,6 +2965,76 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["MessageRetentionPeriod"], ToString(queueRetention.Seconds()));
     }
 
+    Y_UNIT_TEST_F(TestDeleteQueueInvalid, TFixture) {
+        auto json = DeleteQueue({{"QueueUrl", "InvalidExistentQueue"}}, 400);
+    }
+
+    Y_UNIT_TEST_F(TestDeleteQueueNonExisting, TFixture) {
+        auto json = DeleteQueue({{"QueueUrl", NON_EXISTING_QUEUE_URL}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+    }
+
+    Y_UNIT_TEST_F(TestDeleteQueue, TFixture) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        DeleteQueue({{"QueueUrl", queueUrl}});
+
+        auto getQueueUrlRequest = CreateSqsGetQueueUrlRequest();
+        for (const TInstant deadline = TDuration::Seconds(60).ToDeadLine(); TInstant::Now() <= deadline; ) {
+            auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", getQueueUrlRequest, FormAuthorizationStr("ru-central1"));
+            if (res.HttpCode == 200) {
+                // The queue should be deleted within 60 seconds.
+                Sleep(TDuration::MilliSeconds(250));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+                UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+                UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+                return;
+            }
+        }
+        UNIT_FAIL("Queue was not deleted");
+    }
+
+    Y_UNIT_TEST_F(TestDeleteQueueMultiConsumer, TFixture) {
+        const int nConsumers = 10;
+        auto driver = MakeDriver(*this);
+
+        const TString queueName = "ExampleQueueName";
+        auto consumerName = [](int i) { return "user_consumer" + ToString(i); };
+        auto queueUrl = [&](int i) {
+            return std::format("/v1/5//Root/{}/{}/{}/{}", queueName.size(), queueName.c_str(), consumerName(i).size(), consumerName(i).c_str());
+        };
+        {
+            NYdb::NTopic::TCreateTopicSettings settings;
+            for (int i = 0; i < nConsumers; ++i) {
+                settings.BeginAddSharedConsumer(consumerName(i)).KeepMessagesOrder(false).DefaultProcessingTimeout(TDuration::Seconds(20)).EndAddConsumer();
+            }
+            Y_ENSURE(CreateTopic(driver, queueName, settings));
+        }
+        auto client = TTopicClient(driver);
+        for (int consumerRemains = nConsumers; consumerRemains >= 0; --consumerRemains) {
+            auto desc = client.DescribeTopic(queueName, NYdb::NTopic::TDescribeTopicSettings{}.IncludeLocation(true)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(desc.IsSuccess(), consumerRemains > 0, consumerRemains);
+            auto description = desc.GetTopicDescription();
+            desc.Out(Cerr);
+            for (const auto& c : description.GetConsumers()) {
+                Cerr << c.GetConsumerName() << Endl;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(consumerRemains, description.GetConsumers().size(), consumerRemains);
+
+            for (int i = 0; i < nConsumers; ++i) {
+                const TString requestQueueName = queueName + "@" + consumerName(i);
+                const int code = (i < consumerRemains) ? 200 : 400;
+                auto json = GetQueueUrl({{"QueueName", requestQueueName},}, code);
+            }
+
+            if (consumerRemains > 0) {
+                DeleteQueue({{"QueueUrl", queueUrl(consumerRemains - 1)}});
+            }
+        }
+    }
+
     Y_UNIT_TEST_F(TestSetQueueAttributesBasic, TFixture) {
         auto json = CreateQueue({
             {"QueueName", "TestSetAttrsQueue"},
@@ -1374,7 +3099,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
     Y_UNIT_TEST_F(TestSetQueueAttributesNonExistentQueue, TFixture) {
         auto errorJson = SetQueueAttributes({
-            {"QueueUrl", "/v1/5//Root/16/NonExistentQueue/16/ydb-sqs-consumer"},
+            {"QueueUrl", NON_EXISTING_QUEUE_URL},
             {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "60"}}}
         }, 400);
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(errorJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
@@ -1441,7 +3166,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         auto json = CreateQueue({
             {"QueueName", "SetAttrsMain.fifo"},
-            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
         });
         TString queueUrl = GetPathFromQueueUrlMap(json);
 
@@ -1453,13 +3178,14 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         auto attrJson = GetQueueAttributes({
             {"QueueUrl", queueUrl},
-            {"AttributeNames", NJson::TJsonArray{"RedrivePolicy"}}
+            {"AttributeNames", NJson::TJsonArray{"RedrivePolicy", "ContentBasedDeduplication"}}
         });
         UNIT_ASSERT(attrJson["Attributes"].Has("RedrivePolicy"));
         TString resultPolicy = attrJson["Attributes"]["RedrivePolicy"].GetString();
         NJson::TJsonValue policyJson;
         UNIT_ASSERT(NJson::ReadJsonTree(resultPolicy, &policyJson));
         UNIT_ASSERT_VALUES_EQUAL(policyJson["maxReceiveCount"].GetInteger(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["ContentBasedDeduplication"], "true");
     }
 
     Y_UNIT_TEST_F(TestSetQueueAttributesRetentionPeriod, TFixture) {
@@ -1481,30 +3207,302 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["MessageRetentionPeriod"], "7200");
     }
 
+    Y_UNIT_TEST_F(TestPurgeQueueInvalid, TFixture) {
+        auto json = PurgeQueue({{"QueueUrl", "invlid-queue-url"}}, 400);
+    }
+
+    Y_UNIT_TEST_F(TestPurgeQueueNonExisting, TFixture) {
+        auto json = PurgeQueue({{"QueueUrl", NON_EXISTING_QUEUE_URL}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+    }
+
     Y_UNIT_TEST_F(TestPurgeQueue, TFixture) {
-        auto json = PurgeQueue({{"QueueUrl", "unknown-queue-url"}}, 400);
-        //UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "ValidationException");
-        //UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "message"), "Invalid queue url");
+        auto driver = MakeDriver(*this);
+        auto client = TTopicClient(driver);
 
-        json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        const int nMessages = 5;
+        const TString queueName = "queueName";
+        const TString consumer = "consumer-3";
+        Y_ENSURE(CreateTopic(driver, queueName, consumer));
+
+        auto describeAndCountUncommited = [&]() {
+            auto desc = client.DescribeConsumer(queueName, consumer, NYdb::NTopic::TDescribeConsumerSettings{}.IncludeStats(true)).GetValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), queueName);
+            auto description = desc.GetConsumerDescription();
+            desc.Out(Cerr);
+            ui64 offsetDiff = 0;
+            for (const NYdb::NTopic::TPartitionInfo& part : description.GetPartitions()) {
+                UNIT_ASSERT_C(part.GetPartitionStats().has_value(), part.GetPartitionId());
+                UNIT_ASSERT_C(part.GetPartitionConsumerStats().has_value(), part.GetPartitionId());
+                offsetDiff += part.GetPartitionStats().value().GetEndOffset() -
+                              part.GetPartitionConsumerStats().value().GetCommittedOffset();
+            }
+            return offsetDiff;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(describeAndCountUncommited(), 0);
+
+        auto json = CreateQueue({{"QueueName", queueName + "@" + consumer}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT_VALUES_EQUAL(describeAndCountUncommited(), 0);
 
-        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "MessageBody-0"}});
-        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "MessageBody-1"}});
+        for (int i = 0; i < nMessages; ++i) {
+            SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "MessageBody-" + ToString(i)}});
+        }
 
         // All available messages in a queue (including in-flight messages) should be deleted.
         // Set VisibilityTimeout to large value to be sure the message is in-flight during the test.
-        ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}, {"VisibilityTimeout", 43000}});  // ~12 hours
-
-        //WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
-        //    return json["Attributes"]["ApproximateNumberOfMessages"] == "2" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "1";
-        //});
-
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}, {"MaxNumberOfMessages", 3}, {"VisibilityTimeout", 43000}}); // ~12 hours
+        UNIT_ASSERT_VALUES_UNEQUAL(json["Messages"].GetArray().size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(describeAndCountUncommited(), nMessages);
         PurgeQueue({{"QueueUrl", queueUrl}});
 
-        //WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
-        //    return json["Attributes"]["ApproximateNumberOfMessages"] == "0" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
-        //});
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}, {"VisibilityTimeout", 30}});
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(describeAndCountUncommited(), 0);
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueUrlWithIAM, TFixture) {
+        auto req = CreateSqsGetQueueUrlRequest();
+        req["QueueName"] = "not-existing-queue";
+        auto res = SendHttpRequest("/Root?folderId=XXX", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: Bearer proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_STRING_CONTAINS(resultMessage, "The specified queue doesn't exist");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthGetQueueUrlEmpty, TNoAuthFixture) {
+        auto json = GetQueueUrl({}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "MissingParameter");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthGetQueueUrl, TNoAuthFixture) {
+        auto driver = MakeDriver(*this);
+        const TString topicName = "ExampleQueueName";
+        const TString consumer = "ydb-sqs-consumer";
+
+        Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+        const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+        auto queueName = topicName;
+        auto json = GetQueueUrl({{"QueueName", queueName}});
+        UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetPathFromQueueUrlMap(json));
+
+        // ignore QueueOwnerAWSAccountId parameter.
+        json = GetQueueUrl({{"QueueName", queueName}, {"QueueOwnerAWSAccountId", "some-account-id"}});
+        UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetPathFromQueueUrlMap(json));
+
+        json = GetQueueUrl({{"QueueName", queueName}, {"WrongParameter", "some-value"}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "InvalidArgumentException");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthGetQueueUrlOfNotExistingQueue, TNoAuthFixture) {
+        auto json = GetQueueUrl({{"QueueName", "not-existing-queue"}}, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthGetQueueUrlWithConsumer, TNoAuthFixture) {
+        auto driver = MakeDriver(*this);
+        const TString consumer = "user_consumer";
+        const TString queueName = "ExampleQueueName";
+        Y_ENSURE(CreateTopic(driver, queueName, consumer));
+        const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", queueName.size(), queueName.c_str(), consumer.size(), consumer.c_str());
+        const TString requestQueueName = queueName + "@" + consumer;
+        auto json = GetQueueUrl({
+            {"QueueName", requestQueueName},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetPathFromQueueUrlMap(json));
+
+        const TString requestQueueNameWithWrongConsumer = queueName + "@" + "wrong_consumer";
+        json = GetQueueUrl({
+                               {"QueueName", requestQueueNameWithWrongConsumer},
+                           }, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthSendMessage, TNoAuthFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+
+        auto json0 = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "MessageBody-0"},
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json0, "SequenceNumber").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json0, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json0, "MessageId").empty());
+
+        auto json1 = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", ""},
+            {"DelaySeconds", 900},
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json1, "SequenceNumber").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json1, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json1, "MessageId").empty());
+        constexpr TStringBuf emptyStringHash = "d41d8cd98f00b204e9800998ecf8427e";
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json1, "MD5OfMessageBody"), emptyStringHash);
+        UNIT_ASSERT_VALUES_UNEQUAL(GetByPath<TString>(json0, "MessageId"), GetByPath<TString>(json1, "MessageId"));
+
+        const auto messages = ReadMessagesSync(driver, path.TopicPath, false, 2, TDuration::Minutes(5));
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "MessageBody-0");
+        UNIT_ASSERT_VALUES_EQUAL(messages[1].GetData(), "");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthReceiveMessage, TNoAuthFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+
+        auto jsonSend = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "MessageBody-0"},
+        });
+
+        auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+        UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
+        CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
+        // Second call during visibility timeout
+        jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
+        UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthDeleteMessage, TNoAuthFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+        TString body = "MessageBody-0";
+        SendMessage({{"QueueUrl", path.QueueUrl}, {"MessageBody", body}});
+        auto json = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body);
+
+        auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle.empty());
+
+        DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}});
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthCreateQueue, TNoAuthFixture) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+        UNIT_ASSERT(queueUrl.Contains("ExampleQueueName"));
+        UNIT_ASSERT(queueUrl.Contains("ydb-sqs-consumer"));
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthDeleteQueue, TNoAuthFixture) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        DeleteQueue({{"QueueUrl", queueUrl}});
+        json = GetQueueUrl({{"QueueName", "ExampleQueueName"}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenGetQueueUrlEmpty, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto json = GetQueueUrl({}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenGetQueueUrl, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto driver = MakeDriver(*this);
+        const TString topicName = "ExampleQueueName";
+        const TString consumer = "ydb-sqs-consumer";
+
+        Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+        const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+        auto queueName = topicName;
+        auto json = GetQueueUrl({{"QueueName", queueName}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenGetQueueUrlOfNotExistingQueue, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto json = GetQueueUrl({{"QueueName", "not-existing-queue"}}, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenSendMessage, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+
+        auto json = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "MessageBody-0"},
+        }, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenReceiveMessage, TWithEnforceUserTokenRequirementFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+
+        auto jsonSend = SendMessage({
+            {"QueueUrl", path.QueueUrl},
+            {"MessageBody", "MessageBody-0"},
+        });
+
+        DisableAuthorization();
+
+        auto json = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenDeleteMessage, TWithEnforceUserTokenRequirementFixture) {
+        auto driver = MakeDriver(*this);
+        const TSqsTopicPaths path;
+        bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+        UNIT_ASSERT(a);
+        TString body = "MessageBody-0";
+        SendMessage({{"QueueUrl", path.QueueUrl}, {"MessageBody", body}});
+        auto json = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body);
+
+        auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle.empty());
+
+        DisableAuthorization();
+
+        json = DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", receiptHandle}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenCreateQueue, TNoAuthWithEnforceUserTokenRequirementFixture) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}}, 400);
+    }
+
+    Y_UNIT_TEST_F(TestNoAuthWithEnforceUserTokenDeleteQueue, TWithEnforceUserTokenRequirementFixture) {
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        DisableAuthorization();
+
+        json = DeleteQueue({{"QueueUrl", queueUrl}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json, "__type"), "IncompleteSignature");
     }
 
 } // Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy)

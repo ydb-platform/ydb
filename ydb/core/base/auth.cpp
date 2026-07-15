@@ -1,6 +1,9 @@
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include "auth.h"
+#include "appdata.h"
 
 namespace NKikimr {
 
@@ -39,17 +42,7 @@ NACLib::TUserToken ParseUserToken(const TString& userTokenSerialized) {
     return NACLib::TUserToken(tokenPb);
 }
 
-template <class Iterable>
-bool IsTokenAllowedImpl(const TAppData* appData, const NACLib::TUserToken* userToken, const Iterable& allowedSIDs) {
-    if (appData && !appData->EnforceUserTokenRequirement) {
-        if (!appData->EnforceUserTokenCheckRequirement || !userToken || userToken->GetSerializedToken().empty()) {
-            return true;
-        }
-    }
-    return IsTokenAllowed(userToken, allowedSIDs);
-}
-
-}
+} // namespace
 
 bool IsTokenAllowed(const NACLib::TUserToken* userToken, const TVector<TString>& allowedSIDs) {
     return IsTokenAllowedImpl(userToken, allowedSIDs);
@@ -69,20 +62,20 @@ bool IsTokenAllowed(const TString& userTokenSerialized, const NProtoBuf::Repeate
     return IsTokenAllowed(&userToken, allowedSIDs);
 }
 
-bool IsTokenAllowed(const TAppData* appData, const NACLib::TUserToken* userToken, const TVector<TString>& allowedSIDs) {
-    return IsTokenAllowedImpl(appData, userToken, allowedSIDs);
-}
-
-bool IsTokenAllowed(const TAppData* appData, const NACLib::TUserToken* userToken, const NProtoBuf::RepeatedPtrField<TString>& allowedSIDs) {
-    return IsTokenAllowedImpl(appData, userToken, allowedSIDs);
-}
-
 bool IsAdministrator(const TAppData* appData, const TString& userTokenSerialized) {
     return IsTokenAllowed(userTokenSerialized, appData->AdministrationAllowedSIDs);
 }
 
 bool IsAdministrator(const TAppData* appData, const NACLib::TUserToken* userToken) {
     return IsTokenAllowed(userToken, appData->AdministrationAllowedSIDs);
+}
+
+bool IsStrictDatabaseOnlyToken(const TAppData* appData, const TString& userTokenSerialized) {
+    const auto& securityConfig = appData->DomainsConfig.GetSecurityConfig();
+    return IsTokenAllowed(userTokenSerialized, securityConfig.GetDatabaseAllowedSIDs())
+        && !IsTokenAllowed(userTokenSerialized, securityConfig.GetViewerAllowedSIDs())
+        && !IsTokenAllowed(userTokenSerialized, securityConfig.GetMonitoringAllowedSIDs())
+        && !IsTokenAllowed(userTokenSerialized, securityConfig.GetAdministrationAllowedSIDs());
 }
 
 bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::TSID& databaseOwner) {
@@ -97,4 +90,27 @@ bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::
     return userToken->IsExist(databaseOwner);
 }
 
+TString ChooseAppropriateOwner(const NKikimrScheme::TEvModifySchemeTransaction& record,
+    const TAppData* appData, const std::optional<NACLib::TUserToken>& userToken)
+{
+    const bool alwaysSetSystemOwner = appData->AlwaysSetSystemOwner
+        || appData->FeatureFlags.GetEnableIdmPermissionsManagement();
+
+    if (!alwaysSetSystemOwner) {
+        if (userToken) {
+            return userToken->GetUserSID();
+        } else {
+            return record.GetOwner();
+        }
+    } else {
+        if ((userToken && userToken->GetUserSID() == BUILTIN_ACL_METADATA)
+            || record.GetOwner() == BUILTIN_ACL_METADATA)
+        {
+            return BUILTIN_ACL_METADATA;
+        } else {
+            return BUILTIN_ACL_BASIC_OWNER;
+        }
+    }
 }
+
+} // namespace NKikimr

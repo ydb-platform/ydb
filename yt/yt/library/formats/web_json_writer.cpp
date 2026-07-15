@@ -364,7 +364,7 @@ private:
     std::vector<TUnversionedValueToYqlConverter> Converters_;
     std::vector<TLogicalTypePtr> Types_;
     std::vector<std::vector<int>> TableIndexToColumnIdToTypeIndex_;
-    THashMap<std::pair<int, TString>, int> TableIndexAndColumnNameToTypeIndex_;
+    THashMap<std::pair<int, std::string>, int> TableIndexAndColumnNameToTypeIndex_;
     TEnumIndexedArray<EValueType, int> ValueTypeToTypeIndex_;
 
 private:
@@ -380,7 +380,7 @@ private:
         if (typeIndex == UnschematizedTypeIndex) {
             typeIndex = ValueTypeToTypeIndex_[valueType];
         } else if (typeIndex == UnknownTypeIndex) {
-            auto it = TableIndexAndColumnNameToTypeIndex_.find(std::pair(tableIndex, columnName));
+            auto it = TableIndexAndColumnNameToTypeIndex_.find(std::pair<int, std::string>(tableIndex, columnName));
             if (it == TableIndexAndColumnNameToTypeIndex_.end()) {
                 typeIndex = ValueTypeToTypeIndex_[valueType];
                 columnIdToTypeIndex[columnId] = UnschematizedTypeIndex;
@@ -514,6 +514,8 @@ public:
     TFuture<void> GetReadyEvent() override;
     TBlob GetContext() const override;
     i64 GetWrittenSize() const override;
+    i64 GetEncodedRowBatchCount() const override;
+    i64 GetEncodedColumnarBatchCount() const override;
     TFuture<void> Close() override;
     TFuture<void> Flush() override;
     std::optional<TRowsDigest> GetDigest() const override;
@@ -523,13 +525,13 @@ private:
     const TNameTablePtr NameTable_;
     const TNameTableReader NameTableReader_;
 
-    std::unique_ptr<IOutputStream> UnderlyingOutput_;
+    const std::unique_ptr<IOutputStream> UnderlyingOutput_;
     TCountingOutput Output_;
 
-    std::unique_ptr<IJsonWriter> ResponseBuilder_;
+    const std::unique_ptr<IJsonWriter> ResponseBuilder_;
 
     TWebJsonColumnFilter ColumnFilter_;
-    THashMap<ui16, TString> AllColumnIdToName_;
+    THashMap<ui16, std::string> AllColumnIdToName_;
 
     TValueWriter ValueWriter_;
 
@@ -560,9 +562,11 @@ TWriterForWebJson<TValueWriter>::TWriterForWebJson(
     : Config_(std::move(config))
     , NameTable_(std::move(nameTable))
     , NameTableReader_(NameTable_)
+    // XXX(babenko): this leads to unexpected context switches and must be
+    // completely reworked.
     , UnderlyingOutput_(CreateBufferedSyncAdapter(
         std::move(output),
-        EWaitForStrategy::WaitFor,
+        EWaitForStrategy::SuspendFiber,
         ContextBufferCapacity))
     , Output_(UnderlyingOutput_.get())
     , ResponseBuilder_(CreateJsonWriter(&Output_))
@@ -614,6 +618,18 @@ template <typename TValueWriter>
 i64 TWriterForWebJson<TValueWriter>::GetWrittenSize() const
 {
     return static_cast<i64>(Output_.Counter());
+}
+
+template <typename TValueWriter>
+i64 TWriterForWebJson<TValueWriter>::GetEncodedRowBatchCount() const
+{
+    return 0;
+}
+
+template <typename TValueWriter>
+i64 TWriterForWebJson<TValueWriter>::GetEncodedColumnarBatchCount() const
+{
+    return 0;
 }
 
 template <typename TValueWriter>

@@ -1,13 +1,13 @@
 #pragma once
 
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
-
-#include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -34,12 +34,14 @@ TActorId CreateCommitterActor(NActors::TTestActorRuntime& runtime, TCommitterSet
 TActorId CreateUnlockerActor(NActors::TTestActorRuntime& runtime, TUnlockerSettings&& settings);
 TActorId CreateMessageDeadlineChangerActor(NActors::TTestActorRuntime& runtime, TMessageDeadlineChangerSettings&& settings);
 TActorId CreatePurgerActor(NActors::TTestActorRuntime& runtime, TPurgerSettings&& settings);
+TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, TDescribeSettings&& settings);
 TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString& databasePath, const TString& topicPath);
 THolder<TEvPQ::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtime);
 THolder<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 THolder<TEvWriteResponse> GetWriteResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 THolder<TEvChangeResponse> GetChangeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 THolder<TEvPurgeResponse> GetPurgeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
+THolder<TEvDescribeResponse> GetDescribeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 THolder<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 
 void AssertReadError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode errorCode, const TString& message, TDuration timeout = TDuration::Seconds(5));
@@ -47,6 +49,9 @@ void AssertPurgeError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::Statu
 void AssertPurgeOK(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 
 void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& topic, ui32 partitionId, size_t messageSize, size_t messageCount);
+
+// The function writes `messageCount` messages. For each message, it assigns one of the `groupCount` groups in round-robin order
+void WriteManyGroups(const std::shared_ptr<TTopicSdkTestSetup>& setup, const std::string& topic, size_t messageSize, size_t messageCount, size_t groupCount);
 
 ui64 GetTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic, ui32 partitionId = 0);
 ui64 GetPQRBTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic);
@@ -57,4 +62,4 @@ THolder<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse> GetConsumerState(std::sh
 void ReloadPQTablet(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic, ui32 partitionId = 0);
 void ReloadPQRBTablet(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic);
 
-}
+} // namespace NKikimr::NPQ::NMLP

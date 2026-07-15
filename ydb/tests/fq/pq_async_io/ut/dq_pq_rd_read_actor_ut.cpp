@@ -53,7 +53,7 @@ public:
     ) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             NPq::NProto::TDqReadTaskParams params;
-            auto* partitioningParams = params.MutablePartitioningParams();
+            auto* partitioningParams = params.AddPartitioningParams();
             partitioningParams->SetTopicPartitionsCount(partitionCount);
             partitioningParams->SetEachTopicPartitionGroupId(PartitionId1);
             partitioningParams->SetDqPartitionsCount(1);
@@ -75,7 +75,8 @@ public:
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 freeSpace,
                 CreateMockPqGateway({.Runtime = CaSetup->Runtime.get()}),
-                true
+                true,
+                TDuration{}
             );
 
             actor.InitAsyncInput(dqAsyncInput, dqAsyncInputAsActor);
@@ -174,7 +175,7 @@ public:
         });
         UNIT_ASSERT_C(typeMkql, "Failed to create multi type");
 
-        NKikimr::NMiniKQL::TValuePackerTransport<true> packer(typeMkql, NKikimr::NMiniKQL::EValuePackerVersion::V0);
+        NKikimr::NMiniKQL::TValuePackerTransport<true> packer(typeMkql, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumTestValidationMode);
 
         if (item) {
             auto values = TVector<NUdf::TUnboxedValue>{
@@ -358,6 +359,13 @@ public:
         });
     }
 
+    void MockNoSession(NActors::TActorId rowDispatcherId, ui64 generation) const {
+        CaSetup->Execute([&](TFakeActor& actor) {
+            auto event = new NFq::TEvRowDispatcher::TEvNoSession();
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
+        });
+    }
+
 public:
     NYql::NPq::NProto::TDqPqTopicSource Settings = BuildPqTopicSourceSettings(
         "topic",
@@ -411,7 +419,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         StartSession(Settings);
 
         TInstant deadline = Now() + TDuration::Seconds(5);
-        auto future = CaSetup->AsyncInputPromises.FatalError.GetFuture();
+        auto future = CaSetup->AsyncInputPromises->FatalError.GetFuture();
         MockSessionError(RowDispatcherId1);
 
         bool failed = false;
@@ -905,6 +913,13 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId2, PartitionId1}}, req->Cookie);
         ExpectStartSession({}, RowDispatcherId2, 2);
         MockAck(RowDispatcherId2, 2, PartitionId1);
+    }
+
+    Y_UNIT_TEST_F(ReInitAfterTEvNoSession, TFixture) {
+        StartSession(Settings);
+
+        MockNoSession(RowDispatcherId1, 1);
+        ExpectCoordinatorRequest(CoordinatorId1);
     }
 }
 

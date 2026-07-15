@@ -1,16 +1,14 @@
 #include "partition_end_watcher.h"
 #include "ydb_proxy.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
-
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
-
-#include <ydb/core/base/appdata.h>
 
 #include <util/generic/hash_set.h>
 #include <util/string/join.h>
@@ -190,6 +188,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         if (AutoCommit && !settings.SkipCommit_) {
             DeferredCommit.Commit();
         }
+
         WaitEvent(ev->Sender, ev->Cookie);
     }
 

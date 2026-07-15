@@ -4,7 +4,6 @@
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/base/table_index.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -63,7 +62,7 @@ public:
     }
 
     virtual ~TKqpVectorResolveActor() {
-        if (Input.HasValue() && Alloc) {
+        if (Alloc) {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
             Input.Clear();
 
@@ -89,6 +88,7 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvNewAsyncInputDataArrived, HandleRead);
                 hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
+                cFunc(TEvents::TEvPoison::EventType, PassAway);
             }
         } catch (const yexception& e) {
             RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -106,17 +106,14 @@ private:
     void PassAway() final {
         //Counters->VectorResolveActorsCount->Dec();
 
-        if (ReadActorId) {
-            Send(ReadActorId, new TEvents::TEvPoison);
-            ReadActorId = {};
-        }
-
         {
             auto guard = BindAllocator();
             Input.Clear();
             NKikimr::NMiniKQL::TUnboxedValueDeque emptyList;
             emptyList.swap(PendingRows);
         }
+
+        DestroyReadActor();
 
         MySpan.End();
 
@@ -230,6 +227,10 @@ private:
                 auto & clusterIds = (IsPrefixed || ResolvedLevel > 0 ? CurClusterIds : RootClusterIds);
                 for (size_t rowNum: LevelClusters[cluster]) {
                     auto embedding = PendingRows[rowNum].GetElement(Settings.GetVectorColumnIndex());
+                    if (!embedding.IsString() && !embedding.IsEmbedded()) {
+                        // Skip invalid values, the only legitimate one here is NULL
+                        continue;
+                    }
                     clusters->FindClusters(embedding.AsStringRef(), TmpClusters, OverlapClusters, OverlapRatio);
                     for (auto& cluster: TmpClusters) {
                         NextClusters[rowNum].push_back(std::make_pair(clusterIds[cluster.first], cluster.second));
@@ -279,8 +280,11 @@ private:
     void ReadUsingActor(NTableIndex::NKMeans::TClusterId parent) {
         auto range = ParentRange(parent);
         auto arena = MakeIntrusive<NActors::TProtoArenaHolder>();
-        auto src = arena->Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
+        auto* src = arena->Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
         src->SetDatabase(Settings.GetDatabase());
+        if (Settings.HasPoolId()) {
+            src->SetPoolId(Settings.GetPoolId());
+        }
         *src->MutableTable() = Settings.GetLevelTable();
         range.Serialize(*src->MutableFullRange());
         src->SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);
@@ -345,10 +349,10 @@ private:
         }
         TMaybe<TInstant> watermark;
         ui64 freeSpace = 32*1024*1024; // FIXME The value doesn't really matter, but where to take it from?
-        NKikimr::NMiniKQL::TUnboxedValueBatch rows;
         bool finished = false;
         {
             auto guard = BindAllocator();
+            NKikimr::NMiniKQL::TUnboxedValueBatch rows;
             ReadActorInput->GetAsyncInputData(rows, watermark, finished, freeSpace);
             rows.ForEachRow([&](NUdf::TUnboxedValue& value) {
                 NTableIndex::NKMeans::TClusterId parent = value.GetElement(0).Get<ui64>();
@@ -370,18 +374,24 @@ private:
                     Locks.push_back(resultInfo.GetLocks(i));
                 }
             }
-            Send(ReadActorId, new TEvents::TEvPoison);
-            ReadActorId = {};
-            ReadActorInput = nullptr;
+            DestroyReadActor();
             ReadingChildClusters = false;
             // Convert to NKikimr::NKMeans::TClusters
             if (!Failed) {
+                auto guard = BindAllocator();
                 ParseFetchedClusters();
             }
         }
-        {
-            auto guard = BindAllocator();
-            rows.clear();
+    }
+
+    void DestroyReadActor() {
+        if (ReadActorInput) {
+            // Destroy ReadActor directly, just like library/yql/dq compute actor destroys us
+            // Otherwise it may reference an already destroyed TypeEnv and crash in BindAllocator
+            // when handling TEvPoison
+            ReadActorInput->PassAway();
+            ReadActorId = {};
+            ReadActorInput = nullptr;
         }
     }
 
@@ -461,8 +471,9 @@ private:
             }
             for (size_t i = 0; i < Settings.CopyColumnIndexesSize(); i++) {
                 auto colIdx = Settings.GetCopyColumnIndexes(i);
-                *rowItems++ = row.GetElement(colIdx);
-                rowSize += NMiniKQL::GetUnboxedValueSize(row.GetElement(colIdx), ColumnTypeInfos[colIdx]).AllocatedBytes;
+                auto elem = row.GetElement(colIdx);
+                rowSize += NMiniKQL::GetUnboxedValueSize(elem, ColumnTypeInfos[colIdx]).AllocatedBytes;
+                *rowItems++ = std::move(elem);
                 if (Settings.GetClusterColumnOutPos() == i+1) {
                     // We support inserting cluster ID column into any position to maintain alphabetical order of columns
                     *rowItems++ = NUdf::TUnboxedValuePod((ui64)rowClusters[rowClusters.size()-1].first);

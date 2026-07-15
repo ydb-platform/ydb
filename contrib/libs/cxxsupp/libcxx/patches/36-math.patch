@@ -1,5 +1,5 @@
 diff --git a/include/math.h b/include/math.h
-index de2dacd..b9e5ce0 100644
+index 929bef6..1bdc6b0 100644
 --- a/include/math.h
 +++ b/include/math.h
 @@ -293,6 +293,8 @@ long double    truncl(long double x);

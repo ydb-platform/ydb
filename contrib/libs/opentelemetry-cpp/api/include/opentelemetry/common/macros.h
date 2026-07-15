@@ -246,8 +246,10 @@
 
 // Regex support
 #if (__GNUC__ == 4 && (__GNUC_MINOR__ == 8 || __GNUC_MINOR__ == 9))
+// NOLINTNEXTLINE(cppcoreguidelines-macro-to-enum)
 #  define OPENTELEMETRY_HAVE_WORKING_REGEX 0
 #else
+// NOLINTNEXTLINE(cppcoreguidelines-macro-to-enum)
 #  define OPENTELEMETRY_HAVE_WORKING_REGEX 1
 #endif
 

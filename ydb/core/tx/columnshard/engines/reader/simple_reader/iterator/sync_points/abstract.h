@@ -27,16 +27,21 @@ private:
     virtual void DoAbort() = 0;
     bool AbortFlag = false;
 
+    void InitSourceTracingMetrics(const std::shared_ptr<NCommon::IDataSource>& source) const;
+
 protected:
     const std::shared_ptr<TSpecialReadContext> Context;
     const std::shared_ptr<ISourcesCollection> Collection;
     std::shared_ptr<ISyncPoint> Next;
     std::deque<std::shared_ptr<NCommon::IDataSource>> SourcesSequentially;
+
     virtual std::shared_ptr<NCommon::IDataSource> DoOnSourceFinishedOnPreviouse() {
         return nullptr;
     }
 
     void OnSourceFinished();
+    void ReleaseInFlightForPreparedEmptySources();
+
     virtual TString DoDebugString() const {
         return "";
     }
@@ -51,6 +56,7 @@ public:
         }
         return source;
     }
+
     void Continue(const TPartialSourceAddress& continueAddress, TPlainReadData& reader);
 
     TString DebugString() const;
@@ -85,7 +91,8 @@ public:
         : PointIndex(pointIndex)
         , PointName(pointName)
         , Context(context)
-        , Collection(collection) {
+        , Collection(collection)
+    {
     }
 
     void AddSource(std::shared_ptr<NCommon::IDataSource>&& source);

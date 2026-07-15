@@ -1,8 +1,3 @@
-try:
-    from yt.packages.six import PY3, integer_types, binary_type, text_type
-except ImportError:
-    from six import PY3, integer_types, binary_type, text_type
-
 from yt.common import YtError
 
 
@@ -45,41 +40,41 @@ class YsonType(object):
         return None
 
 
-class YsonString(binary_type, YsonType):
+class YsonString(bytes, YsonType):
     def __eq__(self, other):
         # COMPAT: With implicit promotion of str to unicode it can make sense
         # to compare binary YsonString to unicode string.
-        if not isinstance(other, (binary_type, text_type)):
+        if not isinstance(other, (bytes, str)):
             return NotImplemented
-        return binary_type(self) == binary_type(other) and YsonType.__eq__(self, other)
+        return bytes(self) == bytes(other) and YsonType.__eq__(self, other)
 
     def __ne__(self, other):
         return not (self == other)
 
     def __hash__(self):
-        return self.base_hash(binary_type)
+        return self.base_hash(bytes)
 
     def __repr__(self):
-        return self.to_str(binary_type, repr)
+        return self.to_str(bytes, repr)
 
     def get_yson_type_str(self):
         return "string"
 
 
-class YsonUnicode(text_type, YsonType):
+class YsonUnicode(str, YsonType):
     def __eq__(self, other):
-        if not isinstance(other, text_type):
+        if not isinstance(other, str):
             return NotImplemented
-        return text_type(self) == text_type(other) and YsonType.__eq__(self, other)
+        return str(self) == str(other) and YsonType.__eq__(self, other)
 
     def __ne__(self, other):
         return not (self == other)
 
     def __hash__(self):
-        return self.base_hash(text_type)
+        return self.base_hash(str)
 
     def __repr__(self):
-        return self.to_str(text_type, repr)
+        return self.to_str(str, repr)
 
     def get_yson_type_str(self):
         return "string"
@@ -131,8 +126,8 @@ def proxy(cls):
         "__radd__",
     ]
 
-    for name in dir(text_type):
-        attr = getattr(text_type, name)
+    for name in dir(str):
+        attr = getattr(str, name)
         if callable(attr) and name not in ALLOWED_METHODS:
             setattr(cls, name, _make_raise_not_unicode_error(name))
     for name in ADDITIONAL_METHODS:
@@ -179,15 +174,15 @@ class YsonStringProxy(YsonType):
 
 
 def is_unicode(x):
-    return isinstance(x, text_type)
+    return isinstance(x, str)
 
 
 def get_bytes(x, encoding="utf8"):
-    if isinstance(x, text_type):
+    if isinstance(x, str):
         return x.encode(encoding)
     elif isinstance(x, YsonStringProxy):
         return x._bytes
-    elif isinstance(x, binary_type):
+    elif isinstance(x, bytes):
         return x
     else:
         raise TypeError("get_bytes() expected str, bytes or YsonStringProxy, got <{}>{!r}"
@@ -200,15 +195,12 @@ def make_byte_key(s):
     return proxy
 
 
-if PY3:
-    _YsonIntegerBase = int
-else:
-    _YsonIntegerBase = long  # noqa
+_YsonIntegerBase = int
 
 
 class YsonIntegerBase(_YsonIntegerBase, YsonType):
     def __eq__(self, other):
-        if not isinstance(other, integer_types):
+        if not isinstance(other, int):
             return NotImplemented
         return _YsonIntegerBase(self) == _YsonIntegerBase(other) and YsonType.__eq__(self, other)
 

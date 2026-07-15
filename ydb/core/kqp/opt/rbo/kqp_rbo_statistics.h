@@ -1,7 +1,8 @@
 #pragma once
 
 #include "kqp_info_unit.h"
-#include <yql/essentials/core/yql_statistics.h>
+#include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -74,14 +75,27 @@ struct TColumnLineage {
     THashMap<TString, int, TInfoUnit::THashFunction> MaxDuplicateId;
 };
 
+enum ELogicalCardinality: ui32 {
+    ZeroOrMore,
+    Zero,
+    ZeroOrOne,
+    One,
+    OneOrMore
+};
+
 class TRBOMetadata {
 public:
     EStatisticsType Type = EStatisticsType::BaseTable;
     EStorageType StorageType = EStorageType::NA;
+    ELogicalCardinality LogicalCard = ELogicalCardinality::ZeroOrMore;
 
     TColumnLineage ColumnLineage;
     TVector<TInfoUnit> KeyColumns;
     ui32 ColumnsCount = 0;
+    // This is a descriptive fact: "this node's rows are physically partitioned by these columns".
+    // The per-side *requirement* ("shuffle this input by these keys for the parent join") is
+    // NOT stored here — it lives on TJoinOptimizerNode. It is propagated through renames, projections,
+    // joins and such. When it reaches leafs of a CBO Tree it's used to set the initial orderings.
     TVector<TInfoUnit> ShuffledByColumns;
     TVector<std::pair<TInfoUnit,bool>> SortColumns;
 
@@ -94,15 +108,14 @@ public:
 
 class TRBOStatistics {
 public:
-    double RecordsCount = 0;
-    double DataSize = 0;
+    double ERows = 0;
+    double EBytes = 0;
     double Selectivity = 1.0;
 
     TString ToString(ui32 printOptions);
 };
 
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts);
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts, const TVector<TInfoUnit>& keyColumns);
+TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps & props, bool withStatsAndCosts, const NYql::TTypeAnnotationContext& typeCtx);
 
 }
 }

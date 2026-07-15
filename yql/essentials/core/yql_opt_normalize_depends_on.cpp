@@ -50,7 +50,8 @@ public:
             auto hash = HexEncode(MakeCacheKey(dependsOn->Head()));
             normalizedArgs.push_back(ctx.NewCallable(dependsOn->Head().Pos(), "String", { ctx.NewAtom(dependsOn->Head().Pos(), hash) }));
 
-            TNodeSet innerLambdasArgs, outerLambdasArgs;
+            TNodeSet innerLambdasArgs;
+            TNodeSet outerLambdasArgs;
             VisitExpr(dependsOn, [&](const TExprNode::TPtr& node) {
                 if (node->GetDependencyScope() && node->IsComplete()) {
                     return false;
@@ -87,7 +88,7 @@ public:
         YQL_CLOG(INFO, Core) << "NormalizeDependsOn";
         output = ctx.ReplaceNodes(std::move(input), replaces);
         ctx.Step.Done(TExprStep::NormalizeDependsOn);
-        return TStatus(IGraphTransformer::TStatus::Repeat, true);
+        return TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
     }
 
     void Rewind() override {

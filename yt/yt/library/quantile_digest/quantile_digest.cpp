@@ -45,7 +45,7 @@ public:
         return UnderlyingDigest_.GetRank(value);
     }
 
-    TString Serialize() override
+    std::string Serialize() override
     {
         NProto::TQuantileDigest quantileDigest;
 
@@ -53,6 +53,14 @@ public:
         *tDigest->mutable_data() = UnderlyingDigest_.Serialize();
 
         return quantileDigest.SerializeAsString();
+    }
+
+    void MergeWith(const IQuantileDigestPtr& other) override
+    {
+        const auto* otherDigest = dynamic_cast<const TTDigestAdaptor*>(other.Get());
+        YT_VERIFY(otherDigest);
+
+        UnderlyingDigest_ += otherDigest->UnderlyingDigest_;
     }
 
 private:

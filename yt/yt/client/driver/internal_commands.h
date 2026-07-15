@@ -40,7 +40,7 @@ public:
 private:
     NYTree::TYPath Path;
     int TabletIndex;
-    std::vector<TString> Payloads;
+    std::vector<std::string> Payloads;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -186,6 +186,40 @@ public:
 private:
     NHydra::TCellId ChaosCellId_;
     NHydra::TCellId CoordinatorCellId_;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TForsakeChaosShortcut
+    : public TTypedCommand<NApi::TForsakeChaosShortcutOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TForsakeChaosShortcut);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NHydra::TCellId CoordinatorCellId_;
+    NChaosClient::TChaosObjectId ChaosObjectId_;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TRemoveChaosCellMailbox
+    : public TTypedCommand<NApi::TRemoveChaosCellMailboxOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TRemoveChaosCellMailbox);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NHydra::TCellId ChaosCellId_;
+    NHydra::TCellId DestinationCellId_;
 
     void DoExecute(ICommandContextPtr context) override;
 };

@@ -10,6 +10,8 @@
 
 #include <util/string/builder.h>
 
+#include <utility>
+
 using namespace NKikimr;
 
 namespace NPython {
@@ -44,6 +46,7 @@ struct TPyDynamicLinear {
 
 namespace {
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 PyMethodDef TPyDynamicLinearMethods[] = {
     {"extract", TPyDynamicLinear::Extract, METH_NOARGS, nullptr},
     {nullptr, nullptr, 0, nullptr} /* sentinel */
@@ -161,14 +164,18 @@ PyObject* TPyDynamicLinear::Extract(PyObject* self, PyObject* /* arg */)
 
 class TDynamicLinearProxy: public NUdf::TBoxedValue {
 public:
-    TDynamicLinearProxy(const TPyCastContext::TPtr& castCtx, const NUdf::TType* itemType, TPyObjectPtr&& pyObject)
-        : CastCtx_(castCtx)
+    TDynamicLinearProxy(TPyCastContext::TPtr castCtx, const NUdf::TType* itemType, TPyObjectPtr&& pyObject)
+        : CastCtx_(std::move(castCtx))
         , ItemType_(itemType)
         , PyObject_(std::move(pyObject))
     {
     }
 
     ~TDynamicLinearProxy() override {
+        if (!Consumed_) {
+            CastCtx_->PyCtx->TypeInfoHelper->NotifyNotConsumedLinear(CastCtx_->PyCtx->Pos);
+        }
+
         const TPyGilLocker lock;
         PyObject_.Reset();
     }
@@ -188,7 +195,7 @@ public:
             throw yexception() << "'extract' attribute should be a callable";
         }
 
-        TPyObjectPtr resultObj = PyObject_CallObject(function.Get(), nullptr);
+        TPyObjectPtr resultObj = PyObject_CallObject(function.Get(), /*args=*/nullptr);
         if (!resultObj) {
             throw yexception() << "Failed to execute:\n"
                                << GetLastErrorAsString();

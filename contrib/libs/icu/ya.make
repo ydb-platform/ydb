@@ -15,9 +15,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(78.2)
+VERSION(78.3)
 
-ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-78.2/icu4c-78.2-sources.tgz)
+ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-78.3/icu4c-78.3-sources.tgz)
 
 ADDINCL(
     GLOBAL contrib/libs/icu/include

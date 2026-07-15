@@ -1,7 +1,5 @@
 PROGRAM()
 
-SUBSCRIBER(g:yql)
-
 ALLOCATOR(J)
 
 SRCS(

@@ -2,6 +2,7 @@
 #include "optimizer.h"
 
 #include <iostream>
+#include <utility>
 #include <yql/essentials/parser/pg_wrapper/arena_ctx.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -102,7 +103,7 @@ RelOptInfo* MakeRelOptInfo(const IOptimizer::TRel& r, int relno) {
 
     rel->pathlist = list_make1(p);
     rel->cheapest_total_path = p;
-    rel->relids = bms_add_member(nullptr, rel->relid);
+    rel->relids = bms_add_member(/*a=*/nullptr, rel->relid);
     rel->attr_needed = (Relids*)palloc0((1 + maxattno) * sizeof(Relids));
 
     return rel;
@@ -118,9 +119,9 @@ List* MakeRelOptInfoList(const IOptimizer::TInput& input) {
 }
 
 TPgOptimizer::TPgOptimizer(
-    const TInput& input,
+    TInput input,
     const std::function<void(const TString&)>& log)
-    : Input_(input)
+    : Input_(std::move(input))
     , Log_(log)
 {
     get_relation_stats_hook = RelationStatsHook;
@@ -150,13 +151,13 @@ Var* TPgOptimizer::MakeVar(TVarId varId) {
                : (var = ::NYql::MakeVar(std::get<0>(varId), std::get<1>(varId)));
 }
 
-EquivalenceClass* TPgOptimizer::MakeEqClass(int i) {
+EquivalenceClass* TPgOptimizer::MakeEqClass(int eqId) {
     EquivalenceClass* eq = makeNode(EquivalenceClass);
 
-    for (auto [relno, varno] : Input_.EqClasses[i].Vars) {
+    for (auto [relno, varno] : Input_.EqClasses[eqId].Vars) {
         EquivalenceMember* m = makeNode(EquivalenceMember);
         m->em_expr = (Expr*)MakeVar(TVarId{relno, varno});
-        m->em_relids = bms_add_member(nullptr, relno);
+        m->em_relids = bms_add_member(/*a=*/nullptr, relno);
         m->em_datatype = 20;
         eq->ec_opfamilies = list_make1_oid(1976);
         eq->ec_members = lappend(eq->ec_members, m);
@@ -185,7 +186,7 @@ void TPgOptimizer::LogNode(const TString& prefix, void* node)
 }
 
 IOptimizer::TOutput TPgOptimizer::MakeOutput(Path* path) {
-    TOutput output = {{}, &Input_};
+    TOutput output = {.Nodes = {}, .Input = &Input_};
     output.Rows = path->rows;
     output.TotalCost = path->total_cost;
     MakeOutputJoin(output, path);
@@ -257,8 +258,8 @@ int TPgOptimizer::MakeOutputJoin(TOutput& output, Path* path) {
                 right = (Var*)a2;
             }
 
-            node.LeftVars.emplace_back(std::make_tuple(left->varno, left->varattno));
-            node.RightVars.emplace_back(std::make_tuple(right->varno, right->varattno));
+            node.LeftVars.emplace_back(left->varno, left->varattno);
+            node.RightVars.emplace_back(right->varno, right->varattno);
 
             if (!bms_is_member(left->varno, jpath->outerjoinpath->parent->relids)) {
                 std::swap(node.LeftVars.back(), node.RightVars.back());
@@ -279,7 +280,7 @@ void TPgOptimizer::MakeLeftOrRightRestrictions(std::vector<RestrictInfo*>& dst, 
     for (const auto& eq : src) {
         YQL_ENSURE(eq.Vars.size() == 2);
         RestrictInfo* ri = makeNode(RestrictInfo);
-        ri->can_join = 1;
+        ri->can_join = true;
         ri->norm_selec = -1;
         ri->outer_selec = -1;
 
@@ -294,11 +295,11 @@ void TPgOptimizer::MakeLeftOrRightRestrictions(std::vector<RestrictInfo*>& dst, 
             ri->required_relids = bms_add_member(ri->required_relids, relId);
             ri->clause_relids = bms_add_member(ri->clause_relids, relId);
             if (left) {
-                ri->outer_relids = bms_add_member(nullptr, relId);
-                ri->left_relids = bms_add_member(nullptr, relId);
+                ri->outer_relids = bms_add_member(/*a=*/nullptr, relId);
+                ri->left_relids = bms_add_member(/*a=*/nullptr, relId);
                 left = false;
             } else {
-                ri->right_relids = bms_add_member(nullptr, relId);
+                ri->right_relids = bms_add_member(/*a=*/nullptr, relId);
             }
             oe->args = lappend(oe->args, MakeVar(TVarId{relId, varId}));
 
@@ -347,12 +348,12 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
         root.simple_rte_array[i] = makeNode(RangeTblEntry);
         root.simple_rte_array[i]->rtekind = RTE_RELATION;
     }
-    root.all_baserels = bms_add_range(nullptr, 1, rels->length);
+    root.all_baserels = bms_add_range(/*a=*/nullptr, 1, rels->length);
     root.eq_classes = MakeEqClasses();
 
     for (auto* ri : LeftRestriction_) {
         root.left_join_clauses = lappend(root.left_join_clauses, ri);
-        root.hasJoinRTEs = 1;
+        root.hasJoinRTEs = true;
         root.outer_join_rels = bms_add_members(root.outer_join_rels, ri->right_relids);
 
         SpecialJoinInfo* ji = makeNode(SpecialJoinInfo);
@@ -362,14 +363,14 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
         ji->syn_lefthand = bms_add_members(ji->min_lefthand, ri->left_relids);
         ji->syn_righthand = bms_add_members(ji->min_righthand, ri->right_relids);
         ji->jointype = JOIN_LEFT;
-        ji->lhs_strict = 1;
+        ji->lhs_strict = true;
 
         root.join_info_list = lappend(root.join_info_list, ji);
     }
 
     for (auto* ri : RightRestriction_) {
         root.right_join_clauses = lappend(root.right_join_clauses, ri);
-        root.hasJoinRTEs = 1;
+        root.hasJoinRTEs = true;
         root.outer_join_rels = bms_add_members(root.outer_join_rels, ri->left_relids);
 
         SpecialJoinInfo* ji = makeNode(SpecialJoinInfo);
@@ -379,7 +380,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
         ji->syn_lefthand = bms_add_members(ji->min_lefthand, ri->right_relids);
         ji->syn_righthand = bms_add_members(ji->min_righthand, ri->left_relids);
         ji->jointype = JOIN_LEFT;
-        ji->lhs_strict = 1;
+        ji->lhs_strict = true;
 
         root.join_info_list = lappend(root.join_info_list, ji);
     }
@@ -402,7 +403,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
     for (int i = 0; i < rels->length; i++) {
         root.simple_rel_array[i + 1]->has_eclass_joins = bms_num_members(root.simple_rel_array[i + 1]->eclass_indexes) > 1;
     }
-    root.ec_merging_done = 1;
+    root.ec_merging_done = true;
 
     LogNode("Context: ", &root);
 
@@ -452,9 +453,9 @@ struct TPgOptimizerImpl {
         Rels.emplace_back(IOptimizer::TRel{});
         Var2TableCol.emplace_back();
         // rel -> varIds
-        VarIds.emplace_back(THashMap<TStringBuf, int>{});
+        VarIds.emplace_back();
         // rel -> tables
-        RelTables.emplace_back(std::vector<TStringBuf>{});
+        RelTables.emplace_back();
         for (const auto& table : leaf->Labels()) {
             RelTables.back().emplace_back(table);
             Table2RelIds[table].emplace_back(relId);
@@ -504,12 +505,12 @@ struct TPgOptimizerImpl {
             for (int relId : lrelIds) {
                 int varId = GetVarId(relId, lcol);
 
-                leftVars.emplace_back(std::make_tuple(relId, varId, ltable, lcol));
+                leftVars.emplace_back(relId, varId, ltable, lcol);
             }
             for (int relId : rrelIds) {
                 int varId = GetVarId(relId, rcol);
 
-                rightVars.emplace_back(std::make_tuple(relId, varId, rtable, rcol));
+                rightVars.emplace_back(relId, varId, rtable, rcol);
             }
         }
     }
@@ -564,7 +565,8 @@ struct TPgOptimizerImpl {
         } else if (op->JoinType == LeftJoin || op->JoinType == RightJoin) {
             CHECK(op->LeftJoinKeys.size() == 1 && op->RightJoinKeys.size() == 1, "Only 1 var per join supported");
 
-            std::vector<std::tuple<int, int, TStringBuf, TStringBuf>> leftVars, rightVars;
+            std::vector<std::tuple<int, int, TStringBuf, TStringBuf>> leftVars;
+            std::vector<std::tuple<int, int, TStringBuf, TStringBuf>> rightVars;
             ExtractVars(leftVars, rightVars, op);
 
             IOptimizer::TEq leftEqClass = MakeEqClass(leftVars);
@@ -610,7 +612,7 @@ struct TPgOptimizerImpl {
         }
     }
 
-    std::shared_ptr<IBaseOptimizerNode> Convert(int nodeId) const {
+    [[nodiscard]] std::shared_ptr<IBaseOptimizerNode> Convert(int nodeId) const {
         const auto* node = &Result.Nodes[nodeId];
         if (node->Outer == -1 && node->Inner == -1) {
             YQL_ENSURE(node->Rels.size() == 1);

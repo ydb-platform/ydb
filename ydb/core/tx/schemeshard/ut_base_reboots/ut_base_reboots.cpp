@@ -35,10 +35,13 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyWithRebootsAtCommit, 2, 1, true) {
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
             {
                 TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
                 t.TestEnv->ReliablePropose(runtime, CreateTableRequest(++t.TxId,
                                                                        "/MyRoot",
                                                                        "Name: \"Table\""
@@ -50,23 +53,25 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                                                                        "UniformPartitionsCount: 2"),
                                            {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                expectedDomainPaths += 1;
             }
 
             t.TestEnv->ReliablePropose(runtime, CopyTableRequest(++t.TxId, "/MyRoot", "NewTable", "/MyRoot/Table"),
                                        {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            expectedDomainPaths += 1;
 
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(3)});
+                                   {NLs::ChildrenCount(4)});
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/NewTable", true),
                                    {NLs::Finished,
                                     NLs::IsTable,
                                     NLs::PartitionCount(2),
                                     NLs::ShardsInsideDomain(4),
-                                    NLs::PathsInsideDomain(3)});
+                                    NLs::PathsInsideDomain(expectedDomainPaths)});
             }
         });
     }
@@ -623,7 +628,6 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterAndForceDrop, 2, 1, false) {
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -658,13 +662,12 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                 TInactiveZone inactive(activeZone);
                 t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 1));
                 TestDescribeResult(DescribePath(runtime, "/MyRoot")
-                                       , {NLs::NoChildren});
+                                       , {NLs::ChildrenCount(1)});
             }
         });
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableWithReboots, 2, 1, false) {
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -689,7 +692,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "MyRoot"),
-                                   {NLs::ChildrenCount(4)});
+                                   {NLs::ChildrenCount(5)});
                 TestDescribeResult(DescribePath(runtime, "MyRoot/Table"),
                                    {NLs::PathExist});
                 TestDescribeResult(DescribePath(runtime, "MyRoot/NewTable1"),
@@ -701,7 +704,6 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyIndexedTableWithReboots, 2, 1, false) {
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -747,7 +749,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "MyRoot"),
-                                   {NLs::ChildrenCount(4)});
+                                   {NLs::ChildrenCount(5)});
                 TestDescribeResult(DescribePath(runtime, "MyRoot/Table"),
                                    {NLs::PathExist, NLs::IndexesCount(1)});
                 TestDescribeResult(DescribePath(runtime, "MyRoot/NewTable1"),
@@ -786,7 +788,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableAndDropWithReboots2, 2, 1, false) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableAndDropWithReboots2, 4, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -948,8 +950,14 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SimultaneousDropForceDrop, 2, 1, false) {
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
+            {
+                TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+            }
+
             TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                 Name: "Table1"
                 Columns { Name: "key"   Type: "Uint64" }
@@ -957,10 +965,11 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                 KeyColumnNames: ["key"]
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            expectedDomainPaths += 1;
 
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                {NLs::PathExist,
-                                NLs::ChildrenCount(2)});
+                                NLs::ChildrenCount(3)});
             auto pathVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
                                               {NLs::PathExist,
                                                NLs::PathVersionEqual(3)});
@@ -970,6 +979,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
             AsyncForceDropUnsafe(runtime, ++t.TxId,  pathVer.PathId.LocalPathId);
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
+            expectedDomainPaths -= 1;
             t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 2));
 
             {
@@ -977,10 +987,70 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
                                    {NLs::PathNotExist});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(1),
-                                    NLs::PathsInsideDomain(1),
+                                   {NLs::ChildrenCount(2),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomainOneOf({0,1})});
             }
         });
+    }
+
+    Y_UNIT_TEST(IncrementalBackupConfigPersistsAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        // Create table and set up continuous backup
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateContinuousBackup(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            ContinuousBackupDescription {
+                StreamName: "0_continuousBackupImpl"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Take incremental backup - creates IncrBackupImpl table with IncrementalBackupConfig
+        TestAlterContinuousBackup(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            TakeIncrementalBackup {
+                DstPath: "IncrBackupImpl"
+                DstStreamPath: "1_continuousBackupImpl"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify IncrBackupImpl table has IncrementalBackupConfig before reboot
+        {
+            auto describe = DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl");
+            const auto& tableDesc = describe.GetPathDescription().GetTable();
+            UNIT_ASSERT(tableDesc.HasIncrementalBackupConfig());
+            UNIT_ASSERT_VALUES_EQUAL(
+                static_cast<int>(tableDesc.GetIncrementalBackupConfig().GetMode()),
+                static_cast<int>(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP)
+            );
+        }
+
+        // Reboot SchemeShard
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // Verify IncrementalBackupConfig survives reboot
+        {
+            auto describe = DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl");
+            const auto& tableDesc = describe.GetPathDescription().GetTable();
+            UNIT_ASSERT_C(tableDesc.HasIncrementalBackupConfig(),
+                "IncrementalBackupConfig lost after SchemeShard reboot");
+            UNIT_ASSERT_VALUES_EQUAL(
+                static_cast<int>(tableDesc.GetIncrementalBackupConfig().GetMode()),
+                static_cast<int>(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP)
+            );
+        }
     }
 }

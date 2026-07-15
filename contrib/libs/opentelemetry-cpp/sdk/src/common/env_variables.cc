@@ -26,7 +26,7 @@ namespace sdk
 namespace common
 {
 
-bool GetRawEnvironmentVariable(const char *env_var_name, std::string &value)
+static bool GetRawEnvironmentVariable(const char *env_var_name, std::string &value)
 {
 #if !defined(NO_GETENV)
   const char *endpoint_from_env = nullptr;
@@ -159,11 +159,11 @@ static bool GetTimeoutFromString(const char *input, std::chrono::system_clock::d
 
   if (unit == "")
   {
-    // TODO: The spec says milliseconds, but opentelemetry-cpp implemented
-    // seconds by default. Fixing this is a breaking change.
+    // The spec says milliseconds, but opentelemetry-cpp implemented
+    // seconds by default, up to opentelemetry-cpp 1.26.0.
 
     value = std::chrono::duration_cast<std::chrono::system_clock::duration>(
-        std::chrono::seconds{result});
+        std::chrono::milliseconds{result});
     return true;
   }
 

@@ -4,9 +4,11 @@
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 #include <util/generic/bitmap.h>
 #include <util/string/printf.h>
@@ -392,6 +394,127 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         EraseRowsShouldSuccess(Nothing());
     }
 
+    Y_UNIT_TEST(EraseRowsCdc) {
+        TPortManager pm;
+
+        NKikimrPQ::TPQConfig pqConfig;
+        pqConfig.SetEnabled(true);
+        pqConfig.SetEnableProtoSourceIdInfo(true);
+        pqConfig.SetTopicsAreFirstClassCitizen(true);
+        pqConfig.SetMaxReadCookies(10);
+        pqConfig.AddClientServiceType()->SetName("data-streams");
+        pqConfig.SetCheckACL(false);
+        pqConfig.SetRequireCredentialsInNewProtocol(false);
+        pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+
+        const TString databaseName{"Root"};
+        const TString tableName{"table-1"};
+
+        TServerSettings serverSettings(pm.GetPort(2134), {}, pqConfig);
+        serverSettings.SetUseRealThreads(true)
+            .SetDomainName(databaseName)
+            .SetGrpcPort(pm.GetPort(2135));
+
+        TServer::TPtr server = new TServer(serverSettings);
+        server->EnableGRpc(serverSettings.GrpcPort);
+        auto& runtime = *server->GetRuntime();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        InitRoot(server, sender);
+
+        const auto tablePath = JoinPath({databaseName, tableName});
+        CreateTable(server, sender, databaseName, tableName);
+
+        // fill table
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table-1` (key, value) VALUES
+            (1, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
+            (2, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
+            (3, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
+        )");
+
+        // configure cdc
+        const TString streamName("stream");
+        TShardedTableOptions::TCdcStream streamDesc{
+            .Name = streamName,
+            .Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
+            .Format = NKikimrSchemeOp::ECdcStreamFormat::ECdcStreamFormatJson,
+        };
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, databaseName, tableName, streamDesc));
+
+        // emulate ttl erase rows
+        auto tableId = ResolveTableId(server, sender, tablePath);
+        auto testTableId = TTableId(tableId.PathId, tableId.SchemaVersion);
+        EraseRows(server, sender, tablePath, testTableId, {1}, SerializeKeys({1, 2}));
+
+        // check table content
+        auto content = ReadShardedTable(server, tablePath);
+        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "key = 3, value = 2020-04-15T00:00:00.000000Z");
+
+        // open client
+        TString endpoint = "localhost:" + ToString(serverSettings.GrpcPort);
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(endpoint)
+            .SetDatabase("/" + serverSettings.DomainName);
+        auto driver = NYdb::TDriver(driverConfig);
+
+        auto client = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(driver, NYdb::NPersQueue::TPersQueueClientSettings().Database(databaseName));
+
+        // add consumer
+        const TString consumerName{"user"};
+        {
+            auto res = client->AddReadRule(JoinPath({tableName, streamName}),
+                NYdb::NPersQueue::TAddReadRuleSettings().ReadRule(
+                    NYdb::NPersQueue::TReadRuleSettings().ConsumerName(consumerName))).ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        // get records
+        auto reader = client->CreateReadSession(NYdb::NPersQueue::TReadSessionSettings()
+            .AppendTopics(std::string(JoinPath({databaseName, tableName, streamName})))
+            .ConsumerName(consumerName)
+            .DisableClusterDiscovery(true)
+        );
+
+        // fetch stream
+
+        ui32 reads = 0;
+        while (reads < 2) {
+            auto ev = reader->GetEvent(true);
+            UNIT_ASSERT(ev);
+
+            NYdb::NPersQueue::TPartitionStream::TPtr pStream;
+            if (auto* data = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*ev)) {
+                pStream = data->GetPartitionStream();
+                for (const auto& item : data->GetMessages()) {
+                    Y_UNUSED(item);
+                    reads++;
+
+                    TString itemString{item.GetData()};
+                    NJson::TJsonValue itemJson;
+                    UNIT_ASSERT(NJson::ReadJsonTree(itemString, &itemJson));
+
+                    TString itemUser = itemJson["user"].GetString();
+                    UNIT_ASSERT_VALUES_EQUAL(itemUser, "ttl@system");
+                }
+            }
+            else if (auto* create = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev)) {
+                pStream = create->GetPartitionStream();
+                create->Confirm();
+            } else if (auto* destroy = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*ev)) {
+                pStream = destroy->GetPartitionStream();
+                destroy->Confirm();
+            } else if (std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*ev)) {
+                break;
+            }
+
+            if (pStream) {
+                UNIT_ASSERT_VALUES_EQUAL(pStream->GetTopicPath(), TString("/") + JoinPath({databaseName, tableName, streamName}));
+            }
+        }
+    }
+
     Y_UNIT_TEST(EraseRowsShouldFailOnVariousErrors) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -433,7 +556,6 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
 
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableTableDatetime64(enableDatetime64);
-        featureFlags.SetEnablePgSyntax(true);
         featureFlags.SetEnableTablePgTypes(true);
 
         TPortManager pm;
@@ -1541,7 +1663,7 @@ tkey = 100, key = 4
         check(TEvResponse::ProtoRecordType::SCHEME_ERROR, "Empty partitions list", [](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvResolve::EventType) {
                 ev->Get<TEvResolve>()->Request->ResultSet.at(0).KeyDescription->Partitioning =
-                    std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
+                    std::make_shared<TPartitioning>();
             }
         });
 
@@ -1899,6 +2021,81 @@ tkey = 100, key = 4
                 {"by_tkey", {"tkey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}
             })
         );
+    }
+
+    Y_UNIT_TEST(ConditionalEraseRowsOnlineUniqueIndex) {
+        using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
+
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAddUniqueIndex(true);
+        featureFlags.SetEnableOnlineAddUniqueIndex(true);
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetFeatureFlags(featureFlags);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .EnableOutOfOrder(false)
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"skey", "Uint32", false, false},
+                {"tkey", "Uint32", false, false},
+                {"value", "Timestamp", false, false}
+            })
+            .Indexes({
+                {"by_skey", {"skey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalUnique},
+            }));
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
+            (1, 10, 300, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
+            (2, 20, 200, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
+            (3, 30, 100, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
+        )");
+
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> blockedPrepare(runtime, [&](auto& ev) {
+            const auto& rec = ev->Get()->Record;
+            if (rec.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+                bool ok = schemeTx.ParseFromArray(rec.GetTxBody().data(), rec.GetTxBody().size());
+                if (ok) {
+                    return schemeTx.HasPrepareIndexValidation();
+                }
+            }
+            return false;
+        });
+        auto createIndexFuture = KqpSchemeExecSend(runtime, R"(
+            ALTER TABLE `/Root/table-1` ADD INDEX by_tkey GLOBAL UNIQUE ON (tkey)
+            )", "/Root");
+        runtime.WaitFor("blocked prepare validation", [&]{ return blockedPrepare.size() > 0; });
+
+        auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        auto indexes = GetIndexes(server, sender, "/Root/table-1");
+        ConditionalEraseRows(server, sender, "/Root/table-1", tableId, 4, currentTime, TUnit::AUTO, indexes);
+
+        auto ev = server->GetRuntime()->GrabEdgeEventRethrow<TEvResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvResponse::ProtoRecordType::OK);
+
+        // Unblock and wait for the finished index build
+        blockedPrepare.Stop().Unblock();
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExecWait(runtime, std::move(createIndexFuture)),
+            "SUCCESS");
+
+        for (const auto& index : {"by_skey", "by_tkey"}) {
+            auto content = ReadShardedTable(server, Sprintf("/Root/table-1/%s/indexImplTable", index));
+            UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "");
+        }
     }
 }
 

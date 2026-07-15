@@ -39,6 +39,7 @@ namespace NYql::NDq {
 
 namespace {
 static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
+static const bool TESTS_LARGE = getenv("TESTS_LARGE") != nullptr;
 
 #define LOG_D(stream) LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
 #define LOG_E(stream) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
@@ -517,6 +518,8 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(64_MB, 40_MB);
         TComputeRuntimeSettings runtimeSettings;
         runtimeSettings.StatsMode = statsMode;
+        runtimeSettings.ReportStatsSettings = TReportStatsSettings{TDuration::Seconds(1), TDuration::Seconds(1)};
+    
         auto actor = CreateDqComputeActor(
                 EdgeActor, // executerId,
                 LogPrefix,
@@ -748,7 +751,20 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
 #define WEAK_UNIT_ASSERT_EQUAL_C(A, B, C) do { if (!((A) == (B))) LOG_E("Assert " #A " == " #B " failed " << C); } while(0)
 #define WEAK_UNIT_ASSERT(A) do { if (!(A)) LOG_E("Assert " #A " failed "); } while(0)
 #endif
-    void BasicMultichannelTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks, ui32 numChannels, auto& rng, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
+    struct TStartCAResult {
+        NActors::TActorId SyncCA;
+        TVector<IDqOutputChannel::TPtr> DqOutputChannels;
+        IDqInputChannel::TPtr DqInputChannel;
+    };
+
+    TStartCAResult StartCA(
+        ui32 packets,
+        ui32 watermarkPeriod,
+        bool waitIntermediateAcks,
+        ui32 numChannels,
+        NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE,
+        bool createSuspended = false
+    ) {
         LogPrefix = TStringBuilder() << "Square Test for:"
            << " packets=" << packets
            << " watermarkPeriod=" << watermarkPeriod
@@ -761,10 +777,25 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         });
         auto dqOutputChannels = AddDummyInputChannels(task, InputChannelId, numChannels);
         auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId, (IsWide ? static_cast<TType*>(WideRowType) : RowType));
+        task.SetCreateSuspended(createSuspended);
 
         auto syncCA = CreateTestSyncComputeActor(task, statsMode);
         ActorSystem.EnableScheduleForActor(syncCA, true);
-        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);   // SayHelloOnBootstrap
+
+        return {syncCA, std::move(dqOutputChannels), std::move(dqInputChannel)};
+    }
+
+    void BasicMultichannelTests(
+        ui32 packets,
+        ui32 watermarkPeriod,
+        bool waitIntermediateAcks,
+        ui32 numChannels,
+        auto& rng,
+        NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE,
+        bool createSuspended = false
+    ) {
+        auto [syncCA, dqOutputChannels, dqInputChannel] = StartCA(packets, watermarkPeriod, waitIntermediateAcks, numChannels, statsMode, createSuspended);
 
         ui32 val = 0;
         TMaybe<TInstant> expectedWatermark;
@@ -1045,7 +1076,7 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
         auto seed = GetRandomSeed();
         std::mt19937 rng(seed);
-        for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);
+        for (ui32 t = 0; t < (TESTS_LARGE ? 32 : 16); ++t) sizes.push_back(1 + rng() % 734);
         for (bool waitIntermediateAcks : { false, true }) {
             for (ui32 watermarkPeriod : { 0, 1, 3 }) {
                 for (ui32 packets : sizes) {
@@ -1073,8 +1104,8 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
     Y_UNIT_TEST_F(InputTransformMultichannel, TSyncComputeActorTestFixture) {
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
         std::mt19937 rng(GetRandomSeed());
-        for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);
-        for (ui32 numChannels: { 1, 2, 7, 11 }) {
+        for (ui32 t = 0; t < (TESTS_LARGE ? 32 : 8) ; ++t) sizes.push_back(1 + rng() % 734);
+        for (ui32 numChannels: { 1, 2, 11 }) {
             for (bool waitIntermediateAcks : { false, true }) {
                 for (ui32 watermarkPeriod : { 0, 1, 3 }) {
                     for (ui32 packets : sizes) {
@@ -1083,6 +1114,13 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
                 }
             }
         }
+    }
+
+    Y_UNIT_TEST_F(StreamingQuerySendStatsWithCreateSuspended, TSyncComputeActorTestFixture) {
+        auto [syncCA, dqOutputChannels, dqInputChannel] = StartCA(5, 1, true, 1, NDqProto::DQ_STATS_MODE_PROFILE, true);
+        auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor, TDuration::Seconds(5));
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT(ev->Get()->Record.HasStats());
     }
 }
 

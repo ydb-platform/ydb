@@ -1,15 +1,17 @@
 #include "yql_pq_provider_impl.h"
+#include "yql_pq_settings.h"
 #include "yql_pq_topic_key_parser.h"
 
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
-#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -66,12 +68,12 @@ public:
             return true;
         });
 
-        TStatus status = FillState(PendingReadTopics_, ctx);
+        TStatus status = FillState(PendingReadTopics_, ctx, /*isWrite*/ false);
         if (status != TStatus::Ok) {
             return status;
         }
 
-        return FillState(PendingWriteTopics_, ctx);
+        return FillState(PendingWriteTopics_, ctx, /*isWrite*/ true);
     }
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
@@ -104,11 +106,22 @@ private:
         return ctx.MakeType<TStructExprType>(items);
     }
 
-    TStatus FillState(TTopics& pendingTopics, TExprContext& ctx) {
+    TStatus FillState(TTopics& pendingTopics, TExprContext& ctx, bool isWrite) {
         for (auto& [x, meta] : pendingTopics) {
-            auto itemType = LoadTopicMeta(x.first, x.second, ctx, meta);
+            const TStructExprType* itemType = nullptr;
+            try {
+                itemType = LoadTopicMeta(x.first, x.second, ctx, meta);
+            } catch (const std::exception& ex) {
+                if (!State_->UseYtflowEngine || !isWrite) {
+                    TIssues issues;
+                    issues.AddIssue(ex.what());
+                    ctx.IssueManager.AddIssues(issues);
+                    return TStatus::Error;
+                }
+            }
+
             if (!itemType) {
-                return TStatus::Error;
+                itemType = CreateDefaultItemType(ctx);
             }
 
             if (!meta.RowSpec) {
@@ -122,16 +135,9 @@ private:
 
     const TStructExprType* LoadTopicMeta(const TString& cluster, const TString& topic, TExprContext& ctx, TPqState::TTopicMeta& meta) {
         // todo: return TFuture
-        try {
-            auto future = State_->Gateway->DescribeFederatedTopic(State_->SessionId, cluster, State_->Configuration->GetDatabaseForTopic(cluster), topic, State_->Configuration->Tokens.at(cluster));
-            meta.FederatedTopic = future.GetValueSync();
-            return CreateDefaultItemType(ctx);
-        } catch (const std::exception& ex) {
-            TIssues issues;
-            issues.AddIssue(ex.what());
-            ctx.IssueManager.AddIssues(issues);
-            return nullptr;
-        }
+        auto future = State_->Gateway->DescribeFederatedTopic(State_->SessionId, cluster, State_->Configuration->GetDatabaseForTopic(cluster), topic, State_->Configuration->Tokens.at(cluster));
+        meta.FederatedTopic = future.GetValueSync();
+        return CreateDefaultItemType(ctx);
     }
 
     void Rewind() final {

@@ -7,6 +7,10 @@ logger = logging.getLogger(__name__)
 
 
 class TestListingPaging(SolomonReadingTestBase):
+    @classmethod
+    def setup_class(cls):
+        super().setup_class("listing_paging")
+
     def check_full_listing_result(self, result_set, error):
         if error is not None:
             return False, error
@@ -15,7 +19,7 @@ class TestListingPaging(SolomonReadingTestBase):
         for result in result_set:
             rows.extend(result.rows)
 
-        if (len(rows) != self.listing_paging_metrics_size):
+        if len(rows) != self.listing_paging_metrics_size:
             return False, "Result size differs from expected: have {}, should be {}".format(len(rows), self.listing_paging_metrics_size)
 
         test_labels = []
@@ -46,7 +50,7 @@ class TestListingPaging(SolomonReadingTestBase):
     def test_listing_paging_solomon(self):
         data_source_query = f"""
             CREATE EXTERNAL DATA SOURCE local_solomon WITH (
-                SOURCE_TYPE     = "Solomon",
+                SOURCE_TYPE     = "Monium.Metrics",
                 LOCATION        = "{self.solomon_http_endpoint}",
                 GRPC_LOCATION   = "{self.solomon_grpc_endpoint}",
                 AUTH_METHOD     = "NONE",
@@ -83,7 +87,7 @@ class TestListingPaging(SolomonReadingTestBase):
     def test_listing_paging_monitoring(self):
         data_source_query = f"""
             CREATE EXTERNAL DATA SOURCE local_monitoring WITH (
-                SOURCE_TYPE     = "Solomon",
+                SOURCE_TYPE     = "Monium.Metrics",
                 LOCATION        = "{self.solomon_http_endpoint}",
                 GRPC_LOCATION   = "{self.solomon_grpc_endpoint}",
                 PROJECT         = "listing_paging",

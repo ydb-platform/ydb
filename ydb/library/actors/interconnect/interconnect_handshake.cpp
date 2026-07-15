@@ -12,18 +12,43 @@
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <util/network/socket.h>
 #include <util/system/getpid.h>
+#include <util/system/hp_timer.h>
 #include <util/random/entropy.h>
 #include <util/generic/overloaded.h>
 
 #include <google/protobuf/text_format.h>
 
+#include <limits>
 #include <variant>
 
 namespace NActors {
-    static constexpr size_t StackSize = 64 * 1024; // 64k should be enough
+    static constexpr ui32 StackSize = 64 * 1024; // 64k should be enough
 
     static constexpr size_t RdmaHandshakeRegionSize = 4096;
+
+    namespace {
+        class THandshakeActorCreateTimer {
+            const NMonitoring::THistogramPtr Histogram;
+            const ui64 Start;
+
+        public:
+            explicit THandshakeActorCreateTimer(const TInterconnectProxyCommon::TPtr& common)
+                : Histogram(common->MonCounters
+                    ? common->MonCounters->GetHistogram("HandshakeActorCreateUs", NMonitoring::ExponentialHistogram(16, 2, 4))
+                    : nullptr)
+                , Start(Histogram ? GetCycleCountFast() : 0)
+            {}
+
+            ~THandshakeActorCreateTimer() {
+                if (Histogram) {
+                    Histogram->Collect(NHPTimer::GetSeconds(GetCycleCountFast() - Start) * 1000000.0);
+                }
+            }
+        };
+    }
 
     class THandshakeActor
        : public TActorCoroImpl
@@ -95,6 +120,7 @@ namespace NActors {
             THandshakeActor *Actor = nullptr;
             TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
             TPollerToken::TPtr PollerToken;
+            bool KernelLivenessReady = false;
 
         public:
             TConnection(THandshakeActor *actor, TIntrusivePtr<NInterconnect::TStreamSocket> socket)
@@ -148,6 +174,7 @@ namespace NActors {
             void Reset() {
                 Socket.Reset();
                 PollerToken.Reset();
+                KernelLivenessReady = false;
             }
 
             void SetupSocket() {
@@ -163,6 +190,8 @@ namespace NActors {
                 if (const auto& buffer = Actor->Common->Settings.TCPSocketBufferSize) {
                     Socket->SetSendBufferSize(buffer);
                 }
+
+                KernelLivenessReady = SetupKernelLiveness();
             }
 
             void RegisterInPoller() {
@@ -226,8 +255,94 @@ namespace NActors {
                 }
             }
 
+            bool IsKernelLivenessReady() const {
+                return KernelLivenessReady;
+            }
+
             TIntrusivePtr<NInterconnect::TStreamSocket>& GetSocketRef() { return Socket; }
             operator bool() const { return static_cast<bool>(Socket); }
+
+        private:
+            static int ClampSockOptValue(ui64 value) {
+                constexpr ui64 maxValue = static_cast<ui64>(std::numeric_limits<int>::max());
+                return value > maxValue ? std::numeric_limits<int>::max() : static_cast<int>(value);
+            }
+
+            bool SetIntSockOpt(int level, int option, int value, const char *name) {
+                if (SetSockOpt(*Socket, level, option, value) == 0) {
+                    return true;
+                }
+
+                const int err = errno;
+                LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                    "%s ICH40 Kernel liveness disabled for socket# %d due to setsockopt(%s=%d) failure, errno# %d (%s)",
+                    Actor->LogPrefix.data(), int(*Socket), name, value, err, strerror(err));
+                return false;
+            }
+
+            bool SetupKernelLiveness() {
+                if (!Actor->Common->Settings.EnableKernelLiveness) {
+                    return false;
+                }
+
+#if defined(_linux_)
+#if !defined(TCP_KEEPIDLE) || !defined(TCP_KEEPINTVL) || !defined(TCP_KEEPCNT)
+                LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                    "%s ICH42 Kernel liveness requested, but TCP keepalive tuning options are unavailable on this platform",
+                    Actor->LogPrefix.data());
+                return false;
+#else
+                auto toSockOptSeconds = [](TDuration value) -> ui64 {
+                    const ui64 ms = value.MilliSeconds();
+                    return ms ? (ms - 1) / 1000 + 1 : 0; // ceil(ms / 1000) for non-zero durations
+                };
+
+                const auto& settings = Actor->Common->Settings;
+                const ui64 keepAliveIdleSec = toSockOptSeconds(settings.KernelKeepAliveIdle);
+                const ui64 keepAliveIntervalSec = toSockOptSeconds(settings.KernelKeepAliveInterval);
+                const ui64 userTimeoutMs = settings.KernelUserTimeout.MilliSeconds();
+                if (!keepAliveIdleSec || !keepAliveIntervalSec || !settings.KernelKeepAliveProbes || !userTimeoutMs) {
+                    LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                        "%s ICH43 Kernel liveness disabled due to invalid settings KeepAliveIdle# %s KeepAliveInterval# %s KeepAliveProbes# %" PRIu32
+                        " KernelUserTimeout# %s",
+                        Actor->LogPrefix.data(), settings.KernelKeepAliveIdle.ToString().data(),
+                        settings.KernelKeepAliveInterval.ToString().data(), settings.KernelKeepAliveProbes,
+                        settings.KernelUserTimeout.ToString().data());
+                    return false;
+                }
+
+                if (!SetIntSockOpt(SOL_SOCKET, SO_KEEPALIVE, 1, "SO_KEEPALIVE")) {
+                    return false;
+                }
+                if (!SetIntSockOpt(IPPROTO_TCP, TCP_KEEPIDLE, ClampSockOptValue(keepAliveIdleSec), "TCP_KEEPIDLE")) {
+                    return false;
+                }
+                if (!SetIntSockOpt(IPPROTO_TCP, TCP_KEEPINTVL, ClampSockOptValue(keepAliveIntervalSec), "TCP_KEEPINTVL")) {
+                    return false;
+                }
+                if (!SetIntSockOpt(IPPROTO_TCP, TCP_KEEPCNT, ClampSockOptValue(settings.KernelKeepAliveProbes), "TCP_KEEPCNT")) {
+                    return false;
+                }
+
+#if defined(TCP_USER_TIMEOUT)
+                if (!SetIntSockOpt(IPPROTO_TCP, TCP_USER_TIMEOUT, ClampSockOptValue(userTimeoutMs), "TCP_USER_TIMEOUT")) {
+                    return false;
+                }
+#else
+                LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                    "%s ICH45 Kernel liveness requested, but TCP_USER_TIMEOUT is unavailable on this platform",
+                    Actor->LogPrefix.data());
+                return false;
+#endif
+
+                return true;
+#endif
+#else
+                LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                    "%s ICH44 Kernel liveness requested, but this platform is unsupported", Actor->LogPrefix.data());
+                return false;
+#endif
+            }
         };
 
     private:
@@ -268,7 +383,7 @@ namespace NActors {
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
                         ui32 nodeId, ui64 nextPacket, TString peerHostName, TSessionParams params)
-            : TActorCoroImpl(StackSize, true)
+            : TActorCoroImpl(UsePooledStack<StackSize>(), true)
             , Common(std::move(common))
             , SelfVirtualId(self)
             , PeerVirtualId(peer)
@@ -291,7 +406,7 @@ namespace NActors {
         }
 
         THandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket)
-            : TActorCoroImpl(StackSize, true)
+            : TActorCoroImpl(UsePooledStack<StackSize>(), true)
             , Common(std::move(common))
             , MainChannel(this, std::move(socket))
             , ExternalDataChannel(this, nullptr)
@@ -380,7 +495,11 @@ namespace NActors {
                             if (rdmaIncommingRead) {
                                 auto ack = TryRdmaRead(rdmaIncommingRead.value());
                                 SendExBlock(MainChannel, ack, "TRdmaHandshakeReadAck");
-                                Params.UseRdma = true;
+                                if (ack.HasDigest()) {
+                                    Params.UseRdma = true;
+                                } else {
+                                    Rdma.Clear();
+                                }
                             }
                             ExternalDataChannel.GetSocketRef() = std::move(ev->Get()->Socket);
                         } else {
@@ -840,6 +959,10 @@ namespace NActors {
                 request.SetRequestExternalDataChannel(Common->Settings.EnableExternalDataChannel);
                 request.SetRequestXxhash(true);
                 request.SetRequestXdcShuffle(true);
+                request.SetRequestAllowDisablingPayloadChecksums(true);
+                // v2 session is incompatible with encryption; only request it when encryption is disabled locally
+                request.SetRequestSessionV2(Common->Settings.EnableInterconnectSessionV2 &&
+                    Common->Settings.EncryptionMode == EEncryptionMode::DISABLED);
                 request.SetHandshakeId(*HandshakeId);
 
                 ui32 pending = 0;
@@ -904,7 +1027,7 @@ namespace NActors {
 
                 if (reply.HasErrorExplaination()) {
                     notify(reply, false);
-                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "error from peer: " + reply.GetErrorExplaination());
+                    FailFromPeer(reply.GetErrorExplaination());
                 } else if (!reply.HasSuccess()) {
                     notify(reply, false);
                     Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "empty reply");
@@ -933,6 +1056,11 @@ namespace NActors {
                 Params.UseExternalDataChannel = success.GetUseExternalDataChannel();
                 Params.UseXxhash = success.GetUseXxhash();
                 Params.UseXdcShuffle = success.GetUseXdcShuffle();
+                Params.AllowDisablingPayloadChecksums = success.GetAllowDisablingPayloadChecksums();
+                Params.UseSessionV2 = success.GetUseSessionV2();
+                // Kernel liveness mode is a local transport decision: it depends on whether this side
+                // configured keepalive/user-timeout on its own socket.
+                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
                 if (success.HasServerScopeId()) {
                     ParsePeerScopeId(success.GetServerScopeId());
                 }
@@ -981,6 +1109,8 @@ namespace NActors {
             } else {
                 ProgramInfo.ConstructInPlace(); // successful handshake
             }
+
+            Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
         }
 
         std::vector<NInterconnect::TAddress> ResolvePeer() {
@@ -1112,6 +1242,7 @@ namespace NActors {
                     PeerVirtualId = request.Header.SelfVirtualId;
                     NextPacketToPeer = ack->NextPacket;
                     Params = ack->Params;
+                    Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
 
                     // only succeed in case when proxy returned valid SelfVirtualId; otherwise it wants us to terminate
                     // the handshake process and it does not expect the handshake reply
@@ -1227,6 +1358,11 @@ namespace NActors {
                 Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
                 Params.UseXxhash = request.GetRequestXxhash();
                 Params.UseXdcShuffle = request.GetRequestXdcShuffle();
+                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady(); 
+                Params.AllowDisablingPayloadChecksums = request.GetRequestAllowDisablingPayloadChecksums();
+                // v2 session is used only when both peers enabled it and encryption is not in effect
+                Params.UseSessionV2 = request.GetRequestSessionV2() &&
+                    Common->Settings.EnableInterconnectSessionV2 && !Params.Encryption;
 
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
@@ -1299,6 +1435,8 @@ namespace NActors {
                     success.SetUseExternalDataChannel(Params.UseExternalDataChannel);
                     success.SetUseXxhash(Params.UseXxhash);
                     success.SetUseXdcShuffle(Params.UseXdcShuffle);
+                    success.SetAllowDisablingPayloadChecksums(Params.AllowDisablingPayloadChecksums);
+                    success.SetUseSessionV2(Params.UseSessionV2);
 
                     ui32 pending = 0;
                     auto& actors = Common->ConnectionCheckerActorIds;
@@ -1581,23 +1719,38 @@ namespace NActors {
             return WaitForSpecificEvent<T1, T2, TOther...>(std::move(state));
         }
 
-        void Fail(TEvHandshakeFail::EnumHandshakeFail reason, TString explanation, bool network = false) {
+        TEvHandshakeFail::EReason ClassifyPeerError(TStringBuf error) const {
+            const TString peerDoesNotKnowSelf = "DynamicNS knows nothing about the node " + ToString(SelfActorId.NodeId());
+            return error.Contains(peerDoesNotKnowSelf) || error.Contains("Peer node not registered in nameservice")
+                   ? TEvHandshakeFail::EReason::RemoteNodeDoesNotKnowLocalNode
+                   : TEvHandshakeFail::EReason::Unspecified;
+        }
+
+        void FailFromPeer(TString peerError) {
+            const auto detailedReason = ClassifyPeerError(peerError);
+            TString explanation = "error from peer: " + peerError;
+            Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, std::move(explanation), false, detailedReason, std::move(peerError));
+        }
+
+        void Fail(TEvHandshakeFail::EnumHandshakeFail failType, TString explanation, bool network = false,
+                  TEvHandshakeFail::EReason detailedReason = TEvHandshakeFail::EReason::Unspecified,
+                  TString peerError = {}) {
             TString msg = Sprintf("%s Peer# %s(%s) %s", HandshakeKind.data(), PeerHostName ? PeerHostName.data() : "<unknown>",
                 PeerAddr.size() ? PeerAddr.data() : "<unknown>", explanation.data());
 
             if (network) {
-                LOG_LOG_NET_X(NActors::NLog::PRI_DEBUG, PeerNodeId, "network-related error occured on handshake: %s", msg.data());
+                LOG_LOG_NET_X(NActors::NLog::PRI_DEBUG, PeerNodeId, "network-related error occurred on handshake: %s", msg.data());
             } else {
-                // calculate log severity based on failure type; permanent failures lead to error log messages
-                auto severity = reason == TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT
-                                    ? NActors::NLog::PRI_NOTICE
-                                    : NActors::NLog::PRI_INFO;
+                // proxy emits throttled NOTICE summaries for permanent failures
+                auto severity = failType == TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT
+                                    ? NActors::NLog::PRI_INFO
+                                    : NActors::NLog::PRI_DEBUG;
 
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH03", severity, "handshake failed, explanation# %s", msg.data());
             }
 
             if (PeerNodeId) {
-                SendToProxy(MakeHolder<TEvHandshakeFail>(reason, std::move(msg)));
+                SendToProxy(MakeHolder<TEvHandshakeFail>(failType, std::move(msg), PeerHostName, std::move(peerError), detailedReason));
             }
 
             throw TExHandshakeFailed() << explanation;
@@ -1633,11 +1786,13 @@ namespace NActors {
     IActor* CreateOutgoingHandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self,
                                          const TActorId& peer, ui32 nodeId, ui64 nextPacket, TString peerHostName,
                                          TSessionParams params) {
+        THandshakeActorCreateTimer timer(common);
         return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), self, peer, nodeId, nextPacket,
             std::move(peerHostName), std::move(params)), IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }
 
     IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket) {
+        THandshakeActorCreateTimer timer(common);
         return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), std::move(socket)),
             IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }

@@ -2,11 +2,11 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(18)
+SPLIT_FACTOR(50)
 
 REQUIREMENTS(ram:32 cpu:4)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
@@ -24,6 +24,7 @@ PEERDIR(
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/util
     ydb/core/wrappers/ut_helpers
+    ydb/library/aws_init
     yql/essentials/public/udf/service/exception_policy
 )
 

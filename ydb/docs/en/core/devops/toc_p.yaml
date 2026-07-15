@@ -14,10 +14,17 @@ items:
   include:
     mode: link
     path: deployment-options/toc_p.yaml
+- name: Enterprise Manager
+  href: enterprise-manager/index.md
+  include:
+    mode: link
+    path: enterprise-manager/toc_p.yaml
 - name: Observability
   href: observability/index.md
   include:
     mode: link
     path: observability/toc_p.yaml
+- name: Backup and Restore
+  href: backup-and-recovery/index.md
 - name: Backup and recovery
   href: backup-and-recovery.md

@@ -24,7 +24,7 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-extern const TString SerializedNullRow;
+extern const std::string SerializedNullRow;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -162,7 +162,7 @@ static_assert(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline size_t GetDataWeight(EValueType type)
+inline i64 GetDataWeight(EValueType type)
 {
     switch (type) {
         case EValueType::Null:
@@ -188,7 +188,7 @@ inline size_t GetDataWeight(EValueType type)
     }
 }
 
-inline size_t GetDataWeight(const TUnversionedValue& value)
+inline i64 GetDataWeight(const TUnversionedValue& value)
 {
     if (IsStringLikeType(value.Type)) {
         return value.Length;
@@ -251,9 +251,10 @@ TFingerprint GetFarmFingerprint(TUnversionedRow row);
 size_t GetUnversionedRowByteSize(ui32 valueCount);
 
 //! Returns the storage-invariant data weight of a given row.
-size_t GetDataWeight(TUnversionedRow row);
+i64 GetDataWeight(TUnversionedRow row);
 
-size_t GetDataWeight(TRange<TUnversionedRow> rows);
+//! Returns the sum of data weights of rows.
+i64 GetDataWeight(TRange<TUnversionedRow> rows);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -431,18 +432,19 @@ bool ValidateNonKeyColumnsAgainstLock(
 /*! The components must pass #ValidateKeyValue check. */
 void ValidateClientKey(TLegacyKey key);
 
-//! Checks that #key is a valid client-side key. Throws on failure.
 /*! The key must obey the following properties:
  *  1. It cannot be null.
- *  2. It must contain exactly #schema.GetKeyColumnCount() components.
+ *  2. It must contain at most #schema.GetKeyColumnCount() components.
+ *     If #allowMissingKeyColumns is false, it must contain exactly that many.
  *  3. Value ids must be a permutation of {0, ..., #schema.GetKeyColumnCount() - 1}.
- *  4. Value types must either be null of match those given in schema.
+ *  4. Value types must either be null or match those given in schema.
  */
 void ValidateClientKey(
     TLegacyKey key,
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
-    const TNameTablePtr& nameTable);
+    const TNameTablePtr& nameTable,
+    bool allowMissingKeyColumns = false);
 
 //! Checks if #timestamp is sane and can be used for data.
 //! Allows timestamps in range [MinTimestamp, MaxTimestamp] plus some sentinels
@@ -511,8 +513,25 @@ const TLegacyOwningKey& ChooseMinKey(const TLegacyOwningKey& a, const TLegacyOwn
 //! Ties are broken in favour of the first argument.
 const TLegacyOwningKey& ChooseMaxKey(const TLegacyOwningKey& a, const TLegacyOwningKey& b);
 
-TString SerializeToString(TUnversionedRow row);
-TString SerializeToString(TUnversionedValueRange range);
+std::string SerializeToString(TUnversionedRow row);
+std::string SerializeToString(TUnversionedValueRange range);
+
+//! Returns an upper bound on the number of bytes |SerializeRowToBuffer| writes for |range|.
+size_t GetUnversionedRowByteSizeForWire(TUnversionedValueRange range);
+
+//! Serializes |range| in the same compact wire format as |SerializeToString| directly into |dst|.
+//! The buffer must hold at least |GetUnversionedRowByteSizeForWire(range)| bytes.
+//! Returns the pointer past the written bytes.
+char* SerializeRowToBuffer(char* dst, TUnversionedValueRange range);
+
+//! Reads the row header written by |SerializeRowToBuffer| from |input|, stores the value count
+//! into |valueCount|, and returns the pointer to the first value.
+const char* ReadUnversionedRowHeaderFromBuffer(const char* input, ui32* valueCount);
+
+//! Reads a single value written by |SerializeRowToBuffer| from |input| into |value|.
+//! String-like values point into the source buffer and are not copied.
+//! Returns the pointer past the consumed bytes.
+const char* ReadUnversionedValueFromBuffer(const char* input, TUnversionedValue* value);
 
 void ToProto(TProtobufString* protoRow, TUnversionedRow row);
 void ToProto(TProtobufString* protoRow, const TUnversionedOwningRow& row);
@@ -773,7 +792,7 @@ public:
         return *this;
     }
 
-    TUnversionedOwningRow& operator=(TUnversionedOwningRow&& other)
+    TUnversionedOwningRow& operator=(TUnversionedOwningRow&& other) noexcept
     {
         RowData_ = std::move(other.RowData_);
         StringData_ = std::move(other.StringData_);
@@ -796,7 +815,7 @@ public:
 
 private:
     friend TLegacyOwningKey GetKeySuccessorImpl(const TLegacyOwningKey& key, int prefixLength, EValueType sentinelType);
-    friend TUnversionedOwningRow DeserializeFromString(TString&& data, std::optional<int> nullPaddingWidth);
+    friend TUnversionedOwningRow DeserializeFromString(std::string&& data, std::optional<int> nullPaddingWidth);
 
     friend class TUnversionedOwningRowBuilder;
 
@@ -896,9 +915,9 @@ void FormatValue(TStringBuilderBase* builder, TUnversionedRow row, TStringBuf fo
 void FormatValue(TStringBuilderBase* builder, TMutableUnversionedRow row, TStringBuf format);
 void FormatValue(TStringBuilderBase* builder, const TUnversionedOwningRow& row, TStringBuf format);
 
-TString ToString(TUnversionedRow row, bool valuesOnly = false);
-TString ToString(TMutableUnversionedRow row, bool valuesOnly = false);
-TString ToString(const TUnversionedOwningRow& row, bool valuesOnly = false);
+std::string ToString(TUnversionedRow row, bool valuesOnly = false);
+std::string ToString(TMutableUnversionedRow row, bool valuesOnly = false);
+std::string ToString(const TUnversionedOwningRow& row, bool valuesOnly = false);
 
 ////////////////////////////////////////////////////////////////////////////////
 

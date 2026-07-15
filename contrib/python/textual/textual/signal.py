@@ -3,8 +3,6 @@ Signals are a simple pub-sub mechanism.
 
 DOMNodes can subscribe to a signal, which will invoke a callback when the signal is published.
 
-This is experimental for now, for internal use. It may be part of the public API in a future release.
-
 """
 
 from __future__ import annotations
@@ -18,7 +16,7 @@ from textual import log
 
 if TYPE_CHECKING:
     from textual.dom import DOMNode
-    from textual.message_pump import MessagePump
+
 SignalT = TypeVar("SignalT")
 
 SignalCallbackType = Union[
@@ -44,7 +42,7 @@ class Signal(Generic[SignalT]):
         self._owner = ref(owner)
         self._name = name
         self._subscriptions: WeakKeyDictionary[
-            MessagePump, list[SignalCallbackType]
+            DOMNode, list[SignalCallbackType[SignalT]]
         ] = WeakKeyDictionary()
 
     def __rich_repr__(self) -> rich.repr.Result:
@@ -59,8 +57,8 @@ class Signal(Generic[SignalT]):
 
     def subscribe(
         self,
-        node: MessagePump,
-        callback: SignalCallbackType,
+        node: DOMNode,
+        callback: SignalCallbackType[SignalT],
         immediate: bool = False,
     ) -> None:
         """Subscribe a node to this signal.
@@ -76,7 +74,6 @@ class Signal(Generic[SignalT]):
         Raises:
             SignalError: Raised when subscribing a non-mounted widget.
         """
-
         if not node.is_running:
             raise SignalError(
                 f"Node must be running to subscribe to a signal (has {node} been mounted)?"
@@ -84,20 +81,20 @@ class Signal(Generic[SignalT]):
 
         if immediate:
 
-            def signal_callback(data: object) -> None:
+            def signal_callback(data: SignalT) -> None:
                 """Invoke the callback immediately."""
                 callback(data)
 
         else:
 
-            def signal_callback(data: object) -> None:
+            def signal_callback(data: SignalT) -> None:
                 """Post the callback to the node, to call at the next opertunity."""
                 node.call_next(callback, data)
 
         callbacks = self._subscriptions.setdefault(node, [])
         callbacks.append(signal_callback)
 
-    def unsubscribe(self, node: MessagePump) -> None:
+    def unsubscribe(self, node: DOMNode) -> None:
         """Unsubscribe a node from this signal.
 
         Args:
@@ -112,10 +109,13 @@ class Signal(Generic[SignalT]):
             data: An argument to pass to the callbacks.
 
         """
+        if not self._subscriptions:
+            return
         # Don't publish if the DOM is not ready or shutting down
         owner = self.owner
         if owner is None:
             return
+
         if not owner.is_attached or owner._pruning:
             return
         for ancestor_node in owner.ancestors_with_self:

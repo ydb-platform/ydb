@@ -1,5 +1,7 @@
 #include "one_layer.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_COMPACTION
+
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 std::vector<TPortionInfo::TPtr> TOneLayerPortions::DoModifyPortions(
@@ -21,10 +23,17 @@ std::vector<TPortionInfo::TPtr> TOneLayerPortions::DoModifyPortions(
                 auto it = info.first;
                 ++it;
                 if (it != Portions.end() && it->GetStart() <= i->IndexKeyEnd()) {
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("start", i->IndexKeyStart().DebugString())(
-                        "end", i->IndexKeyEnd().DebugString())("next", it->GetStart().DebugString())("next1", it->GetStart().DebugString())(
-                        "next2", it->GetPortion()->IndexKeyEnd().DebugString())("level_id", GetLevelId())("portion_id_new", i->GetPortionId())(
-                        "portion_id_old", it->GetPortion()->GetPortionId())("portion_old", it->GetPortion()->DebugString())("add", sb);
+                    YDB_LOG_ERROR("",
+                        {"start", i->IndexKeyStart().DebugString()},
+                        {"end", i->IndexKeyEnd().DebugString()},
+                        {"next", it->GetStart().DebugString()},
+                        {"next1", it->GetStart().DebugString()},
+                        {"next2", it->GetPortion()->IndexKeyEnd().DebugString()},
+                        {"levelId", GetLevelId()},
+                        {"portionIdNew", i->GetPortionId()},
+                        {"portionIdOld", it->GetPortion()->GetPortionId()},
+                        {"portionOld", it->GetPortion()->DebugString()},
+                        {"add", sb});
                     problems.emplace_back(i);
                     Portions.erase(info.first);
                     continue;
@@ -35,10 +44,15 @@ std::vector<TPortionInfo::TPtr> TOneLayerPortions::DoModifyPortions(
                 if (it != Portions.begin()) {
                     --it;
                     if (i->IndexKeyStart() <= it->GetPortion()->IndexKeyEnd()) {
-                        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("start", i->IndexKeyStart().DebugString())(
-                            "finish", i->IndexKeyEnd().DebugString())("pred_start", it->GetPortion()->IndexKeyStart().DebugString())(
-                            "pred_finish", it->GetPortion()->IndexKeyEnd().DebugString())("level_id", GetLevelId())(
-                            "portion_id_new", i->GetPortionId())("portion_id_old", it->GetPortion()->GetPortionId())("add", sb);
+                        YDB_LOG_ERROR("",
+                            {"start", i->IndexKeyStart().DebugString()},
+                            {"finish", i->IndexKeyEnd().DebugString()},
+                            {"predStart", it->GetPortion()->IndexKeyStart().DebugString()},
+                            {"predFinish", it->GetPortion()->IndexKeyEnd().DebugString()},
+                            {"levelId", GetLevelId()},
+                            {"portionIdNew", i->GetPortionId()},
+                            {"portionIdOld", it->GetPortion()->GetPortionId()},
+                            {"add", sb});
                         problems.emplace_back(i);
                         Portions.erase(info.first);
                         continue;
@@ -50,7 +64,20 @@ std::vector<TPortionInfo::TPtr> TOneLayerPortions::DoModifyPortions(
     return problems;
 }
 
-std::vector<TCompactionTaskData> TOneLayerPortions::DoGetOptimizationTasks() const {
+void TOneLayerPortions::TryAddPortionToTask(
+    const TPortionInfo::TConstPtr& portion, TCompactionTaskData& task, ui64& compactedData, const TMayUsePortion& mayUsePortion) const {
+    if (!mayUsePortion(portion)) {
+        return;
+    }
+    auto affectedPortions = GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd(), mayUsePortion);
+    if (affectedPortions.has_value() && affectedPortions->HasBlockedPortions()) {
+        return;
+    }
+    compactedData += portion->GetTotalBlobBytes();
+    task.AddCurrentLevelPortion(portion, std::move(affectedPortions), false);
+}
+
+std::vector<TCompactionTaskData> TOneLayerPortions::DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const {
     AFL_VERIFY(GetNextLevel());
     ui64 compactedData = 0;
     TCompactionTaskData result(GetNextLevel()->GetLevelId());
@@ -64,15 +91,11 @@ std::vector<TCompactionTaskData> TOneLayerPortions::DoGetOptimizationTasks() con
            (itBkwd != Portions.begin() || itFwd != Portions.end()) && result.CanTakeMore()) {
         if (itFwd != Portions.end() &&
             (itBkwd == Portions.begin() || itBkwd->GetPortion()->GetTotalBlobBytes() <= itFwd->GetPortion()->GetTotalBlobBytes())) {
-            auto portion = itFwd->GetPortion();
-            compactedData += portion->GetTotalBlobBytes();
-            result.AddCurrentLevelPortion(portion, GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd()), false);
+            TryAddPortionToTask(itFwd->GetPortion(), result, compactedData, mayUsePortion);
             ++itFwd;
         } else if (itBkwd != Portions.begin() &&
                    (itFwd == Portions.end() || itFwd->GetPortion()->GetTotalBlobBytes() < itBkwd->GetPortion()->GetTotalBlobBytes())) {
-            auto portion = itBkwd->GetPortion();
-            compactedData += portion->GetTotalBlobBytes();
-            result.AddCurrentLevelPortion(portion, GetNextLevel()->GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd()), false);
+            TryAddPortionToTask(itBkwd->GetPortion(), result, compactedData, mayUsePortion);
             --itBkwd;
         }
     }

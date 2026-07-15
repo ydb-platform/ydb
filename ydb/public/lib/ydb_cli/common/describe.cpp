@@ -12,8 +12,12 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
+#include <ydb/public/api/protos/ydb_scheme.pb.h>
+#include <ydb/public/api/protos/ydb_secret.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/map.h>
 #include <util/stream/format.h>
 #include <util/string/join.h>
 
@@ -70,6 +74,8 @@ void PrintMain(const NTopic::TTopicDescription& topicDescription, IOutputStream&
     }
     out << Endl << "PartitionsCount: " << topicDescription.GetTotalPartitionsCount();
     out << Endl << "PartitionWriteSpeed: " << topicDescription.GetPartitionWriteSpeedBytesPerSecond() / 1_KB << " KB";
+    out << Endl << "PartitionWriteSpeedMessagesPerSecond: " << topicDescription.GetPartitionWriteSpeedMessagesPerSecond();
+    out << Endl << "PartitionWriteBurstMessages: " << topicDescription.GetPartitionWriteBurstMessages();
     out << Endl << "MeteringMode: " << (TStringBuilder() << topicDescription.GetMeteringMode());
     if (topicDescription.GetMetricsLevel().has_value()) {
         out << Endl << "MetricsLevel: " << *topicDescription.GetMetricsLevel();
@@ -418,9 +424,11 @@ void PrintTtlSettings(const NTable::TTableDescription& tableDescription, IOutput
     }
     default:
         NColorizer::TColors colors = NConsoleClient::AutoColors(out);
-        out << "(unknown):" << Endl
-            << colors.RedColor() << "Unknown ttl settings mode. Please update your version of YDB cli"
-            << colors.OldColor() << Endl;
+
+        out << colors.RedColor()
+            << "Unknown TTL settings mode: " << static_cast<int>(settings->GetMode())
+            << colors.OldColor()
+            << Endl;
     }
 
     if (settings->GetRunInterval()) {
@@ -467,8 +475,58 @@ void PrintReadReplicasSettings(const NTable::TTableDescription& tableDescription
         break;
     default:
         NColorizer::TColors colors = NConsoleClient::AutoColors(out);
-        out << colors.RedColor() << "Unknown read replicas settings mode. Please update your version of YDB cli"
-            << colors.OldColor() << Endl;
+
+        out << colors.RedColor()
+            << "Unknown read replicas settings mode: " << static_cast<int>(settings->GetMode())
+            << colors.OldColor()
+            << Endl;
+    }
+}
+
+/**
+ * Print the configuration for the table metrics.
+ *
+ * @param[in] tableDescription The description of the table
+ * @param[in] out The output stream to print to
+ */
+void PrintMetricsSettings(const NTable::TTableDescription& tableDescription, IOutputStream& out) {
+    const auto& settings = tableDescription.GetMetricsSettings();
+    if (!settings) {
+        return;
+    }
+
+    out << Endl << "Metrics settings: " << Endl;
+
+    switch (settings->GetMetricsLevel()) {
+    case NTable::TMetricsSettings::EMetricsLevel::Unspecified:
+        out << "Metrics level: UNSPECIFIED" << Endl;
+        break;
+
+    case NTable::TMetricsSettings::EMetricsLevel::Disabled:
+        out << "Metrics level: DISABLED" << Endl;
+        break;
+
+    case NTable::TMetricsSettings::EMetricsLevel::Database:
+        out << "Metrics level: DATABASE" << Endl;
+        break;
+
+    case NTable::TMetricsSettings::EMetricsLevel::Table:
+        out << "Metrics level: TABLE" << Endl;
+        break;
+
+    case NTable::TMetricsSettings::EMetricsLevel::Partition:
+        out << "Metrics level: PARTITION" << Endl;
+        break;
+
+    default:
+        NColorizer::TColors colors = NConsoleClient::AutoColors(out);
+
+        out << colors.RedColor()
+            << "Unknown metrics level: " << static_cast<int>(settings->GetMetricsLevel())
+            << colors.OldColor()
+            << Endl;
+
+        break;
     }
 }
 
@@ -697,9 +755,40 @@ int TDescribeLogic::PrintPathResponse(const TString& path, const NScheme::TDescr
         return DescribeExternalTable(path, format);
     case NScheme::ESchemeEntryType::SysView:
         return DescribeSystemView(path, format);
+    case NScheme::ESchemeEntryType::Secret:
+        return DescribeSecret(path, format);
     default:
         return DescribeEntryDefault(entry, options);
     }
+}
+
+int TDescribeLogic::DescribeSecret(const TString& path, EDataFormat format) {
+    NSecret::TSecretClient secretClient(Driver);
+
+    auto secretResult = secretClient.DescribeSecret(path).GetValueSync();
+    if (!secretResult.IsSuccess()) {
+        Out << secretResult.GetIssues().ToString() << Endl;
+        return EXIT_FAILURE;
+    }
+
+    if (format == EDataFormat::Pretty || format == EDataFormat::Default) {
+        return PrintSecretResponsePretty(secretResult);
+    }
+    if (format == EDataFormat::Json) {
+        Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+             << "Use \"--format proto-json-base64\" option instead." << Endl;
+    }
+
+    Ydb::Secret::DescribeSecretResult msg;
+    secretResult.SerializeTo(msg.mutable_self());
+    msg.set_version(static_cast<i64>(secretResult.GetVersion()));
+
+    return PrintProtoJsonBase64(msg, Out);
+}
+
+int TDescribeLogic::PrintSecretResponsePretty(const NSecret::TDescribeSecretResult& result) const {
+    Out << "Version: " << result.GetVersion() << Endl;
+    return EXIT_SUCCESS;
 }
 
 int TDescribeLogic::DescribeEntryDefault(NScheme::TSchemeEntry entry, const TDescribeOptions& options) {
@@ -773,6 +862,7 @@ int TDescribeLogic::PrintTableResponsePretty(const NTable::TTableDescription& ta
             << (tableDescription.GetKeyBloomFilter().value() ? "true" : "false") << Endl;
     }
     PrintReadReplicasSettings(tableDescription, Out);
+    PrintMetricsSettings(tableDescription, Out);
     PrintPermissionsIfNeeded(tableDescription, options);
     if (options.ShowStats) {
         PrintStatistics(tableDescription, Out);
@@ -1054,8 +1144,57 @@ int TDescribeLogic::DescribeExternalDataSource(const TString& path, EDataFormat 
     }
 }
 
-int TDescribeLogic::PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& /*result*/) const {
-    // to do
+int TDescribeLogic::PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& result) const {
+    const auto& proto = NYdb::TProtoAccessor::GetProto(result);
+
+    Out << Endl << "Source type: " << proto.source_type();
+    Out << Endl << "Location: " << proto.location();
+
+    // Properties is a flat string map that also carries the auth method and the
+    // (optional) managed database reference. Pull the well-known fields out so they
+    // are shown as dedicated lines and the rest goes into the properties table below.
+    TMap<TString, TString> properties(proto.properties().begin(), proto.properties().end());
+
+    // Pulls a well-known field out of the properties map. The key is always removed
+    // (so it does not also appear in the properties table), but an empty value is
+    // reported as absent: the server stores AUTH_METHOD with an empty value when the
+    // auth identity is not set, and "Auth method: " with nothing after it is confusing.
+    auto extract = [&properties](TStringBuf key) -> std::optional<TString> {
+        auto it = properties.find(TString(key));
+        if (it == properties.end()) {
+            return std::nullopt;
+        }
+        TString value = std::move(it->second);
+        properties.erase(it);
+        if (value.empty()) {
+            return std::nullopt;
+        }
+        return value;
+    };
+
+    if (auto authMethod = extract("AUTH_METHOD")) {
+        Out << Endl << "Auth method: " << *authMethod;
+    }
+    if (auto database = extract("DATABASE_NAME")) {
+        Out << Endl << "Database: " << *database;
+    }
+    if (auto databaseId = extract("DATABASE_ID")) {
+        Out << Endl << "Database id: " << *databaseId;
+    }
+
+    Out << Endl << "Created: " << FormatTime(TInstant::MilliSeconds(proto.self().created_at().plan_step()));
+
+    if (!properties.empty()) {
+        TPrettyTable table({ "Name", "Value" }, TPrettyTableConfig().WithoutRowDelimiters());
+        for (const auto& [name, value] : properties) {
+            table.AddRow()
+                .Column(0, name)
+                .Column(1, value);
+        }
+        Out << Endl << "Properties: " << Endl << table;
+    }
+
+    Out << Endl;
     return EXIT_SUCCESS;
 }
 

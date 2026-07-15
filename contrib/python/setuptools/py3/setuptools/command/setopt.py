@@ -27,7 +27,7 @@ def config_file(kind="local"):
     raise ValueError("config_file() type must be 'local', 'global', or 'user'", kind)
 
 
-def edit_config(filename, settings, dry_run=False) -> None:
+def edit_config(filename, settings) -> None:
     """Edit a configuration file to include `settings`
 
     `settings` is a dictionary of dictionaries or ``None`` values, keyed by
@@ -64,9 +64,8 @@ def edit_config(filename, settings, dry_run=False) -> None:
                     opts.set(section, option, value)
 
     log.info("Writing %s", filename)
-    if not dry_run:
-        with open(filename, 'w', encoding="utf-8") as f:
-            opts.write(f)
+    with open(filename, 'w', encoding="utf-8") as f:
+        opts.write(f)
 
 
 class option_base(Command):
@@ -137,5 +136,4 @@ class setopt(option_base):
         edit_config(
             self.filename,
             {self.command: {self.option.replace('-', '_'): self.set_value}},
-            self.dry_run,
         )

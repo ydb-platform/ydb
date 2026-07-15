@@ -1,7 +1,7 @@
 title: Документация YDB
 description:
   - >-
-    <i>YDB</i> — это распределённая отказоустойчивая Distributed SQL СУБД.
+    <b>YDB</b> (читается <i>вай-ди-би</i>) — это распределённая отказоустойчивая Distributed SQL СУБД.
     YDB обеспечивает высокую доступность, горизонтальную масштабируемость, а также строгую консистентность и поддержку ACID-транзакций.
     Для запросов используется диалект SQL (<a
     href="yql/reference/">YQL</a>).
@@ -16,10 +16,10 @@ links:
   - title: Концепции
     description: Как устроена YDB, возможности и доступные режимы использования
     href: concepts/
-  - title: Для DevOps инженеров
+  - title: Для администраторов БД
     description: Как работать с production кластерами YDB
     href: devops/
-  - title: Для разработчиков
+  - title: Для разработчиков приложений
     description: Как разрабатывать приложения с использованием YDB
     href: dev/
   - title: Для инженеров по безопасности
@@ -37,9 +37,6 @@ links:
   - title: Работа с SDK
     description: Справочник по YDB Software Development Kits
     href: reference/ydb-sdk/
-  - title: Совместимость с PostgreSQL
-    description: Интеграция с экосистемой PostgreSQL
-    href: postgresql/intro/
   - title: Диагностика проблем
     description: Описание диагностики проблем с базами данных YDB и приложениями
     href: troubleshooting/

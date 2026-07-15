@@ -1,5 +1,6 @@
 #include "localrecovery_public.h"
 #include "localrecovery_logreplay.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_operation_broker.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_lsnmngr.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.h>
@@ -34,7 +35,9 @@ namespace NKikimr {
                                 TVDiskIncarnationGuid vdiskIncarnationGuid,
                                 NKikimrVDiskData::TScrubEntrypoint scrubEntrypoint,
                                 ui64 scrubEntrypointLsn,
-                                NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint)
+                                NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint,
+                                std::unique_ptr<TChunkKeeperData>&& chunkKeeperData,
+                                bool hasMetadata)
         : Status(status)
         , RecovInfo(recovInfo)
         , RepairedSyncLog(std::move(repairedSyncLog))
@@ -50,6 +53,8 @@ namespace NKikimr {
         , ScrubEntrypoint(std::move(scrubEntrypoint))
         , ScrubEntrypointLsn(scrubEntrypointLsn)
         , MetadataEntryPoint(std::move(metadataEntryPoint))
+        , ChunkKeeperData(std::move(chunkKeeperData))
+        , HasMetadata(hasMetadata)
     {}
 
     TEvBlobStorage::TEvLocalRecoveryDone::~TEvLocalRecoveryDone() {
@@ -76,6 +81,7 @@ namespace NKikimr {
         TVDiskIncarnationGuid VDiskIncarnationGuid;
         std::shared_ptr<TRopeArena> Arena;
         NMonGroup::TVDiskStateGroup VDiskMonGroup;
+        bool LocalRecoveryTokenRequested = false;
         bool HullLogoBlobsDBInitialized = false;
         bool HullBlocksDBInitialized = false;
         bool HullBarriersDBInitialized = false;
@@ -88,6 +94,7 @@ namespace NKikimr {
         ui64 ScrubEntrypointLsn = 0;
         bool IsTinyDisk = false;
         NKikimrVDiskData::TMetadataEntryPoint MetadataEntryPoint;
+        bool HasMetadata = false;
 
         TActiveActors ActiveActors;
 
@@ -96,15 +103,30 @@ namespace NKikimr {
             HullBarriersDBInitialized && SyncLogInitialized;
         }
 
+        void QueryToken(const TActorContext& ctx) {
+            Y_ABORT_UNLESS(!LocalRecoveryTokenRequested);
+            ctx.Send(MakeBlobStorageLocalRecoveryBrokerID(),
+                new TEvAcquireVDiskOperationToken(MakeBlobStorageVDiskID(
+                    SkeletonId.NodeId(), Config->BaseInfo.PDiskId, Config->BaseInfo.VDiskSlotId),
+                    Config->BaseInfo.PDiskId),
+                IEventHandle::FlagTrackDelivery);
+            LocalRecoveryTokenRequested = true;
+        }
+
+        void ReleaseToken(const TActorContext& ctx) {
+            if (LocalRecoveryTokenRequested) {
+                ctx.Send(MakeBlobStorageLocalRecoveryBrokerID(),
+                    new TEvReleaseVDiskOperationToken(MakeBlobStorageVDiskID(
+                        SkeletonId.NodeId(), Config->BaseInfo.PDiskId, Config->BaseInfo.VDiskSlotId),
+                        Config->BaseInfo.PDiskId));
+                LocalRecoveryTokenRequested = false;
+            }
+        }
+
         void SignalErrorAndDie(const TActorContext &ctx, NKikimrProto::EReplyStatus status, const TString &reason) {
             LocRecCtx->RecovInfo->SuccessfulRecovery = false;
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::Error;
-            LOG_CRIT(ctx, BS_LOCALRECOVERY,
-                    VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                        "LocalRecovery FINISHED: %s reason# %s status# %s;"
-                        "VDISK LOCAL RECOVERY FAILURE DUE TO LOGICAL ERROR",
-                        LocRecCtx->RecovInfo->ToString().data(), reason.data(),
-                        NKikimrProto::EReplyStatus_Name(status).data()));
+            YDB_LOG_CRIT_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "LocalRecovery FINISHED: %s reason# %s status# %s;" "VDISK LOCAL RECOVERY FAILURE DUE TO LOGICAL ERROR", LocRecCtx->RecovInfo->ToString().data(), reason.data(), NKikimrProto::EReplyStatus_Name(status).data()));
             ctx.Send(SkeletonId, new TEvBlobStorage::TEvLocalRecoveryDone(
                                                 status,
                                                 LocRecCtx->RecovInfo,
@@ -122,7 +144,10 @@ namespace NKikimr {
                                                 VDiskIncarnationGuid,
                                                 {},
                                                 0,
-                                                {}));
+                                                {},
+                                                nullptr,
+                                                false));
+            ReleaseToken(ctx);
             Die(ctx);
         }
 
@@ -138,9 +163,7 @@ namespace NKikimr {
             auto lsnMngr = MakeIntrusive<TLsnMngr>(RecoveredLsn, lsnToSyncLogRecovered, true);
             LocRecCtx->RecovInfo->SetRecoveredLogStartLsn(lsnMngr->GetStartLsn());
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::Done;
-            LOG_NOTICE(ctx, BS_LOCALRECOVERY,
-                       VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                            "LocalRecovery FINISHED: %s", LocRecCtx->RecovInfo->ToString().data()));
+            YDB_LOG_NOTICE_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "LocalRecovery FINISHED: %s", LocRecCtx->RecovInfo->ToString().data()));
             ctx.Send(SkeletonId,
                      new TEvBlobStorage::TEvLocalRecoveryDone(NKikimrProto::OK,
                                                               LocRecCtx->RecovInfo,
@@ -156,7 +179,10 @@ namespace NKikimr {
                                                               VDiskIncarnationGuid,
                                                               std::move(ScrubEntrypoint),
                                                               ScrubEntrypointLsn,
-                                                              std::move(MetadataEntryPoint)));
+                                                              std::move(MetadataEntryPoint),
+                                                              std::move(LocRecCtx->ChunkKeeperData),
+                                                              HasMetadata));
+            ReleaseToken(ctx);
             Die(ctx);
         }
 
@@ -181,13 +207,7 @@ namespace NKikimr {
             // store last indexed lsn (i.e. lsn of the last record that already in DiskRecLog)
             SyncLogMaxLsnStored = LocRecCtx->SyncLogRecovery->GetLastLsnOfIndexRecord();
 
-            LOG_NOTICE(ctx, BS_LOCALRECOVERY,
-                       VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                             "MAX LSNS: LogoBlobs# %s Blocks# %s Barriers# %s SyncLog# %" PRIu64,
-                             LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->GetCompactedLsn().ToString().data(),
-                             LocRecCtx->HullDbRecovery->GetHullDs()->Blocks->GetCompactedLsn().ToString().data(),
-                             LocRecCtx->HullDbRecovery->GetHullDs()->Barriers->GetCompactedLsn().ToString().data(),
-                             SyncLogMaxLsnStored));
+            YDB_LOG_NOTICE_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "MAX LSNS: LogoBlobs# %s Blocks# %s Barriers# %s SyncLog# %" PRIu64, LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->GetCompactedLsn().ToString().data(), LocRecCtx->HullDbRecovery->GetHullDs()->Blocks->GetCompactedLsn().ToString().data(), LocRecCtx->HullDbRecovery->GetHullDs()->Barriers->GetCompactedLsn().ToString().data(), SyncLogMaxLsnStored));
 
             // set up blocks cache
             LocRecCtx->HullDbRecovery->BuildBlocksCache();
@@ -264,6 +284,24 @@ namespace NKikimr {
                     SignalErrorAndDie(ctx, NKikimrProto::ERROR, "Entry point for disk metadata is incorrect");
                     return false;
                 }
+                if (!MetadataEntryPoint.HasHullCompLevel0MaxSstsAtOnce()) {
+                    MetadataEntryPoint.SetHullCompLevel0MaxSstsAtOnce(Config->HullCompLevel0MaxSstsAtOnce);
+                }
+                if (!MetadataEntryPoint.HasHullCompSortedPartsNum()) {
+                    MetadataEntryPoint.SetHullCompSortedPartsNum(Config->HullCompSortedPartsNum);
+                }
+                HasMetadata = true;
+            } else {
+                ui32 hullCompLevel0MaxSstsAtOnce = Config->HullCompLevel0MaxSstsAtOnce;
+                ui32 hullCompSortedPartsNum = Config->HullCompSortedPartsNum;
+
+                if (IsTinyDisk) {
+                    hullCompLevel0MaxSstsAtOnce = TVDiskConfig::TinyDiskHullCompLevel0MaxSstsAtOnce;
+                    hullCompSortedPartsNum = TVDiskConfig::TinyDiskHullCompSortedPartsNum;
+                }
+
+                MetadataEntryPoint.SetHullCompLevel0MaxSstsAtOnce(hullCompLevel0MaxSstsAtOnce);
+                MetadataEntryPoint.SetHullCompSortedPartsNum(hullCompSortedPartsNum);
             }
             return true;
         }
@@ -274,6 +312,12 @@ namespace NKikimr {
                           ui64 freshBufSize, ui64 compThreshold, const TActorContext &ctx) {
             ui32 hullCompLevel0MaxSstsAtOnce = Config->HullCompLevel0MaxSstsAtOnce;
             ui32 hullCompSortedPartsNum = Config->HullCompSortedPartsNum;
+            if (MetadataEntryPoint.HasHullCompLevel0MaxSstsAtOnce()) {
+                hullCompLevel0MaxSstsAtOnce = MetadataEntryPoint.GetHullCompLevel0MaxSstsAtOnce();
+            }
+            if (MetadataEntryPoint.HasHullCompSortedPartsNum()) {
+                hullCompSortedPartsNum = MetadataEntryPoint.GetHullCompSortedPartsNum();
+            }
 
             TStartingPoints::const_iterator it;
             it = startingPoints.find(signature);
@@ -281,18 +325,6 @@ namespace NKikimr {
                 // create an empty DB
                 emptyDb = true;
                 counter = 1;
-
-                if (MetadataEntryPoint.HasHullCompLevel0MaxSstsAtOnce()) {
-                    hullCompLevel0MaxSstsAtOnce = MetadataEntryPoint.GetHullCompLevel0MaxSstsAtOnce();
-                } else if (IsTinyDisk) {
-                    hullCompLevel0MaxSstsAtOnce = TVDiskConfig::TinyDiskHullCompLevel0MaxSstsAtOnce;
-                }
-
-                if (MetadataEntryPoint.HasHullCompSortedPartsNum()) {
-                    hullCompSortedPartsNum = MetadataEntryPoint.GetHullCompSortedPartsNum();
-                } else if (IsTinyDisk) {
-                    hullCompSortedPartsNum = TVDiskConfig::TVDiskConfig::TinyDiskHullCompSortedPartsNum;
-                }
 
                 TLevelIndexSettings settings(LocRecCtx->HullCtx,
                     hullCompLevel0MaxSstsAtOnce,
@@ -324,16 +356,16 @@ namespace NKikimr {
                     return false;
                 }
 
-                if (MetadataEntryPoint.HasHullCompLevel0MaxSstsAtOnce()) {
-                    hullCompLevel0MaxSstsAtOnce = MetadataEntryPoint.GetHullCompLevel0MaxSstsAtOnce();
-                } else if (pb.HasHullCompLevel0MaxSstsAtOnce()) {
+                if (pb.HasHullCompLevel0MaxSstsAtOnce()) {
                     hullCompLevel0MaxSstsAtOnce = pb.GetHullCompLevel0MaxSstsAtOnce();
+                } else {
+                    hullCompLevel0MaxSstsAtOnce = Config->HullCompLevel0MaxSstsAtOnce;
                 }
 
-                if (MetadataEntryPoint.HasHullCompSortedPartsNum()) {
-                    hullCompSortedPartsNum = MetadataEntryPoint.GetHullCompSortedPartsNum();
-                } else if (pb.HasHullCompSortedPartsNum()) {
+                if (pb.HasHullCompSortedPartsNum()) {
                     hullCompSortedPartsNum = pb.GetHullCompSortedPartsNum();
+                } else {
+                    hullCompSortedPartsNum = Config->HullCompSortedPartsNum;
                 }
 
                 TLevelIndexSettings settings(LocRecCtx->HullCtx,
@@ -352,9 +384,6 @@ namespace NKikimr {
                 auto aid = ctx.Register(new TLoader(LocRecCtx->VCtx, LocRecCtx->PDiskCtx, metabase.Get(), ctx.SelfID));
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
-
-            MetadataEntryPoint.SetHullCompLevel0MaxSstsAtOnce(hullCompLevel0MaxSstsAtOnce);
-            MetadataEntryPoint.SetHullCompSortedPartsNum(hullCompSortedPartsNum);
 
             LocRecCtx->HullCtx->HullCompLevel0MaxSstsAtOnce = hullCompLevel0MaxSstsAtOnce;
             LocRecCtx->HullCtx->HullCompSortedPartsNum = hullCompSortedPartsNum;
@@ -489,9 +518,6 @@ namespace NKikimr {
             Y_VERIFY_S(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                 LocRecCtx->VCtx->VDiskLogPrefix);
 
-            ui32 hugeBlobOverhead = Config->HugeBlobOverhead;
-            MetadataEntryPoint.SetHugeBlobOverhead(hugeBlobOverhead);
-
             ui32 stepsBetweenPowersOf2 = Config->HugeBlobStepsBetweenPowersOf2;
             if (IsTinyDisk) {
                 stepsBetweenPowersOf2 = TVDiskConfig::TinyDiskHugeBlobStepsBetweenPowersOf2;
@@ -500,7 +526,7 @@ namespace NKikimr {
             bool enableTinyDisks = AppData(ctx)->FeatureFlags.GetEnableTinyDisks();
 
             auto logFunc = [&] (const TString &msg) {
-                LOG_DEBUG(ctx, BS_HULLHUGE, msg);
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_HULLHUGE, msg);
             };
             TStartingPoints::const_iterator it;
             it = startingPoints.find(TLogSignature::SignatureHugeBlobEntryPoint);
@@ -514,7 +540,7 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize + TDiskBlob::MaxHeaderSize,
-                            hugeBlobOverhead,
+                            Config->HugeBlobOverhead,
                             stepsBetweenPowersOf2,
                             enableTinyDisks,
                             Config->HugeBlobsFreeChunkReservation,
@@ -538,7 +564,7 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize + TDiskBlob::MaxHeaderSize,
-                            hugeBlobOverhead,
+                            Config->HugeBlobOverhead,
                             stepsBetweenPowersOf2,
                             enableTinyDisks,
                             Config->HugeBlobsFreeChunkReservation,
@@ -563,6 +589,20 @@ namespace NKikimr {
             return true;
         }
 
+        bool InitChunkKeeper(const TStartingPoints& startingPoints, const TActorContext& ctx) {
+            if (const auto it = startingPoints.find(TLogSignature::SignatureChunkKeeper); it != startingPoints.end()) {
+                NKikimrVDiskData::TChunkKeeperEntryPoint entryPoint;
+                if (!entryPoint.ParseFromArray(it->second.Data.GetData(), it->second.Data.GetSize())) {
+                    SignalErrorAndDie(ctx, NKikimrProto::ERROR, "Entry point for chunk keeper is incorrect");
+                    return false;
+                }
+                LocRecCtx->ChunkKeeperData = std::make_unique<TChunkKeeperData>(entryPoint);
+            } else {
+                LocRecCtx->ChunkKeeperData = std::make_unique<TChunkKeeperData>(NKikimrVDiskData::TChunkKeeperEntryPoint{});
+            }
+            return true;
+        }
+
         void Handle(NPDisk::TEvYardInitResult::TPtr &ev, const TActorContext &ctx) {
             NKikimrProto::EReplyStatus status = ev->Get()->Status;
 
@@ -582,8 +622,7 @@ namespace NKikimr {
 
                 LocRecCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, Config);
 
-                LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                    "INIT: TEvYardInit OK PDiskId# %s", LocRecCtx->PDiskCtx->PDiskIdString.data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "INIT: TEvYardInit OK PDiskId# %s", LocRecCtx->PDiskCtx->PDiskIdString.data()));
 
                 // create context for HullDs
                 Y_VERIFY_S(LocRecCtx->VCtx && LocRecCtx->VCtx->Top, LocRecCtx->VCtx->VDiskLogPrefix);
@@ -598,7 +637,6 @@ namespace NKikimr {
                         Config->BarrierValidation,
                         Config->HullSstSizeInChunksFresh,
                         Config->HullSstSizeInChunksLevel,
-                        Config->HullCompFreeSpaceThreshold,
                         Config->HullCompReadBatchEfficiencyThreshold,
                         Config->HullCompStorageRatioCalcPeriod,
                         Config->HullCompStorageRatioMaxCalcDuration,
@@ -631,10 +669,7 @@ namespace NKikimr {
                 const TStartingPoints &startingPoints = ev->Get()->StartingPoints;
                 // save starting points into info
                 for (const auto &x : startingPoints) {
-                    LOG_DEBUG(ctx, BS_LOCALRECOVERY,
-                              VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                                    "STARTING POINT: signature# %" PRIu32 " record# %s",
-                                    ui32(x.first), x.second.ToString().data()));
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "STARTING POINT: signature# %" PRIu32 " record# %s", ui32(x.first), x.second.ToString().data()));
                     LocRecCtx->RecovInfo->SetStartingPoint(x.first, x.second.Lsn);
                     switch (x.first) {
                         case TLogSignature::SignatureSyncLogIdx:
@@ -645,12 +680,11 @@ namespace NKikimr {
                         case TLogSignature::SignatureHugeBlobEntryPoint:
                         case TLogSignature::SignatureScrub:
                         case TLogSignature::SignatureMetadata:
+                        case TLogSignature::SignatureChunkKeeper:
                             break;
 
                         default:
-                            LOG_CRIT(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                                "Unknown starting point Signature# %" PRIu32 " record# %s",
-                                (ui32)x.first, x.second.ToString().data()));
+                            YDB_LOG_CRIT_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "Unknown starting point Signature# %" PRIu32 " record# %s", (ui32)x.first, x.second.ToString().data()));
                             break;
                     }
                 }
@@ -675,6 +709,9 @@ namespace NKikimr {
                     return;
                 if (!InitScrub(startingPoints, ctx))
                     return;
+                // read chunk keeper entry point if present
+                if (!InitChunkKeeper(startingPoints, ctx))
+                    return;
 
                 Become(&TThis::StateLoadDatabase);
 
@@ -695,20 +732,34 @@ namespace NKikimr {
                 ctx.Send(handle.release());
             }
 
-            LOG_DEBUG(ctx, BS_LOCALRECOVERY,
-                       VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                            "Sending TEvYardInit: pdiskGuid# %" PRIu64 " skeletonid# %s selfid# %s delay %lf sec",
-                            ui64(Config->BaseInfo.PDiskGuid), SkeletonId.ToString().data(),
-                            ctx.SelfID.ToString().data(), yardInitDelay.SecondsFloat()));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "Sending TEvYardInit: pdiskGuid# %" PRIu64 " skeletonid# %s selfid# %s delay %lf sec", ui64(Config->BaseInfo.PDiskGuid), SkeletonId.ToString().data(), ctx.SelfID.ToString().data(), yardInitDelay.SecondsFloat()));
         }
 
-        void Bootstrap(const TActorContext &ctx) {
-            LOG_NOTICE(ctx, BS_LOCALRECOVERY,
-                       VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "LocalRecovery START"));
-
+        void ContinueYardInit(const TActorContext &ctx) {
             SendYardInit(ctx, TDuration::Zero());
             Become(&TThis::StateInitialize);
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::YardInit;
+        }
+
+        void Bootstrap(const TActorContext &ctx) {
+            YDB_LOG_NOTICE_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "LocalRecovery START"));
+
+            QueryToken(ctx);
+            Become(&TThis::StateAwaitToken);
+        }
+
+        void Handle(TEvVDiskOperationToken::TPtr&, const TActorContext& ctx) {
+            Y_ABORT_UNLESS(LocalRecoveryTokenRequested);
+            ContinueYardInit(ctx);
+        }
+
+        void HandleBrokerUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Get()->SourceType == TEvAcquireVDiskOperationToken::EventType) {
+                // No localrecovery broker service. Continue without it.
+                YDB_LOG_WARN_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "LocalRecovery broker is not available, continuing without it"));
+                LocalRecoveryTokenRequested = false;
+                ContinueYardInit(ctx);
+            }
         }
 
         void Handle(THullIndexLoaded::TPtr &ev, const TActorContext &ctx) {
@@ -732,17 +783,14 @@ namespace NKikimr {
         }
 
         void HandleUndelivered(TEvents::TEvUndelivered::TPtr&, const TActorContext& ctx) {
-            LOG_DEBUG(ctx, BS_LOCALRECOVERY,
-                       VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                            "Undelivered TEvYardInit: pdiskGuid# %" PRIu64 " skeletonid# %s selfid# %s",
-                            ui64(Config->BaseInfo.PDiskGuid), SkeletonId.ToString().data(),
-                            ctx.SelfID.ToString().data()));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "Undelivered TEvYardInit: pdiskGuid# %" PRIu64 " skeletonid# %s selfid# %s", ui64(Config->BaseInfo.PDiskGuid), SkeletonId.ToString().data(), ctx.SelfID.ToString().data()));
 
             SendYardInit(ctx, TDuration::Seconds(1));
         }
 
         void HandlePoison(const TActorContext &ctx) {
             ActiveActors.KillAndClear(ctx);
+            ReleaseToken(ctx);
             Die(ctx);
         }
 
@@ -753,6 +801,13 @@ namespace NKikimr {
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::LocalRecovInfoId));
         }
 
+
+        STRICT_STFUNC(StateAwaitToken,
+            HFunc(TEvVDiskOperationToken, Handle)
+            HFunc(TEvents::TEvUndelivered, HandleBrokerUndelivered)
+            CFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison)
+            HFunc(NMon::TEvHttpInfo, Handle)
+        )
 
         STRICT_STFUNC(StateInitialize,
             HFunc(NPDisk::TEvYardInitResult, Handle)

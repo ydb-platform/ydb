@@ -6,6 +6,7 @@ PEERDIR(
 
 SRCS(
     yt.proto
+    pq.proto
     solomon.proto
 )
 

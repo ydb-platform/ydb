@@ -114,7 +114,7 @@ private:
 
         size_t i = PrintedIndexByColumnIndex_[columnIndex];
 
-        for (; i < column.size() && printedSymbols < Widths_[columnIndex];) {
+        for (; i < column.size();) {
             if (column[i] == COLOR_BEGIN) {
                 while (i < column.size() && column[i] != COLOR_END) {
                     Output_ << column[i++];
@@ -127,6 +127,11 @@ private:
                 continue;
             }
 
+            // Break here so trailing color escape codes are consumed
+            // before determining that the line has reached max width.
+            if (printedSymbols >= Widths_[columnIndex]) {
+                break;
+            }
 
             Output_ << column[i++];
             while (i < column.size() && IsUTF8ContinuationByte(column[i])) {

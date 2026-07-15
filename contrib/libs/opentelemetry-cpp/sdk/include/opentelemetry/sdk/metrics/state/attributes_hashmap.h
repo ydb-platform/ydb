@@ -10,13 +10,11 @@
 #include <unordered_map>
 #include <utility>
 
-#include "opentelemetry/common/key_value_iterable.h"
 #include "opentelemetry/nostd/function_ref.h"
 #include "opentelemetry/sdk/common/attribute_utils.h"
 #include "opentelemetry/sdk/common/attributemap_hash.h"
 #include "opentelemetry/sdk/metrics/aggregation/aggregation.h"
 #include "opentelemetry/sdk/metrics/state/filtered_ordered_attribute_map.h"
-#include "opentelemetry/sdk/metrics/view/attributes_processor.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -28,7 +26,7 @@ namespace metrics
 using opentelemetry::sdk::common::OrderedAttributeMap;
 
 constexpr size_t kAggregationCardinalityLimit = 2000;
-const std::string kAttributesLimitOverflowKey = "otel.metrics.overflow";
+const std::string kAttributesLimitOverflowKey = "otel.metric.overflow";
 const bool kAttributesLimitOverflowValue      = true;
 const MetricAttributes kOverflowAttributes    = {
     {kAttributesLimitOverflowKey,
@@ -81,30 +79,6 @@ public:
    * value and store in the hash
    */
   Aggregation *GetOrSetDefault(
-      const opentelemetry::common::KeyValueIterable &attributes,
-      const AttributesProcessor *attributes_processor,
-      nostd::function_ref<std::unique_ptr<Aggregation>()> aggregation_callback)
-  {
-    // TODO: avoid constructing MetricAttributes from KeyValueIterable for
-    // hash_map_.find which is a heavy operation
-    MetricAttributes attr{attributes, attributes_processor};
-
-    auto it = hash_map_.find(attr);
-    if (it != hash_map_.end())
-    {
-      return it->second.get();
-    }
-
-    if (IsOverflowAttributes(attr))
-    {
-      return GetOrSetOveflowAttributes(aggregation_callback);
-    }
-
-    auto result = hash_map_.emplace(std::move(attr), aggregation_callback());
-    return result.first->second.get();
-  }
-
-  Aggregation *GetOrSetDefault(
       const MetricAttributes &attributes,
       nostd::function_ref<std::unique_ptr<Aggregation>()> aggregation_callback)
   {
@@ -144,13 +118,6 @@ public:
   /**
    * Set the value for given key, overwriting the value if already present
    */
-  void Set(const opentelemetry::common::KeyValueIterable &attributes,
-           const AttributesProcessor *attributes_processor,
-           std::unique_ptr<Aggregation> aggr)
-  {
-    Set(MetricAttributes{attributes, attributes_processor}, std::move(aggr));
-  }
-
   void Set(const MetricAttributes &attributes, std::unique_ptr<Aggregation> aggr)
   {
     auto it = hash_map_.find(attributes);

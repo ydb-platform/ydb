@@ -58,10 +58,9 @@ struct TDqComputeEvents {
         EvChannelAckV2,
         EvChannelUpdateV2,
 
-        // place all new events here
+        EvNodeState,
 
-        EvUpdateCounterValue,
-        EvOnAggregatedValueUpdated,
+        // place all new events here
 
         EvEnd
     };

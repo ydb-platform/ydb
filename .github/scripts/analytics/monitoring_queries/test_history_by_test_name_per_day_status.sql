@@ -46,13 +46,15 @@ FROM
          run_timestamp_last,
          is_muted,
          branch,
-         date
+         date,
+         build_type
                     FROM `test_results/all_tests_with_owner_and_mute`
                     WHERE date >= CurrentUtcDate() - 90 * Interval("P1D") ) AS owners_t
                         ON hist.test_name = owners_t.test_name
                             AND hist.suite_folder = owners_t.suite_folder
                             AND hist.date_window = owners_t.date
-                            AND hist.branch = owners_t.branch ) AS `t1`
+                            AND hist.branch = owners_t.branch
+                            AND hist.build_type = owners_t.build_type ) AS `t1`
                     WHERE `t1`.`branch` = 'main'
                             AND `t1`.`date_window` >= CurrentUtcDate() - 7 * Interval("P1D")
                             AND IF(String::Contains(`t1`.`full_name`, 'chunk chunk')
@@ -331,13 +333,15 @@ FROM
          run_timestamp_last,
          is_muted,
          branch,
-         date
+         date,
+         build_type
                             FROM `test_results/all_tests_with_owner_and_mute`
                             WHERE date >= CurrentUtcDate() - 90 * Interval("P1D") ) AS owners_t
                                 ON hist.test_name = owners_t.test_name
                                     AND hist.suite_folder = owners_t.suite_folder
                                     AND hist.date_window = owners_t.date
-                                    AND hist.branch = owners_t.branch ) AS `t1`
+                                    AND hist.branch = owners_t.branch
+                                    AND hist.build_type = owners_t.build_type ) AS `t1`
                             WHERE `t1`.`branch` = 'main'
                                     AND `t1`.`date_window` >= CurrentUtcDate() - 7 * Interval("P1D")
                                     AND IF(String::Contains(`t1`.`full_name`, 'chunk chunk')

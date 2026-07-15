@@ -233,7 +233,7 @@ class ResultsProcessor:
                 endpoint.send_data(data)
 
     @classmethod
-    def upload_tpcc_results(cls, results, run_type: str):
+    def upload_tpcc_results(cls, results, run_type: str, warmup_start_ts: float):
         if not cls.send_results or not cls.get_tpcc_endpoints():
             return
         with allure.step("Upload TPCC results to YDB"):
@@ -254,7 +254,7 @@ class ResultsProcessor:
             summary = results.get('summary', {})
             json_string = json.dumps(results, separators=(',', ':'))
             data = {
-                'timestamp': 1000000 * summary.get('measure_start_ts', 0),
+                'timestamp': int(1000000 * warmup_start_ts),
                 'cluster': cluster_name,
                 'version': version,
                 'git_repository': 'https://github.com/ydb-platform/ydb.git',

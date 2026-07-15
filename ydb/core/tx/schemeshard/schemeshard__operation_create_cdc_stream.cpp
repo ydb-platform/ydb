@@ -294,11 +294,6 @@ public:
             return result;
         }
 
-        if (!AppData()->FeatureFlags.GetEnableTopicAutopartitioningForCDC() && op.GetTopicAutoPartitioning()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Topic autopartitioning for CDC is disabled");
-            return result;
-        }
-
         auto stream = TCdcStreamInfo::Create(streamDesc);
         Y_ABORT_UNLESS(stream);
 
@@ -705,11 +700,11 @@ void DoCreatePqPart(
     partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
     partitionConfig.SetMaxCountInPartition(Max<i32>());
 
-    if (AppData()->FeatureFlags.GetEnableTopicAutopartitioningForCDC() && IsReplicationSupportTopicAutopartitioning(op)) {
+    if (IsReplicationSupportTopicAutopartitioning(op)) {
         auto * ps = pqConfig.MutablePartitionStrategy();
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
-        ps->SetMinPartitionCount(std::min<ui32>(std::max<ui32>(table->GetPartitions().size() / 16, 1), TSchemeShard::MaxPQGroupPartitionsCount));
-        ps->SetMaxPartitionCount(std::min<ui32>(std::max<ui32>(table->GetPartitions().size() * 16, 50), TSchemeShard::MaxPQGroupPartitionsCount));
+        ps->SetMinPartitionCount(std::max<ui32>(table->GetPartitions().size() / 16, 1));
+        ps->SetMaxPartitionCount(std::max<ui32>(table->GetPartitions().size() * 16, 50));
         ps->SetScaleThresholdSeconds(30);
     } else if (op.GetTopicAutoPartitioning()) {
         auto * ps = pqConfig.MutablePartitionStrategy();
@@ -849,7 +844,10 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
         if (!tablePath.IsInsideTableIndexPath()) {
             checks.IsCommonSensePath();
         } else {
-            if (!tablePath.Parent().IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)) {
+            const auto& parentPath = tablePath.Parent();
+            if (!parentPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)
+                && !parentPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree))
+            {
                 return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
                     "Cannot add changefeed to index table");
             }
@@ -884,9 +882,9 @@ bool FillBoundaries(const TTableInfo& table, const NKikimrSchemeOp::TCreateCdcSt
         boundaries.reserve(partitions.size() - 1);
 
         for (ui32 i = 0; i < partitions.size(); ++i) {
-            const auto& partition = partitions.at(i);
+            const auto* partition = partitions.at(i);
             if (i != partitions.size() - 1) {
-                boundaries.push_back(partition.EndOfRange);
+                boundaries.push_back(partition->EndOfRange);
             }
         }
     }
@@ -944,6 +942,11 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     LOG_D("CreateNewCdcStream"
         << ": opId# " << opId
         << ", tx# " << tx.ShortDebugString());
+
+    if (!AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
+            << "CDC stream creation is not allowed when topic is not FirstClassCitizen")};
+    }
 
     const auto acceptExisted = !tx.GetFailOnExist();
     const auto& op = tx.GetCreateCdcStream();

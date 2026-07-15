@@ -19,6 +19,11 @@ class IdGenerator
 public:
   IdGenerator(bool is_random) : is_random_(is_random) {}
 
+  IdGenerator(const IdGenerator &)            = delete;
+  IdGenerator(IdGenerator &&)                 = delete;
+  IdGenerator &operator=(const IdGenerator &) = delete;
+  IdGenerator &operator=(IdGenerator &&)      = delete;
+
   virtual ~IdGenerator() = default;
 
   /** Returns a SpanId represented by opaque 128-bit trace identifier */

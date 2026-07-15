@@ -7,9 +7,9 @@ using namespace NKikimr::NMiniKQL::NTest::NWindow;
 Y_UNIT_TEST_SUITE(TCoreWinFramesCollectorTestPart4) {
 
 Y_UNIT_TEST(RangeIncremental_BasicIncremental) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RangeIncrementals = {
-            TInputRange<TRangeVariant>{5, EDirection::Following}
+            TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Following}
         },
         .InputElements = {ui64(10), ui64(15), ui64(20), ui64(25), ui64(30)},
         .ExpectedStates = {
@@ -45,7 +45,7 @@ Y_UNIT_TEST(RangeIncremental_BasicIncremental) {
 }
 
 Y_UNIT_TEST(RowIncremental_BasicIncremental) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RowIncrementals = {
             TInputRow{2, EDirection::Following}
         },
@@ -83,9 +83,9 @@ Y_UNIT_TEST(RowIncremental_BasicIncremental) {
 }
 
 Y_UNIT_TEST(RangeIncremental_WithGaps) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RangeIncrementals = {
-            TInputRange<TRangeVariant>{10, EDirection::Following}
+            TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(10), EDirection::Following}
         },
         .InputElements = {ui64(10), ui64(25), ui64(40), ui64(55)},
         .ExpectedStates = {
@@ -116,9 +116,9 @@ Y_UNIT_TEST(RangeIncremental_WithGaps) {
 }
 
 Y_UNIT_TEST(RangeIncremental_MultipleNewElements) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RangeIncrementals = {
-            TInputRange<TRangeVariant>{15, EDirection::Following}
+            TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(15), EDirection::Following}
         },
         .InputElements = {ui64(10), ui64(12), ui64(14), ui64(16), ui64(18), ui64(20)},
         .ExpectedStates = {
@@ -159,9 +159,9 @@ Y_UNIT_TEST(RangeIncremental_MultipleNewElements) {
 }
 
 Y_UNIT_TEST(CombinedDelta_RangeAndRow) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RangeIncrementals = {
-            TInputRange<TRangeVariant>{10, EDirection::Following}
+            TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(10), EDirection::Following}
         },
         .RowIncrementals = {
             TInputRow{1, EDirection::Following}
@@ -199,9 +199,9 @@ Y_UNIT_TEST(CombinedDelta_RangeAndRow) {
 }
 
 Y_UNIT_TEST(RangeIncremental_DescendingOrder) {
-    TTestCase<ui64, ESortOrder::Desc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Desc> testCase = {
         .RangeIncrementals = {
-            TInputRange<TRangeVariant>{5, EDirection::Following}
+            TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Following}
         },
         .InputElements = {ui64(30), TYield(), TYield(), ui64(25), ui64(20), ui64(15), ui64(10)},
         .ExpectedStates = {
@@ -237,10 +237,10 @@ Y_UNIT_TEST(RangeIncremental_DescendingOrder) {
 }
 
 Y_UNIT_TEST(TwoRangeIntervalsAndTwoRowIntervalsDeltas_MixedDirections) {
-    TTestCase<ui64, ESortOrder::Asc> testCase = {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
         .RangeIncrementals = {
-            TInputRange<TRangeVariant>{3, EDirection::Following},
-            TInputRange<TRangeVariant>{5, EDirection::Preceding},
+            TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(3), EDirection::Following},
+            TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Preceding},
         },
         .RowIncrementals = {
             TInputRow(1, EDirection::Following),
@@ -303,7 +303,7 @@ Y_UNIT_TEST(TwoRangeIntervalsAndTwoRowIntervalsDeltas_MixedDirections) {
 }
 
 Y_UNIT_TEST(RowIntervalAndRowDelta_Desc) {
-    TTestCase<i64, ESortOrder::Desc> testCase = {
+    TTestCase<TMaybe<i64>, ESortOrder::Desc> testCase = {
         .RowIntervals = {
             TInputRowWindowFrame(
                 TInputRow(1, EDirection::Preceding),
@@ -346,15 +346,15 @@ Y_UNIT_TEST(RowIntervalAndRowDelta_Desc) {
 }
 
 Y_UNIT_TEST(RangeIntervalAndRangeDelta_Desc) {
-    TTestCase<i64, ESortOrder::Desc> testCase = {
+    TTestCase<TMaybe<i64>, ESortOrder::Desc> testCase = {
         .RangeIntervals = {
-            TInputRangeWindowFrame<TRangeVariant>{
-                TInputRange<TRangeVariant>{3, EDirection::Preceding},
-                TInputRange<TRangeVariant>{3, EDirection::Following}
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<i64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<i64>>>{TNoScaledType<ui64>(3), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<i64>>>{TNoScaledType<ui64>(3), EDirection::Following}
             }
         },
         .RangeIncrementals = {
-            TInputRange<TRangeVariant>{3, EDirection::Following}
+            TInputRange<TTypeTestWithScale<TMaybe<i64>>>{TNoScaledType<ui64>(3), EDirection::Following}
         },
         .InputElements = {i64(8), i64(5), TYield(), i64(2), i64(-5)},
         .ExpectedStates = {
@@ -380,6 +380,98 @@ Y_UNIT_TEST(RangeIntervalAndRangeDelta_Desc) {
                 .CurrentElement = -5,
                 .QueueContent = {-5},
                 .RangeIntervalChecks = {{0, 1}},
+                .RangeIncrementalChecks = {{0, 1}}
+            }
+        }
+    };
+
+    RunTestCase(testCase);
+}
+
+Y_UNIT_TEST(RangeIntervalAndRangeDelta_Diff_Types_Desc) {
+    TTestCase<TMaybe<i64>, ESortOrder::Desc> testCase = {
+        .RangeIntervals = {
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<i64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<i64>>>{TNoScaledType<double>(3.0), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<i64>>>{TNoScaledType<double>(3.0), EDirection::Following}
+            }
+        },
+        .RangeIncrementals = {
+            TInputRange<TTypeTestWithScale<TMaybe<i64>>>{TNoScaledType<double>(3.0), EDirection::Following}
+        },
+        .InputElements = {i64(8), i64(5), TYield(), i64(2), i64(-5)},
+        .ExpectedStates = {
+            {
+                .CurrentElement = 8,
+                .QueueContent = {8, 5, 2},
+                .RangeIntervalChecks = {{0, 2}},
+                .RangeIncrementalChecks = {{1, 2}}
+            },
+            {
+                .CurrentElement = 5,
+                .QueueContent = {8, 5, 2, -5},
+                .RangeIntervalChecks = {{0, 3}},
+                .RangeIncrementalChecks = {{2, 3}}
+            },
+            {
+                .CurrentElement = 2,
+                .QueueContent = {5, 2, -5},
+                .RangeIntervalChecks = {{0, 2}},
+                .RangeIncrementalChecks = {{1, 2}}
+            },
+            {
+                .CurrentElement = -5,
+                .QueueContent = {-5},
+                .RangeIntervalChecks = {{0, 1}},
+                .RangeIncrementalChecks = {{0, 1}}
+            }
+        }
+    };
+
+    RunTestCase(testCase);
+}
+
+Y_UNIT_TEST(RangeIntervalAndRangeDelta_Diff_Types2_Desc) {
+    TTestCase<TMaybe<i64>, ESortOrder::Desc> testCase = {
+        .RangeIncrementals = {
+            TInputRange<TTypeTestWithScale<TMaybe<i64>>>{TNoScaledType<float>(0.99), EDirection::Following}
+        },
+        .InputElements = {std::numeric_limits<i64>::max() - 1, std::numeric_limits<i64>::max()},
+        .ExpectedStates = {
+            {
+                .CurrentElement = std::numeric_limits<i64>::max() - 1,
+                .QueueContent = {std::numeric_limits<i64>::max() - 1, std::numeric_limits<i64>::max()},
+                .RangeIncrementalChecks = {{1, 2}}
+            },
+            {
+                .CurrentElement = std::numeric_limits<i64>::max(),
+                .QueueContent = {std::numeric_limits<i64>::max()},
+                .RangeIncrementalChecks = {{0, 1}}
+            }
+        }
+    };
+
+    RunTestCase(testCase);
+}
+
+Y_UNIT_TEST(RangeIntervalAndRangeDelta_Diff_Types3_Desc) {
+    auto range = std::numeric_limits<i64>::max() - 1;
+    float first = 0.99;
+    float second = static_cast<float>(std::numeric_limits<i64>::max());
+    TTestCase<TMaybe<float>, ESortOrder::Desc> testCase = {
+        .RangeIncrementals = {
+            TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<ui64>(range), EDirection::Following}
+        },
+        .InputElements = {first, second},
+        .ExpectedStates = {
+            {
+                .CurrentElement = first,
+                .QueueContent = {first, second},
+                .RangeIncrementalChecks = {{1, 2}}
+            },
+            {
+                .CurrentElement = second,
+                .QueueContent = {second},
                 .RangeIncrementalChecks = {{0, 1}}
             }
         }

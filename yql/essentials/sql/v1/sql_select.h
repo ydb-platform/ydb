@@ -7,6 +7,11 @@ namespace NSQLTranslationV1 {
 
 using namespace NSQLv1Generated;
 
+template <typename TRule>
+    requires std::same_as<TRule, TRule_union_op> ||
+             std::same_as<TRule, TRule_intersect_op>
+bool IsAllQualifiedOp(const TRule& node);
+
 class TSqlSelect: public TSqlTranslation {
 public:
     TSqlSelect(TContext& ctx, NSQLTranslation::ESqlMode mode)
@@ -14,10 +19,16 @@ public:
     {
     }
 
+    explicit TSqlSelect(const TSqlTranslation& that)
+        : TSqlTranslation(that)
+    {
+    }
+
     TSourcePtr Build(const TRule_select_stmt& node, TPosition& selectPos);
     TSourcePtr Build(const TRule_select_unparenthesized_stmt& node, TPosition& selectPos);
     TSourcePtr BuildSubSelect(const TRule_select_kind_partial& node);
     TSourcePtr BuildSubSelect(const TRule_select_subexpr& node);
+    TSourcePtr NamedSingleSource(const TRule_named_single_source& node, bool unorderedSubquery);
 
 private:
     TSourcePtr CheckSubSelectOnDiscard(TSourcePtr source);
@@ -28,8 +39,8 @@ private:
     template <typename TRule>
     bool ColumnList(TVector<TNodePtr>& keys, const TRule& node);
     bool NamedColumn(TVector<TNodePtr>& columnList, const TRule_named_column& node);
-    TSourcePtr SingleSource(const TRule_single_source& node, const TVector<TString>& derivedColumns, TPosition derivedColumnsPos, bool unorderedSubquery);
-    TSourcePtr NamedSingleSource(const TRule_named_single_source& node, bool unorderedSubquery);
+    TSourcePtr SingleSource(const TRule_single_source& node, const TVector<TString>& derivedColumns, TPosition derivedColumnsPos, bool unorderedSubquery, TTableHints& tableHints, TMaybe<TString>& keyFunc, TString& provider, bool& isAnonymous);
+    TSourcePtr HintedSingleSource(const TRule_hinted_single_source& node, const TVector<TString>& derivedColumns, TPosition derivedColumnsPos, bool unorderedSubquery);
     bool FlattenByArg(const TString& sourceLabel, TVector<TNodePtr>& flattenByColumns, TVector<TNodePtr>& flattenByExprs, const TRule_flatten_by_arg& node);
     TSourcePtr FlattenSource(const TRule_flatten_source& node);
     TSourcePtr JoinSource(const TRule_join_source& node);
@@ -37,6 +48,7 @@ private:
     TNodePtr JoinExpr(ISource*, const TRule_join_constraint& node);
     TSourcePtr ProcessCore(const TRule_process_core& node, const TWriteSettings& settings, TPosition& selectPos);
     TSourcePtr ReduceCore(const TRule_reduce_core& node, const TWriteSettings& settings, TPosition& selectPos);
+    TSourcePtr CombineCore(const TRule_combine_core& node, const TWriteSettings& settings, TPosition& selectPos);
 
     struct TSelectKindPlacement {
         bool IsFirstInSelectOp = false;
@@ -44,10 +56,7 @@ private:
     };
 
     TSourcePtr SelectCore(const TRule_select_core& node, const TWriteSettings& settings, TPosition& selectPos,
-                          TMaybe<TSelectKindPlacement> placement, TVector<TSortSpecificationPtr>& selectOpOrederBy, bool& selectOpAssumeOrderBy);
-
-    bool WindowDefinition(const TRule_window_definition& node, TWinSpecs& winSpecs);
-    bool WindowClause(const TRule_window_clause& node, TWinSpecs& winSpecs);
+                          TMaybe<TSelectKindPlacement> placement, TVector<TSortSpecificationPtr>& selectOpOrderBy, bool& selectOpAssumeOrderBy);
 
     struct TSelectKindResult {
         TSourcePtr Source;
@@ -72,11 +81,6 @@ private:
     };
 
     template <typename TRule>
-        requires std::same_as<TRule, TRule_union_op> ||
-                 std::same_as<TRule, TRule_intersect_op>
-    bool IsAllQualifiedOp(const TRule& node);
-
-    template <typename TRule>
         requires std::same_as<TRule, TRule_select_stmt> ||
                  std::same_as<TRule, TRule_select_unparenthesized_stmt> ||
                  std::same_as<TRule, TRule_select_subexpr>
@@ -87,9 +91,9 @@ private:
     TSourcePtr BuildStmt(TSourcePtr result, TBuildExtra extra);
 
     template <typename TRule>
-        requires std::same_as<TRule, TRule_select_stmt> ||
-                 std::same_as<TRule, TRule_select_unparenthesized_stmt> ||
-                 std::same_as<TRule, TRule_select_subexpr>
+        requires std::same_as<TRule, TRule_select_stmt_core> ||
+                 std::same_as<TRule, TRule_select_unparenthesized_stmt_core> ||
+                 std::same_as<TRule, TRule_select_subexpr_core>
     TSourcePtr BuildUnionException(const TRule& node, TPosition& pos, TBuildExtra& extra);
 
     template <typename TRule>

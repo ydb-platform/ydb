@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
             const ui32 canRestore = putBlobs.size() ? 50 : 0;
             const ui32 canPatch = putBlobs.size() ? 2000 : 0;
             const ui32 canWait = 100;
-            i32 w = RandomNumber(canStop + canStart + canPut + canPatch + canWait);
+            i32 w = RandomNumber(canStop + canStart + canPut + canRestore + canPatch + canWait);
             if ((w -= canStop) < 0) {
                 stopNode();
                 env.Sim(TDuration::Seconds(5));
@@ -493,4 +493,3 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         }
     }
 }
-

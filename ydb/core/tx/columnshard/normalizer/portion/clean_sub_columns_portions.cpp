@@ -16,7 +16,8 @@ class TCleanSubColumnsPortionsNormalizer::TNormalizerResult: public INormalizerC
 
 public:
     TNormalizerResult(std::vector<TPortionDataAccessor>&& portions)
-        : SubColumnsPortions(std::move(portions)) {
+        : SubColumnsPortions(std::move(portions))
+    {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& normController) const override {
@@ -53,7 +54,8 @@ public:
     }
 };
 
-bool TCleanSubColumnsPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager& /*tablesManager*/, const TPortionDataAccessor& /*portionInfo*/) const {
+bool TCleanSubColumnsPortionsNormalizer::CheckPortion(
+    const NColumnShard::TTablesManager& /*tablesManager*/, const TPortionDataAccessor& /*portionInfo*/) const {
     return false;
 }
 
@@ -64,7 +66,7 @@ INormalizerTask::TPtr TCleanSubColumnsPortionsNormalizer::BuildTask(
 
     for (auto&& portion : portions) {
         if (portion.GetPortionInfo().HasRemoveSnapshot()) {
-             continue;
+            continue;
         }
         auto it = schemas->find(portion.GetPortionInfo().GetPortionId());
         AFL_VERIFY(it != schemas->end());
@@ -78,8 +80,12 @@ INormalizerTask::TPtr TCleanSubColumnsPortionsNormalizer::BuildTask(
         }
     }
     auto taskResult = std::make_shared<TNormalizerResult>(std::move(subColumnsPortions));
-    ACFL_WARN("normalizer", "TCleanSubColumnsPortionsNormalizer")("message", taskResult->DebugString());
-    ACFL_WARN("normalizer", "TCleanSubColumnsPortionsNormalizer")("all portions", portions.size());
+    YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"normalizer", "TCleanSubColumnsPortionsNormalizer"},
+        {"message", taskResult->DebugString()});
+    YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"normalizer", "TCleanSubColumnsPortionsNormalizer"},
+        {"allPortions", portions.size()});
     return std::make_shared<TTrivialNormalizerTask>(taskResult);
 }
 

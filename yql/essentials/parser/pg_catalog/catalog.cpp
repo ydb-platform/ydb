@@ -15,6 +15,8 @@
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/digest/md5/md5.h>
 
+#include <utility>
+
 namespace NYql::NPg {
 
 const ui32 MaximumExtensionsCount = 64; // see TTypeAnnotationNode::GetUsedPgExtensions
@@ -56,6 +58,8 @@ using TCasts = THashMap<ui32, TCastDesc>;
 using TAggregations = THashMap<ui32, TAggregateDesc>;
 
 using TAms = THashMap<ui32, TAmDesc>;
+
+using TCollations = THashMap<ui32, TCollationDesc>;
 
 using TNamespaces = THashMap<decltype(TNamespaceDesc::Oid), TNamespaceDesc>;
 
@@ -787,7 +791,7 @@ public:
                     for (const auto& procId : *procIdPtr) {
                         auto procPtr = Procs_.FindPtr(procId);
                         Y_ENSURE(procPtr);
-                        if (procPtr->ArgTypes.size() < 1) {
+                        if (procPtr->ArgTypes.empty()) {
                             continue;
                         }
 
@@ -935,7 +939,7 @@ public:
         for (const auto id : *transFuncIdsPtr) {
             auto procPtr = Procs_.FindPtr(id);
             Y_ENSURE(procPtr);
-            if (procPtr->ArgTypes.size() >= 1 &&
+            if (!procPtr->ArgTypes.empty() &&
                 IsCompatibleTo(LastAggregation_.TransTypeId, procPtr->ArgTypes[0], Types_)) {
                 Y_ENSURE(!LastAggregation_.TransFuncId);
                 LastAggregation_.TransFuncId = id;
@@ -973,7 +977,7 @@ public:
             auto procPtr = Procs_.FindPtr(LastAggregation_.TransFuncId);
             Y_ENSURE(procPtr);
             LastAggregation_.ArgTypes = procPtr->ArgTypes;
-            Y_ENSURE(LastAggregation_.ArgTypes.size() >= 1);
+            Y_ENSURE(!LastAggregation_.ArgTypes.empty());
             Y_ENSURE(IsCompatibleTo(LastAggregation_.TransTypeId, LastAggregation_.ArgTypes[0], Types_));
             LastAggregation_.ArgTypes.erase(LastAggregation_.ArgTypes.begin());
         }
@@ -1117,10 +1121,10 @@ private:
 class TOpClassesParser: public TParser {
 public:
     TOpClassesParser(TOpClasses& opClasses, const THashMap<TString, ui32>& typeByName,
-                     const TOpFamilies& opFamilies)
+                     TOpFamilies opFamilies)
         : OpClasses_(opClasses)
         , TypeByName_(typeByName)
-        , OpFamilies_(opFamilies)
+        , OpFamilies_(std::move(opFamilies))
     {
     }
 
@@ -1297,6 +1301,53 @@ private:
     TAms& Ams_;
 };
 
+class TCollationsParser: public TParser {
+public:
+    explicit TCollationsParser(TCollations& collations)
+        : Collations_(collations)
+    {
+    }
+
+    void OnKey(const TString& key, const TString& value) override {
+        if (key == "oid") {
+            CurrDesc_.Oid = FromString<ui32>(value);
+        } else if (key == "descr") {
+            CurrDesc_.Descr = value;
+        } else if (key == "collname") {
+            CurrDesc_.Name = value;
+        } else if (key == "collprovider") {
+            Y_ENSURE(value.size() == 1);
+            switch (value[0]) {
+                case (char)ECollationProvider::Default:
+                case (char)ECollationProvider::Icu:
+                case (char)ECollationProvider::Libc:
+                    CurrDesc_.Provider = (ECollationProvider)value[0];
+                    break;
+                default:
+                    throw yexception() << "Unknown collprovider value: " << value;
+            }
+        } else if (key == "collencoding") {
+            CurrDesc_.Encoding = FromString<i32>(value);
+        } else if (key == "collcollate") {
+            CurrDesc_.Collate = value;
+        } else if (key == "collctype") {
+            CurrDesc_.Ctype = value;
+        } else if (key == "colliculocale") {
+            CurrDesc_.IcuLocale = value;
+        }
+    }
+
+    void OnFinish() override {
+        Y_ENSURE(!CurrDesc_.Name.empty());
+        Collations_[CurrDesc_.Oid] = std::move(CurrDesc_);
+        CurrDesc_ = TCollationDesc();
+    }
+
+private:
+    TCollationDesc CurrDesc_;
+    TCollations& Collations_;
+};
+
 class TAmProcsParser: public TParser {
 public:
     TAmProcsParser(TAmProcs& amProcs, const THashMap<TString, ui32>& typeByName,
@@ -1459,7 +1510,7 @@ ui32 FindOperator(const THashMap<TString, TVector<ui32>>& operatorsByName, const
     Y_ENSURE(operIdsPtr);
     TVector<TString> strArgs;
     Split(signature.substr(pos1 + 1, pos2 - pos1 - 1), ",", strArgs);
-    Y_ENSURE(strArgs.size() >= 1 && strArgs.size() <= 2);
+    Y_ENSURE(!strArgs.empty() && strArgs.size() <= 2);
     TVector<ui32> argTypes;
     for (const auto& str : strArgs) {
         auto typePtr = typeByName.FindPtr(str);
@@ -1580,6 +1631,13 @@ TAms ParseAms(const TString& dat) {
     return ret;
 }
 
+TCollations ParseCollations(const TString& dat) {
+    TCollations ret;
+    TCollationsParser parser(ret);
+    parser.Do(dat);
+    return ret;
+}
+
 TLanguages ParseLanguages(const TString& dat) {
     TLanguages ret;
     TLanguagesParser parser(ret);
@@ -1592,9 +1650,9 @@ TNamespaces FillNamespaces() {
     const ui32 PgCatalogNamepace = 11;
     const ui32 PgPublicNamepace = 2200;
     return TNamespaces{
-        {PgInformationSchemaNamepace, TNamespaceDesc{PgInformationSchemaNamepace, "information_schema", "information_schema namespace"}},
-        {PgPublicNamepace, TNamespaceDesc{PgPublicNamepace, "public", "public namespace"}},
-        {PgCatalogNamepace, TNamespaceDesc{PgCatalogNamepace, "pg_catalog", "pg_catalog namespace"}},
+        {PgInformationSchemaNamepace, TNamespaceDesc{.Oid=PgInformationSchemaNamepace, .Name="information_schema", .Descr="information_schema namespace"}},
+        {PgPublicNamepace, TNamespaceDesc{.Oid=PgPublicNamepace, .Name="public", .Descr="public namespace"}},
+        {PgCatalogNamepace, TNamespaceDesc{.Oid=PgCatalogNamepace, .Name="pg_catalog", .Descr="pg_catalog namespace"}},
     };
 }
 
@@ -1615,18 +1673,29 @@ struct TColumnInfoRaw {
     const char* UdtType;
 };
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 const TTableInfoRaw AllStaticTablesRaw[] = {
 #include "pg_class.generated.h"
 };
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 const TColumnInfoRaw AllStaticColumnsRaw[] = {
 #include "columns.generated.h"
 };
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 const char* AllowedProcsRaw[] = {
 #include "safe_procs.h"
 #include "used_procs.h"
 #include "postgis_procs.h"
+};
+
+// Locale names known to the ICU library pg_collation_icu.generated.h was generated from
+// (see gen_icu_collations). Append-only: a locale's position here becomes part of its
+// collation oid (see IcuCollationOidBase below), so it must never change once assigned.
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
+const char* AllIcuCollationLocalesRaw[] = {
+#include "pg_collation_icu.generated.h"
 };
 
 struct TCatalog: public IExtensionSqlBuilder {
@@ -1641,14 +1710,12 @@ struct TCatalog: public IExtensionSqlBuilder {
     void Init() {
         Clear();
         State.ConstructInPlace();
-        for (size_t i = 0; i < Y_ARRAY_SIZE(AllStaticTablesRaw); ++i) {
-            const auto& raw = AllStaticTablesRaw[i];
+        for (const auto& raw : AllStaticTablesRaw) {
             State->AllStaticTables.push_back(
-                {{TString(raw.Schema), TString(raw.Name)}, raw.Kind, raw.Oid});
+                {{.Schema=TString(raw.Schema), .Name=TString(raw.Name)}, raw.Kind, raw.Oid});
         }
 
-        for (size_t i = 0; i < Y_ARRAY_SIZE(AllStaticColumnsRaw); ++i) {
-            const auto& raw = AllStaticColumnsRaw[i];
+        for (const auto& raw : AllStaticColumnsRaw) {
             State->AllStaticColumns.push_back(
                 {TString(raw.Schema), TString(raw.TableName), TString(raw.Name), TString(raw.UdtType)});
         }
@@ -1656,7 +1723,7 @@ struct TCatalog: public IExtensionSqlBuilder {
         if (GetEnv("YDB_EXPERIMENTAL_PG") == "1") {
             // grafana migration_log
             State->AllStaticTables.push_back(
-                {{"public", "migration_log"}, ERelKind::Relation, 100001});
+                {{.Schema="public", .Name="migration_log"}, ERelKind::Relation, 100001});
             State->AllStaticColumns.push_back(
                 {"public", "migration_log", "id", "int"});
             State->AllStaticColumns.push_back(
@@ -1672,7 +1739,7 @@ struct TCatalog: public IExtensionSqlBuilder {
 
             // zabbix config
             State->AllStaticTables.push_back(
-                {{"public", "config"}, ERelKind::Relation, 100001});
+                {{.Schema="public", .Name="config"}, ERelKind::Relation, 100001});
             State->AllStaticColumns.push_back(
                 {"public", "config", "configid", "bigint"});
             State->AllStaticColumns.push_back(
@@ -1683,7 +1750,7 @@ struct TCatalog: public IExtensionSqlBuilder {
 
             // zabbix dbversion
             State->AllStaticTables.push_back(
-                {{"public", "dbversion"}, ERelKind::Relation, 100002});
+                {{.Schema="public", .Name="dbversion"}, ERelKind::Relation, 100002});
             State->AllStaticColumns.push_back(
                 {"public", "dbversion", "dbversionid", "bigint"});
             State->AllStaticColumns.push_back(
@@ -1699,7 +1766,7 @@ struct TCatalog: public IExtensionSqlBuilder {
         }
 
         for (const auto& c : State->AllStaticColumns) {
-            auto tablePtr = State->StaticColumns.FindPtr(TTableInfoKey{c.Schema, c.TableName});
+            auto tablePtr = State->StaticColumns.FindPtr(TTableInfoKey{.Schema=c.Schema, .Name=c.TableName});
             Y_ENSURE(tablePtr);
             tablePtr->push_back(c);
         }
@@ -1730,6 +1797,8 @@ struct TCatalog: public IExtensionSqlBuilder {
         Y_ENSURE(NResource::FindExact("pg_conversion.dat", &conversionData));
         TString amData;
         Y_ENSURE(NResource::FindExact("pg_am.dat", &amData));
+        TString collationData;
+        Y_ENSURE(NResource::FindExact("pg_collation.dat", &collationData));
         TString languagesData;
         Y_ENSURE(NResource::FindExact("pg_language.dat", &languagesData));
         THashMap<ui32, TLazyTypeInfo> lazyTypeInfos;
@@ -1762,7 +1831,7 @@ struct TCatalog: public IExtensionSqlBuilder {
             Y_ENSURE(inFuncIdPtr->size() == 1);
             auto inFuncPtr = State->Procs.FindPtr(inFuncIdPtr->at(0));
             Y_ENSURE(inFuncPtr);
-            Y_ENSURE(inFuncPtr->ArgTypes.size() >= 1); // may have mods
+            Y_ENSURE(!inFuncPtr->ArgTypes.empty()); // may have mods
             Y_ENSURE(inFuncPtr->ArgTypes[0] == cstringId);
             typePtr->InFuncId = inFuncIdPtr->at(0);
 
@@ -1781,7 +1850,7 @@ struct TCatalog: public IExtensionSqlBuilder {
                 Y_ENSURE(receiveFuncIdPtr->size() == 1);
                 auto receiveFuncPtr = State->Procs.FindPtr(receiveFuncIdPtr->at(0));
                 Y_ENSURE(receiveFuncPtr);
-                Y_ENSURE(receiveFuncPtr->ArgTypes.size() >= 1);
+                Y_ENSURE(!receiveFuncPtr->ArgTypes.empty());
                 Y_ENSURE(receiveFuncPtr->ArgTypes[0] == internalId); // mutable StringInfo
                 typePtr->ReceiveFuncId = receiveFuncIdPtr->at(0);
             }
@@ -1857,6 +1926,22 @@ struct TCatalog: public IExtensionSqlBuilder {
         State->AmOps = ParseAmOps(amOpData, State->TypeByName, State->Types, State->OperatorsByName, State->Operators, State->OpFamilies);
         State->AmProcs = ParseAmProcs(amProcData, State->TypeByName, State->ProcByName, State->Procs, State->OpFamilies);
         State->Ams = ParseAms(amData);
+        State->Collations = ParseCollations(collationData);
+        for (const auto& [k, v] : State->Collations) {
+            Y_ENSURE(State->CollationByName.insert(std::make_pair(v.Name, k)).second);
+        }
+
+        for (size_t i = 0; i < Y_ARRAY_SIZE(AllIcuCollationLocalesRaw); ++i) {
+            TCollationDesc desc;
+            desc.Oid = IcuCollationOidBase + i;
+            desc.IcuLocale = AllIcuCollationLocalesRaw[i];
+            desc.Name = desc.IcuLocale + "-x-icu";
+            desc.Provider = ECollationProvider::Icu;
+            desc.Descr = "ICU locale collation";
+            Y_ENSURE(State->Collations.insert(std::make_pair(desc.Oid, desc)).second);
+            Y_ENSURE(State->CollationByName.insert(std::make_pair(desc.Name, desc.Oid)).second);
+        }
+
         State->Namespaces = FillNamespaces();
         for (auto& [k, v] : State->Types) {
             if (v.TypeId != v.ArrayTypeId) {
@@ -1911,8 +1996,7 @@ struct TCatalog: public IExtensionSqlBuilder {
                 ExportFunction(desc.FunctionId);
             }
         } else {
-            for (size_t i = 0; i < Y_ARRAY_SIZE(AllowedProcsRaw); ++i) {
-                const auto& raw = AllowedProcsRaw[i];
+            for (const auto& raw : AllowedProcsRaw) {
                 State->AllowedProcs.insert(raw);
             }
 
@@ -2117,7 +2201,7 @@ struct TCatalog: public IExtensionSqlBuilder {
     }
 
     void PrepareOper(ui32 extensionIndex, const TString& name, const TVector<ui32>& args) final {
-        Y_ENSURE(args.size() >= 1 && args.size() <= 2);
+        Y_ENSURE(!args.empty() && args.size() <= 2);
         Y_ENSURE(extensionIndex);
         auto lowerName = to_lower(name);
         auto operIdPtr = State->OperatorsByName.FindPtr(lowerName);
@@ -2261,6 +2345,7 @@ struct TCatalog: public IExtensionSqlBuilder {
         TCasts Casts;
         TAggregations Aggregations;
         TAms Ams;
+        TCollations Collations;
         TNamespaces Namespaces;
         TOpFamilies OpFamilies;
         TOpClasses OpClasses;
@@ -2270,6 +2355,7 @@ struct TCatalog: public IExtensionSqlBuilder {
         TLanguages Languages;
         THashMap<TString, TVector<ui32>> ProcByName;
         THashMap<TString, ui32> TypeByName;
+        THashMap<TString, ui32> CollationByName;
         THashMap<std::pair<ui32, ui32>, ui32> CastsByDir;
         THashMap<TString, TVector<ui32>> OperatorsByName;
         THashMap<TString, TVector<ui32>> AggregationsByName;
@@ -2457,6 +2543,38 @@ const TAmDesc& LookupAm(ui32 oid) {
 void EnumAm(std::function<void(ui32, const TAmDesc&)> f) {
     const auto& catalog = TCatalog::Instance();
     for (const auto& [oid, desc] : catalog.State->Ams) {
+        f(oid, desc);
+    }
+}
+
+bool HasCollation(const TString& name) {
+    const auto& catalog = TCatalog::Instance();
+    return catalog.State->CollationByName.contains(name);
+}
+
+const TCollationDesc& LookupCollation(const TString& name) {
+    const auto& catalog = TCatalog::Instance();
+    const auto oidPtr = catalog.State->CollationByName.FindPtr(name);
+    if (!oidPtr) {
+        throw yexception() << "No such collation: " << name;
+    }
+
+    return LookupCollation(*oidPtr);
+}
+
+const TCollationDesc& LookupCollation(ui32 oid) {
+    const auto& catalog = TCatalog::Instance();
+    const auto descPtr = catalog.State->Collations.FindPtr(oid);
+    if (!descPtr) {
+        throw yexception() << "No such collation: " << oid;
+    }
+
+    return *descPtr;
+}
+
+void EnumCollation(std::function<void(ui32, const TCollationDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& [oid, desc] : catalog.State->Collations) {
         f(oid, desc);
     }
 }
@@ -2762,32 +2880,32 @@ ui64 CalcProcScore(const TVector<ui32>& procArgTypes, ui32 procVariadicType, ui3
 }
 
 [[noreturn]] void ThrowOperatorNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Unable to find an overload for operator " << name << " with given argument type(s): "
+    throw TOperatorNotFoundException() << "Unable to find an overload for operator " << name << " with given argument type(s): "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowOperatorAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Ambiguity for operator " << name << " with given argument type(s): "
+    throw TOperatorAmbiguityException() << "Ambiguity for operator " << name << " with given argument type(s): "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowProcNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Unable to find an overload for proc " << name << " with given argument types: "
+    throw TProcNotFoundException() << "Unable to find an overload for proc " << name << " with given argument types: "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowProcAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Ambiguity for proc " << name << " with given argument type(s): "
+    throw TProcAmbiguityException() << "Ambiguity for proc " << name << " with given argument type(s): "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowAggregateNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Unable to find an overload for aggregate " << name << " with given argument types: "
+    throw TAggregateNotFoundException() << "Unable to find an overload for aggregate " << name << " with given argument types: "
                        << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowAggregateAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
-    throw yexception() << "Ambiguity for aggregate " << name << " with given argument type(s): "
+    throw TAggregateAmbiguityException() << "Ambiguity for aggregate " << name << " with given argument type(s): "
                        << ArgTypesList(argTypeIds);
 }
 
@@ -3123,7 +3241,7 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
 }
 
 TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>& GetPosition, const TTypeDesc*& typeDesc, bool& castsNeeded) {
-    Y_ENSURE(0 != typeIds.size());
+    Y_ENSURE(!typeIds.empty());
 
     const auto& catalog = TCatalog::Instance();
 
@@ -3352,11 +3470,7 @@ bool ValidateAggregateArgs(const TAggregateDesc& d, ui32 stateType, ui32 resultT
     }
 
     auto expectedResultType = LookupProc(d.FinalFuncId ? d.FinalFuncId : d.TransFuncId).ResultType;
-    if (resultType != expectedResultType) {
-        return false;
-    }
-
-    return true;
+    return resultType == expectedResultType;
 }
 
 const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>& argTypeIds) {
@@ -3458,7 +3572,8 @@ const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>
 const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui32 resultType) {
     TStringBuf realName = name;
     TMaybe<ui32> aggId;
-    TStringBuf left, right;
+    TStringBuf left;
+    TStringBuf right;
     if (realName.TrySplit('#', left, right)) {
         aggId = FromString<ui32>(right);
         realName = left;
@@ -4334,10 +4449,10 @@ void EnumExtensions(std::function<void(ui32, const TExtensionDesc&)> f) {
     }
 }
 
-const TExtensionDesc& LookupExtension(ui32 extIndex) {
+const TExtensionDesc& LookupExtension(ui32 extensionIndex) {
     const auto& catalog = TCatalog::Instance();
-    Y_ENSURE(extIndex > 0 && extIndex <= catalog.State->Extensions.size());
-    return catalog.State->Extensions[extIndex - 1];
+    Y_ENSURE(extensionIndex > 0 && extensionIndex <= catalog.State->Extensions.size());
+    return catalog.State->Extensions[extensionIndex - 1];
 }
 
 ui32 LookupExtensionByName(const TString& name) {

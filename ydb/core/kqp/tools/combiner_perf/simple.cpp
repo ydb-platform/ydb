@@ -32,7 +32,7 @@ THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM>& setup, IDataSampler& samp
     const auto streamCallable = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", streamType).Build();
 
     const auto pgmReturn = pb.FromFlow(pb.WideCombiner(
-        pb.ToFlow(TRuntimeNode(streamCallable, false)),
+        pb.ToFlow(TRuntimeNode(streamCallable, false), {}),
         memLimit,
         [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
         [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.back() } ; },

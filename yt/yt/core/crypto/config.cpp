@@ -1,6 +1,6 @@
 #include "config.h"
 
-#include <util/system/env.h>
+#include <library/cpp/yt/system/env.h>
 
 namespace NYT::NCrypto {
 
@@ -23,17 +23,17 @@ void TPemBlobConfig::Register(TRegistrar registrar)
     });
 }
 
-TPemBlobConfigPtr TPemBlobConfig::CreateFileReference(const TString& fileName)
+TPemBlobConfigPtr TPemBlobConfig::CreateFileReference(const std::string& fileName)
 {
     auto config = New<TPemBlobConfig>();
     config->FileName = fileName;
     return config;
 }
 
-TString TPemBlobConfig::LoadBlob(TCertificatePathResolver pathResolver) const
+std::string TPemBlobConfig::LoadBlob(TCertificatePathResolver pathResolver) const
 {
     if (EnvironmentVariable) {
-        if (auto value = TryGetEnv(*EnvironmentVariable)) {
+        if (auto value = TryGetEnvValue(*EnvironmentVariable)) {
             return *std::move(value);
         }
     }

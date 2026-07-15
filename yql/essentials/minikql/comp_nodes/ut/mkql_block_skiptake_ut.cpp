@@ -3,6 +3,8 @@
 #include <yql/essentials/minikql/arrow/arrow_defs.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 #include <arrow/array/builder_primitive.h>
 
@@ -31,7 +33,6 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
 
         const auto atTop = &ctx.Func->getEntryBlock().back();
@@ -43,11 +44,7 @@ public:
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", atTop);
 
-        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TTestBlockFlowWrapper::DoCalculateImpl>());
-        const auto doType = FunctionType::get(statusType, {self->getType(), ptrValueType, ctx.Ctx->getType(), ptrValueType, ptrValueType, ptrValueType}, false);
-        const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(doType), "function", atTop);
-
-        const auto result = CallInst::Create(doType, doFuncPtr, {self, statePtr, ctx.Ctx, values0Ptr, values1Ptr, values2Ptr}, "result", block);
+        const auto result = EmitFunctionCall<&TTestBlockFlowWrapper::DoCalculateImpl>(statusType, {self, statePtr, ctx.Ctx, values0Ptr, values1Ptr, values2Ptr}, ctx, block);
 
         ICodegeneratorInlineWideNode::TGettersList getters{
             [values0Ptr, valueType](const TCodegenContext&, BasicBlock*& block) { return new LoadInst(valueType, values0Ptr, "value", block); },
@@ -76,9 +73,9 @@ private:
         std::shared_ptr<arrow::ArrayData> block;
         ARROW_OK(builder.FinishInternal(&block));
 
-        val1 = ctx.HolderFactory.CreateArrowBlock(std::move(block));
-        val2 = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(index)));
-        val3 = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(BlockSize)));
+        val1 = ctx.HolderFactory.CreateArrowBlock(std::move(block), NYql::DefaultDatumTestValidationMode);
+        val2 = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(index)), NYql::DefaultDatumTestValidationMode);
+        val3 = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(BlockSize)), NYql::DefaultDatumTestValidationMode);
 
         state = NUdf::TUnboxedValuePod(++index);
         return EFetchResult::One;
@@ -112,9 +109,9 @@ TRuntimeNode MakeFlow(TSetup<LLVM>& setup) {
     TCallableBuilder callableBuilder(*setup.Env, "TestBlockFlow",
                                      pb.NewFlowType(
                                          pb.NewMultiType({
-                                             pb.NewBlockType(pb.NewDataType(NUdf::EDataSlot::Uint64), TBlockType::EShape::Many),
-                                             pb.NewBlockType(pb.NewDataType(NUdf::EDataSlot::Uint64), TBlockType::EShape::Scalar),
-                                             pb.NewBlockType(pb.NewDataType(NUdf::EDataSlot::Uint64), TBlockType::EShape::Scalar),
+                                             pb.NewBlockType(NTest::ConvertToMinikqlType<ui64>(pb), TBlockType::EShape::Many),
+                                             pb.NewBlockType(NTest::ConvertToMinikqlType<ui64>(pb), TBlockType::EShape::Scalar),
+                                             pb.NewBlockType(NTest::ConvertToMinikqlType<ui64>(pb), TBlockType::EShape::Scalar),
                                          })));
     return TRuntimeNode(callableBuilder.Build(), false);
 }
@@ -128,8 +125,8 @@ Y_UNIT_TEST_LLVM(TestWideSkipBlocks) {
 
     const auto flow = MakeFlow(setup);
 
-    const auto part = pb.WideSkipBlocks(pb.FromFlow(flow), pb.NewDataLiteral<ui64>(7));
-    const auto plain = pb.ToFlow(pb.WideFromBlocks(part));
+    const auto part = pb.WideSkipBlocks(pb.FromFlow(flow), NTest::ConvertValueToLiteralNode(pb, ui64(7)));
+    const auto plain = pb.ToFlow(pb.WideFromBlocks(part), {});
 
     const auto singleValueFlow = pb.NarrowMap(plain, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return pb.Add(items[0], items[1]);
@@ -138,20 +135,7 @@ Y_UNIT_TEST_LLVM(TestWideSkipBlocks) {
     const auto pgmReturn = pb.ForwardList(singleValueFlow);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 8);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 9);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 10);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui64>{8, 9, 10});
 }
 
 Y_UNIT_TEST_LLVM(TestWideTakeBlocks) {
@@ -160,8 +144,8 @@ Y_UNIT_TEST_LLVM(TestWideTakeBlocks) {
 
     const auto flow = MakeFlow(setup);
 
-    const auto part = pb.WideTakeBlocks(pb.FromFlow(flow), pb.NewDataLiteral<ui64>(4));
-    const auto plain = pb.ToFlow(pb.WideFromBlocks(part));
+    const auto part = pb.WideTakeBlocks(pb.FromFlow(flow), NTest::ConvertValueToLiteralNode(pb, ui64(4)));
+    const auto plain = pb.ToFlow(pb.WideFromBlocks(part), {});
 
     const auto singleValueFlow = pb.NarrowMap(plain, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return pb.Add(items[0], items[1]);
@@ -170,23 +154,7 @@ Y_UNIT_TEST_LLVM(TestWideTakeBlocks) {
     const auto pgmReturn = pb.ForwardList(singleValueFlow);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 0);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 1);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 2);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 3);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui64>{0, 1, 2, 3});
 }
 
 Y_UNIT_TEST_LLVM(TestWideTakeSkipBlocks) {
@@ -195,8 +163,8 @@ Y_UNIT_TEST_LLVM(TestWideTakeSkipBlocks) {
 
     const auto flow = MakeFlow(setup);
 
-    const auto part = pb.WideTakeBlocks(pb.WideSkipBlocks(pb.FromFlow(flow), pb.NewDataLiteral<ui64>(3)), pb.NewDataLiteral<ui64>(5));
-    const auto plain = pb.ToFlow(pb.WideFromBlocks(part));
+    const auto part = pb.WideTakeBlocks(pb.WideSkipBlocks(pb.FromFlow(flow), NTest::ConvertValueToLiteralNode(pb, ui64(3))), NTest::ConvertValueToLiteralNode(pb, ui64(5)));
+    const auto plain = pb.ToFlow(pb.WideFromBlocks(part), {});
 
     const auto singleValueFlow = pb.NarrowMap(plain, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         // 0,  0;
@@ -216,26 +184,7 @@ Y_UNIT_TEST_LLVM(TestWideTakeSkipBlocks) {
     const auto pgmReturn = pb.ForwardList(singleValueFlow);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 3);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 4);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 6);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 7);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 8);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui64>{3, 4, 6, 7, 8});
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideTakeSkipBlocks)
 

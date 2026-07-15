@@ -13,10 +13,8 @@ A C++ header for Roaring Bitmaps.
 #include <string>
 
 #if !defined(ROARING_EXCEPTIONS)
-// __cpp_exceptions is required by C++98 and we require C++11 or better.
-#ifndef __cpp_exceptions
-#error "__cpp_exceptions should be defined"
-#endif
+// We assume that if __cpp_exceptions is given a positive integer
+// value, then exceptions are enabled.
 #if __cpp_exceptions
 #define ROARING_EXCEPTIONS 1
 #else
@@ -285,6 +283,28 @@ class Roaring {
     }
 
     /**
+     * Keep only values in the half-open interval [min, max).
+     * Equivalent to two consecutive removeRange calls.
+     */
+    void mask(uint64_t min, uint64_t max) noexcept {
+        removeRange(0, min);
+        if (!isEmpty()) {
+            removeRange(max, (uint64_t)maximum() + 1);
+        }
+    }
+
+    /**
+     * Keep only values in the closed interval [min, max].
+     * Equivalent to two consecutive removeRangeClosed calls.
+     */
+    void maskClosed(uint32_t min, uint32_t max) noexcept {
+        if (min > 0) removeRangeClosed(0, min - 1);
+        if (!isEmpty() && max < maximum()) {
+            removeRangeClosed(max + 1, maximum());
+        }
+    }
+
+    /**
      * Clears the bitmap.
      */
     void clear() { api::roaring_bitmap_clear(&roaring); }
@@ -317,6 +337,9 @@ class Roaring {
         return api::roaring_bitmap_contains_range(&roaring, x, y);
     }
 
+    /**
+     * Check if all values from x (included) to y (included) are present.
+     */
     bool containsRangeClosed(const uint32_t x,
                              const uint32_t y) const noexcept {
         return api::roaring_bitmap_contains_range_closed(&roaring, x, y);
@@ -419,7 +442,10 @@ class Roaring {
         api::roaring_bitmap_to_uint32_array(&roaring, ans);
     }
     /**
-     * To int array with pagination
+     * Write to "ans" a sorted slice of the bitmap's values: skip the first
+     * "offset" values and copy up to "limit" of the values that follow. This
+     * is the paginated form of toUint32Array(). The caller must ensure that
+     * "ans" has room for at least "limit" values.
      */
     void rangeUint32Array(uint32_t *ans, size_t offset,
                           size_t limit) const noexcept {
@@ -640,7 +666,7 @@ class Roaring {
      * many, many bytes could be read. See also readSafe.
      *
      * The function may throw std::runtime_error if a bitmap could not be read.
-     * Not that even if it does not throw, the bitmap could still be unusable if
+     * Note that even if it does not throw, the bitmap could still be unusable if
      * the loaded data does not match the portable Roaring specification: you
      * should ensure that the data you load come from a serialized bitmap.
      */
@@ -673,7 +699,7 @@ class Roaring {
      * method).
      *
      * The function may throw std::runtime_error if a bitmap could not be read.
-     * Not that even if it does not throw, the bitmap could still be unusable if
+     * Note that even if it does not throw, the bitmap could still be unusable if
      * the loaded data does not match the portable Roaring specification: you
      * should ensure that the data you load come from a serialized bitmap.
      */
@@ -684,6 +710,15 @@ class Roaring {
             ROARING_TERMINATE("failed alloc while reading");
         }
         return Roaring(r);
+    }
+
+    /**
+     * Compute how many bytes would be read by readSafe.  Returns 0 if the
+     * serialized data is invalid.
+     * This is meant to be compatible with the Java and Go versions.
+     */
+    static size_t serializedSizeInBytesSafe(const char *buf, size_t maxbytes) {
+        return api::roaring_bitmap_portable_deserialize_size(buf, maxbytes);
     }
 
     /**
@@ -706,7 +741,7 @@ class Roaring {
      * For advanced users.
      * This function may throw std::runtime_error.
      */
-    static const Roaring frozenView(const char *buf, size_t length) {
+    static Roaring frozenView(const char *buf, size_t length) {
         const roaring_bitmap_t *s =
             api::roaring_bitmap_frozen_view(buf, length);
         if (s == NULL) {
@@ -721,7 +756,7 @@ class Roaring {
      * For advanced users; see roaring_bitmap_portable_deserialize_frozen.
      * This function may throw std::runtime_error.
      */
-    static const Roaring portableDeserializeFrozen(const char *buf) {
+    static Roaring portableDeserializeFrozen(const char *buf) {
         const roaring_bitmap_t *s =
             api::roaring_bitmap_portable_deserialize_frozen(buf);
         if (s == NULL) {
@@ -991,6 +1026,24 @@ class RoaringSetBitBiDirectionalIterator final {
     /** DEPRECATED, use `move_equalorlarger`.*/
     CROARING_DEPRECATED void equalorlarger(uint32_t val) {
         api::roaring_uint32_iterator_move_equalorlarger(&i, val);
+    }
+
+    /**
+     * Reads up to ${count} ranges into ${buf}. Returns the number of ranges
+     * read. See roaring_uint32_iterator_read_ranges for full semantics.
+     */
+    size_t read_ranges(api::roaring_uint32_range_closed_t *buf, size_t count) {
+        return api::roaring_uint32_iterator_read_ranges(&i, buf, count);
+    }
+
+    /**
+     * Reads up to ${count} ranges in reverse into ${buf}. Returns the number
+     * of ranges read. See roaring_uint32_iterator_read_prev_ranges for full
+     * semantics.
+     */
+    size_t read_prev_ranges(api::roaring_uint32_range_closed_t *buf,
+                            size_t count) {
+        return api::roaring_uint32_iterator_read_prev_ranges(&i, buf, count);
     }
 
     type_of_iterator &operator--() {  // prefix --

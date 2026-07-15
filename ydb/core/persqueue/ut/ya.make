@@ -6,11 +6,12 @@ ADDINCL(
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(40)
+SPLIT_FACTOR(400)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -22,10 +23,12 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/persqueue/ut/common
+    ydb/core/persqueue/writer
     ydb/core/testlib/default
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
 
     ydb/core/tx/schemeshard/ut_helpers
+    ydb/public/sdk/cpp/src/library/kafka
 )
 
 YQL_LAST_ABI_VERSION()
@@ -38,6 +41,7 @@ SRCS(
     make_config.cpp
     metering_sink_ut.cpp
     partition_chooser_ut.cpp
+    partitioning_keys_manager_ut.cpp
     pq_ut.cpp
     partition_ut.cpp
     partitiongraph_ut.cpp
@@ -47,6 +51,9 @@ SRCS(
     pqrb_describes_ut.cpp
     partition_scale_manager_graph_cmp_ut.cpp
     utils_ut.cpp
+    events_ut.cpp
+    write_id_ut.cpp
+    pqdata_transaction_compat_ut.cpp
 )
 
 RESOURCE(

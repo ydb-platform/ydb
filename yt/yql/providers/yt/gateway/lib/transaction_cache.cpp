@@ -115,10 +115,14 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName, bool commit
 
     if (DumpTx) {
         YQL_CLOG(INFO, ProviderYt) << (commitDumpTx ? "Commiting" : "Aborting") << " dump tx " << GetGuidAsString(DumpTx->GetId())  << " on " << clusterName;
-        if (commitDumpTx) {
-            DumpTx->Commit();
-        } else {
-            DumpTx->Abort();
+        try {
+            if (commitDumpTx) {
+                DumpTx->Commit();
+            } else {
+                DumpTx->Abort();
+            }
+        } catch (...) {
+            YQL_CLOG(WARN, ProviderYt) << CurrentExceptionMessage();
         }
     }
 }
@@ -155,6 +159,7 @@ TMaybe<NYT::TTableColumnarStatistics> TTransactionCache::TEntry::GetExtendedColu
     }
 
     NYT::TTableColumnarStatistics res;
+    res.LegacyChunksDataWeight = p->ColumnarStat.LegacyChunksDataWeight;
     for (auto& column: columns) {
         if (p->ExtendedStatColumns.count(column) == 0) {
             return Nothing();
@@ -169,7 +174,7 @@ TMaybe<NYT::TTableColumnarStatistics> TTransactionCache::TEntry::GetExtendedColu
     return res;
 }
 
-void TTransactionCache::TEntry::UpdateColumnarStat(NYT::TRichYPath ytPath, ui64 size) {
+void TTransactionCache::TEntry::UpdateColumnarStat(NYT::TRichYPath ytPath, ui64 size, bool extended) {
     YQL_ENSURE(ytPath.Columns_.Defined());
     TVector<TString> columns(std::move(ytPath.Columns_->Parts_));
     ytPath.Columns_.Clear();
@@ -177,6 +182,10 @@ void TTransactionCache::TEntry::UpdateColumnarStat(NYT::TRichYPath ytPath, ui64 
 
     auto guard = Guard(Lock_);
     auto& cacheEntry = StatisticsCache[cacheKey];
+    if (extended) {
+        cacheEntry.ExtendedStatColumns.clear();
+        std::copy(columns.begin(), columns.end(), std::inserter(cacheEntry.ExtendedStatColumns, cacheEntry.ExtendedStatColumns.end()));
+    }
     cacheEntry.ColumnarStat.LegacyChunksDataWeight = size;
     for (auto& c: cacheEntry.ColumnarStat.ColumnDataWeight) {
         c.second = 0;
@@ -450,6 +459,7 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
             createClientOptions = createClientOptions.ImpersonationUser(*impersonationUser);
         }
         createdEntry->Client = CreateClient(server, createClientOptions);
+        createdEntry->EffectiveUser = createdEntry->Client->WhoAmI().Login;
         createdEntry->TransactionSpec = specProvider();
         if (externalTx) {
             try {
@@ -464,7 +474,7 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         }
         createdEntry->CacheTx = createdEntry->Client;
         createdEntry->CacheTtl = config->QueryCacheTtl.Get().GetOrElse(TDuration::Days(7));
-        const TString tmpFolder = GetTablesTmpFolder(*config, cluster);
+        const TString tmpFolder = GetUserTablesTmpFolder(*config, cluster);
         if (!tmpFolder.empty()) {
             auto fullTmpFolder = AddPathPrefix(tmpFolder, NYT::TConfig::Get()->Prefix);
             bool existsGlobally = createdEntry->Client->Exists(fullTmpFolder);

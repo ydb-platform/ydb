@@ -10,6 +10,7 @@
 #include "opentelemetry/common/attribute_value.h"
 #include "opentelemetry/common/timestamp.h"
 #include "opentelemetry/logs/log_record.h"
+#include "opentelemetry/logs/severity.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/logs/multi_recordable.h"
 #include "opentelemetry/sdk/logs/processor.h"
@@ -23,14 +24,11 @@ namespace sdk
 namespace logs
 {
 
-namespace
-{
-std::size_t MakeKey(const opentelemetry::sdk::logs::LogRecordProcessor &processor)
+std::size_t MultiRecordable::MakeKey(
+    const opentelemetry::sdk::logs::LogRecordProcessor &processor) noexcept
 {
   return reinterpret_cast<std::size_t>(&processor);
 }
-
-}  // namespace
 
 void MultiRecordable::AddRecordable(const LogRecordProcessor &processor,
                                     std::unique_ptr<Recordable> recordable) noexcept

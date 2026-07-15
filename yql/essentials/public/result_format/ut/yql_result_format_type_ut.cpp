@@ -299,7 +299,7 @@ Y_UNIT_TEST(Interval64) {
 }
 
 Y_UNIT_TEST(Decimal) {
-    Test("[DataType;Decimal;\"10\";\"1\"]");
+    Test(R"([DataType;Decimal;"10";"1"])");
 }
 
 Y_UNIT_TEST(OptionalInt32) {

@@ -1,13 +1,13 @@
 #pragma once
 
+#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
+#include <ydb/core/protos/pqdata_transaction.pb.h>
 
+#include <util/stream/fwd.h>
 #include <util/system/types.h>
-#include <util/digest/multi.h>
-#include <util/stream/output.h>
 
 namespace NKikimr::NPQ {
 
@@ -24,6 +24,7 @@ struct TWriteId {
     TWriteId() = default;
     TWriteId(ui64 nodeId, ui64 keyId);
     explicit TWriteId(NKafka::TProducerInstanceId kafkaProducerInstanceId);
+    explicit TWriteId(NKikimrPQ::TWriteId proto);
 
     bool operator==(const TWriteId& rhs) const;
     bool operator<(const TWriteId& rhs) const;
@@ -31,37 +32,53 @@ struct TWriteId {
     void ToStream(IOutputStream& s) const;
     TString ToString() const;
 
-    size_t GetHash() const
-    {
-        return KafkaApiTransaction ?
-            MultiHash(KafkaProducerInstanceId.Id, KafkaProducerInstanceId.Epoch)
-            : MultiHash(NodeId, KeyId);
-    }
+    size_t GetHash() const;
 
     bool IsTopicApiTransaction() const
     {
-        return !KafkaApiTransaction;
+        return Proto.Id_case() == NKikimrPQ::TWriteId::kTopicApi;
     }
 
     bool IsKafkaApiTransaction() const
     {
-        return KafkaApiTransaction;
+        return Proto.Id_case() == NKikimrPQ::TWriteId::kKafkaApi;
     }
 
-    bool KafkaApiTransaction = false;
-    // these fields are used to identify topic api transaction
-    ui64 NodeId = 0;
-    ui64 KeyId = 0;
-    // Identifies kafka api transaction
-    NKafka::TProducerInstanceId KafkaProducerInstanceId;
-};
+    bool IsDeferredPublicationApiTransaction() const
+    {
+        return Proto.Id_case() == NKikimrPQ::TWriteId::kDeferredPublicationApi;
+    }
 
-inline
-IOutputStream& operator<<(IOutputStream& s, const TWriteId& v)
-{
-    v.ToStream(s);
-    return s;
-}
+    // Precondition: IsTopicApiTransaction(). Otherwise returns default proto values (0).
+    ui64 GetNodeId() const
+    {
+        return Proto.GetTopicApi().GetNodeId();
+    }
+
+    // Precondition: IsTopicApiTransaction(). Otherwise returns default proto values (0).
+    ui64 GetKeyId() const
+    {
+        return Proto.GetTopicApi().GetKeyId();
+    }
+
+    // Precondition: IsKafkaApiTransaction(). Otherwise returns empty/default producer id.
+    const NKafka::TProducerInstanceId& GetKafkaProducerInstanceId() const
+    {
+        return KafkaProducerInstanceId;
+    }
+
+    const NKikimrPQ::TWriteId& GetProto() const
+    {
+        return Proto;
+    }
+
+private:
+    NKikimrPQ::TWriteId Proto;
+    // Denormalized Kafka id; matches Proto KafkaApi branch when IsKafkaApiTransaction().
+    NKafka::TProducerInstanceId KafkaProducerInstanceId;
+
+    void SyncKafkaProducerInstanceIdFromProto();
+};
 
 TWriteId GetWriteId(const NKikimrPQ::TTransaction& m);
 void SetWriteId(NKikimrPQ::TTransaction& m, const TWriteId& writeId);
@@ -78,7 +95,7 @@ void SetWriteId(NKikimrClient::TPersQueuePartitionRequest& m, const TWriteId& wr
 TWriteId GetWriteId(const NKikimrKqp::TTopicOperationsResponse& m);
 void SetWriteId(NKikimrKqp::TTopicOperationsResponse& m, const TWriteId& writeId);
 
-}
+} // namespace NKikimr::NPQ
 
 template <>
 struct THash<NKikimr::NPQ::TWriteId> {

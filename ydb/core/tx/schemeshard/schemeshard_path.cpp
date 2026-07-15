@@ -402,6 +402,23 @@ const TPath::TChecker& TPath::TChecker::NotBackupTable(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::NotReadOnlyColumnTable(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (!Path.Base()->IsColumnTable()) {
+        return *this;
+    }
+
+    if (!Path.IsReadOnlyColumnTable()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is a read-only copy column table; only Copy and Drop are allowed"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::NotAsyncReplicaTable(EStatus status) const {
     if (Failed) {
         return *this;
@@ -1047,10 +1064,17 @@ const TPath::TChecker& TPath::TChecker::CanBackupTable(EStatus status) const {
     }
 
     for (const auto& child: Path.Base()->GetChildren()) {
-        auto name = child.first;
+        const TString& name = child.first;
 
         TPath childPath = Path.Child(name);
         if (childPath->IsTableIndex()) {
+            if (Path.SS->Indexes.contains(childPath.Base()->PathId)
+                && TTableIndexInfo::IsLocalIndex(Path.SS->Indexes.at(childPath.Base()->PathId)->Type))
+            {
+                // local indexes are scheme children and are included in the backup
+                // as part of the table schema, unlike global indexes.
+                continue;
+            }
             return Fail(status, TStringBuilder() << "path has indexes, request doesn't accept it");
         }
     }
@@ -1214,6 +1238,19 @@ const TPath::TChecker& TPath::TChecker::Or(TCheckerMethodPtr leftFunc, TCheckerM
     }
 
     return *this;
+}
+
+const TPath::TChecker& TPath::TChecker::IsTestShardSet(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsTestShardSet()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a test shard set"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
@@ -1813,6 +1850,17 @@ bool TPath::IsBackupTable() const {
     return tableInfo->IsBackup;
 }
 
+bool TPath::IsReadOnlyColumnTable() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    if (!Base()->IsColumnTable() || !SS->ColumnTables.contains(Base()->PathId)) {
+        return false;
+    }
+
+    const auto tableInfo = SS->ColumnTables.GetVerified(Base()->PathId);
+    return tableInfo->IsReadOnly;
+}
+
 bool TPath::IsAsyncReplicaTable() const {
     Y_ABORT_UNLESS(IsResolved());
 
@@ -1847,6 +1895,12 @@ bool TPath::IsTransfer() const {
     Y_ABORT_UNLESS(IsResolved());
 
     return Base()->IsTransfer();
+}
+
+bool TPath::IsTestShardSet() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->IsTestShardSet();
 }
 
 bool TPath::IsSupportedInExports() const {
@@ -1982,14 +2036,17 @@ TString TPath::GetEffectiveACL() const {
         if (element->CachedEffectiveACLVersion != version || !element->CachedEffectiveACL) {  // path needs actualizing
             if (item == Elements.begin()) { // it is root
                 if (!SS->IsDomainSchemeShard) {
-                    element->CachedEffectiveACL.Update(SS->ParentDomainCachedEffectiveACL, element->ACL, element->IsContainer());
+                    element->CachedEffectiveACL.Update(SS->ParentDomainCachedEffectiveACL,
+                        element->ACL, element->IsContainer(), /*isTenantRoot*/ true);
                 } else {
                     element->CachedEffectiveACL.Init(element->ACL);
                 }
             } else { // path element in the middle
                 auto prevIt = std::prev(item);
                 const auto& prevElement = *prevIt;
-                element->CachedEffectiveACL.Update(prevElement->CachedEffectiveACL, element->ACL, element->IsContainer());
+                element->CachedEffectiveACL.Update(prevElement->CachedEffectiveACL,
+                    element->ACL, element->IsContainer(),
+                    /*isTenantRoot*/ element->IsPlainSubDomainRoot() || element->IsExternalSubDomainRoot());
             }
             element->CachedEffectiveACLVersion = version;
         }

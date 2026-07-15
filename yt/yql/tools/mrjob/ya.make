@@ -1,6 +1,10 @@
 PROGRAM(mrjob)
 
-ALLOCATOR(J)
+IF (OS_LINUX)
+    ALLOCATOR(TCMALLOC)
+ELSE()
+    ALLOCATOR(J)
+ENDIF()
 
 SRCS(
     mrjob.cpp
@@ -13,6 +17,7 @@ IF (OS_LINUX)
 ENDIF()
 
 PEERDIR(
+    contrib/libs/tcmalloc/malloc_extension
     yt/cpp/mapreduce/client
     yql/essentials/public/udf/service/terminate_policy
     yql/essentials/providers/common/gateway

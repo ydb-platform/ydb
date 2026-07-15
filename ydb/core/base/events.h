@@ -195,8 +195,12 @@ struct TKikimrEvents : TEvents {
         ES_COUNTERS_INFO = 4272,
         ES_SASL_AUTH = 4273,
         ES_DDISK = 4274,
-        ES_NBS_V2 = 4275,
+        ES_NBS_V2_SERVICE = 4275,
         ES_FORCED_COMPACTION = 4276,
+        ES_NBS_V2_SS_PROXY = 4277,
+        ES_SET_COLUMN_CONSTRAINT = 4278,
+        ES_EXTERNAL_IDP_PROVIDER = 4279,
+        ES_PQ_DEFERRED_PUBLISH = 4280,
     };
 };
 

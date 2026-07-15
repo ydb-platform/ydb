@@ -1,5 +1,7 @@
 #pragma once
 
+#include "kqp_vector_index_levels_cache.h"
+
 #include <ydb/core/protos/kqp.pb.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -14,27 +16,53 @@ namespace NKqp {
 struct TLookupSettings {
     TString TablePath;
     TTableId TableId;
+    TString Database;
+    TString PoolId;
 
     ui32 AllowNullKeysPrefixSize;
     bool KeepRowsOrder;
+    ui32 CookieFormatVersion = 0;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
     std::unique_ptr<NKikimrKqp::TReadVectorTopK> VectorTopK;
 
     std::unordered_map<TString, TSysTables::TTableColumnInfo> KeyColumns;
-    std::vector<TSysTables::TTableColumnInfo*> LookupKeyColumns;
+    std::vector<TSysTables::TTableColumnInfo> InputColumns;
     std::vector<TSysTables::TTableColumnInfo> Columns;
+};
+
+class TStreamLookupShardReadResult{
+public:
+    ui64 ShardId;
+    THolder<TEventHandle<TEvDataShard::TEvReadResult>> ReadResult;
+    size_t UnprocessedResultRow = 0;
+    size_t CalculatedSize = 0;
+
+    TStreamLookupShardReadResult(const ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult, NMiniKQL::TAllocState* alloc);
+
+    TStreamLookupShardReadResult(TStreamLookupShardReadResult&& other)
+        : ShardId(other.ShardId)
+        , ReadResult(std::move(other.ReadResult))
+        , UnprocessedResultRow(other.UnprocessedResultRow)
+        , CalculatedSize(std::exchange(other.CalculatedSize, 0))
+    {}
+
+    TStreamLookupShardReadResult& operator=(TStreamLookupShardReadResult&& other) {
+        if (this != &other) {
+            ShardId = other.ShardId;
+            ReadResult = std::move(other.ReadResult);
+            UnprocessedResultRow = other.UnprocessedResultRow;
+            CalculatedSize = std::exchange(other.CalculatedSize, 0);
+        }
+        return *this;
+    }
+    void Untrack(NMiniKQL::TAllocState* alloc);
+    ~TStreamLookupShardReadResult();
 };
 
 class TKqpStreamLookupWorker {
 public:
     using TReadList = std::vector<std::pair<ui64, THolder<TEvDataShard::TEvRead>>>;
-    using TPartitionInfo = std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>;
-
-    struct TShardReadResult {
-        const ui64 ShardId;
-        THolder<TEventHandle<TEvDataShard::TEvReadResult>> ReadResult;
-        size_t UnprocessedResultRow = 0;
-    };
+    using TPartitionInfo = TPartitioning::TCPtr;
 
     struct TReadResultStats {
         ui64 ReadRowsCount = 0;
@@ -73,15 +101,16 @@ public:
 
     virtual void AddInputRow(NUdf::TUnboxedValue inputRow) = 0;
     virtual void AddInputRow(TConstArrayRef<TCell> inputRow) = 0;
-    virtual std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui64& newReadId) = 0;
-    virtual TReadList BuildRequests(const TPartitionInfo& partitioning, ui64& readId) = 0;
-    virtual void AddResult(TShardReadResult result) = 0;
+    virtual void RebuildRequest(const ui64 shardId, const ui64& prevReadId, ui64& newReadId) = 0;
+    virtual void BuildRequests(const TPartitionInfo& partitioning, ui64& readId) = 0;
+    virtual std::pair<ui64, THolder<TEvDataShard::TEvRead>> PopNextRequest() = 0;
+    virtual size_t ScheduledRequestsCount() = 0;
+    virtual void AddResult(TStreamLookupShardReadResult result) = 0;
     virtual TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) = 0;
     virtual TReadResultStats ReadAllResult(std::function<void(TConstArrayRef<TCell>)> reader) = 0;
     virtual bool AllRowsProcessed() = 0;
     virtual bool HasPendingResults() = 0;
     virtual void ResetRowsProcessing(ui64 readId) = 0;
-    virtual std::optional<TString> IsOverloaded(size_t maxRowsProcessing) = 0;
 
 protected:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
@@ -94,7 +123,7 @@ protected:
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
     ui64 taskId,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
-    const NYql::NDqProto::TTaskInput& inputDesc);
+    const NYql::NDqProto::TTaskInput& inputDesc, TIntrusivePtr<TVectorIndexLevelsCache> vectorIndexLevelsCache);
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateLookupWorker(TLookupSettings&& settings,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory);

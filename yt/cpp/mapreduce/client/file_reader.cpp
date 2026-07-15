@@ -6,6 +6,7 @@
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 #include <yt/cpp/mapreduce/common/retry_request.h>
+#include <yt/cpp/mapreduce/common/trace_context.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
@@ -41,24 +42,43 @@ TStreamReaderBase::TStreamReaderBase(
     const TTransactionId& transactionId)
     : RawClient_(rawClient)
     , ClientRetryPolicy_(std::move(clientRetryPolicy))
-    , ReadTransaction_(std::make_unique<TPingableTransaction>(
+    , ReadTransaction_()
+    , TraceContext_(NTracing::CreateTraceContext("TStreamReaderBase", context.Config))
+{
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
+    ReadTransaction_ = std::make_unique<TPingableTransaction>(
         RawClient_,
         ClientRetryPolicy_,
         context,
         transactionId,
         transactionPinger->GetChildTxPinger(),
-        TStartTransactionOptions()))
-{ }
+        TStartTransactionOptions());
+}
+
+void TStreamReaderBase::Abort()
+{
+    Input_->Abort();
+}
+
+bool TStreamReaderBase::IsAborted() const
+{
+    return Input_->IsAborted();
+}
 
 TStreamReaderBase::~TStreamReaderBase() = default;
 
 TYPath TStreamReaderBase::Snapshot(const TYPath& path)
 {
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
     return NYT::Snapshot(RawClient_, ClientRetryPolicy_, ReadTransaction_->GetId(), path);
 }
 
 size_t TStreamReaderBase::DoRead(void* buf, size_t len)
 {
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
     if (len == 0) {
         return 0;
     }
@@ -98,7 +118,7 @@ TFileReader::TFileReader(
     Path_.Path_ = TStreamReaderBase::Snapshot(Path_.Path_);
 }
 
-std::unique_ptr<IInputStream> TFileReader::Request(const TTransactionId& transactionId, ui64 readBytes)
+std::unique_ptr<IAbortableInputStream> TFileReader::Request(const TTransactionId& transactionId, ui64 readBytes)
 {
     const ui64 currentOffset = StartOffset_ + readBytes;
 
@@ -130,7 +150,7 @@ TBlobTableReader::TBlobTableReader(
     Path_ = TStreamReaderBase::Snapshot(path);
 }
 
-std::unique_ptr<IInputStream> TBlobTableReader::Request(const TTransactionId& transactionId, ui64 readBytes)
+std::unique_ptr<IAbortableInputStream> TBlobTableReader::Request(const TTransactionId& transactionId, ui64 readBytes)
 {
     const i64 currentOffset = StartOffset_ + readBytes;
     const i64 startPartIndex = currentOffset / Options_.PartSize_;

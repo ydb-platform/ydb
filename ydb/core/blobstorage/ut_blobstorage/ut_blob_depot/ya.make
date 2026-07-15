@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
-    IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    IF (SANITIZER_TYPE)
         SIZE(MEDIUM)
     ELSE()
         SIZE(SMALL)

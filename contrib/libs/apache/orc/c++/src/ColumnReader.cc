@@ -16,36 +16,27 @@
  * limitations under the License.
  */
 
-#include "orc/Int128.hh"
+#include "ColumnReader.hh"
+
+#include <cmath>
 
 #include "Adaptor.hh"
 #include "ByteRLE.hh"
-#include "ColumnReader.hh"
 #include "ConvertColumnReader.hh"
+#include "DictionaryLoader.hh"
 #include "RLE.hh"
 #include "SchemaEvolution.hh"
 #include "orc/Exceptions.hh"
+#include "orc/Int128.hh"
 
 #include <math.h>
 #include <iostream>
+#include <type_traits>
 
 namespace orc {
 
   StripeStreams::~StripeStreams() {
     // PASS
-  }
-
-  inline RleVersion convertRleVersion(proto::ColumnEncoding_Kind kind) {
-    switch (static_cast<int64_t>(kind)) {
-      case proto::ColumnEncoding_Kind_DIRECT:
-      case proto::ColumnEncoding_Kind_DICTIONARY:
-        return RleVersion_1;
-      case proto::ColumnEncoding_Kind_DIRECT_V2:
-      case proto::ColumnEncoding_Kind_DICTIONARY_V2:
-        return RleVersion_2;
-      default:
-        throw ParseError("Unknown encoding in convertRleVersion");
-    }
   }
 
   ColumnReader::ColumnReader(const Type& type, StripeStreams& stripe)
@@ -375,7 +366,8 @@ namespace orc {
 
    private:
     std::unique_ptr<SeekableInputStream> inputStream_;
-    const uint64_t bytesPerValue_ = (columnKind == FLOAT) ? 4 : 8;
+    using ItemType = std::conditional_t<columnKind == DOUBLE, double, float>;
+    const int64_t bytesPerValue_ = sizeof(ItemType);
     const char* bufferPointer_;
     const char* bufferEnd_;
 
@@ -390,55 +382,33 @@ namespace orc {
       return static_cast<unsigned char>(*(bufferPointer_++));
     }
 
-    template <typename FloatType>
-    FloatType readDouble() {
-      int64_t bits = 0;
-      if (bufferEnd_ - bufferPointer_ >= 8) {
-        if (isLittleEndian) {
+    ValueType read() {
+      using BitType = std::conditional_t<columnKind == TypeKind::DOUBLE, int64_t, int32_t>;
+      BitType bits = 0;
+      if (bufferEnd_ - bufferPointer_ >= bytesPerValue_) {
+        if constexpr (isLittleEndian) {
           memcpy(&bits, bufferPointer_, sizeof(bits));
         } else {
-          bits = static_cast<int64_t>(static_cast<unsigned char>(bufferPointer_[0]));
-          bits |= static_cast<int64_t>(static_cast<unsigned char>(bufferPointer_[1])) << 8;
-          bits |= static_cast<int64_t>(static_cast<unsigned char>(bufferPointer_[2])) << 16;
-          bits |= static_cast<int64_t>(static_cast<unsigned char>(bufferPointer_[3])) << 24;
-          bits |= static_cast<int64_t>(static_cast<unsigned char>(bufferPointer_[4])) << 32;
-          bits |= static_cast<int64_t>(static_cast<unsigned char>(bufferPointer_[5])) << 40;
-          bits |= static_cast<int64_t>(static_cast<unsigned char>(bufferPointer_[6])) << 48;
-          bits |= static_cast<int64_t>(static_cast<unsigned char>(bufferPointer_[7])) << 56;
+          bits = static_cast<BitType>(static_cast<unsigned char>(bufferPointer_[0]));
+          bits |= static_cast<BitType>(static_cast<unsigned char>(bufferPointer_[1])) << 8;
+          bits |= static_cast<BitType>(static_cast<unsigned char>(bufferPointer_[2])) << 16;
+          bits |= static_cast<BitType>(static_cast<unsigned char>(bufferPointer_[3])) << 24;
+          if constexpr (columnKind == TypeKind::DOUBLE) {
+            bits |= static_cast<BitType>(static_cast<unsigned char>(bufferPointer_[4])) << 32;
+            bits |= static_cast<BitType>(static_cast<unsigned char>(bufferPointer_[5])) << 40;
+            bits |= static_cast<BitType>(static_cast<unsigned char>(bufferPointer_[6])) << 48;
+            bits |= static_cast<BitType>(static_cast<unsigned char>(bufferPointer_[7])) << 56;
+          }
         }
-        bufferPointer_ += 8;
+        bufferPointer_ += bytesPerValue_;
       } else {
-        for (uint64_t i = 0; i < 8; i++) {
+        for (int64_t i = 0; i < bytesPerValue_; i++) {
           bits |= static_cast<int64_t>(readByte()) << (i * 8);
         }
       }
-      FloatType* result = reinterpret_cast<FloatType*>(&bits);
-      return *result;
-    }
 
-    template <typename FloatType>
-    FloatType readFloat() {
-      int32_t bits = 0;
-      if (bufferEnd_ - bufferPointer_ >= 4) {
-        if (isLittleEndian) {
-          memcpy(&bits, bufferPointer_, sizeof(bits));
-        } else {
-          bits = static_cast<unsigned char>(bufferPointer_[0]);
-          bits |= static_cast<unsigned char>(bufferPointer_[1]) << 8;
-          bits |= static_cast<unsigned char>(bufferPointer_[2]) << 16;
-          bits |= static_cast<unsigned char>(bufferPointer_[3]) << 24;
-        }
-        bufferPointer_ += 4;
-      } else {
-        for (uint64_t i = 0; i < 4; i++) {
-          bits |= readByte() << (i * 8);
-        }
-      }
-      float* result = reinterpret_cast<float*>(&bits);
-      if (!result) {
-        std::cerr << "read float empty." << std::endl;
-      }
-      return static_cast<FloatType>(*result);
+      ItemType* result = reinterpret_cast<ItemType*>(&bits);
+      return static_cast<ValueType>(*result);
     }
   };
 
@@ -482,41 +452,27 @@ namespace orc {
     ValueType* outArray =
         reinterpret_cast<ValueType*>(dynamic_cast<BatchType&>(rowBatch).data.data());
 
-    if constexpr (columnKind == FLOAT) {
-      if (notNull) {
-        for (size_t i = 0; i < numValues; ++i) {
-          if (notNull[i]) {
-            outArray[i] = readFloat<ValueType>();
-          }
-        }
-      } else {
-        for (size_t i = 0; i < numValues; ++i) {
-          outArray[i] = readFloat<ValueType>();
+    if (notNull) {
+      for (size_t i = 0; i < numValues; ++i) {
+        if (notNull[i]) {
+          outArray[i] = read();
         }
       }
     } else {
-      if (notNull) {
-        for (size_t i = 0; i < numValues; ++i) {
-          if (notNull[i]) {
-            outArray[i] = readDouble<ValueType>();
-          }
+      // Number of values in the buffer that we can copy directly.
+      // Only viable when the machine is little-endian.
+      uint64_t bufferNum = 0;
+      if constexpr (isLittleEndian && std::is_same_v<ValueType, ItemType>) {
+        bufferNum =
+            std::min(numValues, static_cast<size_t>(bufferEnd_ - bufferPointer_) / bytesPerValue_);
+        uint64_t bufferBytes = bufferNum * bytesPerValue_;
+        if (bufferBytes > 0) {
+          memcpy(outArray, bufferPointer_, bufferBytes);
+          bufferPointer_ += bufferBytes;
         }
-      } else {
-        // Number of values in the buffer that we can copy directly.
-        // Only viable when the machine is little-endian.
-        uint64_t bufferNum = 0;
-        if (isLittleEndian) {
-          bufferNum = std::min(numValues,
-                               static_cast<size_t>(bufferEnd_ - bufferPointer_) / bytesPerValue_);
-          uint64_t bufferBytes = bufferNum * bytesPerValue_;
-          if (bufferBytes > 0) {
-            memcpy(outArray, bufferPointer_, bufferBytes);
-            bufferPointer_ += bufferBytes;
-          }
-        }
-        for (size_t i = bufferNum; i < numValues; ++i) {
-          outArray[i] = readDouble<ValueType>();
-        }
+      }
+      for (size_t i = bufferNum; i < numValues; ++i) {
+        outArray[i] = read();
       }
     }
   }
@@ -553,7 +509,10 @@ namespace orc {
     std::unique_ptr<RleDecoder> rle_;
 
    public:
-    StringDictionaryColumnReader(const Type& type, StripeStreams& stipe);
+    StringDictionaryColumnReader(const Type& type, StripeStreams& stripe);
+
+    StringDictionaryColumnReader(const Type& type, StripeStreams& stripe,
+                                 const std::shared_ptr<StringDictionary> dictionary);
     ~StringDictionaryColumnReader() override;
 
     uint64_t skip(uint64_t numValues) override;
@@ -567,39 +526,23 @@ namespace orc {
 
   StringDictionaryColumnReader::StringDictionaryColumnReader(const Type& type,
                                                              StripeStreams& stripe)
-      : ColumnReader(type, stripe), dictionary_(new StringDictionary(stripe.getMemoryPool())) {
+      : StringDictionaryColumnReader(type, stripe, nullptr) {}
+
+  StringDictionaryColumnReader::StringDictionaryColumnReader(
+      const Type& type, StripeStreams& stripe, const std::shared_ptr<StringDictionary> dictionary)
+      : ColumnReader(type, stripe), dictionary_(dictionary) {
     RleVersion rleVersion = convertRleVersion(stripe.getEncoding(columnId).kind());
-    uint32_t dictSize = stripe.getEncoding(columnId).dictionary_size();
     std::unique_ptr<SeekableInputStream> stream =
         stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
     if (stream == nullptr) {
       throw ParseError("DATA stream not found in StringDictionaryColumn");
     }
     rle_ = createRleDecoder(std::move(stream), false, rleVersion, memoryPool, metrics);
-    stream = stripe.getStream(columnId, proto::Stream_Kind_LENGTH, false);
-    if (dictSize > 0 && stream == nullptr) {
-      throw ParseError("LENGTH stream not found in StringDictionaryColumn");
+
+    // If no dictionary was provided, load it
+    if (!dictionary_) {
+      dictionary_ = loadStringDictionary(columnId, stripe, memoryPool);
     }
-    std::unique_ptr<RleDecoder> lengthDecoder =
-        createRleDecoder(std::move(stream), false, rleVersion, memoryPool, metrics);
-    dictionary_->dictionaryOffset.resize(dictSize + 1);
-    int64_t* lengthArray = dictionary_->dictionaryOffset.data();
-    lengthDecoder->next(lengthArray + 1, dictSize, nullptr);
-    lengthArray[0] = 0;
-    for (uint32_t i = 1; i < dictSize + 1; ++i) {
-      if (lengthArray[i] < 0) {
-        throw ParseError("Negative dictionary entry length");
-      }
-      lengthArray[i] += lengthArray[i - 1];
-    }
-    int64_t blobSize = lengthArray[dictSize];
-    dictionary_->dictionaryBlob.resize(static_cast<uint64_t>(blobSize));
-    std::unique_ptr<SeekableInputStream> blobStream =
-        stripe.getStream(columnId, proto::Stream_Kind_DICTIONARY_DATA, false);
-    if (blobSize > 0 && blobStream == nullptr) {
-      throw ParseError("DICTIONARY_DATA stream not found in StringDictionaryColumn");
-    }
-    readFully(dictionary_->dictionaryBlob.data(), blobSize, blobStream.get());
   }
 
   StringDictionaryColumnReader::~StringDictionaryColumnReader() {
@@ -1751,8 +1694,15 @@ namespace orc {
       case GEOGRAPHY:
         switch (static_cast<int64_t>(stripe.getEncoding(type.getColumnId()).kind())) {
           case proto::ColumnEncoding_Kind_DICTIONARY:
-          case proto::ColumnEncoding_Kind_DICTIONARY_V2:
-            return std::make_unique<StringDictionaryColumnReader>(type, stripe);
+          case proto::ColumnEncoding_Kind_DICTIONARY_V2: {
+            // Check if we have a pre-loaded dictionary we can use
+            auto dictionary = stripe.getSharedDictionary(type.getColumnId());
+            if (dictionary) {
+              return std::make_unique<StringDictionaryColumnReader>(type, stripe, dictionary);
+            } else {
+              return std::unique_ptr<ColumnReader>(new StringDictionaryColumnReader(type, stripe));
+            }
+          }
           case proto::ColumnEncoding_Kind_DIRECT:
           case proto::ColumnEncoding_Kind_DIRECT_V2:
             return std::make_unique<StringDirectColumnReader>(type, stripe);

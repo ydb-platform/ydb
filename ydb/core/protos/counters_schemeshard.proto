@@ -137,7 +137,7 @@ enum ESimpleCounters {
     COUNTER_STREAM_SHARDS_COUNT = 112                     [(CounterOpts) = {Name: "StreamShardsCount"}];
     COUNTER_STREAM_SHARDS_QUOTA = 113                     [(CounterOpts) = {Name: "StreamShardsQuota"}];
 
-    COUNTER_COMPACTION_QUEUE_SIZE = 114                   [(CounterOpts) = {Name: "BackgroundCompactionQueueSize"}];
+    COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE = 114        [(CounterOpts) = {Name: "BackgroundCompactionQueueSize"}];
 
     COUNTER_STREAM_RESERVED_THROUGHPUT = 115              [(CounterOpts) = {Name: "StreamReservedThroughput"}];
     COUNTER_STREAM_RESERVED_STORAGE = 116                 [(CounterOpts) = {Name: "StreamReservedStorage"}];
@@ -149,10 +149,10 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxAlterReplication = 121        [(CounterOpts) = {Name: "InFlightOps/AlterReplication"}];
     COUNTER_IN_FLIGHT_OPS_TxDropReplicationCascade = 122  [(CounterOpts) = {Name: "InFlightOps/DropReplicationCascade"}];
 
-    COUNTER_COMPACTION_QUEUE_SIZE_SH = 123                [(CounterOpts) = {Name: "BackgroundCompactionQueueSizeBySearchHeight"}];
-    COUNTER_COMPACTION_QUEUE_SIZE_DELETES = 124           [(CounterOpts) = {Name: "BackgroundCompactionQueueSizeByRowDeletes"}];
-    COUNTER_COMPACTION_QUEUE_RUNNING = 125                [(CounterOpts) = {Name: "BackgroundCompactionQueueRunning"}];
-    COUNTER_COMPACTION_QUEUE_WAITING_REPEAT = 126         [(CounterOpts) = {Name: "BackgroundCompactionQueueWaitingRepeat"}];
+    COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE_SH = 123     [(CounterOpts) = {Name: "BackgroundCompactionQueueSizeBySearchHeight"}];
+    COUNTER_BACKGROUND_COMPACTION_QUEUE_SIZE_DELETES = 124 [(CounterOpts) = {Name: "BackgroundCompactionQueueSizeByRowDeletes"}];
+    COUNTER_BACKGROUND_COMPACTION_QUEUE_RUNNING = 125     [(CounterOpts) = {Name: "BackgroundCompactionQueueRunning"}];
+    COUNTER_BACKGROUND_COMPACTION_QUEUE_WAITING_REPEAT = 126 [(CounterOpts) = {Name: "BackgroundCompactionQueueWaitingRepeat"}];
     COUNTER_SHARDS_WITH_BORROWED_DATA = 127               [(CounterOpts) = {Name: "TableShardsWithBorrowedData"}];
     COUNTER_SHARDS_WITH_LOANED_DATA = 128                 [(CounterOpts) = {Name: "TableShardsWithLoanedData"}];
 
@@ -273,8 +273,39 @@ enum ESimpleCounters {
 
     COUNTER_IN_FLIGHT_OPS_TxTruncateTable = 213 [(CounterOpts) = {Name: "InFlightOps/TruncateTable"}];
 
-    COUNTER_BLOCKSTORE_VOLUME_DIRECT_SHARD_COUNT = 214            [(CounterOpts) = {Name: "BlockStoreVolumeDirectShards"}];
-    COUNTER_BLOCKSTORE_PARTITION_DIRECT_SHARD_COUNT = 215        [(CounterOpts) = {Name: "BlockStorePartitionDirectShards"}];
+    COUNTER_BLOCKSTORE_VOLUME_DIRECT_SHARD_COUNT = 214 [(CounterOpts) = {Name: "BlockStoreVolumeDirectShards"}];
+    COUNTER_BLOCKSTORE_PARTITION_DIRECT_SHARD_COUNT = 215 [(CounterOpts) = {Name: "BlockStorePartitionDirectShards"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxReadOnlyCopyColumnTable = 216 [(CounterOpts) = {Name: "InFlightOps/ReadOnlyCopyColumnTable"}];
+
+    COUNTER_FORCED_COMPACTION_OPERATIONS_QUEUE_SIZE = 217    [(CounterOpts) = {Name: "ForcedCompactionOperationsQueueSize"}];
+    COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_SIZE = 218    [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueSize"}];
+    COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_RUNNING = 219 [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueRunning"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxPrepareIndexValidation = 220 [(CounterOpts) = {Name: "InFlightOps/PrepareIndexValidation"}];
+
+    COUNTER_FORMAT_SHARDIDX_TABLE_COUNT = 221 [(CounterOpts) = {Name: "TablesInFormatShardidx"}];
+    COUNTER_FORMAT_POSITION_TABLE_COUNT = 222 [(CounterOpts) = {Name: "TablesInFormatPosition"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateFullBackupOp = 223 [(CounterOpts) = {Name: "InFlightOps/CreateFullBackupOp"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateLocalIndex = 224 [(CounterOpts) = {Name: "InFlightOps/CreateLocalIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropLocalIndex = 225 [(CounterOpts) = {Name: "InFlightOps/DropLocalIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterLocalIndex = 226 [(CounterOpts) = {Name: "InFlightOps/AlterLocalIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxMoveLocalIndex = 227 [(CounterOpts) = {Name: "InFlightOps/MoveLocalIndex"}];
+
+    COUNTER_SMALL_BLOBS_VOLUME_BYTES = 228               [(CounterOpts) = {Name: "SmallBlobsVolumeBytes"}];
+    COUNTER_SMALL_BLOBS_COUNT = 229                      [(CounterOpts) = {Name: "SmallBlobsCount"}];
+    COUNTER_SMALL_BLOBS_VOLUME_HARD_QUOTA_BYTES = 230    [(CounterOpts) = {Name: "SmallBlobsVolumeHardQuotaBytes"}];
+    COUNTER_SMALL_BLOBS_VOLUME_SOFT_QUOTA_BYTES = 231    [(CounterOpts) = {Name: "SmallBlobsVolumeSoftQuotaBytes"}];
+    COUNTER_SMALL_BLOBS_COUNT_HARD_QUOTA = 232           [(CounterOpts) = {Name: "SmallBlobsCountHardQuota"}];
+    COUNTER_SMALL_BLOBS_COUNT_SOFT_QUOTA = 233           [(CounterOpts) = {Name: "SmallBlobsCountSoftQuota"}];
+    COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED = 234             [(CounterOpts) = {Name: "SmallBlobsQuotaExceeded"}];
+
+    COUNTER_TEST_SHARD_SET_COUNT = 235                     [(CounterOpts) = {Name: "TestShardSetCount"}];
+    COUNTER_TEST_SHARD_COUNT = 236                         [(CounterOpts) = {Name: "TestShardCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateTestShardSet = 237      [(CounterOpts) = {Name: "InFlightOps/CreateTestShardSet"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropTestShardSet = 238        [(CounterOpts) = {Name: "InFlightOps/DropTestShardSet"}];
 }
 
 enum ECumulativeCounters {
@@ -447,6 +478,35 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxAlterStreamingQuery = 132  [(CounterOpts) = {Name: "FinishedOps/AlterStreamingQuery"}];
 
     COUNTER_FINISHED_OPS_TxTruncateTable = 133 [(CounterOpts) = {Name: "FinishedOps/TruncateTable"}];
+
+    COUNTER_FINISHED_OPS_TxReadOnlyCopyColumnTable = 134 [(CounterOpts) = {Name: "FinishedOps/ReadOnlyCopyColumnTable"}];
+
+    COUNTER_FORCED_COMPACTION_OK = 135            [(CounterOpts) = {Name: "ForcedCompactionOk"}];
+    COUNTER_FORCED_COMPACTION_FAILED = 136        [(CounterOpts) = {Name: "ForcedCompactionFailed"}];
+    COUNTER_FORCED_COMPACTION_TIMEOUT = 137       [(CounterOpts) = {Name: "ForcedCompactionTimeout"}];
+    COUNTER_FORCED_COMPACTION_NOT_NEEDED = 138    [(CounterOpts) = {Name: "ForcedCompactionNotNeeded"}];
+    COUNTER_FORCED_COMPACTION_LOANED = 139        [(CounterOpts) = {Name: "ForcedCompactionLoaned"}];
+
+    COUNTER_FINISHED_OPS_TxPrepareIndexValidation = 140 [(CounterOpts) = {Name: "FinishedOps/PrepareIndexValidation"}];
+
+    // Partitions skipped (not rewritten) during split/merge due to partial persistence.
+    // Together with COUNTER_SPLIT_MERGE_PARTITIONS_REWRITTEN, gives the savings ratio.
+    COUNTER_SPLIT_MERGE_PARTITIONS_SKIPPED  = 141 [(CounterOpts) = {Name: "SplitMergePartitionsSkipped"}];
+    // Partitions actually rewritten during split/merge (those at or after the split point).
+    COUNTER_SPLIT_MERGE_PARTITIONS_REWRITTEN = 142 [(CounterOpts) = {Name: "SplitMergePartitionsRewritten"}];
+
+    COUNTER_FINISHED_OPS_TxCreateFullBackupOp = 143 [(CounterOpts) = {Name: "FinishedOps/CreateFullBackupOp"}];
+
+    // How much time TTableInfo::VerifyConsistency() call takes, in nanoseconds
+    COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS = 144 [(CounterOpts) = {Name: "TablePartitionsConsistencyCheckTimeNs"}];
+
+    COUNTER_FINISHED_OPS_TxCreateLocalIndex = 145 [(CounterOpts) = {Name: "FinishedOps/CreateLocalIndex"}];
+    COUNTER_FINISHED_OPS_TxDropLocalIndex = 146 [(CounterOpts) = {Name: "FinishedOps/DropLocalIndex"}];
+    COUNTER_FINISHED_OPS_TxAlterLocalIndex = 147 [(CounterOpts) = {Name: "FinishedOps/AlterLocalIndex"}];
+    COUNTER_FINISHED_OPS_TxMoveLocalIndex = 148 [(CounterOpts) = {Name: "FinishedOps/MoveLocalIndex"}];
+
+    COUNTER_FINISHED_OPS_TxCreateTestShardSet = 149      [(CounterOpts) = {Name: "FinishedOps/CreateTestShardSet"}];
+    COUNTER_FINISHED_OPS_TxDropTestShardSet = 150        [(CounterOpts) = {Name: "FinishedOps/DropTestShardSet"}];
 }
 
 enum EPercentileCounters {
@@ -478,6 +538,11 @@ enum EPercentileCounters {
         Name: "NumShardsByTtlLag"
         Integral: true
         Ranges: { Value: 0        Name: "0"     }
+        Ranges: { Value: 30       Name: "30"    }
+        Ranges: { Value: 60       Name: "60"    }
+        Ranges: { Value: 120      Name: "120"   }
+        Ranges: { Value: 300      Name: "300"   }
+        Ranges: { Value: 600      Name: "600"   }
         Ranges: { Value: 900      Name: "900"   }
         Ranges: { Value: 1800     Name: "1800"  }
         Ranges: { Value: 3600     Name: "3600"  }
@@ -548,6 +613,15 @@ enum EPercentileCounters {
         Ranges: { Value: 200000      Name: "200 ms"       }
         Ranges: { Value: 500000      Name: "500 ms"       }
         Ranges: { Value: 1000000     Name: "1000 ms"      }
+        Ranges: { Value: 5000000     Name: "5000 ms"      }
+        Ranges: { Value: 10000000    Name: "10000 ms"     }
+        Ranges: { Value: 30000000    Name: "30000 ms"     }
+        Ranges: { Value: 50000000    Name: "50000 ms"     }
+        Ranges: { Value: 60000000    Name: "60000 ms"     }
+        Ranges: { Value: 70000000    Name: "70000 ms"     }
+        Ranges: { Value: 300000000   Name: "300000 ms"    }
+        Ranges: { Value: 600000000   Name: "600000 ms"    }
+        Ranges: { Value: 900000000   Name: "900000 ms"    }
     }];
 
     COUNTER_PQ_STATS_BATCH_LATENCY = 6 [(CounterOpts) = {
@@ -689,7 +763,7 @@ enum ETxTypes {
     TXTYPE_ADD_SHARDS_SHRED = 98 [(TxTypeOpts) = {Name: "TxAddShardsShred"}];
     TXTYPE_CANCEL_SHARDS_SHRED = 99 [(TxTypeOpts) = {Name: "TxCancelShardsShred"}];
 
-    TXTYPE_LOGIN_FINALIZE = 100 [(TxTypeOpts) = {Name: "TxLoginFinalize"}];
+    TXTYPE_DEPRECATED_100 = 100 [(TxTypeOpts) = {Name: "TxDeprecated100"}]; // was TXTYPE_LOGIN_FINALIZE
 
     TXTYPE_PROGRESS_INCREMENTAL_RESTORE = 101 [(TxTypeOpts) = {Name: "TxProgressIncrementalRestore"}];
     TXTYPE_INCREMENTAL_RESTORE_SHARD_RESPONSE = 102 [(TxTypeOpts) = {Name: "TxIncrementalRestoreShardResponse"}];
@@ -702,4 +776,31 @@ enum ETxTypes {
     TXTYPE_GET_BACKUP_COLLECTION_RESTORE = 107 [(TxTypeOpts) = {Name: "TxGetBackupCollectionRestore"}];
     TXTYPE_LIST_BACKUP_COLLECTION_RESTORE = 108 [(TxTypeOpts) = {Name: "TxListBackupCollectionRestore"}];
     TXTYPE_FORGET_BACKUP_COLLECTION_RESTORE = 109 [(TxTypeOpts) = {Name: "TxForgetBackupCollectionRestore"}];
+
+    TXTYPE_CANCEL_FORCED_COMPACTION = 110   [(TxTypeOpts) = {Name: "TxCancelForcedCompaction"}];
+    TXTYPE_CREATE_FORCED_COMPACTION = 111   [(TxTypeOpts) = {Name: "TxCreateForcedCompaction"}];
+    TXTYPE_FORGET_FORCED_COMPACTION = 112   [(TxTypeOpts) = {Name: "TxForgetForcedCompaction"}];
+    TXTYPE_GET_FORCED_COMPACTION = 113      [(TxTypeOpts) = {Name: "TxGetForcedCompaction"}];
+    TXTYPE_LIST_FORCED_COMPACTION = 114     [(TxTypeOpts) = {Name: "TxListForcedCompaction"}];
+    TXTYPE_PROGRESS_FORCED_COMPACTION = 115 [(TxTypeOpts) = {Name: "TxProgressForcedCompaction"}];
+
+    TXTYPE_DEPRECATED_116 = 116 [(TxTypeOpts) = {Name: "TxDeprecated116"}]; // was TXTYPE_USER_HASHES_MIGRATION
+
+    TXTYPE_TABLE_PARTITIONS_STORAGE_FORMAT_SWITCH = 117 [(TxTypeOpts) = {Name: "TxTablePartitionsFormatSwitch"}];
+    TXTYPE_TABLE_PARTITIONS_STORAGE_FORMAT_SWEEP_STEP = 118 [(TxTypeOpts) = {Name: "TxTablePartitionsFormatSweepStep"}];
+    TXTYPE_TABLE_PARTITIONS_STORAGE_FORMAT_SWEEP_AUTO_START = 119 [(TxTypeOpts) = {Name: "TxTablePartitionsFormatSweepAutoStart"}];
+
+    TXTYPE_GET_FULL_BACKUP = 120 [(TxTypeOpts) = {Name: "TxGetFullBackup"}];
+    TXTYPE_LIST_FULL_BACKUP = 121 [(TxTypeOpts) = {Name: "TxListFullBackup"}];
+    TXTYPE_FORGET_FULL_BACKUP = 122 [(TxTypeOpts) = {Name: "TxForgetFullBackup"}];
+    TXTYPE_PROGRESS_FULL_BACKUP = 123 [(TxTypeOpts) = {Name: "TxProgressFullBackup"}];
+
+    TXTYPE_CREATE_SET_COLUMN_CONSTRAINT = 124             [(TxTypeOpts) = {Name: "TxCreateSetColumnConstraint"}];
+    TXTYPE_GET_SET_COLUMN_CONSTRAINT = 125             [(TxTypeOpts) = {Name: "TxGetSetColumnConstraint"}];
+
+    TXTYPE_TEST_SHARD_CONTROL = 126 [(TxTypeOpts) = {Name: "TxTestShardControl"}];
+
+    TXTYPE_LIST_SET_COLUMN_CONSTRAINT = 127             [(TxTypeOpts) = {Name: "TxListSetColumnConstraint"}];
+    TXTYPE_FORGET_SET_COLUMN_CONSTRAINT = 128          [(TxTypeOpts) = {Name: "TxForgetSetColumnConstraint"}];
+    TXTYPE_CANCEL_SET_COLUMN_CONSTRAINT = 129             [(TxTypeOpts) = {Name: "TxCancelSetColumnConstraint"}];
 }

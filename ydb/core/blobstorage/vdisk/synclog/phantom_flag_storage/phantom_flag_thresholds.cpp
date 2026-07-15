@@ -15,10 +15,6 @@ TPhantomFlagThresholds::TTabletChannel TPhantomFlagThresholds::MakeTabletChannel
     return TTabletChannel(blobId.TabletID(), blobId.Channel());
 }
 
-inline ui64 TPhantomFlagThresholds::THasher::operator()(const TTabletChannel& x) const {
-    return std::hash<ui64>{}((x.first << 8) | x.second);
-}
-
 TPhantomFlagThresholds::TTabletThresholds::TTabletThresholds() {
     Thresholds.resize(MaxExpectedDisksInGroup);
 }
@@ -64,6 +60,17 @@ void TPhantomFlagThresholds::TTabletThresholds::Merge(TBlobStorageGroupType grou
     }
 }
 
+std::vector<TPhantomFlagThresholds::TTabletThresholds::TTabletThreshold>
+        TPhantomFlagThresholds::TTabletThresholds::GetList() const {
+    std::vector<TTabletThreshold> res;
+    for (ui32 orderNumber = 0; orderNumber < Thresholds.size(); ++orderNumber) {
+        if (Thresholds[orderNumber]) {
+            res.emplace_back(Thresholds[orderNumber]->first, Thresholds[orderNumber]->second, orderNumber);
+        }
+    }
+    return res;
+}
+
 TString TPhantomFlagThresholds::TTabletThresholds::ToString(TBlobStorageGroupType groupType) const {
     TStringStream str;
     str << "{";
@@ -92,6 +99,10 @@ void TPhantomFlagThresholds::AddBlob(const TLogoBlobID& blob) {
 
 void TPhantomFlagThresholds::AddBlob(ui32 orderNumber, const TLogoBlobID& blob) {
     TabletThresholds[MakeTabletChannel(blob)].AddBlob(orderNumber, MakeGenStep(blob));
+}
+
+void TPhantomFlagThresholds::AddBlob(ui32 orderNumber, ui64 tabletId, ui8 channel, ui32 generation, ui32 step) {
+    TabletThresholds[{tabletId, channel}].AddBlob(orderNumber, {generation, step});
 }
 
 void TPhantomFlagThresholds::AddHardBarrier(ui32 orderNumber, ui64 tabletId, ui8 channel, ui32 generation, ui32 step) {
@@ -140,6 +151,19 @@ void TPhantomFlagThresholds::Merge(TPhantomFlagThresholds&& other) {
 
 void TPhantomFlagThresholds::Clear() {
     TabletThresholds.clear();
+}
+
+
+std::vector<TPhantomFlagThresholds::TThreshold> TPhantomFlagThresholds::GetList() const {
+    std::vector<TThreshold> res;
+    for (const auto& [tabletChannel, thresholds] : TabletThresholds) {
+        auto [tabletId, channel] = tabletChannel;
+        std::vector<TTabletThresholds::TTabletThreshold> tuples = thresholds.GetList();
+        for (const auto& [generation, step, orderNumber] : tuples) {
+            res.emplace_back(tabletId, channel, generation, step, orderNumber);
+        }
+    }
+    return res;
 }
 
 TString TPhantomFlagThresholds::ToString() const {

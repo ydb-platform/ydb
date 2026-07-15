@@ -1,13 +1,13 @@
 self: super: with self; {
   boost_range = stdenv.mkDerivation rec {
     pname = "boost_range";
-    version = "1.87.0";
+    version = "1.91.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";
       repo = "range";
       rev = "boost-${version}";
-      hash = "sha256-JWIDKme6si91ZRAPLRSczE1zoSjL0KeqV0DsGKUvfCU=";
+      hash = "sha256-VF24eBNY4F0emkICSzWCeTtcLAcMdLIJM6U3Yz8h1X4=";
     };
   };
 }

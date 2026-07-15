@@ -7,141 +7,6 @@ namespace NKqp {
 
 using namespace NYql;
 
-namespace {
-
-void AppendQuerySpanIdInfo(TStringBuilder& message, TMaybe<ui64> victimQuerySpanId) {
-    if (victimQuerySpanId && *victimQuerySpanId != 0) {
-        message << " VictimQuerySpanId: " << *victimQuerySpanId << ".";
-    }
-}
-
-} // anonymous namespace
-
-NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKikimrPathId& pathId,
-    TMaybe<ui64> victimQuerySpanId)
-{
-    TStringBuilder message;
-    message << "Transaction locks invalidated.";
-
-    if (pathId.OwnerId() != 0) {
-        auto table = txCtx.TableByIdMap.FindPtr(pathId);
-        if (!table) {
-            message << " Unknown table, pathId: " << pathId.ToString() << ".";
-            AppendQuerySpanIdInfo(message, victimQuerySpanId);
-            return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
-        }
-        message << " Table: `" << *table << "`.";
-        AppendQuerySpanIdInfo(message, victimQuerySpanId);
-        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
-    } else {
-        // Olap tables don't return SchemeShard in locks, thus we use tableId here.
-        for (const auto& [candidatePathId, table] : txCtx.TableByIdMap) {
-            if (candidatePathId.TableId() == pathId.TableId()) {
-                message << " Table: `" << table << "`.";
-                AppendQuerySpanIdInfo(message, victimQuerySpanId);
-                return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
-            }
-        }
-        message << " Unknown table, pathId: " << pathId.ToString() << ".";
-        AppendQuerySpanIdInfo(message, victimQuerySpanId);
-        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
-    }
-}
-
-NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId,
-    TMaybe<ui64> victimQuerySpanId)
-{
-    TStringBuilder message;
-    message << "Transaction locks invalidated.";
-
-    if (auto tableInfoPtr = shardIdToTableInfo.GetPtr(shardId); tableInfoPtr) {
-        message << " Tables: ";
-        bool first = true;
-        for (const auto& path : tableInfoPtr->Pathes) {
-            if (!first) {
-                message << ", ";
-                first = false;
-            }
-            message << "`" << path << "`";
-        }
-        message << ".";
-        AppendQuerySpanIdInfo(message, victimQuerySpanId);
-        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
-    } else {
-        message << " Unknown table, tabletId: " << shardId << ".";
-        AppendQuerySpanIdInfo(message, victimQuerySpanId);
-    }
-    return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
-}
-
-// Non-TxManager (obsolete) path: no QuerySpanId tracking
-TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TKqpTxLock& invalidatedLock) {
-    return GetLocksInvalidatedIssue(
-        txCtx,
-        TKikimrPathId(
-            invalidatedLock.GetSchemeShard(),
-            invalidatedLock.GetPathId()));
-}
-
-// Non-TxManager (obsolete) lock merge path: no QuerySpanId tracking
-std::pair<bool, std::vector<TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,
-    TKqpTransactionContext& txCtx)
-{
-    std::pair<bool, std::vector<TIssue>> res;
-    auto& locks = txCtx.Locks;
-
-    YQL_ENSURE(type.GetKind() == NKikimrMiniKQL::ETypeKind::List);
-    auto locksListType = type.GetList();
-
-    if (!locks.HasLocks()) {
-        locks.LockType = locksListType.GetItem();
-        locks.LocksListType = locksListType;
-    }
-
-    YQL_ENSURE(locksListType.GetItem().GetKind() == NKikimrMiniKQL::ETypeKind::Struct);
-    auto lockType = locksListType.GetItem().GetStruct();
-    YQL_ENSURE(lockType.MemberSize() == 7);
-    YQL_ENSURE(lockType.GetMember(0).GetName() == "Counter");
-    YQL_ENSURE(lockType.GetMember(1).GetName() == "DataShard");
-    YQL_ENSURE(lockType.GetMember(2).GetName() == "Generation");
-    YQL_ENSURE(lockType.GetMember(3).GetName() == "LockId");
-    YQL_ENSURE(lockType.GetMember(4).GetName() == "PathId");
-    YQL_ENSURE(lockType.GetMember(5).GetName() == "SchemeShard");
-    YQL_ENSURE(lockType.GetMember(6).GetName() == "HasWrites");
-
-    res.first = true;
-    for (auto& lockValue : value.GetList()) {
-        TKqpTxLock txLock(lockValue);
-        if (auto counter = txLock.GetCounter(); counter >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin) {
-            switch (counter) {
-                case NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken:
-                case NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken:
-                    res.second.emplace_back(GetLocksInvalidatedIssue(txCtx, txLock));
-                    break;
-                default:
-                    res.second.emplace_back(YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_ACQUIRE_FAILURE));
-                    break;
-            }
-            res.first = false;
-
-        } else if (auto curTxLock = locks.LocksMap.FindPtr(txLock.GetKey())) {
-            if (txLock.HasWrites()) {
-                curTxLock->SetHasWrites();
-            }
-
-            if (curTxLock->Invalidated(txLock)) {
-                res.second.emplace_back(GetLocksInvalidatedIssue(txCtx, txLock));
-                res.first = false;
-            }
-        } else {
-            // despite there were some errors we need to proceed merge to erase remaining locks properly
-            locks.LocksMap.insert(std::make_pair(txLock.GetKey(), txLock));
-        }
-    }
-
-    return res;
-}
-
 TKqpTransactionInfo TKqpTransactionContext::GetInfo() const {
     TKqpTransactionInfo txInfo;
 
@@ -185,9 +50,17 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     Y_UNUSED(config);
 
     if (*txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
+        *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE &&
         *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO &&
-        *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW)
+        *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW &&
+        *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW)
         return false;
+
+    if (*txCtx.EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) {
+        // In Read Committed mode, each query should see the latest committed data,
+        // so we need a fresh snapshot for each query, not a cached one.
+        return true;
+    }
 
     if (txCtx.GetSnapshot().IsValid())
         return false;
@@ -209,33 +82,38 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         for (const auto &stage : tx.GetStages()) {
             readPhases += stage.SourcesSize();
 
+            auto processTableSink = [&](const NKqpProto::TKqpInternalSink& intSink) {
+                if (!intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                    return;
+                }
+                NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                AFL_ENSURE(intSink.GetSettings().UnpackTo(&sinkSettings));
+
+
+                AFL_ENSURE(tx.GetHasEffects() || sinkSettings.GetInconsistentTx());
+                if (sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                    hasInsert = true;
+                    ++readPhases;
+                }
+                if (!sinkSettings.GetLookupColumns().empty()) {
+                    ++readPhases;
+                }
+                for (const auto& index : sinkSettings.GetIndexes()) {
+                    if (index.GetIsUniq()) {
+                        ++readPhases;
+                    }
+                }
+            };
+
             for (const auto &sink : stage.GetSinks()) {
-                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink
-                    && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>())
-                {
-                    AFL_ENSURE(tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE);
-                    NKikimrKqp::TKqpTableSinkSettings sinkSettings;
-                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings));
-                    AFL_ENSURE(tx.GetHasEffects() || sinkSettings.GetInconsistentTx());
-                    if (sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
-                        hasInsert = true;
-                        // Insert operations create new read phases,
-                        // so in presence of other reads we have to acquire snapshot.
-                        // This is unique to INSERT operation, because it can fail.
-                        ++readPhases;
-                    }
+                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
+                    processTableSink(sink.GetInternalSink());
+                }
+            }
 
-                    if (!sinkSettings.GetLookupColumns().empty()) {
-                        // Lookup for index update
-                        ++readPhases;
-                    }
-
-                    for (const auto& index : sinkSettings.GetIndexes()) {
-                        if (index.GetIsUniq()) {
-                            // Unique index check
-                            ++readPhases;
-                        }
-                    }
+            for (const auto &transform : stage.GetOutputTransforms()) {
+                if (transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink) {
+                    processTableSink(transform.GetInternalSink());
                 }
             }
 
@@ -258,6 +136,11 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
     if (txCtx.NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
         return true;
+    }
+
+    if (*txCtx.EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
+        // In Strict Serializable mode, all read-only transactions must acquire snapshot
+        return hasEffects ? readPhases > 1 : readPhases > 0;
     }
 
     if (*txCtx.EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW && hasEffects) {
@@ -336,9 +219,9 @@ bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
                     case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                         return true;
                     case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
+                        break;
                     case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
                     case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
-                        break;
                     default:
                         YQL_ENSURE(false, "unexpected type");
                 }
@@ -354,7 +237,7 @@ bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
             for (const auto &tableOp : stage.GetTableOps()) {
                 if (tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kUpsertRows
                     || tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kDeleteRows) {
-                    return true;
+                    AFL_ENSURE(false);
                 }
             }
 
@@ -396,10 +279,10 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                         break;
                     }
                     case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
-                    case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
-                    case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
                         modifiedTables.insert(getTable(tableOp.GetTable()));
                         break;
+                    case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
+                    case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
                     default:
                         YQL_ENSURE(false, "unexpected type");
                 }
@@ -445,36 +328,55 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                 }
             }
 
+            auto processSinkSettings = [&](NKikimrKqp::TKqpTableSinkSettings& settings) {
+                const bool tableModifiedBefore = modifiedTables.contains(getTable(settings.GetTable()));
+                modifiedTables.insert(getTable(settings.GetTable()));
+                for (const auto& index : settings.GetIndexes()) {
+                    modifiedTables.insert(getTable(index.GetTable()));
+                }
+
+                // For plans compatibility with old indexes. Don't need it for new.
+                if (!settings.GetLookupColumns().empty() && tableModifiedBefore) {
+                    AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+                    return true;
+                }
+
+                // For plans compatibility with old indexes. Don't need it for new.
+                for (const auto& index : settings.GetIndexes()) {
+                    if (index.GetIsUniq() && tableModifiedBefore) {
+                        return true;
+                    }
+                }
+
+                if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && !commit) {
+                    // INSERT with sink should be executed immediately, because it returns an error in case of duplicate rows.
+                    return true;
+                }
+
+                return false;
+            };
+
             for (const auto& sink : stage.GetSinks()) {
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
 
-                    const bool tableModifiedBefore = modifiedTables.contains(getTable(settings.GetTable()));
-                    modifiedTables.insert(getTable(settings.GetTable()));
-                    for (const auto& index : settings.GetIndexes()) {
-                        modifiedTables.insert(getTable(index.GetTable()));
-                    }
-
-                    // For plans compatibility with old indexes. Don't need it for new.
-                    if (!settings.GetLookupColumns().empty() && tableModifiedBefore) {
-                        AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
-                        return true;
-                    }
-
-                    // For plans compatibility with old indexes. Don't need it for new.
-                    for (const auto& index : settings.GetIndexes()) {
-                        if (index.GetIsUniq() && tableModifiedBefore) {
-                            return true;
-                        }
-                    }
-
-                    if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && !commit) {
-                        // INSERT with sink should be executed immediately, because it returns an error in case of duplicate rows.
+                    if (processSinkSettings(settings)) {
                         return true;
                     }
                 } else {
+                    return true;
+                }
+            }
+
+            for (const auto& transform : stage.GetOutputTransforms()) {
+                AFL_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
+                AFL_ENSURE(transform.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                NKikimrKqp::TKqpTableSinkSettings settings;
+                YQL_ENSURE(transform.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+
+                if (processSinkSettings(settings)) {
                     return true;
                 }
             }

@@ -4,6 +4,8 @@
 #include "blocks.h"
 #include "s3.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev) {
@@ -77,6 +79,7 @@ namespace NKikimr::NBlobDepot {
                             const size_t numErased = agent.S3WritesInFlight.erase(locator);
                             Y_ABORT_UNLESS(numErased);
                             Self->S3Manager->AddTrashToCollect(locator);
+                            Self->S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);
                         }
                     };
 
@@ -131,8 +134,13 @@ namespace NKikimr::NBlobDepot {
                         }
                     }
 
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT68, "TTxCommitBlobSeq process key", (Id, Self->GetLogId()),
-                        (Key, key), (Item, item), (CanBeCollected, canBeCollected), (Generation, generation));
+                    YDB_LOG_DEBUG("TTxCommitBlobSeq process key",
+                        {"marker", "BDT68"},
+                        {"id", Self->GetLogId()},
+                        {"key", key},
+                        {"item", item},
+                        {"canBeCollected", canBeCollected},
+                        {"generation", generation});
 
                     if (canBeCollected) {
                         // we can't accept this record, because it is potentially under already issued barrier
@@ -180,6 +188,8 @@ namespace NKikimr::NBlobDepot {
 
                             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUTS_OK] += 1;
                             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUTS_BYTES] += locator.Len;
+
+                            Self->S3Manager->OnS3WriteInFlightRemoved(/*success=*/true);
                         }
                         Self->Data->UpdateKey(key, item, txc, this);
                     }
@@ -214,12 +224,21 @@ namespace NKikimr::NBlobDepot {
         TAgent& agent = GetAgent(ev->Recipient);
         const ui32 generation = Executor()->Generation();
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT57, "TEvDiscardSpoiledBlobSeq", (Id, GetLogId()), (AgentId, agent.Connection->NodeId),
-            (Msg, ev->Get()->Record));
+        YDB_LOG_DEBUG("TEvDiscardSpoiledBlobSeq",
+            {"marker", "BDT57"},
+            {"id", GetLogId()},
+            {"agentId", agent.Connection->NodeId},
+            {"msg", ev->Get()->Record});
 
         // FIXME(alexvru): delete uncertain keys containing this BlobSeqId as they were never written
 
         const auto& record = ev->Get()->Record;
+
+        // Arm S3 put throttling before the spoiled locators get processed so that subsequent prepare-write events
+        // (already serialized after this one on the same agent pipe) see the updated state and get queued.
+        if (record.GetS3SlowDown()) {
+            S3Manager->NotifyPutSlowDown();
+        }
 
         for (const auto& item : record.GetItems()) {
             const auto blobSeqId = TBlobSeqId::FromProto(item);
@@ -243,7 +262,10 @@ namespace NKikimr::NBlobDepot {
             const auto& locator = TS3Locator::FromProto(item);
             const size_t numErased = agent.S3WritesInFlight.erase(locator);
             Y_ABORT_UNLESS(numErased == 1);
-            S3Manager->AddTrashToCollect(locator);
+            if (!record.GetS3SlowDown()) { // in case of SlowDown these items never had the chance of being written
+                S3Manager->AddTrashToCollect(locator);
+            }
+            S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);
         }
     }
 

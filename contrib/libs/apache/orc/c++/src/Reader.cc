@@ -19,7 +19,9 @@
 #include "Reader.hh"
 #include "Adaptor.hh"
 #include "BloomFilter.hh"
+#include "DictionaryLoader.hh"
 #include "Options.hh"
+#include "RLE.hh"
 #include "Statistics.hh"
 #include "StripeStream.hh"
 #include "Utils.hh"
@@ -27,12 +29,12 @@
 #include "wrap/coded-stream-wrapper.h"
 
 #include <algorithm>
-#include <iostream>
 #include <iterator>
 #include <memory>
 #include <set>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace orc {
@@ -246,11 +248,54 @@ namespace orc {
     buildTypeNameIdMap(contents_->schema.get());
   }
 
+  static const std::unordered_set<proto::Stream_Kind> DATA_STREAM_KINDS = {
+      proto::Stream_Kind_DATA, proto::Stream_Kind_DICTIONARY_DATA, proto::Stream_Kind_PRESENT,
+      proto::Stream_Kind_LENGTH, proto::Stream_Kind_SECONDARY};
+
+  static const std::unordered_set<proto::Stream_Kind> INDEX_STREAM_KINDS = {
+      proto::Stream_Kind_ROW_INDEX, proto::Stream_Kind_BLOOM_FILTER_UTF8};
+
+  std::vector<ReadRange> extractReadRangesForStripe(
+      uint64_t stripeIndex, const proto::StripeInformation& stripeInfo,
+      const proto::StripeFooter& stripeFooter, const std::vector<bool>& selectedColumns,
+      const std::unordered_set<proto::Stream_Kind>& allowedKinds = DATA_STREAM_KINDS) {
+    std::vector<ReadRange> ranges;
+
+    uint64_t stripeFooterStart =
+        stripeInfo.offset() + stripeInfo.index_length() + stripeInfo.data_length();
+    uint64_t offset = stripeInfo.offset();
+
+    for (int i = 0; i < stripeFooter.streams_size(); i++) {
+      const proto::Stream& stream = stripeFooter.streams(i);
+      if (offset + stream.length() > stripeFooterStart) {
+        std::stringstream msg;
+        msg << "Malformed stream meta at stream index " << i << " in stripe " << stripeIndex
+            << ": streamOffset=" << offset << ", streamLength=" << stream.length()
+            << ", stripeOffset=" << stripeInfo.offset()
+            << ", stripeIndexLength=" << stripeInfo.index_length()
+            << ", stripeDataLength=" << stripeInfo.data_length();
+        throw ParseError(msg.str());
+      }
+
+      if (stream.has_kind() && selectedColumns[stream.column()]) {
+        if (allowedKinds.find(stream.kind()) != allowedKinds.cend()) {
+          ranges.emplace_back(offset, stream.length());
+        }
+      }
+
+      offset += stream.length();
+    }
+
+    return ranges;
+  }
+
   RowReaderImpl::RowReaderImpl(std::shared_ptr<FileContents> contents, const RowReaderOptions& opts)
       : localTimezone_(getLocalTimezone()),
         contents_(contents),
         throwOnHive11DecimalOverflow_(opts.getThrowOnHive11DecimalOverflow()),
         forcedScaleOnHive11Decimal_(opts.getForcedScaleOnHive11Decimal()),
+        enableAsyncPrefetch_(opts.getEnableAsyncPrefetch()),
+        smallStripeLookAheadLimit_(opts.getSmallStripeLookAheadLimit()),
         footer_(contents_->footer.get()),
         firstRowOfStripe_(*contents_->pool, 0),
         enableEncodedBlock_(opts.getEnableLazyDecoding()),
@@ -305,9 +350,10 @@ namespace orc {
     // prepare SargsApplier if SearchArgument is available
     if (opts.getSearchArgument() && footer_->row_index_stride() > 0) {
       sargs_ = opts.getSearchArgument();
-      sargsApplier_.reset(
-          new SargsApplier(*contents_->schema, sargs_.get(), footer_->row_index_stride(),
-                           getWriterVersionImpl(contents.get()), contents_->readerMetrics));
+      sargsApplier_ = std::make_unique<SargsApplier>(
+          *contents_->schema, sargs_.get(), footer_->row_index_stride(),
+          getWriterVersionImpl(contents.get()), opts.getDictionaryFilteringSizeThreshold(),
+          contents_->readerMetrics, &schemaEvolution_);
     }
 
     skipBloomFilters_ = hasBadBloomFilters();
@@ -440,6 +486,15 @@ namespace orc {
     rowIndexes_.clear();
     bloomFilterIndex_.clear();
 
+    if (enableAsyncPrefetch_ &&
+        fullyCachedStripes_.find(currentStripe_) == fullyCachedStripes_.end()) {
+      // Cache required ranges of index which are usually very small
+      auto ranges =
+          extractReadRangesForStripe(currentStripe_, currentStripeInfo_, currentStripeFooter_,
+                                     selectedColumns_, INDEX_STREAM_KINDS);
+      contents_->cacheRanges(std::move(ranges));
+    }
+
     // obtain row indexes for selected columns
     uint64_t offset = currentStripeInfo_.offset();
     for (int i = 0; i < currentStripeFooter_.streams_size(); ++i) {
@@ -448,11 +503,24 @@ namespace orc {
       if (selectedColumns_[colId] && pbStream.has_kind() &&
           (pbStream.kind() == proto::Stream_Kind_ROW_INDEX ||
            pbStream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8)) {
-        std::unique_ptr<SeekableInputStream> inStream = createDecompressor(
-            getCompression(),
-            std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
-                contents_->stream.get(), offset, pbStream.length(), *contents_->pool)),
-            getCompressionSize(), *contents_->pool, contents_->readerMetrics);
+        std::unique_ptr<SeekableInputStream> inStream;
+        BufferSlice slice;
+
+        {
+          std::lock_guard<std::mutex> lock(contents_->readCacheMutex);
+          if (contents_->readCache) {
+            slice = contents_->readCache->read(ReadRange(offset, pbStream.length()));
+          }
+        }
+        if (slice.buffer) {
+          inStream = std::make_unique<SeekableArrayInputStream>(slice.buffer->data() + slice.offset,
+                                                                slice.length);
+        } else {
+          inStream = std::make_unique<SeekableFileInputStream>(contents_->stream.get(), offset,
+                                                               pbStream.length(), *contents_->pool);
+        }
+        inStream = createDecompressor(getCompression(), std::move(inStream), getCompressionSize(),
+                                      *contents_->pool, contents_->readerMetrics);
 
         if (pbStream.kind() == proto::Stream_Kind_ROW_INDEX) {
           proto::RowIndex rowIndex;
@@ -519,14 +587,29 @@ namespace orc {
   }
 
   proto::StripeFooter getStripeFooter(const proto::StripeInformation& info,
-                                      const FileContents& contents) {
+                                      FileContents& contents) {
     uint64_t stripeFooterStart = info.offset() + info.index_length() + info.data_length();
     uint64_t stripeFooterLength = info.footer_length();
-    std::unique_ptr<SeekableInputStream> pbStream = createDecompressor(
-        contents.compression,
-        std::make_unique<SeekableFileInputStream>(contents.stream.get(), stripeFooterStart,
-                                                  stripeFooterLength, *contents.pool),
-        contents.blockSize, *contents.pool, contents.readerMetrics);
+
+    std::unique_ptr<SeekableInputStream> pbStream;
+    BufferSlice slice;
+
+    {
+      std::lock_guard<std::mutex> lock(contents.readCacheMutex);
+      if (contents.readCache) {
+        slice = contents.readCache->read(ReadRange(stripeFooterStart, stripeFooterLength));
+      }
+    }
+    if (slice.buffer) {
+      pbStream = std::make_unique<SeekableArrayInputStream>(slice.buffer->data() + slice.offset,
+                                                            slice.length);
+    } else {
+      pbStream = std::make_unique<SeekableFileInputStream>(contents.stream.get(), stripeFooterStart,
+                                                           stripeFooterLength, *contents.pool);
+    }
+    pbStream = createDecompressor(contents.compression, std::move(pbStream), contents.blockSize,
+                                  *contents.pool, contents.readerMetrics);
+
     proto::StripeFooter result;
     if (!result.ParseFromZeroCopyStream(pbStream.get())) {
       throw ParseError(std::string("bad StripeFooter from ") + pbStream->getName());
@@ -1032,10 +1115,105 @@ namespace orc {
     }
   }
 
+  uint64_t getStripeSize(const proto::StripeInformation& stripeInfo) {
+    return stripeInfo.index_length() + stripeInfo.data_length() + stripeInfo.footer_length();
+  }
+
+  bool isSmallStripe(const proto::StripeInformation& stripeInfo, uint64_t threshold) {
+    return getStripeSize(stripeInfo) <= threshold;
+  }
+
+  /**
+   * Load stripe dictionaries for dictionary-based predicate pushdown.
+   * Only loads dictionaries for STRING/VARCHAR/CHAR columns with IN expressions.
+   */
+  std::unordered_map<uint64_t, std::shared_ptr<StringDictionary>> loadStripeDictionaries(
+      const proto::Footer& footer, const std::vector<bool>& selectedColumns,
+      const std::vector<uint64_t>& columnsWithInExpr, StripeStreams& stripe,
+      size_t dictSizeThreshold) {
+    std::unordered_map<uint64_t, std::shared_ptr<StringDictionary>> dictionaries;
+
+    // Only load dictionaries for selected columns with IN expressions
+    for (uint64_t colId : columnsWithInExpr) {
+      if (!selectedColumns[colId] || colId >= static_cast<uint64_t>(footer.types_size())) {
+        continue;
+      }
+
+      auto encoding = stripe.getEncoding(colId);
+      if (encoding.kind() != proto::ColumnEncoding_Kind_DICTIONARY &&
+          encoding.kind() != proto::ColumnEncoding_Kind_DICTIONARY_V2) {
+        continue;
+      }
+
+      auto typeKind = footer.types(static_cast<int>(colId)).kind();
+      if (typeKind != proto::Type_Kind_STRING && typeKind != proto::Type_Kind_VARCHAR &&
+          typeKind != proto::Type_Kind_CHAR) {
+        continue;
+      }
+
+      if (encoding.dictionary_size() > dictSizeThreshold) {
+        continue;
+      }
+
+      dictionaries[colId] = loadStringDictionary(colId, stripe, stripe.getMemoryPool());
+    }
+
+    return dictionaries;
+  }
+
+  // Evaluate dictionaries for the current stripe to determine if it can be
+  // skipped.
+  bool evaluateStripeDictionaries(RowReaderImpl& reader, const proto::Footer& footer,
+                                  const std::vector<bool>& selectedColumns,
+                                  const proto::StripeFooter& stripeFooter,
+                                  const proto::StripeInformation& stripeInfo,
+                                  uint64_t currentStripe, SargsApplier* sargsApplier,
+                                  const Timezone& localTimezone, const Timezone& readerTimezone) {
+    const std::vector<uint64_t>& columnsWithInExpr = sargsApplier->getColumnsWithInExpressions();
+    if (columnsWithInExpr.empty()) {
+      return true;
+    }
+
+    const Timezone& writerTimezone = stripeFooter.has_writer_timezone()
+                                         ? getTimezoneByName(stripeFooter.writer_timezone())
+                                         : localTimezone;
+    StripeStreamsImpl stripeStreams(reader, currentStripe, stripeInfo, stripeFooter,
+                                    stripeInfo.offset(), *reader.getFileContents().stream,
+                                    writerTimezone, readerTimezone);
+
+    auto dictionaries =
+        loadStripeDictionaries(footer, selectedColumns, columnsWithInExpr, stripeStreams,
+                               sargsApplier->getDictionaryFilteringSizeThreshold());
+    if (!dictionaries.empty()) {
+      // Store the loaded dictionaries for use by ColumnReaders
+      reader.setSharedDictionaries(dictionaries);
+
+      return sargsApplier->evaluateColumnDictionaries(dictionaries);
+    }
+
+    return true;
+  }
+
+  std::shared_ptr<StringDictionary> RowReaderImpl::getSharedDictionary(uint64_t columnId) const {
+    auto it = sharedDictionaries_.find(columnId);
+    if (it != sharedDictionaries_.end()) {
+      return it->second;
+    }
+    return nullptr;
+  }
+
+  void RowReaderImpl::setSharedDictionaries(
+      const std::unordered_map<uint64_t, std::shared_ptr<StringDictionary>>& dictionaries) {
+    for (const auto& pair : dictionaries) {
+      sharedDictionaries_[pair.first] = pair.second;
+    }
+  }
+
   void RowReaderImpl::startNextStripe() {
     reader_.reset();  // ColumnReaders use lots of memory; free old memory first
     rowIndexes_.clear();
     bloomFilterIndex_.clear();
+    sharedDictionaries_.clear();  // Clear dictionaries from previous stripe
 
     // evaluate file statistics if it exists
     if (sargsApplier_ &&
@@ -1077,7 +1255,15 @@ namespace orc {
 
       if (isStripeNeeded) {
         currentStripeFooter_ = getStripeFooter(currentStripeInfo_, *contents_.get());
-        if (sargsApplier_) {
+
+        if (sargsApplier_ && sargsApplier_->getDictionaryFilteringSizeThreshold() > 0) {
+          // evaluate dictionaries for predicate pushdown
+          isStripeNeeded = evaluateStripeDictionaries(
+              *this, *footer_, selectedColumns_, currentStripeFooter_, currentStripeInfo_,
+              currentStripe_, sargsApplier_.get(), localTimezone_, readerTimezone_);
+        }
+
+        if (sargsApplier_ && isStripeNeeded) {
           // read row group statistics and bloom filters of current stripe
           loadStripeIndex();
 
@@ -1099,6 +1285,52 @@ namespace orc {
     } while (sargsApplier_ && currentStripe_ < lastStripe_);
 
     if (currentStripe_ < lastStripe_) {
+      if (enableAsyncPrefetch_) {
+        contents_->evictCache(currentStripeInfo_.offset());
+
+        auto extractSmallStripeRanges = [this](uint64_t startStripe) {
+          std::vector<ReadRange> ranges;
+          uint64_t maxStripe = std::min(lastStripe_, startStripe + smallStripeLookAheadLimit_ + 1);
+          for (uint64_t stripe = startStripe; stripe < maxStripe; stripe++) {
+            const auto& stripeInfo = footer_->stripes(static_cast<int>(stripe));
+            if (!isSmallStripe(stripeInfo, contents_->cacheOptions.rangeSizeLimit)) {
+              break;
+            }
+            ranges.push_back(ReadRange{stripeInfo.offset(), getStripeSize(stripeInfo)});
+            fullyCachedStripes_.insert(stripe);
+          }
+          return ranges;
+        };
+
+        if (fullyCachedStripes_.find(currentStripe_) != fullyCachedStripes_.cend()) {
+          // Current stripe has been fully cached, only prefetch next (small) stripe if not cached
+          auto nextStripe = currentStripe_ + 1;
+          if (nextStripe < lastStripe_ &&
+              fullyCachedStripes_.find(nextStripe) == fullyCachedStripes_.cend()) {
+            std::vector<ReadRange> ranges = extractSmallStripeRanges(nextStripe);
+            if (!ranges.empty()) {
+              contents_->cacheRanges(std::move(ranges));
+            }
+          }
+        } else if (smallStripeLookAheadLimit_ > 0 &&
+                   isSmallStripe(currentStripeInfo_, contents_->cacheOptions.rangeSizeLimit)) {
+          contents_->cacheRanges(extractSmallStripeRanges(currentStripe_));
+        } else {
+          // This is very coarse since I/O ranges of all selected columns are about to prefetch.
+          // We can further evaluate index stream with knowledge of pruned row groups to issue
+          // less I/O ranges.
+          contents_->cacheRanges(extractReadRangesForStripe(
+              currentStripe_, currentStripeInfo_, currentStripeFooter_, selectedColumns_));
+          // Cache footer of next stripe to avoid blocking I/O.
+          if (currentStripe_ + 1 < lastStripe_) {
+            const auto& nextStripe = footer_->stripes(static_cast<int>(currentStripe_ + 1));
+            contents_->cacheRanges(std::vector<ReadRange>{ReadRange{
+                nextStripe.offset() + nextStripe.index_length() + nextStripe.data_length(),
+                nextStripe.footer_length()}});
+          }
+        }
+      }
+
       // get writer timezone info from stripe footer to help understand timestamp values.
       const Timezone& writerTimezone =
           currentStripeFooter_.has_writer_timezone()
@@ -1374,6 +1606,7 @@ namespace orc {
     contents->pool = options.getMemoryPool();
     contents->errorStream = options.getErrorStream();
     contents->readerMetrics = options.getReaderMetrics();
+    contents->cacheOptions = options.getCacheOptions();
     std::string serializedFooter = options.getSerializedFileTail();
     uint64_t fileLength;
     uint64_t postscriptLength;
@@ -1534,11 +1767,7 @@ namespace orc {
   }
 
   void ReaderImpl::releaseBuffer(uint64_t boundary) {
-    std::lock_guard<std::mutex> lock(contents_->readCacheMutex);
-
-    if (contents_->readCache) {
-      contents_->readCache->evictEntriesBefore(boundary);
-    }
+    contents_->evictCache(boundary);
   }
 
   void ReaderImpl::preBuffer(const std::vector<uint32_t>& stripes,
@@ -1563,61 +1792,11 @@ namespace orc {
     std::vector<bool> selectedColumns;
     columnSelector.updateSelected(selectedColumns, rowReaderOptions);
 
-    std::vector<ReadRange> ranges;
-    ranges.reserve(newIncludeTypes.size());
     for (auto stripe : newStripes) {
-      // get stripe information
       const auto& stripeInfo = footer_->stripes(stripe);
-      uint64_t stripeFooterStart =
-          stripeInfo.offset() + stripeInfo.index_length() + stripeInfo.data_length();
-      uint64_t stripeFooterLength = stripeInfo.footer_length();
-
-      // get stripe footer
-      std::unique_ptr<SeekableInputStream> pbStream = createDecompressor(
-          contents_->compression,
-          std::make_unique<SeekableFileInputStream>(contents_->stream.get(), stripeFooterStart,
-                                                    stripeFooterLength, *contents_->pool),
-          contents_->blockSize, *contents_->pool, contents_->readerMetrics);
-      proto::StripeFooter stripeFooter;
-      if (!stripeFooter.ParseFromZeroCopyStream(pbStream.get())) {
-        throw ParseError(std::string("bad StripeFooter from ") + pbStream->getName());
-      }
-
-      // traverse all streams in stripe footer, choose selected streams to prebuffer
-      uint64_t offset = stripeInfo.offset();
-      for (int i = 0; i < stripeFooter.streams_size(); i++) {
-        const proto::Stream& stream = stripeFooter.streams(i);
-        if (offset + stream.length() > stripeFooterStart) {
-          std::stringstream msg;
-          msg << "Malformed stream meta at stream index " << i << " in stripe " << stripe
-              << ": streamOffset=" << offset << ", streamLength=" << stream.length()
-              << ", stripeOffset=" << stripeInfo.offset()
-              << ", stripeIndexLength=" << stripeInfo.index_length()
-              << ", stripeDataLength=" << stripeInfo.data_length();
-          throw ParseError(msg.str());
-        }
-
-        if (stream.has_kind() && selectedColumns[stream.column()]) {
-          const auto& kind = stream.kind();
-          if (kind == proto::Stream_Kind_DATA || kind == proto::Stream_Kind_DICTIONARY_DATA ||
-              kind == proto::Stream_Kind_PRESENT || kind == proto::Stream_Kind_LENGTH ||
-              kind == proto::Stream_Kind_SECONDARY) {
-            ranges.emplace_back(offset, stream.length());
-          }
-        }
-
-        offset += stream.length();
-      }
-
-      {
-        std::lock_guard<std::mutex> lock(contents_->readCacheMutex);
-
-        if (!contents_->readCache) {
-          contents_->readCache = std::make_shared<ReadRangeCache>(
-              getStream(), options_.getCacheOptions(), contents_->pool, contents_->readerMetrics);
-        }
-        contents_->readCache->cache(std::move(ranges));
-      }
+      proto::StripeFooter stripeFooter = getStripeFooter(stripeInfo, *contents_);
+      auto ranges = extractReadRangesForStripe(stripe, stripeInfo, stripeFooter, selectedColumns);
+      contents_->cacheRanges(std::move(ranges));
     }
   }
 
@@ -1629,8 +1808,23 @@ namespace orc {
     // PASS
   }
 
-  InputStream::~InputStream(){
-      // PASS
-  };
+  InputStream::~InputStream() {
+    // PASS
+  }
+
+  void FileContents::cacheRanges(std::vector<ReadRange> ranges) {
+    std::lock_guard<std::mutex> lock(readCacheMutex);
+    if (!readCache) {
+      readCache = std::make_shared<ReadRangeCache>(stream.get(), cacheOptions, pool, readerMetrics);
+    }
+    readCache->cache(std::move(ranges));
+  }
+
+  void FileContents::evictCache(uint64_t boundary) {
+    std::lock_guard<std::mutex> lock(readCacheMutex);
+    if (readCache) {
+      readCache->evictEntriesBefore(boundary);
+    }
+  }
 
 }  // namespace orc

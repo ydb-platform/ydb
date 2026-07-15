@@ -6,9 +6,9 @@ LICENSE(BSL-1.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.90.0)
+VERSION(1.91.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/property_tree/archive/boost-1.90.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/property_tree/archive/boost-1.91.0.tar.gz)
 
 PEERDIR(
     contrib/restricted/boost/any
@@ -22,7 +22,6 @@ PEERDIR(
     contrib/restricted/boost/optional
     contrib/restricted/boost/range
     contrib/restricted/boost/serialization
-    contrib/restricted/boost/static_assert
     contrib/restricted/boost/throw_exception
     contrib/restricted/boost/type_traits
 )

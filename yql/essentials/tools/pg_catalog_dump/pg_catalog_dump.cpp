@@ -9,7 +9,7 @@
 using namespace NYql;
 using namespace NJson;
 
-int Main(int argc, const char* argv[])
+int Main(int argc, const char** argv)
 {
     Y_UNUSED(argc);
     Y_UNUSED(argv);
@@ -121,7 +121,7 @@ int Main(int argc, const char* argv[])
     return 0;
 }
 
-int main(int argc, const char* argv[]) {
+int main(int argc, const char** argv) {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
 

@@ -1,16 +1,19 @@
 #pragma once
 
+#include "export_counters.h"
+
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/tx/columnshard/backup/iscan/iscan.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/actor.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/export/common/identifier.h>
 #include <ydb/core/tx/columnshard/export/session/session.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
-#include <ydb/core/tx/columnshard/backup/iscan/iscan.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NExport {
 
@@ -30,9 +33,28 @@ private:
     EStage Stage = EStage::Initialization;
     std::shared_ptr<NExport::TSession> ExportSession;
     TActorId Exporter;
-    TString ErrorMessage;
-    static inline const ui64 FreeSpace = ((ui64)8) << 20;
+    static inline const ui64 FreeSpace = ((ui64)128) << 20;
+    static constexpr TDuration OperationTimeout = TDuration::Minutes(240);
+    static constexpr TDuration WarningInterval = TDuration::Seconds(60);
+    static constexpr TDuration TimeoutCheckInterval = TDuration::Seconds(15);
+
+    TExportCounters Counters;
+    TInstant ReadStartTime;
+    TInstant WriteStartTime;
+    TInstant SaveCursorStartTime;
+    TInstant StageStartTime;
+
     void SwitchStage(const EStage from, const EStage to);
+
+    void AbortExport(const TString& errorMessage);
+    void KillExporter();
+
+    void ScheduleTimeoutCheck();
+    void HandleWakeup();
+
+    static TString StageToString(EStage stage);
+
+    void PassAway() override;
 
 protected:
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev);
@@ -46,13 +68,13 @@ protected:
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev);
 
     void HandleExecute(NKqp::TEvKqpCompute::TEvScanError::TPtr& /*ev*/);
-    
+
     void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult::TPtr& /*ev*/);
-    
+
     void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr& /*ev*/);
 
     virtual void OnBootstrap(const TActorContext& /*ctx*/) override;
-    
+
     std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> BuildRequestInitiator(const TCursor& cursor) const;
 
 public:
@@ -66,11 +88,25 @@ public:
                 hFunc(NKqp::TEvKqpCompute::TEvScanError, HandleExecute);
                 hFunc(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult, HandleExecute);
                 hFunc(NColumnShard::TEvPrivate::TEvBackupExportError, HandleExecute);
+                cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
                 default:
                     TBase::StateInProgress(ev);
             }
         } catch (...) {
             AFL_VERIFY(false);
+        }
+    }
+
+    STATEFN(StateError) {
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_BACKGROUND,
+            {"selfId", SelfId()},
+            {"tabletId", TabletId});
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NBackground::TEvLocalTransactionCompleted, Handle);
+            hFunc(NBackground::TEvSessionControl, Handle);
+            cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
+            default:
+                break;
         }
     }
 };

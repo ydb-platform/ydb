@@ -1,13 +1,12 @@
-# Troubleshooting
+# Diagnosing problems
 
-When troubleshooting issues with {{ ydb-short-name }}, diagnostics tools such as logging, metrics, OpenTracing/Jaeger tracing are helpful. We strongly recommend that you enable them in advance before any problems occur. This will help see changes in the overall picture before, during, and after an issue when troubleshooting it. This greatly speeds up our investigation into incidents and lets us provide assistance much faster.
+When diagnosing problems related to {{ ydb-short-name }}, diagnostic tools help: logging, metrics, and distributed tracing. It is recommended to enable them in advance, before problems occur, so that when investigating an incident, you can see the full picture of the system state before, during, and after the failure.
 
-This section contains code recipes for enabling diagnostics tools in different {{ ydb-short-name }} SDKs.
+This section contains code recipes for enabling diagnostic tools in different {{ ydb-short-name }} SDKs.
 
-Table of contents:
+Contents:
 
 - [Enable logging](debug-logs.md)
-- [Enable metrics in Prometheus](debug-prometheus.md)
-- [Enable tracing in Jaeger](debug-jaeger.md)
-- [Enable tracing in OpenTelemetry](debug-otel.md)
-
+- [Connect metrics to Prometheus](debug-prometheus.md)
+- [Tracing with OpenTelemetry](debug-otel.md)
+- [Connect tracing to Jaeger](debug-jaeger.md)

@@ -1,0 +1,5 @@
+items:
+- name: Использование планов при оптимизации запросов
+  href: query-plans-optimization.md
+- name: Подсказки оптимизатора
+  href: query-hints.md

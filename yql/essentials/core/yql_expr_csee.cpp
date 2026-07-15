@@ -11,7 +11,7 @@
 namespace NYql {
 
 namespace {
-    static constexpr bool UseDeterminsticHash = false;
+    constexpr bool UseDeterminsticHash = false;
 
     struct TLambdaFrame {
         TLambdaFrame(const TExprNode* lambda, const TLambdaFrame* prev)
@@ -297,7 +297,8 @@ namespace {
                         || EqualNodes(left.Head(), currLeftFrame, right.Tail(), currRightFrame, visited, coStore)
                         && EqualNodes(left.Tail(), currLeftFrame, right.Head(), currRightFrame, visited, coStore);
                 } else {
-                    TSmallVec<const TExprNode*> lNodes, rNodes;
+                    TSmallVec<const TExprNode*> lNodes;
+                    TSmallVec<const TExprNode*> rNodes;
                     lNodes.reserve(left.ChildrenSize());
                     rNodes.reserve(right.ChildrenSize());
 
@@ -478,7 +479,7 @@ namespace {
         TNodeMap<TNodeSet>& visited, TNodeMap<TNodeSet>& visitedInsideDependsOn) {
         switch (node.Type()) {
             case TExprNode::Atom:
-                node.SetDependencyScope(nullptr, nullptr);
+                node.SetDependencyScope(/*outerLambda=*/nullptr, /*innerLambda=*/nullptr);
                 return;
             case TExprNode::Argument:
                 closures.emplace(node.GetDependencyScope()->first);
@@ -649,7 +650,7 @@ IGraphTransformer::TStatus UpdateCompletness(const TExprNode::TPtr& input, TExpr
     TNodeSet closures;
     TNodeMap<TNodeSet> visited;
     TNodeMap<TNodeSet> visitedInsideDependsOn;
-    CalculateCompletness(*input, false, 0, closures, visited, visitedInsideDependsOn);
+    CalculateCompletness(*input, /*insideDependsOn=*/false, 0, closures, visited, visitedInsideDependsOn);
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -663,7 +664,7 @@ IGraphTransformer::TStatus EliminateCommonSubExpressions(const TExprNode::TPtr& 
     TNodeMap<TExprNode*> renames;
     //Cerr << "INPUT\n" << output->Dump() << "\n";
     std::unordered_multimap<ui64, TExprNode*> incompleteNodes;
-    const auto newNode = VisitNode(*output, nullptr, 0, ctx.UniqueNodes, incompleteNodes, renames, coStore, reachable, *output);
+    const auto newNode = VisitNode(*output, /*currentLambda=*/nullptr, 0, ctx.UniqueNodes, incompleteNodes, renames, coStore, reachable, *output);
     YQL_ENSURE(forSubGraph || !newNode);
     if (!renames.empty()) {
         TNodeSet visited;

@@ -3,11 +3,15 @@ LIBRARY()
 SRCS(
     actor.cpp
     change_message_visibility.cpp
+    config.cpp
     consumer_attributes.cpp
     create_queue.cpp
     delete_message.cpp
+    delete_queue.cpp
     error.cpp
     get_queue_attributes.cpp
+    get_queue_url.cpp
+    limits.cpp
     list_queues.cpp
     purge_queue.cpp
     receipt.cpp
@@ -20,6 +24,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/persqueue/topic_parser
     ydb/library/grpc/server
     ydb/core/base
     ydb/core/client/server
@@ -37,8 +42,11 @@ PEERDIR(
     ydb/services/sqs_topic/queue_url/holder
     ydb/services/sqs_topic/protos/receipt
     ydb/services/ydb
+    ydb/core/metering
+    ydb/core/persqueue/public
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/mlp
+    ydb/core/persqueue/public/schema
     ydb/core/ymq/attributes
     ydb/core/ymq/base
     ydb/core/ymq/error
@@ -50,4 +58,8 @@ END()
 RECURSE(
     protos
     queue_url
+)
+
+RECURSE_FOR_TESTS(
+    ut
 )

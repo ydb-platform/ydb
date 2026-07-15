@@ -8,7 +8,6 @@ PEERDIR(
 SRCS(
     metadata_actor.cpp
     metadata_actor.h
-    metadata_context.h
 )
 
 END()

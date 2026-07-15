@@ -2,6 +2,7 @@
 
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 #include <util/random/random.h>
 #include <util/generic/ptr.h>
@@ -12,11 +13,12 @@
 namespace NKikimr::NMiniKQL {
 
 struct TFuzzOptions {
-    bool FuzzZeroOptionalBitmaskRemove = false;
-    bool FuzzOffsetShift = false;
+    bool FuzzZeroOptionalBitmaskRemove = true;
+    bool FuzzOffsetShift = true;
+    bool FuzzImmutable = true;
 
     static TFuzzOptions FuzzAll() {
-        return TFuzzOptions{.FuzzZeroOptionalBitmaskRemove = true, .FuzzOffsetShift = true};
+        return TFuzzOptions{.FuzzZeroOptionalBitmaskRemove = true, .FuzzOffsetShift = true, .FuzzImmutable = true};
     }
 };
 
@@ -24,10 +26,9 @@ class IFuzzer {
 public:
     virtual ~IFuzzer() = default;
 
-    virtual NYql::NUdf::TUnboxedValue Fuzz(NYql::NUdf::TUnboxedValue input,
-                                           const THolderFactory& holderFactory,
-                                           arrow::MemoryPool& memoryPool,
-                                           IRandomProvider& randomProvider) const = 0;
+    virtual arrow::Datum Fuzz(const arrow::ArrayData& input,
+                              arrow::MemoryPool& memoryPool,
+                              IRandomProvider& randomProvider) const = 0;
 };
 
 using TFuzzerList = TVector<THolder<IFuzzer>>;
@@ -41,7 +42,7 @@ public:
 
     ui64 ReserveFuzzer();
 
-    void CreateFuzzers(TFuzzOptions options, ui64 fuzzerIndex, const TType* type, const TTypeEnvironment& env);
+    void CreateFuzzers(TFuzzOptions options, ui64 fuzzerIndex, const TType* type, const TTypeEnvironment& env, NYql::EDatumValidationMode validationMode);
 
     void ClearFuzzers();
 

@@ -19,11 +19,11 @@ struct TServiceDiscoveryConfig
     bool EnableMetrics;
 
     //! Provider endpoint.
-    TString Fqdn;
+    std::string Fqdn;
     int GrpcPort;
 
     //! Provider throttles requests based on this string.
-    TString Client;
+    std::string Client;
 
     REGISTER_YSON_STRUCT(TServiceDiscoveryConfig);
 

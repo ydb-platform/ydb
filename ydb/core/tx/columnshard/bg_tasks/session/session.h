@@ -1,7 +1,8 @@
 #pragma once
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/core/tx/columnshard/bg_tasks/abstract/status_channel.h>
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/session.h>
+#include <ydb/core/tx/columnshard/bg_tasks/abstract/status_channel.h>
+
+#include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap::NBackground {
 
@@ -11,6 +12,7 @@ private:
     YDB_READONLY_DEF(std::optional<NActors::TActorId>, ActorId);
     YDB_READONLY_DEF(TStatusChannelContainer, ChannelContainer);
     YDB_READONLY_DEF(TSessionLogicContainer, LogicContainer);
+
 public:
     TSessionInfoReport GetSessionInfoForReport() const {
         return TSessionInfoReport(Identifier, LogicContainer.GetClassName(), LogicContainer->IsFinished());
@@ -38,6 +40,9 @@ public:
         if (!LogicContainer.DeserializeFromString(record.GetLogicDescription())) {
             return TConclusionStatus::Fail("cannot parse logic description");
         }
+        if (!LogicContainer) {
+            return TConclusionStatus::Fail("logic container is empty after deserialization");
+        }
         if (!LogicContainer->DeserializeProgressFromString(record.GetProgress())) {
             return TConclusionStatus::Fail("cannot parse progress");
         }
@@ -54,7 +59,7 @@ public:
     bool IsRunning() const {
         return !!ActorId;
     }
-    
+
     ISessionLogic::TStatus GetStatus() const {
         return LogicContainer->GetStatus();
     }
@@ -89,4 +94,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NBackground

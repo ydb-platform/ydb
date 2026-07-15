@@ -1,0 +1,9 @@
+/* ytfile can not */
+/* dq can not */
+/* dqfile can not */
+pragma yt.OmitInaccessibleRows;
+
+select a.*
+from plato.Input as a
+join plato.Input as b
+on a.key = b.key;

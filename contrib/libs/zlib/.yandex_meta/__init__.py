@@ -18,6 +18,7 @@ zlib = GNUMakeNixProject(
         ".": {"./include"},
     },
     disable_includes={
+        "contrib/crc32vx/crc32_vx_hooks.h",
         # if defined(VMS)
         "unixio.h",
     },

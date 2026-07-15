@@ -4,15 +4,145 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_join.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/utils/limiting_allocator.h>
 #include <yql/essentials/utils/std_allocator.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <util/system/env.h>
 
+static constexpr TStringBuf YqlSysPrefix = "_yql_sys_";
+
 namespace NYql {
 
 namespace {
+
+enum class ETransformsType {
+    Copy,
+    Math,
+    None
+};
+
+struct TFieldLineage {
+    TStringBuf Field;
+    ui32 InputIndex;
+    ETransformsType Transforms;
+
+    struct TFieldHash {
+        std::size_t operator()(const TFieldLineage& x) const noexcept {
+            return CombineHashes(
+                CombineHashes(std::hash<ui32>()(x.InputIndex), THash<TStringBuf>()(x.Field)),
+                std::hash<ETransformsType>()(x.Transforms));
+        }
+    };
+
+    bool operator==(const TFieldLineage& rhs) const {
+        return std::tie(Field, InputIndex, Transforms) == std::tie(rhs.Field, rhs.InputIndex, rhs.Transforms);
+    }
+
+    bool operator<(const TFieldLineage& rhs) const {
+        return std::tie(Field, InputIndex, Transforms) < std::tie(rhs.Field, rhs.InputIndex, rhs.Transforms);
+    }
+};
+
+using TFieldLineageSet = std::unordered_set<TFieldLineage, TFieldLineage::TFieldHash, TEqualTo<TFieldLineage>, TStdIAllocator<TFieldLineage>>;
+
+struct TSchemaHash {
+    size_t operator()(const NYql::TStructExprType* type) const {
+        if (type == nullptr) {
+            return 0;
+        }
+        ui64 hash = NYql::TypeHashMagic | (ui64)NYql::ETypeAnnotationKind::Struct;
+        size_t count = 0;
+        for (const auto* item : type->GetItems()) {
+            if (item->GetName().StartsWith(YqlSysPrefix)) {
+                continue;
+            }
+            hash = NYql::StreamHash(item->GetHash(), hash);
+            ++count;
+        }
+        hash = NYql::StreamHash(count, hash);
+        return hash;
+    }
+};
+
+struct TSchemaEqualTo {
+    bool operator()(const NYql::TStructExprType* lhs, const NYql::TStructExprType* rhs) const {
+        if (lhs == rhs) {
+            return true;
+        }
+        if (!lhs || !rhs) {
+            return false;
+        }
+        const auto& lItems = lhs->GetItems();
+        const auto& rItems = rhs->GetItems();
+        for (auto li = lItems.begin(), ri = rItems.begin(); li != lItems.end() || ri != rItems.end();) {
+            if (li != lItems.end() && (*li)->GetName().StartsWith(YqlSysPrefix)) {
+                ++li;
+                continue;
+            }
+            if (ri != rItems.end() && (*ri)->GetName().StartsWith(YqlSysPrefix)) {
+                ++ri;
+                continue;
+            }
+            if (li == lItems.end() && ri == rItems.end()) {
+                return true;
+            }
+            if (li == lItems.end() || ri == rItems.end()) {
+                return false;
+            }
+            if (*li != *ri) {
+                return false;
+            }
+            ++li, ++ri;
+        }
+        return true;
+    }
+};
+
+template <class TValue>
+using TVectorLimited = TVector<TValue, TStdIAllocator<const TValue>>;
+
+using TOrderedLineageVector = TVectorLimited<TFieldLineage>;
+
+template <class TValue>
+using TSetLimited = TSet<TValue, TLess<TValue>, TStdIAllocator<TValue>>;
+
+struct TLineageHash {
+    size_t operator()(const TOrderedLineageVector& vec) const {
+        size_t hash = 0;
+        for (const auto& elem : vec) {
+            hash = CombineHashes(hash, NYql::TFieldLineage::TFieldHash{}(elem));
+        }
+        return hash;
+    }
+};
+
+struct TLineageEqualTo {
+    bool operator()(const TOrderedLineageVector& lhs, const TOrderedLineageVector& rhs) const {
+        if (lhs.size() != rhs.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < lhs.size(); ++i) {
+            if (!(lhs[i].InputIndex == rhs[i].InputIndex &&
+                  lhs[i].Field == rhs[i].Field &&
+                  lhs[i].Transforms == rhs[i].Transforms)) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+struct TIndexHash {
+    size_t operator()(const TSetLimited<ui32>& set) const {
+        size_t hash = 0;
+        for (const auto& elem : set) {
+            hash = CombineHashes(hash, THash<ui32>{}(elem));
+        }
+        return hash;
+    }
+};
 
 template <typename T>
 using TNodeMapLimited = std::unordered_map<const TExprNode*, T, std::hash<const TExprNode*>, std::equal_to<const TExprNode*>, TStdIAllocator<std::pair<const TExprNode* const, T>>>;
@@ -21,12 +151,24 @@ using TNodeSetLimited = std::unordered_set<const TExprNode*, std::hash<const TEx
 
 template <class TKey,
           class TValue>
-using THashMapLimited = THashMap<TKey, TValue, THash<TKey>, TEqualTo<TKey>, TStdIAllocator<std::pair<const TKey, TValue>>>;
+using THashMapLimited = std::unordered_map<TKey, TValue, THash<TKey>, TEqualTo<TKey>, TStdIAllocator<std::pair<const TKey, TValue>>>;
+
+using TSchemaMapLimited = std::unordered_map<const TStructExprType*, ui32, TSchemaHash, TSchemaEqualTo, TStdIAllocator<std::pair<const TStructExprType* const, ui32>>>;
+
+template <class TKey,
+          class TValue>
+using TMapLimited = TMap<TKey, TValue, TLess<TKey>, TStdIAllocator<std::pair<const TKey, TValue>>>;
 
 template <class TValue>
-using TVectorLimited = TVector<TValue, TStdIAllocator<const TValue>>;
+using THashSetLimited = THashSet<TValue, THash<TValue>, TEqualTo<TValue>, TStdIAllocator<TValue>>;
 
 using NodeDataProviderPair = std::pair<const TExprNode*, IDataProvider*>;
+
+const TStringBuf ZeroString = {};
+
+using TLineageMapLimited = std::unordered_map<TOrderedLineageVector, ui32, TLineageHash, TLineageEqualTo, TStdIAllocator<std::pair<const TOrderedLineageVector, ui32>>>;
+
+using TIndexMapLimited = std::unordered_map<TSetLimited<ui32>, ui32, TIndexHash, TEqualTo<TSetLimited<ui32>>, TStdIAllocator<std::pair<const TSetLimited<ui32>, ui32>>>;
 
 class TLimitedStringStream: public TStringStream {
 public:
@@ -52,21 +194,33 @@ private:
 
 class TLineageScanner {
 public:
-    TLineageScanner(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone)
+    TLineageScanner(const TExprNode& root, TTypeAnnotationContext& ctx, TExprContext& exprCtx, const TLineageRunOptions& options)
         : Root_(root)
         , Ctx_(ctx)
         , ExprCtx_(exprCtx)
-        , Allocator_(MakeLimitingAllocator(ctx.LineageMemoryLimit, TDefaultAllocator::Instance()))
+        , Options_(options)
+        , Allocator_(MakeLimitingAllocator(ctx.LineageSettings.LineageMemoryLimit, TDefaultAllocator::Instance()))
         , Reads_(Allocator_.get())
         , Writes_(Allocator_.get())
         , ReadIds_(Allocator_.get())
         , Lineages_(Allocator_.get())
         , HasReads_(Allocator_.get())
-        , Standalone_(standalone)
+        , StringPool_(4096, TMemoryPool::TExpGrow::Instance(), Allocator_.get())
+        , Strings_(Allocator_.get())
+        , TableIds_(Allocator_.get())
+        , SchemaSets_(Allocator_.get())
+        , LineageSets_(Allocator_.get())
+        , IndexSets_(Allocator_.get())
+        , SchemaRefs_(Allocator_.get())
+        , LineageRefs_(Allocator_.get())
     {
+        if (Options_.Version != 1 && Options_.Version != 2) {
+            throw yexception() << "Unsupported LineageVersion is provided: " << Options_.Version;
+        }
     }
 
     TString Process() {
+        auto startTime = TInstant::Now();
         VisitExpr(Root_, [&](const TExprNode& node) {
             for (auto& p : Ctx_.DataSources) {
                 if (p->IsRead(node)) {
@@ -91,48 +245,38 @@ public:
 
             return true; });
 
-        TLimitedStringStream s(Ctx_.LineageOutputLimit);
+        TLimitedStringStream s(Ctx_.LineageSettings.LineageOutputLimit);
         NYson::TYsonWriter writer(&s, NYson::EYsonFormat::Binary);
+        CollectResults();
         writer.OnBeginMap();
+        if (Options_.Version > 1) {
+            writer.OnKeyedItem("Version");
+            writer.OnInt64Scalar(Options_.Version);
+            WriteSchemaSet(writer);
+            WriteLineageSet(writer);
+        }
         writer.OnKeyedItem("Reads");
         writer.OnBeginList();
-        for (const auto& r : Reads_) {
-            TVector<TPinInfo> inputs;
-            auto& formatter = r.second->GetPlanFormatter();
-            formatter.GetInputs(*r.first, inputs, /* withLimits */ false);
-            TVectorLimited<ui32> readIds(Allocator_.get());
-            for (const auto& i : inputs) {
-                auto id = ++NextReadId_;
-                readIds.push_back(id);
-                writer.OnListItem();
-                writer.OnBeginMap();
-                writer.OnKeyedItem("Id");
-                writer.OnInt64Scalar(id);
-                writer.OnKeyedItem("Name");
-                writer.OnStringScalar(i.DisplayName);
-                writer.OnKeyedItem("Schema");
-                const auto& itemType = *r.first->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-                WriteSchema(writer, itemType, nullptr);
-                if (formatter.WriteSchemaHeader(writer)) {
-                    WriteSchema(writer, itemType, &formatter);
-                }
-
-                writer.OnEndMap();
-            }
-            if (!readIds.empty()) {
-                ReadIds_.insert({r.first, readIds});
-            }
+        for (const auto& [tableName, tableId] : TableIds_) {
+            writer.OnListItem();
+            writer.OnBeginMap();
+            writer.OnKeyedItem("Id");
+            writer.OnInt64Scalar(tableId);
+            writer.OnKeyedItem("Name");
+            writer.OnStringScalar(tableName);
+            WriteSchemaRef(writer, tableName);
+            WriteProviderSchemaRef(writer, tableName);
+            writer.OnEndMap();
         }
-
         writer.OnEndList();
         writer.OnKeyedItem("Writes");
         writer.OnBeginList();
-        THashMapLimited<TString, TVectorLimited<NodeDataProviderPair>> writeTables(Allocator_.get());
+        TMapLimited<TStringBuf, TVectorLimited<NodeDataProviderPair>> writeTables(Allocator_.get());
         for (const auto& w : Writes_) {
             TVector<TPinInfo> outputs;
             w.second->GetPlanFormatter().GetOutputs(*w.first, outputs, /* withLimits */ false);
             YQL_ENSURE(outputs.size() == 1);
-            writeTables.try_emplace(outputs.front().DisplayName, TVectorLimited<NodeDataProviderPair>(Allocator_.get())).first->second.push_back(w);
+            writeTables.try_emplace(AppendString(outputs.front().DisplayName), TVectorLimited<NodeDataProviderPair>(Allocator_.get())).first->second.push_back(w);
         }
         for (const auto& w : writeTables) {
             writer.OnListItem();
@@ -141,90 +285,22 @@ public:
             writer.OnInt64Scalar(++NextWriteId_);
             writer.OnKeyedItem("Name");
             writer.OnStringScalar(w.first);
-            writer.OnKeyedItem("Schema");
-            auto data = w.second[0].first->Child(3);
-            const auto& itemType = *data->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-            WriteSchema(writer, itemType, nullptr);
-            auto& formatter = w.second[0].second->GetPlanFormatter();
-            if (formatter.WriteSchemaHeader(writer)) {
-                WriteSchema(writer, itemType, &formatter);
-            }
-
-            writer.OnKeyedItem("Lineage");
-            if (w.second.size() == 1) {
-                WriteLineage(writer, *CollectLineage(*data));
-            } else {
-                TVectorLimited<TLineage> lineages(Allocator_.get());
-                lineages.reserve(w.second.size());
-                Transform(w.second.begin(),
-                          w.second.end(),
-                          std::back_inserter(lineages),
-                          [this](const auto& e) {
-                              return *CollectLineage(*e.first->Child(3));
-                          });
-                TLineage lineage;
-                MergeLineages(lineage, lineages);
-                WriteLineage(writer, lineage);
-            }
+            WriteSchemaRef(writer, w.first);
+            WriteProviderSchemaRef(writer, w.first);
+            WriteLineageRef(writer, w.first);
             writer.OnEndMap();
         }
-
         writer.OnEndList();
+        if (Options_.Version > 1) {
+            WriteReadSet(writer);
+        }
         writer.OnEndMap();
+        Ctx_.LineageStats.Duration = (TInstant::Now() - startTime).MicroSeconds();
+        Ctx_.LineageStats.Memory = Allocator_->GetAllocatedSize();
         return s.Str();
     }
 
 private:
-    void WriteSchema(NYson::TYsonWriter& writer, const TStructExprType& structType, IPlanFormatter* formatter) {
-        writer.OnBeginMap();
-        for (const auto& i : structType.GetItems()) {
-            if (i->GetName().StartsWith("_yql_sys_")) {
-                continue;
-            }
-
-            writer.OnKeyedItem(i->GetName());
-            if (formatter) {
-                formatter->WriteTypeDetails(writer, *i->GetItemType());
-            } else {
-                writer.OnStringScalar(FormatType(i->GetItemType()));
-            }
-        }
-
-        writer.OnEndMap();
-    }
-
-    enum class ETransformsType {
-        Copy,
-        None
-    };
-
-    struct TFieldLineage {
-        ui32 InputIndex;
-        TStringBuf Field;
-        ETransformsType Transforms;
-
-        struct TFieldHash {
-            std::size_t operator()(const TFieldLineage& x) const noexcept {
-                return CombineHashes(
-                    CombineHashes(std::hash<ui32>()(x.InputIndex), THash<TStringBuf>()(x.Field)),
-                    std::hash<ETransformsType>()(x.Transforms));
-            }
-        };
-
-        bool operator==(const TFieldLineage& rhs) const {
-            return std::tie(InputIndex, Field, Transforms) == std::tie(rhs.InputIndex, rhs.Field, rhs.Transforms);
-        }
-
-        bool operator<(const TFieldLineage& rhs) const {
-            return std::tie(InputIndex, Field, Transforms) < std::tie(rhs.InputIndex, rhs.Field, rhs.Transforms);
-        }
-    };
-
-    static TFieldLineage ReplaceTransforms(const TFieldLineage& src, ETransformsType newTransforms) {
-        return {src.InputIndex, src.Field, (src.Transforms == ETransformsType::Copy && newTransforms == ETransformsType::Copy) ? newTransforms : ETransformsType::None};
-    }
-    using TFieldLineageSet = THashSet<TFieldLineage, TFieldLineage::TFieldHash, TEqualTo<TFieldLineage>, TStdIAllocator<TFieldLineage>>;
-
     struct TFieldsLineage {
         explicit TFieldsLineage(IAllocator* allocator)
             : Items(allocator)
@@ -250,6 +326,353 @@ private:
     };
     using TFieldsLineageMap = THashMapLimited<const TExprNode*, TMaybe<TFieldsLineage>>;
 
+    struct TLineage {
+        // null - can't calculcate
+        TMaybe<THashMapLimited<TStringBuf, TFieldsLineage>> Fields;
+    };
+
+    void CollectResults() {
+        TVectorLimited<std::tuple<TStringBuf, const TExprNode*, const TExprNode*>> readTables(Allocator_.get());
+        for (const auto& r : Reads_) {
+            TVector<TPinInfo> inputs;
+            auto& formatter = r.second->GetPlanFormatter();
+            formatter.GetInputs(*r.first, inputs, /*withLimits=*/false);
+            for (const auto& i : inputs) {
+                const TStringBuf& tableName = AppendString(i.DisplayName);
+                readTables.emplace_back(tableName, r.first, i.Key);
+            }
+        }
+        SortBy(readTables, [](const auto& x) { return std::get<0>(x); });
+        for (const auto& r : readTables) {
+            const auto& tableName = std::get<0>(r);
+            const auto* readNode = std::get<1>(r);
+            const auto* key = std::get<2>(r);
+            auto [it, inserted] = TableIds_.try_emplace(tableName, 0);
+            if (inserted) {
+                it->second = ++NextReadId_;
+                const TStructExprType& itemType = *key->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                AddSchemaRef(&itemType, tableName);
+            }
+            ReadIds_.try_emplace(readNode, TVectorLimited<ui32>(Allocator_.get())).first->second.push_back(it->second);
+        }
+        THashMapLimited<TStringBuf, TVectorLimited<NodeDataProviderPair>> writeTables(Allocator_.get());
+        for (const auto& w : Writes_) {
+            TVector<TPinInfo> outputs;
+            w.second->GetPlanFormatter().GetOutputs(*w.first, outputs, /* withLimits */ false);
+            YQL_ENSURE(outputs.size() == 1);
+            const TStringBuf& tableName = AppendString(outputs.front().DisplayName);
+            writeTables.try_emplace(tableName, TVectorLimited<NodeDataProviderPair>(Allocator_.get())).first->second.push_back(w);
+        }
+        for (const auto& w : writeTables) {
+            auto data = w.second[0].first->Child(3);
+            const auto& itemType = *GetSeqItemType(*data->GetTypeAnn()).Cast<TStructExprType>();
+            AddSchemaRef(&itemType, w.first);
+            if (w.second.size() == 1) {
+                AddLineageRef(*CollectLineage(*data), w.first);
+            } else {
+                TVectorLimited<TLineage> lineages(Allocator_.get());
+                lineages.reserve(w.second.size());
+                Transform(w.second.begin(),
+                          w.second.end(),
+                          std::back_inserter(lineages),
+                          [this](const auto& e) {
+                              return *CollectLineage(*e.first->Child(3));
+                          });
+                TLineage lineage;
+                MergeLineages(lineage, lineages);
+                AddLineageRef(lineage, w.first);
+            }
+        }
+    }
+
+    void AddSchemaRef(const TStructExprType* itemType, const TStringBuf& tableName) {
+        auto [it, inserted] = SchemaSets_.try_emplace(itemType, 1);
+        if (!inserted) {
+            it->second += 1;
+        }
+        SchemaRefs_[tableName] = it->first;
+    }
+
+    void AddLineageRef(const TLineage& lineage, const TStringBuf& tableName) {
+        // TODO: remove Standalone check after fixing all failed tests, see YQL-20445
+        if (Options_.Standalone && !lineage.Fields.Defined()) {
+            YQL_ENSURE(!GetEnv("YQL_DETERMINISTIC_MODE"), "Can't calculate lineage");
+            return;
+        }
+        auto& lineageFields = LineageRefs_.emplace(tableName, TMapLimited<TStringBuf, const TVectorLimited<TFieldLineage>*>(Allocator_.get())).first->second;
+        for (const auto& fi : *lineage.Fields) {
+            TVectorLimited<TFieldLineage> items(Allocator_.get());
+            for (const auto& i : lineage.Fields->at(fi.first).Items) {
+                items.push_back(i);
+            }
+            Sort(items);
+            auto [it, inserted] = LineageSets_.try_emplace(items, 1);
+            if (!inserted) {
+                it->second += 1;
+            }
+            lineageFields.emplace(fi.first, &it->first);
+        }
+    }
+
+    IPlanFormatter* GetFormatter() {
+        if (!Writes_.empty()) {
+            return &Writes_.begin()->second->GetPlanFormatter();
+        } else if (!Reads_.empty()) {
+            return &Reads_.begin()->second->GetPlanFormatter();
+        }
+        return nullptr;
+    }
+
+    void WriteSchemaSet(NYson::TYsonWriter& writer) {
+        bool isDuplicate = false;
+        size_t index = 1;
+        TVectorLimited<std::pair<const TStructExprType*, ui32>> items(Allocator_.get());
+        items.reserve(SchemaSets_.size());
+        for (auto& [value, count] : SchemaSets_) {
+            if (count > 1) {
+                count = ++index;
+                isDuplicate = true;
+                items.push_back({value, count});
+            }
+        }
+        if (Options_.Version > 1 && isDuplicate) {
+            writer.OnKeyedItem("SchemaSets");
+            writer.OnBeginList();
+            for (auto& [value, ind] : items) {
+                writer.OnListItem();
+                writer.OnBeginMap();
+                writer.OnKeyedItem("Id");
+                writer.OnInt64Scalar(ind - 1);
+                writer.OnKeyedItem("Schema");
+                WriteSchema(writer, *value, /*formatter=*/nullptr);
+                writer.OnEndMap();
+            }
+            writer.OnEndList();
+            writer.OnKeyedItem("YtSchemaSets");
+            writer.OnBeginList();
+            for (auto& [value, ind] : items) {
+                writer.OnListItem();
+                writer.OnBeginMap();
+                writer.OnKeyedItem("Id");
+                writer.OnInt64Scalar(ind - 1);
+                writer.OnKeyedItem("YtSchema");
+                WriteSchema(writer, *value, GetFormatter());
+                writer.OnEndMap();
+            }
+            writer.OnEndList();
+        }
+    }
+
+    void WriteLineageSet(NYson::TYsonWriter& writer) {
+        bool isDuplicate = false;
+        size_t index = 1;
+        TVectorLimited<std::pair<const TVectorLimited<TFieldLineage>*, ui32>> items(Allocator_.get());
+        for (auto& [value, count] : LineageSets_) {
+            if (count > 1) {
+                count = ++index;
+                isDuplicate = true;
+                items.push_back({&value, count});
+            }
+        }
+        if (Options_.Version > 1 && isDuplicate) {
+            SortBy(items, [](const auto& x) { return x.second; });
+            writer.OnKeyedItem("LineageSets");
+            writer.OnBeginList();
+            for (auto& [value, ind] : items) {
+                writer.OnListItem();
+                writer.OnBeginMap();
+                writer.OnKeyedItem("Id");
+                writer.OnInt64Scalar(ind - 1);
+                writer.OnKeyedItem("Lineage");
+                WriteLineageSection(writer, value);
+                writer.OnEndMap();
+            }
+            writer.OnEndList();
+        }
+    }
+
+    void WriteReadSet(NYson::TYsonWriter& writer) {
+        if (!IndexSets_.empty()) {
+            TVectorLimited<std::pair<TSetLimited<ui32>, ui32>> items(Allocator_.get());
+            items.reserve(IndexSets_.size());
+            Copy(IndexSets_.begin(), IndexSets_.end(), std::back_inserter(items));
+            SortBy(items, [](const auto& x) { return x.second; });
+            writer.OnKeyedItem("ReadSets");
+            writer.OnBeginList();
+            for (const auto& [key, value] : items) {
+                writer.OnListItem();
+                writer.OnBeginMap();
+                writer.OnKeyedItem("Id");
+                writer.OnInt64Scalar(value);
+                writer.OnKeyedItem("Inputs");
+                TVectorLimited<ui32> inputs(Allocator_.get());
+                inputs.assign(key.begin(), key.end());
+                Sort(inputs);
+                writer.OnBeginList();
+                for (const auto& el : inputs) {
+                    writer.OnListItem();
+                    writer.OnInt64Scalar(el);
+                }
+                writer.OnEndList();
+                writer.OnEndMap();
+            }
+            writer.OnEndList();
+        }
+    }
+
+    void WriteLineageRef(NYson::TYsonWriter& writer, const TStringBuf& tableName) {
+        writer.OnKeyedItem("Lineage");
+        auto it = LineageRefs_.find(tableName);
+        if (it == LineageRefs_.end()) {
+            if (Options_.Standalone) {
+                writer.OnEntity();
+                return;
+            }
+            throw yexception() << TStringBuilder() << "Lineage can't be calculated for " << tableName << " table";
+        }
+        writer.OnBeginMap();
+        const auto& lineageRefs = it->second;
+        if (lineageRefs.empty()) {
+            writer.OnEndMap();
+            return;
+        }
+        for (const auto& [fieldName, lineage] : lineageRefs) {
+            writer.OnKeyedItem(fieldName);
+            if (Options_.Version > 1 && LineageSets_.at(*lineage) > 1) {
+                writer.OnBeginList();
+                writer.OnListItem();
+                writer.OnBeginMap();
+                writer.OnKeyedItem("Ref");
+                writer.OnInt64Scalar(LineageSets_.at(*lineage) - 1);
+                writer.OnEndMap();
+                writer.OnEndList();
+            } else {
+                WriteLineageSection(writer, lineage);
+            }
+        }
+        writer.OnEndMap();
+    }
+
+    void WriteLineageSection(NYson::TYsonWriter& writer, const TVectorLimited<TFieldLineage>* fieldLineage) {
+        TMapLimited<std::pair<TStringBuf, ETransformsType>, TSetLimited<ui32>> inputSets(Allocator_.get());
+        if (Options_.Version > 1) {
+            // if several indices have the save (Field, Transforms), replace them with new syntetic index which is stored into IndexSets_
+            for (const auto& i : *fieldLineage) {
+                inputSets.try_emplace(make_pair(i.Field, i.Transforms), TSetLimited<ui32>(Allocator_.get())).first->second.insert(i.InputIndex);
+            }
+            for (const auto& inputs : inputSets) {
+                if (inputs.second.size() > 1) {
+                    if (IndexSets_.find(inputs.second) == IndexSets_.end()) {
+                        IndexSets_[inputs.second] = ++NextReadId_;
+                    }
+                }
+            }
+        }
+        THashSetLimited<std::pair<TStringBuf, ETransformsType>> checkedItems(Allocator_.get());
+        TVectorLimited<TFieldLineage> items(Allocator_.get());
+        for (const auto& i : *fieldLineage) {
+            ui32 inputIndex = i.InputIndex;
+            if (Options_.Version > 1) {
+                if (checkedItems.contains(make_pair(TString(i.Field), i.Transforms))) {
+                    continue;
+                }
+                auto it = inputSets.find(make_pair(TString(i.Field), i.Transforms));
+                if (it->second.size() > 1) {
+                    auto itt = IndexSets_.find(it->second);
+                    inputIndex = itt->second;
+                }
+            }
+            items.push_back({.Field = i.Field, .InputIndex = inputIndex, .Transforms = i.Transforms});
+            checkedItems.insert(make_pair(i.Field, i.Transforms));
+        }
+        Sort(items);
+        writer.OnBeginList();
+        for (const auto& i : items) {
+            ui32 inputIndex = i.InputIndex;
+            writer.OnListItem();
+            writer.OnBeginMap();
+            writer.OnKeyedItem("Input");
+            writer.OnInt64Scalar(inputIndex);
+            writer.OnKeyedItem("Field");
+            writer.OnStringScalar(i.Field);
+            writer.OnKeyedItem("Transforms");
+            switch (i.Transforms) {
+                case ETransformsType::Copy:
+                    writer.OnStringScalar("Copy");
+                    break;
+                case ETransformsType::Math:
+                    writer.OnStringScalar("Math");
+                    break;
+                default:
+                    writer.OnEntity();
+            }
+            writer.OnEndMap();
+        }
+        writer.OnEndList();
+    }
+
+    void WriteSchemaRef(NYson::TYsonWriter& writer, const TStringBuf& tableName) {
+        const auto schema = SchemaRefs_[tableName];
+        if (Options_.Version > 1 && SchemaSets_[schema] > 1) {
+            writer.OnKeyedItem("SchemaRef");
+            writer.OnInt64Scalar(SchemaSets_[schema] - 1);
+        } else {
+            writer.OnKeyedItem("Schema");
+            WriteSchema(writer, *schema, /*formatter=*/nullptr);
+        }
+    }
+
+    void WriteProviderSchemaRef(NYson::TYsonWriter& writer, const TStringBuf& tableName) {
+        const auto schema = SchemaRefs_[tableName];
+        if (Options_.Version > 1 && SchemaSets_[schema] > 1) {
+            writer.OnKeyedItem("YtSchemaRef");
+            writer.OnInt64Scalar(SchemaSets_[schema] - 1);
+        } else {
+            writer.OnKeyedItem("YtSchema");
+            WriteSchema(writer, *schema, GetFormatter());
+        }
+    }
+
+    void WriteSchema(NYson::TYsonWriter& writer, const TStructExprType& structType, IPlanFormatter* formatter) {
+        writer.OnBeginMap();
+        for (const auto& i : structType.GetItems()) {
+            if (i->GetName().StartsWith("_yql_sys_")) {
+                continue;
+            }
+
+            writer.OnKeyedItem(i->GetName());
+            if (formatter) {
+                formatter->WriteTypeDetails(writer, *i->GetItemType());
+            } else {
+                if (Options_.Standalone && Options_.YsonTypeFormat) {
+                    NCommon::WriteTypeToYson(writer, i->GetItemType());
+                } else {
+                    writer.OnStringScalar(FormatType(i->GetItemType()));
+                }
+            }
+        }
+
+        writer.OnEndMap();
+    }
+
+    static bool IsMathCallable(const TExprNode& node) {
+        if (node.IsCallable({"+", "-", "*", "/", "%",
+                             "Add", "Sub", "Mul", "Div", "Mod",
+                             "Plus", "Minus", "Abs", "Increment", "Decrement",
+                             "BitAnd", "BitOr", "BitXor", "BitNot", "ShiftLeft", "ShiftRight", "CountBits"})) {
+            return true;
+        }
+        return node.IsCallable("Apply") && node.Head().IsCallable("Udf") &&
+               node.Head().Head().Content().StartsWith("Math.");
+    }
+
+    static TFieldLineage ReplaceTransforms(const TFieldLineage& src, ETransformsType newTransforms) {
+        const ETransformsType result = (newTransforms == ETransformsType::Copy)
+                                           ? src.Transforms
+                                           : newTransforms;
+        return {.Field = src.Field, .InputIndex = src.InputIndex, .Transforms = result};
+    }
+
     static TFieldLineageSet ReplaceTransforms(const TFieldLineageSet& src, ETransformsType newTransforms, IAllocator* allocator) {
         TFieldLineageSet ret(allocator);
         for (const auto& i : src) {
@@ -272,10 +695,20 @@ private:
         return ret;
     }
 
-    struct TLineage {
-        // null - can't calculcate
-        TMaybe<THashMapLimited<TStringBuf, TFieldsLineage>> Fields;
-    };
+    template <typename TCallback>
+    static void ProcessReadItem(const TTypeAnnotationNode* itemType, const TCallback& callback) {
+        if (itemType->GetKind() == ETypeAnnotationKind::Variant) {
+            for (const auto* alt : itemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>()->GetItems()) {
+                for (const auto* i : alt->Cast<TStructExprType>()->GetItems()) {
+                    callback(*i);
+                }
+            }
+        } else {
+            for (const auto* i : itemType->Cast<TStructExprType>()->GetItems()) {
+                callback(*i);
+            }
+        }
+    }
 
     const TLineage* CollectLineage(const TExprNode& node) {
         if (auto it = Lineages_.find(&node); it != Lineages_.end()) {
@@ -285,17 +718,17 @@ private:
         auto& lineage = Lineages_[&node];
         if (auto readIt = ReadIds_.find(&node); readIt != ReadIds_.end()) {
             lineage.Fields.ConstructInPlace(Allocator_.get());
-            auto type = node.GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-            for (const auto& i : type->GetItems()) {
-                if (i->GetName().StartsWith("_yql_sys_")) {
-                    continue;
+            auto type = node.GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]->Cast<TListExprType>()->GetItemType();
+            ProcessReadItem(type, [&](const TItemExprType& i) {
+                if (i.GetName().StartsWith("_yql_sys_")) {
+                    return;
                 }
 
-                auto& v = (*lineage.Fields).try_emplace(i->GetName(), TFieldsLineage(Allocator_.get())).first->second;
+                auto& v = (*lineage.Fields).try_emplace(i.GetName(), TFieldsLineage(Allocator_.get())).first->second;
                 for (const auto& r : readIt->second) {
-                    v.Items.insert({r, i->GetName(), ETransformsType::Copy});
+                    v.Items.insert({i.GetName(), r, ETransformsType::Copy});
                 }
-            }
+            });
 
             return &lineage;
         }
@@ -328,8 +761,12 @@ private:
                              "Take",
                              "Sort",
                              "TopSort",
-                             "AssumeSorted",
-                             "SkipNullMembers"})) {
+                             "Top",
+                             "Nth",
+                             "AssumeSorted", "AssumeUnique", "AssumeDistinct", "AssumeUniqueHint", "AssumeDistinctHint",
+                             "AssumeChopped", "AssumeConstraints", "AssumeStrict", "AssumeNonStrict",
+                             "SkipNullMembers", "FilterNullMembers",
+                             "Iterator", "ToFlow", "FromFlow", "ToStream", "ForwardList"})) {
             lineage = *CollectLineage(node.Head());
             return &lineage;
         } else if (node.IsCallable("ExtractMembers")) {
@@ -340,14 +777,20 @@ private:
             HandleAggregate(lineage, node);
         } else if (node.IsCallable({"Extend", "OrderedExtend", "Merge"})) {
             HandleExtend(lineage, node);
+        } else if (node.IsCallable("Mux")) {
+            HandleMux(lineage, node);
         } else if (node.IsCallable({"CalcOverWindow", "CalcOverSessionWindow", "CalcOverWindowGroup"})) {
             HandleWindow(lineage, node);
         } else if (node.IsCallable("EquiJoin")) {
             HandleEquiJoin(lineage, node);
-        } else if (node.IsCallable("LMap")) {
+        } else if (node.IsCallable({"LMap", "OrderedLMap"})) {
             HandleLMap(lineage, node);
         } else if (node.IsCallable({"PartitionsByKeys", "PartitionByKey"})) {
             HandlePartitionByKeys(lineage, node);
+        } else if (node.IsCallable("Chopper")) {
+            HandleChopper(lineage, node);
+        } else if (node.IsCallable("Condense1")) {
+            HandleCondense1(lineage, node);
         } else if (node.IsCallable({"AsList", "List", "ListIf"})) {
             HandleListLiteral(lineage, node);
         } else {
@@ -359,7 +802,7 @@ private:
 
     void Warning(const TExprNode& node) {
         auto message = TStringBuilder() << node.Type() << " : " << node.Content() << " is not supported";
-        if (Standalone_) {
+        if (Options_.Standalone) {
             auto issue = TIssue(ExprCtx_.GetPosition(node.Pos()), message);
             SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_LINEAGE_INTERNAL_ERROR, issue);
             ExprCtx_.AddWarning(issue);
@@ -402,6 +845,9 @@ private:
 
         if (node.IsCallable("Member")) {
             if (&node.Head() == arg && src) {
+                if (node.Tail().Content().StartsWith(YqlSysPrefix)) {
+                    return it->second = TFieldsLineage(Allocator_.get());
+                }
                 return it->second = (*src->Fields).at(node.Tail().Content());
             }
 
@@ -423,28 +869,34 @@ private:
             }
 
             if (inner->StructItems) {
+                if (node.Tail().Content().StartsWith(YqlSysPrefix)) {
+                    return it->second = TFieldsLineage(Allocator_.get());
+                }
                 TFieldsLineage result(Allocator_.get());
                 result.Items = (*inner->StructItems).at(node.Tail().Content());
                 return it->second = result;
             }
         }
 
+        bool sqlInTableSource = false;
         if (node.IsCallable("SqlIn")) {
-            auto lineage = CollectLineage(*node.Child(0));
-            if (lineage && lineage->Fields) {
-                TFieldsLineage result(Allocator_.get());
-                for (const auto& f : *lineage->Fields) {
-                    result.MergeFrom(f.second);
+            sqlInTableSource = HasSetting(*node.Child(2), "tableSource");
+            if (sqlInTableSource) {
+                auto lineage = CollectLineage(*node.Child(0));
+                if (lineage && lineage->Fields) {
+                    TFieldsLineage result(Allocator_.get());
+                    for (const auto& f : *lineage->Fields) {
+                        result.MergeFrom(f.second);
+                    }
+                    return it->second = result;
                 }
-
-                return it->second = result;
             }
         }
 
         std::vector<TFieldsLineage> results;
         TMaybe<bool> hasStructItems;
         for (ui32 index = 0; index < node.ChildrenSize(); ++index) {
-            if (index != 0 && node.IsCallable("SqlIn")) {
+            if (index == 0 && sqlInTableSource) {
                 continue;
             }
 
@@ -524,8 +976,9 @@ private:
                 }
             } else if (root->IsCallable("Member") && &root->Head() == &arg) {
                 auto fieldName = root->Tail().Content();
-                const auto& in = (*src.Fields).at(fieldName);
-                dst.StructItems = in.StructItems;
+                if (!fieldName.StartsWith(YqlSysPrefix)) {
+                    dst.StructItems = (*src.Fields).at(fieldName).StructItems;
+                }
             }
         }
 
@@ -536,22 +989,25 @@ private:
                            const TTypeAnnotationNode* extType, const TFieldsLineageMap& flattenColumns) {
         TMaybe<TStringBuf> oneField;
         if (value && value->IsCallable("Member") && &value->Head() == &arg) {
-            auto& f = innerLineage.Fields->at(value->Tail().Content());
-            if (f.StructItems) {
-                for (const auto& x : *f.StructItems) {
-                    auto& res = (*lineage.Fields).try_emplace(x.first, TFieldsLineage(Allocator_.get())).first->second;
-                    res.Items = x.second;
+            const auto fieldName = value->Tail().Content();
+            if (!fieldName.StartsWith(YqlSysPrefix)) {
+                auto& f = innerLineage.Fields->at(fieldName);
+                if (f.StructItems) {
+                    for (const auto& x : *f.StructItems) {
+                        auto& res = (*lineage.Fields).try_emplace(x.first, TFieldsLineage(Allocator_.get())).first->second;
+                        res.Items = x.second;
+                    }
+                    return;
                 }
-
-                return;
             }
 
             // fallback
-            oneField = value->Tail().Content();
+            oneField = fieldName;
         }
 
         if (value && value->IsCallable("If")) {
-            TLineage left, right;
+            TLineage left;
+            TLineage right;
             left.Fields.ConstructInPlace(Allocator_.get());
             right.Fields.ConstructInPlace(Allocator_.get());
             FillStructLineage(left, value->Child(1), arg, innerLineage, extType, TFieldsLineageMap(Allocator_.get()));
@@ -581,9 +1037,11 @@ private:
 
                 if (root->IsCallable("Member") && &root->Head() == &arg) {
                     newTransforms = ETransformsType::Copy;
+                } else if (IsMathCallable(*root)) {
+                    newTransforms = ETransformsType::Math;
                 }
 
-                MergeLineageFromUsedFields(expr, arg, innerLineage, res, true, flattenColumns, newTransforms);
+                MergeLineageFromUsedFields(expr, arg, innerLineage, res, /*produceStruct=*/true, flattenColumns, newTransforms);
             }
 
             return;
@@ -602,6 +1060,7 @@ private:
 
             for (const auto& i : structType->GetItems()) {
                 auto& res = (*lineage.Fields).try_emplace(i->GetName(), TFieldsLineage(Allocator_.get())).first->second;
+                TFieldLineageSet items(allLineage);
                 res.Items = allLineage;
             }
         }
@@ -620,16 +1079,22 @@ private:
         const TExprNode* value = &body.Tail();
         if (body.IsCallable({"OptionalIf", "FlatListIf"})) {
             value = &body.Tail();
-        } else if (body.IsCallable("Just")) {
+        } else if (body.IsCallable({"Just", "ToStream"})) {
             value = &body.Head();
         } else if (body.IsCallable({"FlatMap", "OrderedFlatMap"})) {
             if (lambda.GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
                 value = &body;
                 while (value->IsCallable({"FlatMap", "OrderedFlatMap"})) {
                     TNodeMap<TMaybe<TFieldsLineage>> visited;
-                    if (auto res = ScanExprLineage(value->Head(), &arg, &innerLineage, visited, TFieldsLineageMap(Allocator_.get()))) {
-                        flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), res);
+                    auto res = ScanExprLineage(value->Head(), &arg, &innerLineage, visited, TFieldsLineageMap(Allocator_.get()));
+                    if (!res) {
+                        TFieldsLineage all(Allocator_.get());
+                        for (const auto& f : *innerLineage.Fields) {
+                            all.Items.insert(f.second.Items.begin(), f.second.Items.end());
+                        }
+                        res = std::move(all);
                     }
+                    flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), res);
                     value = &value->Tail().Tail();
                 }
                 if (value->IsCallable("Just")) {
@@ -696,13 +1161,13 @@ private:
                                                initHandler->Head().Head(),
                                                innerLineage,
                                                source,
-                                               false,
+                                               /*produceStruct=*/false,
                                                TFieldsLineageMap(Allocator_.get()));
                     MergeLineageFromUsedFields(updateHandler->Tail(),
                                                updateHandler->Head().Head(),
                                                innerLineage,
                                                source,
-                                               false,
+                                               /*produceStruct=*/false,
                                                TFieldsLineageMap(Allocator_.get()));
                 } else if (payload->Child(1)->IsCallable("AggApply")) {
                     auto extractHandler = payload->Child(1)->Child(2);
@@ -724,52 +1189,78 @@ private:
                 (*lineage.Fields).insert_or_assign(field, source);
             }
         }
+        if (const TExprNode::TPtr outputColumnsSetting = GetSetting(*node.Child(3), "output_columns")) {
+            TSetLimited<TStringBuf> outMembers(Allocator_.get());
+            const auto& settingsList = outputColumnsSetting->ChildPtr(1)->ChildrenList();
+            Transform(settingsList.begin(),
+                      settingsList.end(),
+                      std::inserter(outMembers, outMembers.begin()),
+                      [](const auto& x) { return x->Content(); });
+            EraseNodesIf(*lineage.Fields, [&outMembers](auto& iter) {
+                return !outMembers.contains(iter.first);
+            });
+        }
+    }
+
+    void HandleGroupHandler(TLineage& lineage, const TExprNode& node, const TExprNode& arg) {
+        auto innerLineage = *CollectLineage(node.Head());
+        if (!innerLineage.Fields.Defined()) {
+            return;
+        }
+
+        const auto& body = node.Tail().Tail();
+        if (&body == &arg) {
+            lineage.Fields = *innerLineage.Fields;
+            return;
+        }
+
+        lineage.Fields.ConstructInPlace(Allocator_.get());
+        FillStructLineage(lineage,
+                          /*value=*/nullptr,
+                          arg,
+                          innerLineage,
+                          GetSeqItemType(body.GetTypeAnn()),
+                          TFieldsLineageMap(Allocator_.get()));
     }
 
     void HandleLMap(TLineage& lineage, const TExprNode& node) {
-        auto innerLineage = *CollectLineage(node.Head());
-        if (!innerLineage.Fields.Defined()) {
-            return;
-        }
-
-        const auto& lambda = node.Tail();
-        const auto& arg = lambda.Head().Head();
-        const auto& body = lambda.Tail();
-        if (&body == &arg) {
-            lineage.Fields = *innerLineage.Fields;
-            return;
-        }
-
-        lineage.Fields.ConstructInPlace(Allocator_.get());
-        FillStructLineage(lineage,
-                          nullptr,
-                          arg,
-                          innerLineage,
-                          GetSeqItemType(body.GetTypeAnn()),
-                          TFieldsLineageMap(Allocator_.get()));
+        HandleGroupHandler(lineage, node, node.Tail().Head().Head());
     }
 
     void HandlePartitionByKeys(TLineage& lineage, const TExprNode& node) {
+        HandleGroupHandler(lineage, node, node.Tail().Head().Head());
+    }
+
+    void HandleChopper(TLineage& lineage, const TExprNode& node) {
+        HandleGroupHandler(lineage, node, node.Tail().Head().Tail());
+    }
+
+    void HandleCondense1(TLineage& lineage, const TExprNode& node) {
         auto innerLineage = *CollectLineage(node.Head());
         if (!innerLineage.Fields.Defined()) {
+            lineage.Fields.ConstructInPlace(Allocator_.get());
             return;
         }
 
-        const auto& lambda = node.Tail();
-        const auto& arg = lambda.Head().Head();
-        const auto& body = lambda.Tail();
-        if (&body == &arg) {
-            lineage.Fields = *innerLineage.Fields;
+        auto stateType = GetSeqItemType(node.GetTypeAnn());
+        if (!stateType || stateType->GetKind() != ETypeAnnotationKind::Struct) {
+            lineage.Fields.ConstructInPlace(Allocator_.get());
             return;
         }
+
+        const auto& initHandler = *node.Child(1);
+        const auto& updateHandler = *node.Child(3);
+
+        TFieldsLineage source(Allocator_.get());
+        MergeLineageFromUsedFields(initHandler.Tail(), initHandler.Head().Head(), innerLineage, source,
+                                   /*produceStruct=*/false, TFieldsLineageMap(Allocator_.get()));
+        MergeLineageFromUsedFields(updateHandler.Tail(), updateHandler.Head().Head(), innerLineage, source,
+                                   /*produceStruct=*/false, TFieldsLineageMap(Allocator_.get()));
 
         lineage.Fields.ConstructInPlace(Allocator_.get());
-        FillStructLineage(lineage,
-                          nullptr,
-                          arg,
-                          innerLineage,
-                          GetSeqItemType(body.GetTypeAnn()),
-                          TFieldsLineageMap(Allocator_.get()));
+        for (const auto& i : stateType->Cast<TStructExprType>()->GetItems()) {
+            (*lineage.Fields).insert_or_assign(i->GetName(), source);
+        }
     }
 
     void MergeLineages(TLineage& lineage, TVectorLimited<TLineage>& inners) {
@@ -782,16 +1273,17 @@ private:
             auto& res = (*lineage.Fields).try_emplace(x.first, TFieldsLineage(Allocator_.get())).first->second;
             TMaybe<bool> hasStructItems;
             for (const auto& i : inners) {
-                if (auto f = (*i.Fields).FindPtr(x.first)) {
+                if (auto it = (*i.Fields).find(x.first); it != (*i.Fields).end()) {
+                    auto f = &it->second;
                     for (const auto& x : f->Items) {
                         res.Items.insert(x);
                     }
 
-                    if (f->StructItems || f->Items.empty()) {
+                    if (f->StructItems) {
                         if (!hasStructItems) {
                             hasStructItems = true;
                         }
-                    } else {
+                    } else if (!f->Items.empty()) {
                         hasStructItems = false;
                     }
                 }
@@ -800,7 +1292,8 @@ private:
             if (hasStructItems && *hasStructItems) {
                 res.StructItems.ConstructInPlace(Allocator_.get());
                 for (const auto& i : inners) {
-                    if (auto f = (*i.Fields).FindPtr(x.first)) {
+                    if (auto it = (*i.Fields).find(x.first); it != (*i.Fields).end()) {
+                        auto f = &it->second;
                         if (f->StructItems) {
                             for (const auto& si : *f->StructItems) {
                                 for (const auto& x : si.second) {
@@ -825,6 +1318,46 @@ private:
         MergeLineages(lineage, inners);
     }
 
+    void HandleMux(TLineage& lineage, const TExprNode& node) {
+        TVectorLimited<TLineage> inners(Allocator_.get());
+        for (const auto& child : node.Head().Children()) {
+            inners.push_back(*CollectLineage(*child));
+            if (!inners.back().Fields.Defined()) {
+                return;
+            }
+        }
+        MergeLineages(lineage, inners);
+    }
+
+    bool HandleSessionColumns(TLineage& lineage, const TLineage& innerLineage,
+                              const TExprNode& sessionSpec, const TExprNode& sessionColumns) {
+        if (sessionColumns.ChildrenSize() == 0) {
+            return true;
+        }
+        if (!sessionSpec.IsCallable("SessionWindowTraits")) {
+            lineage.Fields.Clear();
+            return false;
+        }
+        const auto& initHandler = sessionSpec.Child(2);
+        const auto& updateHandler = sessionSpec.Child(3);
+        for (const auto& sessionColumn : sessionColumns.Children()) {
+            auto& res = (*lineage.Fields).try_emplace(sessionColumn->Content(), TFieldsLineage(Allocator_.get())).first->second;
+            MergeLineageFromUsedFields(initHandler->Tail(),
+                                       initHandler->Head().Head(),
+                                       innerLineage,
+                                       res,
+                                       /*produceStruct=*/false,
+                                       TFieldsLineageMap(Allocator_.get()));
+            MergeLineageFromUsedFields(updateHandler->Tail(),
+                                       updateHandler->Head().Head(),
+                                       innerLineage,
+                                       res,
+                                       /*produceStruct=*/false,
+                                       TFieldsLineageMap(Allocator_.get()));
+        }
+        return true;
+    }
+
     void HandleWindow(TLineage& lineage, const TExprNode& node) {
         auto innerLineage = *CollectLineage(node.Head());
         if (!innerLineage.Fields.Defined()) {
@@ -834,40 +1367,31 @@ private:
         TExprNode::TListType frameGroups;
         if (node.IsCallable("CalcOverWindowGroup")) {
             for (const auto& g : node.Child(1)->Children()) {
-                frameGroups.push_back(g->Child(2));
+                frameGroups.emplace_back(g->Child(2));
             }
         } else {
-            frameGroups.push_back(node.Child(3));
+            frameGroups.emplace_back(node.Child(3));
         }
 
         lineage.Fields = *innerLineage.Fields;
         if (node.IsCallable("CalcOverSessionWindow")) {
-            if (node.Child(5)->ChildrenSize() && !node.Child(4)->IsCallable("SessionWindowTraits")) {
-                lineage.Fields.Clear();
+            if (!HandleSessionColumns(lineage, innerLineage, *node.Child(4), *node.Child(5))) {
                 return;
             }
-
-            for (const auto& sessionColumn : node.Child(5)->Children()) {
-                auto& res = (*lineage.Fields).try_emplace(sessionColumn->Content(), TFieldsLineage(Allocator_.get())).first->second;
-                const auto& initHandler = node.Child(4)->Child(2);
-                const auto& updateHandler = node.Child(4)->Child(2);
-                MergeLineageFromUsedFields(initHandler->Tail(),
-                                           initHandler->Head().Head(),
-                                           innerLineage,
-                                           res,
-                                           false,
-                                           TFieldsLineageMap(Allocator_.get()));
-                MergeLineageFromUsedFields(updateHandler->Tail(),
-                                           updateHandler->Head().Head(),
-                                           innerLineage,
-                                           res,
-                                           false,
-                                           TFieldsLineageMap(Allocator_.get()));
+        } else if (node.IsCallable("CalcOverWindowGroup")) {
+            for (const auto& g : node.Child(1)->Children()) {
+                if (!HandleSessionColumns(lineage, innerLineage, *g->Child(3), *g->Child(4))) {
+                    return;
+                }
             }
         }
 
         for (const auto& g : frameGroups) {
             for (const auto& f : g->Children()) {
+                if (f->IsCallable("WinFilter")) {
+                    continue;
+                }
+
                 if (!f->IsCallable("WinOnRows")) {
                     lineage.Fields.Clear();
                     return;
@@ -895,13 +1419,13 @@ private:
                                                    initHandler->Head().Head(),
                                                    innerLineage,
                                                    res,
-                                                   false,
+                                                   /*produceStruct=*/false,
                                                    TFieldsLineageMap(Allocator_.get()));
                         MergeLineageFromUsedFields(updateHandler->Tail(),
                                                    updateHandler->Head().Head(),
                                                    innerLineage,
                                                    res,
-                                                   false,
+                                                   /*produceStruct=*/false,
                                                    TFieldsLineageMap(Allocator_.get()));
                     } else {
                         lineage.Fields.Clear();
@@ -952,7 +1476,8 @@ private:
                 originalName = it->second;
             }
 
-            TStringBuf table, column;
+            TStringBuf table;
+            TStringBuf column;
             SplitTableName(originalName, table, column);
             ui32 index = inputLabels.at(table);
             auto& res = (*lineage.Fields).try_emplace(field->GetName(), TFieldsLineage(Allocator_.get())).first->second;
@@ -962,11 +1487,11 @@ private:
             }
 
             auto& h = hasStructItems[field->GetName()];
-            if (f.StructItems || f.Items.empty()) {
+            if (f.StructItems) {
                 if (!h) {
                     h = true;
                 }
-            } else {
+            } else if (!f.Items.empty()) {
                 h = false;
             }
         }
@@ -977,7 +1502,8 @@ private:
                 originalName = it->second;
             }
 
-            TStringBuf table, column;
+            TStringBuf table;
+            TStringBuf column;
             SplitTableName(originalName, table, column);
             ui32 index = inputLabels.at(table);
             auto& res = (*lineage.Fields).try_emplace(field->GetName(), TFieldsLineage(Allocator_.get())).first->second;
@@ -1018,8 +1544,8 @@ private:
                 for (const auto& f : child->Children()) {
                     TNodeMap<TMaybe<TFieldsLineage>> visited;
                     auto res = ScanExprLineage(f->Tail(),
-                                               nullptr,
-                                               nullptr,
+                                               /*arg=*/nullptr,
+                                               /*src=*/nullptr,
                                                visited,
                                                TFieldsLineageMap(Allocator_.get()));
                     if (res) {
@@ -1030,8 +1556,8 @@ private:
             } else {
                 TNodeMap<TMaybe<TFieldsLineage>> visited;
                 auto res = ScanExprLineage(*child,
-                                           nullptr,
-                                           nullptr,
+                                           /*arg=*/nullptr,
+                                           /*src=*/nullptr,
                                            visited,
                                            TFieldsLineageMap(Allocator_.get()));
                 if (res) {
@@ -1047,65 +1573,43 @@ private:
         }
     }
 
-    void WriteLineage(NYson::TYsonWriter& writer, const TLineage& lineage) {
-        // TODO: remove Standalone_ after fixing all failed tests, see YQL-20445
-        if (Standalone_ && !lineage.Fields.Defined()) {
-            YQL_ENSURE(!GetEnv("YQL_DETERMINISTIC_MODE"), "Can't calculate lineage");
-            writer.OnEntity();
-            return;
+    TStringBuf AppendString(const TStringBuf& buf) {
+        if (buf.empty()) {
+            return ZeroString;
         }
 
-        writer.OnBeginMap();
-        TVectorLimited<TStringBuf> fields(Allocator_.get());
-        for (const auto& f : *lineage.Fields) {
-            fields.push_back(f.first);
+        auto it = Strings_.find(buf);
+        if (it != Strings_.end()) {
+            return *it;
         }
 
-        Sort(fields);
-        for (const auto& f : fields) {
-            writer.OnKeyedItem(f);
-            writer.OnBeginList();
-            TVectorLimited<TFieldLineage> items(Allocator_.get());
-            for (const auto& i : lineage.Fields->at(f).Items) {
-                items.push_back(i);
-            }
-
-            Sort(items);
-            for (const auto& i : items) {
-                writer.OnListItem();
-                writer.OnBeginMap();
-                writer.OnKeyedItem("Input");
-                writer.OnInt64Scalar(i.InputIndex);
-                writer.OnKeyedItem("Field");
-                writer.OnStringScalar(i.Field);
-                writer.OnKeyedItem("Transforms");
-                switch (i.Transforms) {
-                    case ETransformsType::Copy:
-                        writer.OnStringScalar("Copy");
-                        break;
-                    default:
-                        writer.OnEntity();
-                }
-                writer.OnEndMap();
-            }
-            writer.OnEndList();
-        }
-
-        writer.OnEndMap();
+        auto newBuf = StringPool_.AppendString(buf);
+        Strings_.insert(it, newBuf);
+        return newBuf;
     }
 
 private:
     const TExprNode& Root_;
-    const TTypeAnnotationContext& Ctx_;
+    TTypeAnnotationContext& Ctx_;
     TExprContext& ExprCtx_;
-    std::unique_ptr<IAllocator> Allocator_;
+    TLineageRunOptions Options_;
+    std::unique_ptr<ILimitingAllocator> Allocator_;
     TNodeMapLimited<IDataProvider*> Reads_, Writes_;
     ui32 NextReadId_ = 0;
     ui32 NextWriteId_ = 0;
     TNodeMapLimited<TVectorLimited<ui32>> ReadIds_;
     TNodeMapLimited<TLineage> Lineages_;
     TNodeSetLimited HasReads_;
-    bool Standalone_;
+    TMemoryPool StringPool_;
+    THashSetLimited<TStringBuf> Strings_;
+    TMapLimited<TStringBuf, ui32> TableIds_;
+    // Sets: value -> duplication's count
+    TSchemaMapLimited SchemaSets_;
+    TLineageMapLimited LineageSets_;
+    TIndexMapLimited IndexSets_;
+    // Refs: tableName -> value
+    THashMapLimited<TStringBuf, const TStructExprType*> SchemaRefs_;
+    THashMapLimited<TStringBuf, TMapLimited<TStringBuf, const TOrderedLineageVector*>> LineageRefs_;
 };
 
 template <typename Compare, typename Fun>
@@ -1134,8 +1638,8 @@ void IterateTwoLists(NYT::TNode::TListType& listFirst, NYT::TNode::TListType& li
 
 } // namespace
 
-TString CalculateLineage(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone) {
-    TLineageScanner scanner(root, ctx, exprCtx, standalone);
+TString CalculateLineage(const TExprNode& root, TTypeAnnotationContext& ctx, TExprContext& exprCtx, const TLineageRunOptions& options) {
+    TLineageScanner scanner(root, ctx, exprCtx, options);
     return scanner.Process();
 }
 
@@ -1151,7 +1655,8 @@ void CheckEquvalentLineages(const TString& lineageFirst, const TString& lineageS
     auto lineageNode1 = NYT::NodeFromYsonString(lineageFirst);
     auto lineageNode2 = NYT::NodeFromYsonString(lineageSecond);
 
-    THashMap<i64, NYT::TNode> idToPath1, idToPath2;
+    THashMap<i64, NYT::TNode> idToPath1;
+    THashMap<i64, NYT::TNode> idToPath2;
     IterateTwoLists(lineageNode1["Reads"].AsList(),
                     lineageNode2["Reads"].AsList(),
                     // clang-format off

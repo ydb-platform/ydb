@@ -138,7 +138,7 @@ public:
             auto key = (*cursor)->UncheckedAsString();
             if (key == "name") {
                 cursor->Next();
-                SetName(ExtractTo<TString>(cursor));
+                SetName(ExtractTo<std::string>(cursor));
             } else if (key == "required") {
                 cursor->Next();
                 RequiredV1_ = ExtractTo<bool>(cursor);
@@ -309,9 +309,9 @@ void Deserialize(TTableSchema& schema, TColumnNameToConstraintMap& columnNameToC
 
     EnsureYsonToken("table schema", *cursor, EYsonItemType::BeginList);
 
-    auto constraintedColumns = ExtractTo<std::vector<TConstrainedColumnSchema>>(cursor);
+    auto constrainedColumns = ExtractTo<std::vector<TConstrainedColumnSchema>>(cursor);
     std::vector<TColumnSchema> columns;
-    for (auto& constrainedColumn : constraintedColumns) {
+    for (auto& constrainedColumn : constrainedColumns) {
         if (constrainedColumn.Constraint()) {
             auto [it, emplaced] = columnNameToConstraint.emplace(constrainedColumn.Name(), *constrainedColumn.Constraint());
             if (!emplaced) {

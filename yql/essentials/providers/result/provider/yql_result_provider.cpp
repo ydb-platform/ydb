@@ -28,7 +28,7 @@ using namespace NNodes;
 class TYsonResultWriter: public IResultWriter {
 public:
     explicit TYsonResultWriter(NYson::EYsonFormat format)
-        : Writer_(new NYson::TYsonWriter(&PartialStream_, format, ::NYson::EYsonType::Node, true))
+        : Writer_(new NYson::TYsonWriter(&PartialStream_, format, ::NYson::EYsonType::Node, /*enableRaw=*/true))
     {
     }
 
@@ -142,7 +142,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
         }
     }
 
-    if (listType->GetKind() == ETypeAnnotationKind::EmptyList) {
+    if (listType->GetKind() == ETypeAnnotationKind::EmptyList || listType->GetKind() == ETypeAnnotationKind::Universal) {
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -169,7 +169,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
             if (!structType->FindItem(rightName)) {
                 if (hasAutoNames) {
                     columns = {};
-                    return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                    return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
                 }
                 ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Unknown field in hint: " << child->Content()));
                 return IGraphTransformer::TStatus::Error;
@@ -178,7 +178,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
             if (!usedFields.insert(rightName).second) {
                 if (hasAutoNames) {
                     columns = {};
-                    return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                    return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
                 }
                 ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Duplicate field in hint: " << rightName));
                 return IGraphTransformer::TStatus::Error;
@@ -187,7 +187,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
             TString columnName = "column" + ToString(i);
             if (!structType->FindItem(columnName) || !usedFields.insert(columnName).second) {
                 columns = {};
-                return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
             }
             orderedFields.push_back(ctx.NewAtom(child->Pos(), columnName));
         } else {
@@ -198,7 +198,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
                     if (!usedFields.insert(TString(x->GetName())).second) {
                         if (hasAutoNames) {
                             columns = {};
-                            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
                         }
                         ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Duplicate field in hint: " << x->GetName()));
                         return IGraphTransformer::TStatus::Error;
@@ -211,7 +211,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
     if (usedFields.size() != structType->GetSize()) {
         if (hasAutoNames) {
             columns = {};
-            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
         }
         ctx.AddError(TIssue(ctx.GetPosition(columns->Pos()), TStringBuilder() << "Mismatch of fields in hint and in the struct, columns fields: " << usedFields.size()
                                                                               << ", struct fields:" << structType->GetSize()));
@@ -220,7 +220,7 @@ IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TType
 
     if (hasPrefixes || hasAutoNames) {
         columns = ctx.NewList(columns->Pos(), std::move(orderedFields));
-        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
     }
 
     return IGraphTransformer::TStatus::Ok;
@@ -370,8 +370,8 @@ private:
                     auto zero = ctx.NewAtom(TPositionHandle(), "0", TNodeFlags::Default);
                     zero->SetTypeAnn(ctx.MakeType<TUnitExprType>());
                     zero->SetState(TExprNode::EState::ConstrComplete);
-                    zero->SetDependencyScope(nullptr, nullptr);                    // HOTFIX for CSEE
-                    input.Ptr()->ChildRef(TResFor::idx_Current) = std::move(zero); // FIXME: Don't use ChilfRef
+                    zero->SetDependencyScope(/*outerLambda=*/nullptr, /*innerLambda=*/nullptr); // HOTFIX for CSEE
+                    input.Ptr()->ChildRef(TResFor::idx_Current) = std::move(zero);              // FIXME: Don't use ChilfRef
                     input.Ptr()->SetResult(ctx.NewWorld(input.Pos()));
                     input.Ptr()->SetState(TExprNode::EState::ExecutionComplete);
                     return TStatus::Ok;
@@ -418,7 +418,7 @@ private:
                                  .Done()
                                  .Ptr();
 
-                    return IGraphTransformer::TStatus(TStatus::Repeat, true);
+                    return IGraphTransformer::TStatus(TStatus::Repeat, /*hasRestart=*/true);
                 } else {
                     auto status = RequireChild(input.Ref(), TResFor::idx_Active);
                     if (status.Level != IGraphTransformer::TStatus::Ok) {
@@ -444,7 +444,7 @@ private:
                                  .Done()
                                  .Ptr();
 
-                    return IGraphTransformer::TStatus(TStatus::Repeat, true);
+                    return IGraphTransformer::TStatus(TStatus::Repeat, /*hasRestart=*/true);
                 }
             } else if (input.Ref().HasResult()) {
                 // parse list
@@ -506,7 +506,7 @@ private:
                              .Done()
                              .Ptr();
 
-                return IGraphTransformer::TStatus(TStatus::Repeat, true);
+                return IGraphTransformer::TStatus(TStatus::Repeat, /*hasRestart=*/true);
             }
 
             needWriter = false;
@@ -985,16 +985,34 @@ public:
                             return IGraphTransformer::TStatus::Error;
                         }
 
-                        if (!EnsureWorldType(*res.Ref().Child(TResWriteBase::idx_World), ctx)) {
+                        auto world = res.Ref().Child(TResWriteBase::idx_World);
+                        if (world->GetTypeAnn() && world->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                            input->SetTypeAnn(world->GetTypeAnn());
+                            return IGraphTransformer::TStatus::Ok;
+                        }
+
+                        if (!EnsureWorldType(*world, ctx)) {
                             return IGraphTransformer::TStatus::Error;
                         }
 
-                        if (!EnsureSpecificDataSink(*res.Ref().Child(TResWriteBase::idx_DataSink), ResultProviderName, ctx)) {
+                        auto datasink = res.Ref().Child(TResWriteBase::idx_DataSink);
+                        if (datasink->GetTypeAnn() && datasink->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                            input->SetTypeAnn(datasink->GetTypeAnn());
+                            return IGraphTransformer::TStatus::Ok;
+                        }
+
+                        if (!EnsureSpecificDataSink(*datasink, ResultProviderName, ctx)) {
                             return IGraphTransformer::TStatus::Error;
                         }
 
-                        if (!res.Ref().Child(TResWriteBase::idx_Key)->IsCallable("Key") || res.Ref().Child(TResWriteBase::idx_Key)->ChildrenSize() > 0) {
-                            ctx.AddError(TIssue(ctx.GetPosition(res.Ref().Child(TResWriteBase::idx_Key)->Pos()), "Expected empty key"));
+                        auto key = res.Ref().Child(TResWriteBase::idx_Key);
+                        if (key->GetTypeAnn() && key->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                            input->SetTypeAnn(key->GetTypeAnn());
+                            return IGraphTransformer::TStatus::Ok;
+                        }
+
+                        if (!key->IsCallable("Key") || key->ChildrenSize() > 0) {
+                            ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Expected empty key"));
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -1003,6 +1021,11 @@ public:
                         }
 
                         auto settings = res.Ref().Child(TResWriteBase::idx_Settings);
+                        if (settings->GetTypeAnn() && settings->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                            input->SetTypeAnn(settings->GetTypeAnn());
+                            return IGraphTransformer::TStatus::Ok;
+                        }
+
                         if (!EnsureTuple(*settings, ctx)) {
                             return IGraphTransformer::TStatus::Error;
                         }
@@ -1135,8 +1158,14 @@ public:
 
                         if (res.Maybe<TResTransientBase>()) {
                             auto resTransient = res.Cast<TResTransientBase>();
-                            if (!EnsureAtom(*resTransient.Ref().Child(TResTransientBase::idx_DelegatedSource), ctx)) {
+                            bool isUniversal;
+                            if (!EnsureAtomOrUniversal(*resTransient.Ref().Child(TResTransientBase::idx_DelegatedSource), ctx, isUniversal)) {
                                 return IGraphTransformer::TStatus::Error;
+                            }
+
+                            if (isUniversal) {
+                                input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+                                return IGraphTransformer::TStatus::Ok;
                             }
 
                             if (!Config_->Types.DataSourceMap.FindPtr(resTransient.DelegatedSource().Value())) {
@@ -1146,8 +1175,8 @@ public:
                             }
                         }
 
-                        if (Config_->Types.OrderedColumns && res.Data().Ref().IsCallable("AssumeColumnOrder")) {
-                            if (!HasSetting(res.Settings().Ref(), "freezeColumns")) {
+                        if (Config_->Types.DeriveColumnOrder && res.Data().Ref().IsCallable("AssumeColumnOrder")) {
+                            if (Config_->Types.OrderedColumns && !HasSetting(res.Settings().Ref(), "freezeColumns")) {
                                 auto dataOrder = Config_->Types.LookupColumnOrder(res.Data().Ref());
                                 YQL_ENSURE(dataOrder);
 

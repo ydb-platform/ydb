@@ -34,7 +34,8 @@ private:
         TReplyInfo(std::unique_ptr<NActors::IEventBase>&& ev, const TActorId& destinationForReply, const ui64 cookie)
             : Event(std::move(ev))
             , DestinationForReply(destinationForReply)
-            , Cookie(cookie) {
+            , Cookie(cookie)
+        {
         }
 
         void DoSendReply(const TActorContext& ctx) {
@@ -52,6 +53,7 @@ public:
 
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;
+
     TTxType GetTxType() const override {
         return TXTYPE_WRITE_PORTIONS_FINISHED;
     }
@@ -72,7 +74,8 @@ private:
         TReplyInfo(std::unique_ptr<NActors::IEventBase>&& ev, const TActorId& destinationForReply, const ui64 cookie)
             : Event(std::move(ev))
             , DestinationForReply(destinationForReply)
-            , Cookie(cookie) {
+            , Cookie(cookie)
+        {
         }
 
         void DoSendReply(const TActorContext& ctx) {
@@ -85,11 +88,13 @@ private:
 public:
     TTxBlobsWritingFailed(TColumnShard* self, TInsertedPortions&& pack)
         : TBase(self, "blobs_writing_failed")
-        , Pack(std::move(pack)) {
+        , Pack(std::move(pack))
+    {
     }
 
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;
+
     TTxType GetTxType() const override {
         return TXTYPE_WRITE_PORTIONS_FAILED;
     }

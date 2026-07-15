@@ -1,4 +1,32 @@
 {
+    "test_canonical_requests.Test.test_capacity_metrics": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.0"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.1"
+        }
+    ],
+    "test_canonical_requests.Test.test_cluster_balance": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.0"
+        }
+    ],
+    "test_canonical_requests.Test.test_cluster_balance_mismatching_size_in_units": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance_mismatching_size_in_units/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance_mismatching_size_in_units/results.txt.0"
+        }
+    ],
     "test_canonical_requests.Test.test_cluster_get_set": [
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt"
@@ -75,6 +103,34 @@
             "uri": "file://test_canonical_requests.Test.test_essential/results.txt.8"
         }
     ],
+    "test_canonical_requests.Test.test_group_add": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_add/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_add/results.txt.0"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_add/results.txt.1"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_add/results.txt.2"
+        }
+    ],
+    "test_canonical_requests.Test.test_group_resize": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_resize/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_resize/results.txt.0"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_resize/results.txt.1"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_resize/results.txt.2"
+        }
+    ],
     "test_canonical_requests.Test.test_group_take_snapshot": [
         {
             "uri": "file://test_canonical_requests.Test.test_group_take_snapshot/results.txt"
@@ -95,6 +151,19 @@
             "uri": "file://test_canonical_requests.Test.test_infer_pdisk_slot_count/results.txt.0"
         }
     ],
+    "test_canonical_requests.Test.test_pdisk_check_leaked_slots": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots/results.txt.0"
+        },
+        null,
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots/results.txt.1"
+        }
+    ],
     "test_canonical_requests.Test.test_pdisk_set_status_inactive": [
         {
             "uri": "file://test_canonical_requests.Test.test_pdisk_set_status_inactive/results.txt"
@@ -106,13 +175,18 @@
             "uri": "file://test_canonical_requests.Test.test_pdisk_set_status_inactive/results.txt.1"
         }
     ],
-    "test_canonical_requests.Test.test_vdisk_ready_stable_period": [
+    "test_canonical_requests.Test.test_pool_estimated_usage": [
         {
-            "uri": "file://test_canonical_requests.Test.test_vdisk_ready_stable_period/results.txt"
+            "uri": "file://test_canonical_requests.Test.test_pool_estimated_usage/results.txt"
+        },
+        null,
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_pool_estimated_usage/results.txt.0"
         },
         null,
         {
-            "uri": "file://test_canonical_requests.Test.test_vdisk_ready_stable_period/results.txt.0"
+            "uri": "file://test_canonical_requests.Test.test_pool_estimated_usage/results.txt.1"
         }
     ]
 }

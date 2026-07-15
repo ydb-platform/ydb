@@ -1,11 +1,17 @@
 #include "ddisk_actor.h"
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::InitPDiskInterface() {
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD01, "TDDiskActor::InitPDiskInterface", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID));
-
+        Y_ABORT_UNLESS(!IsPersistentBufferActor);
+        YDB_LOG_DEBUG("TDDiskActor::InitPDiskInterface",
+            {"marker", "BSDD01"},
+            {"DDiskId", DDiskId},
+            {"PDiskActorId", BaseInfo.PDiskActorID});
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvYardInit(BaseInfo.InitOwnerRound, TVDiskID(Info->GroupID,
             Info->GroupGeneration, BaseInfo.VDiskIdShort), BaseInfo.PDiskGuid, SelfId(), SelfId(), BaseInfo.VDiskSlotId,
             0 /*groupSizeInUnits*/, true /*getDiskFd*/));
@@ -13,19 +19,25 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(NPDisk::TEvYardInitResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD02, "TDDiskActor::Handle(TEvYardInitResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        YDB_LOG_INFO("TDDiskActor::Handle(TEvYardInitResult)",
+            {"marker", "BSDD02"},
+            {"DDiskId", DDiskId},
+            {"msg", msg});
 
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvYardInitResult)")) {
+            return;
         }
+        Y_ABORT_UNLESS(msg.DiskFormat);
 
         PDiskParams = std::move(msg.PDiskParams);
+        DiskFormat = std::move(msg.DiskFormat);
         OwnedChunksOnBoot = std::move(msg.OwnedChunks);
         DiskFd = std::move(msg.DiskFd);
         if (!DiskFd.IsOpen()) {
-            STLOG(PRI_INFO, BS_DDISK, BSDD17,
-                "TDDiskActor::Handle(TEvYardInitResult) DiskFd is invalid, all further I/O will be routed through PDisk",
-                (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID));
+            YDB_LOG_INFO("TDDiskActor::Handle(TEvYardInitResult) DiskFd is invalid, all further I/O will be routed through PDisk",
+                {"marker", "BSDD17"},
+                {"DDiskId", DDiskId},
+                {"PDiskActorId", BaseInfo.PDiskActorID});
         }
 
         if (const auto it = msg.StartingPoints.find(TLogSignature::SignatureDDiskChunkMap); it != msg.StartingPoints.end()) {
@@ -47,28 +59,27 @@ namespace NKikimr::NDDisk {
         if (const auto it = msg.StartingPoints.find(TLogSignature::SignaturePersistentBufferChunkMap); it != msg.StartingPoints.end()) {
             NPDisk::TLogRecord& record = it->second;
             PersistentBufferChunkMapSnapshotLsn = record.Lsn;
+
             NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord chunkMap;
             const bool success = chunkMap.ParseFromArray(record.Data.data(), record.Data.size());
             Y_ABORT_UNLESS(success);
             for (auto idx : chunkMap.GetChunkIdxs()) {
-                PersistentBufferSpaceAllocator.AddNewChunk(idx);
-                auto [it, inserted] = PersistentBufferSectorsChecksum.insert({idx, {}});
-                it->second.resize(SectorInChunk);
-                if (!inserted) {
-                    STLOG(PRI_ERROR, BS_DDISK, BSDD10, "TDDiskActor::Handle(TEvYardInitResult) persistent buffer has duplicated chunk index in log", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID), (ChunkIdx, idx));
-                }
-                ++*Counters.Chunks.ChunksOwned;
+                PersistentBufferChunks.emplace_back(idx);
             }
+            PersistentBufferUniqueId = chunkMap.GetUniqueId();
         }
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound));
     }
 
     void TDDiskActor::Handle(NPDisk::TEvReadLogResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD03, "TDDiskActor::Handle(TEvReadLogResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvReadLogResult)",
+            {"marker", "BSDD03"},
+            {"DDiskId", DDiskId},
+            {"msg", msg});
 
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvReadLogResult)")) {
+            return;
         }
 
         ++*Counters.RecoveryLog.ReadLogChunks;
@@ -101,14 +112,85 @@ namespace NKikimr::NDDisk {
 
         if (msg.IsEndOfLog) {
             StartHandlingQueries();
-            StartRestorePersistentBuffer();
+            CreatePersistentBuffer();
         } else {
             Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound,
                 msg.NextPosition));
         }
     }
 
+    void TDDiskActor::CreatePersistentBuffer() {
+        auto format = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(*DiskFormat), +[](NPDisk::TDiskFormat* ptr) {
+            delete ptr;
+        });
+        if (PersistentBufferUniqueId == 0) {
+            PersistentBufferUniqueId = RandomNumber<ui64>();
+        }
+        auto pbActor = std::make_unique<TDDiskActor>(TVDiskConfig::TBaseInfo(BaseInfo),
+            Info, TPersistentBufferFormat(PersistentBufferFormat), TDDiskConfig(Config), CountersParent,
+            PersistentBufferChunks, PersistentBufferUniqueId, PDiskParams, std::move(format), std::move(DiskFd.Duplicate()));
+        auto *as = TActivationContext::ActorSystem();
+        PersistentBufferActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
+        auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
+        as->RegisterLocalService(pbServiceId, PersistentBufferActorId);
+        YDB_LOG_DEBUG("TDDiskActor::CreatePersistentBuffer()",
+            {"marker", "BSDD03"},
+            {"DDiskId", DDiskId},
+            {"pbServiceId", pbServiceId},
+            {"persistentBufferActorId", PersistentBufferActorId});
+    }
+
+    void TDDiskActor::InitUring() {
+#if defined(__linux__)
+        NPDisk::TUringRouterConfig config;
+        config.QueueDepth = MaxInFlight;
+        config.UseSQPoll = Config.UseSQPoll;
+        config.UseIOPoll = Config.UseIOPoll;
+        if (!UringRouter) {
+            if (!Config.ForcePDiskFallback && DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
+                UringRouter = std::make_unique<NPDisk::TUringRouter>(
+                    DiskFd,
+                    TActivationContext::ActorSystem(),
+                    config,
+                    &Counters.UringCounters);
+                if (const auto result = UringRouter->RegisterFile(); !result) {
+                    YDB_LOG_WARN("TDDiskActor::InitUring failed to register fixed file for io_uring",
+                        {"marker", "BSDD18"},
+                        {"DDiskId", DDiskId},
+                        {"errno", result.error()});
+                }
+
+                UringRouter->Start();
+            }
+        }
+
+        if (UringRouter) {
+            const NPDisk::EUringFavor requestedFavor = config.GetUringFavor();
+            const NPDisk::EUringFavor actualFavor = UringRouter->GetUringFavor();
+            *Counters.DirectIO.RegularUringCount = (actualFavor == requestedFavor) ? 1 : 0;
+            *Counters.DirectIO.FallbackUringCount = (actualFavor == requestedFavor) ? 0 : 1;
+            *Counters.DirectIO.FallbackPDiskCount = 0;
+            if (actualFavor != requestedFavor) {
+                YDB_LOG_WARN("TDDiskActor::InitUring io_uring mode fallback",
+                    {"marker", "BSDD19"},
+                    {"DDiskId", DDiskId},
+                    {"requestedFavor", requestedFavor},
+                    {"actualFavor", actualFavor});
+            }
+            YDB_LOG_INFO("TDDiskActor::InitUring started io_uring with config",
+                {"marker", "BSDD20"},
+                {"DDiskId", DDiskId},
+                {"config", UringRouter->GetConfig()});
+        } else {
+            *Counters.DirectIO.RegularUringCount = 0;
+            *Counters.DirectIO.FallbackUringCount = 0;
+            *Counters.DirectIO.FallbackPDiskCount = 1;
+        }
+#endif
+    }
+
     void TDDiskActor::StartHandlingQueries() {
+        InitUring();
         TActivationContext::Send(new IEventHandle(TEvPrivate::EvHandleSingleQuery, 0, SelfId(), SelfId(), nullptr, 0));
     }
 
@@ -128,7 +210,8 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit,
-            const NProtoBuf::Message& data, ui64 *startingPointLsn, std::function<void()> callback) {
+            const NProtoBuf::Message& data, ui64 *startingPointLsn, std::function<void()> callback,
+            TVector<TChunkIdx> chunksToDelete) {
         TString buffer;
         const bool success = data.SerializeToString(&buffer);
         Y_ABORT_UNLESS(success);
@@ -144,19 +227,23 @@ namespace NKikimr::NDDisk {
         if (chunkIdxToCommit) {
             cr.CommitChunks.push_back(chunkIdxToCommit);
         }
+        cr.DeleteChunks = std::move(chunksToDelete);
 
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvLog(PDiskParams->Owner, PDiskParams->OwnerRound, signature, cr,
-            TRcBuf(std::move(buffer)), {lsn, lsn}, nullptr));
+            TRcBuf(std::move(buffer)), {lsn, lsn}, nullptr, TWriteSource::DDiskBoot));
 
         LogCallbacks.emplace(lsn, std::move(callback));
     }
 
     void TDDiskActor::Handle(NPDisk::TEvLogResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD05, "TDDiskActor::Handle(TEvLogResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        YDB_LOG_DEBUG("TDDiskActor::Handle(TEvLogResult)",
+            {"marker", "BSDD05"},
+            {"DDiskId", DDiskId},
+            {"msg", msg});
 
-        if (msg.Status != NKikimrProto::OK) {
-            Y_ABORT();
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvLogResult)")) {
+            return;
         }
 
         for (const auto& result : msg.Results) {

@@ -1,10 +1,11 @@
 #pragma once
-#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/blob_set.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
-#include <ydb/core/testlib/basics/runtime.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
@@ -60,9 +61,11 @@ protected:
     virtual void OnPortionActualization(const NOlap::TPortionInfo& /*info*/) override {
         ActualizationsCount.Inc();
     }
+
     virtual void OnActualizationRefreshScheme() override {
         ActualizationRefreshSchemeCount.Inc();
     }
+
     virtual void OnActualizationRefreshTiering() override {
         ActualizationRefreshTieringCount.Inc();
     }
@@ -70,9 +73,11 @@ protected:
     virtual bool DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) override;
     virtual bool DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) override;
     virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const ::NKikimr::NColumnShard::TColumnShard& shard) override;
+
     virtual void OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) override {
         TieringUpdates.Inc();
     }
+
     virtual EOptimizerCompactionWeightControl GetCompactionControl() const override {
         return EOptimizerCompactionWeightControl::Force;
     }
@@ -207,7 +212,6 @@ public:
     virtual bool IsForcedGenerateInternalPathId() const override {
         return true;
     }
-
 };
 
-}
+}   // namespace NKikimr::NYDBTest::NColumnShard

@@ -2,21 +2,31 @@
 
 #include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
-#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 namespace NACLib {
+
 class TUserToken;
-}
+
+} // namespace NACLib
 
 namespace NKikimr::NPQ::NMLP {
+
+enum class EOperationResult : ui8 {
+    Success = 0,
+    NotFound = 1,
+    NotInFlight = 2,
+    Failed = 3,
+};
 
 enum EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::MLP),
     EvWriteResponse,
     EvChangeResponse,
     EvPurgeResponse,
+    EvDescribeResponse,
     EvEnd
 };
 
@@ -28,6 +38,7 @@ struct TMessageId {
 struct TEvWriteResponse : public NActors::TEventLocal<TEvWriteResponse, EEv::EvWriteResponse> {
 
     NDescriber::EStatus DescribeStatus;
+    ui64 BalancerTabletId = 0;
 
     struct TMessage {
         size_t Index;
@@ -48,14 +59,18 @@ struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvRea
 
     Ydb::StatusIds::StatusCode Status;
     TString ErrorDescription;
+    ui64 BalancerTabletId = 0;
 
     struct TMessage {
         TMessageId MessageId;
         Ydb::Topic::Codec Codec;
         TString Data;
-        THashMap<TString, TString> MessageMetaAttributes;
         TInstant SentTimestamp;
         TString MessageGroupId;
+        TString MessageDeduplicationId;
+        std::optional<ui32> ApproximateReceiveCount;
+        std::optional<TInstant> ApproximateFirstReceiveTimestamp;
+        std::unordered_multimap<TString, TString> Attributes;
     };
     std::vector<TMessage> Messages;
 };
@@ -71,10 +86,11 @@ struct TEvChangeResponse : public NActors::TEventLocal<TEvChangeResponse, EEv::E
 
     Ydb::StatusIds::StatusCode Status;
     TString ErrorDescription;
+    ui64 BalancerTabletId = 0;
 
     struct TResult {
         TMessageId MessageId;
-        bool Success = false;
+        EOperationResult Status = EOperationResult::Failed;
     };
     std::vector<TResult> Messages;
 };
@@ -91,6 +107,22 @@ struct TEvPurgeResponse : public NActors::TEventLocal<TEvPurgeResponse, EEv::EvP
     TString ErrorDescription;
 };
 
+struct TEvDescribeResponse : public NActors::TEventLocal<TEvDescribeResponse, EEv::EvDescribeResponse> {
+    TEvDescribeResponse(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, TString&& errorDescription = {})
+        : Status(status)
+        , ErrorDescription(std::move(errorDescription))
+    {
+    }
+
+    Ydb::StatusIds::StatusCode Status;
+    TString ErrorDescription;
+
+    TInstant TopicCreated;
+    ui64 ApproximateMessageCount;
+    ui64 ApproximateDelayedMessageCount;
+    ui64 ApproximateLockedMessageCount;
+};
+
 
 struct TWriterSettings {
     TString DatabasePath;
@@ -101,7 +133,7 @@ struct TWriterSettings {
         TString MessageBody;
         std::optional<TString> MessageGroupId;
         std::optional<TString> MessageDeduplicationId;
-        std::optional<TString> SerializedMessageAttributes;
+        std::unordered_multimap<TString, TString> Attributes;
         TDuration Delay;
     };
     std::vector<TMessage> Messages;
@@ -120,7 +152,11 @@ struct TReaderSettings {
     std::optional<TDuration> WaitTime;
     std::optional<TDuration> ProcessingTimeout;
     ui32 MaxNumberOfMessage = 1;
-    bool UncompressMessages = false;
+    std::vector<TString> SkipMessageGroups; // TODO remove after SQS migration was finished
+
+    // SQS FIFO receive-request-attempt-id replay. When set, repeated reads with the same
+    // attempt id within the configured period return the same messages.
+    TString ReceiveAttemptId;
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
@@ -177,5 +213,16 @@ struct TPurgerSettings {
 // Return TEvPurgeResponse
 IActor* CreatePurger(const NActors::TActorId& parentId, TPurgerSettings&& settings);
 
+// Return TEvDescribeResponse
+struct TDescribeSettings {
+    TString DatabasePath;
+    TString TopicName;
+    TString Consumer;
 
-} // NKikimr::NPQ::NMLP
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+};
+
+// Return TEvDescribeResponse
+IActor* CreateDescriber(const NActors::TActorId& parentId, TDescribeSettings&& settings);
+
+} // namespace NKikimr::NPQ::NMLP

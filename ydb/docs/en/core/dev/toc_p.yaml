@@ -1,16 +1,21 @@
 items:
 - name: Getting started
   href: getting-started.md
-- name: YQL tutorial
-  href: yql-tutorial/index.md
+- name: Streaming queries
+  href: streaming-query/index.md
   include:
     mode: link
-    path: yql-tutorial/toc_p.yaml
+    path: streaming-query/toc_p.yaml
 - name: Example applications
   href: example-app/index.md
   include:
     mode: link
     path: example-app/toc_p.yaml
+- name: YQL tutorial
+  href: yql-tutorial/index.md
+  include:
+    mode: link
+    path: yql-tutorial/toc_p.yaml
 - name: Primary keys
   href: primary-key/index.md
   include:
@@ -20,12 +25,22 @@ items:
   href: secondary-indexes.md
 - name: Vector indexes
   href: vector-indexes.md
-- name: Query plans optimization
-  href: query-plans-optimization.md
-- name: Resource consumption management
-  href: resource-consumption-management.md  
-- name: Query hints
-  href: query-hints.md
+- name: Vector index type vector_kmeans_tree
+  href: vector-indexes-kmeans-tree-type.md
+- name: Fulltext indexes
+  href: fulltext-indexes.md
+- name: Hybrid search
+  href: hybrid-search.md
+- name: Local indexes
+  href: local-indexes/index.md
+  include:
+    mode: link
+    path: local-indexes/toc_p.yaml
+- name: Query execution optimization
+  href: query-execution-optimization/index.md
+  include:
+    mode: link
+    path: query-execution-optimization/toc_p.yaml
 - name: Batch upload
   href: batch-upload.md
 - name: Paging
@@ -36,7 +51,11 @@ items:
   href: system-views.md
 - name: Change Data Capture
   href: cdc.md
+- name: Structure and limitations of a shared topic reader
+  href: shared-consumer-internals.md
 - name: Terraform
   href: terraform.md
 - name: Custom attributes
   href: custom-attributes.md
+- name: Resource consumption management
+  href: resource-consumption-management.md

@@ -3,6 +3,7 @@ import traceback
 import uuid
 import allure
 import logging
+import random
 import time as time_module
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -22,11 +23,13 @@ from ydb.tests.library.stability.utils.remote_execution import execute_command
 
 
 class StressRunExecutor:
-    def __init__(self, ignore_stderr_content, event_process_mode):
+    def __init__(self, ignore_stderr_content, event_process_mode, database, nodes):
+        self.database = database
         self._ignore_stderr_content = ignore_stderr_content
         self.event_process_mode = event_process_mode
         self.run_counter_lock = threading.Lock()
         self.run_counter = 0
+        self.nodes = nodes
 
     def __substitute_variables_in_template(
         self,
@@ -39,10 +42,12 @@ class StressRunExecutor:
 
         Supported variables:
         - {node_host} - node host
+        - {slot_kafka_port} - kafka proxy port of a random compute slot on the same host
         - {iteration_num} - iteration number
         - {thread_id} - thread ID (usually node host)
         - {run_id} - unique run ID
         - {timestamp} - run timestamp
+        - {database} - run database without leading '/'
         - {uuid} - short UUID
 
         Args:
@@ -58,15 +63,16 @@ class StressRunExecutor:
         node_host = target_node.host
         iteration_num = run_config.get("iteration_num", 1)
         thread_id = run_config.get("thread_id", node_host)
+        database = run_config.get("database", 'Root/db1')
         timestamp = int(time_module.time())
         short_uuid = uuid.uuid4().hex[:8]
 
         # Create unique run_id
         run_id = f"{node_host}_{iteration_num}_{timestamp}"
 
-        # Substitution dictionary
         substitutions = {
             "{node_host}": node_host,
+            "{database}": database,
             "{iteration_num}": str(iteration_num),
             "{thread_id}": str(thread_id),
             "{run_id}": run_id,
@@ -74,6 +80,14 @@ class StressRunExecutor:
             "{uuid}": short_uuid,
             "{global_run_id}": str(self.run_counter),
         }
+
+        if "{slot_kafka_port}" in command_args_template:
+            kafka_ports = [
+                dyn_node.kafka_port
+                for dyn_node in self.nodes
+                if dyn_node.host == node_host and dyn_node.role == YdbCluster.Node.Role.COMPUTE
+            ]
+            substitutions["{slot_kafka_port}"] = str(random.choice(kafka_ports or [0]))
 
         # Perform substitutions
         result = command_args_template
@@ -183,6 +197,7 @@ class StressRunExecutor:
                             run_config_copy["node_host"] = node_host
                             run_config_copy["duration"] = round(run_duration)
                             run_config_copy["node_role"] = node['node'].role
+                            run_config_copy["database"] = self.database
                             run_config_copy["thread_id"] = (
                                 node_host  # Thread identifier - node host
                             )
@@ -357,7 +372,7 @@ class StressRunExecutor:
             if self.event_process_mode is not None:
                 event_prefix = f'export YDB_STRESS_UTIL_EVENT_PROCESS_MODE={self.event_process_mode};'
             cmd = f"{event_prefix}stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
-
+            run_config['run_command'] = cmd
             run_timeout = (
                 run_config["duration"] + 600
             )  # Add buffer for completion

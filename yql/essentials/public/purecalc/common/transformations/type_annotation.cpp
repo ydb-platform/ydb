@@ -248,8 +248,8 @@ private:
 TAutoPtr<IGraphTransformer> NYql::NPureCalc::MakeTypeAnnotationTransformer(
     TTypeAnnotationContextPtr typeAnnotationContext,
     const TVector<const TStructExprType*>& inputStructs,
-    TVector<const TStructExprType*>& rawInputTypes,
+    TVector<const TStructExprType*>& rawInputStructs,
     EProcessorMode processorMode,
     const TString& nodeName) {
-    return new TTypeAnnotator(typeAnnotationContext, inputStructs, rawInputTypes, processorMode, nodeName);
+    return new TTypeAnnotator(typeAnnotationContext, inputStructs, rawInputStructs, processorMode, nodeName);
 }

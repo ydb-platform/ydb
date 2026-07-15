@@ -17,6 +17,8 @@
 
 #include <library/cpp/yt/coding/varint.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
 namespace NYT::NTableClient {
@@ -172,7 +174,7 @@ TUnversionedOwningRow YsonToSchemafulRow(
 {
     auto nameTable = TNameTable::FromSchema(tableSchema);
 
-    auto rowParts = ConvertTo<THashMap<TString, INodePtr>>(TYsonString(yson, ysonType));
+    auto rowParts = ConvertTo<THashMap<std::string, INodePtr>>(TYsonString(yson, ysonType));
 
     TUnversionedOwningRowBuilder rowBuilder;
     auto validateAndAddValue = [&rowBuilder, &validateValues] (const TUnversionedValue& value, const TColumnSchema& column) {
@@ -393,7 +395,7 @@ TUnversionedOwningRow YsonToKey(TStringBuf yson)
     return keyBuilder.FinishRow();
 }
 
-TString KeyToYson(TUnversionedRow row)
+std::string KeyToYson(TUnversionedRow row)
 {
     return ConvertToYsonString(row, EYsonFormat::Text).ToString();
 }
@@ -537,11 +539,11 @@ void FromUnversionedValue(const char** value, TUnversionedValue unversionedValue
 void ToUnversionedValue(
     TUnversionedValue* unversionedValue,
     bool value,
-    const TRowBufferPtr& rowBuffer,
+    const TRowBufferPtr& /*rowBuffer*/,
     int id,
     EValueFlags flags)
 {
-    *unversionedValue = rowBuffer->CaptureValue(MakeUnversionedBooleanValue(value, id, flags));
+    *unversionedValue = MakeUnversionedBooleanValue(value, id, flags);
 }
 
 void FromUnversionedValue(bool* value, TUnversionedValue unversionedValue)
@@ -639,7 +641,7 @@ XX(i64,  Int64,  int64)
 XX(ui64, Uint64, uint64)
 XX(i32,  Int64,  int32)
 XX(ui32, Uint64, uint32)
-XX(i16,  Int64,  int32)
+XX(i16,  Int64,  int16)
 XX(ui16, Uint64, uint16)
 XX(i8,   Int64,  int8)
 XX(ui8,  Uint64, uint8)
@@ -740,6 +742,7 @@ void FromUnversionedValue(IMapNodePtr* value, TUnversionedValue unversionedValue
 {
     if (unversionedValue.Type == EValueType::Null) {
         *value = nullptr;
+        return;
     }
     if (unversionedValue.Type != EValueType::Any) {
         THROW_ERROR_EXCEPTION("Cannot parse YSON map from %Qlv",
@@ -764,8 +767,9 @@ void FromUnversionedValue(TIP6Address* value, TUnversionedValue unversionedValue
 {
     if (unversionedValue.Type == EValueType::Null) {
         *value = TIP6Address();
+        return;
     }
-    auto strValue = FromUnversionedValue<TString>(unversionedValue);
+    auto strValue = FromUnversionedValue<std::string>(unversionedValue);
     *value = TIP6Address::FromString(strValue);
 }
 
@@ -786,6 +790,7 @@ void FromUnversionedValue(TError* value, TUnversionedValue unversionedValue)
 {
     if (unversionedValue.Type == EValueType::Null) {
         *value = {};
+        return;
     }
     if (unversionedValue.Type != EValueType::Any) {
         THROW_ERROR_EXCEPTION(
@@ -823,8 +828,8 @@ void ProtobufToUnversionedValueImpl(
     auto* wireBuffer = pool->AllocateUnaligned(byteSize);
     YT_VERIFY(value.SerializePartialToArray(wireBuffer, byteSize));
     ArrayInputStream inputStream(wireBuffer, byteSize);
-    TString ysonBytes;
-    TStringOutput outputStream(ysonBytes);
+    std::string ysonBytes;
+    TStdStringOutput outputStream(ysonBytes);
     TYsonWriter ysonWriter(&outputStream);
     ParseProtobuf(&ysonWriter, &inputStream, type);
     *unversionedValue = rowBuffer->CaptureValue(MakeUnversionedAnyValue(ysonBytes, id, flags));
@@ -848,7 +853,8 @@ void UnversionedValueToProtobufImpl(
     TProtobufString wireBytes;
     StringOutputStream outputStream(&wireBytes);
     TProtobufWriterOptions options;
-    options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(EUnknownYsonFieldsMode::Keep);
+    options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
+        EUnknownYsonFieldsMode::Keep);
     auto protobufWriter = CreateProtobufWriter(&outputStream, type, options);
     ParseYsonStringBuffer(
         unversionedValue.AsStringBuf(),
@@ -869,8 +875,8 @@ void ListToUnversionedValueImpl(
     int id,
     EValueFlags flags)
 {
-    TString ysonBytes;
-    TStringOutput outputStream(ysonBytes);
+    std::string ysonBytes;
+    TStdStringOutput outputStream(ysonBytes);
     NYT::NYson::TYsonWriter writer(&outputStream);
     writer.OnBeginList();
 
@@ -1025,7 +1031,12 @@ void UnversionedValueToListImpl(
         {
             FlushElement();
             WireBytes_.clear();
-            Underlying_ = CreateProtobufWriter(&OutputStream_, Type_);
+
+            TProtobufWriterOptions options;
+            options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
+                EUnknownYsonFieldsMode::Keep);
+
+            Underlying_ = CreateProtobufWriter(&OutputStream_, Type_, options);
         }
 
         void FlushElement()
@@ -1176,8 +1187,8 @@ void MapToUnversionedValueImpl(
     int id,
     EValueFlags flags)
 {
-    TString ysonBytes;
-    TStringOutput outputStream(ysonBytes);
+    std::string ysonBytes;
+    TStdStringOutput outputStream(ysonBytes);
     NYT::NYson::TYsonWriter writer(&outputStream);
     writer.OnBeginMap();
 
@@ -1196,7 +1207,7 @@ void MapToUnversionedValueImpl(
 }
 
 void UnversionedValueToMapImpl(
-    std::function<google::protobuf::Message*(TString)> appender,
+    std::function<google::protobuf::Message*(std::string)> appender,
     const TProtobufMessageType* type,
     TUnversionedValue unversionedValue)
 {
@@ -1214,7 +1225,7 @@ void UnversionedValueToMapImpl(
     {
     public:
         TConsumer(
-            std::function<google::protobuf::Message*(TString)> appender,
+            std::function<google::protobuf::Message*(std::string)> appender,
             const TProtobufMessageType* type)
             : Appender_(std::move(appender))
             , Type_(type)
@@ -1335,7 +1346,12 @@ void UnversionedValueToMapImpl(
             FlushElement();
             WireBytes_.clear();
             Key_ = std::string(key);
-            Underlying_ = CreateProtobufWriter(&OutputStream_, Type_);
+
+            TProtobufWriterOptions options;
+            options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(
+                EUnknownYsonFieldsMode::Keep);
+
+            Underlying_ = CreateProtobufWriter(&OutputStream_, Type_, options);
         }
 
         void FlushElement()
@@ -1352,6 +1368,139 @@ void UnversionedValueToMapImpl(
             Key_.reset();
         }
     } consumer(std::move(appender), type);
+
+    ParseYsonStringBuffer(
+        unversionedValue.AsStringBuf(),
+        EYsonType::Node,
+        &consumer);
+}
+
+void UnversionedValueToMapImpl(
+    std::function<void(std::string, TUnversionedValue)> appender,
+    TUnversionedValue unversionedValue)
+{
+    if (unversionedValue.Type == EValueType::Null) {
+        return;
+    }
+
+    if (unversionedValue.Type != EValueType::Any) {
+        THROW_ERROR_EXCEPTION("Cannot parse map from %Qlv",
+            unversionedValue.Type);
+    }
+
+    class TConsumer final
+        : public TYsonConsumerBase
+    {
+    public:
+        explicit TConsumer(std::function<void(std::string, TUnversionedValue)> appender)
+            : Appender_(std::move(appender))
+        { }
+
+        void OnStringScalar(TStringBuf value) override
+        {
+            FlushValue(MakeUnversionedStringValue(value));
+        }
+
+        void OnInt64Scalar(i64 value) override
+        {
+            FlushValue(MakeUnversionedInt64Value(value));
+        }
+
+        void OnUint64Scalar(ui64 value) override
+        {
+            FlushValue(MakeUnversionedUint64Value(value));
+        }
+
+        void OnDoubleScalar(double value) override
+        {
+            FlushValue(MakeUnversionedDoubleValue(value));
+        }
+
+        void OnBooleanScalar(bool value) override
+        {
+            FlushValue(MakeUnversionedBooleanValue(value));
+        }
+
+        void OnEntity() override
+        {
+            FlushValue(MakeUnversionedSentinelValue(EValueType::Null));
+        }
+
+        void OnBeginList() override
+        {
+            THROW_ERROR_EXCEPTION("YSON lists are not supported in scalar maps");
+        }
+
+        void OnListItem() override
+        {
+            THROW_ERROR_EXCEPTION("YSON lists are not supported in scalar maps");
+        }
+
+        void OnEndList() override
+        {
+            THROW_ERROR_EXCEPTION("YSON lists are not supported in scalar maps");
+        }
+
+        void OnBeginMap() override
+        {
+            if (!InMap_) {
+                InMap_ = true;
+                return;
+            }
+            THROW_ERROR_EXCEPTION("YSON maps are not supported in scalar maps");
+        }
+
+        void OnKeyedItem(TStringBuf key) override
+        {
+            EnsureInMap();
+            if (PendingKey_) {
+                THROW_ERROR_EXCEPTION("Previous map item value is missing");
+            }
+            PendingKey_ = std::string(key);
+        }
+
+        void OnEndMap() override
+        {
+            EnsureInMap();
+            if (PendingKey_) {
+                THROW_ERROR_EXCEPTION("Last map item value is missing");
+            }
+            InMap_ = false;
+        }
+
+        void OnBeginAttributes() override
+        {
+            THROW_ERROR_EXCEPTION("YSON attributes are not supported in scalar maps");
+        }
+
+        void OnEndAttributes() override
+        {
+            YT_ABORT();
+        }
+
+    private:
+        const std::function<void(std::string, TUnversionedValue)> Appender_;
+
+        bool InMap_ = false;
+        std::optional<std::string> PendingKey_;
+
+        void EnsureInMap() const
+        {
+            if (!InMap_) {
+                THROW_ERROR_EXCEPTION("YSON map expected");
+            }
+        }
+
+        void FlushValue(TUnversionedValue value)
+        {
+            EnsureInMap();
+            if (!PendingKey_) {
+                THROW_ERROR_EXCEPTION("YSON scalar value is unexpected");
+            }
+            Appender_(std::move(*PendingKey_), value);
+            PendingKey_.reset();
+        }
+    } consumer(std::move(appender));
 
     ParseYsonStringBuffer(
         unversionedValue.AsStringBuf(),
@@ -1429,9 +1578,9 @@ void UnversionedValueToYson(TUnversionedValue unversionedValue, IYsonConsumer* c
 
 TYsonString UnversionedValueToYson(TUnversionedValue unversionedValue, bool enableRaw)
 {
-    TString data;
+    std::string data;
     data.reserve(GetYsonSize(unversionedValue));
-    TStringOutput output(data);
+    TStdStringOutput output(data);
     TYsonWriter writer(&output, EYsonFormat::Binary, EYsonType::Node, /* enableRaw */ enableRaw);
     UnversionedValueToYson(unversionedValue, &writer);
     return TYsonString(std::move(data));
@@ -1519,7 +1668,7 @@ TUnversionedValue TryDecodeUnversionedAnyValue(
     TStatelessLexer lexer; // this will not allocate on happy path
     TToken token;
     lexer.ParseToken(value.AsStringBuf(), &token);
-    YT_VERIFY(!token.IsEmpty());
+    YT_VERIFY(token.GetType() != ETokenType::EndOfStream);
 
     switch (token.GetType()) {
         case ETokenType::Int64:
@@ -1672,7 +1821,7 @@ TUnversionedValueRangeTruncationResult TruncateUnversionedValues(
             clipped = true;
         }
 
-        // This funciton also accounts for the representation of the id and type of the unversioned value.
+        // This function also accounts for the representation of the id and type of the unversioned value.
         // The limit can be slightly exceeded this way.
         resultSize += EstimateRowValueSize(truncatedValue);
 

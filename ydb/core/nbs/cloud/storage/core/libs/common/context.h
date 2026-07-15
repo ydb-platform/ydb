@@ -2,8 +2,9 @@
 
 #include "public.h"
 
+#include <ydb/library/actors/wilson/wilson_trace.h>
+
 #include <library/cpp/deprecated/atomic/atomic.h>
-#include <library/cpp/lwtrace/shuttle.h>
 
 namespace NYdb::NBS {
 
@@ -29,8 +30,7 @@ struct TRequestTime
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TCallContextBase
-    : public TThrRefBase
+struct TCallContextBase: public TThrRefBase
 {
 private:
     TAtomic Stage2Time[static_cast<int>(EProcessingStage::Last)] = {};
@@ -44,9 +44,9 @@ private:
 
 public:
     ui64 RequestId;
-    NLWTrace::TOrbit LWOrbit;
+    NWilson::TTraceId RootTraceId;
 
-    TCallContextBase(ui64 requestId);
+    explicit TCallContextBase(ui64 requestId);
 
     TDuration GetPossiblePostponeDuration() const;
     void SetPossiblePostponeDuration(TDuration d);

@@ -9,11 +9,11 @@ using namespace NKikimr;
 namespace NPython {
 namespace {
 
-static PyObject* VoidRepr(PyObject*) {
+PyObject* VoidRepr(PyObject*) {
     return PyRepr("yql.Void").Release();
 }
 
-static void VoidDealloc(PyObject*) {
+void VoidDealloc(PyObject*) {
     Py_FatalError("Deallocating yql.Void");
 }
 

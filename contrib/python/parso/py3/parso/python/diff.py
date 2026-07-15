@@ -881,6 +881,6 @@ class _NodesTree:
             end_pos[0] += len(lines) - 1
             end_pos[1] = len(lines[-1])
 
-        endmarker = EndMarker('', tuple(end_pos), self.prefix + self._prefix_remainder)
+        endmarker = EndMarker('', (end_pos[0], end_pos[1]), self.prefix + self._prefix_remainder)
         endmarker.parent = self._module
         self._module.children.append(endmarker)

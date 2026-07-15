@@ -20,9 +20,16 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/pb.h>
 
+#include <ydb/library/login/hashes_checker/hashes_checker.h>
+
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <openssl/sha.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
@@ -475,6 +482,45 @@ namespace NSchemeShardUT_Private {
                        const TString& dstPath, const TString& dstName, const TString& srcFullName,
                        TEvSchemeShard::EStatus expectedResult) {
         TestCopyTable(runtime, TTestTxConfig::SchemeShard, txId, dstPath, dstName, srcFullName, expectedResult);
+    }
+
+    TEvSchemeShard::TEvModifySchemeTransaction* CopyColumnTableRequest(ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TApplyIf applyIf) {
+        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+        auto transaction = evTx->Record.AddTransaction();
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
+        transaction->SetWorkingDir(dstPath);
+
+        auto op = transaction->MutableCreateColumnTable();
+        op->SetName(dstName);
+        op->SetCopyFromTable(srcFullName);
+        op->SetIsBackup(true);
+
+        SetApplyIf(*transaction, applyIf);
+        return evTx;
+    }
+
+    void AsyncCopyColumnTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId,
+                        const TString& dstPath, const TString& dstName, const TString& srcFullName) {
+        TActorId sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, schemeShardId, sender, CopyColumnTableRequest(txId, dstPath, dstName, srcFullName));
+    }
+
+    void AsyncCopyColumnTable(TTestActorRuntime& runtime, ui64 txId,
+                        const TString& dstPath, const TString& dstName, const TString& srcFullName) {
+        AsyncCopyColumnTable(runtime, TTestTxConfig::SchemeShard, txId, dstPath, dstName, srcFullName);
+    }
+
+    void TestCopyColumnTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId,
+                       const TString& dstPath, const TString& dstName, const TString& srcFullName,
+                       TEvSchemeShard::EStatus expectedResult) {
+        AsyncCopyColumnTable(runtime, schemeShardId, txId, dstPath, dstName, srcFullName);
+        TestModificationResult(runtime, txId, expectedResult);
+    }
+
+    void TestCopyColumnTable(TTestActorRuntime& runtime, ui64 txId,
+                       const TString& dstPath, const TString& dstName, const TString& srcFullName,
+                       TEvSchemeShard::EStatus expectedResult) {
+        TestCopyColumnTable(runtime, TTestTxConfig::SchemeShard, txId, dstPath, dstName, srcFullName, expectedResult);
     }
 
     TString TestDescribe(TTestActorRuntime& runtime, const TString& path) {
@@ -1086,10 +1132,43 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery)
 
+    // test shard
+    GENERIC_HELPERS(CreateTestShardSet, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet, &NKikimrSchemeOp::TModifyScheme::MutableCreateTestShardSet)
+    GENERIC_HELPERS(DropTestShardSet, NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
 
+    // external table
+    void AsyncCreateExternalTableOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme) {
+        auto* ev = CreateExternalTableRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
+        ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+    }
+
+    void TestCreateExternalTableOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults) {
+        auto* ev = CreateExternalTableRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
+        ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    // external data source
+    void AsyncCreateExternalDataSourceOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme) {
+        auto* ev = CreateExternalDataSourceRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
+        ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+    }
+
+    void TestCreateExternalDataSourceOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults) {
+        auto* ev = CreateExternalDataSourceRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
+        ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    // streaming query
     void TestCreateStreamingQueryOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults) {
         auto* ev = CreateStreamingQueryRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
         ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
@@ -1157,6 +1236,18 @@ namespace NSchemeShardUT_Private {
     {
         AsyncAssignBlockStoreVolume(runtime, txId, parentPath, name, mountToken, tokenVersion);
         TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    TString CreateTestShardSetConfig(const TString& name, ui64 count) {
+        return TStringBuilder() << R"(
+                Name: ")" << name << R"("
+                Count: )" << count << R"(
+                StorageConfig {
+                }
+                CmdInitialize {
+                    MaxDataBytes: 1000
+                }
+            )";
     }
 
     TEvSchemeShard::TEvCancelTx *CancelTxRequest(ui64 txId, ui64 targetTxId) {
@@ -1651,16 +1742,51 @@ namespace NSchemeShardUT_Private {
         NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err);
         UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         //Cdbg << scheme << "\n";
+
+        // Find the table info to get key column count
+        ui32 keyColumnCount = 0;
+        for (ui32 i = 0; i < scheme.DeltaSize(); ++i) {
+            const auto& d = scheme.GetDelta(i);
+            if (d.GetDeltaType() == NTabletFlatScheme::TAlterRecord::AddTable &&
+                d.GetTableId() == table)
+            {
+                // Count key columns by counting subsequent AddColumnToKey deltas for this table
+                for (ui32 j = i + 1; j < scheme.DeltaSize(); ++j) {
+                    const auto& dj = scheme.GetDelta(j);
+                    if (dj.GetDeltaType() == NTabletFlatScheme::TAlterRecord::AddTable) {
+                        // Stop at the next table definition
+                        break;
+                    }
+                    if (dj.GetDeltaType() == NTabletFlatScheme::TAlterRecord::AddColumnToKey &&
+                        dj.GetTableId() == table)
+                    {
+                        keyColumnCount++;
+                    }
+                }
+                break;
+            }
+        }
+
+        // With unified system, ByKeyFilter is now stored as a ByKeyFilterPrefixes entry
+        // with prefix length = key column count
         for (ui32 i = 0; i < scheme.DeltaSize(); ++i) {
             const auto& d = scheme.GetDelta(i);
             if (d.GetDeltaType() == NTabletFlatScheme::TAlterRecord::SetTable &&
                 d.GetTableId() == table &&
-                d.HasByKeyFilter())
+                d.ByKeyFilterPrefixesSize() > 0)
             {
-                return d.GetByKeyFilter();
+                // Check if full-key bloom is enabled
+                // Full-key bloom is represented as a prefix entry with length = key column count
+                for (ui32 j = 0; j < d.ByKeyFilterPrefixesSize(); ++j) {
+                    if (d.GetByKeyFilterPrefixes(j).GetPrefixLength() == keyColumnCount && keyColumnCount > 0) {
+                        return true;
+                    }
+                }
+                return false;
             }
         }
-        UNIT_ASSERT_C(false, "ByKeyFilter delta record not found");
+
+        // No SetTable delta found with ByKeyFilterPrefixes - bloom is disabled
         return false;
     }
 
@@ -1830,8 +1956,8 @@ namespace NSchemeShardUT_Private {
         return tableDescription;
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainRequest(ui64 txId, const TString &parentPath, const TString &name) {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainRequest(ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name) {
+        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomain);
         transaction->SetWorkingDir(parentPath);
@@ -1839,9 +1965,23 @@ namespace NSchemeShardUT_Private {
         return evTx;
     }
 
+    void AsyncUpgradeSubDomain(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name) {
+        auto evTx = UpgradeSubDomainRequest(schemeShard, txId, parentPath, name);
+        AsyncSend(runtime, schemeShard, evTx);
+    }
+
     void AsyncUpgradeSubDomain(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name) {
-        auto evTx = UpgradeSubDomainRequest(txId, parentPath, name);
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, evTx);
+        AsyncUpgradeSubDomain(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name);
+    }
+
+    void TestUpgradeSubDomain(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults) {
+        AsyncUpgradeSubDomain(runtime, schemeShard, txId, parentPath, name);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    void TestUpgradeSubDomain(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name) {
+        AsyncUpgradeSubDomain(runtime, schemeShard, txId, parentPath, name);
+        TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusAccepted, ""}});
     }
 
     void TestUpgradeSubDomain(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults) {
@@ -1854,8 +1994,8 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusAccepted, ""}});
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainDecisionRequest(ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainDecisionRequest(ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision);
         transaction->SetWorkingDir(parentPath);
@@ -1864,9 +2004,23 @@ namespace NSchemeShardUT_Private {
         return evTx;
     }
 
+    void AsyncUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        auto evTx = UpgradeSubDomainDecisionRequest(schemeShard, txId, parentPath, name, decision);
+        AsyncSend(runtime, schemeShard, evTx);
+    }
+
     void AsyncUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
-        auto evTx = UpgradeSubDomainDecisionRequest(txId, parentPath, name, decision);
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, evTx);
+        AsyncUpgradeSubDomainDecision(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, decision);
+    }
+
+    void TestUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        AsyncUpgradeSubDomainDecision(runtime, schemeShard, txId, parentPath, name, decision);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    void TestUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        AsyncUpgradeSubDomainDecision(runtime, schemeShard, txId, parentPath, name, decision);
+        TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusAccepted, ""}});
     }
 
     void TestUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
@@ -1928,19 +2082,19 @@ namespace NSchemeShardUT_Private {
         switch (cfg.IndexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal: {
             auto& settings = *index.mutable_global_index()->mutable_settings();
-            if (cfg.GlobalIndexSettings) {
+            if (cfg.GlobalIndexSettings.size() == 1) {
                 cfg.GlobalIndexSettings[0].SerializeTo(settings);
             }
         } break;
         case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
             auto& settings = *index.mutable_global_unique_index()->mutable_settings();
-            if (cfg.GlobalIndexSettings) {
+            if (cfg.GlobalIndexSettings.size() == 1) {
                 cfg.GlobalIndexSettings[0].SerializeTo(settings);
             }
         } break;
         case NKikimrSchemeOp::EIndexTypeGlobalAsync: {
             auto& settings = *index.mutable_global_async_index()->mutable_settings();
-            if (cfg.GlobalIndexSettings) {
+            if (cfg.GlobalIndexSettings.size() == 1) {
                 cfg.GlobalIndexSettings[0].SerializeTo(settings);
             }
         } break;
@@ -1960,19 +2114,28 @@ namespace NSchemeShardUT_Private {
                 kmeansTreeSettings.set_levels(2);
             }
 
-            if (cfg.GlobalIndexSettings) {
-                cfg.GlobalIndexSettings[0].SerializeTo(*settings.mutable_level_table_settings());
-                if (cfg.GlobalIndexSettings.size() > 1) {
-                    cfg.GlobalIndexSettings[1].SerializeTo(*settings.mutable_posting_table_settings());
-                }
-                if (cfg.GlobalIndexSettings.size() > 2) {
-                    cfg.GlobalIndexSettings[2].SerializeTo(*settings.mutable_prefix_table_settings());
+            const bool isPrefixed = cfg.IndexColumns.size() > 1;
+            if (cfg.GlobalIndexSettings.size() == (isPrefixed ? 3 : 2)) {
+                cfg.GlobalIndexSettings[NTableIndex::NKMeans::LevelTablePosition].SerializeTo(*settings.mutable_level_table_settings());
+                cfg.GlobalIndexSettings[NTableIndex::NKMeans::PostingTablePosition].SerializeTo(*settings.mutable_posting_table_settings());
+                if (isPrefixed) {
+                    cfg.GlobalIndexSettings[NTableIndex::NKMeans::PrefixTablePosition].SerializeTo(*settings.mutable_prefix_table_settings());
                 }
             }
         } break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
+            if (cfg.GlobalIndexSettings.size() == 1) {
+                cfg.GlobalIndexSettings[0].SerializeTo(*index.mutable_global_fulltext_plain_index()->mutable_settings());
+            }
         } break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+            auto& settings = *index.mutable_global_fulltext_relevance_index();
+            if (cfg.GlobalIndexSettings.size() == 4) {
+                cfg.GlobalIndexSettings[NTableIndex::NFulltext::DictTablePosition].SerializeTo(*settings.mutable_dict_table_settings());
+                cfg.GlobalIndexSettings[NTableIndex::NFulltext::DocsTablePosition].SerializeTo(*settings.mutable_docs_table_settings());
+                cfg.GlobalIndexSettings[NTableIndex::NFulltext::StatsTablePosition].SerializeTo(*settings.mutable_stats_table_settings());
+                cfg.GlobalIndexSettings[NTableIndex::NFulltext::PostingTablePosition].SerializeTo(*settings.mutable_posting_table_settings());
+            }
         } break;
         default:
             UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(cfg.IndexType));
@@ -2172,7 +2335,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE LIST: " << event->ToString() << Endl;
-        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, event->Record.GetIssues());
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS, event->Record.GetIssues());
         return event->Record;
     }
 
@@ -2191,7 +2354,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE Get: " << event->ToString() << Endl;
-        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, event->Record.GetIssues());
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS, event->Record.GetIssues());
         return event->Record;
     }
 
@@ -2230,15 +2393,17 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
-    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath) {
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath, bool cascade, ui32 maxShardsInFlight) {
         NKikimrForcedCompaction::TForcedCompactionSettings settings;
         settings.set_source_path(tablePath);
+        settings.set_cascade(cascade);
+        settings.set_max_shards_in_flight(maxShardsInFlight);
         auto ev = MakeHolder<TEvForcedCompaction::TEvCreateRequest>(id, dbName, settings);
         AsyncSend(runtime, schemeshardId, ev.Release());
     }
 
-    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath) {
-        AsyncCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath);
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, bool cascade, ui32 maxShardsInFlight) {
+        AsyncCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, cascade, maxShardsInFlight);
     }
 
     void TestCompact(
@@ -2247,17 +2412,129 @@ namespace NSchemeShardUT_Private {
         ui64 id,
         const TString& dbName,
         const TString& tablePath,
+        bool cascade,
+        ui32 maxShardsInFlight,
         Ydb::StatusIds::StatusCode expectedStatus)
     {
-        AsyncCompact(runtime, schemeshardId, id, dbName, tablePath);
+        AsyncCompact(runtime, schemeshardId, id, dbName, tablePath, cascade, maxShardsInFlight);
 
         TAutoPtr<IEventHandle> handle;
         auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvCreateResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
     }
 
-    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, Ydb::StatusIds::StatusCode expectedStatus) {
-        TestCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, expectedStatus);
+    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, bool cascade, ui32 maxShardsInFlight, Ydb::StatusIds::StatusCode expectedStatus) {
+        TestCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, cascade, maxShardsInFlight, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 id,
+        const TString& dbName,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvGetRequest(dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvGetResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 id,
+        const TString& dbName,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestGetCompaction(runtime, TTestTxConfig::SchemeShard, id, dbName, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvCancelResponse TestCancelCompaction(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvCancelRequest(txId, dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvCancelResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvCancelResponse TestCancelCompaction(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestCancelCompaction(runtime, TTestTxConfig::SchemeShard, txId, dbName, id, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvForgetResponse TestForgetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvForgetRequest(txId, dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvForgetResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvForgetResponse TestForgetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestForgetCompaction(runtime, TTestTxConfig::SchemeShard, txId, dbName, id, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvListResponse TestListCompactions(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        const TString& dbName,
+        ui64 pageSize,
+        const TString& pageToken,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvListRequest(dbName, pageSize, pageToken));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvListResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvListResponse TestListCompactions(
+        TTestActorRuntime& runtime,
+        const TString& dbName,
+        ui64 pageSize,
+        const TString& pageToken,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestListCompactions(runtime, TTestTxConfig::SchemeShard, dbName, pageSize, pageToken, expectedStatus);
     }
 
     TPathId TestFindTabletSubDomainPathId(
@@ -2288,21 +2565,44 @@ namespace NSchemeShardUT_Private {
         return TPathId(record.GetSchemeShardId(), record.GetSubDomainPathId());
     }
 
-    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& password, const TVector<TExpectedResult>& expectedResults) {
-        auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
-        auto transaction = modifyTx->Record.AddTransaction();
-        transaction->SetWorkingDir(database);
-        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+    TTestPasswordHashes MakeTestPasswordHashes(const TString& password) {
+        // Deterministically derive a new-format password hash from the plain password.
+        //
+        // We generate a SHA-256 (scram-sha-256) hash only: argon is a legacy format now.
+        // SchemeShard verifies a SASL PLAIN login by a plain string comparison of the supplied
+        // hash against the stored one, so we don't need a real scram computation here: we just build a
+        // pseudo hash of the required byte lengths that is a stable function of the password.
+        const auto& scram = NLogin::HashesRegistry.HashNamesMap.at("scram-sha-256");
 
-        auto createUser = transaction->MutableAlterLogin()->MutableCreateUser();
-        createUser->SetUser(user);
-        createUser->SetPassword(password);
+        const auto deriveBytes = [&password](const TString& tag, size_t size) {
+            TString result;
+            TString block = tag + password;
+            while (result.size() < size) {
+                unsigned char digest[SHA256_DIGEST_LENGTH];
+                SHA256(reinterpret_cast<const unsigned char*>(block.data()), block.size(), digest);
+                result.append(reinterpret_cast<const char*>(digest), sizeof(digest));
+                block.assign(reinterpret_cast<const char*>(digest), sizeof(digest));
+            }
 
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
-        TestModificationResults(runtime, txId, expectedResults);
+            result.resize(size);
+            return result;
+        };
+
+        const TString saltB64 = Base64Encode(deriveBytes("salt:", scram.SaltSize));
+        const TString storedKeyB64 = Base64Encode(deriveBytes("stored:", scram.HashSize));
+        const TString serverKeyB64 = Base64Encode(deriveBytes("server:", scram.HashSize));
+
+        NJson::TJsonValue hashes;
+        hashes["scram-sha-256"] = ToString(scram.IterationsCount) + ":" + saltB64 + "$" + storedKeyB64 + ":" + serverKeyB64;
+        hashes["version"] = NLogin::HASHES_JSON_SCHEMA_VERSION;
+
+        return {
+            .HashedPassword = Base64Encode(NJson::WriteJson(hashes, false)),
+            .ScramServerKey = serverKeyB64,
+        };
     }
 
-    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& hashedPassword, const TString& hashedPasswordOldFormat, const TVector<TExpectedResult>& expectedResults) {
+    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& hashedPassword, const TVector<TExpectedResult>& expectedResults) {
         auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = modifyTx->Record.AddTransaction();
         transaction->SetWorkingDir(database);
@@ -2310,8 +2610,6 @@ namespace NSchemeShardUT_Private {
 
         auto createUser = transaction->MutableAlterLogin()->MutableCreateUser();
         createUser->SetUser(user);
-        createUser->SetIsHashedPassword(true);
-        createUser->SetPassword(hashedPasswordOldFormat);
         createUser->SetHashedPassword(hashedPassword);
 
         AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
@@ -2382,23 +2680,10 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, expectedResults);
     }
 
-    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password) {
-        TActorId sender = runtime.AllocateEdgeActor();
-        auto evLogin = new TEvSchemeShard::TEvLogin();
-        evLogin->Record.SetUser(user);
-        evLogin->Record.SetPassword(password);
-
-        if (auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain(); user.EndsWith("@" + ldapDomain)) {
-            evLogin->Record.SetExternalAuth(ldapDomain);
-        }
-        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLogin);
-        TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
-        UNIT_ASSERT(event);
-        return event->Record;
-    }
-
-    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech, NLoginProto::EHashType::HashType hashType, const TString& hash, const TString& authMessage) {
+    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user,
+        NLoginProto::ESaslAuthMech::SaslAuthMech authMech, NLoginProto::EHashType::HashType hashType,
+        const TString& hash, const TString& authMessage)
+    {
         TActorId sender = runtime.AllocateEdgeActor();
         auto evLogin = new TEvSchemeShard::TEvLogin();
         evLogin->Record.SetUser(user);
@@ -2415,19 +2700,17 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
-    NKikimrScheme::TEvLoginResult LoginFinalize(
-        TTestActorRuntime& runtime,
-        const NLogin::TLoginProvider::TLoginUserRequest& request,
-        const NLogin::TLoginProvider::TPasswordCheckResult& checkResult,
-        const TString& passwordHash,
-        const bool needUpdateCache
-    ) {
-        const auto evLoginFinalize = new NSchemeShard::TEvPrivate::TEvLoginFinalize(
-            request, checkResult, runtime.AllocateEdgeActor(), passwordHash, needUpdateCache
-        );
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, evLoginFinalize);
+    NKikimrScheme::TEvLoginResult LoginExternal(TTestActorRuntime& runtime, const TString& user) {
+        // External (LDAP) authentication: the password is verified by LDAP, not by YDB, so it is passed through as is.
+        const auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        auto evLogin = new TEvSchemeShard::TEvLogin();
+        evLogin->Record.SetUser(user);
+        evLogin->Record.SetExternalAuth(ldapDomain);
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLogin);
         TAutoPtr<IEventHandle> handle;
-        const auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
+        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
         UNIT_ASSERT(event);
         return event->Record;
     }
@@ -2451,21 +2734,6 @@ namespace NSchemeShardUT_Private {
         ModifyUser(runtime, txId, database, [user, isEnabled](auto* alterUser) {
             alterUser->SetUser(std::move(user));
             alterUser->SetCanLogin(isEnabled);
-        });
-    }
-
-    void ChangePasswordUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& password) {
-        ModifyUser(runtime, txId, database, [user, password](auto* alterUser) {
-            alterUser->SetUser(std::move(user));
-            alterUser->SetPassword(std::move(password));
-        });
-    }
-
-    void ChangePasswordHashUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& hash) {
-        ModifyUser(runtime, txId, database, [user, hash](auto* alterUser) {
-            alterUser->SetUser(std::move(user));
-            alterUser->SetPassword(std::move(hash));
-            alterUser->SetIsHashedPassword(true);
         });
     }
 
@@ -2695,18 +2963,18 @@ namespace NSchemeShardUT_Private {
         TestLs(Runtime, Table, true, fnFillInfo);
     }
 
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> TFakeDataReq::TTablePartitioningInfo::ResolveKey(
+    std::shared_ptr<const TPartitioning> TFakeDataReq::TTablePartitioningInfo::ResolveKey(
         const TTableRange& range) const
     {
         Y_ABORT_UNLESS(!Partitioning.empty());
 
-        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
+        TVector<TKeyDesc::TPartitionInfo> partitions;
 
         // Temporary fix: for an empty range we need to return some datashard so that it can handle readset logic (
         // send empty result to other tx participants etc.)
         if (range.IsEmptyRange(KeyColumnTypes)) {
-            partitions->push_back(TKeyDesc::TPartitionInfo(Partitioning.begin()->Datashard));
-            return partitions;
+            partitions.push_back(TKeyDesc::TPartitionInfo(Partitioning.begin()->Datashard));
+            return std::make_shared<TPartitioning>(std::move(partitions));
         }
 
         TVector<TBorder>::const_iterator low = LowerBound(Partitioning.begin(), Partitioning.end(), true,
@@ -2717,17 +2985,17 @@ namespace NSchemeShardUT_Private {
 
         Y_ABORT_UNLESS(low != Partitioning.end(), "last key must be (inf)");
         do {
-            partitions->push_back(TKeyDesc::TPartitionInfo(low->Datashard));
+            partitions.push_back(TKeyDesc::TPartitionInfo(low->Datashard));
 
             if (range.Point)
-                return partitions;
+                return std::make_shared<TPartitioning>(std::move(partitions));
 
             int prevComp = CompareBorders<true, true>(low->KeyTuple.GetCells(), range.To, low->Point || low->Inclusive, range.InclusiveTo, KeyColumnTypes);
             if (prevComp >= 0)
-                return partitions;
+                return std::make_shared<TPartitioning>(std::move(partitions));
         } while (++low != Partitioning.end());
 
-        return partitions;
+        return std::make_shared<TPartitioning>(std::move(partitions));
     }
 
     TEvSchemeShard::TEvModifySchemeTransaction* CombineSchemeTransactions(const TVector<TEvSchemeShard::TEvModifySchemeTransaction*>& transactions) {
@@ -3011,7 +3279,7 @@ namespace NSchemeShardUT_Private {
             NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Text);
             NYql::IDataProvider::TFillSettings fillSettings;
             bool truncated;
-            KikimrResultToYson(ysonStream, writer, result, {}, fillSettings, truncated);
+            NYql::KikimrResultToYson(ysonStream, writer, result, {}, fillSettings, truncated);
             UNIT_ASSERT(!truncated);
             shardRows.push_back(ysonStream.Str());
         }
@@ -3208,4 +3476,198 @@ namespace NSchemeShardUT_Private {
 
         return ev->Record;
     }
+
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns,
+        const TString& userSID,
+        bool skipSettings)
+    {
+        // We can't do `GetRequest`, because it is not implemented at the time of writing the test
+        auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>();
+        request->Record.SetTxId(txId);
+        request->Record.SetDatabaseName(dbName);
+
+        if (userSID != "") {
+            request->Record.SetUserSID(userSID);
+        }
+
+        if (!skipSettings) {
+            NKikimrSetColumnConstraint::TSetColumnConstraintSettings settings;
+            settings.SetTablePath(tablePath);
+            for (const auto& col : notNullColumns) {
+                settings.AddNotNullColumns(col);
+            }
+
+            *request->Record.MutableSettings() = std::move(settings);
+        }
+
+        auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, schemeShard, sender, request.Release());
+
+        TAutoPtr<IEventHandle> handle;
+        auto* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvCreateResponse>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
+    }
+
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns)
+    {
+        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, "", false);
+    }
+
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraintWithoutSettings(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns)
+    {
+        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, "", true);
+    }
+
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns,
+        const TString& userSID)
+    {
+        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, userSID, false);
+    }
+
+    void AsyncSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns)
+    {
+        NKikimrSetColumnConstraint::TSetColumnConstraintSettings settings;
+        settings.SetTablePath(tablePath);
+        for (const auto& col : notNullColumns) {
+            settings.AddNotNullColumns(col);
+        }
+
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>(txId, dbName, std::move(settings));
+        ForwardToTablet(runtime, schemeShard, sender, request.Release());
+    }
+
+    TEvSetColumnConstraint::TEvListRequest* ListSetColumnConstraintRequest(const TString& dbName, ui64 pageSize, const TString& pageToken) {
+        return new TEvSetColumnConstraint::TEvListRequest(dbName, pageSize, pageToken);
+    }
+
+    NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName) {
+        return TestListSetColumnConstraint(runtime, schemeShard, dbName, 100, "", Ydb::StatusIds::SUCCESS);
+    }
+
+    NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(
+        TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName,
+        ui64 pageSize, const TString& pageToken, Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = ListSetColumnConstraintRequest(dbName, pageSize, pageToken);
+
+        ForwardToTablet(runtime, schemeShard, sender, request);
+
+        TAutoPtr<IEventHandle> handle;
+        TEvSetColumnConstraint::TEvListResponse* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvListResponse>(handle);
+        UNIT_ASSERT(event);
+
+        Cerr << "SET COLUMN CONSTRAINT RESPONSE LIST: " << event->ToString() << Endl;
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus, event->Record.GetIssues());
+        return event->Record;
+    }
+
+    NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 txId,
+        const TString& dbName,
+        ui64 operationId,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvSetColumnConstraint::TEvForgetRequest(txId, dbName, operationId));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvForgetResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        const TString& dbName,
+        ui64 operationId,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestForgetSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, txId, dbName, operationId, expectedStatus);
+    }
+
+    NKikimrSetColumnConstraint::TEvCancelResponse TestCancelSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 schemeShard,
+        ui64 txId,
+        const TString& dbName,
+        ui64 operationId)
+    {
+        auto request = MakeHolder<TEvSetColumnConstraint::TEvCancelRequest>(txId, dbName, operationId);
+
+        auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, schemeShard, sender, request.Release());
+
+        TAutoPtr<IEventHandle> handle;
+        auto* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvCancelResponse>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
+    }
+
+    void TestCheckColumnsNotNull(
+        TTestActorRuntime& runtime,
+        const TString& tablePath,
+        const std::map<TString, bool>& expectedColumnNotNullStates)
+    {
+        const auto describeResult = DescribePath(runtime, tablePath);
+        const auto& columns = describeResult.GetPathDescription().GetTable().GetColumns();
+
+        std::map<TString, bool> currentNotNull;
+
+        for (const auto& column : columns) {
+            currentNotNull[column.GetName()] = column.GetNotNull();
+        }
+
+        for (const auto& [columnName, expectedNotNullValue] : expectedColumnNotNullStates) {
+            auto it = currentNotNull.find(columnName);
+            UNIT_ASSERT_C(
+                it != currentNotNull.end(),
+                TStringBuilder()
+                    << "[CheckColumnsNotNull] Column `" << columnName << "` not found. "
+                    << describeResult.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                it->second,
+                expectedNotNullValue,
+                TStringBuilder()
+                    << "[CheckColumnsNotNull] Column `" << columnName << "` not null state mismatch. "
+                    << describeResult.ShortDebugString());
+        }
+    }
 }
+

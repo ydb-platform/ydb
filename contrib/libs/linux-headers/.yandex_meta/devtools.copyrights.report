@@ -50,7 +50,6 @@ BELONGS ya.make
         asm/signal_arm64.h [3:3]
         asm/statfs_arm64.h [3:3]
         asm/ucontext_arm64.h [3:3]
-        asm/unistd_arm64.h [3:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 005fdb24f8e2b9ebb42063d1ec366c82
 BELONGS ya.make
@@ -87,6 +86,18 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         drm/exynos_drm.h [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0128e852f88abcd10e24eb5340aaa44c
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2022-2024 OpenSynergy GmbH
+         * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/virtio_rtc.h [3:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 0167bf0efec9714579a21c42cfcb57b9
 BELONGS ya.make
@@ -215,6 +226,17 @@ BELONGS ya.make
     Files with this license:
         linux/sonypi.h [13:13]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 091e97d9d54fef258f61e5f746a2b7a1
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2021 - Raspberry Pi Ltd
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/media/raspberrypi/pisp_be_config.h [5:5]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 09d6692a7808fdf9c67420a433ebb60a
 BELONGS ya.make
     License text:
@@ -269,6 +291,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/auto_dev-ioctl.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b26996bfb42c528af128697232328ba
+BELONGS ya.make
+    License text:
+         * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/nsm.h [3:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 0bbb23c343299b62e3746ede25e6eef6
 BELONGS ya.make
@@ -511,12 +544,13 @@ BELONGS ya.make
     License text:
          * Copyright © 2017-2020 Mickaël Salaün <mic@digikod.net>
          * Copyright © 2018-2020 ANSSI
+         * Copyright © 2021-2025 Microsoft Corporation
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        linux/landlock.h [5:6]
+        linux/landlock.h [5:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 193058f6c43e3cad79e69e87eb6248c1
 BELONGS ya.make
@@ -551,6 +585,17 @@ BELONGS ya.make
     Files with this license:
         linux/can/j1939.h [5:5]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 1952ddba96a859e68e77037b3641dcfa
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2012-2016  Hans Verkuil <hansverk@cisco.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/v4l2-dv-timings.h [5:5]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 195d647d00bc18f0d4f0903db2b8d9a1
 BELONGS ya.make
     License text:
@@ -572,7 +617,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        linux/serial_core.h [5:5]
+        linux/serial_core.h [3:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1a553df2b24a35924894b61456ff987a
 BELONGS ya.make
@@ -672,6 +717,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         rdma/ib_user_verbs.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1d80039b4a96cd59938ead7613a2dd6e
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2024 Marvell.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        misc/mrvl_cn10k_dpi.h [5:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1ec5abb17f6e6fd2a93877eaec01b8f6
 BELONGS ya.make
@@ -976,6 +1032,18 @@ BELONGS ya.make
     Files with this license:
         linux/dvb/osd.h [7:9]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 2c7e16c6add1375fd1e4c75eefc0f78d
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2021 THine Electronics, Inc.
+         * Copyright (C) 2023 Ideas on Board Oy
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/thp7312.h [5:6]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 2cda42b3df52681d22ee9012139886b5
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -1006,6 +1074,19 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/zorro.h [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2ded96c4c895700e4411da98a09f1da1
+BELONGS ya.make
+    License text:
+         * Copyright (C) The Asahi Linux Contributors
+         * Copyright (C) 2018-2023 Collabora Ltd.
+         * Copyright (C) 2014-2018 Broadcom
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        drm/asahi_drm.h [3:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 2f3793ecc3c6cce52ff07d15219e8a79
 BELONGS ya.make
@@ -1042,6 +1123,19 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/aspeed-p2a-ctrl.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 302ef77cc4dc5f4c5b1c2e2d0e725417
+BELONGS ya.make
+    License text:
+         * Copyright © 2017-2020 Mickaël Salaün <mic@digikod.net>
+         * Copyright © 2018-2020 ANSSI
+         * Copyright © 2021-2025 Microsoft Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/landlock.h [5:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3207d350fa7af9a1c00d36424866f16b
 BELONGS ya.make
@@ -1190,6 +1284,18 @@ BELONGS ya.make
         linux/v4l2-controls.h [5:5]
         linux/videodev2.h [5:5]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 3800ce66ac192a7219fc53e207ce9a67
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2021 THine Electronics, Inc.
+         * Copyright (C) 2023 Ideas on Board Oy
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/thp7312.h [5:6]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 380e076e790b82379fe75a158108c24d
 BELONGS ya.make
     License text:
@@ -1212,17 +1318,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         scsi/scsi_bsg_ufs.h [5:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 3866399ed19ebc1f304703a69bd54dfb
-BELONGS ya.make
-    License text:
-         * Copyright (C) 2020-2023 Intel Corporation
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        drm/ivpu_accel.h [3:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 38b189a1de166b2abe92f94055386913
 BELONGS ya.make
@@ -1256,16 +1351,16 @@ BELONGS ya.make
     Files with this license:
         rdma/irdma-abi.h [3:3]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 3a48c02df08f6c2c4e18d78840b16fe1
+KEEP     COPYRIGHT_SERVICE_LABEL 3a68f18ec5a9074445762c970dc6ee30
 BELONGS ya.make
     License text:
-         * Copyright 1996, 1997, 1998 Hans Reiser, see reiserfs/README for licensing and copyright details
+        /* Copyright(c) Advanced Micro Devices, Inc */
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        linux/reiserfs_fs.h [3:3]
+        fwctl/pds.h [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3abceee12813f5f5c1ed7a506777af26
 BELONGS ya.make
@@ -1567,6 +1662,19 @@ BELONGS ya.make
         linux/timerfd.h [5:5]
         linux/userfaultfd.h [5:6]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 48ff39b111e930d89ec6dd513b6fdbf8
+BELONGS ya.make
+    License text:
+        /* Copyright (C) 2023 Collabora ltd. */
+        \#ifndef _PANTHOR_DRM_H_
+        \#define _PANTHOR_DRM_H_
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        drm/panthor_drm.h [2:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 49cedc791d52c16fa7b77f682c1cafe7
 BELONGS ya.make
     License text:
@@ -1730,17 +1838,6 @@ BELONGS ya.make
     Files with this license:
         linux/bpf_perf_event.h [2:2]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 53423b7043219181c7a2db97154757a2
-BELONGS ya.make
-    License text:
-         * Copyright (C) 2015 IBM Corporation
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        scsi/cxlflash_ioctl.h [8:8]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 534536464669065f913dc7b6392c8f79
 BELONGS ya.make
     License text:
@@ -1866,17 +1963,6 @@ BELONGS ya.make
     Files with this license:
         linux/ultrasound.h [10:10]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 584f4cf45a658aa6691b2ac587906267
-BELONGS ya.make
-    License text:
-         * Copyright (c) 2011 Jiri Pirko <jpirko@redhat.com>
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        linux/if_team.h [4:4]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 59e0cc57a692683a403fe85614542e6d
 BELONGS ya.make
     License text:
@@ -1957,6 +2043,17 @@ BELONGS ya.make
     Files with this license:
         linux/dma-buf.h [5:5]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 5d79465eeb8872701c89074169ac01e5
+BELONGS ya.make
+    License text:
+         * Copyright © 2023 Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        drm/xe_drm.h [3:3]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 5eb8707fd6ac9144cb98fe33b063f456
 BELONGS ya.make
     License text:
@@ -2003,15 +2100,17 @@ BELONGS ya.make
     Files with this license:
         asm/posix_types_arm.h [5:5]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 60532bdfaa2b41c68103d7a9323d14a0
+KEEP     COPYRIGHT_SERVICE_LABEL 60c3b7b486412cba7c703f10def7d987
 BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
+    License text:
+         * Copyright 2016-2023 HabanaLabs, Ltd.
+         * All Rights Reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        linux/nl80211.h [6:14]
+        drm/habanalabs_accel.h [3:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 61375807ab2a77a803ab8d0797577f87
 BELONGS ya.make
@@ -2100,6 +2199,17 @@ BELONGS ya.make
     Files with this license:
         linux/kfd_sysfs.h [3:3]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 645d7994882a1dd0b51e8b828bec27ae
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2020-2025 Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        drm/ivpu_accel.h [3:3]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 648a97fa298660e965cde849534ae0fc
 BELONGS ya.make
     License text:
@@ -2151,13 +2261,15 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 66ffec21b9bdf8f4b1383531b4f3f31a
 BELONGS ya.make
     License text:
-         * Copyright © 2014-2018 Broadcom
-         * Copyright © 2019 Collabora ltd.
+         * Copyright (C) The Asahi Linux Contributors
+         * Copyright (C) 2018-2023 Collabora Ltd.
+         * Copyright (C) 2014-2018 Broadcom
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        drm/asahi_drm.h [3:5]
         drm/panfrost_drm.h [3:4]
         drm/v3d_drm.h [2:2]
 
@@ -2218,6 +2330,18 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         asm/eeh_powerpc.h [16:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6a337b52bf20d5c1f9babdafa1ca26d6
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2022-2024 OpenSynergy GmbH
+         * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/virtio_rtc.h [3:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 6ae3dd10986a7d09441dd39dc498112b
 BELONGS ya.make
@@ -2338,12 +2462,13 @@ BELONGS ya.make
     License text:
          * Copyright © 2017-2020 Mickaël Salaün <mic@digikod.net>
          * Copyright © 2018-2020 ANSSI
+         * Copyright © 2021-2025 Microsoft Corporation
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        linux/landlock.h [5:6]
+        linux/landlock.h [5:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 708c0633bb0bb2542f21d8b198dff8d2
 BELONGS ya.make
@@ -2585,6 +2710,17 @@ BELONGS ya.make
     Files with this license:
         asm/opal-prd_powerpc.h [6:6]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 7bd405d2ca2d5bf242565f3804370524
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2024-2025 Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        fwctl/cxl.h [3:3]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 7eecb7a7093057e894b3b2850ce23fab
 BELONGS ya.make
     License text:
@@ -2647,12 +2783,14 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 80897ba1256a852924d19c5c5bde5076
 BELONGS ya.make
     License text:
+         * Copyright (C) 2022 Casey Schaufler <casey@schaufler-ca.com>
          * Copyright (C) 2022 Intel Corporation
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        linux/lsm.h [5:6]
         linux/tdx-guest.h [5:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 80d34fe40f966e2fd8497cb2bef175d8
@@ -2744,6 +2882,19 @@ BELONGS ya.make
     Files with this license:
         linux/nbd.h [3:8]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 86591bf31753dba45cb37b0c1bffa1e9
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2021 - Raspberry Pi Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/media/raspberrypi/pisp_common.h [5:5]
+        linux/media/raspberrypi/pisp_fe_config.h [5:5]
+        linux/media/raspberrypi/pisp_fe_statistics.h [5:5]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 86c051674d566ea96b9121ecd0bcf668
 BELONGS ya.make
     License text:
@@ -2775,6 +2926,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/usb/tmc.h [3:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 883c9badcf063ac0237919ec2da9cf0f
+BELONGS ya.make
+    License text:
+         *   Copyright (c) 2023 by Geoffrey D. Bennett <g at b4.vu>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        sound/scarlett2.h [7:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 886cf6b0b9ed70ce8e6889efa24677b5
 BELONGS ya.make
@@ -2908,6 +3070,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/nbd.h [3:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8b9d48c121ba2a6cfc66e62271e8a9c7
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2022-2024, Advanced Micro Devices, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        drm/amdxdna_accel.h [3:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 8bcb233fcdcd3a95b4bbd65b7a5011e1
 BELONGS ya.make
@@ -3091,6 +3264,17 @@ BELONGS ya.make
     Files with this license:
         linux/hyperv.h [165:166]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 93b7b290ccc73dad9927b56f79c3b05f
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2024 Amlogic, Inc. All rights reserved
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/media/amlogic/c3-isp-config.h [3:3]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 93dc3251b465d6e739fe0c847f3b58c8
 BELONGS ya.make
     License text:
@@ -3185,7 +3369,7 @@ BELONGS ya.make
         sound/sof/abi.h [6:6]
         sound/sof/fw.h [6:6]
         sound/sof/header.h [6:6]
-        sound/sof/tokens.h [6:6]
+        sound/sof/tokens.h [6:8]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 9778dfef3338829b5cd3d42445909892
 BELONGS ya.make
@@ -3210,6 +3394,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         xen/gntdev.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 98fe6d722a2d5fbcaf8c0970c909ced2
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2023 Imagination Technologies Ltd. */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        drm/pvr_drm.h [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 99a4aafcf2940680cdeceb81c761c298
 BELONGS ya.make
@@ -3281,6 +3476,16 @@ BELONGS ya.make
     Files with this license:
         linux/tc_act/tc_gate.h [2:2]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 9bf10fe01a40973a305ebc653097ab79
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/nl80211.h [6:14]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 9c3a2c2667134b74cba9d7beee1aa1b7
 BELONGS ya.make
     License text:
@@ -3349,7 +3554,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/idxd.h [2:4]
-        linux/um_timetravel.h [14:14]
         linux/xdp_diag.h [4:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 9dd3c06754fd56b2de791a0916fc50f7
@@ -3455,6 +3659,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/am437x-vpfe.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a0b1064bfa2f80e262262050ffbba67c
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2024 Unisoc Technologies Co., Ltd.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/exfat.h [3:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a0d8add0286600a09508aadaa62c865c
 BELONGS ya.make
@@ -3614,17 +3829,6 @@ BELONGS ya.make
     Files with this license:
         linux/stm.h [4:4]
 
-KEEP     COPYRIGHT_SERVICE_LABEL a7961594e2cf23be3ebdf624008110e9
-BELONGS ya.make
-    License text:
-         * Copyright 2014 IBM Corp.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        misc/cxl.h [3:3]
-
 KEEP     COPYRIGHT_SERVICE_LABEL a79e7fc88fb4942573861e45264e7e16
 BELONGS ya.make
     License text:
@@ -3637,6 +3841,18 @@ BELONGS ya.make
         mtd/mtd-abi.h [3:3]
         mtd/mtd-user.h [3:3]
         mtd/nftl-user.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a7ec427f006141a74af8a10b7629bb6b
+BELONGS ya.make
+    License text:
+         * Channel numbers used by the microchip-tcb-capture driver
+         * Copyright (C) 2025 Bence Csókás
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/counter/microchip-tcb-capture.h [3:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a801750cf5edb8692c8cde996e7ae1d3
 BELONGS ya.make
@@ -3824,6 +4040,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         asm/kvm_para_powerpc.h [16:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ad03023f7af3a801d861361d94863d46
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2024 Rodolfo Giometti <giometti@enneenne.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/pps_gen.h [5:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL adc11f352994aab310983ed7d9dc5bd4
 BELONGS ya.make
@@ -4280,18 +4507,6 @@ BELONGS ya.make
     Files with this license:
         linux/devlink.h [4:4]
 
-KEEP     COPYRIGHT_SERVICE_LABEL bf1ac412bb545623bc911c3d6523ac80
-BELONGS ya.make
-    License text:
-         *		Author: Franco Venturi <fventuri@mediaone.net>
-         *		Copyright 1998 Franco Venturi
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        linux/if_cablemodem.h [5:6]
-
 KEEP     COPYRIGHT_SERVICE_LABEL bf6483648172844d848ae7ba5284f1a0
 BELONGS ya.make
     License text:
@@ -4315,17 +4530,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/vbox_err.h [2:2]
-
-KEEP     COPYRIGHT_SERVICE_LABEL c04f9d4e081c1a8016ab2906de389a9e
-BELONGS ya.make
-    License text:
-         * Copyright (C) 2012-2016  Hans Verkuil <hans.verkuil@cisco.com>
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        linux/v4l2-dv-timings.h [5:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c06354693ad68b0e0ad4f78221ab2ac2
 BELONGS ya.make
@@ -4419,6 +4623,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/nilfs2_ondisk.h [15:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c586d12007451242b1261c7acf53112f
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2024,2025, Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cxl/features.h [3:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c5bbecfeafed3ea017845926f41d213f
 BELONGS ya.make
@@ -4515,6 +4730,17 @@ BELONGS ya.make
         linux/dvb/dmx.h [5:7]
         linux/dvb/net.h [5:7]
         linux/dvb/video.h [7:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c8b93e8e35cc357641df3b354b8c98fb
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        fwctl/mlx5.h [3:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c8e3cfd1eae54cd8bd9a3a31d57c910e
 BELONGS ya.make
@@ -4853,6 +5079,17 @@ BELONGS ya.make
     Files with this license:
         linux/sev-guest.h [5:5]
 
+KEEP     COPYRIGHT_SERVICE_LABEL d302653a147b0048c3c635efc4df51a1
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2021-2022 Elizabeth Figura <zfigura@codeweavers.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/ntsync.h [5:5]
+
 KEEP     COPYRIGHT_SERVICE_LABEL d33d8417ca745c71f2759f7a4c3e6b24
 BELONGS ya.make
     License text:
@@ -4876,6 +5113,17 @@ BELONGS ya.make
         linux/can/bcm.h [7:9]
         linux/can/error.h [7:9]
         linux/can/raw.h [7:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d522ba6ebb9507e8756c52412cf2b85f
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        fwctl/fwctl.h [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL d5ddfa3149f93df9c5073d93bd25f2f0
 BELONGS ya.make
@@ -4980,6 +5228,18 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/blkzoned.h [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dca7bf22cfeb9a94676b163ded4b62e9
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2022 Casey Schaufler <casey@schaufler-ca.com>
+         * Copyright (C) 2022 Intel Corporation
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/lsm.h [5:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL dcc02b88d3818bb8c14d7cc451b75a84
 BELONGS ya.make
@@ -5115,6 +5375,19 @@ BELONGS ya.make
     Files with this license:
         drm/drm_mode.h [2:6]
 
+KEEP     COPYRIGHT_SERVICE_LABEL e21f656363034ac7eaa35a61c6ef5e78
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2022/23 Siemens Mobility GmbH */
+        \#ifndef _LINUX_GSMMUX_H
+        \#define _LINUX_GSMMUX_H
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/gsmmux.h [2:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL e3219d93cb6fdcb3f746b05d36008234
 BELONGS ya.make
     License text:
@@ -5227,6 +5500,17 @@ BELONGS ya.make
     Files with this license:
         linux/if_tun.h [4:4]
 
+KEEP     COPYRIGHT_SERVICE_LABEL e8d656690bd15fce4cfa9988a426d904
+BELONGS ya.make
+    License text:
+         * Copyright 2018-2024 Amazon.com, Inc. or its affiliates. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        rdma/efa-abi.h [3:3]
+
 KEEP     COPYRIGHT_SERVICE_LABEL e954eaacb67b3450b2238676d9fd07a9
 BELONGS ya.make
     License text:
@@ -5237,6 +5521,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/acct.h [12:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eaa8012a9553d9bfd1e1bd2226ef5b88
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2024-2025 by Geoffrey D. Bennett <g at b4.vu>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        sound/fcp.h [5:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL eb0b17d0a366209c5365fd1f017e3a7b
 BELONGS ya.make
@@ -5317,7 +5612,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        asm/papr_pdsm_powerpc.h [5:5]
+        linux/papr_pdsm.h [5:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ee30f96ab16e20e390563df0667e99b9
 BELONGS ya.make
@@ -5487,17 +5782,17 @@ BELONGS ya.make
         linux/auto_fs.h [4:5]
         linux/auto_fs4.h [3:3]
 
-KEEP     COPYRIGHT_SERVICE_LABEL f3f33b7a9aa14bf99e2ba92fdc1fd6a8
+KEEP     COPYRIGHT_SERVICE_LABEL f3ea16297fefe18216dbcd5187abbc33
 BELONGS ya.make
     License text:
-         * Copyright © 2009-2022 VMware, Inc., Palo Alto, CA., USA
+         * Copyright © 2009-2023 VMware, Inc., Palo Alto, CA., USA
          * All Rights Reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        drm/vmwgfx_drm.h [3:4]
+        drm/vmwgfx_drm.h [4:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f4323e411440c3e6da2e4c9a252e8c3c
 BELONGS ya.make
@@ -5509,6 +5804,17 @@ BELONGS ya.make
     Files with this license:
         drm/amdgpu_drm.h [3:6]
         linux/kfd_ioctl.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f46cc08fd9ab992a3b2c4705252a0763
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2022 Nuvoton Technologies
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        linux/npcm-video.h [5:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f48e21caf7f5829ce71e6361d3604a90
 BELONGS ya.make
@@ -5531,18 +5837,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/rio_mport_cdev.h [3:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL f592a119aca51923a6457e7e6d3a16f7
-BELONGS ya.make
-    License text:
-         * Copyright 2016-2022 HabanaLabs, Ltd.
-         * All Rights Reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        drm/habanalabs_accel.h [3:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f5979eee408e15aafc4b8f37cb14bebc
 BELONGS ya.make
@@ -5578,6 +5872,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         linux/mempolicy.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f6fd769c23ec262c17b0bb708f68a222
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2021-2024 Advanced Micro Devices, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        misc/amd-apml.h [3:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f795036ac2ad25c237e281f880521961
 BELONGS ya.make
@@ -5646,16 +5951,16 @@ BELONGS ya.make
     Files with this license:
         linux/i8k.h [5:5]
 
-KEEP     COPYRIGHT_SERVICE_LABEL f92ae910cb0c44542dd7ccea58f6eaa0
+KEEP     COPYRIGHT_SERVICE_LABEL f9f0185f1c508a71425cb8a4c6a98cf6
 BELONGS ya.make
     License text:
-         * Copyright 2018-2023 Amazon.com, Inc. or its affiliates. All rights reserved.
+         * Copyright (C) 2019 - 2023 Intel Corporation
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        rdma/efa-abi.h [3:3]
+        linux/um_timetravel.h [3:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f9fc290e1e73be767c5b40514b41e7cb
 BELONGS ya.make

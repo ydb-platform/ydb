@@ -37,8 +37,8 @@ protected:
 };
 
 struct TQueryStringParse: public TQueryStringConv {
-    explicit TQueryStringParse(TSourcePosition&& pos)
-        : Pos_(std::move(pos))
+    explicit TQueryStringParse(const TSourcePosition& pos)
+        : Pos_(pos)
     {
     }
 
@@ -81,8 +81,8 @@ struct TQueryStringToList: public TQueryStringParse {
 };
 
 struct TQueryStringToDict: public TQueryStringParse {
-    explicit TQueryStringToDict(TType* dictType, TSourcePosition&& pos)
-        : TQueryStringParse(std::move(pos))
+    explicit TQueryStringToDict(TType* dictType, const TSourcePosition& pos)
+        : TQueryStringParse(pos)
         , DictType_(dictType)
     {
     }
@@ -114,10 +114,10 @@ class TBuildQueryString: public TQueryStringConv {
     } FirstArgTypeId_;
 
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
     explicit TBuildQueryString(TSourcePosition&& pos, EFirstArgTypeId firstArgTypeId)
-        : Pos_(std::move(pos))
+        : Pos_(pos)
         , FirstArgTypeId_(firstArgTypeId)
     {
     }
@@ -129,6 +129,8 @@ public:
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder,
                       const TUnboxedValuePod* args) const override;
+
+    static const TStringRef& BuildPolyArgs();
 
     static bool DeclareSignature(const TStringRef& name,
                                  TType* userType,

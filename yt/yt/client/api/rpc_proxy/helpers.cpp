@@ -52,10 +52,19 @@ void PatchProxyForStallRequests(const TConnectionConfigPtr& config, TApiServiceP
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ThrowUnimplemented(const TString& method)
+void ThrowUnimplemented(const std::string& method)
 {
     THROW_ERROR_EXCEPTION("%Qv method is not implemented in RPC proxy",
         method);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void SetControlMultiplexingBandIfEnabled(NRpc::TClientRequest& req, const TConnectionConfigPtr& config)
+{
+    if (config->EnableControlMultiplexingBand) {
+        req.SetMultiplexingBand(NRpc::EMultiplexingBand::Control);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -578,7 +587,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
                 << TErrorAttribute("logical_type", FromProto<ESimpleLogicalValueType>(protoSchema.logical_type()));
         }
         if (protoSchema.has_type() && GetPhysicalType(v1Type) != physicalType) {
-            THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"logical_type\" do not match")
+            THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"type\" do not match")
                 << TErrorAttribute("type_v3", ToString(*columnType))
                 << TErrorAttribute("type", protoSchema.type());
         }
@@ -1289,7 +1298,7 @@ void ToProto(
 
     ToProto(protoStatistics->mutable_column_hyperloglog_digests(), statistics.LargeStatistics.ColumnHyperLogLogDigests);
 
-    YT_OPTIONAL_SET_PROTO(protoStatistics, read_size_estimation, statistics.ReadDataSizeEstimate);
+    YT_OPTIONAL_SET_PROTO(protoStatistics, read_size_estimate, statistics.ReadDataSizeEstimate);
 }
 
 void FromProto(
@@ -1309,7 +1318,7 @@ void FromProto(
 
     FromProto(&statistics->LargeStatistics.ColumnHyperLogLogDigests, protoStatistics.column_hyperloglog_digests());
 
-    statistics->ReadDataSizeEstimate = YT_OPTIONAL_FROM_PROTO(protoStatistics, read_size_estimation);
+    statistics->ReadDataSizeEstimate = YT_OPTIONAL_FROM_PROTO(protoStatistics, read_size_estimate);
 }
 
 void ToProto(
@@ -1345,7 +1354,7 @@ void FromProto(
     const NProto::TMultiTablePartition& protoMultiTablePartition)
 {
     for (const auto& range : protoMultiTablePartition.table_ranges()) {
-        multiTablePartition->TableRanges.emplace_back(NYPath::TRichYPath::Parse(FromProto<TString>(range)));
+        multiTablePartition->TableRanges.emplace_back(NYPath::TRichYPath::Parse(FromProto<std::string>(range)));
     }
 
     if (protoMultiTablePartition.has_aggregate_statistics()) {
@@ -1930,8 +1939,6 @@ NProto::EQueryEngine ConvertQueryEngineToProto(
             return NProto::EQueryEngine::QE_MOCK;
         case NQueryTrackerClient::EQueryEngine::Spyt:
             return NProto::EQueryEngine::QE_SPYT;
-        case NQueryTrackerClient::EQueryEngine::SpytConnect:
-            return NProto::EQueryEngine::QE_SPYT;
     }
     YT_ABORT();
 }
@@ -2459,7 +2466,8 @@ bool IsChaosRetriableError(const TError& error)
             code == NTabletClient::EErrorCode::TabletReplicationEraMismatch ||
             code == NChaosClient::EErrorCode::ShortcutNotFound ||
             code == NChaosClient::EErrorCode::ShortcutHasDifferentEra ||
-            code == NChaosClient::EErrorCode::ShortcutRevoked;
+            code == NChaosClient::EErrorCode::ShortcutRevoked ||
+            code == NChaosClient::EErrorCode::ChaosCellIsNotEnabled;
     }));
 }
 
@@ -2733,11 +2741,11 @@ TIntrusivePtr<NApi::IRowset<TTypeErasedRow>> DeserializeRowset(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void SortByRegexes(std::vector<TString>& values, const std::vector<NRe2::TRe2Ptr>& regexes)
+void SortByRegexes(std::vector<std::string>& values, const std::vector<NRe2::TRe2Ptr>& regexes)
 {
-    auto valueToRank = [&] (const TString& value) -> size_t {
+    auto valueToRank = [&] (const std::string& value) -> size_t {
         for (size_t index = 0; index < regexes.size(); ++index) {
-            if (NRe2::TRe2::FullMatch(NRe2::StringPiece(value), *regexes[index])) {
+            if (NRe2::TRe2::FullMatch(re2::StringPiece(value), *regexes[index])) {
                 return index;
             }
         }

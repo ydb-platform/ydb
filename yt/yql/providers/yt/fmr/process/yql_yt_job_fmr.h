@@ -9,18 +9,35 @@
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/client/impl/yql_yt_table_data_service_client_impl.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/discovery/file/yql_yt_file_service_discovery.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/discovery/interface/yql_yt_service_discovery.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/impl/yql_yt_job_service_impl.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/file/yql_yt_file_yt_job_service.h>
 #include <yt/yql/providers/yt/job/yql_job_user_base.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_queue_writer_with_lock.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
+#include <yt/yql/providers/yt/fmr/vanilla/peer_tracker/yql_yt_vanilla_peer_tracker.h>
 
 namespace NYql::NFmr {
+
+// Parameters describing a vanilla YT operation; carried through FMR job state
+// so that separate-process job binaries can resolve peers (e.g. TDS) via ListJobs.
+struct TVanillaInfo {
+    TStaticVanillaPeerTrackerSettings Tracker;
+    ui16 TdsPort = 8002;
+    ui32 TdsMinIndex = 1;
+
+    void Save(IOutputStream* s) const {
+        ::SaveMany(s, Tracker, TdsPort, TdsMinIndex);
+    }
+
+    void Load(IInputStream* s) {
+        ::LoadMany(s, Tracker, TdsPort, TdsMinIndex);
+    }
+};
 
 struct TFmrUserJobOptions {
     bool WriteStatsToFile = false;
 };
-
 
 class TFmrUserJob: public TYqlUserJobBase {
 public:
@@ -57,12 +74,65 @@ public:
         TableDataServiceDiscoveryFilePath_ = tableDataServiceDiscoveryFilePath;
     }
 
-    void SetIsOrdered(bool isOrdered) {
-        IsOrdered_ = isOrdered;
+    // Set a live discovery object instead of a file path.
+    // Not serialized — only valid for in-process job execution.
+    void SetTableDataServiceDiscovery(ITableDataServiceDiscovery::TPtr discovery) {
+        Discovery_ = std::move(discovery);
+    }
+
+    // Set a live ITableDataService directly — bypasses HTTP, for fully intraprocess use.
+    // Not serialized — only valid for in-process job execution.
+    void SetDirectTableDataService(ITableDataService::TPtr tds) {
+        DirectTableDataService_ = std::move(tds);
+    }
+
+    // Set vanilla TDS info for separate-process jobs: the binary resolves TDS
+    // nodes via ListJobs instead of reading a local file.
+    void SetVanillaInfo(TVanillaInfo info) {
+        VanillaInfo_ = std::move(info);
+    }
+
+    void SetFmrJobType(EFmrJobType jobType) {
+        FmrJobType_ = jobType;
     }
 
     void SetSettings(const TFmrUserJobSettings& settings) {
         Settings_ = settings;
+    }
+
+    void SetTvmSettings(const TMaybe<TFmrTvmJobSettings>& tvmSettings) {
+        TvmSettings_ = tvmSettings;
+    }
+
+    void SetReduceOperationSpec(const TReduceOperationSpec& reduceOperationSpec) {
+        ReduceOperationSpec_ = reduceOperationSpec;
+    }
+
+    void SetIsMapReduceReducer(bool value) {
+        IsMapReduceReducer_ = value;
+    }
+
+    void SetIsMapReduceMap(bool value) {
+        IsMapReduceMap_ = value;
+    }
+
+    // Whether this Reduce job's input is sorted by [_yql_key_hash, ...ReduceOperationSpec's
+    // SortBy] (a MapReduce operation's reduce stage) or by SortBy alone with no hash column at
+    // all (a plain Reduce operation reading real YT-sorted input) - see
+    // TReduceTaskParams::SortByHasKeyHashPrefix, which this is set from.
+    void SetSortByHasKeyHashPrefix(bool value) {
+        SortByHasKeyHashPrefix_ = value;
+    }
+
+    // Set by the gateway (from execCtx->InputTables_, before this job's state is serialized to
+    // workers) whenever the ORIGINAL OPERATION has more than one distinct input position (e.g. a
+    // JOIN's mapper reading the same or different tables via multiple sections). This must be a
+    // job-level decision, not inferred per task: once an input table is large enough to be split
+    // into byte-range partitions, any individual task ends up touching only one of the operation's
+    // input positions, so a per-task diversity check would wrongly conclude marking is unnecessary
+    // even though the mapper globally expects Variant-tagged rows.
+    void SetForceTableIndexMarking(bool value) {
+        ForceTableIndexMarking_ = value;
     }
 
     void Save(IOutputStream& s) const override;
@@ -75,12 +145,33 @@ protected:
 
     TIntrusivePtr<NYT::IReaderImplBase> MakeMkqlJobReader() override;
 
+    void ChangeMkqlIOSpecIfNeeded() override;
+
+    void PostInitMkqlIOSpec() override;
+
+    bool NeedWriteStats() override {
+        return false;
+    }
+
 private:
-    void FillQueueFromSingleInputTable(ui64 tableIndex);
+    void FillQueueFromSingleInputTable(ui64 tableIndex, bool needsTableIndexMarking);
     void FillQueueFromInputTablesUnordered();
     void FillQueueFromInputTablesOrdered();
+    void FillQueueFromReduceInput();
 
-    void InitializeFmrUserJob();
+    // Per-reader original input positions (TYtTableRef::TableIndex / TFmrTableRef::TableIndex) for a
+    // physical task-table-ref, in the same order GetTableInputStreams returns readers for it (one
+    // TYtTableTaskRef can bundle rows from several original input tables). This is what TableName()
+    // resolution and the table_index stream markers must use, since it's unique per original input
+    // position (unlike the operation's InputGroups/Group, which several distinct tables can share).
+    std::vector<ui32> GetTableIndicesForInput(const TTaskTableRef& tableRef) const;
+    // Whether to embed table_index markers in the raw stream so the reader can tell which original
+    // input position each row came from. Driven entirely by ForceTableIndexMarking_ (a job-level
+    // flag set by the gateway) rather than this task's own InputTables_ diversity — see
+    // SetForceTableIndexMarking for why a per-task check is unsound.
+    bool NeedsTableIndexMarking() const;
+
+    void InitializeFmrUserJob(TVector<TString>* mapperBlobs = nullptr);
 
     TStatistics GetStatistics(const TFmrUserJobOptions& options);
 
@@ -90,9 +181,23 @@ private:
     std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections_;
     TString TableDataServiceDiscoveryFilePath_;
     TString YtJobServiceType_; // file or native
-    bool IsOrdered_ = false;
+    EFmrJobType FmrJobType_ = EFmrJobType::Map;
     TFmrUserJobSettings Settings_ = TFmrUserJobSettings();
+    TMaybe<TFmrTvmJobSettings> TvmSettings_ = Nothing();
+    TMaybe<TVanillaInfo> VanillaInfo_ = Nothing();
+    TMaybe<TReduceOperationSpec> ReduceOperationSpec_;
+    bool IsMapReduceReducer_ = false;
+    bool IsMapReduceMap_ = false;
+    bool SortByHasKeyHashPrefix_ = false;
+    bool ForceTableIndexMarking_ = false;
     // End of serializable part
+
+    // Non-serialized: set only for in-process execution via SetTableDataServiceDiscovery.
+    ITableDataServiceDiscovery::TPtr Discovery_;
+    // Non-serialized: direct in-process TDS, bypasses HTTP; set via SetDirectTableDataService.
+    ITableDataService::TPtr DirectTableDataService_;
+    // Non-serialized: owns the static peer tracker created for subprocess vanilla TDS discovery.
+    std::unique_ptr<IVanillaPeerTracker> VanillaPeerTracker_;
 
     TFmrRawTableQueue::TPtr UnionInputTablesQueue_; // Queue which represents union of all input streams
     TFmrRawTableQueueReader::TPtr QueueReader_;

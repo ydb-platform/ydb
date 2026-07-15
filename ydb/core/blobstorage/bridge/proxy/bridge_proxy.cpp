@@ -322,8 +322,19 @@ namespace NKikimr {
                 // ensure we got right number of responses
                 Y_ABORT_UNLESS(ev->ResponseSz == state.NumResponses);
 
-                if (!MustRestoreFirst && DataIsTrustedInPile(pile)) {
+                if (MustRestoreFirst) {
+                    // we are going to restore data, so we have to collect answers from all piles
+                } else if (DataIsTrustedInPile(pile)) {
+                    // this is response from synced pile, we can fully trust it
                     return ev;
+                } else if (ResponsesPending) {
+                    // we still have some queries in flight, execute them
+                    return nullptr;
+                } else {
+                    // strange situation: we haven't got response from trusted pile?
+                    Y_DEBUG_ABORT("missing response from trusted pile");
+                    return static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest).MakeErrorResponse(
+                        NKikimrProto::ERROR, "failed to obtain response from trusted pile", self.GroupId);
                 }
 
                 if (!state.Responses) {
@@ -437,8 +448,16 @@ namespace NKikimr {
                     Y_ABORT_UNLESS(item.Id);
                     Y_ABORT_UNLESS(item.Buffer.size() == item.Id.BlobSize());
                     self.SendQuery(shared_from_this(), bridgePileId, std::make_unique<TEvBlobStorage::TEvPut>(
-                        item.Id, TRcBuf(item.Buffer), TInstant::Max(), handleClass, TEvBlobStorage::TEvPut::TacticDefault,
-                        item.IssueKeepFlag, true), {.Index = index});
+                        TEvBlobStorage::TEvPut::TParameters{
+                            .BlobId = item.Id,
+                            .Buffer = TRope(TRcBuf(item.Buffer)),
+                            .Deadline = TInstant::Max(),
+                            .HandleClass = handleClass,
+                            .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
+                            .WriteSource = TWriteSource::BridgeProxyRestorePut,
+                            .IssueKeepFlag = item.IssueKeepFlag,
+                            .IgnoreBlock = true,
+                        }), {.Index = index});
                 }
 
                 IsRestoring = true;
@@ -701,7 +720,7 @@ namespace NKikimr {
 
                 // check the sync state for this group
                 const auto& groupPileInfo = state.GetPile(i);
-                if (auto eventToSend = PrepareEvent(groupPileInfo, originalRequest)) {
+                if (auto eventToSend = PrepareEvent(groupPileInfo, originalRequest, pile->BridgePileId)) {
                     SendQuery(request, pile->BridgePileId, std::move(eventToSend));
                 }
             }
@@ -737,7 +756,8 @@ namespace NKikimr {
         }
 
         template<typename TEvent>
-        std::unique_ptr<IEventBase> PrepareEvent(const NKikimrBridge::TGroupState::TPile& pile, const TEvent& ev) {
+        std::unique_ptr<IEventBase> PrepareEvent(const NKikimrBridge::TGroupState::TPile& pile, const TEvent& ev,
+                TBridgePileId bridgePileId) {
             std::unique_ptr<TEvent> res;
 
             switch (pile.GetStage()) {
@@ -749,7 +769,7 @@ namespace NKikimr {
                         // allow only keep flags to be sent
                         res = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(ev.TabletId, ev.RecordGeneration,
                             ev.PerGenerationCounter, ev.Channel, false, 0, 0, new TVector<TLogoBlobID>(*ev.Keep),
-                            nullptr, ev.Deadline, true, false, false);
+                            nullptr, ev.Deadline, true, ev.WriteSource, false, false);
                     }
                     [[fallthrough]];
                 case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:
@@ -770,6 +790,19 @@ namespace NKikimr {
                 case NKikimrBridge::TGroupState_EStage_TGroupState_EStage_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBridge::TGroupState_EStage_TGroupState_EStage_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_ABORT();
+            }
+
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut>) {
+                if (Info->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE && !ev.AlreadyEncrypted) {
+                    // we have to encrypt this message
+                } else if (bridgePileId == BridgeInfo->SelfNodePile->BridgePileId) {
+                    // send this message as is
+                } else if (AppData()->FeatureFlags.GetEnableInterpileTrafficOptimization()) {
+                    // enable reducing interpile traffic
+                    res = std::make_unique<TEvBlobStorage::TEvPut>(ev.Id, TRope(ev.Buffer), ev.Deadline, ev.HandleClass,
+                        ev.Tactic, ev.IssueKeepFlag, ev.IgnoreBlock, ev.AlreadyEncrypted,
+                        /*reduceInterpileTraffic=*/ true);
+                }
             }
 
             if (!res) {
@@ -821,19 +854,37 @@ namespace NKikimr {
                     auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(ev.get());
                     Y_ABORT_UNLESS(common);
                     ++common->RestartCounter;
-                    Y_DEBUG_ABORT_UNLESS(common->RestartCounter < 100); // too often restarts do not make sense
                     auto handle = std::make_unique<IEventHandle>(SelfId(), request->Sender, ev.release(), 0, request->Cookie);
 
                     const auto& bridgeGroupState = Info->Group->GetBridgeGroupState();
                     const ui32 myGeneration = bridgeGroupState.GetPile(pile.BridgePileId.GetPileIndex()).GetGroupGeneration();
 
+                    Y_VERIFY_DEBUG_S(common->RestartCounter < 100, "GroupId# " << GroupId
+                        << " item.GroupId# " << item.GroupId
+                        << " myGeneration# " << myGeneration
+                        << " RacingGeneration# " << msg->RacingGeneration
+                        << " Info.Generation# " << request->Info->GroupGeneration
+                        << " Type# " << TypeName<TEvent>()
+                        << " RequestId# " << request->RequestId
+                        << " ErrorReason# " << msg->ErrorReason); // too often restarts do not make sense
+
                     if (myGeneration < msg->RacingGeneration) {
                         PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), std::move(handle));
                     } else if (msg->RacingGeneration < myGeneration) {
-                        // our generation is higher than the recipient's; we have to route this message through node warden
-                        // to ensure proxy's configuration gets in place
-                        SendToBSProxy(handle->Sender, GroupId, handle->ReleaseBase().Release(), handle->Cookie,
-                            std::move(handle->TraceId));
+                        std::unique_ptr<IEventHandle> h(CreateEventForBSProxy(handle->Sender, GroupId,
+                            handle->ReleaseBase().Release(), handle->Cookie, std::move(handle->TraceId)));
+                        if (TGroupID(item.GroupId).ConfigurationType() == EGroupConfigurationType::Static) {
+                            // static group configuration is updated a bit differently, so we can't expect for instant update;
+                            // here we introduce a backoff timer
+                            constexpr ui32 maxCounter = 20;
+                            constexpr double maxFactor = 6.0 / maxCounter;
+                            auto timeout = TDuration::MicroSeconds(pow(10, Min(common->RestartCounter - 1, maxCounter) * maxFactor));
+                            TActivationContext::Schedule(timeout, h.release());
+                        } else {
+                            // our generation is higher than the recipient's; we have to route this message through node warden
+                            // to ensure proxy's configuration gets in place
+                            TActivationContext::Send(h.release());
+                        }
                     } else {
                         // we can retry this message (obviously, we HAD request executed at incorrect generation, but
                         // now generation is correct)

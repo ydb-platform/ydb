@@ -6,6 +6,7 @@
 #include <util/string/join.h>
 
 #include <sstream>
+#include <utility>
 
 using namespace NYql;
 
@@ -175,8 +176,8 @@ TOptimizerStatistics::TOptimizerStatistics(
     , ByteSize(byteSize)
     , Cost(cost)
     , Selectivity(1.0)
-    , KeyColumns(keyColumns)
-    , ColumnStatistics(columnMap)
+    , KeyColumns(std::move(keyColumns))
+    , ColumnStatistics(std::move(columnMap))
     , ShuffledByColumns(nullptr)
     , SortColumns(nullptr)
     , StorageType(storageType)

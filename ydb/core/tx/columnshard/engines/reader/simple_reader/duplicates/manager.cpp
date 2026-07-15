@@ -10,6 +10,8 @@
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 namespace {
@@ -24,6 +26,7 @@ private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
         Request->Abort(TStringBuilder() << "cannot allocate memory: " << errorMessage);
     }
+
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvFilterRequestResourcesAllocated(Request, guard, std::move(RequestGuard)));
@@ -42,15 +45,12 @@ public:
 };
 }   // namespace
 
-#define LOCAL_LOG_TRACE \
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)
-
 TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions)
     : TActor(&TDuplicateManager::StateMain)
     , LastSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetLastSchema())
     , PKColumns(context.GetPKColumns())
     , PKSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetPrimaryKey())
-    , Counters(context.GetCommonContext()->GetCounters().GetDuplicateFilteringCounters())
+    , Counters(context.GetCommonContext()->GetCounters().GetSimpleDuplicateFilteringCounters())
     , Intervals(MakeIntervalTree(portions))
     , Portions(MakePortionsIndex(Intervals))
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
@@ -100,9 +100,13 @@ TIntervalsIterator TDuplicateManager::StartIntervalProcessing(
         materializedBorders.emplace(portionId, GetBorders(portionId));
     }
     TColumnDataSplitter splitter(materializedBorders);
-    LOCAL_LOG_TRACE("event", "split_portion")
-    ("source", constructor->GetRequest()->Get()->GetPortionId())("splitter", splitter.DebugString())(
-        "intersection_portions", intersectingPortions.size());
+    YDB_LOG_TRACE("",
+        {"component", "duplicates_manager"},
+        {"self", TActivationContext::AsActorContext().SelfID},
+        {"event", "split_portion"},
+        {"source", constructor->GetRequest()->Get()->GetPortionId()},
+        {"splitter", splitter.DebugString()},
+        {"intersectionPortions", intersectingPortions.size()});
     THashMap<ui32, NArrow::TColumnFilter> readyFilters;
     std::vector<ui32> intervalsToBuild;
     {
@@ -155,8 +159,12 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     Counters->OnFilterRequest(intersectingPortions.size());
     ExpectedIntersectionCount = intersectingPortions.size();
 
-    LOCAL_LOG_TRACE("event", "request_filter")
-    ("source", constructor->GetRequest()->Get()->GetPortionId())("intersecting_portions", intersectingPortions.size());
+    YDB_LOG_TRACE("",
+        {"component", "duplicates_manager"},
+        {"self", TActivationContext::AsActorContext().SelfID},
+        {"event", "request_filter"},
+        {"source", constructor->GetRequest()->Get()->GetPortionId()},
+        {"intersectingPortions", intersectingPortions.size()});
     AFL_VERIFY(intersectingPortions.size());
 
     TIntervalsIterator intervalsIterator = StartIntervalProcessing(intersectingPortions, constructor);
@@ -188,11 +196,19 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
 
 void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr& ev) {
     if (ev->Get()->GetConclusion().IsFail()) {
-        LOCAL_LOG_TRACE("event", "filter_construction_error")("error", ev->Get()->GetConclusion().GetErrorMessage());
+        YDB_LOG_TRACE("",
+            {"component", "duplicates_manager"},
+            {"self", TActivationContext::AsActorContext().SelfID},
+            {"event", "filter_construction_error"},
+            {"error", ev->Get()->GetConclusion().GetErrorMessage()});
         AbortAndPassAway(ev->Get()->GetConclusion().GetErrorMessage());
         return;
     }
-    LOCAL_LOG_TRACE("event", "filters_constructed")("filters", ev->Get()->GetConclusion().GetResult().size());
+    YDB_LOG_TRACE("",
+        {"component", "duplicates_manager"},
+        {"self", TActivationContext::AsActorContext().SelfID},
+        {"event", "filters_constructed"},
+        {"filters", ev->Get()->GetConclusion().GetResult().size()});
     AFL_VERIFY(ev->Get()->GetConclusion().GetResult().size());
     for (auto&& [mapInfo, filter] : ev->Get()->ExtractResult()) {
         if (auto findInterval = IntervalsInFlight.find(mapInfo.GetInterval()); findInterval != IntervalsInFlight.end()) {
@@ -202,7 +218,11 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr
             }
         }
         FiltersCache.Insert(mapInfo, filter);
-        LOCAL_LOG_TRACE("event", "extract_constructed_filter")("range", mapInfo.DebugString());
+        YDB_LOG_TRACE("",
+            {"component", "duplicates_manager"},
+            {"self", TActivationContext::AsActorContext().SelfID},
+            {"event", "extract_constructed_filter"},
+            {"range", mapInfo.DebugString()});
     }
 
     ValidateInFlightProgress();

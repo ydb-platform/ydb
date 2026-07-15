@@ -11,9 +11,9 @@
 #include <arrow/datum.h>
 #include <arrow/compute/kernel.h>
 
-extern "C" uint64_t GetBlockCount(const NYql::NUdf::TUnboxedValuePod data);
-extern "C" uint64_t GetBitmapPopCountCount(const NYql::NUdf::TUnboxedValuePod data);
-extern "C" uint8_t GetBitmapScalarValue(const NYql::NUdf::TUnboxedValuePod data);
+extern "C" uint64_t GetBlockCount(NYql::NUdf::TUnboxedValuePod data);
+extern "C" uint64_t GetBitmapPopCountCount(NYql::NUdf::TUnboxedValuePod data);
+extern "C" uint8_t GetBitmapScalarValue(NYql::NUdf::TUnboxedValuePod data);
 
 namespace NKikimr::NMiniKQL {
 
@@ -27,12 +27,12 @@ std::vector<arrow::ValueDescr> ToValueDescr(const TVector<TType*>& types);
 std::vector<arrow::compute::InputType> ConvertToInputTypes(const TVector<TType*>& argTypes);
 arrow::compute::OutputType ConvertToOutputType(TType* output);
 
-NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const uint64_t count);
+NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, uint64_t count, NYql::EDatumValidationMode validationMode = NYql::DefaultDatumValidationMode);
 
 class TBlockFuncNode: public TMutableComputationNode<TBlockFuncNode> {
 public:
     TBlockFuncNode(TComputationMutables& mutables,
-                   NYql::NUdf::EValidateDatumMode validateDatumMode,
+                   NYql::EDatumValidationMode validateDatumMode,
                    TStringBuf name,
                    TComputationNodePtrVector&& argsNodes,
                    const TVector<TType*>& argsTypes,
@@ -66,7 +66,7 @@ private:
                const std::vector<arrow::ValueDescr>& argsValuesDescr,
                TComputationContext& ctx)
             : TComputationValue(memInfo)
-            , ExecContext(&ctx.ArrowMemoryPool, nullptr, nullptr)
+            , ExecContext(&ctx.ArrowMemoryPool, /*executor=*/nullptr, /*func_registry=*/nullptr)
             , KernelContext(&ExecContext)
         {
             if (kernel.init) {
@@ -86,7 +86,7 @@ private:
     std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final;
 
 private:
-    NYql::NUdf::EValidateDatumMode ValidateDatumMode_ = NYql::NUdf::EValidateDatumMode::None;
+    NYql::EDatumValidationMode ValidateDatumMode_ = NYql::EDatumValidationMode::None;
     const ui32 StateIndex_;
     const TComputationNodePtrVector ArgsNodes_;
     const std::vector<arrow::ValueDescr> ArgsValuesDescr_;
@@ -122,6 +122,6 @@ struct TBlockState: public TComputationValue<TBlockState> {
 
     ui64 Slice();
 
-    NUdf::TUnboxedValuePod Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx) const;
+    NUdf::TUnboxedValuePod Get(ui64 sliceSize, const THolderFactory& holderFactory, size_t idx) const;
 };
 } // namespace NKikimr::NMiniKQL

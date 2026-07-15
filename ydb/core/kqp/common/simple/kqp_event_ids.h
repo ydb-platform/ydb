@@ -52,6 +52,8 @@ struct TKqpEvents {
         EvProxyPingResponse,
         EvListCompileCacheQueriesRequest,
         EvListCompileCacheQueriesResponse,
+        EvWarmupComplete,
+        EvStartWarmup,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);
@@ -163,7 +165,6 @@ struct TKqpScriptExecutionEvents {
         EvScriptFinalizeRequest,
         EvScriptFinalizeResponse,
         EvSaveScriptFinalStatusResponse,
-        EvGetScriptExecutionOperationQueryResponse,
         EvDescribeSecretsResponse,
         EvSaveScriptResultPartFinished,
         EvScriptExecutionsTableCreationFinished,
@@ -177,6 +178,7 @@ struct TKqpScriptExecutionEvents {
         EvSaveScriptProgressResponse,
         EvResetScriptExecutionRetriesResponse,
         EvGetScriptExecutionPhysicalGraph,
+        EvDescribeResourceIdResponse,
     };
 };
 

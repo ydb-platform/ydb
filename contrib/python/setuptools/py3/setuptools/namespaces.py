@@ -20,11 +20,6 @@ class Installer:
         log.info("Installing %s", filename)
         lines = map(self._gen_nspkg_line, nsp)
 
-        if self.dry_run:
-            # always generate the lines, even in dry run
-            list(lines)
-            return
-
         with open(filename, 'wt', encoding=py312.PTH_ENCODING) as f:
             # Python<3.13 requires encoding="locale" instead of "utf-8"
             # See: python/cpython#77102

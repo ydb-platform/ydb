@@ -70,10 +70,10 @@ def extract_tb(tb, limit=None):
     This is useful for alternate formatting of stack traces.  If
     'limit' is omitted or None, all entries are extracted.  A
     pre-processed stack trace entry is a FrameSummary object
-    containing attributes filename, lineno, name, and line
-    representing the information that is usually printed for a stack
-    trace.  The line is a string with leading and trailing
-    whitespace stripped; if the source is not available it is None.
+    representing the information that is usually printed for a
+    stack trace. The line attribute is a string with
+    leading and trailing whitespace stripped; if the source is not
+    available the corresponding attribute is None.
     """
     return StackSummary._extract_from_extended_frame_gen(
         _walk_tb_with_full_positions(tb), limit=limit)
@@ -251,9 +251,8 @@ def extract_stack(f=None, limit=None):
 
     The return value has the same format as for extract_tb().  The
     optional 'f' and 'limit' arguments have the same meaning as for
-    print_stack().  Each item in the list is a quadruple (filename,
-    line number, function name, text), and the entries are in order
-    from oldest to newest stack frame.
+    print_stack().  Each item in the list is a FrameSummary object,
+    and the entries are in order from oldest to newest stack frame.
     """
     if f is None:
         f = sys._getframe().f_back
@@ -281,7 +280,7 @@ class FrameSummary:
       active when the frame was captured.
     - :attr:`name` The name of the function or method that was executing
       when the frame was captured.
-    - :attr:`line` The text from the linecache module for the
+    - :attr:`line` The text from the linecache module for the line
       of code that was running when the frame was captured.
     - :attr:`locals` Either None if locals were not supplied, or a dict
       mapping the name to the repr() of the variable.
@@ -951,7 +950,7 @@ def _extract_caret_anchors_from_line_segment(segment):
 _WIDE_CHAR_SPECIFIERS = "WF"
 
 def _display_width(line, offset=None):
-    """Calculate the extra amount of width space the given source
+    """Calculate the amount of width space the given source
     code segment might take if it were to be displayed on a fixed
     width output device. Supports wide unicode characters and emojis."""
 
@@ -1037,7 +1036,7 @@ class TracebackException:
     def __init__(self, exc_type, exc_value, exc_traceback, *, limit=None,
             lookup_lines=True, capture_locals=False, compact=False,
             max_group_width=15, max_group_depth=10, save_exc_type=True, _seen=None):
-        # NB: we need to accept exc_traceback, exc_value, exc_traceback to
+        # NB: we need to accept exc_type, exc_value, exc_traceback to
         # permit backwards compat with the existing API, otherwise we
         # need stub thunk objects just to glue it together.
         # Handle loops in __cause__ or __context__.
@@ -1484,17 +1483,23 @@ def _substitution_cost(ch_a, ch_b):
     return _MOVE_COST
 
 
+def _get_safe___dir__(obj):
+    # Use obj.__dir__() to avoid a TypeError when calling dir(obj).
+    # See gh-131001 and gh-139933.
+    try:
+        d = obj.__dir__()
+    except TypeError:  # when obj is a class
+        d = type(obj).__dir__(obj)
+    return sorted(x for x in d if isinstance(x, str))
+
+
 def _compute_suggestion_error(exc_value, tb, wrong_name):
     if wrong_name is None or not isinstance(wrong_name, str):
         return None
     if isinstance(exc_value, AttributeError):
         obj = exc_value.obj
         try:
-            try:
-                d = dir(obj)
-            except TypeError:  # Attributes are unsortable, e.g. int and str
-                d = list(obj.__class__.__dict__.keys()) + list(obj.__dict__.keys())
-            d = sorted([x for x in d if isinstance(x, str)])
+            d = _get_safe___dir__(obj)
             hide_underscored = (wrong_name[:1] != '_')
             if hide_underscored and tb is not None:
                 while tb.tb_next is not None:
@@ -1509,11 +1514,7 @@ def _compute_suggestion_error(exc_value, tb, wrong_name):
     elif isinstance(exc_value, ImportError):
         try:
             mod = __import__(exc_value.name)
-            try:
-                d = dir(mod)
-            except TypeError:  # Attributes are unsortable, e.g. int and str
-                d = list(mod.__dict__.keys())
-            d = sorted([x for x in d if isinstance(x, str)])
+            d = _get_safe___dir__(mod)
             if wrong_name[:1] != '_':
                 d = [x for x in d if x[:1] != '_']
         except Exception:

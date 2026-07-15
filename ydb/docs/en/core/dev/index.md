@@ -24,7 +24,6 @@ Main resources:
   - [{#T}](../yql/reference/index.md)
   - [{#T}](../reference/ydb-sdk/index.md)
   - [{#T}](../reference/ydb-cli/index.md)
-  - [{#T}](../postgresql/intro.md)
   - [{#T}](../reference/kafka-api/index.md)
 
 If you're interested in developing {{ ydb-short-name }} core or satellite projects, refer to the [documentation for contributors](../contributor/index.md).

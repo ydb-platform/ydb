@@ -8,11 +8,20 @@
 
 namespace NYdbWorkload {
 
-class TWorkloadVectorFilesDataInitializer : public TWorkloadDataInitializerBase {
+class TWorkloadVectorDataInitializerBase : public TWorkloadDataInitializerBase {
+protected:
+    const TVectorWorkloadParams& VectorParams;
+
+public:
+    TWorkloadVectorDataInitializerBase(const TString& name, const TString& description, const TVectorWorkloadParams& params);
+    virtual int PostImport() override;
+};
+
+class TWorkloadVectorFilesDataInitializer : public TWorkloadVectorDataInitializerBase {
 private:
-    const TVectorWorkloadParams& Params;
     TString DataFiles;
     TString EmbeddingColumnName = "embedding";
+    TString Format;
 
 public:
     TWorkloadVectorFilesDataInitializer(const TVectorWorkloadParams& params);
@@ -21,11 +30,11 @@ public:
     virtual TBulkDataGeneratorList DoGetBulkInitialData() override;
 };
 
-class TWorkloadVectorGenerateDataInitializer : public TWorkloadDataInitializerBase {
+class TWorkloadVectorGenerateDataInitializer : public TWorkloadVectorDataInitializerBase {
 private:
-    const TVectorWorkloadParams& Params;
     NVector::TVectorOpts VectorOpts;
-    size_t RowCount;
+    size_t RowCount = 10000;
+    size_t PrefixCount = 100;
     uint32_t RandomSeed = 42;
 
 public:

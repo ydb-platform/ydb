@@ -1,0 +1,26 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config '"OptimizerFlags" '"ExpandLMapOrShuffleByKeysViaBlock"))
+
+(let input (AsList
+  (Int32 '1)
+  (Int32 '2)
+  (Int32 '3)
+  (Int32 '4)
+))
+
+(let lmap1 (LMap input (lambda '(stream)
+  (Map stream (lambda '(item) (+ item (Int32 '1))))
+)))
+
+(let lmap2 (LMap input (lambda '(stream)
+  (Map stream (lambda '(item) (* item (Int32 '2))))
+)))
+
+(let output (ZipAll lmap1 lmap2))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) output '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

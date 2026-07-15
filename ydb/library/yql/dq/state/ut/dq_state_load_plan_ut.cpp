@@ -98,7 +98,7 @@ TTaskInputBuilder& TTaskInputBuilder::TopicSource(const TString& topic, ui64 par
     src->MutableSettings()->PackFrom(topicSrcSettings);
 
     NYql::NPq::NProto::TDqReadTaskParams readTaskParams;
-    auto* part = readTaskParams.MutablePartitioningParams();
+    auto* part = readTaskParams.AddPartitioningParams();
     part->SetTopicPartitionsCount(partitionsCount);
     part->SetDqPartitionsCount(dqPartitionsCount);
     part->SetEachTopicPartitionGroupId(eachPartition);

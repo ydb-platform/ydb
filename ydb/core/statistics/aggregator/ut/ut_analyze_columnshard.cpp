@@ -36,6 +36,17 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
     }
 
+    Y_UNIT_TEST(AnalyzeMultiColumnStatistics) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareMultiColumnColumnTable(env, "Database", "Table", 4);
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        CheckMultiColumnStatisticsProbes(env, runtime, tableInfo.PathId, {2, 3});
+    }
+
     Y_UNIT_TEST(AnalyzeEmptyTable) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
@@ -110,7 +121,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         UNIT_ASSERT_VALUES_EQUAL(analyzeResonse->Get()->Record.GetOperationId(), operationId);
 
         AnalyzeStatus(runtime, sender, tableInfo.SaTabletId, operationId, NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION);
-    }    
+    }
 
     Y_UNIT_TEST(AnalyzeSameOperationId) {
         TTestEnv env(1, 1);
@@ -133,7 +144,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         block.Unblock();
         block.Stop();
-        
+
         auto response1 = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
         UNIT_ASSERT(response1);
         UNIT_ASSERT_VALUES_EQUAL(response1->Get()->Record.GetOperationId(), operationId);
@@ -168,14 +179,21 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
             auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
             UNIT_ASSERT(response);
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetOperationId(), GetOperationId(i));
-        }        
-    }    
+        }
+    }
 
     Y_UNIT_TEST(AnalyzeRebootSa) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         const auto tableInfo = PrepareDatabaseAndTable(env);
         auto sender = runtime.AllocateEdgeActor();
+
+        size_t finalResultsCount = 0;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeActorResult>([&](auto& ev) {
+            if (ev->Get()->Final) {
+                ++finalResultsCount;
+            }
+        });
 
         TBlockEvents<TEvDataShard::TEvKqpScan> block(runtime);
 
@@ -184,6 +202,11 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         runtime.WaitFor("TEvKqpScan", [&]{ return !block.empty(); });
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+
+        // After restart, the operation must still appear as IN_PROGRESS, not ENQUEUED.
+        AnalyzeStatus(runtime, sender, tableInfo.SaTabletId, "operationId",
+            NKikimrStat::TEvAnalyzeStatusResponse::STATUS_IN_PROGRESS);
+
         block.Unblock();
         block.Stop();
 
@@ -200,7 +223,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         // Check that AnalyzeActor on the initial tablet instance got cancelled and
         // only 2 AnalyzeActors successfully finished.
-        UNIT_ASSERT_VALUES_EQUAL(runtime.GetCounter(TEvStatistics::EvFinishTraversal), 2);
+        UNIT_ASSERT_VALUES_EQUAL(finalResultsCount, 2);
     }
 
 
@@ -242,13 +265,20 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), "operationId");
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
         UNIT_ASSERT(!record.GetIssues().empty());
-    }    
+    }
 
     Y_UNIT_TEST(AnalyzeCancel) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         const auto tableInfo = PrepareDatabaseAndTable(env);
         auto sender = runtime.AllocateEdgeActor();
+
+        size_t finalResultsCount = 0;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeActorResult>([&](auto& ev) {
+            if (ev->Get()->Final) {
+                ++finalResultsCount;
+            }
+        });
 
         TBlockEvents<TEvDataShard::TEvKqpScan> block(runtime);
 
@@ -275,7 +305,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
 
         // Make sure that only 1 AnalyzeActor successfully finished.
-        UNIT_ASSERT_VALUES_EQUAL(runtime.GetCounter(TEvStatistics::EvFinishTraversal), 1);
+        UNIT_ASSERT_VALUES_EQUAL(finalResultsCount, 1);
     }
 }
 

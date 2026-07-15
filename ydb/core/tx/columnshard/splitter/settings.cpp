@@ -1,5 +1,3 @@
 #include "settings.h"
 
-namespace NKikimr::NOlap::NSplitter {
-
-}
+namespace NKikimr::NOlap::NSplitter {}

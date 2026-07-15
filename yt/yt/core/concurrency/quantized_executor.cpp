@@ -19,7 +19,7 @@ class TQuantizedExecutor
 {
 public:
     TQuantizedExecutor(
-        TString name,
+        std::string name,
         ICallbackProviderPtr callbackProvider,
         const TQuantizedExecutorOptions& options)
         : Name_(std::move(name))
@@ -50,7 +50,7 @@ public:
     }
 
 private:
-    const TString Name_;
+    const std::string Name_;
     const ICallbackProviderPtr CallbackProvider_;
     const TQuantizedExecutorOptions Options_;
 
@@ -103,7 +103,7 @@ private:
                 Invokers_.push_back(worker->GetInvoker());
 
                 worker->Suspend(/*immediately*/ true)
-                    .Get()
+                    .BlockingGet()
                     .ThrowOnError();
                 Workers_.push_back(std::move(worker));
             }
@@ -257,7 +257,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 IQuantizedExecutorPtr CreateQuantizedExecutor(
-    TString name,
+    std::string name,
     ICallbackProviderPtr callbackProvider,
     TQuantizedExecutorOptions options)
 {

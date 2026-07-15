@@ -187,9 +187,9 @@ T UnpackInteger(TChunkedInputBuffer& buf) {
     }
 
     static_assert(MAX_PACKED_DECIMAL_SIZE > MAX_PACKED64_SIZE);
-    char tmpBuf[MAX_PACKED_DECIMAL_SIZE];
+    std::array<char, MAX_PACKED_DECIMAL_SIZE> tmpBuf;
     Y_DEBUG_ABORT_UNLESS(buf.size() < MAX_PACKED_DECIMAL_SIZE);
-    std::memcpy(tmpBuf, buf.data(), buf.size());
+    std::memcpy(tmpBuf.data(), buf.data(), buf.size());
     size_t pos = buf.size();
     buf.Skip(buf.size());
 
@@ -204,12 +204,12 @@ T UnpackInteger(TChunkedInputBuffer& buf) {
         tmpBuf[pos++] = *buf.data();
         buf.Skip(1);
         if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128>) {
-            std::tie(res, read) = NYql::NDecimal::Deserialize(tmpBuf, pos);
+            std::tie(res, read) = NYql::NDecimal::Deserialize(tmpBuf.data(), pos);
             Y_DEBUG_ABORT_UNLESS((read != 0) xor (NYql::NDecimal::IsError(res)));
         } else if constexpr (std::is_same_v<T, ui64>) {
-            read = Unpack64(tmpBuf, pos, res);
+            read = Unpack64(tmpBuf.data(), pos, res);
         } else {
-            read = Unpack32(tmpBuf, pos, res);
+            read = Unpack32(tmpBuf.data(), pos, res);
         }
         if (read) {
             break;

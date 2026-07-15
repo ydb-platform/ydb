@@ -40,6 +40,14 @@ struct TTxSettings {
         return TTxSettings(TS_SNAPSHOT_RW);
     }
 
+    static TTxSettings ReadCommittedRW() {
+        return TTxSettings(TS_READ_COMMITTED_RW);
+    }
+
+    static TTxSettings StrictSerializableRW() {
+        return TTxSettings(TS_STRICT_SERIALIZABLE_RW);
+    }
+
     void Out(IOutputStream& out) const {
         switch (Mode_) {
         case TS_SERIALIZABLE_RW:
@@ -57,6 +65,12 @@ struct TTxSettings {
         case TS_SNAPSHOT_RW:
             out << "SnapshotRW";
             break;
+        case TS_READ_COMMITTED_RW:
+            out << "ReadCommittedRW";
+            break;
+        case TS_STRICT_SERIALIZABLE_RW:
+            out << "StrictSerializableRW";
+            break;
         default:
             out << "Unknown";
             break;
@@ -69,6 +83,8 @@ struct TTxSettings {
         TS_STALE_RO,
         TS_SNAPSHOT_RO,
         TS_SNAPSHOT_RW,
+        TS_READ_COMMITTED_RW,
+        TS_STRICT_SERIALIZABLE_RW,
     };
 
     FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);

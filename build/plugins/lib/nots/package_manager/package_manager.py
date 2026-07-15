@@ -6,6 +6,7 @@ import sys
 
 from .constants import (
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
+    NODE_MODULES_DIRNAME,
     VIRTUAL_STORE_DIRNAME,
     NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
     NPM_REGISTRY_URL,
@@ -13,7 +14,6 @@ from .constants import (
 from .lockfile import Lockfile
 from .utils import (
     build_lockfile_path,
-    build_build_backup_lockfile_path,
     build_pre_lockfile_path,
     build_ws_config_path,
     b_rooted,
@@ -159,6 +159,7 @@ class PackageManager(object):
         sources_root=None,
         inject_peers=False,
         verbose=False,
+        ld_library_path=None,
     ):
         self.module_path = build_path[len(build_root) + 1 :] if module_path is None else module_path
         self.build_path = build_path
@@ -169,6 +170,7 @@ class PackageManager(object):
         self.script_path = script_path
         self.inject_peers = inject_peers
         self.verbose = verbose
+        self.ld_library_path = ld_library_path
 
     @classmethod
     def load_package_json(cls, path):
@@ -237,6 +239,11 @@ class PackageManager(object):
         if not self.nodejs_bin_path:
             raise PackageManagerError("Unable to execute command: nodejs_bin_path is not configured")
 
+        cmd_env = env.copy()
+
+        if self.ld_library_path:
+            cmd_env["LD_LIBRARY_PATH"] = self.ld_library_path
+
         cmd = (
             [self.nodejs_bin_path, script_path or self.script_path]
             + args
@@ -248,13 +255,16 @@ class PackageManager(object):
             stdin=None,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env=env,
+            env=cmd_env,
             text=True,
             encoding="utf-8",
         )
         stdout, stderr = p.communicate()
 
         if self.verbose:
+            for key, value in cmd_env.items():
+                escaped_value = value.replace('"', '\\"').replace("$", "\\$")
+                print(f'export {key}="{escaped_value}', file=sys.stderr)
             print(f'cd {cwd} && {" ".join(cmd)}', file=sys.stderr)
             print(f'stdout: {stdout}', file=sys.stderr) if stdout else None
             print(f'stderr: {stderr}', file=sys.stderr) if stderr else None
@@ -321,15 +331,16 @@ class PackageManager(object):
 
         # Pure `tier 0` logic - isolated stores in the `build_root` (works in `distbuild` and `CI autocheck`)
         store_dir = self._get_pnpm_store()
-        virtual_store_dir = (
-            self._nm_path(VIRTUAL_STORE_DIRNAME) if self.inject_peers or use_legacy_pnpm_virtual_store else None
-        )
+        if self.inject_peers or use_legacy_pnpm_virtual_store:
+            virtual_store_dir = os.path.join(self.build_path, NODE_MODULES_DIRNAME, VIRTUAL_STORE_DIRNAME)
+        else:
+            virtual_store_dir = None
+
         global_virtual_store_dir = os.path.join(store_dir, "v10", "links")
 
         self._run_pnpm_install(store_dir, self.build_path, local_cli, virtual_store_dir, self.inject_peers)
 
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir or global_virtual_store_dir)
-        self._restore_original_lockfile(original_lf_path, virtual_store_dir)
 
         if nm_bundle:
             # TODO: how to bundle node_modules with GVS?
@@ -338,6 +349,7 @@ class PackageManager(object):
                 node_modules_path=self._nm_path(),
                 peers=ws.get_paths(base_path=self.module_path, ignore_self=True),
                 bundle_path=os.path.join(self.build_path, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME),
+                inject_peers=self.inject_peers,
             )
 
     """
@@ -424,7 +436,6 @@ class PackageManager(object):
         ]
         outs = [
             b_rooted(build_ws_config_path(self.module_path)),
-            b_rooted(build_pre_lockfile_path(self.module_path)),
         ]
         resources = []
 
@@ -567,19 +578,6 @@ class PackageManager(object):
             include_defaults=False,
             script_path=os.path.join(yatool_prebuilder_path, "build", "bin", "prebuilder.js"),
         )
-
-    @timeit
-    def _restore_original_lockfile(self, original_lf_path: str, virtual_store_dir: str | None):
-        original_lf_path = original_lf_path or build_lockfile_path(self.sources_path)
-        build_lf_path = build_lockfile_path(self.build_path)
-        build_bkp_lf_path = build_build_backup_lockfile_path(self.build_path)
-
-        if virtual_store_dir:
-            vs_lf_path = os.path.join(virtual_store_dir, "lock.yaml")
-            shutil.copyfile(original_lf_path, vs_lf_path)
-
-        shutil.copyfile(build_lf_path, build_bkp_lf_path)
-        shutil.copyfile(original_lf_path, build_lf_path)
 
     @timeit
     def _copy_pnpm_patches(self):

@@ -4,6 +4,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/library/login/sasl/scram.h>
 
 #include <util/random/random.h>
@@ -126,7 +127,9 @@ TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const 
 }
 
 
-TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets) {
+TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString groupId,
+                                            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets,
+                                            std::optional<i32> generationId) {
     Cerr << ">>>>> TOffsetCommitRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_COMMIT, 1);
@@ -146,6 +149,9 @@ TMessagePtr<TOffsetCommitResponseData> TKafkaTestClient::OffsetCommit(TString gr
             topic.Partitions.push_back(partition);
         }
         request.Topics.push_back(topic);
+    }
+    if (generationId.has_value()) {
+        request.GenerationId = *generationId;
     }
 
     return WriteAndRead<TOffsetCommitResponseData>(header, request);
@@ -167,14 +173,33 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topic
     request.TopicData.resize(1);
     request.TopicData[0].Name = topicName;
     request.TopicData[0].PartitionData.resize(msgs.size());
+    TVector<TString> serializedRecords;
+    serializedRecords.reserve(msgs.size());
     for(size_t i = 0 ; i < msgs.size(); ++i) {
         request.TopicData[0].PartitionData[i].Index = msgs[i].first;
-        request.TopicData[0].PartitionData[i].Records = msgs[i].second;
+        serializedRecords.push_back(WriteKafkaRecordBatch(msgs[i].second));
+        request.TopicData[0].PartitionData[i].Records = ToRawBytes(serializedRecords.back());
     }
 
     if (transactionalId) {
         request.TransactionalId = *transactionalId;
     }
+
+    return WriteAndRead<TProduceResponseData>(header, request);
+}
+
+TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topicName, ui32 partition, const TKafkaBytes& records) {
+    Cerr << ">>>>> TProduceRequestData\n";
+
+    TRequestHeaderData header = Header(NKafka::EApiKey::PRODUCE, 9);
+
+    TProduceRequestData request;
+    request.Acks = -1;
+    request.TopicData.resize(1);
+    request.TopicData[0].Name = topicName;
+    request.TopicData[0].PartitionData.resize(1);
+    request.TopicData[0].PartitionData[0].Index = partition;
+    request.TopicData[0].PartitionData[0].Records = records;
 
     return WriteAndRead<TProduceResponseData>(header, request);
 }
@@ -211,9 +236,12 @@ void TKafkaTestClient::ProduceAsync(const TTopicPartition& topicPartition,
     request.TopicData.resize(1);
     request.TopicData[0].Name = topicName;
     request.TopicData[0].PartitionData.resize(msgs.size());
+    TVector<TString> serializedRecords;
+    serializedRecords.reserve(msgs.size());
     for(size_t i = 0 ; i < msgs.size(); ++i) {
         request.TopicData[0].PartitionData[i].Index = msgs[i].first;
-        request.TopicData[0].PartitionData[i].Records = msgs[i].second;
+        serializedRecords.push_back(WriteKafkaRecordBatch(msgs[i].second));
+        request.TopicData[0].PartitionData[i].Records = ToRawBytes(serializedRecords.back());
     }
 
     if (transactionalId) {
@@ -270,7 +298,7 @@ TMessagePtr<TListOffsetsResponseData> TKafkaTestClient::ListOffsets(std::vector<
     return WriteAndRead<TListOffsetsResponseData>(header, request);
 }
 
-TMessagePtr<TJoinGroupResponseData> TKafkaTestClient::JoinGroup(std::vector<TString>& topics, TString& groupId, TString protocolName, i32 heartbeatTimeout) {
+TMessagePtr<TJoinGroupResponseData> TKafkaTestClient::JoinGroup(std::vector<TString>& topics, TString& groupId, TString protocolName, i32 heartbeatTimeout, bool emptyMetadata) {
     Cerr << ">>>>> TJoinGroupRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::JOIN_GROUP, 9);
@@ -291,12 +319,17 @@ TMessagePtr<TJoinGroupResponseData> TKafkaTestClient::JoinGroup(std::vector<TStr
 
     TKafkaVersion version = 3;
 
-    TWritableBuf buf(nullptr, subscribtion.Size(version) + sizeof(version));
+    TKafkaWriteBuffer buf(subscribtion.Size(version) + sizeof(version));
     TKafkaWritable writable(buf);
-    writable << version;
-    subscribtion.Write(writable, version);
 
-    protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
+    if (emptyMetadata) {
+        protocol.Metadata = TKafkaRawBytes();
+    } else {
+        writable << version;
+        subscribtion.Write(writable, version);
+
+        protocol.Metadata = TKafkaRawBytes(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
+    }
 
     request.Protocols.push_back(protocol);
     return WriteAndRead<TJoinGroupResponseData>(header, request);
@@ -362,7 +395,7 @@ void TKafkaTestClient::WaitRebalance(TString& memberId, ui64 generationId, TStri
         heartbeatStatus = Heartbeat(memberId, generationId, groupId)->ErrorCode;
     } while (heartbeatStatus == static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-    UNIT_ASSERT_VALUES_EQUAL(heartbeatStatus, static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS));
+    UNIT_ASSERT(heartbeatStatus == static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS) || heartbeatStatus == static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
 }
 
 TReadInfo TKafkaTestClient::JoinAndSyncGroupAndWaitPartitions(std::vector<TString>& topics, TString& groupId, ui32 expectedPartitionsCount, TString& protocolName, ui32 totalPartitionsCount, ui32 hartbeatTimeout) {
@@ -469,7 +502,7 @@ std::vector<NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment> TKafkaTe
         }
 
         {
-            TWritableBuf buf(nullptr, consumerAssignment.Size(ASSIGNMENT_VERSION) + sizeof(ASSIGNMENT_VERSION));
+            TKafkaWriteBuffer buf( consumerAssignment.Size(ASSIGNMENT_VERSION) + sizeof(ASSIGNMENT_VERSION));
             TKafkaWritable writable(buf);
 
             writable << ASSIGNMENT_VERSION;
@@ -916,16 +949,6 @@ void TKafkaTestClient::ScramAuthenticateToKafka(const TString& userName, const T
     const auto& authBytes2 = response2->AuthBytes.value();
     std::string serverFinalMessage(reinterpret_cast<const char*>(authBytes2.data()), authBytes2.size());
 
-    Cerr << ">>>>> Server final message: " << serverFinalMessage << Endl;
-    Cerr << ">>>>> Server final message length: " << serverFinalMessage.size() << Endl;
-
-    // DEBUG: Print raw bytes
-    Cerr << ">>>>> Raw bytes: ";
-    for (size_t i = 0; i < authBytes2.size(); ++i) {
-        Cerr << "0x" << Hex((unsigned char)authBytes2[i]) << " ";
-    }
-    Cerr << Endl;
-
     NLogin::NSasl::TFinalServerMsg parsedFinalServerMsg;
     auto parseFinalResult = NLogin::NSasl::ParseFinalServerMsg(serverFinalMessage, parsedFinalServerMsg);
     UNIT_ASSERT_C(parseFinalResult == NLogin::NSasl::EParseMsgReturnCodes::Success,
@@ -995,7 +1018,7 @@ TMessagePtr<T> TKafkaTestClient::WriteAndRead(TRequestHeaderData& header, TApiMe
 }
 
 void TKafkaTestClient::Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version, bool silent) {
-    TWritableBuf sb(nullptr, request->Size(version) + 1000);
+    TKafkaWriteBuffer sb( request->Size(version) + 1000);
     TKafkaWritable writable(sb);
     request->Write(writable, version);
     so.Write(sb.GetFrontBuffer().data(), sb.GetFrontBuffer().size());
@@ -1036,6 +1059,7 @@ TMessagePtr<T> TKafkaTestClient::Read(TSocketInput& si, TRequestHeaderData* requ
     TKafkaVersion headerVersion = ResponseHeaderVersion(requestHeader->RequestApiKey, requestHeader->RequestApiVersion);
 
     TKafkaReadable readable(*buffer);
+    readable.SetAllowCompressed(true);
 
     TResponseHeaderData header;
     header.Read(readable, headerVersion);

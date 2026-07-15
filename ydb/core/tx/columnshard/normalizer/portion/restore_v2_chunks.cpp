@@ -44,7 +44,8 @@ public:
     }
 
     TV2BuildTask(const TPortionAddress& address)
-        : PortionAddress(address) {
+        : PortionAddress(address)
+    {
     }
 };
 
@@ -54,8 +55,10 @@ private:
 
 public:
     TChangesAddV2(std::vector<TV2BuildTask>&& patches)
-        : Patches(std::move(patches)) {
+        : Patches(std::move(patches))
+    {
     }
+
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
@@ -85,7 +88,8 @@ public:
     }
 
     TPatchItemRemoveV1(const TColumnChunkLoadContextV1& chunkInfo)
-        : ChunkInfo(chunkInfo) {
+        : ChunkInfo(chunkInfo)
+    {
     }
 };
 
@@ -95,8 +99,10 @@ private:
 
 public:
     TChangesRemoveV1(std::vector<TPatchItemRemoveV1>&& patches)
-        : Patches(std::move(patches)) {
+        : Patches(std::move(patches))
+    {
     }
+
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
@@ -193,4 +199,4 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     return tasks;
 }
 
-}   // namespace NKikimr::NOlap::NRestoreV1Chunks
+}   // namespace NKikimr::NOlap::NRestoreV2Chunks

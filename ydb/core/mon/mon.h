@@ -28,9 +28,10 @@ void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const
 class TMon {
 public:
     enum class EAuthMode {
-        Disabled,      // Don't check authorization
-        Enforce,       // Check authorization in monitoring layer
-        ExtractOnly    // Extract token only, check authorization in handler
+        Disabled, // Don't check authorization.
+        Enforce,  // Check authorization in monitoring layer.
+        Relaxed,  // Extract token if available and pass it to handlers or downstream code.
+                  // Do not enforce monitoring AllowedSIDs or reject on auth-RPC failure here.
     };
 
     using TRequestAuthorizer = std::function<IEventHandle*(const TActorId& owner, NHttp::THttpIncomingRequest* request)>;
@@ -53,6 +54,18 @@ public:
         ui32 MaxRequestsPerSecond = 0;
         TDuration InactivityTimeout = TDuration::Minutes(2);
         TString AllowOrigin;
+        std::vector<TString> CompressContentTypes = {
+            "text/plain",
+            "text/html",
+            "text/css",
+            "text/event-stream",
+            "text/javascript",
+            "application/javascript",
+            "application/json",
+            "application/yaml",
+            "multipart/form-data",
+            "multipart/x-mixed-replace",
+        };
         bool RequireCountersAuthentication = false;
         bool RequireHealthcheckAuthentication = false;
     };

@@ -1,7 +1,7 @@
 #include "fair_share_action_queue.h"
 
 #include "fair_share_queue_scheduler_thread.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 #include "system_invokers.h"
 
 #include <yt/yt/core/actions/bind.h>
@@ -30,16 +30,17 @@ class TFairShareActionQueue
 public:
     TFairShareActionQueue(
         std::string threadName,
-        const std::vector<TString>& queueNames,
-        const THashMap<TString, std::vector<TString>>& bucketToQueues,
+        const std::vector<std::string>& queueNames,
+        const THashMap<std::string, std::vector<std::string>>& bucketToQueues,
         TThreadOptions threadOptions,
-        NProfiling::IRegistryPtr registry)
+        NProfiling::IRegistryPtr registry,
+        const NProfiling::TTagSet& extraTags)
         : ShutdownCookie_(RegisterShutdownCallback(
             Format("FairShareActionQueue(%v)", threadName),
             BIND_NO_PROPAGATE(&TFairShareActionQueue::Shutdown, MakeWeak(this), /*graceful*/ false),
             /*priority*/ 100))
     {
-        THashMap<TString, int> queueNameToIndex;
+        THashMap<std::string, int> queueNameToIndex;
         for (int queueIndex = 0; queueIndex < std::ssize(queueNames); ++queueIndex) {
             EmplaceOrCrash(queueNameToIndex, queueNames[queueIndex], queueIndex);
         }
@@ -49,14 +50,14 @@ public:
         BucketNames_.reserve(queueNames.size());
 
         std::vector<TBucketDescription> bucketDescriptions;
-        THashSet<TString> createdQueues;
+        THashSet<std::string> createdQueues;
         int nextBucketIndex = 0;
         for (const auto& [bucketName, bucketQueues] : bucketToQueues) {
             int bucketIndex = nextBucketIndex++;
             auto& bucketDescription = bucketDescriptions.emplace_back();
             for (int bucketQueueIndex = 0; bucketQueueIndex < std::ssize(bucketQueues); ++bucketQueueIndex) {
                 const auto& queueName = bucketQueues[bucketQueueIndex];
-                bucketDescription.QueueTagSets.push_back(GetQueueTags(threadName, bucketName, queueName));
+                bucketDescription.QueueTagSets.push_back(GetQueueTags(threadName, bucketName, queueName, extraTags));
                 bucketDescription.QueueProfilerTags.push_back(New<NYTProf::TProfilerTag>("queue", queueName));
 
                 {
@@ -76,7 +77,7 @@ public:
             }
 
             auto& bucketDescription = bucketDescriptions.emplace_back();
-            bucketDescription.QueueTagSets.push_back(GetQueueTags(threadName, queueName, queueName));
+            bucketDescription.QueueTagSets.push_back(GetQueueTags(threadName, queueName, queueName, extraTags));
             bucketDescription.QueueProfilerTags.push_back(New<NYTProf::TProfilerTag>("queue", queueName));
 
             {
@@ -137,7 +138,7 @@ public:
             QueueIndexToBucketQueueIndex_[index]);
     }
 
-    void Reconfigure(const THashMap<TString, double>& newBucketWeights) override
+    void Reconfigure(const THashMap<std::string, double>& newBucketWeights) override
     {
         std::vector<double> weights(BucketNames_.size());
         for (int bucketIndex = 0; bucketIndex < std::ssize(BucketNames_); ++bucketIndex) {
@@ -164,7 +165,7 @@ private:
     std::vector<int> QueueIndexToBucketIndex_;
     std::vector<int> QueueIndexToBucketQueueIndex_;
 
-    std::vector<TString> BucketNames_;
+    std::vector<std::string> BucketNames_;
 
     std::atomic<bool> Stopped_ = false;
 
@@ -181,17 +182,19 @@ private:
 
 IFairShareActionQueuePtr CreateFairShareActionQueue(
     std::string threadName,
-    const std::vector<TString>& queueNames,
-    const THashMap<TString, std::vector<TString>>& bucketToQueues,
+    const std::vector<std::string>& queueNames,
+    const THashMap<std::string, std::vector<std::string>>& bucketToQueues,
     TThreadOptions threadOptions,
-    NProfiling::IRegistryPtr registry)
+    IRegistryPtr registry,
+    const TTagSet& extraTags)
 {
     return New<TFairShareActionQueue>(
         threadName,
         queueNames,
         bucketToQueues,
         threadOptions,
-        std::move(registry));
+        std::move(registry),
+        extraTags);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

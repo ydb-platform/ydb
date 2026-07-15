@@ -1,5 +1,3 @@
 #include "adapter.h"
 
-namespace NKikimr::NOlap::NBackground {
-
-}
+namespace NKikimr::NOlap::NBackground {}

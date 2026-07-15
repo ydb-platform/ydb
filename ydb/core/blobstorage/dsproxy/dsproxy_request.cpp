@@ -2,7 +2,6 @@
 #include "dsproxy_monactor.h"
 #include <ydb/core/base/feature_flags.h>
 
-
 namespace NKikimr {
 
     void TBlobStorageGroupProxy::PushRequest(IActor *actor, TInstant deadline) {
@@ -112,6 +111,8 @@ namespace NKikimr {
                             .LogAccEnabled = ev->Get()->IsVerboseNoDataEnabled || ev->Get()->CollectDebugInfo,
                             .LatencyQueueKind = kind,
                             .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
+                            .EnableStorageRetroTraceGeneration = static_cast<bool>(Controls.EnableStorageRetroTraceGeneration.Update(TActivationContext::Now())),
+                            .EnableStorageRetroTraceCollectionSlowRequests = static_cast<bool>(Controls.EnableStorageRetroTraceCollectionSlowRequests.Update(TActivationContext::Now())),
                         },
                         .NodeLayout = TNodeLayoutInfoPtr(NodeLayoutInfo),
                         .AccelerationParams = GetAccelerationParams(),
@@ -146,7 +147,7 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvPut::TPtr &ev) {
-        if (IsLimitedKeyless) {
+        if (IsLimitedKeyless && !ev->Get()->AlreadyEncrypted) {
             ErrorDescription = "Created as LIMITED without keys. It happens when tenant keys are missing on the node.";
             HandleError(ev);
             return;
@@ -161,10 +162,10 @@ namespace NKikimr {
                     new TEvBlobStorage::TEvPutResult(NKikimrProto::ERROR, ev->Get()->Id, 0, GroupId, 0.f));
             result->ErrorReason = errorReason;
             result->ExecutionRelay = std::move(ev->Get()->ExecutionRelay);
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
-                    "HandleNormal ev# " << ev->Get()->Print(false)
-                    << " result# " << result->Print(false)
-                    << " Marker# DSP54");
+            YDB_LOG_ERROR_COMP(NKikimrServices::BS_PROXY, "HandleNormal",
+                {"ev", ev->Get()->Print(false)},
+                {"result", result->Print(false)},
+                {"marker", "DSP54"});
             Send(ev->Sender, result.release(), 0, ev->Cookie);
         };
 
@@ -206,18 +207,22 @@ namespace NKikimr {
                 !BatchedPutIds.contains(ev->Get()->Id)) {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
-            Y_ABORT_UNLESS((ui64)handleClass <= PutHandleClassCount);
-            Y_ABORT_UNLESS(tactic <= PutTacticCount);
+            const bool reduceInterpileTraffic = ev->Get()->ReduceInterpileTraffic;
+            Y_ABORT_UNLESS(NKikimrBlobStorage::EPutHandleClass_MIN <= handleClass &&
+                handleClass <= NKikimrBlobStorage::EPutHandleClass_MAX,
+                "incorrect PutHandleClass# %u", static_cast<unsigned>(handleClass));
+            Y_ABORT_UNLESS(0 <= tactic && tactic < TEvBlobStorage::TEvPut::TacticCount,
+                "incorrect PutTactic# %d", static_cast<int>(tactic));
 
-            TBatchedPutQueue &batchedPuts = BatchedPuts[handleClass][tactic];
+            TBatchedPutQueue &batchedPuts = BatchedPuts[handleClass][tactic][reduceInterpileTraffic];
             if (batchedPuts.Queue.empty()) {
-                PutBatchedBucketQueue.emplace_back(handleClass, tactic);
+                PutBatchedBucketQueue.emplace_back(handleClass, tactic, reduceInterpileTraffic);
             }
 
             if (batchedPuts.Queue.size() == MaxBatchedPutRequests || batchedPuts.Bytes + partSize > MaxBatchedPutSize) {
                 *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size();
                 ++*Mon->PutBatchesSent;
-                ProcessBatchedPutRequests(batchedPuts, handleClass, tactic);
+                ProcessBatchedPutRequests(batchedPuts, handleClass, tactic, reduceInterpileTraffic);
             }
 
             BatchedPutIds.insert(ev->Get()->Id);
@@ -245,6 +250,8 @@ namespace NKikimr {
                         .ExecutionRelay = ev->Get()->ExecutionRelay,
                         .LatencyQueueKind = kind,
                         .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
+                        .EnableStorageRetroTraceGeneration = static_cast<bool>(Controls.EnableStorageRetroTraceGeneration.Update(now)),
+                        .EnableStorageRetroTraceCollectionSlowRequests = static_cast<bool>(Controls.EnableStorageRetroTraceCollectionSlowRequests.Update(now)),
                         .ExternalRelevanceWatcher = ev->Get()->ExternalRelevanceWatcher,
                     },
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
@@ -553,7 +560,8 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::ProcessBatchedPutRequests(TBatchedPutQueue &batchedPuts,
-            NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic) {
+            NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic,
+            bool reduceInterpileTraffic) {
         TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(handleClass);
 
         for (auto& ev : batchedPuts.Queue) {
@@ -586,6 +594,8 @@ namespace NKikimr {
                                     .ExecutionRelay = ev->Get()->ExecutionRelay,
                                     .LatencyQueueKind = kind,
                                     .ForceGroupGeneration = forceGroupGeneration,
+                                    .EnableStorageRetroTraceGeneration = static_cast<bool>(Controls.EnableStorageRetroTraceGeneration.Update(now)),
+                                    .EnableStorageRetroTraceCollectionSlowRequests = static_cast<bool>(Controls.EnableStorageRetroTraceCollectionSlowRequests.Update(now)),
                                     .ExternalRelevanceWatcher = ev->Get()->ExternalRelevanceWatcher,
                                 },
                                 .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
@@ -609,6 +619,8 @@ namespace NKikimr {
                                     .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batch.Queue),
                                     .LatencyQueueKind = kind,
                                     .ForceGroupGeneration = forceGroupGeneration,
+                                    .EnableStorageRetroTraceGeneration = static_cast<bool>(Controls.EnableStorageRetroTraceGeneration.Update(now)),
+                                    .EnableStorageRetroTraceCollectionSlowRequests = static_cast<bool>(Controls.EnableStorageRetroTraceCollectionSlowRequests.Update(now)),
                                 },
                                 .Events = batch.Queue,
                                 .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
@@ -619,6 +631,7 @@ namespace NKikimr {
                                 .AccelerationParams = GetAccelerationParams(),
                                 .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(now)),
                                 .MaxTimeout = TDuration::Seconds(Controls.MaxPutTimeoutSeconds.Update(now)),
+                                .ReduceInterpileTraffic = reduceInterpileTraffic,
                             }),
                             TInstant::Max()
                         );
@@ -670,11 +683,11 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::Handle(TEvStopBatchingPutRequests::TPtr& ev) {
         StopPutBatchingEvent = ev;
         for (auto &bucket : PutBatchedBucketQueue) {
-            auto &batchedPuts = BatchedPuts[bucket.HandleClass][bucket.Tactic];
+            auto &batchedPuts = BatchedPuts[bucket.HandleClass][bucket.Tactic][bucket.ReduceInterpileTraffic];
             Y_ABORT_UNLESS(!batchedPuts.Queue.empty());
             *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size();
             ++*Mon->PutBatchesSent;
-            ProcessBatchedPutRequests(batchedPuts, bucket.HandleClass, bucket.Tactic);
+            ProcessBatchedPutRequests(batchedPuts, bucket.HandleClass, bucket.Tactic, bucket.ReduceInterpileTraffic);
         }
         PutBatchedBucketQueue.clear();
         ++*Mon->EventStopPutBatching;
@@ -927,6 +940,10 @@ namespace NKikimr {
         if (DoSendDeathNote) {
             SendToProxy(std::make_unique<TEvDeathNote>(Responsiveness));
         }
+        for (auto& [nodeId, sessionId] : NodeSubscriptions) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0,
+                sessionId ?: TActivationContext::InterconnectProxy(nodeId), SelfId(), nullptr, 0));
+        }
         TActor::PassAway();
     }
 
@@ -997,8 +1014,17 @@ namespace NKikimr {
                 ParentSpan.EndOk();
                 Span.EndOk();
             } else {
-                ParentSpan.EndError(errorReason);
-                Span.EndError(std::move(errorReason));
+                if (NWilson::TSpan* wilsonSpan = ParentSpan.GetWilsonSpanPtr()) {
+                    wilsonSpan->EndError(errorReason);
+                } else if (TNamedSpan* retroSpan = ParentSpan.GetRetroSpanPtr()) {
+                    retroSpan->EndError();
+                }
+
+                if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                    wilsonSpan->EndError(std::move(errorReason));
+                } else if (TNamedSpan* retroSpan = Span.GetRetroSpanPtr()) {
+                    retroSpan->EndError();
+                }
             }
         }
 
@@ -1076,8 +1102,9 @@ namespace NKikimr {
                 }
                 *PoolCounters->DSProxyDiskCostCounter += cost;
 
-                LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::BS_REQUEST_COST,
-                    "DSProxy Request Type# " << TypeName<T>() << " Cost# " << cost);
+                YDB_LOG_TRACE_CTX_COMP(TActivationContext::AsActorContext(), NKikimrServices::BS_REQUEST_COST, "DSProxy Request",
+                    {"type", TypeName<T>()},
+                    {"cost", cost});
             }
 
             if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVPut> ||
@@ -1130,12 +1157,18 @@ namespace NKikimr {
         return true;
     }
 
-    bool TBlobStorageGroupRequestActor::CheckForExternalCancellation() {
-        if (ExternalRelevanceWatcher && ExternalRelevanceWatcher->expired()) {
+    bool TBlobStorageGroupRequestActor::CancelIfIrrelevant() {
+        if (CheckForExternalCancellation()) {
+            Mon->CancelledEvents->Inc();
+            ErrorReason = "external cancellation";
             ReplyAndDie(NKikimrProto::ERROR);
             return true;
         }
         return false;
+    }
+
+    bool TBlobStorageGroupRequestActor::CheckForExternalCancellation() const {
+        return ExternalRelevanceWatcher && ExternalRelevanceWatcher->expired();
     }
 
     void TBlobStorageGroupProxy::Handle(TEvGetQueuesInfo::TPtr ev) {

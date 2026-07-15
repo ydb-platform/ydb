@@ -250,8 +250,11 @@ private:
         }
 
         EFetchResult FillBuffer() {
-            while (true) {
-                auto res = Join_.MatchRows(*JoinCtx_, Output_.MakeConsumeFn());
+            auto outputIsFull = [&]() {
+                return Output_.SizeTuples() >= Threshold_;
+            };
+            while (!outputIsFull()) {
+                auto res = Join_.MatchRows(*JoinCtx_, Output_.MakeConsumeFn(), outputIsFull);
                 switch (res) {
                 case EFetchResult::Finish: {
                     if (Output_.SizeTuples() == 0) {
@@ -268,16 +271,14 @@ private:
                     return EFetchResult::One;
                 }
                 case EFetchResult::One: {
-                    if (Output_.SizeTuples() >= Threshold_) {
-                        Buffer_ = Output_.Flush();
-                        return EFetchResult::One;
-                    }
                     break;
                 }
                 default:
                     MKQL_ENSURE(false, "unexpected fetch result");
                 }
             }
+            Buffer_ = Output_.Flush();
+            return EFetchResult::One;
         }
 
     private:

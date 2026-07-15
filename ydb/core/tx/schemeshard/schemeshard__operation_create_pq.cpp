@@ -47,7 +47,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         return nullptr;
     }
 
-    if (partitionCount == 0 || partitionCount > TSchemeShard::MaxPQGroupPartitionsCount) {
+    if (partitionCount == 0) {
         status = NKikimrScheme::StatusInvalidParameter;
         errStr = Sprintf("Invalid total partition count specified: %u", partitionCount);
         return nullptr;
@@ -107,7 +107,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         }
     }
 
-    bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge() && NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());
+    bool splitMergeEnabled = NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());
 
     TString prevBound;
     for (ui32 i = 0; i < partitionCount; ++i) {
@@ -144,7 +144,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
             }
         }
 
-        pqGroupInfo->PartitionsToAdd.emplace(i, i + 1, keyRange);
+        pqGroupInfo->PartitionsToAdd.emplace_back(i, i + 1, keyRange);
     }
 
     if (partsPerTablet == 0 || partsPerTablet > TSchemeShard::MaxPQTabletPartitionsCount) {
@@ -159,13 +159,6 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     pqGroupInfo->TotalGroupCount = partitionCount;
     pqGroupInfo->TotalPartitionCount = partitionCount;
     pqGroupInfo->ActivePartitionCount = partitionCount;
-
-    ui32 tabletCount = pqGroupInfo->ExpectedShardCount();
-    if (tabletCount > TSchemeShard::MaxPQGroupTabletsCount) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = Sprintf("Invalid tablet count specified: %u", tabletCount);
-        return nullptr;
-    }
 
     NKikimrPQ::TPQTabletConfig tabletConfig = op.GetPQTabletConfig();
     tabletConfig.ClearPartitionIds();
@@ -240,9 +233,12 @@ void ApplySharding(TTxId txId,
         partition->PqId = it->PartitionId;
         partition->GroupId = it->GroupId;
         partition->KeyRange = it->KeyRange;
-        partition->AlterVersion = 1;
+        // Must match pqGroup->AlterVersion: init counts partitions with
+        // partition->AlterVersion <= alterData->AlterVersion when rebuilding PQPartitionsInside.
+        partition->AlterVersion = pqGroup->AlterVersion;
         partition->CreateVersion = 1;
         partition->Status = NKikimrPQ::ETopicPartitionStatus::Active;
+        partition->CreationTimestamp = TInstant::Seconds(TAppData::TimeProvider->Now().Seconds());
 
         pqGroup->AddPartition(idx, partition.Release());
     }
@@ -366,11 +362,11 @@ public:
             }
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
                 if (dstPath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId));
                     result->SetPathId(dstPath.Base()->PathId.LocalPathId);
                 }
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -411,11 +407,11 @@ public:
                 .PQReservedStorageLimit(reserve.Storage);
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
                 if (dstPath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId));
                     result->SetPathId(dstPath.Base()->PathId.LocalPathId);
                 }
+                result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
@@ -426,8 +422,7 @@ public:
         const ui32 tabletProfileId = 0;
         TChannelsBindings tabletChannelsBinding;
         if (!context.SS->ResolvePqChannels(tabletProfileId, dstPath.GetPathIdForDomain(), tabletChannelsBinding)) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                             "Unable to construct channel binding for PQ with the storage pool");
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding for PQ with the storage pool");
             return result;
         }
 
@@ -457,8 +452,7 @@ public:
                 dstPath.GetPathIdForDomain(),
                 pqChannelsBinding);
             if (!resolved) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for PersQueue with the storage pool");
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding for PersQueue with the storage pool");
                 return result;
             }
 
@@ -527,8 +521,8 @@ public:
             }
         }
 
+        // Activate main tx state machine
         context.OnComplete.ActivateTx(OperationId);
-
         context.DbChanges.PersistTxState(OperationId);
 
         if (!acl.empty()) {
@@ -549,6 +543,7 @@ public:
         dstPath.DomainInfo()->IncPathsInside(context.SS);
         dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
         dstPath.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
+        dstPath.DomainInfo()->IncPQGroupsInside();
         dstPath.DomainInfo()->IncPQReservedStorage(reserve.Storage);
 
         StreamReservedThroughputChange = reserve.Throughput;

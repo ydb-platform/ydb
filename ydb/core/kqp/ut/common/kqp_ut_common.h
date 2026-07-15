@@ -3,10 +3,12 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -38,14 +40,7 @@ const TString KikimrDefaultUtDomainRoot = "Root";
 
 extern const TString EXPECTED_EIGHTSHARD_VALUE1;
 
-
-struct TTestLogSettings {
-    NLog::EPriority DefaultLogPriority = NLog::PRI_WARN;
-    std::unordered_map<NKikimrServices::EServiceKikimr, NLog::EPriority> LogPriorities;
-    bool Freeze = false;
-
-    TTestLogSettings& AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority);
-};
+using TTestLogSettings = NTestUtils::TTestLogSettings;
 
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
 private:
@@ -58,7 +53,6 @@ private:
         FeatureFlags.SetEnableSparsedColumns(true);
         FeatureFlags.SetEnableWritePortionsOnInsert(true);
         FeatureFlags.SetEnableParameterizedDecimal(true);
-        FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
         FeatureFlags.SetEnableTopicMessageLevelParallelism(true);
         FeatureFlags.SetEnableFollowerStats(true);
         FeatureFlags.SetEnableColumnStore(true);
@@ -80,16 +74,21 @@ public:
     TString AuthToken;
     TString DomainRoot = KikimrDefaultUtDomainRoot;
     ui32 NodeCount = 1;
+    ui32 DynamicNodeCount = 0;
     bool WithSampleTables = true;
     bool UseRealThreads = true;
     bool EnableForceFollowers = false;
     bool EnableScriptExecutionBackgroundChecks = true;
+    bool NeedsStatsCollectors = false;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
+    TVector<TString> StoragePoolTypes;
     TMaybe<NFake::TStorage> Storage = Nothing();
     bool InitFederatedQuerySetupFactory = false;
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
-    NKqp::IDescribeSchemaSecretsServiceFactory::TPtr DescribeSchemaSecretsServiceFactory = std::make_shared<NKqp::TDescribeSchemaSecretsServiceFactory>();
+    NSecret::IDescribeSchemaSecretsServiceFactory::TPtr DescribeSchemaSecretsServiceFactory =
+        std::make_shared<NSecret::TDescribeSchemaSecretsServiceFactory>();
+    std::shared_ptr<NKqp::IQueryReplayBackendFactory> QueryReplayBackendFactory;
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
     NKikimrConfig::TImmediateControlsConfig Controls;
@@ -116,15 +115,19 @@ public:
     TKikimrSettings& SetAuthToken(const TString& value) { AuthToken = value; return *this; }
     TKikimrSettings& SetDomainRoot(const TString& value) { DomainRoot = value; return *this; }
     TKikimrSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
+    TKikimrSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
     TKikimrSettings& SetWithSampleTables(bool value) { WithSampleTables = value; return *this; }
     TKikimrSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
     TKikimrSettings& SetLogStream(IOutputStream* follower) { LogStream = follower; return *this; };
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
+    TKikimrSettings& SetStoragePoolTypes(const TVector<TString>& storagePoolTypes) { StoragePoolTypes = storagePoolTypes; return *this; };
     TKikimrSettings& SetInitFederatedQuerySetupFactory(bool value) { InitFederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
-    TKikimrSettings& SetDescribeSchemaSecretsServiceFactory(NKqp::IDescribeSchemaSecretsServiceFactory::TPtr value) { DescribeSchemaSecretsServiceFactory = value; return *this; };
+    TKikimrSettings& SetDescribeSchemaSecretsServiceFactory(NSecret::IDescribeSchemaSecretsServiceFactory::TPtr value) { DescribeSchemaSecretsServiceFactory = value; return *this; };
+    TKikimrSettings& SetQueryReplayBackendFactory(std::shared_ptr<NKqp::IQueryReplayBackendFactory> value) { QueryReplayBackendFactory = std::move(value); return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
     TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
+    TKikimrSettings& SetNeedsStatsCollectors(bool value) { NeedsStatsCollectors = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
     TKikimrSettings& SetControls(const NKikimrConfig::TImmediateControlsConfig& value) { Controls = value; return *this; }
     TKikimrSettings& SetColumnShardReaderClassName(const TString& value) { AppConfig.MutableColumnShardConfig()->SetReaderClassName(value); return *this; }
@@ -141,6 +144,10 @@ public:
     TKikimrSettings& SetUseLocalCheckpointsInStreamingQueries(bool value) { UseLocalCheckpointsInStreamingQueries = value; return *this; };
     TKikimrSettings& SetCheckpointPeriod(TDuration value) { CheckpointPeriod = value; return *this; };
     TKikimrSettings& SetLogSettings(TTestLogSettings value) { LogSettings = value; return *this; };
+    TKikimrSettings& SetEnableStrictSerializableIsolation(bool value) {
+        AppConfig.MutableTableServiceConfig()->SetEnableStrictSerializableIsolation(value);
+        return *this;
+    }
     TKikimrSettings& SetVerbose(bool value) { Verbose = value; return *this; };
 };
 
@@ -211,6 +218,7 @@ public:
     const NYdb::TDriver& GetDriver() const { return *Driver; }
     Tests::TClient& GetTestClient() const { return *Client; }
     Tests::TServer& GetTestServer() const { return *Server; }
+    TString CreateDatabase(const TString& name, const TString& storagePoolType, const TVector<std::pair<TString, TString>>& attributes, ui32 nodesCount = 1, TDuration timeout = TDuration::Seconds(30), bool acceptIfExists = false);
 
     NYdb::TDriverConfig GetDriverConfig() const { return DriverConfig; }
 
@@ -249,12 +257,12 @@ private:
     void Initialize(const TKikimrSettings& settings);
     void WaitForKqpProxyInit();
     void CreateSampleTables();
-    bool SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service);
 
 private:
     THolder<Tests::TServerSettings> ServerSettings;
-    THolder<Tests::TServer> Server;
+    Tests::TServer::TPtr Server;
     THolder<Tests::TClient> Client;
+    THolder<Tests::TTenants> Tenants;
     TAdaptiveThreadPool ThreadPool;
     bool ThreadPoolStarted_ = false;
     TPortManager PortManager;
@@ -292,7 +300,8 @@ enum class EIndexTypeSql {
     GlobalAsync,
     GlobalVectorKMeansTree,
     GlobalFulltextPlain,
-    GlobalFulltextRelevance
+    GlobalFulltextRelevance,
+    GlobalJson
 };
 
 inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
@@ -306,6 +315,7 @@ inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
     case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
     case NKqp::EIndexTypeSql::GlobalFulltextPlain:
     case NKqp::EIndexTypeSql::GlobalFulltextRelevance:
+    case NKqp::EIndexTypeSql::GlobalJson:
         return "GLOBAL";
     }
 }
@@ -323,11 +333,15 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
         return NYdb::NTable::EIndexType::GlobalFulltextPlain;
     case EIndexTypeSql::GlobalFulltextRelevance:
         return NYdb::NTable::EIndexType::GlobalFulltextRelevance;
+    case EIndexTypeSql::GlobalJson:
+        return NYdb::NTable::EIndexType::GlobalJson;
     }
 }
 
 TString ReformatYson(const TString& yson);
+TString SortYsonList(const TString& yson);
 void CompareYson(const TString& expected, const TString& actual, const TString& message = {});
+void CompareYsonUnordered(const TString& expected, const TString& actual, const TString& message = {});
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message = {});
 
 void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize,
@@ -462,6 +476,7 @@ public:
     void CreateDatabase(const TString& databaseName);
     Tests::TServer& GetServer() const;
     Tests::TClient& GetClient() const;
+    const TString& GetEndpoint() const;
 
 private:
     TPortManager PortManager;
@@ -483,6 +498,11 @@ void CheckOwner(NYdb::NTable::TSession& session, const TString& path, const TStr
 // Waits until the KQP proxy recognizes the subject's connect permission.
 // Useful after GrantConnect to avoid UNAUTHORIZED/UNAVAILABLE races.
 void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject);
+
+inline NYdb::NQuery::TExecuteQuerySettings NoRetryExecuteQuerySettings() {
+    return NYdb::NQuery::TExecuteQuerySettings().RetrySettings(
+        NYdb::NRetry::TRetryOperationSettings().MaxRetries(0));
+}
 
 } // namespace NKqp
 } // namespace NKikimr

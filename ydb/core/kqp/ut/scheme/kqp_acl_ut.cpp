@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
@@ -11,7 +12,8 @@ using namespace NYdb::NTable;
 
 const TString UserName = "user0@builtin";
 
-void AddPermissions(const TKikimrRunner& kikimr, const TString& path, const TString& subject, const std::vector<std::string>& permissionNames) {
+NYdb::TStatus AddPermissions(const TKikimrRunner& kikimr, const TString& path, const TString& subject,
+                              const std::vector<std::string>& permissionNames, bool assertSuccess = true) {
     auto driver = NYdb::TDriver(NYdb::TDriverConfig()
     .SetEndpoint(kikimr.GetEndpoint())
     .SetDatabase("/Root")
@@ -20,10 +22,13 @@ void AddPermissions(const TKikimrRunner& kikimr, const TString& path, const TStr
     auto result = schemeClient.ModifyPermissions(path,
         NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(NYdb::NScheme::TPermissions(subject, permissionNames))
     ).ExtractValueSync();
-    AssertSuccessResult(result);
-
-    Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), path);
+    if (assertSuccess) {
+        AssertSuccessResult(result);
+        Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), path);
+    }
+    return result;
 }
+
 
 void AddConnectPermission(const TKikimrRunner& kikimr, const TString& subject) {
     AddPermissions(kikimr, "/Root", subject, {"ydb.database.connect"});
@@ -50,6 +55,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -82,6 +88,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -102,6 +109,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -124,6 +132,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -145,6 +154,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -172,6 +182,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto db = NYdb::NTable::TTableClient(driver);
@@ -207,6 +218,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("root@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -228,6 +240,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -260,6 +273,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -292,6 +306,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -323,6 +338,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -362,6 +378,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -398,6 +415,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -433,6 +451,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -461,6 +480,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -484,15 +504,15 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(AclDml, UseSink, IsOlap) {
+    Y_UNIT_TEST_TWIN(AclDml, IsOlap) {
         NKqp::TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
         TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("root@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -515,6 +535,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
             .SetAuthToken(UserName);
         auto driver = TDriver(driverConfig);
         auto client = NYdb::NQuery::TQueryClient(driver);
@@ -608,15 +629,15 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         driver.Stop(true);
     }
 
-    Y_UNIT_TEST_QUAD(AclRevoke, UseSink, IsOlap) {
+    Y_UNIT_TEST_TWIN(AclRevoke, IsOlap) {
         NKqp::TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
         TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("root@builtin");
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -641,6 +662,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken(UserName);
             auto driver = TDriver(driverConfig);
             auto client = NYdb::NQuery::TQueryClient(driver);
@@ -711,6 +733,9 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
                 )", NQuery::TTxControl::NoTx()
             ).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            env.GetClient().GrantConnect("databaseadmin");
+
         }
         NQuery::TQueryClient databaseAdmin(env.GetDriver(), NQuery::TClientSettings().CredentialsProviderFactory(
             CreateLoginCredentialsProviderFactory({
@@ -748,7 +773,6 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST_TWIN(AclTemporary, IsOlap) {
         auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(settings);
@@ -1091,7 +1115,6 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST_TWIN(AclTemporaryInterruptInheritance, IsOlap) {
         auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(settings);
@@ -1185,7 +1208,6 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
     Y_UNIT_TEST(AclInterruptInheritance) {
         auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(settings);
@@ -1215,7 +1237,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         kikimr.GetTestClient().TestGrant("/", "Root", "write@builtin",
             NACLib::EAccessRights::GenericWrite);
-        kikimr.GetTestClient().TestGrant("/", "Root", "write@builtin", 
+        kikimr.GetTestClient().TestGrant("/", "Root", "write@builtin",
             NACLib::EAccessRights::GenericRead);
 
         {
@@ -1276,7 +1298,6 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableMoveColumnTable(true);
         auto settings = NKqp::TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         TKikimrRunner kikimr(settings);
@@ -1356,6 +1377,960 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         driverWrite.Stop(true);
         driverRead.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingServiceSelectAccessDenied) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+
+        auto result = scriptingClient.ExecuteYqlScript(R"(
+            SELECT * FROM `/Root/TwoShard`;
+        )").GetValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+        UNIT_ASSERT_C(
+            result.GetIssues().ToString().contains("does not exist or you do not have access permissions"),
+            result.GetIssues().ToString()
+        );
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingServiceSelectWithDescribeOnlyDenied) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {"ydb.deprecated.describe_schema"});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+
+        auto result = scriptingClient.ExecuteYqlScript(R"(
+            SELECT * FROM `/Root/TwoShard`;
+        )").GetValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(
+            result.GetIssues().ToString().contains("AccessDenied"),
+            result.GetIssues().ToString()
+        );
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingServiceSelectSuccess) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+
+        auto result = scriptingClient.ExecuteYqlScript(R"(
+            SELECT * FROM `/Root/TwoShard`;
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetResultSets().size() > 0);
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingServiceWriteAccessDenied) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+
+        auto result = scriptingClient.ExecuteYqlScript(R"(
+            UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES
+                (10u, "One", -10);
+        )").GetValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_C(
+            result.GetIssues().ToString().contains("AccessDenied"),
+            result.GetIssues().ToString()
+        );
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingServiceNoConnectPermission) {
+        TKikimrRunner kikimr;
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+
+        auto result = scriptingClient.ExecuteYqlScript(R"(
+            SELECT * FROM `/Root/TwoShard`;
+        )").GetValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingAndQueryServiceAccessConsistency) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+        auto queryClient = NYdb::NQuery::TQueryClient(driver);
+
+        {
+            auto scriptResult = scriptingClient.ExecuteYqlScript(R"(
+                SELECT * FROM `/Root/TwoShard`;
+            )").GetValueSync();
+            UNIT_ASSERT_C(!scriptResult.IsSuccess(), scriptResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(scriptResult.GetStatus(), EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_C(
+                scriptResult.GetIssues().ToString().contains("does not exist or you do not have access permissions"),
+                scriptResult.GetIssues().ToString()
+            );
+
+            auto queryResult = queryClient.ExecuteQuery(R"(
+                SELECT * FROM `/Root/TwoShard`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(queryResult.GetStatus(), EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_C(
+                queryResult.GetIssues().ToString().contains("does not exist or you do not have access permissions"),
+                queryResult.GetIssues().ToString()
+            );
+        }
+
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {"ydb.deprecated.describe_schema"});
+
+        {
+            auto scriptResult = scriptingClient.ExecuteYqlScript(R"(
+                SELECT * FROM `/Root/TwoShard`;
+            )").GetValueSync();
+            UNIT_ASSERT_C(!scriptResult.IsSuccess(), scriptResult.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                scriptResult.GetIssues().ToString().contains("AccessDenied"),
+                scriptResult.GetIssues().ToString()
+            );
+
+            auto queryResult = queryClient.ExecuteQuery(R"(
+                SELECT * FROM `/Root/TwoShard`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                queryResult.GetIssues().ToString().contains("AccessDenied"),
+                queryResult.GetIssues().ToString()
+            );
+        }
+
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
+
+        {
+            auto scriptResult = scriptingClient.ExecuteYqlScript(R"(
+                SELECT * FROM `/Root/TwoShard`;
+            )").GetValueSync();
+            UNIT_ASSERT_C(scriptResult.IsSuccess(), scriptResult.GetIssues().ToString());
+            UNIT_ASSERT(scriptResult.GetResultSets().size() > 0);
+
+            auto queryResult = queryClient.ExecuteQuery(R"(
+                SELECT * FROM `/Root/TwoShard`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+        }
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingAndQueryServiceWriteConsistency) {
+        NKqp::TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
+
+        {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetAuthToken("root@builtin");
+            auto driver = TDriver(driverConfig);
+            auto client = NYdb::NQuery::TQueryClient(driver);
+            AssertSuccessResult(client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/test_write_acl` (
+                    id Int64 NOT NULL,
+                    name String,
+                    primary key (id)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync());
+            driver.Stop(true);
+        }
+
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/test_write_acl", UserName,
+            {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+        auto queryClient = NYdb::NQuery::TQueryClient(driver);
+
+        {
+            auto scriptResult = scriptingClient.ExecuteYqlScript(R"(
+                UPSERT INTO `/Root/test_write_acl` (id, name) VALUES (1, "test");
+            )").GetValueSync();
+            UNIT_ASSERT_C(!scriptResult.IsSuccess(), scriptResult.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                scriptResult.GetIssues().ToString().contains("AccessDenied"),
+                scriptResult.GetIssues().ToString()
+            );
+
+            auto queryResult = queryClient.ExecuteQuery(R"(
+                UPSERT INTO `/Root/test_write_acl` (id, name) VALUES (1, 'test');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                queryResult.GetIssues().ToString().contains("AccessDenied"),
+                queryResult.GetIssues().ToString()
+            );
+        }
+
+        {
+            auto scriptResult = scriptingClient.ExecuteYqlScript(R"(
+                SELECT * FROM `/Root/test_write_acl`;
+            )").GetValueSync();
+            UNIT_ASSERT_C(scriptResult.IsSuccess(), scriptResult.GetIssues().ToString());
+
+            auto queryResult = queryClient.ExecuteQuery(R"(
+                SELECT * FROM `/Root/test_write_acl`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+        }
+
+        AddPermissions(kikimr, "/Root/test_write_acl", UserName, {"ydb.deprecated.update_row"});
+
+        {
+            auto scriptResult = scriptingClient.ExecuteYqlScript(R"(
+                UPSERT INTO `/Root/test_write_acl` (id, name) VALUES (1, "test");
+            )").GetValueSync();
+            UNIT_ASSERT_C(scriptResult.IsSuccess(), scriptResult.GetIssues().ToString());
+
+            auto queryResult = queryClient.ExecuteQuery(R"(
+                UPSERT INTO `/Root/test_write_acl` (id, name) VALUES (2, 'test');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+        }
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingStreamSelectAccessDenied) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+
+        auto it = scriptingClient.StreamExecuteYqlScript(R"(
+            SELECT * FROM `/Root/TwoShard`;
+        )").GetValueSync();
+
+        UNIT_ASSERT(it.IsSuccess());
+        bool gotError = false;
+        for (;;) {
+            auto part = it.ReadNext().GetValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(
+                    part.GetIssues().ToString().contains("does not exist or you do not have access permissions") ||
+                    part.EOS(),
+                    part.GetIssues().ToString()
+                );
+                gotError = !part.EOS();
+                break;
+            }
+        }
+        UNIT_ASSERT(gotError);
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingSelectWithWhereFilterAccessDenied) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {"ydb.deprecated.describe_schema"});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+        auto queryClient = NYdb::NQuery::TQueryClient(driver);
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(R"(
+                SELECT Key, Value1 FROM `/Root/TwoShard` WHERE Value2 > 0;
+            )").GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("AccessDenied"),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                SELECT Key, Value1 FROM `/Root/TwoShard` WHERE Value2 > 0;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("AccessDenied"),
+                result.GetIssues().ToString());
+        }
+
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {"ydb.deprecated.select_row"});
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(R"(
+                SELECT Key, Value1 FROM `/Root/TwoShard` WHERE Value2 > 0;
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().size() > 0);
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                SELECT Key, Value1 FROM `/Root/TwoShard` WHERE Value2 > 0;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingSelectWithAggregationAccessDenied) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/Test", UserName, {"ydb.deprecated.describe_schema"});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+        auto queryClient = NYdb::NQuery::TQueryClient(driver);
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(R"(
+                SELECT `Group`, SUM(Amount) AS TotalAmount
+                FROM `/Root/Test`
+                GROUP BY `Group`
+                ORDER BY TotalAmount DESC;
+            )").GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("AccessDenied"),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                SELECT `Group`, SUM(Amount) AS TotalAmount
+                FROM `/Root/Test`
+                GROUP BY `Group`
+                ORDER BY TotalAmount DESC;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("AccessDenied"),
+                result.GetIssues().ToString());
+        }
+
+        AddPermissions(kikimr, "/Root/Test", UserName, {"ydb.deprecated.select_row"});
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(R"(
+                SELECT `Group`, SUM(Amount) AS TotalAmount
+                FROM `/Root/Test`
+                GROUP BY `Group`
+                ORDER BY TotalAmount DESC;
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().size() > 0);
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                SELECT `Group`, SUM(Amount) AS TotalAmount
+                FROM `/Root/Test`
+                GROUP BY `Group`
+                ORDER BY TotalAmount DESC;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingSelectWithLimitOrderByAccessDenied) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/EightShard", UserName, {"ydb.deprecated.describe_schema"});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+        auto queryClient = NYdb::NQuery::TQueryClient(driver);
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(R"(
+                SELECT Key, Text FROM `/Root/EightShard`
+                WHERE Data > 0
+                ORDER BY Key
+                LIMIT 5;
+            )").GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("AccessDenied"),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                SELECT Key, Text FROM `/Root/EightShard`
+                WHERE Data > 0
+                ORDER BY Key
+                LIMIT 5;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("AccessDenied"),
+                result.GetIssues().ToString());
+        }
+
+        AddPermissions(kikimr, "/Root/EightShard", UserName, {"ydb.deprecated.select_row"});
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(R"(
+                SELECT Key, Text FROM `/Root/EightShard`
+                WHERE Data > 0
+                ORDER BY Key
+                LIMIT 5;
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().size() > 0);
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                SELECT Key, Text FROM `/Root/EightShard`
+                WHERE Data > 0
+                ORDER BY Key
+                LIMIT 5;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingJoinAccessDeniedOnOneTable) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/Join1", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
+        AddPermissions(kikimr, "/Root/Join2", UserName, {});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+        auto queryClient = NYdb::NQuery::TQueryClient(driver);
+
+        const TString joinQuery = R"(
+            SELECT j1.Value AS Val1, j2.Value2 AS Val2
+            FROM `/Root/Join1` AS j1
+            INNER JOIN `/Root/Join2` AS j2
+                ON j1.Fk21 = j2.Key1 AND j1.Fk22 = j2.Key2
+            WHERE j1.Key > 0
+            ORDER BY Val1
+            LIMIT 10;
+        )";
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(joinQuery).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("does not exist or you do not have access permissions"),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(joinQuery,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("does not exist or you do not have access permissions"),
+                result.GetIssues().ToString());
+        }
+
+        AddPermissions(kikimr, "/Root/Join2", UserName,
+            {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(joinQuery).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().size() > 0);
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(joinQuery,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingSubqueryAccessDenied) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/Test", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+        auto queryClient = NYdb::NQuery::TQueryClient(driver);
+
+        const TString subquery = R"(
+            SELECT Name FROM `/Root/Test`
+            WHERE `Group` IN (
+                SELECT Key FROM `/Root/TwoShard` WHERE Value2 >= 0
+            );
+        )";
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(subquery).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("does not exist or you do not have access permissions"),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(subquery,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("does not exist or you do not have access permissions"),
+                result.GetIssues().ToString());
+        }
+
+        AddPermissions(kikimr, "/Root/TwoShard", UserName,
+            {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(subquery).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(subquery,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingSelectCountAccessDenied) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {"ydb.deprecated.describe_schema"});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+        auto queryClient = NYdb::NQuery::TQueryClient(driver);
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(R"(
+                SELECT COUNT(*) AS cnt FROM `/Root/TwoShard` WHERE Value2 != 0;
+            )").GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("AccessDenied"),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                SELECT COUNT(*) AS cnt FROM `/Root/TwoShard` WHERE Value2 != 0;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("AccessDenied"),
+                result.GetIssues().ToString());
+        }
+
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {"ydb.deprecated.select_row"});
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(R"(
+                SELECT COUNT(*) AS cnt FROM `/Root/TwoShard` WHERE Value2 != 0;
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                SELECT COUNT(*) AS cnt FROM `/Root/TwoShard` WHERE Value2 != 0;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingSelectByPrimaryKeyAccessDenied) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+        auto queryClient = NYdb::NQuery::TQueryClient(driver);
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(R"(
+                SELECT Key, Value1 FROM `/Root/TwoShard` WHERE Key = 1u;
+            )").GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("does not exist or you do not have access permissions"),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                SELECT Key, Value1 FROM `/Root/TwoShard` WHERE Key = 1u;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("does not exist or you do not have access permissions"),
+                result.GetIssues().ToString());
+        }
+
+        AddPermissions(kikimr, "/Root/TwoShard", UserName,
+            {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(R"(
+                SELECT Key, Value1 FROM `/Root/TwoShard` WHERE Key = 1u;
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                SELECT Key, Value1 FROM `/Root/TwoShard` WHERE Key = 1u;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingJoinDescribeOnlyDeniesSelectRow) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/Join1", UserName,
+            {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
+        AddPermissions(kikimr, "/Root/Join2", UserName,
+            {"ydb.deprecated.describe_schema"});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+        auto queryClient = NYdb::NQuery::TQueryClient(driver);
+
+        const TString joinQuery = R"(
+            SELECT j1.Value AS Val1, j2.Value2 AS Val2
+            FROM `/Root/Join1` AS j1
+            INNER JOIN `/Root/Join2` AS j2
+                ON j1.Fk21 = j2.Key1 AND j1.Fk22 = j2.Key2
+            WHERE j1.Key > 0
+            ORDER BY Val1
+            LIMIT 10;
+        )";
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(joinQuery).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("AccessDenied") ||
+                result.GetIssues().ToString().contains("Failed to get partitioning"),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(joinQuery,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("AccessDenied") ||
+                result.GetIssues().ToString().contains("Failed to get partitioning"),
+                result.GetIssues().ToString());
+        }
+
+        AddPermissions(kikimr, "/Root/Join2", UserName, {"ydb.deprecated.select_row"});
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(joinQuery).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient.ExecuteQuery(joinQuery,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(ScriptingPartialTableAccessInMultiStatement) {
+        TKikimrRunner kikimr;
+        AddConnectPermission(kikimr, UserName);
+        AddPermissions(kikimr, "/Root/KeyValue", UserName,
+            {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"});
+        AddPermissions(kikimr, "/Root/TwoShard", UserName, {"ydb.deprecated.describe_schema"});
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetDatabase("/Root")
+            .SetAuthToken(UserName);
+        auto driver = TDriver(driverConfig);
+        auto scriptingClient = NYdb::NScripting::TScriptingClient(driver);
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(R"(
+                SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = 1u;
+                SELECT Key, Value1 FROM `/Root/TwoShard` WHERE Key = 1u;
+            )").GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("AccessDenied"),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = scriptingClient.ExecuteYqlScript(R"(
+                SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = 1u;
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().size() > 0);
+        }
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(GrantForCreateAndAlterTableIndex) {
+        auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        AddConnectPermission(kikimr, UserName);
+
+        struct TIndexTestCase {
+            TString Name;
+            TString PlainTablePath;
+            TString IndexPath;
+            TString CreateWithIndex;
+            TString CreatePlain;
+            TString Alter;
+        };
+
+        const std::vector<TIndexTestCase> testCases = {
+            {
+                "bloom",
+                "/Root/test_bloom_plain",
+                "/Root/test_bloom/idx",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_bloom` (
+                    Key Timestamp NOT NULL, Val Utf8, Uid Utf8 NOT NULL, PRIMARY KEY (Key, Uid),
+                    INDEX idx LOCAL USING bloom_filter ON (Val) WITH (false_positive_probability = 0.01)
+                ) WITH (STORE = COLUMN, AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_BY_LOAD = DISABLED, PARTITION_COUNT = 1);)",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_bloom_plain` (
+                    Key Timestamp NOT NULL, Val Utf8, Uid Utf8 NOT NULL, PRIMARY KEY (Key, Uid)
+                ) WITH (STORE = COLUMN, AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_BY_LOAD = DISABLED, PARTITION_COUNT = 1);)",
+                R"(--!syntax_v1
+                ALTER TABLE `/Root/test_bloom_plain` ADD INDEX idx LOCAL USING bloom_filter ON (Val) WITH (false_positive_probability = 0.01);)",
+            },
+            {
+                "global_sync",
+                "/Root/test_sync_plain",
+                "/Root/test_sync/idx",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_sync` (
+                    Key Uint64, Val Utf8, PRIMARY KEY (Key),
+                    INDEX idx GLOBAL SYNC ON (Val)
+                ))",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_sync_plain` (
+                    Key Uint64, Val Utf8, PRIMARY KEY (Key)
+                ))",
+                R"(--!syntax_v1
+                ALTER TABLE `/Root/test_sync_plain` ADD INDEX idx GLOBAL SYNC ON (Val))",
+            },
+            {
+                "vector",
+                "/Root/test_vector_plain",
+                "/Root/test_vector/idx",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_vector` (
+                    Key Uint64, Embedding String, PRIMARY KEY (Key),
+                    INDEX idx GLOBAL USING vector_kmeans_tree ON (Embedding)
+                        WITH (similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2)
+                ))",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_vector_plain` (
+                    Key Uint64, Embedding String, PRIMARY KEY (Key)
+                ))",
+                R"(--!syntax_v1
+                ALTER TABLE `/Root/test_vector_plain` ADD INDEX idx GLOBAL USING vector_kmeans_tree ON (Embedding)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2))",
+            },
+            {
+                "fulltext",
+                "/Root/test_fulltext_plain",
+                "/Root/test_fulltext/idx",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_fulltext` (
+                    Key Uint64, Text String, PRIMARY KEY (Key),
+                    INDEX idx GLOBAL USING fulltext_plain ON (Text)
+                        WITH (tokenizer=whitespace, use_filter_lowercase=true)
+                ))",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_fulltext_plain` (
+                    Key Uint64, Text String, PRIMARY KEY (Key)
+                ))",
+                R"(--!syntax_v1
+                ALTER TABLE `/Root/test_fulltext_plain` ADD INDEX idx GLOBAL USING fulltext_plain ON (Text)
+                    WITH (tokenizer=whitespace, use_filter_lowercase=true))",
+            },
+        };
+
+        auto executeQueryAsUser = [&](const TString& query) {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetAuthToken(UserName);
+            auto driver = TDriver(driverConfig);
+            auto client = NYdb::NQuery::TQueryClient(driver);
+            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            driver.Stop(true);
+            return result;
+        };
+
+        for (const auto& tc : testCases) {
+            Cerr << "Testing index type: " << tc.Name << Endl;
+
+            // CREATE TABLE with index must fail without create_table permission
+            {
+                auto result = executeQueryAsUser(tc.CreateWithIndex);
+                UNIT_ASSERT_C(!result.IsSuccess(), tc.Name << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_C(
+                    result.GetIssues().ToString().contains("Access denied") ||
+                    result.GetIssues().ToString().contains("Unauthorized"),
+                    tc.Name << ": " << result.GetIssues().ToString());
+            }
+        }
+
+        AddPermissions(kikimr, "/Root", UserName, {"ydb.deprecated.create_table"});
+
+        for (const auto& tc : testCases) {
+            // CREATE TABLE with index must succeed with create_table permission
+            {
+                auto result = executeQueryAsUser(tc.CreateWithIndex);
+                UNIT_ASSERT_C(result.IsSuccess(), tc.Name << ": " << result.GetIssues().ToString());
+            }
+
+            // Create plain table (as admin) and grant describe to user for ALTER test
+            AssertSuccessResult(kikimr.GetQueryClient().ExecuteQuery(tc.CreatePlain, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync());
+            AddPermissions(kikimr, tc.PlainTablePath, UserName, {"ydb.deprecated.describe_schema"});
+
+            // ALTER TABLE to add index must fail without alter_schema permission
+            {
+                auto result = executeQueryAsUser(tc.Alter);
+                UNIT_ASSERT_C(!result.IsSuccess(), tc.Name << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_C(
+                    result.GetIssues().ToString().contains("Access denied") ||
+                    result.GetIssues().ToString().contains("Unauthorized"),
+                    tc.Name << ": " << result.GetIssues().ToString());
+            }
+
+            AddPermissions(kikimr, tc.PlainTablePath, UserName, {"ydb.deprecated.alter_schema"});
+
+            // ALTER TABLE to add index must succeed with alter_schema permission
+            {
+                auto result = executeQueryAsUser(tc.Alter);
+                UNIT_ASSERT_C(result.IsSuccess(), tc.Name << ": " << result.GetIssues().ToString());
+            }
+        }
+
+        // Verify that permissions cannot be granted directly on index paths
+        for (const auto& tc : testCases) {
+            auto result = AddPermissions(kikimr, tc.IndexPath, UserName,
+                {"ydb.deprecated.select_row"}, false);
+            UNIT_ASSERT_C(!result.IsSuccess(),
+                tc.Name << ": AddPermissions on index path should fail, but succeeded");
+        }
     }
 }
 

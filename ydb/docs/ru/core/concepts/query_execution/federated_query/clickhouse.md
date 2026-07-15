@@ -1,5 +1,7 @@
 # Работа с базами данных ClickHouse
 
+{% include [!](_includes/experimental_connectors_warning.md) %}
+
 В этом разделе описана основная информация про работу с внешней базой данных [ClickHouse](https://clickhouse.com).
 
 Для работы с внешней базой данных ClickHouse необходимо выполнить следующие шаги:
@@ -41,7 +43,7 @@ SELECT * FROM clickhouse_datasource.<table_name>
 - `clickhouse_datasource` - идентификатор внешнего источника данных;
 - `<table_name>` - имя таблицы внутри внешнего источника данных.
 
-## Ограничения
+## Ограничения {#limitations}
 
 При работе с кластерами ClickHouse существует ряд ограничений:
 

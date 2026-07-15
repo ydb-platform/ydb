@@ -1,9 +1,9 @@
 #include "target_table.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/replication.pb.h>
 
 namespace NKikimr::NReplication::NController {
-
 
 TTargetTableBase::TTargetTableBase(TReplication* replication, ETargetKind finalKind,
         ui64 id, const IConfig::TPtr& config)

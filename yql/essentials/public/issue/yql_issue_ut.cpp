@@ -35,7 +35,7 @@ Y_UNIT_TEST(BasicTest) {
     TPosition pos;
     pos.Row = 1;
 
-    TTextWalker walker(pos, false);
+    TTextWalker walker(pos, /*utf8Aware=*/false);
     walker.Advance(TStringBuf("a\r\taa"));
 
     UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(5, 1));
@@ -47,7 +47,7 @@ Y_UNIT_TEST(CrLfTest) {
     TPosition pos;
     pos.Row = 1;
 
-    TTextWalker walker(pos, false);
+    TTextWalker walker(pos, /*utf8Aware=*/false);
     walker.Advance(TStringBuf("a\raa\r"));
     UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(5, 1));
     walker.Advance('\n');
@@ -67,7 +67,7 @@ Y_UNIT_TEST(UnicodeTest) {
         TPosition pos;
         pos.Row = 1;
 
-        TTextWalker walker(pos, false);
+        TTextWalker walker(pos, /*utf8Aware=*/false);
         walker.Advance(TStringBuf("привет"));
 
         UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(12, 1));
@@ -77,7 +77,7 @@ Y_UNIT_TEST(UnicodeTest) {
         TPosition pos;
         pos.Row = 1;
 
-        TTextWalker walker(pos, true);
+        TTextWalker walker(pos, /*utf8Aware=*/true);
         walker.Advance(TStringBuf("привет"));
 
         UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(6, 1));
@@ -123,14 +123,14 @@ Y_UNIT_TEST(Escape) {
     const TString nfd = WideToUTF8(Normalize<NUnicode::ENormalization::NFD>(UTF8ToWide(toNormalize))); // dots over 'ё' will be separate unicode symbol
     const TString nfc = WideToUTF8(Normalize<NUnicode::ENormalization::NFC>(UTF8ToWide(toNormalize))); // dots over 'ё' will be with with their letter
     UNIT_ASSERT_STRINGS_UNEQUAL(nfc, nfd);
-    std::pair<TString, TString> nonUtf8Messages[] = {
+    auto nonUtf8Messages = std::to_array<std::pair<TString, TString>>({
         {nonUtf8String, "????"},
         {TStringBuilder() << nonUtf8String << "Failed to parse file " << nonUtf8String << "עברית" << nonUtf8String, "????Failed to parse file ????עברית????"},
         {nfd, nfd},
         {nfc, nfc},
         {TStringBuilder() << nfc << nonUtf8String << nfd, TStringBuilder() << nfc << "????" << nfd},
         {TStringBuilder() << nfd << nonUtf8String << nfc, TStringBuilder() << nfd << "????" << nfc},
-    };
+    });
 
     for (const auto& [src, dst] : nonUtf8Messages) {
         TIssue issue(src);

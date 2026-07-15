@@ -10,7 +10,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <util/generic/size_literals.h>
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 namespace NKikimr {
@@ -116,7 +116,7 @@ void TKqpCountersBase::Init() {
     QueriesWithFullScan = KqpGroup->GetCounter("Query/WithFullScan", true);
 
     QueryAffectedShardsCount = KqpGroup->GetHistogram("Query/AffectedShards",
-        NMonitoring::ExplicitHistogram({1, 9, 49, 99, 499, 999}));
+        NMonitoring::ExplicitHistogram({1, 2, 4, 8, 16, 64, 512, 1024}));
     QueryReadSetsCount = KqpGroup->GetHistogram("Query/ReadSets",
         NMonitoring::ExplicitHistogram({99, 999, 9999, 99999}));
     QueryReadBytes = KqpGroup->GetHistogram("Query/ReadBytes",
@@ -222,6 +222,8 @@ void TKqpCountersBase::Init() {
     TxAborted = KqpGroup->GetCounter("Transactions/Aborted", true);
     TxCommited = KqpGroup->GetCounter("Transactions/Commited", true);
     TxEvicted = KqpGroup->GetCounter("Transactions/Evicted", true);
+    OnlineRORequests = KqpGroup->GetCounter("Isolation/OnlineRO/Requests", true);
+    OnlineROWithInconsistentReadsRequests = KqpGroup->GetCounter("Isolation/OnlineROWithInconsistentReads/Requests", true);
 
     TxActivePerSession = KqpGroup->GetHistogram(
         "Transactions/TxActivePerSession", NMonitoring::ExponentialHistogram(16, 2, 1));
@@ -542,6 +544,14 @@ void TKqpCountersBase::ReportTxAborted(ui32 abortedCount) {
     TxAborted->Add(abortedCount);
 }
 
+void TKqpCountersBase::ReportOnlineRO() {
+    OnlineRORequests->Inc();
+}
+
+void TKqpCountersBase::ReportOnlineROWithInconsistentReads() {
+    OnlineROWithInconsistentReadsRequests->Inc();
+}
+
 void TKqpCountersBase::ReportQueryCacheHit(bool hit) {
     if (hit) {
         CompileQueryCacheHits->Inc();
@@ -753,6 +763,7 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     QueryReplayGroup = KqpGroup->GetSubgroup("subsystem", "unified_agent_query_replay");
     WorkloadManagerGroup = KqpGroup->GetSubgroup("subsystem", "workload_manager");
     ChannelGroup = KqpGroup->GetSubgroup("subsystem", "compute_channels");
+    TxProxyMon = MakeIntrusive<NTxProxy::TTxProxyMon>(counters);
 
     Init();
 
@@ -790,6 +801,19 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     /* Compile computation pattern service */
     CompiledComputationPatterns = KqpGroup->GetCounter("ComputationPatternCompilation/CompiledComputationPatterns");
     CompileComputationPatternsQueueSize = KqpGroup->GetCounter("ComputationPatternCompilation/CompileComputationPatternsQueueSize");
+
+    /* Warmup */
+    WarmupQueriesFetched = KqpGroup->GetCounter("Warmup/QueriesFetched", false);
+    WarmupQueriesCompiled = KqpGroup->GetCounter("Warmup/QueriesCompiled", false);
+    WarmupQueriesTruncated = KqpGroup->GetCounter("Warmup/QueriesTruncated", false);
+    WarmupQueriesEmptyQueryType = KqpGroup->GetCounter("Warmup/QueriesEmptyQueryType", false);
+
+    /* Compile cache view (federated .sys/compile_cache_queries) */
+    CompileCacheViewPeerScanWarnings = KqpGroup->GetCounter("CompileCacheView/PeerScanWarnings", true);
+
+    WarmupHitsInWindow = KqpGroup->GetCounter("Warmup/HitsInWindow", true);
+    WarmupMissesInWindow = KqpGroup->GetCounter("Warmup/MissesInWindow", true);
+    WarmupSavedCompileMs = KqpGroup->GetCounter("Warmup/SavedCompileMs", true);
 
     /* Resource Manager */
     RmComputeActors = KqpGroup->GetCounter("RM/ComputeActors", false);
@@ -837,6 +861,14 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     IteratorDeliveryProblems = KqpGroup->GetCounter("IteratorReads/DeliveryProblems", true);
     StreamLookupIteratorTotalQuotaBytesInFlight = KqpGroup->GetCounter("IteratorReads/StreamLookupIteratorTotalQuotaBytesInFlight", false);
     StreamLookupIteratorTotalQuotaBytesExceeded = KqpGroup->GetCounter("IteratorReads/StreamLookupIteratorTotalQuotaBytesExceeded", true);
+    
+    SentLocks = KqpGroup->GetCounter("PessimisticLocks/SentLocks", true);
+    LockLatencyHistogram = KqpGroup->GetHistogram("PessimisticLocks/LockLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    ModifiedRowsCount = KqpGroup->GetCounter("PessimisticLocks/ModifiedRowsCount", true);
+    LockedRowsCount = KqpGroup->GetCounter("PessimisticLocks/LockedRowsCount", true);
+    MaxInFlightLockTimeOnExit = KqpGroup->GetHistogram("PessimisticLocks/MaxInFlightLockTimeOnExitMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    StreamLookupLockTotalQuotaBytesInFlight = KqpGroup->GetCounter("PessimisticLocks/StreamLookupLockTotalQuotaBytesInFlight", false);
+    StreamLookupLockTotalQuotaBytesExceeded = KqpGroup->GetCounter("PessimisticLocks/StreamLookupLockTotalQuotaBytesExceeded", true);
 
     /* sink writes */
     WriteActorsShardResolve = KqpGroup->GetCounter("SinkWrites/WriteActorShardResolve", true);
@@ -922,6 +954,10 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     BatchOperationUpdateRows = KqpGroup->GetCounter("BatchOperation/Update/Rows", true);
     BatchOperationDeleteRows = KqpGroup->GetCounter("BatchOperation/Delete/Rows", true);
     BatchOperationRetries = KqpGroup->GetCounter("BatchOperation/Retries", true);
+}
+
+::NMonitoring::TDynamicCounterPtr TKqpCounters::GetRootCounters() const {
+    return Counters;
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {
@@ -1249,6 +1285,20 @@ void TKqpCounters::ReportTxAborted(TKqpDbCountersPtr dbCounters, ui32 abortedCou
     TKqpCountersBase::ReportTxAborted(abortedCount);
     if (dbCounters) {
         dbCounters->ReportTxAborted(abortedCount);
+    }
+}
+
+void TKqpCounters::ReportOnlineRO(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportOnlineRO();
+    if (dbCounters) {
+        dbCounters->ReportOnlineRO();
+    }
+}
+
+void TKqpCounters::ReportOnlineROWithInconsistentReads(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportOnlineROWithInconsistentReads();
+    if (dbCounters) {
+        dbCounters->ReportOnlineROWithInconsistentReads();
     }
 }
 

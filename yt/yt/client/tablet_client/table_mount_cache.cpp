@@ -63,7 +63,7 @@ bool TTableMountInfo::IsChaosReplica() const
     return TypeFromId(UpstreamReplicaId) == EObjectType::ChaosTableReplica;
 }
 
-TTabletInfoPtr TTableMountInfo::GetTabletByIndexOrThrow(int tabletIndex) const
+TTabletInfoPtr TTableMountInfo::GetTabletByIndexOrThrow(i64 tabletIndex) const
 {
     if (tabletIndex < 0 || tabletIndex >= std::ssize(Tablets)) {
         if (Tablets.empty()) {
@@ -80,6 +80,17 @@ TTabletInfoPtr TTableMountInfo::GetTabletByIndexOrThrow(int tabletIndex) const
             tabletIndex);
     }
     return Tablets[tabletIndex];
+}
+
+TTabletInfoPtr TTableMountInfo::FindTabletById(TTabletId id) const
+{
+    for (const auto& tablet : Tablets) {
+        if (tablet->TabletId == id) {
+            return tablet;
+        }
+    }
+
+    return {};
 }
 
 int TTableMountInfo::GetTabletIndexForKey(TUnversionedValueRange key) const
@@ -121,22 +132,24 @@ TTabletInfoPtr TTableMountInfo::GetTabletForRow(TVersionedRow row) const
     return GetTabletForKey(row.Keys());
 }
 
-int TTableMountInfo::GetRandomMountedTabletIndex() const
+TErrorOr<TTabletInfoPtr> TTableMountInfo::GetRandomMountedTablet() const
 {
     ValidateTabletOwner();
 
     if (MountedTablets.empty()) {
-        THROW_ERROR_EXCEPTION(NTabletClient::EErrorCode::TabletNotMounted,
-            "Table %v has no mounted tablets",
-            Path);
+        auto error = TError(NTabletClient::EErrorCode::TabletNotMounted,
+            "%v %v has no mounted tablets",
+            IsHunkStorage() ? "Hunk storage" : "Table",
+            IsHunkStorage() ? PhysicalPath : Path);
+        if (!Tablets.empty()) {
+            // NB: For cache invalidation.
+            error <<= TErrorAttribute("tablet_id", Tablets[0]->TabletId);
+        }
+
+        return error;
     }
 
-    return RandomNumber(MountedTablets.size());
-}
-
-TTabletInfoPtr TTableMountInfo::GetRandomMountedTablet() const
-{
-    return MountedTablets[GetRandomMountedTabletIndex()];
+    return MountedTablets[RandomNumber(MountedTablets.size())];
 }
 
 void TTableMountInfo::ValidateTabletOwner() const
@@ -231,16 +244,6 @@ void TTabletRedirectionHint::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("reshard_redirection_hint", &TThis::ReshardRedirectionHint)
         .Default();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TUnfoldedColumns::Persist(const TStreamPersistenceContext& context)
-{
-    using NYT::Persist;
-
-    Persist(context, TableColumn);
-    Persist(context, IndexColumn);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,6 +1,8 @@
 #include "sql_into_tables.h"
 #include "sql_values.h"
 
+#include <yql/essentials/core/langver/feature.gen.h>
+
 #include <util/string/join.h>
 
 using namespace NYql;
@@ -51,7 +53,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             modeTokens = {modeBlock.GetAlt6().GetToken1()};
             break;
         case TRule_into_table_stmt_TBlock1::AltCase::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 
     TVector<TString> modeStrings;
@@ -104,7 +106,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
 
         const bool result = !hasAt
                                 ? ClusterExprOrBinding(clusterExpr, service, cluster, isBinding)
-                                : ClusterExpr(clusterExpr, false, service, cluster);
+                                : ClusterExpr(clusterExpr, /*allowWildcard=*/false, service, cluster);
 
         if (!result) {
             return nullptr;
@@ -140,7 +142,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             break;
         }
         case TRule_simple_table_ref_core::AltCase::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 
     bool withTruncate = false;
@@ -193,12 +195,12 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             return nullptr;
         }
     } else {
-        table.Keys = BuildTableKey(pos, service, cluster, nameOrAt.second, {nameOrAt.first ? "@" : ""});
+        table.Keys = BuildTableKey(pos, service, cluster, nameOrAt.second, {.ViewName = nameOrAt.first ? "@" : ""});
     }
 
     Ctx_.IncrementMonCounter("sql_insert_clusters", table.Cluster.GetLiteral() ? *table.Cluster.GetLiteral() : "unknown");
 
-    auto values = TSqlIntoValues(Ctx_, Mode_).Build(node.GetRule_into_values_source4(), SqlIntoUserModeStr_);
+    auto values = TSqlIntoValues(*this).Build(node.GetRule_into_values_source4(), SqlIntoUserModeStr_);
     if (!values) {
         return nullptr;
     }
@@ -245,9 +247,7 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
 
     if (isMapReduce) {
         if (mode == ESQLWriteColumnMode::ReplaceInto) {
-            if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
-                    pos, "REPLACE", MakeLangVersion(2025, 4)))
-            {
+            if (!Ctx_.EnsureAvailable(pos, NYql::NFeature::ReplaceInto)) {
                 return false;
             }
         }

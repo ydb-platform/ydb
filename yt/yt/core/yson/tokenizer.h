@@ -13,6 +13,7 @@ public:
     explicit TTokenizer(TStringBuf input);
 
     bool ParseNext();
+    void SkipAttributes();
     const TToken& CurrentToken() const;
     ETokenType GetCurrentType() const;
     TStringBuf GetCurrentSuffix() const;

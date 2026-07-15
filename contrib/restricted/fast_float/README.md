@@ -3,12 +3,16 @@
 
 [![Ubuntu 22.04 CI (GCC 11)](https://github.com/fastfloat/fast_float/actions/workflows/ubuntu22.yml/badge.svg)](https://github.com/fastfloat/fast_float/actions/workflows/ubuntu22.yml)
 
+*Note: This library is for C++ users. C programmers should consider [ffc.h](https://github.com/kolemannix/ffc.h). It is a high-performance port of fast_float to C.*
+
+
 The fast_float library provides fast header-only implementations for the C++
 from_chars functions for `float` and `double` types as well as integer types.
 These functions convert ASCII strings representing decimal values (e.g.,
 `1.3e10`) into binary types. We provide exact rounding (including round to
 even). In our experience, these `fast_float` functions many times faster than
 comparable number-parsing functions from existing C++ standard libraries.
+
 
 Specifically, `fast_float` provides the following two functions to parse
 floating-point numbers with a C++17-like syntax (the library itself only
@@ -437,7 +441,6 @@ The fast_float library is part of:
 * [WebKit](https://github.com/WebKit/WebKit), the engine behind Safari (Apple's
   web browser),
 * [DuckDB](https://duckdb.org),
-* [Redis](https://github.com/redis/redis) and [Valkey](https://github.com/valkey-io/valkey),
 * [Apache Arrow](https://github.com/apache/arrow/pull/8494) where it multiplied
   the number parsing speed by two or three times,
 * [Google Jsonnet](https://github.com/google/jsonnet),
@@ -450,15 +453,6 @@ AdaCore](https://github.com/AdaCore/VSS). The [SerenityOS operating
 system](https://github.com/SerenityOS/serenity/commit/53b7f5e6a11e663c83df8030c3171c5945cb75ec)
 has a derived implementation that is inherited by the [Ladybird
 Browser](https://github.com/LadybirdBrowser/ladybird).
-
-The fast_float library provides a performance similar to that of the
-[fast_double_parser](https://github.com/lemire/fast_double_parser) library but
-using an updated algorithm reworked from the ground up, and while offering an
-API more in line with the expectations of C++ programmers. The
-fast_double_parser library is part of the [Microsoft LightGBM machine-learning
-framework](https://github.com/microsoft/LightGBM).
-
-
 
 Packages
 ------
@@ -488,6 +482,7 @@ Packages
   [Jackson](https://github.com/FasterXML/jackson-core).
 * [There is a C# port of the fast_float
   library](https://github.com/CarlVerret/csFastFloat) called `csFastFloat`.
+* [There is a plain C port of the fast_float library](https://github.com/kolemannix/ffc.h) called ffc.h
 
 ## How fast is it?
 
@@ -536,7 +531,7 @@ sufficiently recent version of CMake (3.11 or better at least):
 FetchContent_Declare(
   fast_float
   GIT_REPOSITORY https://github.com/fastfloat/fast_float.git
-  GIT_TAG tags/v8.2.3
+  GIT_TAG tags/v8.2.10
   GIT_SHALLOW TRUE)
 
 FetchContent_MakeAvailable(fast_float)
@@ -552,7 +547,7 @@ You may also use [CPM](https://github.com/cpm-cmake/CPM.cmake), like so:
 CPMAddPackage(
   NAME fast_float
   GITHUB_REPOSITORY "fastfloat/fast_float"
-  GIT_TAG v8.2.3)
+  GIT_TAG v8.2.10)
 ```
 
 ## Using as single header
@@ -564,7 +559,7 @@ if desired as described in the command line help.
 
 You may directly download automatically generated single-header files:
 
-<https://github.com/fastfloat/fast_float/releases/download/v8.2.3/fast_float.h>
+<https://github.com/fastfloat/fast_float/releases/download/v8.2.10/fast_float.h>
 
 ## Benchmarking
 

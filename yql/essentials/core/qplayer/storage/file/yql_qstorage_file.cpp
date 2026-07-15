@@ -223,7 +223,9 @@ private:
         auto writer = memory->MakeWriter("", {});
         TFileInput indexFile(indexPath.GetPath());
         TInstant indexWrittenAt;
-        ui64 totalItems, loadedTotalBytes, loadedChecksum;
+        ui64 totalItems;
+        ui64 loadedTotalBytes;
+        ui64 loadedChecksum;
         indexFile.LoadOrFail(&indexWrittenAt, sizeof(indexWrittenAt));
         indexFile.LoadOrFail(&totalItems, sizeof(totalItems));
         indexFile.LoadOrFail(&loadedTotalBytes, sizeof(loadedTotalBytes));
@@ -235,7 +237,8 @@ private:
         TInstant dataWrittenAt;
         dataFile.LoadOrFail(&dataWrittenAt, sizeof(dataWrittenAt));
         Y_ENSURE(indexWrittenAt == dataWrittenAt);
-        ui64 totalBytes = 0, checksum = 0;
+        ui64 totalBytes = 0;
+        ui64 checksum = 0;
         for (ui64 i = 0; i < totalItems; ++i) {
             TQItemKey key;
             LoadString(dataFile, key.Component, totalBytes, checksum, loadedTotalBytes);
@@ -260,12 +263,12 @@ private:
         str.reserve(length);
         totalBytes += length;
         while (length > 0) {
-            char buffer[1024];
+            std::array<char, 1024> buffer;
             auto toRead = Min<ui32>(sizeof(buffer), length);
-            file.LoadOrFail(buffer, toRead);
+            file.LoadOrFail(buffer.data(), toRead);
             length -= toRead;
-            str.append(buffer, toRead);
-            checksum = crc64(buffer, toRead, checksum);
+            str.append(buffer.data(), toRead);
+            checksum = crc64(buffer.data(), toRead, checksum);
         }
     }
 

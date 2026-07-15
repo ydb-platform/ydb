@@ -13,7 +13,7 @@ from __future__ import annotations
 from enum import IntEnum
 from functools import lru_cache
 
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Optional, NamedTuple
 
 # local
 from .bisearch import bisearch as _bisearch
@@ -130,7 +130,7 @@ class BreakResult(NamedTuple):
 
 
 @lru_cache(maxsize=1024)
-def _simple_break_check(prev_gcb: GCB, curr_gcb: GCB) -> BreakResult | None:
+def _simple_break_check(prev_gcb: GCB, curr_gcb: GCB) -> Optional[BreakResult]:
     """
     Check simple GCB-pair-based break rules (cacheable).
 
@@ -248,7 +248,7 @@ def _should_break(
 def iter_graphemes(
     unistr: str,
     start: int = 0,
-    end: int | None = None,
+    end: Optional[int] = None,
 ) -> Iterator[str]:
     r"""
     Iterate over grapheme clusters in a Unicode string.
@@ -266,9 +266,9 @@ def iter_graphemes(
 
         >>> list(iter_graphemes('cafe\u0301'))
         ['c', 'a', 'f', 'e\u0301']
-        >>> list(iter_graphemes('\U0001F468\u200D\U0001F469\u200D\U0001F467'))
+        >>> list(iter_graphemes('ok\U0001F468\u200D\U0001F469\u200D\U0001F467'))
         ['o', 'k', '\U0001F468\u200D\U0001F469\u200D\U0001F467']
-        >>> list(iter_graphemes('\U0001F1FA\U0001F1F8'))
+        >>> list(iter_graphemes('ok\U0001F1FA\U0001F1F8'))
         ['o', 'k', '\U0001F1FA\U0001F1F8']
 
     .. versionadded:: 0.3.0
@@ -390,7 +390,7 @@ def grapheme_boundary_before(unistr: str, pos: int) -> int:
 def iter_graphemes_reverse(
     unistr: str,
     start: int = 0,
-    end: int | None = None,
+    end: Optional[int] = None,
 ) -> Iterator[str]:
     r"""
     Iterate over grapheme clusters in reverse order (last to first).

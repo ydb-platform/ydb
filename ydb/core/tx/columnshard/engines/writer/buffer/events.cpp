@@ -1,5 +1,3 @@
 #include "events.h"
 
-namespace NKikimr::NColumnShard::NWriting {
-
-}
+namespace NKikimr::NColumnShard::NWriting {}

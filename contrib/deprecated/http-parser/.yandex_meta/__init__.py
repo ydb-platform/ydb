@@ -1,6 +1,5 @@
 from devtools.yamaker.project import NixProject
 
-
 http_parser = NixProject(
     arcdir="contrib/deprecated/http-parser",
     nixattr="http-parser",

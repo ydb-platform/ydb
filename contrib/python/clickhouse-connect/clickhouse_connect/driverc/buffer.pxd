@@ -2,7 +2,7 @@ cdef class ResponseBuffer:
     cdef:
         unsigned long long buf_loc, buf_sz, slice_sz
         signed long long slice_start
-        object gen, source
+        object gen, source, _exception_tag, open_marker, close_marker, carryover, exception_buf, last_message_data, current_chunk
         char* buffer
         char* slice
         unsigned char _read_byte_load(self) except ?255
@@ -10,3 +10,4 @@ cdef class ResponseBuffer:
         Py_buffer buff_source
         cdef object _read_str_col(self, unsigned long long num_rows, char * encoding)
         cdef object _read_nullable_str_col(self, unsigned long long num_rows, char * encoding, object null_obj)
+        cdef void _check_for_exception(self, object chunk) except *

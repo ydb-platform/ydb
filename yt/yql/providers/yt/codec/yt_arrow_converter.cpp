@@ -595,11 +595,37 @@ private:
     IYsonComplexTypeReader::TPtr Underlying_;
 };
 
+template <bool Native>
+class TVariantYsonReader final: public IYsonYQLComplexTypeReader<Native> {
+public:
+    TVariantYsonReader(
+        TVector<std::unique_ptr<IYsonComplexTypeReader>>&& children,
+        const NUdf::TType* type)
+        : Children_(std::move(children))
+    {
+        Y_UNUSED(type);
+    }
+
+    NUdf::TBlockItem GetItem(TYsonBuffer& ysonBuffer) override {
+        Y_UNUSED(ysonBuffer);
+        ythrow yexception() << "TVariantYsonReader not implemented";
+    }
+
+    NUdf::TBlockItem GetNotNull(TYsonBuffer& ysonBuffer) override {
+        Y_UNUSED(ysonBuffer);
+        ythrow yexception() << "TVariantYsonReader not implemented";
+    }
+
+private:
+    TVector<std::unique_ptr<IYsonComplexTypeReader>> Children_;
+};
+
 template<bool Native>
 struct TComplexTypeYsonReaderTraits {
     using TResult = IYsonComplexTypeReader;
     template <bool Nullable>
     using TTuple = TTupleYsonReader<Nullable, Native>;
+    using TVariant = TVariantYsonReader<Native>;
     // TODO: Implement reader for decimals
     template <typename T, bool Nullable, typename = std::enable_if_t<!std::is_same_v<T, NYql::NDecimal::TInt128> && (std::is_integral_v<T> || std::is_floating_point_v<T>)>>
     using TFixedSize = TFixedSizeYsonReader<T, Nullable, Native>;

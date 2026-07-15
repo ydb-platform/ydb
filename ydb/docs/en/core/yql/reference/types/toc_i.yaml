@@ -3,6 +3,9 @@ items:
   href: index.md
 - name: Simple
   href: primitive.md
+- name: Serial
+  href: serial.md
+  when: feature_serial
 - name: Optional
   href: optional.md
 - name: Containers
@@ -15,3 +18,6 @@ items:
   href: type_string.md
 - name: JSON
   href: json.md
+- name: YSON
+  hidden: true
+  href: yson.md

@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "opentelemetry/common/attribute_value.h"
@@ -39,9 +40,7 @@ class SpanDataEvent
 public:
   SpanDataEvent(std::string name,
                 opentelemetry::common::SystemTimestamp timestamp,
-                const opentelemetry::common::KeyValueIterable &attributes)
-      : name_(name), timestamp_(timestamp), attribute_map_(attributes)
-  {}
+                const opentelemetry::common::KeyValueIterable &attributes);
 
   /**
    * Get the name for this event
@@ -60,10 +59,7 @@ public:
    * @return the attributes for this event
    */
   const std::unordered_map<std::string, opentelemetry::sdk::common::OwnedAttributeValue> &
-  GetAttributes() const noexcept
-  {
-    return attribute_map_.GetAttributes();
-  }
+  GetAttributes() const noexcept;
 
 private:
   std::string name_;
@@ -78,19 +74,14 @@ class SpanDataLink
 {
 public:
   SpanDataLink(opentelemetry::trace::SpanContext span_context,
-               const opentelemetry::common::KeyValueIterable &attributes)
-      : span_context_(span_context), attribute_map_(attributes)
-  {}
+               const opentelemetry::common::KeyValueIterable &attributes);
 
   /**
    * Get the attributes for this link
    * @return the attributes for this link
    */
   const std::unordered_map<std::string, opentelemetry::sdk::common::OwnedAttributeValue> &
-  GetAttributes() const noexcept
-  {
-    return attribute_map_.GetAttributes();
-  }
+  GetAttributes() const noexcept;
 
   /**
    * Get the span context for this link
@@ -109,7 +100,7 @@ private:
 class SpanData final : public Recordable
 {
 public:
-  SpanData() : resource_{nullptr}, instrumentation_scope_{nullptr} {}
+  SpanData() = default;
   /**
    * Get the trace id for this span
    * @return the trace id for this span
@@ -168,37 +159,13 @@ public:
    * Get the attributes associated with the resource
    * @returns the attributes associated with the resource configured for TracerProvider
    */
-
-  const opentelemetry::sdk::resource::Resource &GetResource() const noexcept
-  {
-    if (resource_ == nullptr)
-    {
-      // this shouldn't happen as TraceProvider provides default resources
-      static opentelemetry::sdk::resource::Resource resource =
-          opentelemetry::sdk::resource::Resource::GetEmpty();
-      return resource;
-    }
-    return *resource_;
-  }
+  const opentelemetry::sdk::resource::Resource &GetResource() const noexcept;
 
   /**
    * Get the attributes associated with the resource
    * @returns the attributes associated with the resource configured for TracerProvider
    */
-
-  const opentelemetry::sdk::trace::InstrumentationScope &GetInstrumentationScope() const noexcept
-  {
-    if (instrumentation_scope_ == nullptr)
-    {
-      // this shouldn't happen as Tracer ensures there is valid default instrumentation scope.
-      static std::unique_ptr<opentelemetry::sdk::instrumentationscope::InstrumentationScope>
-          instrumentation_scope =
-              opentelemetry::sdk::instrumentationscope::InstrumentationScope::Create(
-                  "unknown_service");
-      return *instrumentation_scope;
-    }
-    return *instrumentation_scope_;
-  }
+  const opentelemetry::sdk::trace::InstrumentationScope &GetInstrumentationScope() const noexcept;
 
   OPENTELEMETRY_DEPRECATED_MESSAGE("Please use GetInstrumentationScope instead")
   const opentelemetry::sdk::trace::InstrumentationScope &GetInstrumentationLibrary() const noexcept
@@ -223,10 +190,7 @@ public:
    * @return the attributes for this span
    */
   const std::unordered_map<std::string, opentelemetry::sdk::common::OwnedAttributeValue> &
-  GetAttributes() const noexcept
-  {
-    return attribute_map_.GetAttributes();
-  }
+  GetAttributes() const noexcept;
 
   /**
    * Get the events associated with this span
@@ -241,71 +205,37 @@ public:
   const std::vector<SpanDataLink> &GetLinks() const noexcept { return links_; }
 
   void SetIdentity(const opentelemetry::trace::SpanContext &span_context,
-                   opentelemetry::trace::SpanId parent_span_id) noexcept override
-  {
-    span_context_   = span_context;
-    parent_span_id_ = parent_span_id;
-  }
+                   opentelemetry::trace::SpanId parent_span_id) noexcept override;
 
   void SetAttribute(nostd::string_view key,
-                    const opentelemetry::common::AttributeValue &value) noexcept override
-  {
-    attribute_map_.SetAttribute(key, value);
-  }
+                    const opentelemetry::common::AttributeValue &value) noexcept override;
 
   void AddEvent(nostd::string_view name,
                 opentelemetry::common::SystemTimestamp timestamp =
                     opentelemetry::common::SystemTimestamp(std::chrono::system_clock::now()),
                 const opentelemetry::common::KeyValueIterable &attributes =
                     opentelemetry::common::KeyValueIterableView<std::map<std::string, int32_t>>(
-                        {})) noexcept override
-  {
-    SpanDataEvent event(std::string(name), timestamp, attributes);
-    events_.push_back(event);
-  }
+                        {})) noexcept override;
 
   void AddLink(const opentelemetry::trace::SpanContext &span_context,
-               const opentelemetry::common::KeyValueIterable &attributes) noexcept override
-  {
-    SpanDataLink link(span_context, attributes);
-    links_.push_back(link);
-  }
+               const opentelemetry::common::KeyValueIterable &attributes) noexcept override;
 
   void SetStatus(opentelemetry::trace::StatusCode code,
-                 nostd::string_view description) noexcept override
-  {
-    status_code_ = code;
-    status_desc_ = std::string(description);
-  }
+                 nostd::string_view description) noexcept override;
 
-  void SetName(nostd::string_view name) noexcept override
-  {
-    name_ = std::string(name.data(), name.length());
-  }
+  void SetName(nostd::string_view name) noexcept override;
 
-  void SetTraceFlags(opentelemetry::trace::TraceFlags flags) noexcept override { flags_ = flags; }
+  void SetTraceFlags(opentelemetry::trace::TraceFlags flags) noexcept override;
 
-  void SetSpanKind(opentelemetry::trace::SpanKind span_kind) noexcept override
-  {
-    span_kind_ = span_kind;
-  }
+  void SetSpanKind(opentelemetry::trace::SpanKind span_kind) noexcept override;
 
-  void SetResource(const opentelemetry::sdk::resource::Resource &resource) noexcept override
-  {
-    resource_ = &resource;
-  }
+  void SetResource(const opentelemetry::sdk::resource::Resource &resource) noexcept override;
 
-  void SetStartTime(opentelemetry::common::SystemTimestamp start_time) noexcept override
-  {
-    start_time_ = start_time;
-  }
+  void SetStartTime(opentelemetry::common::SystemTimestamp start_time) noexcept override;
 
-  void SetDuration(std::chrono::nanoseconds duration) noexcept override { duration_ = duration; }
+  void SetDuration(std::chrono::nanoseconds duration) noexcept override;
 
-  void SetInstrumentationScope(const InstrumentationScope &instrumentation_scope) noexcept override
-  {
-    instrumentation_scope_ = &instrumentation_scope;
-  }
+  void SetInstrumentationScope(const InstrumentationScope &instrumentation_scope) noexcept override;
 
 private:
   opentelemetry::trace::SpanContext span_context_{false, false};
@@ -320,8 +250,8 @@ private:
   std::vector<SpanDataLink> links_;
   opentelemetry::trace::TraceFlags flags_;
   opentelemetry::trace::SpanKind span_kind_{opentelemetry::trace::SpanKind::kInternal};
-  const opentelemetry::sdk::resource::Resource *resource_;
-  const InstrumentationScope *instrumentation_scope_;
+  const opentelemetry::sdk::resource::Resource *resource_{nullptr};
+  const InstrumentationScope *instrumentation_scope_{nullptr};
 };
 }  // namespace trace
 }  // namespace sdk

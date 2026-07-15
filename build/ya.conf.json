@@ -15,6 +15,14 @@
                 }
             }
         },
+        "ast-index": {
+            "executable": {
+                "ast-index": [
+                    "ast-index"
+                ]
+            },
+            "formula": "build/external_resources/ast-index/resources.json"
+        },
         "atop": {
             "executable": {
                 "atop": [
@@ -259,7 +267,7 @@
                     "gofmt"
                 ]
             },
-            "formula": "build/external_resources/go_tools/go1.25.json"
+            "formula": "build/external_resources/go_tools/go1.26.json"
         },
         "jdk17": {
             "executable": {
@@ -336,6 +344,14 @@
             },
             "formula": "build/external_resources/yexport/public.resources.json"
         },
+        "yfm-docs": {
+            "executable": {
+                "yfm-docs": [
+                    "yfm-docs"
+                ]
+            },
+            "formula": "build/platform/yfm/resources.json"
+        },
         "ygdiff": {
             "executable": {
                 "ygdiff": [
@@ -382,6 +398,41 @@
                 "allure": {
                     "bottle": "allure_commandline",
                     "executable": "allure"
+                }
+            }
+        },
+        "ast-index": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WINDOWS"
+                    }
+                }
+            ],
+            "tools": {
+                "ast-index": {
+                    "bottle": "ast-index",
+                    "executable": "ast-index"
                 }
             }
         },
@@ -1046,6 +1097,16 @@
                         "os": "LINUX"
                     },
                     "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
                         "arch": "armv7a_cortex_a9",
                         "os": "LINUX"
                     }
@@ -1128,6 +1189,16 @@
                         "os": "DARWIN"
                     },
                     "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
                         "arch": "armv7ahf_cortex_a53",
                         "os": "LINUX"
                     }
@@ -1192,6 +1263,17 @@
                     "target": {
                         "arch": "wasm64",
                         "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
                     }
                 },
                 {
@@ -1786,6 +1868,16 @@
                         "os": "LINUX"
                     },
                     "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
                         "arch": "armv7a_cortex_a9",
                         "os": "LINUX"
                     }
@@ -1868,6 +1960,16 @@
                         "os": "DARWIN"
                     },
                     "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
                         "arch": "armv7ahf_cortex_a53",
                         "os": "LINUX"
                     }
@@ -1932,6 +2034,17 @@
                     "target": {
                         "arch": "wasm64",
                         "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "armv7ahf_cortex_a7",
+                        "os": "LINUX"
                     }
                 },
                 {
@@ -2339,7 +2452,7 @@
         "golang": {
             "params": {
                 "type": "golang",
-                "version": "1.25.0"
+                "version": "1.26.0"
             },
             "platforms": [
                 {
@@ -2636,6 +2749,34 @@
                 }
             }
         },
+        "yfm-docs": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                }
+            ],
+            "tools": {
+                "yfm-docs": {
+                    "bottle": "yfm-docs",
+                    "executable": "yfm-docs"
+                }
+            }
+        },
         "ygdiff": {
             "platforms": [
                 {
@@ -2739,6 +2880,9 @@
     "tools": {
         "allure": {
             "description": "Run Allure commandline"
+        },
+        "ast-index": {
+            "description": "Fast code search for Android/Kotlin/Java, iOS/Swift/ObjC, TypeScript, Rust, Ruby, C#, Python, Go, C++, Perl, Proto projects"
         },
         "atop": {
             "description": "Advanced System & Process Monitor"
@@ -2861,6 +3005,9 @@
         "yexport": {
             "description": "Run yexport",
             "visible": false
+        },
+        "yfm-docs": {
+            "description": "YFM-extended markdown processor for Cloud deploy (v3)"
         },
         "ygdiff": {
             "description": "Run ygdiff tool",

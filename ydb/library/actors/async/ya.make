@@ -15,6 +15,8 @@ SRCS(
     decorator.h
     event.cpp
     event.h
+    low_priority.cpp
+    low_priority.h
     result.cpp
     result.h
     sleep.cpp

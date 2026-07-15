@@ -1,7 +1,9 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
+
 namespace NKikimr::NOlap::NIndexes::NCategoriesBloom {
 
 class TBloomIndexConstructor: public TSkipBitmapIndexConstructor {
@@ -14,7 +16,7 @@ public:
     }
 
 private:
-    double FalsePositiveProbability = 0.1;
+    double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexConstructor>(GetClassNameStatic());
 
 protected:

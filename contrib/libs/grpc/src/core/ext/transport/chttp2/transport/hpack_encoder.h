@@ -40,6 +40,7 @@
 #include "src/core/lib/slice/slice.h"
 #include "src/core/lib/slice/slice_buffer.h"
 #include "src/core/lib/transport/metadata_batch.h"
+#include "src/core/lib/transport/metadata_compression_traits.h"
 #include "src/core/lib/transport/timeout_encoding.h"
 #include "src/core/lib/transport/transport.h"
 
@@ -275,8 +276,10 @@ class Compressor<MetadataTrait, SmallSetOfValuesCompressor> {
 };
 
 struct PreviousTimeout {
-  Timeout timeout;
-  uint32_t index;
+  Timeout timeout = Timeout::FromDuration(Duration::Zero());
+  // Dynamic table index of a previously sent timeout
+  // 0 is guaranteed not in the dynamic table so is a safe initializer
+  uint32_t index = 0;
 };
 
 class TimeoutCompressorImpl {
@@ -284,7 +287,9 @@ class TimeoutCompressorImpl {
   void EncodeWith(y_absl::string_view key, Timestamp deadline, Encoder* encoder);
 
  private:
-  std::vector<PreviousTimeout> previous_timeouts_;
+  static constexpr const size_t kNumPreviousValues = 5;
+  PreviousTimeout previous_timeouts_[kNumPreviousValues];
+  uint32_t next_previous_value_ = 0;
 };
 
 template <typename MetadataTrait>

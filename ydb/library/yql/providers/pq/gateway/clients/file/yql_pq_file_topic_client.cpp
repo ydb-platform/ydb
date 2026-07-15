@@ -301,7 +301,8 @@ private:
             } while ((maybeMsg = EventsMsgQ.Pop(false)));
 
             fo.Flush();
-            EventsQ.Push(std::move(acks), 1 + acks.Acks.size());
+            auto acksSize = acks.Acks.size();
+            EventsQ.Push(std::move(acks), 1 + acksSize);
             EventsQ.Push(TWriteSessionEvent::TReadyToAcceptEvent(IssueContinuationToken()), 1);
 
             if (EventsQ.IsStopped()) {
@@ -328,7 +329,7 @@ private:
     uint64_t SeqNo = 0;
 };
 
-struct TDummyPartitionSession final : public TPartitionSession {
+struct TDummyPartitionSession final : public TPartitionSessionControl {
     TDummyPartitionSession(ui64 sessionId, const TString& topicPath, ui64 partId) {
         PartitionSessionId = sessionId;
         TopicPath = topicPath;
@@ -336,6 +337,19 @@ struct TDummyPartitionSession final : public TPartitionSession {
     }
 
     void RequestStatus() override {
+    }
+
+    void Commit(uint64_t /*startOffset*/, uint64_t /*endOffset*/) override {
+    }
+
+    void ConfirmCreate(std::optional<uint64_t> /*readOffset*/, std::optional<uint64_t> /*commitOffset*/, std::optional<uint64_t> /*maxOffset*/) override {
+        // TODO seek to offset
+    }
+
+    void ConfirmDestroy() override {
+    }
+
+    void ConfirmEnd(std::span<const uint32_t> /*childIds*/) override {
     }
 };
 
@@ -363,8 +377,21 @@ public:
     }
 
     TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) final {
-        Y_UNUSED(path, settings);
-        return NThreading::MakeFuture(TDescribeTopicResult(TStatus(EStatus::SUCCESS, {}), {}));
+        Y_UNUSED(settings);
+        Ydb::Topic::DescribeTopicResult describeTopicResult;
+        const TClusterNPath key { "pq", SkipDatabasePrefix(path) };
+        const auto topicsIt = Topics.find(key);
+        if (topicsIt == Topics.end()) {
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue(TStringBuilder() << "Cluster: " << key.first << ", topic: " << key.second << " not found");
+            return NThreading::MakeFuture(TDescribeTopicResult(TStatus(EStatus::NOT_FOUND, std::move(issues)), {}));
+        }
+        for (size_t partition = 0; partition < topicsIt->second.PartitionsCount; ++partition) {
+            auto& partitionInfo = *describeTopicResult.add_partitions();
+            partitionInfo.set_partition_id(partition);
+            partitionInfo.set_active(true);
+        }
+        return NThreading::MakeFuture(TDescribeTopicResult(TStatus(EStatus::SUCCESS, {}), std::move(describeTopicResult)));
     }
 
     TAsyncDescribeConsumerResult DescribeConsumer(const TString& path, const TString& consumer, const TDescribeConsumerSettings& settings) final {

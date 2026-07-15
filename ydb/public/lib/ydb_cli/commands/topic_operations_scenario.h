@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/lib/ydb_cli/common/scoped_driver.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/fwd.h>
@@ -42,11 +43,14 @@ public:
     void EnsurePercentileIsValid() const;
     void EnsureWarmupSecIsValid() const;
     void EnsureRatesIsValid() const;
+    void EnsureCodecOptionsAreValid() const;
 
     TString GetReadOnlyTableName() const;
     TString GetWriteOnlyTableName() const;
 
     ui32 GetTopicMaxPartitionCount() const;
+
+    void ConfigMetadataMonitoringOptions(TClientCommand::TConfig& config);
 
     TDuration TotalSec;
     TDuration WindowSec;
@@ -73,6 +77,7 @@ public:
     TString TableName;
     ui32 TablePartitionCount = 1;
     bool UseTransactions = false;
+    bool NoTrackProducerIdInTx = false;
     size_t CommitPeriodSeconds = 1;
     size_t TxCommitIntervalMs = 0;
     size_t CommitMessages = 1'000'000;
@@ -88,12 +93,18 @@ public:
     bool CleanupPolicyCompact = false;
     std::optional<size_t> ConsumerMaxMemoryUsageBytes;
     size_t PartitionMaxInflightBytes = 0; // zero means no limit
+    bool DirectRead = false;
     std::optional<size_t> ProducerMaxMemoryUsageBytes;
+    TDuration BatchFlushInterval = TDuration::Seconds(1);
+    std::optional<ui64> BatchFlushSizeBytes;
+    ui32 BatchFlushMessageCount = 1;
+    TString BatchInnerCodecStr;
     size_t ProducerKeysCount = 0;
     bool KeyedWrites = false;
     size_t ConfigConsumerCount = 0;
     bool NeedDescribeTopic = false;
     TString DescribeConsumerName;
+    TMaybe<ui32> PartitionsPerTablet;
 
 protected:
     void CreateTopic(const TString& database,
@@ -131,7 +142,7 @@ protected:
     bool AnyIncomingMessages() const;
     bool AnyOutgoingMessages() const;
 
-    std::unique_ptr<TDriver> Driver;
+    std::unique_ptr<TScopedDriver> Driver;
     std::shared_ptr<TLog> Log;
     std::shared_ptr<std::atomic_bool> ErrorFlag;
     std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;

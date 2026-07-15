@@ -8,7 +8,8 @@ TCSCounters::TCSCounters()
     : TBase("CS")
     , WritingCounters(std::make_shared<TWriteCounters>(*this))
     , Initialization(*this)
-    , TxProgress(*this) {
+    , TxProgress(*this)
+{
     for (auto&& i : GetEnumAllValues<EOverloadStatus>()) {
         AFL_VERIFY((ui32)i == WaitingOverloads.size());
         auto overloadCounters = CreateSubGroup("overload_type", ::ToString(i));
@@ -46,6 +47,8 @@ TCSCounters::TCSCounters()
     OverloadShardWritesSizeCount = TBase::GetDeriviative("Overload/Shard/WritesSize/Count");
     OverloadRejectProbabilityBytes = TBase::GetDeriviative("Overload/RejectProbability/Bytes");
     OverloadRejectProbabilityCount = TBase::GetDeriviative("Overload/RejectProbability/Count");
+    OverloadSmallBlobsQuotaBytes = TBase::GetDeriviative("Overload/SmallBlobsQuota/Bytes");
+    OverloadSmallBlobsQuotaCount = TBase::GetDeriviative("Overload/SmallBlobsQuota/Count");
 
     InternalCompactionGranuleBytes = TBase::GetValueAutoAggregationsClient("InternalCompaction/Bytes");
     InternalCompactionGranulePortionsCount = TBase::GetValueAutoAggregationsClient("InternalCompaction/PortionsCount");
@@ -54,12 +57,18 @@ TCSCounters::TCSCounters()
     SplitCompactionGranulePortionsCount = TBase::GetValueAutoAggregationsClient("SplitCompaction/PortionsCount");
 
     HistogramSuccessWritePutBlobsDurationMs = TBase::GetHistogram("SuccessWritePutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
-    HistogramSuccessWriteMiddle1PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle1PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
-    HistogramSuccessWriteMiddle2PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle2PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
-    HistogramSuccessWriteMiddle3PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle3PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
-    HistogramSuccessWriteMiddle4PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle4PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
-    HistogramSuccessWriteMiddle5PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle5PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
-    HistogramSuccessWriteMiddle6PutBlobsDurationMs = TBase::GetHistogram("SuccessWriteMiddle6PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramSuccessWriteMiddle1PutBlobsDurationMs =
+        TBase::GetHistogram("SuccessWriteMiddle1PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramSuccessWriteMiddle2PutBlobsDurationMs =
+        TBase::GetHistogram("SuccessWriteMiddle2PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramSuccessWriteMiddle3PutBlobsDurationMs =
+        TBase::GetHistogram("SuccessWriteMiddle3PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramSuccessWriteMiddle4PutBlobsDurationMs =
+        TBase::GetHistogram("SuccessWriteMiddle4PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramSuccessWriteMiddle5PutBlobsDurationMs =
+        TBase::GetHistogram("SuccessWriteMiddle5PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramSuccessWriteMiddle6PutBlobsDurationMs =
+        TBase::GetHistogram("SuccessWriteMiddle6PutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
     HistogramFailedWritePutBlobsDurationMs = TBase::GetHistogram("FailedWritePutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
     HistogramWriteTxCompleteDurationMs = TBase::GetHistogram("WriteTxCompleteDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
 
@@ -92,4 +101,4 @@ void TCSCounters::OnWriteOverload(const EOverloadStatus status, const ui32 size)
     WriteOverloadBytes[(ui64)status]->Add(size);
 }
 
-}
+}   // namespace NKikimr::NColumnShard

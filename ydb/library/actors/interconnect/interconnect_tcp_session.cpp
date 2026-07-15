@@ -8,7 +8,10 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
+#include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+
+#include <tuple>
 
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
@@ -27,20 +30,27 @@ namespace NActors {
         }
     }
 
-    TInterconnectSessionTCP::TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params)
+    TStringBuf FormatActivityName(ui32 activityIndex) {
+        return activityIndex == Max<ui32>() ? TStringBuf("manual") : GetActivityTypeName(activityIndex);
+    }
+
+    TStringBuf FormatEventTypeName(const TString& eventTypeName) {
+        return eventTypeName.empty() ? TStringBuf("manual") : TStringBuf(eventTypeName);
+    }
+
+    TInterconnectSessionTCP::TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy)
         : TActor(&TInterconnectSessionTCP::StateFunc)
         , Created(TInstant::Now())
         , Proxy(proxy)
         , CloseOnIdleWatchdog(GetCloseOnIdleTimeout(), std::bind(&TThis::OnCloseOnIdleTimerHit, this))
         , LostConnectionWatchdog(GetLostConnectionTimeout(), std::bind(&TThis::OnLostConnectionTimerHit, this))
-        , Params(std::move(params))
+        , KernelLivenessMode(Params.UseKernelLiveness)
         , TotalOutputQueueSize(0)
         , OutputStuckFlag(false)
         , OutputQueueUtilization(16)
         , OutputCounter(0ULL)
         , ZcProcessor(proxy->Common->Settings.SocketSendOptimization == ESocketSendOptimization::IC_MSG_ZEROCOPY)
     {
-        Proxy->Metrics->SetConnected(0);
         PartUpdateTimestamp = GetCycleCountFast();
         ReceiveContext.Reset(new TReceiveContext);
     }
@@ -55,7 +65,12 @@ namespace NActors {
         }
     }
 
-    void TInterconnectSessionTCP::Init() {
+    void TInterconnectSessionTCP::Init(const TSessionParams& params) {
+        Params = params;
+        Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
+        Proxy->Metrics->SetConnected(0);
+        DirectSession = std::make_shared<TDirectSessionV1>(TActivationContext::ActorSystem(), SelfId(), Proxy->PeerNodeId);
+        ReceiveContext->DirectSession = DirectSession;
         auto destroyCallback = [as = TActivationContext::ActorSystem(), id = Proxy->Common->DestructorId](THolder<IEventBase> event) {
             as->Send(id, event.Release());
         };
@@ -66,6 +81,12 @@ namespace NActors {
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session created", Proxy->PeerNodeId);
         SetPrefix(Sprintf("Session %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
         SendUpdateToWhiteboard();
+    }
+
+    void TInterconnectSessionTCP::HandleProcessDirectSessionQueue() {
+        // Runs on the shared session/input-session mailbox thread, so applying registration commands
+        // here does not race with incoming-event dispatch.
+        DirectSession->ApplyPendingCommands();
     }
 
     std::optional<ui8> TInterconnectSessionTCP::GetXDCFlags() const noexcept {
@@ -105,6 +126,10 @@ namespace NActors {
         return false;
     }
 
+    bool TInterconnectSessionTCP::HasRdmaState() const {
+        return Params.UseRdma || RdmaQp || RdmaInflightDataAmount;
+    }
+
     void TInterconnectSessionTCP::Handle(TEvTerminate::TPtr& ev) {
         Terminate(ev->Get()->Reason);
     }
@@ -124,15 +149,24 @@ namespace NActors {
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::UnregisterSession, this);
         ShutdownSocket(std::move(reason));
 
+        // disconnect the direct interface so racing user threads observe a clean shutdown; the handle
+        // itself stays published in ReceiveContext for the input session's whole lifetime
+        DirectSession->Shutdown();
+
         ReceiveContext->Terminated = true; // prevent further message generation by receiving actor
         for (const auto& kv : Subscribers) {
-            Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second);
+            Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second.Cookie);
+            Proxy->Metrics->AddSubscribersByActivity(kv.second.ActivityIndex, -1);
         }
         Proxy->Metrics->SubSubscribersCount(Subscribers.size());
         Subscribers.clear();
 
         for (auto& d : DelayedEvents) {
-            d.Span.EndError("nondelivery");
+            if (NWilson::TSpan* wilsonSpan = d.Span.GetWilsonSpanPtr()) {
+                wilsonSpan->EndError("nondelivery");
+            } else if (NActors::TDelayedEventSpan* retroSpan = d.Span.GetRetroSpanPtr()) {
+                retroSpan->EndError();
+            }
             TActivationContext::Send(IEventHandle::ForwardOnNondelivery(d.Event, TEvents::TEvUndelivered::Disconnected));
         }
         DelayedEvents.clear();
@@ -154,10 +188,6 @@ namespace NActors {
         Proxy->Metrics->SubInflightRdmaDataAmount(RdmaInflightDataAmount);
 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session destroyed", Proxy->PeerNodeId);
-
-        if (!Subscribers.empty()) {
-            Proxy->Metrics->SubSubscribersCount(Subscribers.size());
-        }
 
         guard->Terminate(std::move(Pool), XdcSocket, TlsActivationContext->AsActorContext());
 
@@ -193,6 +223,7 @@ namespace NActors {
         }
 
         SetOutputStuckFlag(true);
+        Proxy->Metrics->UpdateNumEventsInQueueHistogram(NumEventsInQueue);
         ++NumEventsInQueue;
         if (State == EState::Idle) {
             UpdateState(EState::Utilized);
@@ -227,11 +258,31 @@ namespace NActors {
             Subscribe(ev);
         }
 
+        EnqueueForward(std::move(ev));
+    }
+
+    void TInterconnectSessionTCP::ForwardWithSubscribe(STATEFN_SIG) {
+        Proxy->ValidateEvent(ev, "ForwardWithSubscribe");
+
+        auto msg = ev->Release<TEvForwardSubscribeSession>();
+        Y_ABORT_UNLESS(msg->Event);
+
+        LOG_DEBUG_IC_SESSION("ICS12", "subscribe for session state for %s", msg->Event->Sender.ToString().data());
+        UpdateSubscriber(msg->Event->Sender, msg->Event->Cookie, msg->ActivityIndex, std::move(msg->EventTypeName),
+            std::move(msg->StackTrace));
+        Send(msg->Event->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId, DirectSession), 0, msg->Event->Cookie);
+
+        EnqueueForward(TAutoPtr<IEventHandle>(msg->Event.Release()));
+    }
+
+    void TInterconnectSessionTCP::EnqueueForward(TAutoPtr<IEventHandle> ev) {
+        Y_ABORT_UNLESS(ev);
+
         if (Y_UNLIKELY(Proxy->Common->Settings.EventDelay)) {
             auto& d = DelayedEvents.emplace_back();
             d.Event = std::move(ev);
             if (Y_UNLIKELY(d.Event->TraceId)) {
-                d.Span = NWilson::TSpan(15 /*max verbosity*/, std::move(d.Event->TraceId), "Interconnect.Delay");
+                d.Span = NActors::TDelayedEventSpan::TUniversal(15 /*max verbosity*/, std::move(d.Event->TraceId), "Interconnect.Delay");
                 // Reparent event to the delay span
                 d.Event->TraceId = d.Span.GetTraceId();
             }
@@ -245,24 +296,52 @@ namespace NActors {
         Y_ABORT_UNLESS(!DelayedEvents.empty());
         auto d = std::move(DelayedEvents.front());
         DelayedEvents.pop_front();
-        d.Span.End();
+        d.Span.EndOk();
         Enqueue(d.Event);
     }
 
     void TInterconnectSessionTCP::Subscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS04", "subscribe for session state for %s", ev->Sender.ToString().data());
-        const auto [it, inserted] = Subscribers.emplace(ev->Sender, ev->Cookie);
-        if (inserted) {
-            Proxy->Metrics->IncSubscribersCount();
-        } else {
-            it->second = ev->Cookie;
-        }
-        Send(ev->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, ev->Cookie);
+        UpdateSubscriber(ev->Sender, ev->Cookie);
+        Send(ev->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId, DirectSession), 0, ev->Cookie);
     }
 
     void TInterconnectSessionTCP::Unsubscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS05", "unsubscribe for session state for %s", ev->Sender.ToString().data());
-        Proxy->Metrics->SubSubscribersCount(Subscribers.erase(ev->Sender));
+        if (const auto it = Subscribers.find(ev->Sender); it != Subscribers.end()) {
+            Proxy->Metrics->AddSubscribersByActivity(it->second.ActivityIndex, -1);
+            Subscribers.erase(it);
+            Proxy->Metrics->SubSubscribersCount(1);
+        }
+    }
+
+    void TInterconnectSessionTCP::UpdateSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex, TString eventTypeName,
+            TString stackTrace) {
+        auto updateInfo = [&] (TSubscriberInfo& info) {
+            info.Cookie = cookie;
+            info.ActivityIndex = activityIndex;
+            info.EventTypeName = eventTypeName;
+            info.StackTrace = stackTrace;
+        };
+
+        auto historyKey = TSubscriberHistoryKey(stackTrace, activityIndex, eventTypeName);
+        if (const auto it = SubscriberHistory.find(historyKey); it != SubscriberHistory.end()) {
+            ++it->second;
+        } else if (SubscriberHistory.size() < MaxSubscriberHistoryEntries) {
+            SubscriberHistory.emplace(std::move(historyKey), 1);
+        } else {
+            SubscriberHistoryOverflow = true;
+        }
+
+        const auto [it, inserted] = Subscribers.emplace(actorId, TSubscriberInfo{});
+        if (inserted) {
+            Proxy->Metrics->IncSubscribersCount();
+            Proxy->Metrics->AddSubscribersByActivity(activityIndex, +1);
+        } else if (it->second.ActivityIndex != activityIndex) {
+            Proxy->Metrics->AddSubscribersByActivity(it->second.ActivityIndex, -1);
+            Proxy->Metrics->AddSubscribersByActivity(activityIndex, +1);
+        }
+        updateInfo(it->second);
     }
 
     THolder<TEvHandshakeAck> TInterconnectSessionTCP::ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) {
@@ -308,6 +387,9 @@ namespace NActors {
             ZcProcessor.ApplySocketOption(*XdcSocket);
         }
 
+        // Apply kernel-liveness decision for this concrete transport connection.
+        KernelLivenessMode = ev->Get()->Params.UseKernelLiveness;
+
         // there may be a race
         const ui64 nextPacket = Max(LastConfirmed, ev->Get()->NextPacket);
 
@@ -315,7 +397,8 @@ namespace NActors {
         RearmCloseOnIdle();
 
         // reset activity timestamps
-        LastInputActivityTimestamp = LastPayloadActivityTimestamp = TActivationContext::Monotonic();
+        LastInputActivityTimestamp = LastPayloadActivityTimestamp = LastPingTimestamp = TActivationContext::Monotonic();
+        ClockSkewPingTimestamp = TMonotonic::Max();
 
         LOG_INFO_IC_SESSION("ICS10", "traffic start");
 
@@ -328,22 +411,38 @@ namespace NActors {
 
         // create input session actor
         ReceiveContext->UnlockLastPacketSerialToConfirm();
+        // Keep most session params stable, but pass current transport-level liveness mode.
+        TSessionParams inputSessionParams = Params;
+        inputSessionParams.UseKernelLiveness = KernelLivenessMode;
         auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, XdcSocket, ReceiveContext, Proxy->Common,
-            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params, RdmaQp, std::move(cq));
+            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), std::move(inputSessionParams), RdmaQp, std::move(cq));
         ReceiverId = RegisterWithSameMailbox(actor.Release());
 
-        // register our socket in poller actor
-        LOG_DEBUG_IC_SESSION("ICS11", "registering socket in PollerActor");
-        const bool success = Send(MakePollerActorId(), new TEvPollerRegister(Socket, ReceiverId, SelfId()));
-        Y_ABORT_UNLESS(success);
-        if (XdcSocket) {
-            const bool success = Send(MakePollerActorId(), new TEvPollerRegister(XdcSocket, ReceiverId, SelfId()));
+        // register our socket with the appropriate I/O backend
+        if (Proxy->Common->Settings.UseUring && !Params.Encryption && TUringContext::IsSupported()) {
+            LOG_DEBUG_IC_SESSION("ICS11", "registering socket with UringPollerActor");
+            // Both the main and XDC sockets are driven entirely by io_uring: the input session
+            // arms recv (main multishot, XDC readv) and the output session submits writes/send_zc.
+            // Neither socket is registered with the epoll TPollerActor anymore (Caveat 3).
+            Send(MakeUringPollerActorId(), new TEvUringRegister(Socket, XdcSocket, ReceiverId, SelfId()));
+        } else {
+            LOG_DEBUG_IC_SESSION("ICS11", "registering socket in PollerActor");
+            const bool success = Send(MakePollerActorId(), new TEvPollerRegister(Socket, ReceiverId, SelfId()));
             Y_ABORT_UNLESS(success);
+            if (XdcSocket) {
+                const bool success = Send(MakePollerActorId(), new TEvPollerRegister(XdcSocket, ReceiverId, SelfId()));
+                Y_ABORT_UNLESS(success);
+            }
         }
 
         LostConnectionWatchdog.Disarm();
+        Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
         Proxy->Metrics->SetConnected(1);
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] connected", Proxy->PeerNodeId);
+        if (Proxy->Common->Settings.MergePerHostCounters) {
+            LOG_INFO_IC_SESSION("ICS80", "peer-level connect PeerNodeId# %" PRIu32 " Peer# %s Host# %s",
+                Proxy->PeerNodeId, Proxy->Metrics->GetHumanFriendlyPeerHostName().data(), Proxy->TechnicalPeerHostName.data());
+        }
 
         // arm pinger timer
         ResetFlushLogic();
@@ -474,7 +573,11 @@ namespace NActors {
                 return;
             }
 
-            WriteData();
+            if (UringContext) {
+                WriteDataUring();
+            } else {
+                WriteData();
+            }
             if (!Socket) {
                 return;
             }
@@ -485,8 +588,13 @@ namespace NActors {
             canProducePackets = NumEventsInQueue && (InflightDataAmount + RdmaInflightDataAmount) < GetTotalInflightAmountOfData() &&
                 GetUnsentSize() < GetUnsentLimit();
 
-            canWriteData = ((OutgoingStream || OutOfBandStream) && !ReceiveContext->MainWriteBlocked) ||
-                (XdcStream && !ReceiveContext->XdcWriteBlocked);
+            if (UringContext) {
+                canWriteData = ((OutgoingStream || OutOfBandStream) && !UringMainWriteInFlight) ||
+                    (XdcStream && !UringXdcWriteInFlight);
+            } else {
+                canWriteData = ((OutgoingStream || OutOfBandStream) && !ReceiveContext->MainWriteBlocked) ||
+                    (XdcStream && !ReceiveContext->XdcWriteBlocked);
+            }
 
             if (!canProducePackets && !canWriteData) {
                 SetEnoughCpu(true); // we do not starve
@@ -539,6 +647,11 @@ namespace NActors {
 
     void TInterconnectSessionTCP::StartHandshake() {
         LOG_INFO_IC_SESSION("ICS15", "start handshake");
+        if (HasRdmaState()) {
+            LOG_NOTICE_IC_SESSION("ICRDMA", "start initial handshake instead of graceful reconnect for RDMA session");
+            IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::StartInitialHandshake);
+            return;
+        }
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::StartResumeHandshake, ReceiveContext->LockLastPacketSerialToConfirm());
     }
 
@@ -580,6 +693,31 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::ShutdownSocket(TDisconnectReason reason) {
+        if (UringContext) {
+            if (Socket) {
+                UringContext->SubmitCancelFd((int)*Socket);
+            }
+            if (XdcSocket) {
+                UringContext->SubmitCancelFd((int)*XdcSocket);
+            }
+            UringContext->Flush();
+            UringWritesInFlight.clear();
+            UringMainWriteInFlight = false;
+            UringMainWriteInFlightSince = TMonotonic::Zero();
+            UringXdcWriteInFlight = false;
+            UringZcEnabled = false;
+            XdcZcNotifCum = 0;
+            XdcDropWantedCum = 0;
+            XdcDroppedCum = 0;
+            XdcZcNotifQueue.clear();
+            // Tell the reaper to release this session ring. Without this the reaper keeps its
+            // own TUringContext reference forever, so io_uring_queue_exit never runs and the
+            // ring fd, eventfd and provided-buffer ring leak on every reconnect/handshake race.
+            const int eventFd = UringContext->GetEventFd();
+            UringContext.Reset();
+            Send(MakeUringPollerActorId(), new TEvUringUnregister(eventFd));
+        }
+
         if (Socket) {
             if (const TString& s = reason.ToString()) {
                 Proxy->Metrics->IncDisconnectByReason(s);
@@ -596,6 +734,11 @@ namespace NActors {
             Proxy->RegisterDisconnect();
             SetOutputStuckFlag(false);
             LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] disconnected", Proxy->PeerNodeId);
+            if (Proxy->Common->Settings.MergePerHostCounters) {
+                LOG_NOTICE_IC_SESSION("ICS81", "peer-level disconnect PeerNodeId# %" PRIu32 " Peer# %s Host# %s Reason# %s",
+                    Proxy->PeerNodeId, Proxy->Metrics->GetHumanFriendlyPeerHostName().data(),
+                    Proxy->TechnicalPeerHostName.data(), reason.ToString().data());
+            }
         }
         if (XdcSocket) {
             // call shutdown but do not call close and do not free wrapper object - we need descriptor to finish ZC op
@@ -775,6 +918,260 @@ namespace NActors {
         WriteBlockedByFullSendBuffer = writeBlockedByFullSendBuffer;
     }
 
+    void TInterconnectSessionTCP::WriteDataUring() {
+        static constexpr size_t maxBytesAtOnce = 256 * 1024;
+
+        auto submitStream = [&](NInterconnect::TOutgoingStream& stream, int socketFd, EUringOpTag tag,
+                                size_t maxBytes, bool& inFlight, bool isOutOfBand) {
+            if (inFlight || !stream || UringContext->GetPendingWrites() >= TUringContext::MaxPendingWrites) {
+                return;
+            }
+
+            constexpr ui32 iovLimit = 256;
+            TStackVec<TConstIoVec, iovLimit> wbuffers;
+            stream.ProduceIoVec(wbuffers, iovLimit, maxBytes);
+            if (wbuffers.empty()) {
+                return;
+            }
+
+            ui64 seqNo = ++UringWriteSeqNo;
+            size_t totalBytes = 0;
+            std::vector<struct iovec> iovecs(wbuffers.size());
+            for (size_t i = 0; i < wbuffers.size(); ++i) {
+                iovecs[i].iov_base = const_cast<void*>(static_cast<const void*>(wbuffers[i].Data));
+                iovecs[i].iov_len = wbuffers[i].Size;
+                totalBytes += wbuffers[i].Size;
+            }
+
+            if (UringContext->SubmitWritev(socketFd, iovecs.data(), iovecs.size(), seqNo, tag)) {
+                UringContext->IncrementPendingWrites();
+                inFlight = true;
+                // Key the in-flight map by the SAME masked value the completion carries
+                // (the tag occupies the high byte of user_data), so the completion lookup can
+                // never miss and silently skip clearing the single-in-flight latch.
+                const ui64 key = seqNo & UringOpDataMask;
+                UringWritesInFlight[key] = TUringWriteInFlight{totalBytes, tag == EUringOpTag::XdcWritev, isOutOfBand, std::move(iovecs)};
+                if (tag == EUringOpTag::MainWritev) {
+                    ++UringMainWritevSubmitted;
+                    UringMainWriteInFlightSince = TActivationContext::Monotonic();
+                }
+            }
+        };
+
+        // Main socket carries two logical streams: the ordinary data stream (OutgoingStream,
+        // retained until peer-confirmed) and the priority out-of-band stream (OutOfBandStream,
+        // carrying confirm/flush packets, dropped as soon as written). Because io_uring writes
+        // on the main socket are single-in-flight, we only ever switch streams at a main-packet
+        // boundary (OutgoingOffset == 0); a partially-sent data packet is always finished first.
+        // This preserves on-wire packet framing while still letting confirms jump the queue.
+        auto submitMain = [&]() {
+            if (UringMainWriteInFlight || UringContext->GetPendingWrites() >= TUringContext::MaxPendingWrites) {
+                // Diagnostic: if the single-in-flight main-write latch has been held far longer
+                // than any keepalive period, the writev completion was never delivered and the
+                // sender has gone silent (peer will declare DeadPeer). Report it (throttled) with
+                // the submit accounting so we can tell a swallowed io_uring_submit error from a
+                // lost completion.
+                if (UringMainWriteInFlight && UringMainWriteInFlightSince != TMonotonic::Zero()) {
+                    const TMonotonic now = TActivationContext::Monotonic();
+                    if (now - UringMainWriteInFlightSince > TDuration::Seconds(2) &&
+                        now - UringMainWriteStuckReported > TDuration::Seconds(2)) {
+                        UringMainWriteStuckReported = now;
+                        LOG_NOTICE_IC_SESSION("ICS41", "uring main write latch stuck for %.3fs"
+                            " submitted# %" PRIu64 " completed# %" PRIu64 " pendingWrites# %" PRIu32
+                            " oobSize# %zu submitCalls# %" PRIu64 " submitErrors# %" PRIu64
+                            " submitPartials# %" PRIu64 " lastSubmitRet# %d sqeFull# %" PRIu64,
+                            (now - UringMainWriteInFlightSince).SecondsFloat(),
+                            UringMainWritevSubmitted, UringMainWriteCompleted,
+                            UringContext->GetPendingWrites(), OutOfBandStream.CalculateOutgoingSize(),
+                            UringContext->GetSubmitCalls(), UringContext->GetSubmitErrors(),
+                            UringContext->GetSubmitPartials(), UringContext->GetLastSubmitRet(),
+                            UringContext->GetSqeFull());
+                    }
+                }
+                return;
+            }
+            if (OutOfBandStream && OutgoingOffset == 0) {
+                submitStream(OutOfBandStream, (int)*Socket, EUringOpTag::MainWritev, maxBytesAtOnce,
+                    UringMainWriteInFlight, /*isOutOfBand=*/true);
+            } else if (OutgoingStream) {
+                submitStream(OutgoingStream, (int)*Socket, EUringOpTag::MainWritev, maxBytesAtOnce,
+                    UringMainWriteInFlight, /*isOutOfBand=*/false);
+            } else if (OutOfBandStream) {
+                // No partial main packet in progress but OutgoingStream is empty: flush OOB.
+                submitStream(OutOfBandStream, (int)*Socket, EUringOpTag::MainWritev, maxBytesAtOnce,
+                    UringMainWriteInFlight, /*isOutOfBand=*/true);
+            }
+        };
+
+        auto submitXdcZc = [&](NInterconnect::TOutgoingStream& stream, int socketFd, size_t maxBytes) {
+            if (UringXdcWriteInFlight || !stream || UringContext->GetPendingWrites() >= TUringContext::MaxPendingWrites) {
+                return;
+            }
+
+            constexpr ui32 iovLimit = 1;
+            TStackVec<TConstIoVec, iovLimit> wbuffers;
+            TStackVec<NInterconnect::TOutgoingStream::TBufController, iovLimit> controllers;
+            stream.ProduceIoVec(wbuffers, iovLimit, maxBytes, &controllers);
+            if (wbuffers.empty()) {
+                return;
+            }
+
+            auto& front = wbuffers.front();
+            ui64 seqNo = ++UringWriteSeqNo;
+
+            if (UringContext->SubmitSendZc(socketFd, front.Data, front.Size, seqNo)) {
+                UringContext->IncrementPendingWrites();
+                UringXdcWriteInFlight = true;
+                UringWritesInFlight[seqNo] = TUringWriteInFlight{front.Size, true, false, {}};
+            }
+        };
+
+        if (OutgoingStream || OutOfBandStream) {
+            submitMain();
+        }
+
+        if (XdcSocket && XdcStream) {
+            if (Proxy->Common->Settings.SocketSendOptimization == ESocketSendOptimization::IC_MSG_ZEROCOPY) {
+                submitXdcZc(XdcStream, (int)*XdcSocket, maxBytesAtOnce);
+            } else {
+                submitStream(XdcStream, (int)*XdcSocket, EUringOpTag::XdcWritev, maxBytesAtOnce,
+                    UringXdcWriteInFlight, /*isOutOfBand=*/false);
+            }
+        }
+
+        UringContext->Flush();
+    }
+
+    void TInterconnectSessionTCP::Handle(TEvUringRegisterFailed::TPtr& /*ev*/) {
+        // io_uring setup failed in the poller (ring/buffer-ring allocation). Fall back to the
+        // epoll TPollerActor so this session still has a working I/O backend instead of being
+        // left silently dead. Mirrors the non-uring registration branch in SetNewConnection.
+        if (UringContext || !Socket) {
+            return; // already have a backend, or socket already gone
+        }
+        LOG_NOTICE_IC_SESSION("ICS11", "uring registration failed, falling back to epoll PollerActor");
+        const bool success = Send(MakePollerActorId(), new TEvPollerRegister(Socket, ReceiverId, SelfId()));
+        Y_ABORT_UNLESS(success);
+        if (XdcSocket) {
+            const bool successXdc = Send(MakePollerActorId(), new TEvPollerRegister(XdcSocket, ReceiverId, SelfId()));
+            Y_ABORT_UNLESS(successXdc);
+        }
+    }
+
+    void TInterconnectSessionTCP::Handle(TEvUringRegisterResult::TPtr& ev) {
+        auto* msg = ev->Get();
+        UringContext = std::move(msg->Context);
+        // Zero-copy XDC send gating is active only when this connection actually uses send_zc.
+        UringZcEnabled = XdcSocket &&
+            Proxy->Common->Settings.SocketSendOptimization == ESocketSendOptimization::IC_MSG_ZEROCOPY;
+        XdcZcNotifCum = 0;
+        XdcDropWantedCum = 0;
+        XdcDroppedCum = 0;
+        XdcZcNotifQueue.clear();
+        GenerateTraffic();
+    }
+
+    void TInterconnectSessionTCP::DropFrontXdc(size_t bytes) {
+        if (!UringZcEnabled) {
+            XdcStream.DropFront(bytes);
+            return;
+        }
+        // Defer the physical free until the kernel has released the buffers via NOTIF.
+        XdcDropWantedCum += bytes;
+        FlushXdcZcDrop();
+    }
+
+    void TInterconnectSessionTCP::FlushXdcZcDrop() {
+        const ui64 dropTarget = Min(XdcDropWantedCum, XdcZcNotifCum);
+        if (dropTarget > XdcDroppedCum) {
+            const size_t toDrop = dropTarget - XdcDroppedCum;
+            XdcStream.DropFront(toDrop);
+            XdcDroppedCum += toDrop;
+        }
+    }
+
+    void TInterconnectSessionTCP::Handle(TEvUringWriteComplete::TPtr& ev) {
+        auto* msg = ev->Get();
+        ui64 seqNo = msg->UserData & UringOpDataMask;
+
+        auto it = UringWritesInFlight.find(seqNo);
+        if (it == UringWritesInFlight.end()) {
+            return;
+        }
+
+        auto flight = std::move(it->second);
+        UringWritesInFlight.erase(it);
+
+        if (flight.IsXdc) {
+            UringXdcWriteInFlight = false;
+        } else {
+            UringMainWriteInFlight = false;
+            UringMainWriteInFlightSince = TMonotonic::Zero();
+            ++UringMainWriteCompleted;
+        }
+
+        if (msg->Result > 0) {
+            size_t written = msg->Result;
+            if (flight.IsXdc) {
+                XdcStream.Advance(written);
+                XdcBytesSent += written;
+                XdcOffset += written;
+                if (UringZcEnabled) {
+                    // Record this zero-copy send; its buffers stay referenced by the kernel
+                    // until the matching NOTIF arrives (FIFO per socket).
+                    XdcZcNotifQueue.push_back(written);
+                }
+            } else if (flight.IsOutOfBand) {
+                // Out-of-band (confirm/flush) bytes are never retained: advance the sent cursor
+                // (so UnsentBytes is decremented, exactly as the epoll path does via Write()) and
+                // then drop them immediately. Skipping Advance left UnsentBytes stale, eventually
+                // tripping the OutgoingStream invariant once the queue emptied.
+                OutOfBandStream.Advance(written);
+                OutOfBandStream.DropFront(written);
+                OutOfBandBytesSent += written;
+                BytesWrittenToSocket += written;
+            } else {
+                OutgoingStream.Advance(written);
+                OutgoingOffset += written;
+                BytesWrittenToSocket += written;
+
+                auto sendQueueIt = SendQueue.begin() + OutgoingIndex;
+                for (; OutgoingOffset && sendQueueIt != SendQueue.end() && sendQueueIt->PacketSize <= OutgoingOffset;
+                     ++sendQueueIt, ++OutgoingIndex) {
+                    OutgoingOffset -= sendQueueIt->PacketSize;
+                }
+            }
+            Proxy->Metrics->AddTotalBytesWritten(written);
+            DropConfirmed(LastConfirmed);
+            GenerateTraffic();
+        } else if (msg->Result < 0) {
+            int err = -msg->Result;
+            if (err != ECANCELED) {
+                LOG_NOTICE_NET(Proxy->PeerNodeId, "uring write error: %s", strerror(err));
+                ReestablishConnectionWithHandshake(TDisconnectReason::FromErrno(err));
+            }
+        } else {
+            LOG_NOTICE_NET(Proxy->PeerNodeId, "uring write: connection closed by peer%s", "");
+            if (!NumEventsInQueue && LastConfirmed == OutputCounter) {
+                Terminate(TDisconnectReason::EndOfStream());
+            } else {
+                ReestablishConnectionWithHandshake(TDisconnectReason::EndOfStream());
+            }
+        }
+    }
+
+    void TInterconnectSessionTCP::Handle(TEvUringSendZcNotif::TPtr& ev) {
+        Y_UNUSED(ev);
+        // The kernel has released the buffers of the oldest outstanding zero-copy send.
+        // Advance the notif-confirmed offset and flush any drop that was waiting on it.
+        if (!UringZcEnabled || XdcZcNotifQueue.empty()) {
+            return;
+        }
+        XdcZcNotifCum += XdcZcNotifQueue.front();
+        XdcZcNotifQueue.pop_front();
+        FlushXdcZcDrop();
+    }
+
     ssize_t TInterconnectSessionTCP::HandleWriteResult(ssize_t r, const TString& err) {
         if (r > 0) {
             return r;
@@ -867,9 +1264,12 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::ScheduleFlush() {
-        if (FlushSchedule.empty() || ForcePacketTimestamp < FlushSchedule.top()) {
-            Schedule(ForcePacketTimestamp, new TEvFlush);
-            FlushSchedule.push(ForcePacketTimestamp);
+        const TMonotonic nextFlushTimestamp = UseKernelLivenessMode()
+            ? Min(ForcePacketTimestamp, ClockSkewPingTimestamp)
+            : ForcePacketTimestamp;
+        if (nextFlushTimestamp != TMonotonic::Max() && (FlushSchedule.empty() || nextFlushTimestamp < FlushSchedule.top())) {
+            Schedule(nextFlushTimestamp, new TEvFlush);
+            FlushSchedule.push(nextFlushTimestamp);
             MaxFlushSchedule = Max(MaxFlushSchedule, FlushSchedule.size());
             ++FlushEventsScheduled;
         }
@@ -880,12 +1280,31 @@ namespace NActors {
         while (FlushSchedule && now >= FlushSchedule.top()) {
             FlushSchedule.pop();
         }
+        // Send-side heartbeat (DEBUG): paired with the input session's recv counters and the
+        // reaper ICUR50 stats, this shows on idle whether keepalive writevs keep being submitted
+        // and completed, or whether the single-in-flight latch is wedged. The flush timer fires
+        // roughly every ForceConfirmPeriod on an otherwise idle session, so this is low-rate.
+        if (UringContext) {
+            const double latchHeldS = (UringMainWriteInFlight && UringMainWriteInFlightSince != TMonotonic::Zero())
+                ? (now - UringMainWriteInFlightSince).SecondsFloat() : 0.0;
+            LOG_DEBUG_IC_SESSION("ICS42", "uring send hb submitted# %" PRIu64 " completed# %" PRIu64
+                " mainInFlight# %d latchHeld# %.3fs pendingWrites# %" PRIu32 " oobSize# %zu"
+                " submitErrors# %" PRIu64 " submitPartials# %" PRIu64 " sqeFull# %" PRIu64,
+                UringMainWritevSubmitted, UringMainWriteCompleted, (int)UringMainWriteInFlight,
+                latchHeldS, UringContext->GetPendingWrites(), OutOfBandStream.CalculateOutgoingSize(),
+                UringContext->GetSubmitErrors(), UringContext->GetSubmitPartials(),
+                UringContext->GetSqeFull());
+        }
         if (Socket) {
             if (now >= ForcePacketTimestamp) {
                 ++ConfirmPacketsForcedByTimeout;
                 ++FlushEventsProcessed;
                 MakePacket(false); // just generate confirmation packet if we have preconditions for this
-            } else if (ForcePacketTimestamp != TMonotonic::Max()) {
+            }
+            const TMonotonic nextFlushTimestamp = UseKernelLivenessMode()
+                ? Min(ForcePacketTimestamp, ClockSkewPingTimestamp)
+                : ForcePacketTimestamp;
+            if (nextFlushTimestamp != TMonotonic::Max() && now < nextFlushTimestamp) {
                 ScheduleFlush();
             }
             GenerateTraffic();
@@ -895,9 +1314,20 @@ namespace NActors {
     void TInterconnectSessionTCP::ResetFlushLogic() {
         ForcePacketTimestamp = TMonotonic::Max();
         UnconfirmedBytes = 0;
-        const TDuration ping = Proxy->Common->Settings.PingPeriod;
-        if (ping != TDuration::Zero() && !NumEventsInQueue) {
-            SetForcePacketTimestamp(ping);
+        if (UseKernelLivenessMode()) {
+            const TDuration clockSkewPingTimeout = Proxy->Common->Settings.ClockSkewPingTimeout;
+            if (clockSkewPingTimeout == TDuration::Zero()) {
+                ClockSkewPingTimestamp = TMonotonic::Max();
+            } else {
+                ClockSkewPingTimestamp = LastPingTimestamp + clockSkewPingTimeout;
+                ScheduleFlush();
+            }
+        } else {
+            Y_DEBUG_ABORT_UNLESS(ClockSkewPingTimestamp == TMonotonic::Max());
+            const TDuration ping = Proxy->Common->Settings.PingPeriod;
+            if (ping != TDuration::Zero() && !NumEventsInQueue) {
+                SetForcePacketTimestamp(ping);
+            }
         }
     }
 
@@ -1026,7 +1456,7 @@ namespace NActors {
 
         const ui64 droppedDataAmount = bytesDropped + bytesDroppedFromXdc - sizeof(TTcpPacketHeader_v2) * numDropped;
         OutgoingStream.DropFront(bytesDropped);
-        XdcStream.DropFront(bytesDroppedFromXdc);
+        DropFrontXdc(bytesDroppedFromXdc);
         if (lastDroppedSerial) {
             ChannelScheduler->ForEach([&](TEventOutputChannel& channel) {
                 channel.DropConfirmed(*lastDroppedSerial, *Pool);
@@ -1065,7 +1495,7 @@ namespace NActors {
             const ui32 gross = grossAfter - grossBefore;
             channel->UnaccountedTraffic += gross;
             const ui64 netAfter = channel->GetBufferedAmountOfData();
-            Y_DEBUG_ABORT_UNLESS(netAfter <= netBefore); // net amount should shrink
+            Y_DEBUG_ABORT_UNLESS(netAfter <= netBefore, "netBefore# %" PRIu64 " netAfter# %" PRIu64, netBefore, netAfter); // net amount should shrink
             const ui64 net = netBefore - netAfter; // number of net bytes serialized
 
             // adjust metrics for local and global queue size
@@ -1118,12 +1548,14 @@ namespace NActors {
                 flagState = EFlag::GREEN;
 
                 do {
-                    auto lastInputDelay = TActivationContext::Monotonic() - LastInputActivityTimestamp;
-                    if (lastInputDelay * 4 >= GetDeadPeerTimeout() * 3) {
-                        flagState = EFlag::ORANGE;
-                        break;
-                    } else if (lastInputDelay * 2 >= GetDeadPeerTimeout()) {
-                        flagState = EFlag::YELLOW;
+                    if (!UseKernelLivenessMode()) {
+                        auto lastInputDelay = TActivationContext::Monotonic() - LastInputActivityTimestamp;
+                        if (lastInputDelay * 4 >= GetDeadPeerTimeout() * 3) {
+                            flagState = EFlag::ORANGE;
+                            break;
+                        } else if (lastInputDelay * 2 >= GetDeadPeerTimeout()) {
+                            flagState = EFlag::YELLOW;
+                        }
                     }
 
                     // check utilization
@@ -1218,14 +1650,20 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::IssuePingRequest() {
+        const TDuration period = UseKernelLivenessMode()
+            ? Proxy->Common->Settings.ClockSkewPingTimeout
+            : PingPeriodicity;
+        if (period == TDuration::Zero()) {
+            return;
+        }
         const TMonotonic now = TActivationContext::Monotonic();
-        if (now >= LastPingTimestamp + PingPeriodicity) {
+        if (now >= LastPingTimestamp + period) {
             LOG_DEBUG_IC_SESSION("ICS00", "Issuing ping request");
+            LastPingTimestamp = now;
             if (Socket) {
                 MakePacket(false, GetCycleCountFast() | TTcpPacketBuf::PingRequestMask);
                 MakePacket(false, TInstant::Now().MicroSeconds() | TTcpPacketBuf::ClockMask);
             }
-            LastPingTimestamp = now;
         }
     }
 
@@ -1368,6 +1806,10 @@ namespace NActors {
 
                             MON_VAR(Created)
                             MON_VAR(Params.UseExternalDataChannel)
+                            TABLER() {
+                                TABLED() { str << "Params.UseKernelLiveness"; }
+                                TABLED() { str << UseKernelLivenessMode(); }
+                            }
                             MON_VAR(NewConnectionSet)
                             MON_VAR(ReceiverId)
                             MON_VAR(MessagesGot)
@@ -1482,6 +1924,7 @@ namespace NActors {
                             MON_VAR(GetTotalInflightAmountOfData())
                             MON_VAR(GetCloseOnIdleTimeout())
                             MON_VAR(Subscribers.size())
+                            MON_VAR(SubscriberHistory.size())
                             TABLER() {
                                 TABLED() { str << "ZeroCopy state"; }
                                 TABLED() { str << ZcProcessor.GetCurrentStateName(); }
@@ -1508,6 +1951,75 @@ namespace NActors {
                     }
                 }
             }
+
+            const bool collectSubscriptionStackTrace = Proxy->Common->Settings.CollectSubscriptionStackTrace;
+            auto aggregateSubscribers = [&](const auto& subscribers) {
+                TSubscriberHistory subscriberGroups;
+                for (const auto& [actorId, info] : subscribers) {
+                    Y_UNUSED(actorId);
+                    ++subscriberGroups[TSubscriberHistoryKey(info.StackTrace, info.ActivityIndex, info.EventTypeName)];
+                }
+                return subscriberGroups;
+            };
+
+            auto renderSubscriberGroups = [&](TStringBuf title, const TSubscriberHistory& subscriberGroups,
+                    bool showOverflowWarning = false) {
+                if (subscriberGroups.empty() && !showOverflowWarning) {
+                    return;
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        str << title;
+                    }
+                    DIV_CLASS("panel-body") {
+                        if (showOverflowWarning) {
+                            DIV_CLASS("alert alert-warning") {
+                                str << "Subscription history storage limit of " << MaxSubscriberHistoryEntries
+                                    << " aggregated entries has been reached; new history groups are no longer added.";
+                            }
+                        }
+                        TABLE_CLASS("table table-sortable") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { str << "Count"; }
+                                    TABLEH() { str << "Activity"; }
+                                    if (collectSubscriptionStackTrace) {
+                                        TABLEH() { str << "EventTypeName"; }
+                                    }
+                                    if (collectSubscriptionStackTrace) {
+                                        TABLEH() { str << "StackTrace"; }
+                                    }
+                                }
+                            }
+                            TABLEBODY() {
+                                for (const auto& [groupKey, count] : subscriberGroups) {
+                                    const auto& [stackTrace, activityIndex, eventTypeName] = groupKey;
+                                    TABLER() {
+                                        TABLED() { str << count; }
+                                        TABLED() { str << EncodeHtmlPcdata(FormatActivityName(activityIndex)); }
+                                        if (collectSubscriptionStackTrace) {
+                                            TABLED() { str << EncodeHtmlPcdata(FormatEventTypeName(eventTypeName)); }
+                                            TABLED() {
+                                                if (stackTrace.empty()) {
+                                                    str << "manual";
+                                                } else {
+                                                    PRE() {
+                                                        str << EncodeHtmlPcdata(stackTrace);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            renderSubscriberGroups("Subscriptions", aggregateSubscribers(Subscribers));
+            renderSubscriberGroups("Subscription history", SubscriberHistory, SubscriberHistoryOverflow);
         }
 
         auto h = std::make_unique<IEventHandle>(ev->Recipient, ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

@@ -25,9 +25,9 @@ void CanonizeFpBitsTest() {
         Max
     };
 
-    T values[EValues::Max];
-    T newValues[EValues::Max];
-    int valuesClass[EValues::Max];
+    std::array<T, EValues::Max> values;
+    std::array<T, EValues::Max> newValues;
+    std::array<int, EValues::Max> valuesClass;
     values[Zero] = T(0);
     values[MZero] = -values[Zero];
     values[One] = T(1);

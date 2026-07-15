@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    create_external_data_source_formatter.cpp
     create_table_formatter.cpp
     create_view_formatter.cpp
     formatters_common.cpp
@@ -9,6 +10,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/tx/columnshard/engines/storage/indexes/helper
     ydb/core/formats/arrow/serializer
     ydb/core/kqp/runtime
     ydb/core/protos

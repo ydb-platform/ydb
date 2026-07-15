@@ -1,5 +1,6 @@
 #include "change_message_visibility.h"
 #include "actor.h"
+#include "config.h"
 #include "error.h"
 #include "limits.h"
 #include "receipt.h"
@@ -136,8 +137,6 @@ namespace NKikimr::NSqsTopic::V1 {
                         TDerived::Method)
                 });
 
-            TString serializedToken = this->Request_->GetSerializedToken();
-
             TVector<NPQ::NMLP::TMessageId> messages(Reserve(requestList.size()));
             TVector<TInstant> deadlines(Reserve(requestList.size()));
             for (const auto& [messageId, deadline] : requestList) {
@@ -148,10 +147,10 @@ namespace NKikimr::NSqsTopic::V1 {
             NPQ::NMLP::TMessageDeadlineChangerSettings changerSettings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
-                .Consumer = this->QueueUrl_->Consumer,
+                .Consumer = ResolveConsumerNameFromQueueUrl(this->QueueUrl_->Consumer, ctx),
                 .Messages = std::move(messages),
                 .Deadlines = std::move(deadlines),
-                .UserToken = MakeIntrusive<NACLib::TUserToken>(serializedToken),
+                .UserToken = this->Request_->GetInternalToken(),
             };
 
             std::unique_ptr<IActor> actorPtr{NKikimr::NPQ::NMLP::CreateMessageDeadlineChanger(this->SelfId(), std::move(changerSettings))};
@@ -193,12 +192,23 @@ namespace NKikimr::NSqsTopic::V1 {
                     this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, std::format("Message id not found")));
                     return;
                 }
-                if (message.Success) {
-                    Success_.insert(*id);
-                    ++successCount;
-                } else {
-                    Failed_[*id] = MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, {});
-                    ++failedCount;
+                switch (message.Status) {
+                    case NPQ::NMLP::EOperationResult::Success:
+                        Success_.insert(*id);
+                        ++successCount;
+                        break;
+                    case NPQ::NMLP::EOperationResult::NotFound:
+                        Failed_[*id] = MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, {});
+                        ++failedCount;
+                        break;
+                    case NPQ::NMLP::EOperationResult::NotInFlight:
+                        Failed_[*id] = MakeError(NSQS::NErrors::MESSAGE_NOT_INFLIGHT, {});
+                        ++failedCount;
+                        break;
+                    case NPQ::NMLP::EOperationResult::Failed:
+                        Failed_[*id] = MakeError(NSQS::NErrors::INTERNAL_FAILURE, {});
+                        ++failedCount;
+                        break;
                 }
             }
 

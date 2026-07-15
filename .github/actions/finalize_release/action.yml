@@ -1,0 +1,123 @@
+name: 'Finalize Release'
+description: 'Create PR, auto-merge, wait for merge, and create release tag'
+inputs:
+  version:
+    description: 'Release version (e.g., 2.31.0)'
+    required: true
+  branch-name:
+    description: 'Release branch name'
+    required: true
+  release-commit-sha:
+    description: 'SHA of the release commit for tagging'
+    required: true
+  tag-prefix:
+    description: 'Tag prefix (e.g., CLI_)'
+    required: true
+  product-name:
+    description: 'Product name for PR title (e.g., YDB CLI)'
+    required: true
+  token:
+    description: 'GitHub token for PR operations and push'
+    required: true
+outputs:
+  pr-number:
+    description: 'Created PR number'
+    value: ${{ steps.create-pr.outputs.pr-number }}
+  pr-url:
+    description: 'Created PR URL'
+    value: ${{ steps.create-pr.outputs.pr-url }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        token: ${{ inputs.token }}
+        fetch-depth: 0
+    - name: Configure git
+      uses: ./.github/actions/configure_git
+    - name: Create and auto-merge PR
+      id: create-pr
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        PR_TITLE="${{ inputs.product-name }} release ${{ inputs.version }}"
+        printf -v PR_BODY '%s\n' \
+          '### Changelog entry' \
+          '' \
+          '### Changelog category' \
+          '' \
+          '* Not for changelog (changelog entry is not required)' \
+          '' \
+          '### Description for reviewers' \
+          "Automated release PR for ${{ inputs.product-name }} version ${{ inputs.version }}"
+        PR_URL=$(gh pr create \
+          --title "$PR_TITLE" \
+          --body "$PR_BODY" \
+          --head "${{ inputs.branch-name }}" \
+          --base main \
+          --repo ${{ github.repository }})
+        PR_NUMBER=$(basename "$PR_URL")
+        echo "Created PR #$PR_NUMBER"
+        echo "PR URL: $PR_URL"
+        echo "pr-number=$PR_NUMBER" >> $GITHUB_OUTPUT
+        echo "pr-url=$PR_URL" >> $GITHUB_OUTPUT
+        if gh pr merge "$PR_NUMBER" --merge --auto; then
+          echo "Auto-merge enabled for PR #$PR_NUMBER"
+        else
+          echo "Auto-merge failed - branch protection rules required"
+          echo "Please merge PR manually: $PR_URL"
+          exit 1
+        fi
+    - name: Create PR URL file
+      shell: bash
+      run: |
+        echo "${{ steps.create-pr.outputs.pr-url }}" > pr_url.txt
+        echo "Created pr_url.txt with PR URL: ${{ steps.create-pr.outputs.pr-url }}"
+    - name: Upload PR URL artifact
+      uses: actions/upload-artifact@v6
+      with:
+        name: pr-url
+        path: pr_url.txt
+        if-no-files-found: error
+        retention-days: 1
+    - name: Wait for PR merge
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        PR_NUMBER="${{ steps.create-pr.outputs.pr-number }}"
+        echo "Waiting for PR #$PR_NUMBER to be merged (CI may take 1-3 hours)..."
+        for i in {1..48}; do
+          PR_STATE=$(gh pr view "$PR_NUMBER" --json state,mergedAt --jq '.state + ":" + (.mergedAt != null | tostring)')
+          if [[ "$PR_STATE" == "MERGED:true" ]]; then
+            echo "PR merged successfully"
+            break
+          elif [[ "$PR_STATE" == "CLOSED:false" ]]; then
+            echo "PR was closed without merging - this shouldn't happen with auto-merge"
+            exit 1
+          else
+            echo "PR still pending (attempt $i/48), state: $PR_STATE, waiting 5 minutes..."
+            sleep 300
+          fi
+          if [ $((i % 6)) -eq 0 ]; then
+            echo "Still waiting after $((i * 5)) minutes..."
+          fi
+        done
+        PR_STATE=$(gh pr view "$PR_NUMBER" --json state,mergedAt --jq '.state + ":" + (.mergedAt != null | tostring)')
+        if [[ "$PR_STATE" != "MERGED:true" ]]; then
+          echo "ERROR: PR was not merged after 4 hours. Current state: $PR_STATE"
+          echo "Please check the PR status and approve if needed."
+          echo "PR URL: $(gh pr view "$PR_NUMBER" --json url --jq '.url')"
+          exit 1
+        fi
+    - name: Create release tag
+      shell: bash
+      run: |
+        RELEASE_SHA="${{ inputs.release-commit-sha }}"
+        TAG_NAME="${{ inputs.tag-prefix }}${{ inputs.version }}"
+        git fetch origin main
+        git tag "$TAG_NAME" "$RELEASE_SHA"
+        git push origin "$TAG_NAME"
+        echo "Created and pushed tag $TAG_NAME on commit $RELEASE_SHA"

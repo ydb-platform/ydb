@@ -4,6 +4,8 @@
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/base/appdata.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -110,6 +112,8 @@ TLockInfo::TLockInfo(TLockLocker * locker, const ILocksDb::TLockRow& row)
     , CreationTime(TInstant::MicroSeconds(row.CreateTs))
     , Flags(ELockFlags(row.Flags))
     , VictimQuerySpanId(row.VictimQuerySpanId)
+    , BreakerQuerySpanId_(row.BreakerQuerySpanId)
+    , BreakerNodeId_(row.BreakerNodeId)
 {
     if (row.BreakVersion != TRowVersion::Max()) {
         BreakVersion.emplace(row.BreakVersion);
@@ -192,7 +196,9 @@ void TLockInfo::SetBroken(TRowVersion at) {
     }
 
     if (!IsBroken(at)) {
-        LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "Lock " << LockId << " marked broken at " << at);
+        YDB_LOG_TRACE_CTX(LockLoggerContext, "Lock marked broken",
+            {"lockId", LockId},
+            {"at", at});
 
         BreakVersion = at;
         Locker->ScheduleRemoveBrokenRanges(LockId, at);
@@ -204,6 +210,8 @@ void TLockInfo::SetBroken(TRowVersion at) {
             Ranges.clear();
             Locker->ScheduleBrokenLock(this);
         }
+
+        OnBrokenEvent.NotifyAll();
     }
 }
 
@@ -213,7 +221,10 @@ void TLockInfo::OnRemoved() {
         Counter = Max<ui64>();
         Points.clear();
         Ranges.clear();
+        OnBrokenEvent.NotifyAll();
     }
+
+    OnRemovedEvent.NotifyAll();
 }
 
 void TLockInfo::PersistLock(ILocksDb* db) {
@@ -412,6 +423,8 @@ void TLockInfo::CleanupConflicts() {
 }
 
 bool TLockInfo::RestoreInMemoryState(const ILocksDb::TLockRow& lockRow) {
+    SetBreakerInfo(lockRow.BreakerQuerySpanId, lockRow.BreakerNodeId);
+
     auto flags = ELockFlags(lockRow.Flags);
     if (!!(flags & ELockFlags::Persistent)) {
         Y_ENSURE(IsPersistent());
@@ -557,6 +570,18 @@ void TLockInfo::AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>
 
 // TTableLocks
 
+TTableLocks::~TTableLocks() {
+}
+
+TTableLocks::TRuntimeLockHolderList::~TRuntimeLockHolderList() {
+    while (!Empty()) {
+        // We must detach all lock holders and make them invalid
+        TRuntimeLockHolder* holder = PopFront();
+        holder->Self = nullptr;
+    }
+    LockTails.clear();
+}
+
 void TTableLocks::AddShardLock(TLockInfo* lock) {
     ShardLocks.insert(lock);
 }
@@ -611,6 +636,63 @@ void TTableLocks::RemoveRangeLock(TLockInfo* lock) {
 
 void TTableLocks::RemoveWriteLock(TLockInfo* lock) {
     WriteLocks.erase(lock);
+}
+
+TTableLocks::TRuntimeLockHolder TTableLocks::AddRuntimeLock(TConstArrayRef<TCell> key, TLockInfo::TPtr lock) {
+    auto it = RuntimeLocks.find(key);
+    if (it == RuntimeLocks.end()) {
+        auto res = RuntimeLocks.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(TOwnedCellVec(key)),
+            std::forward_as_tuple());
+        Y_ENSURE(res.second);
+        it = res.first;
+    }
+    TRuntimeLockHolder holder(this, it, std::move(lock));
+    auto& tail = it->second.LockTails[holder.Lock];
+    if (!tail) {
+        it->second.PushBack(&holder);
+    } else {
+        // Note: we don't need to activate the next lock holder because the lock doesn't change
+        holder.LinkAfter(tail);
+    }
+    tail = &holder;
+    return holder;
+}
+
+void TTableLocks::MovedRuntimeLock(TRuntimeLocks::iterator key, TRuntimeLockHolder* holder, TRuntimeLockHolder* was) {
+    Y_ENSURE(key->second);
+    auto& tail = key->second.LockTails[holder->Lock];
+    Y_ENSURE(tail, "Unexpected move of an unregistered lock holder");
+    if (tail == was) {
+        tail = holder;
+    }
+}
+
+void TTableLocks::RemoveRuntimeLock(TRuntimeLocks::iterator key, TRuntimeLockHolder* holder) {
+    Y_ENSURE(key->second);
+    auto& tail = key->second.LockTails[holder->Lock];
+    Y_ENSURE(tail, "Unexpected remove of an unregistered lock holder");
+    TRuntimeLockHolder* prev = key->second.Front() != holder ? holder->Prev()->Node() : nullptr;
+    TRuntimeLockHolder* next = key->second.Back() != holder ? holder->Next()->Node() : nullptr;
+    bool predecessorChanged = !prev || prev->Lock != holder->Lock;
+    if (tail == holder) {
+        if (predecessorChanged) {
+            key->second.LockTails.erase(holder->Lock);
+        } else {
+            tail = prev;
+        }
+    }
+    holder->Unlink();
+    if (next) {
+        // Activate the next lock holder when predecessor lock changes
+        if (predecessorChanged) {
+            next->OnChangedEvent.NotifyAll();
+        }
+    } else if (!key->second) {
+        // This key has no holders, remove
+        RuntimeLocks.erase(key);
+    }
 }
 
 // TLockLocker
@@ -795,6 +877,8 @@ void TLockLocker::RemoveBrokenRanges() {
                 Tables.at(tableId)->RemoveWriteLock(lock.Get());
             }
             lock->CleanupConflicts();
+
+            lock->OnBrokenEvent.NotifyAll();
         }
     }
 }
@@ -878,6 +962,7 @@ TLockInfo::TPtr TLockLocker::RestoreInMemoryLock(const ILocksDb::TLockRow& row) 
                 // Lock was broken in the previous generation, but that break
                 // has failed to commit. Since subsequent reads may not have
                 // detected conflicts we need to repeat the break.
+                it->second->SetBreakerInfo(row.BreakerQuerySpanId, row.BreakerNodeId);
                 PendingRestoreBreakQueue.PushBack(it->second.Get());
                 return nullptr;
             }
@@ -1104,7 +1189,12 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
     brokenLocks.reserve(Update->BreakLocks.Size());
     if (Update->BreakLocks) {
         Locker.BreakLocks(Update->BreakLocks, breakVersion);
-        for (const auto& lock : Update->BreakLocks) {
+        ui64 breakerSpanId = Update->GetEffectiveBreakerQuerySpanId();
+        ui32 breakerNodeId = breakerSpanId != 0 ? Update->LockNodeId : 0;
+        for (auto& lock : Update->BreakLocks) {
+            if (breakerSpanId) {
+                lock.SetBreakerInfo(breakerSpanId, breakerNodeId);
+            }
             brokenLocks.push_back(lock.GetLockId());
         }
     }
@@ -1152,7 +1242,7 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
         } else {
             lock = Locker.GetOrAddLock(Update->LockTxId, Update->LockNodeId);
         }
-        if (lock && Update->QuerySpanId != 0) {
+        if (lock && Update->QuerySpanId != 0 && lock->GetVictimQuerySpanId() == 0) {
             lock->SetVictimQuerySpanId(Update->QuerySpanId);
         }
         if (!lock) {
@@ -1302,7 +1392,8 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
         auto it = Cache->Locks.find(lockTxId);
         if (it != Cache->Locks.end())
             return it->second;
-        LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "TSysLocks::GetLock: lock " << lockTxId << " not found in cache");
+        YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: lock not found in cache",
+            {"lockTxId", lockTxId});
         return TLock();
     }
 
@@ -1324,16 +1415,18 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
                 if (txLock->GetReadTables().contains(tableId) || txLock->GetWriteTables().contains(tableId)) {
                     return MakeAndLogLock(lockTxId, txLock->GetGeneration(), txLock->GetCounter(checkVersion), tableId, txLock->IsWriteLock());
                 } else {
-                    LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD,
-                            "TSysLocks::GetLock: lock " << lockTxId << " exists, but not set for table " << tableId);
+                    YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: lock exists, but not set for table",
+                        {"lockTxId", lockTxId},
+                        {"tableId", tableId});
                 }
             } else {
-                LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD,
-                        "TSysLocks::GetLock: bad request for lock " << lockTxId);
+                YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: bad request for lock",
+                    {"lockTxId", lockTxId});
             }
         }
     } else {
-        LOG_TRACE_S(LockLoggerContext, NKikimrServices::TX_DATASHARD, "TSysLocks::GetLock: lock " << lockTxId << " not found");
+        YDB_LOG_TRACE_CTX(LockLoggerContext, "TSysLocks::GetLock: lock not found",
+            {"lockTxId", lockTxId});
     }
 
     Self->IncCounter(COUNTER_LOCKS_LOST);
@@ -1587,7 +1680,7 @@ EEnsureCurrentLock TSysLocks::EnsureCurrentLock(bool createMissing) {
     if (!Update->Lock) {
         return EEnsureCurrentLock::TooMany;
     }
-    if (Update->QuerySpanId != 0) {
+    if (Update->QuerySpanId != 0 && Update->Lock->GetVictimQuerySpanId() == 0) {
         Update->Lock->SetVictimQuerySpanId(Update->QuerySpanId);
     }
 
@@ -1696,6 +1789,13 @@ bool TSysLocks::RestorePersistentState(ILocksDb* db) {
         }
     }
     return false;
+}
+
+TRuntimeLockHolder TSysLocks::AddRuntimeLock(const TTableId& tableId, TConstArrayRef<TCell> key) {
+    Y_ENSURE(Update && Update->Lock);
+    auto* table = Locker.FindTablePtr(tableId);
+    Y_ENSURE(table, "Cannot find table " << tableId);
+    return table->AddRuntimeLock(key, Update->Lock);
 }
 
 }}

@@ -154,6 +154,7 @@ PyDoc_STRVAR(to_index_dict__doc__, "DEPRECATED: use list[n] instead.");
 PyDoc_STRVAR(has_fast_len__doc__, "DEPRECATED: do not use.");
 PyDoc_STRVAR(has_items__doc__, "DEPRECATED: test list as bool instead.");
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 PyMethodDef TPyLazyListMethods[] = {
     {"__reversed__", TPyLazyList::Reversed, METH_NOARGS, nullptr},
     {"to_index_dict", TPyLazyList::ToIndexDict, METH_NOARGS, to_index_dict__doc__},
@@ -428,7 +429,10 @@ if (PyIndex_Check(slice)) {
 }
 
 if (PySlice_Check(slice)) {
-    Py_ssize_t start, stop, step, size;
+    Py_ssize_t start;
+    Py_ssize_t stop;
+    Py_ssize_t step;
+    Py_ssize_t size;
 
     if (list->CachedLength >= 0) {
         if (PySlice_GetIndicesEx(SLICEOBJ(slice), (list->CachedLength + list->Step - 1) / list->Step, &start, &stop, &step, &size) < 0) {
@@ -500,7 +504,7 @@ if (!list->Dict.IsSet()) {
     list->Dict.Set(list->CastCtx->PyCtx, list->CastCtx->ValueBuilder->ToIndexDict(NUdf::TUnboxedValuePod(list->Value.Get().Get())).AsBoxed());
 }
 
-return ToPyLazyDict(list->CastCtx, nullptr, list->ItemType, NUdf::TUnboxedValuePod(list->Dict.Get().Get())).Release();
+return ToPyLazyDict(list->CastCtx, /*keyType=*/nullptr, list->ItemType, NUdf::TUnboxedValuePod(list->Dict.Get().Get())).Release();
 }
 PY_CATCH(nullptr)
 }
@@ -741,6 +745,7 @@ PyNumberMethods ThinListNumbering = {
 
 namespace {
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 PyMethodDef TPyThinListMethods[] = {
     {"__reversed__", TPyThinList::Reversed, METH_NOARGS, nullptr},
     {"to_index_dict", TPyThinList::ToIndexDict, METH_NOARGS, to_index_dict__doc__},
@@ -995,7 +1000,10 @@ if (PyIndex_Check(slice)) {
 }
 
 if (PySlice_Check(slice)) {
-    Py_ssize_t start, stop, step, size;
+    Py_ssize_t start;
+    Py_ssize_t stop;
+    Py_ssize_t step;
+    Py_ssize_t size;
 
     if (PySlice_GetIndicesEx(SLICEOBJ(slice), list->Length, &start, &stop, &step, &size) < 0) {
         return nullptr;
@@ -1031,7 +1039,7 @@ PyObject* TPyThinList::ToIndexDict(PyObject* self, PyObject* /* arg */)
         PY_TRY{
             TPyThinList* list = Cast(self);
 const auto dict = list->CastCtx->ValueBuilder->ToIndexDict(NUdf::TUnboxedValuePod(list->Value.Get().Get()));
-return ToPyLazyDict(list->CastCtx, nullptr, list->ItemType, dict).Release();
+return ToPyLazyDict(list->CastCtx, /*keyType=*/nullptr, list->ItemType, dict).Release();
 }
 PY_CATCH(nullptr)
 }

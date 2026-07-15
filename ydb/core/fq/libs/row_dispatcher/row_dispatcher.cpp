@@ -274,10 +274,15 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
         void AddNode(ui32 nodeId) {
             if (Nodes.contains(nodeId)) {
+                auto& state = Nodes[nodeId];
+                if (state.RetryState && state.RetryState->IsTimeout()) {
+                    state.RetryState = Nothing();
+                    HandleNodeDisconnected(nodeId);
+                }
                 return;
             }
             if (nodeId == SelfId.NodeId()) {
-                HandleNodeConnected(nodeId);      // always сconnected
+                HandleNodeConnected(nodeId);      // always connected
             } else {
                 HandleNodeDisconnected(nodeId);
             }
@@ -313,7 +318,6 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             if (state.RetryScheduled) {
                 return false;
             }
-            state.RetryScheduled = true;
             if (!state.RetryState) {
                 state.RetryState.ConstructInPlace(Timeout);
             }
@@ -321,7 +325,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             if (state.RetryState->IsTimeout()) {
                 return true;
             }
-
+            state.RetryScheduled = true;
             auto ev = MakeHolder<TEvPrivate::TEvTryConnect>(nodeId);
             auto delay = state.RetryState->GetNextDelay();
             NActors::TActivationContext::Schedule(delay, new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
@@ -364,7 +368,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
     TRowDispatcherMetrics Metrics;
     TUserPoolMetrics UserPoolMetrics;
-    NYql::IPqGateway::TPtr PqGateway;
+    NYql::IPqStaticGateway::TPtr PqGateway;
     NYdb::TDriver Driver;
     NActors::TMon* Monitoring;
     TNodesTracker NodesTracker;
@@ -372,6 +376,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TAggregatedStats AggrStats; 
     ui64 LastCpuTime = 0;
     NActors::TActorId NodesManagerId;
+    TInstant LastUpdateMetricsTime = TInstant::Now();
 
     struct TConsumerCounters {
         ui64 NewDataArrived = 0;
@@ -436,6 +441,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
     THashMap<NActors::TActorId, TAtomicSharedPtr<TConsumerInfo>> Consumers;      // key - read actor id
     TMap<ui64, TAtomicSharedPtr<TConsumerInfo>> ConsumersByEventQueueId;
+    THashMap<TString, TSet<TActorId>> ConsumersByQueryId;                        // key - query id, value - set of read actor ids
     THashMap<TTopicSessionKey, TTopicSessionInfo, TTopicSessionKeyHash> TopicSessions;
     TMap<TActorId, TReadActorInfo> ReadActorsInternalState;
     bool EnableStreamingQueriesCounters = false;
@@ -450,7 +456,7 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-        const NYql::IPqGateway::TPtr& pqGateway,
+        const NYql::IPqStaticGateway::TPtr& pqGateway,
         NYdb::TDriver driver,
         NActors::TMon* monitoring = nullptr,
         NActors::TActorId nodesManagerId = {},
@@ -535,7 +541,7 @@ TRowDispatcher::TRowDispatcher(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
     NActors::TActorId nodesManagerId,
@@ -554,7 +560,7 @@ TRowDispatcher::TRowDispatcher(
     , PqGateway(pqGateway)
     , Driver(driver)
     , Monitoring(monitoring)
-    , NodesTracker(Config.GetCoordinator().GetRebalancingTimeout() ? Config.GetCoordinator().GetRebalancingTimeout() : TDuration::Seconds(DefaultRebalancingTimeoutSec))
+    , NodesTracker(GetCoordinatorRebalancingTimeout(Config.GetCoordinator()))
     , NodesManagerId(nodesManagerId)
     , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
 {
@@ -570,7 +576,7 @@ void TRowDispatcher::Bootstrap() {
     auto leaderElection = !config.GetCoordinationNodePath().empty()
         ? NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, Driver, Tenant, Counters)
         : NewLocalLeaderElection(SelfId(), coordinatorId, Counters);
-    Register(leaderElection.release());
+    Register(leaderElection.release(), TMailboxType::HTSwap, NKikimr::AppData()->SystemPoolId);
 
     CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService(Config.GetCompileService(), Counters));
 
@@ -683,7 +689,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscrib
 }
 
 void TRowDispatcher::UpdateMetrics() {
-    static TInstant LastUpdateMetricsTime = TInstant::Now();
     auto now = TInstant::Now();
     AggrStats.LastUpdateMetricsPeriod = now - LastUpdateMetricsTime;
     LastUpdateMetricsTime = now;
@@ -758,6 +763,7 @@ TString TRowDispatcher::GetInternalState() {
     };
     str << "SelfId: " << SelfId().ToString() << "\n";
     str << "Consumers count: " << Consumers.size() << "\n";
+    str << "ConsumersByEventQueueId map size: " << ConsumersByEventQueueId.size() << "\n";
     str << "TopicSessions count: " << TopicSessions.size() << "\n";
     str << "Max session buffer size: " << toHuman(MaxSessionBufferSizeBytes) << "\n";
     str << "CpuMicrosec: " << toHuman(LastCpuTime) << "\n";
@@ -915,6 +921,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
 
     Consumers[ev->Sender] = consumerInfo;
     ConsumersByEventQueueId[consumerInfo->EventQueueId] = consumerInfo;
+    ConsumersByQueryId[consumerInfo->QueryId].insert(ev->Sender);
     if (!CheckSession(consumerInfo, ev)) {
         return;
     }
@@ -993,7 +1000,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
     auto it = Consumers.find(ev->Sender);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_WARN("Wrong consumer, sender " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId());
+        LOG_ROW_DISPATCHER_WARN("Consumer not found, sender " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId() << ", sending TEvNoSession");
+        Send(ev->Sender, new NFq::TEvRowDispatcher::TEvNoSession(), 0, ev->Cookie);
         return;
     }
     LWPROBE(Heartbeat, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
@@ -1080,8 +1088,20 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
             }
         }
     }
+    const TString queryId = consumerIt->second->QueryId;
     ConsumersByEventQueueId.erase(consumerIt->second->EventQueueId);
     Consumers.erase(consumerIt);
+    
+    auto queryIt = ConsumersByQueryId.find(queryId);
+    if (queryIt != ConsumersByQueryId.end()) {
+        queryIt->second.erase(readActorId);
+        if (queryIt->second.empty()) {
+            ConsumersByQueryId.erase(queryIt);
+            if (EnableStreamingQueriesCounters) {
+                Metrics.Counters->RemoveSubgroup("query_id", queryId);
+            }
+        }
+    }
     Metrics.ClientsCount->Set(Consumers.size());
 }
 
@@ -1335,6 +1355,7 @@ void TRowDispatcher::UpdateCpuTime() {
     for (auto& [actorId, consumer] : Consumers) {
         consumer->CpuMicrosec += diff;
     }
+    LOG_ROW_DISPATCHER_TRACE("UpdateCpuTime, currentCpuTime " << currentCpuTime << ", diff " << diff);
     LastCpuTime = currentCpuTime;
 }
 
@@ -1351,7 +1372,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
     NActors::TActorId nodesManagerId,

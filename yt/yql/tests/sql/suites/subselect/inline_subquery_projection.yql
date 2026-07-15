@@ -1,0 +1,11 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+USE plato;
+
+SELECT (SELECT Max(key) FROM Input);
+
+SELECT '1' || (SELECT Max(key) FROM Input);
+
+SELECT (SELECT Max(key) FROM Input) || '1';
+
+SELECT '1' || (SELECT Max(key) FROM Input) || '1';

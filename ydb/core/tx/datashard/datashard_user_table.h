@@ -267,6 +267,7 @@ struct TUserTable : public TThrRefBase {
         bool IsKey;
         ui32 Family = 0;
         bool NotNull = false;
+        bool SetNotNullInProgress = false;
 
         TUserColumn(NScheme::TTypeInfo type, TString typeMod, TString name, bool isKey = false)
             : Type(type)
@@ -335,6 +336,8 @@ struct TUserTable : public TThrRefBase {
         TDuration ResolvedTimestampsInterval;
         bool SchemaChanges = false;
         TMaybe<TString> AwsRegion;
+        bool UserSIDs = false;
+        bool TraceIds = false;
 
         TCdcStream() = default;
 
@@ -346,6 +349,8 @@ struct TUserTable : public TThrRefBase {
             , VirtualTimestamps(streamDesc.GetVirtualTimestamps())
             , ResolvedTimestampsInterval(TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs()))
             , SchemaChanges(streamDesc.GetSchemaChanges())
+            , UserSIDs(streamDesc.GetUserSIDs())
+            , TraceIds(streamDesc.GetTraceIds())
         {
             if (const auto& awsRegion = streamDesc.GetAwsRegion()) {
                 AwsRegion = awsRegion;
@@ -459,6 +464,8 @@ struct TUserTable : public TThrRefBase {
     TReplicationConfig ReplicationConfig;
     TIncrementalBackupConfig IncrementalBackupConfig;
     bool IsBackup = false;
+    ui32 UniqueIndexKeySize = 0;
+    NKikimrSchemeOp::ESpecialTableType SpecialTableType = NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeNone;
 
     TMap<TPathId, TTableIndex> Indexes;
 

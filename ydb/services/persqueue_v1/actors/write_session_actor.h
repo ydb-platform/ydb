@@ -21,7 +21,7 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/aliases.h>
 #include <ydb/services/metadata/service.h>
-
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -139,8 +139,6 @@ private:
 
     void ProceedPartition(const ui32 partition, const NActors::TActorContext& ctx);
 
-    //void InitCheckACL(const TActorContext& ctx);
-
     void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx);
     void MakeAndSendInitResponse(const TMaybe<ui64>& maxSeqNo, const TActorContext& ctx);
 
@@ -158,7 +156,8 @@ private:
     void HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
 
-    void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
+    void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx,
+                      std::optional<Ydb::StatusIds::StatusCode> statusOverride = std::nullopt);
 
     void CheckFinish(const NActors::TActorContext& ctx);
 
@@ -172,7 +171,7 @@ private:
     void CloseSpans(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode);
 
 private:
-    void CreatePartitionWriterCache(const TActorContext& ctx);
+    bool CreatePartitionWriterCache(const TActorContext& ctx);
     void DestroyPartitionWriterCache(const TActorContext& ctx);
     NWilson::TSpan GenerateSpan(NJaegerTracing::ERequestType subrequestType, const TStringBuf name) const;
     NWilson::TSpan GenerateInitSpan() const {
@@ -214,7 +213,6 @@ private:
     std::optional<ui32> ExpectedGeneration;
     std::optional<ui64> InitialSeqNo;
 
-    bool PartitionFound = false;
     // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1
     TString SourceId; // TODO: Replace with 'MessageGroupId' everywhere
     bool UseDeduplication = true;
@@ -269,7 +267,7 @@ private:
     TInstant LastACLCheckTimestamp;
     TInstant LogSessionDeadline;
 
-    NKikimrSchemeOp::TPersQueueGroupDescription Config;
+    TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
     // PQ tablet configuration that we get at the time of session initialization
     NKikimrPQ::TPQTabletConfig InitialPQTabletConfig;
     std::shared_ptr<NPQ::IPartitionChooser> Chooser;
@@ -280,6 +278,8 @@ private:
     TString ClientDC;
 
     TInstant LastSourceIdUpdate;
+
+    THashMap<ui64, TString> DeferredPublicationExtByInt;
 
     TVector<NPersQueue::TPQLabelsInfo> Aggr;
     NKikimr::NPQ::TMultiCounter SLITotal;

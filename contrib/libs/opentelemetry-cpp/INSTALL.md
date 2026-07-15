@@ -268,6 +268,7 @@ build configuration.
 | **exporters_elasticsearch**| opentelemetry-cpp::elasticsearch_log_record_exporter                                             |
 | **exporters_etw**          | opentelemetry-cpp::etw_exporter                                                                  |
 | **exporters_zipkin**       | opentelemetry-cpp::zipkin_trace_exporter                                                         |
+| **resource_detectors**     | opentelemetry-cpp::resource_detectors                                                            |
 | **shims_opentracing**      | opentelemetry-cpp::opentracing_shim                                                              |
 
 ## Build instructions using Bazel

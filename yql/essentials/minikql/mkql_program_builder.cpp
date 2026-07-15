@@ -19,8 +19,6 @@ using namespace std::string_view_literals;
 
 namespace NKikimr::NMiniKQL {
 
-static_assert(RuntimeVersion >= 47U);
-
 namespace {
 
 struct TDataFunctionFlags {
@@ -93,6 +91,7 @@ void EnsureScriptSpecificTypes(
         case EScriptType::SystemPython3_11:
         case EScriptType::SystemPython3_12:
         case EScriptType::SystemPython3_13:
+        case EScriptType::SystemPython3_14:
             return TPythonTypeChecker().Walk(funcType, nodeStack);
         case EScriptType::Javascript:
             return TJavascriptTypeChecker().Walk(funcType, nodeStack);
@@ -241,8 +240,8 @@ bool ReduceOptionalElements(const TType* type, const TArrayRef<const ui32>& test
     return multiOptional;
 }
 
-static std::vector<TType*> ValidateBlockItems(const TArrayRef<TType* const>& wideComponents, bool unwrap) {
-    MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
+std::vector<TType*> ValidateBlockItems(const TArrayRef<TType* const>& wideComponents, bool unwrap) {
+    MKQL_ENSURE(!wideComponents.empty(), "Expected at least one column");
     std::vector<TType*> items;
     items.reserve(wideComponents.size());
     // XXX: Declare these variables outside the loop body to use for the last
@@ -281,8 +280,8 @@ std::string_view ScriptTypeAsStr(EScriptType type) {
 EScriptType ScriptTypeFromStr(std::string_view str) {
     TString lowerStr = TString(str);
     lowerStr.to_lower();
-#define MKQL_SCRIPT_TYPE_FROM_STR(name, value, lowerName, allowSuffix)              \
-    if ((allowSuffix && lowerStr.StartsWith(#lowerName)) || lowerStr == #lowerName) \
+#define MKQL_SCRIPT_TYPE_FROM_STR(name, value, lowerName, allowSubstring)            \
+    if ((allowSubstring && lowerStr.Contains(#lowerName)) || lowerStr == #lowerName) \
         return EScriptType::name;
 
     MKQL_SCRIPT_TYPES(MKQL_SCRIPT_TYPE_FROM_STR)
@@ -306,6 +305,7 @@ bool IsSystemPython(EScriptType type) {
            type == EScriptType::SystemPython3_11 ||
            type == EScriptType::SystemPython3_12 ||
            type == EScriptType::SystemPython3_13 ||
+           type == EScriptType::SystemPython3_14 ||
            type == EScriptType::Python ||
            type == EScriptType::Python2;
 }
@@ -345,11 +345,12 @@ std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap) {
 }
 
 TProgramBuilder::TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry,
-                                 bool voidWithEffects, NYql::TLangVersion langver)
+                                 bool voidWithEffects, NYql::TLangVersion langver, NYql::TRuntimeSettings::TConstPtr runtimeSettings)
     : TTypeBuilder(env)
     , FunctionRegistry_(functionRegistry)
     , VoidWithEffects_(voidWithEffects)
     , LangVer_(langver)
+    , RuntimeSettings_(std::move(runtimeSettings))
 {
 }
 
@@ -362,7 +363,8 @@ const IFunctionRegistry& TProgramBuilder::GetFunctionRegistry() const {
 }
 
 TType* TProgramBuilder::ChooseCommonType(TType* type1, TType* type2) {
-    bool isOptional1, isOptional2;
+    bool isOptional1;
+    bool isOptional2;
     const auto data1 = UnpackOptionalData(type1, isOptional1);
     const auto data2 = UnpackOptionalData(type2, isOptional2);
     if (data1->IsSameType(*data2)) {
@@ -379,7 +381,8 @@ TType* TProgramBuilder::ChooseCommonType(TType* type1, TType* type2) {
 }
 
 TType* TProgramBuilder::BuildArithmeticCommonType(TType* type1, TType* type2) {
-    bool isOptional1, isOptional2;
+    bool isOptional1;
+    bool isOptional2;
     const auto data1 = UnpackOptionalData(type1, isOptional1);
     const auto data2 = UnpackOptionalData(type2, isOptional2);
     const auto features1 = NUdf::GetDataTypeInfo(*data1->GetDataSlot()).Features;
@@ -408,13 +411,13 @@ TType* TProgramBuilder::BuildArithmeticCommonType(TType* type1, TType* type2) {
 }
 
 TRuntimeNode TProgramBuilder::Arg(TType* type) const {
-    TCallableBuilder builder(Env_, __func__, type, true);
-    return TRuntimeNode(builder.Build(), false);
+    TCallableBuilder builder(Env_, __func__, type, /*disableMerge=*/true);
+    return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::WideFlowArg(TType* type) const {
-    TCallableBuilder builder(Env_, __func__, type, true);
-    return TRuntimeNode(builder.Build(), false);
+    TCallableBuilder builder(Env_, __func__, type, /*disableMerge=*/true);
+    return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Member(TRuntimeNode structObj, const std::string_view& memberName) {
@@ -429,11 +432,11 @@ TRuntimeNode TProgramBuilder::Member(TRuntimeNode structObj, const std::string_v
     TCallableBuilder callableBuilder(Env_, __func__, memberType);
     callableBuilder.Add(structObj);
     callableBuilder.Add(NewDataLiteral<ui32>(memberIndex));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::Element(TRuntimeNode structObj, const std::string_view& memberName) {
-    return Member(structObj, memberName);
+TRuntimeNode TProgramBuilder::Element(TRuntimeNode tuple, const std::string_view& memberName) {
+    return Member(tuple, memberName);
 }
 
 TRuntimeNode TProgramBuilder::AddMember(TRuntimeNode structObj, const std::string_view& memberName, TRuntimeNode memberValue) {
@@ -456,7 +459,7 @@ TRuntimeNode TProgramBuilder::AddMember(TRuntimeNode structObj, const std::strin
             callableBuilder.Add(structObj);
             callableBuilder.Add(memberValue);
             callableBuilder.Add(NewDataLiteral<ui32>(i));
-            return TRuntimeNode(callableBuilder.Build(), false);
+            return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
         }
     }
 
@@ -491,7 +494,7 @@ TRuntimeNode TProgramBuilder::RemoveMember(TRuntimeNode structObj, const std::st
     TCallableBuilder callableBuilder(Env_, __func__, newType);
     callableBuilder.Add(structObj);
     callableBuilder.Add(NewDataLiteral<ui32>(*memberIndex));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Zip(const TArrayRef<const TRuntimeNode>& lists) {
@@ -518,7 +521,7 @@ TRuntimeNode TProgramBuilder::Zip(const TArrayRef<const TRuntimeNode>& lists) {
         callableBuilder.Add(list);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::ZipAll(const TArrayRef<const TRuntimeNode>& lists) {
@@ -545,7 +548,7 @@ TRuntimeNode TProgramBuilder::ZipAll(const TArrayRef<const TRuntimeNode>& lists)
         callableBuilder.Add(list);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Enumerate(TRuntimeNode list, TRuntimeNode start, TRuntimeNode step) {
@@ -562,7 +565,7 @@ TRuntimeNode TProgramBuilder::Enumerate(TRuntimeNode list, TRuntimeNode start, T
     callableBuilder.Add(list);
     callableBuilder.Add(start);
     callableBuilder.Add(step);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Enumerate(TRuntimeNode list) {
@@ -584,7 +587,7 @@ TRuntimeNode TProgramBuilder::Fold(TRuntimeNode list, TRuntimeNode state, const 
     callableBuilder.Add(itemArg);
     callableBuilder.Add(stateNodeArg);
     callableBuilder.Add(newState);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Fold1(TRuntimeNode list, const TUnaryLambda& init, const TBinaryLambda& handler) {
@@ -604,7 +607,7 @@ TRuntimeNode TProgramBuilder::Fold1(TRuntimeNode list, const TUnaryLambda& init,
     callableBuilder.Add(initState);
     callableBuilder.Add(stateNodeArg);
     callableBuilder.Add(newState);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Reduce(TRuntimeNode list, TRuntimeNode state1,
@@ -646,26 +649,26 @@ TRuntimeNode TProgramBuilder::Reduce(TRuntimeNode list, TRuntimeNode state1,
     callableBuilder.Add(itemState2Arg);
     callableBuilder.Add(state3NodeArg);
     callableBuilder.Add(newState3);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::Condense(TRuntimeNode flow, TRuntimeNode state,
+TRuntimeNode TProgramBuilder::Condense(TRuntimeNode stream, TRuntimeNode state,
                                        const TBinaryLambda& switcher,
                                        const TBinaryLambda& handler, bool useCtx) {
-    const auto flowType = flow.GetStaticType();
+    const auto streamType = stream.GetStaticType();
 
-    if (flowType->IsList()) {
+    if (streamType->IsList()) {
         // TODO: Native implementation for list.
-        return Collect(Condense(ToFlow(flow), state, switcher, handler));
+        return Collect(Condense(ToFlow(stream, {}), state, switcher, handler));
     }
 
-    MKQL_ENSURE(flowType->IsFlow() || flowType->IsStream(), "Expected flow or stream.");
+    MKQL_ENSURE(streamType->IsFlow() || streamType->IsStream(), "Expected flow or stream.");
 
     TType* itemType;
-    if (flowType->IsFlow()) {
-        itemType = static_cast<const TFlowType&>(*flowType).GetItemType();
+    if (streamType->IsFlow()) {
+        itemType = static_cast<const TFlowType&>(*streamType).GetItemType();
     } else {
-        itemType = static_cast<const TStreamType&>(*flowType).GetItemType();
+        itemType = static_cast<const TStreamType&>(*streamType).GetItemType();
     }
 
     const auto itemArg = Arg(itemType);
@@ -674,9 +677,9 @@ TRuntimeNode TProgramBuilder::Condense(TRuntimeNode flow, TRuntimeNode state,
     const auto newState = handler(itemArg, stateArg);
     MKQL_ENSURE(newState.GetStaticType()->IsSameType(*state.GetStaticType()), "State type is changed by the handler");
 
-    auto returnType = flowType->IsFlow() ? NewFlowType(state.GetStaticType()) : NewStreamType(state.GetStaticType());
+    auto returnType = streamType->IsFlow() ? NewFlowType(state.GetStaticType()) : NewStreamType(state.GetStaticType());
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
-    callableBuilder.Add(flow);
+    callableBuilder.Add(stream);
     callableBuilder.Add(state);
     callableBuilder.Add(itemArg);
     callableBuilder.Add(stateArg);
@@ -686,26 +689,26 @@ TRuntimeNode TProgramBuilder::Condense(TRuntimeNode flow, TRuntimeNode state,
         callableBuilder.Add(NewDataLiteral<bool>(useCtx));
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::Condense1(TRuntimeNode flow, const TUnaryLambda& init,
+TRuntimeNode TProgramBuilder::Condense1(TRuntimeNode stream, const TUnaryLambda& init,
                                         const TBinaryLambda& switcher,
                                         const TBinaryLambda& handler, bool useCtx) {
-    const auto flowType = flow.GetStaticType();
+    const auto streamType = stream.GetStaticType();
 
-    if (flowType->IsList()) {
+    if (streamType->IsList()) {
         // TODO: Native implementation for list.
-        return Collect(Condense1(ToFlow(flow), init, switcher, handler));
+        return Collect(Condense1(ToFlow(stream, {}), init, switcher, handler));
     }
 
-    MKQL_ENSURE(flowType->IsFlow() || flowType->IsStream(), "Expected flow or stream.");
+    MKQL_ENSURE(streamType->IsFlow() || streamType->IsStream(), "Expected flow or stream.");
 
     TType* itemType;
-    if (flowType->IsFlow()) {
-        itemType = static_cast<const TFlowType&>(*flowType).GetItemType();
+    if (streamType->IsFlow()) {
+        itemType = static_cast<const TFlowType&>(*streamType).GetItemType();
     } else {
-        itemType = static_cast<const TStreamType&>(*flowType).GetItemType();
+        itemType = static_cast<const TStreamType&>(*streamType).GetItemType();
     }
 
     const auto itemArg = Arg(itemType);
@@ -717,14 +720,14 @@ TRuntimeNode TProgramBuilder::Condense1(TRuntimeNode flow, const TUnaryLambda& i
     MKQL_ENSURE(newState.GetStaticType()->IsSameType(*initState.GetStaticType()), "State type is changed by the handler");
 
     TType* returnType;
-    if (flowType->IsFlow()) {
+    if (streamType->IsFlow()) {
         returnType = NewFlowType(newState.GetStaticType());
     } else {
         returnType = NewStreamType(newState.GetStaticType());
     }
 
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
-    callableBuilder.Add(flow);
+    callableBuilder.Add(stream);
     callableBuilder.Add(itemArg);
     callableBuilder.Add(initState);
     callableBuilder.Add(stateArg);
@@ -734,7 +737,7 @@ TRuntimeNode TProgramBuilder::Condense1(TRuntimeNode flow, const TUnaryLambda& i
         callableBuilder.Add(NewDataLiteral<bool>(useCtx));
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Squeeze(TRuntimeNode stream, TRuntimeNode state,
@@ -753,7 +756,10 @@ TRuntimeNode TProgramBuilder::Squeeze(TRuntimeNode stream, TRuntimeNode state,
     const auto newState = handler(itemArg, stateNodeArg);
     MKQL_ENSURE(newState.GetStaticType()->IsSameType(*state.GetStaticType()), "State type is changed by the handler");
 
-    TRuntimeNode saveArg, outSave, loadArg, outLoad;
+    TRuntimeNode saveArg;
+    TRuntimeNode outSave;
+    TRuntimeNode loadArg;
+    TRuntimeNode outLoad;
 
     if (save && load) {
         outSave = save(saveArg = Arg(state.GetStaticType()));
@@ -773,7 +779,7 @@ TRuntimeNode TProgramBuilder::Squeeze(TRuntimeNode stream, TRuntimeNode state,
     callableBuilder.Add(outSave);
     callableBuilder.Add(loadArg);
     callableBuilder.Add(outLoad);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Squeeze1(TRuntimeNode stream, const TUnaryLambda& init,
@@ -793,7 +799,10 @@ TRuntimeNode TProgramBuilder::Squeeze1(TRuntimeNode stream, const TUnaryLambda& 
     const auto newState = handler(itemArg, stateNodeArg);
     MKQL_ENSURE(newState.GetStaticType()->IsSameType(*initState.GetStaticType()), "State type is changed by the handler");
 
-    TRuntimeNode saveArg, outSave, loadArg, outLoad;
+    TRuntimeNode saveArg;
+    TRuntimeNode outSave;
+    TRuntimeNode loadArg;
+    TRuntimeNode outLoad;
 
     if (save && load) {
         outSave = save(saveArg = Arg(initState.GetStaticType()));
@@ -813,7 +822,7 @@ TRuntimeNode TProgramBuilder::Squeeze1(TRuntimeNode stream, const TUnaryLambda& 
     callableBuilder.Add(outSave);
     callableBuilder.Add(loadArg);
     callableBuilder.Add(outLoad);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Discard(TRuntimeNode stream) {
@@ -822,7 +831,7 @@ TRuntimeNode TProgramBuilder::Discard(TRuntimeNode stream) {
 
     TCallableBuilder callableBuilder(Env_, __func__, streamType);
     callableBuilder.Add(stream);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Map(TRuntimeNode list, const TUnaryLambda& handler) {
@@ -860,7 +869,7 @@ TRuntimeNode TProgramBuilder::MapNext(TRuntimeNode list, const TBinaryLambda& ha
     callableBuilder.Add(itemArg);
     callableBuilder.Add(nextItemArg);
     callableBuilder.Add(newItem);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 template <bool Ordered>
@@ -929,7 +938,7 @@ TRuntimeNode TProgramBuilder::ChainMap(TRuntimeNode list, TRuntimeNode state, co
     callableBuilder.Add(stateNodeArg);
     callableBuilder.Add(std::get<0U>(newItemAndState));
     callableBuilder.Add(std::get<1U>(newItemAndState));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Chain1Map(TRuntimeNode list, const TUnaryLambda& init, const TBinaryLambda& handler) {
@@ -983,7 +992,7 @@ TRuntimeNode TProgramBuilder::Chain1Map(TRuntimeNode list, const TUnarySplitLamb
     callableBuilder.Add(stateArg);
     callableBuilder.Add(std::get<0U>(updateItemAndState));
     callableBuilder.Add(std::get<1U>(updateItemAndState));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::ToList(TRuntimeNode optional) {
@@ -1002,7 +1011,7 @@ TRuntimeNode TProgramBuilder::Iterable(TZeroLambda lambda) {
     TCallableBuilder callableBuilder(Env_, __func__, resultType);
     callableBuilder.Add(lambdaRes);
     callableBuilder.Add(itemArg);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::ToOptional(TRuntimeNode list) {
@@ -1013,14 +1022,14 @@ TRuntimeNode TProgramBuilder::Head(TRuntimeNode list) {
     const auto resultType = NewOptionalType(AS_TYPE(TListType, list.GetStaticType())->GetItemType());
     TCallableBuilder callableBuilder(Env_, __func__, resultType);
     callableBuilder.Add(list);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Last(TRuntimeNode list) {
     const auto resultType = NewOptionalType(AS_TYPE(TListType, list.GetStaticType())->GetItemType());
     TCallableBuilder callableBuilder(Env_, __func__, resultType);
     callableBuilder.Add(list);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Nanvl(TRuntimeNode data, TRuntimeNode dataIfNaN) {
@@ -1111,7 +1120,7 @@ TRuntimeNode TProgramBuilder::BuildListSort(const std::string_view& callableName
     callableBuilder.Add(itemArg);
     callableBuilder.Add(key);
     callableBuilder.Add(ascending);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BuildListNth(const std::string_view& callableName, TRuntimeNode list, TRuntimeNode n, TRuntimeNode ascending,
@@ -1149,36 +1158,36 @@ TRuntimeNode TProgramBuilder::BuildListNth(const std::string_view& callableName,
     callableBuilder.Add(itemArg);
     callableBuilder.Add(key);
     callableBuilder.Add(ascending);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::BuildSort(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode ascending,
+TRuntimeNode TProgramBuilder::BuildSort(const std::string_view& callableName, TRuntimeNode list, TRuntimeNode ascending,
                                         const TUnaryLambda& keyExtractor)
 {
-    if (const auto flowType = flow.GetStaticType(); flowType->IsFlow() || flowType->IsStream()) {
-        const bool isFlow = flowType->IsFlow();
+    if (const auto listType = list.GetStaticType(); listType->IsFlow() || listType->IsStream()) {
+        const bool isFlow = listType->IsFlow();
         TRuntimeNode condense;
         if (isFlow) {
             const auto pickle = [&](TRuntimeNode item) { return Pickle(item); };
-            condense = SqueezeToList(Map(flow, pickle), NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
+            condense = SqueezeToList(Map(list, pickle), NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id));
         } else {
-            condense = Condense1(flow,
+            condense = Condense1(list,
                                  [this](TRuntimeNode item) { return AsList(item); },
                                  [this](TRuntimeNode, TRuntimeNode) { return NewDataLiteral<bool>(false); },
                                  [this](TRuntimeNode item, TRuntimeNode state) { return Append(state, item); });
         }
 
         const auto finalKeyExtractor = isFlow ? [&](TRuntimeNode item) {
-            auto itemType = AS_TYPE(TFlowType, flowType)->GetItemType();
+            auto itemType = AS_TYPE(TFlowType, listType)->GetItemType();
             return keyExtractor(Unpickle(itemType, item));
         }
                                               : keyExtractor;
 
-        return FlatMap(condense, [&](TRuntimeNode list) {
-            auto sorted = BuildSort("UnstableSort", Steal(list), ascending, finalKeyExtractor);
+        return FlatMap(condense, [&](TRuntimeNode lst) {
+            auto sorted = BuildSort("UnstableSort", Steal(lst), ascending, finalKeyExtractor);
             if (isFlow) {
                 return Map(LazyList(sorted), [&](TRuntimeNode item) {
-                    auto itemType = AS_TYPE(TFlowType, flowType)->GetItemType();
+                    auto itemType = AS_TYPE(TFlowType, listType)->GetItemType();
                     return Unpickle(itemType, item);
                 });
             } else {
@@ -1187,25 +1196,25 @@ TRuntimeNode TProgramBuilder::BuildSort(const std::string_view& callableName, TR
         });
     }
 
-    return BuildListSort(callableName, flow, ascending, keyExtractor);
+    return BuildListSort(callableName, list, ascending, keyExtractor);
 }
 
-TRuntimeNode TProgramBuilder::BuildNth(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode n, TRuntimeNode ascending,
+TRuntimeNode TProgramBuilder::BuildNth(const std::string_view& callableName, TRuntimeNode list, TRuntimeNode n, TRuntimeNode ascending,
                                        const TUnaryLambda& keyExtractor)
 {
-    if (const auto flowType = flow.GetStaticType(); flowType->IsFlow() || flowType->IsStream()) {
-        return FlatMap(Condense1(flow,
+    if (const auto listType = list.GetStaticType(); listType->IsFlow() || listType->IsStream()) {
+        return FlatMap(Condense1(list,
                                  [this](TRuntimeNode item) { return AsList(item); },
                                  [this](TRuntimeNode, TRuntimeNode) { return NewDataLiteral<bool>(false); },
                                  [this](TRuntimeNode item, TRuntimeNode state) { return Append(state, item); }),
-                       [&](TRuntimeNode list) { return BuildNth(callableName, list, n, ascending, keyExtractor); });
+                       [&](TRuntimeNode lst) { return BuildNth(callableName, lst, n, ascending, keyExtractor); });
     }
 
-    return BuildListNth(callableName, flow, n, ascending, keyExtractor);
+    return BuildListNth(callableName, list, n, ascending, keyExtractor);
 }
 
-TRuntimeNode TProgramBuilder::BuildTake(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode count) {
-    const auto listType = flow.GetStaticType();
+TRuntimeNode TProgramBuilder::BuildTake(const std::string_view& callableName, TRuntimeNode list, TRuntimeNode count) {
+    const auto listType = list.GetStaticType();
 
     TType* itemType = nullptr;
     if (listType->IsFlow()) {
@@ -1223,9 +1232,9 @@ TRuntimeNode TProgramBuilder::BuildTake(const std::string_view& callableName, TR
     MKQL_ENSURE(static_cast<const TDataType&>(*count.GetStaticType()).GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64");
 
     TCallableBuilder callableBuilder(Env_, callableName, listType);
-    callableBuilder.Add(flow);
+    callableBuilder.Add(list);
     callableBuilder.Add(count);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 template <bool IsFilter, bool OnStruct>
@@ -1413,7 +1422,7 @@ TRuntimeNode TProgramBuilder::BuildContainerProperty(const std::string_view& cal
 
     TCallableBuilder callableBuilder(Env_, callableName, NewDataType(NUdf::TDataType<ResultType>::Id));
     callableBuilder.Add(listOrDict);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Length(TRuntimeNode listOrDict) {
@@ -1427,17 +1436,17 @@ TRuntimeNode TProgramBuilder::Iterator(TRuntimeNode list, const TArrayRef<const 
     for (auto node : dependentNodes) {
         callableBuilder.Add(node);
     }
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::EmptyIterator(TType* streamType) {
     MKQL_ENSURE(streamType->IsStream() || streamType->IsFlow(), "Expected stream or flow.");
     TCallableBuilder callableBuilder(Env_, __func__, streamType);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::Collect(TRuntimeNode flow) {
-    const auto seqType = flow.GetStaticType();
+TRuntimeNode TProgramBuilder::Collect(TRuntimeNode listOrStream) {
+    const auto seqType = listOrStream.GetStaticType();
     TType* itemType = nullptr;
     if (seqType->IsFlow()) {
         itemType = AS_TYPE(TFlowType, seqType)->GetItemType();
@@ -1450,8 +1459,8 @@ TRuntimeNode TProgramBuilder::Collect(TRuntimeNode flow) {
     }
 
     TCallableBuilder callableBuilder(Env_, __func__, NewListType(itemType));
-    callableBuilder.Add(flow);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    callableBuilder.Add(listOrStream);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::LazyList(TRuntimeNode list) {
@@ -1461,7 +1470,7 @@ TRuntimeNode TProgramBuilder::LazyList(TRuntimeNode list) {
     MKQL_ENSURE(listType->IsList(), "Expected list");
     TCallableBuilder callableBuilder(Env_, __func__, type);
     callableBuilder.Add(list);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::ForwardList(TRuntimeNode stream) {
@@ -1470,10 +1479,10 @@ TRuntimeNode TProgramBuilder::ForwardList(TRuntimeNode stream) {
     const auto itemType = type->IsFlow() ? AS_TYPE(TFlowType, stream)->GetItemType() : AS_TYPE(TStreamType, stream)->GetItemType();
     TCallableBuilder callableBuilder(Env_, __func__, NewListType(itemType));
     callableBuilder.Add(stream);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::ToFlow(TRuntimeNode stream) {
+TRuntimeNode TProgramBuilder::ToFlow(TRuntimeNode stream, const TArrayRef<const TRuntimeNode>& dependentNodes) {
     const auto type = stream.GetStaticType();
     MKQL_ENSURE(type->IsStream() || type->IsList() || type->IsOptional(), "Expected stream, list or optional.");
     TType* itemType;
@@ -1487,20 +1496,25 @@ TRuntimeNode TProgramBuilder::ToFlow(TRuntimeNode stream) {
 
     TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(itemType));
     callableBuilder.Add(stream);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    if constexpr (RuntimeVersion >= 75U) {
+        for (auto node : dependentNodes) {
+            callableBuilder.Add(node);
+        }
+    }
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::FromFlow(TRuntimeNode flow) {
     MKQL_ENSURE(flow.GetStaticType()->IsFlow(), "Expected flow.");
     TCallableBuilder callableBuilder(Env_, __func__, NewStreamType(AS_TYPE(TFlowType, flow)->GetItemType()));
     callableBuilder.Add(flow);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Steal(TRuntimeNode input) {
-    TCallableBuilder callableBuilder(Env_, __func__, input.GetStaticType(), true);
+    TCallableBuilder callableBuilder(Env_, __func__, input.GetStaticType(), /*disableMerge=*/true);
     callableBuilder.Add(input);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::ToBlocks(TRuntimeNode flow) {
@@ -1509,47 +1523,29 @@ TRuntimeNode TProgramBuilder::ToBlocks(TRuntimeNode flow) {
 
     TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(blockType));
     callableBuilder.Add(flow);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TType* TProgramBuilder::BuildWideBlockType(const TArrayRef<TType* const>& wideComponents) {
     std::vector<TType*> blockItems;
     blockItems.reserve(wideComponents.size());
-    for (size_t i = 0; i < wideComponents.size(); i++) {
-        blockItems.push_back(NewBlockType(wideComponents[i], TBlockType::EShape::Many));
+    for (auto* wideComponent : wideComponents) {
+        blockItems.push_back(NewBlockType(wideComponent, TBlockType::EShape::Many));
     }
     blockItems.push_back(NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
     return NewMultiType(blockItems);
 }
 
-TRuntimeNode TProgramBuilder::WideToBlocks(TRuntimeNode stream) {
-    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected WideStream as input type");
-    if constexpr (RuntimeVersion < 58U) {
-        // Preserve the old behaviour for ABI compatibility.
-        // Emit (FromFlow (WideToBlocks (ToFlow (<stream>)))) to
-        // process the flow in favor to the given stream following
-        // the older MKQL ABI.
-        // FIXME: Drop the branch below, when the time comes.
-        const auto inputFlow = ToFlow(stream);
-        const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, inputFlow.GetStaticType()));
-        TType* outputMultiType = BuildWideBlockType(wideComponents);
-        TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(outputMultiType));
-        callableBuilder.Add(inputFlow);
-        const auto outputFlow = TRuntimeNode(callableBuilder.Build(), false);
-        return FromFlow(outputFlow);
-    }
-    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, stream.GetStaticType()));
+TRuntimeNode TProgramBuilder::WideToBlocks(TRuntimeNode flow) {
+    MKQL_ENSURE(flow.GetStaticType()->IsStream(), "Expected WideStream as input type");
+    const auto wideComponents = GetWideComponents(AS_TYPE(TStreamType, flow.GetStaticType()));
     TType* outputMultiType = BuildWideBlockType(wideComponents);
     TCallableBuilder callableBuilder(Env_, __func__, NewStreamType(outputMultiType));
-    callableBuilder.Add(stream);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    callableBuilder.Add(flow);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::ListToBlocks(TRuntimeNode list) {
-    if constexpr (RuntimeVersion < 60U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     MKQL_ENSURE(list.GetStaticType()->IsList(), "Expected List as input type");
     const auto listType = AS_TYPE(TListType, list.GetStaticType());
 
@@ -1560,7 +1556,7 @@ TRuntimeNode TProgramBuilder::ListToBlocks(TRuntimeNode list) {
 
     TCallableBuilder callableBuilder(Env_, __func__, NewListType(itemBlockStructType));
     callableBuilder.Add(list);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::FromBlocks(TRuntimeNode flow) {
@@ -1569,39 +1565,20 @@ TRuntimeNode TProgramBuilder::FromBlocks(TRuntimeNode flow) {
 
     TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(blockType->GetItemType()));
     callableBuilder.Add(flow);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode stream) {
-    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected WideStream as input type");
-    if constexpr (RuntimeVersion < 55U) {
-        // Preserve the old behaviour for ABI compatibility.
-        // Emit (FromFlow (WideFromBlocks (ToFlow (<stream>)))) to
-        // process the flow in favor to the given stream following
-        // the older MKQL ABI.
-        // FIXME: Drop the branch below, when the time comes.
-        const auto inputFlow = ToFlow(stream);
-        auto outputItems = ValidateBlockFlowType(inputFlow.GetStaticType());
-        outputItems.pop_back();
-        TType* outputMultiType = NewMultiType(outputItems);
-        TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(outputMultiType));
-        callableBuilder.Add(inputFlow);
-        const auto outputFlow = TRuntimeNode(callableBuilder.Build(), false);
-        return FromFlow(outputFlow);
-    }
-    auto outputItems = ValidateBlockStreamType(stream.GetStaticType());
+TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode flow) {
+    MKQL_ENSURE(flow.GetStaticType()->IsStream(), "Expected WideStream as input type");
+    auto outputItems = ValidateBlockStreamType(flow.GetStaticType());
     outputItems.pop_back();
     TType* outputMultiType = NewMultiType(outputItems);
     TCallableBuilder callableBuilder(Env_, __func__, NewStreamType(outputMultiType));
-    callableBuilder.Add(stream);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    callableBuilder.Add(flow);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::ListFromBlocks(TRuntimeNode list) {
-    if constexpr (RuntimeVersion < 61U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     MKQL_ENSURE(list.GetStaticType()->IsList(), "Expected List as input type");
     const auto listType = AS_TYPE(TListType, list.GetStaticType());
 
@@ -1612,7 +1589,7 @@ TRuntimeNode TProgramBuilder::ListFromBlocks(TRuntimeNode list) {
 
     TCallableBuilder callableBuilder(Env_, __func__, NewListType(itemStructType));
     callableBuilder.Add(list);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::WideSkipBlocks(TRuntimeNode stream, TRuntimeNode count) {
@@ -1638,7 +1615,7 @@ TRuntimeNode TProgramBuilder::WideSortBlocks(TRuntimeNode flow, const std::vecto
 TRuntimeNode TProgramBuilder::AsScalar(TRuntimeNode value) {
     TCallableBuilder callableBuilder(Env_, __func__, NewBlockType(value.GetStaticType(), TBlockType::EShape::Scalar));
     callableBuilder.Add(value);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::ReplicateScalar(TRuntimeNode value, TRuntimeNode count) {
@@ -1657,48 +1634,49 @@ TRuntimeNode TProgramBuilder::ReplicateScalar(TRuntimeNode value, TRuntimeNode c
     TCallableBuilder callableBuilder(Env_, __func__, outputType);
     callableBuilder.Add(value);
     callableBuilder.Add(count);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::BlockCompress(TRuntimeNode stream, ui32 bitmapIndex) {
-    auto blockItemTypes = ValidateBlockStreamType(stream.GetStaticType());
+TRuntimeNode TProgramBuilder::BlockCompress(TRuntimeNode flow, ui32 bitmapIndex) {
+    auto blockItemTypes = ValidateBlockStreamType(flow.GetStaticType());
 
     MKQL_ENSURE(blockItemTypes.size() >= 2, "Expected at least two input columns");
     MKQL_ENSURE(bitmapIndex < blockItemTypes.size() - 1, "Invalid bitmap index");
     MKQL_ENSURE(AS_TYPE(TDataType, blockItemTypes[bitmapIndex])->GetSchemeType() == NUdf::TDataType<bool>::Id,
                 "Expected Bool as bitmap column type");
 
-    const auto wideComponents = GetWideComponents(stream.GetStaticType());
+    const auto wideComponents = GetWideComponents(flow.GetStaticType());
     MKQL_ENSURE(wideComponents.size() == blockItemTypes.size(), "Unexpected tuple size");
-    std::vector<TType*> streamItems;
+    std::vector<TType*> flowItems;
     for (size_t i = 0; i < wideComponents.size(); ++i) {
         if (i == bitmapIndex) {
             continue;
         }
-        streamItems.push_back(wideComponents[i]);
+        flowItems.push_back(wideComponents[i]);
     }
 
-    if constexpr (RuntimeVersion < 66) {
-        TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(NewMultiType(streamItems)));
-        callableBuilder.Add(ToFlow(stream));
-        callableBuilder.Add(NewDataLiteral<ui32>(bitmapIndex));
-        return FromFlow(TRuntimeNode(callableBuilder.Build(), false));
-    }
-    TCallableBuilder callableBuilder(Env_, __func__, NewStreamType(NewMultiType(streamItems)));
-    callableBuilder.Add(stream);
+    TCallableBuilder callableBuilder(Env_, __func__, NewStreamType(NewMultiType(flowItems)));
+    callableBuilder.Add(flow);
     callableBuilder.Add(NewDataLiteral<ui32>(bitmapIndex));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::BlockExpandChunked(TRuntimeNode comp) {
-    if (comp.GetStaticType()->IsStream()) {
-        ValidateBlockStreamType(comp.GetStaticType());
+TRuntimeNode TProgramBuilder::BlockExpandChunked(TRuntimeNode flow) {
+    const auto inputType = flow.GetStaticType();
+    if constexpr (RuntimeVersion < 74U) {
+        if (inputType->IsStream()) {
+            ValidateBlockStreamType(inputType);
+        } else {
+            ValidateBlockFlowType(inputType);
+        }
     } else {
-        ValidateBlockFlowType(comp.GetStaticType());
+        MKQL_ENSURE(inputType->IsStream(), "Expected stream as input type");
+        ValidateBlockStreamType(inputType);
     }
-    TCallableBuilder callableBuilder(Env_, __func__, comp.GetStaticType());
-    callableBuilder.Add(comp);
-    return TRuntimeNode(callableBuilder.Build(), false);
+
+    TCallableBuilder callableBuilder(Env_, __func__, inputType);
+    callableBuilder.Add(flow);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockCoalesce(TRuntimeNode first, TRuntimeNode second) {
@@ -1722,7 +1700,7 @@ TRuntimeNode TProgramBuilder::BlockCoalesce(TRuntimeNode first, TRuntimeNode sec
     TCallableBuilder callableBuilder(Env_, __func__, outputType);
     callableBuilder.Add(first);
     callableBuilder.Add(second);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockExists(TRuntimeNode data) {
@@ -1731,11 +1709,11 @@ TRuntimeNode TProgramBuilder::BlockExists(TRuntimeNode data) {
 
     TCallableBuilder callableBuilder(Env_, __func__, outputType);
     callableBuilder.Add(data);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMember(TRuntimeNode structObj, const std::string_view& memberName) {
-    auto blockType = AS_TYPE(TBlockType, structObj.GetStaticType());
+TRuntimeNode TProgramBuilder::BlockMember(TRuntimeNode structure, const std::string_view& memberName) {
+    auto blockType = AS_TYPE(TBlockType, structure.GetStaticType());
     bool isOptional;
     const auto type = AS_TYPE(TStructType, UnpackOptional(blockType->GetItemType(), isOptional));
 
@@ -1747,9 +1725,9 @@ TRuntimeNode TProgramBuilder::BlockMember(TRuntimeNode structObj, const std::str
 
     auto returnType = NewBlockType(memberType, blockType->GetShape());
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
-    callableBuilder.Add(structObj);
+    callableBuilder.Add(structure);
     callableBuilder.Add(NewDataLiteral<ui32>(memberIndex));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockNth(TRuntimeNode tuple, ui32 index) {
@@ -1767,7 +1745,7 @@ TRuntimeNode TProgramBuilder::BlockNth(TRuntimeNode tuple, ui32 index) {
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(tuple);
     callableBuilder.Add(NewDataLiteral<ui32>(index));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockAsStruct(const TArrayRef<std::pair<std::string_view, TRuntimeNode>>& args) {
@@ -1789,7 +1767,7 @@ TRuntimeNode TProgramBuilder::BlockAsStruct(const TArrayRef<std::pair<std::strin
         callableBuilder.Add(x.second);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockAsTuple(const TArrayRef<const TRuntimeNode>& args) {
@@ -1812,19 +1790,19 @@ TRuntimeNode TProgramBuilder::BlockAsTuple(const TArrayRef<const TRuntimeNode>& 
         callableBuilder.Add(x);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockToPg(TRuntimeNode input, TType* returnType) {
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(input);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockFromPg(TRuntimeNode input, TType* returnType) {
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(input);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockNot(TRuntimeNode data) {
@@ -1835,7 +1813,7 @@ TRuntimeNode TProgramBuilder::BlockNot(TRuntimeNode data) {
 
     TCallableBuilder callableBuilder(Env_, __func__, data.GetStaticType());
     callableBuilder.Add(data);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockAnd(TRuntimeNode first, TRuntimeNode second) {
@@ -1881,7 +1859,7 @@ TRuntimeNode TProgramBuilder::ListFromRange(TRuntimeNode start, TRuntimeNode end
     callableBuilder.Add(start);
     callableBuilder.Add(end);
     callableBuilder.Add(step);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Switch(TRuntimeNode stream,
@@ -1917,7 +1895,7 @@ TRuntimeNode TProgramBuilder::Switch(TRuntimeNode stream,
         }
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::HasItems(TRuntimeNode listOrDict) {
@@ -1938,7 +1916,7 @@ TRuntimeNode TProgramBuilder::Reverse(TRuntimeNode list) {
 
     TCallableBuilder callableBuilder(Env_, __func__, listType);
     callableBuilder.Add(list);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Skip(TRuntimeNode list, TRuntimeNode count) {
@@ -1970,36 +1948,27 @@ TRuntimeNode TProgramBuilder::WideSort(TRuntimeNode flow, const std::vector<std:
 }
 
 TRuntimeNode TProgramBuilder::BuildWideTopOrSort(const std::string_view& callableName,
-                                                 TRuntimeNode stream,
+                                                 TRuntimeNode flow,
                                                  TMaybe<TRuntimeNode> count,
                                                  const std::vector<std::pair<ui32, TRuntimeNode>>& keys,
                                                  bool isBlocks) {
     if (isBlocks) {
-        return BuildWideTopOrSortImpl(callableName, stream, count, keys, TType::EKind::Stream);
+        return BuildWideTopOrSortImpl(callableName, flow, count, keys, TType::EKind::Stream);
     } else {
-        return BuildWideTopOrSortImpl(callableName, stream, count, keys, TType::EKind::Flow);
+        return BuildWideTopOrSortImpl(callableName, flow, count, keys, TType::EKind::Flow);
     }
 }
 
 TRuntimeNode TProgramBuilder::BuildWideTopOrSortImpl(const std::string_view& callableName,
-                                                     TRuntimeNode stream,
+                                                     TRuntimeNode flow,
                                                      TMaybe<TRuntimeNode> count,
                                                      const std::vector<std::pair<ui32, TRuntimeNode>>& keys,
                                                      TType::EKind streamKind) {
-    MKQL_ENSURE(stream.GetStaticType()->GetKind() == streamKind, "Mismatched input type");
-    const auto width = GetWideComponentsCount(stream.GetStaticType());
+    MKQL_ENSURE(flow.GetStaticType()->GetKind() == streamKind, "Mismatched input type");
+    const auto width = GetWideComponentsCount(flow.GetStaticType());
     MKQL_ENSURE(!keys.empty() && keys.size() <= width, "Unexpected keys count: " << keys.size());
-    bool shouldRewriteToFlow = RuntimeVersion < 64U && streamKind == TType::EKind::Stream;
-    if (shouldRewriteToFlow) {
-        // Preserve the old behaviour for ABI compatibility.
-        // Emit (FromFlow (Wide{Top,TopSort,Sort}Blocks (ToFlow (<stream>)))) to
-        // process the flow in favor to the given stream following
-        // the older MKQL ABI.
-        // FIXME: Drop the branch below, when the time comes.
-        stream = ToFlow(stream);
-    }
-    TCallableBuilder callableBuilder(Env_, callableName, stream.GetStaticType());
-    callableBuilder.Add(stream);
+    TCallableBuilder callableBuilder(Env_, callableName, flow.GetStaticType());
+    callableBuilder.Add(flow);
     if (count) {
         callableBuilder.Add(*count);
     }
@@ -2010,52 +1979,43 @@ TRuntimeNode TProgramBuilder::BuildWideTopOrSortImpl(const std::string_view& cal
         callableBuilder.Add(key.second);
     });
 
-    auto resultNode = TRuntimeNode(callableBuilder.Build(), false);
-    if (shouldRewriteToFlow) {
-        // Preserve the old behaviour for ABI compatibility.
-        // Emit (FromFlow (Wide{Top,TopSort,Sort}Blocks (ToFlow (<stream>)))) to
-        // process the flow in favor to the given stream following
-        // the older MKQL ABI.
-        // FIXME: Drop the branch below, when the time comes.
-        return FromFlow(resultNode);
-    }
-    return resultNode;
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::Top(TRuntimeNode flow, TRuntimeNode count, TRuntimeNode ascending, const TUnaryLambda& keyExtractor) {
-    if (const auto flowType = flow.GetStaticType(); flowType->IsFlow() || flowType->IsStream()) {
+TRuntimeNode TProgramBuilder::Top(TRuntimeNode list, TRuntimeNode count, TRuntimeNode ascending, const TUnaryLambda& keyExtractor) {
+    if (const auto listType = list.GetStaticType(); listType->IsFlow() || listType->IsStream()) {
         const TUnaryLambda getKey = [&](TRuntimeNode item) { return Nth(item, 0U); };
         const TUnaryLambda getItem = [&](TRuntimeNode item) { return Nth(item, 1U); };
         const TUnaryLambda cacheKeyExtractor = [&](TRuntimeNode item) {
             return NewTuple({keyExtractor(item), item});
         };
 
-        return FlatMap(Condense1(Map(flow, cacheKeyExtractor),
+        return FlatMap(Condense1(Map(list, cacheKeyExtractor),
                                  [&](TRuntimeNode item) { return AsList(item); },
                                  [this](TRuntimeNode, TRuntimeNode) { return NewDataLiteral<bool>(false); },
                                  [&](TRuntimeNode item, TRuntimeNode state) { return KeepTop(count, state, item, ascending, getKey); }),
-                       [&](TRuntimeNode list) { return Map(Top(list, count, ascending, getKey), getItem); });
+                       [&](TRuntimeNode lst) { return Map(Top(lst, count, ascending, getKey), getItem); });
     }
 
-    return BuildListNth(__func__, flow, count, ascending, keyExtractor);
+    return BuildListNth(__func__, list, count, ascending, keyExtractor);
 }
 
-TRuntimeNode TProgramBuilder::TopSort(TRuntimeNode flow, TRuntimeNode count, TRuntimeNode ascending, const TUnaryLambda& keyExtractor) {
-    if (const auto flowType = flow.GetStaticType(); flowType->IsFlow() || flowType->IsStream()) {
+TRuntimeNode TProgramBuilder::TopSort(TRuntimeNode list, TRuntimeNode count, TRuntimeNode ascending, const TUnaryLambda& keyExtractor) {
+    if (const auto listType = list.GetStaticType(); listType->IsFlow() || listType->IsStream()) {
         const TUnaryLambda getKey = [&](TRuntimeNode item) { return Nth(item, 0U); };
         const TUnaryLambda getItem = [&](TRuntimeNode item) { return Nth(item, 1U); };
         const TUnaryLambda cacheKeyExtractor = [&](TRuntimeNode item) {
             return NewTuple({keyExtractor(item), item});
         };
 
-        return FlatMap(Condense1(Map(flow, cacheKeyExtractor),
+        return FlatMap(Condense1(Map(list, cacheKeyExtractor),
                                  [&](TRuntimeNode item) { return AsList(item); },
                                  [this](TRuntimeNode, TRuntimeNode) { return NewDataLiteral<bool>(false); },
                                  [&](TRuntimeNode item, TRuntimeNode state) { return KeepTop(count, state, item, ascending, getKey); }),
-                       [&](TRuntimeNode list) { return Map(TopSort(list, count, ascending, getKey), getItem); });
+                       [&](TRuntimeNode lst) { return Map(TopSort(lst, count, ascending, getKey), getItem); });
     }
 
-    return BuildListNth(__func__, flow, count, ascending, keyExtractor);
+    return BuildListNth(__func__, list, count, ascending, keyExtractor);
 }
 
 TRuntimeNode TProgramBuilder::KeepTop(TRuntimeNode count,
@@ -2100,7 +2060,7 @@ TRuntimeNode TProgramBuilder::KeepTop(TRuntimeNode count,
     callableBuilder.Add(key);
     callableBuilder.Add(ascending);
     callableBuilder.Add(hotkey);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Contains(TRuntimeNode dict, TRuntimeNode key) {
@@ -2115,7 +2075,7 @@ TRuntimeNode TProgramBuilder::Contains(TRuntimeNode dict, TRuntimeNode key) {
     TCallableBuilder callableBuilder(Env_, __func__, NewDataType(NUdf::TDataType<bool>::Id));
     callableBuilder.Add(dict);
     callableBuilder.Add(key);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Lookup(TRuntimeNode dict, TRuntimeNode key) {
@@ -2127,7 +2087,7 @@ TRuntimeNode TProgramBuilder::Lookup(TRuntimeNode dict, TRuntimeNode key) {
     TCallableBuilder callableBuilder(Env_, __func__, NewOptionalType(dictType->GetPayloadType()));
     callableBuilder.Add(dict);
     callableBuilder.Add(key);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::DictItems(TRuntimeNode dict) {
@@ -2135,31 +2095,31 @@ TRuntimeNode TProgramBuilder::DictItems(TRuntimeNode dict) {
     const auto itemType = NewTupleType({dictTypeChecked->GetKeyType(), dictTypeChecked->GetPayloadType()});
     TCallableBuilder callableBuilder(Env_, __func__, NewListType(itemType));
     callableBuilder.Add(dict);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::DictKeys(TRuntimeNode dict) {
     const auto dictTypeChecked = AS_TYPE(TDictType, dict.GetStaticType());
     TCallableBuilder callableBuilder(Env_, __func__, NewListType(dictTypeChecked->GetKeyType()));
     callableBuilder.Add(dict);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::DictPayloads(TRuntimeNode dict) {
     const auto dictTypeChecked = AS_TYPE(TDictType, dict.GetStaticType());
     TCallableBuilder callableBuilder(Env_, __func__, NewListType(dictTypeChecked->GetPayloadType()));
     callableBuilder.Add(dict);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::ToIndexDict(TRuntimeNode list) {
     const auto itemType = AS_TYPE(TListType, list.GetStaticType())->GetItemType();
     ThrowIfListOfVoid(itemType);
     const auto keyType = NewDataType(NUdf::TDataType<ui64>::Id);
-    const auto dictType = NewDictType(keyType, itemType, false);
+    const auto dictType = NewDictType(keyType, itemType, /*multi=*/false);
     TCallableBuilder callableBuilder(Env_, __func__, dictType);
     callableBuilder.Add(list);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::JoinDict(TRuntimeNode dict1, bool isMulti1, TRuntimeNode dict2, bool isMulti2, EJoinKind joinKind) {
@@ -2212,7 +2172,7 @@ TRuntimeNode TProgramBuilder::JoinDict(TRuntimeNode dict1, bool isMulti1, TRunti
     callableBuilder.Add(NewDataLiteral(isMulti1));
     callableBuilder.Add(NewDataLiteral(isMulti2));
     callableBuilder.Add(NewDataLiteral(ui32(joinKind)));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::GraceJoinCommon(const TStringBuf& funcName, TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
@@ -2224,7 +2184,10 @@ TRuntimeNode TProgramBuilder::GraceJoinCommon(const TStringBuf& funcName, TRunti
         MKQL_ENSURE(!rightKeyColumns.empty(), "At least one key column must be specified");
     }
 
-    TRuntimeNode::TList leftKeyColumnsNodes, rightKeyColumnsNodes, leftRenamesNodes, rightRenamesNodes;
+    TRuntimeNode::TList leftKeyColumnsNodes;
+    TRuntimeNode::TList rightKeyColumnsNodes;
+    TRuntimeNode::TList leftRenamesNodes;
+    TRuntimeNode::TList rightRenamesNodes;
 
     leftKeyColumnsNodes.reserve(leftKeyColumns.size());
     std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(), std::back_inserter(leftKeyColumnsNodes),
@@ -2254,7 +2217,7 @@ TRuntimeNode TProgramBuilder::GraceJoinCommon(const TStringBuf& funcName, TRunti
     callableBuilder.Add(NewTuple(rightRenamesNodes));
     callableBuilder.Add(NewDataLiteral((ui32)anyJoinSettings));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::GraceJoin(TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
@@ -2307,7 +2270,7 @@ TRuntimeNode TProgramBuilder::SqueezeToList(TRuntimeNode flow, TRuntimeNode limi
     TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(NewListType(itemType)));
     callableBuilder.Add(flow);
     callableBuilder.Add(limit);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Append(TRuntimeNode list, TRuntimeNode item) {
@@ -2321,7 +2284,7 @@ TRuntimeNode TProgramBuilder::Append(TRuntimeNode list, TRuntimeNode item) {
     TCallableBuilder callableBuilder(Env_, __func__, listType);
     callableBuilder.Add(list);
     callableBuilder.Add(item);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Prepend(TRuntimeNode item, TRuntimeNode list) {
@@ -2335,11 +2298,11 @@ TRuntimeNode TProgramBuilder::Prepend(TRuntimeNode item, TRuntimeNode list) {
     TCallableBuilder callableBuilder(Env_, __func__, listType);
     callableBuilder.Add(item);
     callableBuilder.Add(list);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BuildExtend(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists) {
-    MKQL_ENSURE(lists.size() > 0, "Expected at least 1 list or flow");
+    MKQL_ENSURE(!lists.empty(), "Expected at least 1 list or flow");
     if (lists.size() == 1) {
         return lists.front();
     }
@@ -2357,7 +2320,7 @@ TRuntimeNode TProgramBuilder::BuildExtend(const std::string_view& callableName, 
         callableBuilder.Add(list);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Extend(const TArrayRef<const TRuntimeNode>& lists) {
@@ -2370,117 +2333,117 @@ TRuntimeNode TProgramBuilder::OrderedExtend(const TArrayRef<const TRuntimeNode>&
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::String>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<const char*>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<const char*>::Id, Env_), /*isImmediate=*/true);
 }
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TUtf8>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TUtf8>::Id, Env_), /*isImmediate=*/true);
 }
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Yson>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TYson>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TYson>::Id, Env_), /*isImmediate=*/true);
 }
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Json>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TJson>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TJson>::Id, Env_), /*isImmediate=*/true);
 }
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::JsonDocument>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TJsonDocument>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TJsonDocument>::Id, Env_), /*isImmediate=*/true);
 }
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Uuid>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TUuid>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TUuid>::Id, Env_), /*isImmediate=*/true);
 }
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Date>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TDate>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TDate>::Id, Env_), /*isImmediate=*/true);
 }
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Datetime>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TDatetime>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TDatetime>::Id, Env_), /*isImmediate=*/true);
 }
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Timestamp>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TTimestamp>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TTimestamp>::Id, Env_), /*isImmediate=*/true);
 }
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Interval>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TInterval>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TInterval>::Id, Env_), /*isImmediate=*/true);
 }
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::DyNumber>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TDyNumber>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TDyNumber>::Id, Env_), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewDecimalLiteral(NYql::NDecimal::TInt128 data, ui8 precision, ui8 scale) const {
-    return TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod(data), TDataDecimalType::Create(precision, scale, Env_), Env_), true);
+    return TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod(data), TDataDecimalType::Create(precision, scale, Env_), Env_), /*isImmediate=*/true);
 }
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Date32>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TDate32>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TDate32>::Id, Env_), /*isImmediate=*/true);
 }
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Datetime64>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TDatetime64>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TDatetime64>::Id, Env_), /*isImmediate=*/true);
 }
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Timestamp64>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TTimestamp64>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TTimestamp64>::Id, Env_), /*isImmediate=*/true);
 }
 
 template <>
 TRuntimeNode TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Interval64>(const NUdf::TStringRef& data) const {
-    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TInterval64>::Id, Env_), true);
+    return TRuntimeNode(BuildDataLiteral(data, NUdf::TDataType<NUdf::TInterval64>::Id, Env_), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewOptional(TRuntimeNode data) {
     auto type = TOptionalType::Create(data.GetStaticType(), Env_);
-    return TRuntimeNode(TOptionalLiteral::Create(data, type, Env_), true);
+    return TRuntimeNode(TOptionalLiteral::Create(data, type, Env_), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewOptional(TType* optionalType, TRuntimeNode data) {
     auto type = AS_TYPE(TOptionalType, optionalType);
-    return TRuntimeNode(TOptionalLiteral::Create(data, type, Env_), true);
+    return TRuntimeNode(TOptionalLiteral::Create(data, type, Env_), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewVoid() {
-    return TRuntimeNode(Env_.GetVoidLazy(), true);
+    return TRuntimeNode(Env_.GetVoidLazy(), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewEmptyListOfVoid() {
-    return TRuntimeNode(Env_.GetListOfVoidLazy(), true);
+    return TRuntimeNode(Env_.GetListOfVoidLazy(), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewEmptyOptional(TType* optionalOrPgType) {
     MKQL_ENSURE(optionalOrPgType->IsOptional() || optionalOrPgType->IsPg(), "Expected optional or pg type");
 
     if (optionalOrPgType->IsOptional()) {
-        return TRuntimeNode(TOptionalLiteral::Create(static_cast<TOptionalType*>(optionalOrPgType), Env_), true);
+        return TRuntimeNode(TOptionalLiteral::Create(static_cast<TOptionalType*>(optionalOrPgType), Env_), /*isImmediate=*/true);
     }
 
     return PgCast(NewNull(), optionalOrPgType);
 }
 
 TRuntimeNode TProgramBuilder::NewEmptyOptionalDataLiteral(NUdf::TDataTypeId schemeType) {
-    return TRuntimeNode(BuildEmptyOptionalDataLiteral(schemeType, Env_), true);
+    return TRuntimeNode(BuildEmptyOptionalDataLiteral(schemeType, Env_), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewEmptyStruct() {
-    return TRuntimeNode(Env_.GetEmptyStructLazy(), true);
+    return TRuntimeNode(Env_.GetEmptyStructLazy(), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewStruct(const TArrayRef<const std::pair<std::string_view, TRuntimeNode>>& members) {
@@ -2493,7 +2456,7 @@ TRuntimeNode TProgramBuilder::NewStruct(const TArrayRef<const std::pair<std::str
         builder.Add(x.first, x.second);
     }
 
-    return TRuntimeNode(builder.Build(), true);
+    return TRuntimeNode(builder.Build(), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewStruct(TType* structType, const TArrayRef<const std::pair<std::string_view, TRuntimeNode>>& members) {
@@ -2511,16 +2474,16 @@ TRuntimeNode TProgramBuilder::NewStruct(TType* structType, const TArrayRef<const
         values[index] = members[i].second;
     }
 
-    return TRuntimeNode(TStructLiteral::Create(values.size(), values.data(), detailedStructType, Env_), true);
+    return TRuntimeNode(TStructLiteral::Create(values.size(), values.data(), detailedStructType, Env_), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewEmptyList() {
-    return TRuntimeNode(Env_.GetEmptyListLazy(), true);
+    return TRuntimeNode(Env_.GetEmptyListLazy(), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewEmptyList(TType* itemType) {
     TListLiteralBuilder builder(Env_, itemType);
-    return TRuntimeNode(builder.Build(), true);
+    return TRuntimeNode(builder.Build(), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewList(TType* itemType, const TArrayRef<const TRuntimeNode>& items) {
@@ -2529,27 +2492,27 @@ TRuntimeNode TProgramBuilder::NewList(TType* itemType, const TArrayRef<const TRu
         builder.Add(item);
     }
 
-    return TRuntimeNode(builder.Build(), true);
+    return TRuntimeNode(builder.Build(), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewEmptyDict() {
-    return TRuntimeNode(Env_.GetEmptyDictLazy(), true);
+    return TRuntimeNode(Env_.GetEmptyDictLazy(), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewDict(TType* dictType, const TArrayRef<const std::pair<TRuntimeNode, TRuntimeNode>>& items) {
     MKQL_ENSURE(dictType->IsDict(), "Expected dict type");
 
-    return TRuntimeNode(TDictLiteral::Create(items.size(), items.data(), static_cast<TDictType*>(dictType), Env_), true);
+    return TRuntimeNode(TDictLiteral::Create(items.size(), items.data(), static_cast<TDictType*>(dictType), Env_), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewEmptyTuple() {
-    return TRuntimeNode(Env_.GetEmptyTupleLazy(), true);
+    return TRuntimeNode(Env_.GetEmptyTupleLazy(), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewTuple(TType* tupleType, const TArrayRef<const TRuntimeNode>& elements) {
     MKQL_ENSURE(tupleType->IsTuple(), "Expected tuple type");
 
-    return TRuntimeNode(TTupleLiteral::Create(elements.size(), elements.data(), static_cast<TTupleType*>(tupleType), Env_), true);
+    return TRuntimeNode(TTupleLiteral::Create(elements.size(), elements.data(), static_cast<TTupleType*>(tupleType), Env_), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewTuple(const TArrayRef<const TRuntimeNode>& elements) {
@@ -2565,14 +2528,14 @@ TRuntimeNode TProgramBuilder::NewTuple(const TArrayRef<const TRuntimeNode>& elem
 TRuntimeNode TProgramBuilder::NewVariant(TRuntimeNode item, ui32 index, TType* variantType) {
     const auto type = AS_TYPE(TVariantType, variantType);
     MKQL_ENSURE(type->GetUnderlyingType()->IsTuple(), "Expected tuple as underlying type");
-    return TRuntimeNode(TVariantLiteral::Create(item, index, type, Env_), true);
+    return TRuntimeNode(TVariantLiteral::Create(item, index, type, Env_), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::NewVariant(TRuntimeNode item, const std::string_view& member, TType* variantType) {
     const auto type = AS_TYPE(TVariantType, variantType);
     MKQL_ENSURE(type->GetUnderlyingType()->IsStruct(), "Expected struct as underlying type");
     ui32 index = AS_TYPE(TStructType, type->GetUnderlyingType())->GetMemberIndex(member);
-    return TRuntimeNode(TVariantLiteral::Create(item, index, type, Env_), true);
+    return TRuntimeNode(TVariantLiteral::Create(item, index, type, Env_), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::ToDynamicLinear(TRuntimeNode item, const std::string_view& file, ui32 row, ui32 column) {
@@ -2583,7 +2546,7 @@ TRuntimeNode TProgramBuilder::ToDynamicLinear(TRuntimeNode item, const std::stri
     auto linType = AS_TYPE(TLinearType, item.GetStaticType());
     MKQL_ENSURE(!linType->IsDynamic(), "Expected static linear type");
 
-    auto retType = TLinearType::Create(linType->GetItemType(), true, Env_);
+    auto retType = TLinearType::Create(linType->GetItemType(), /*isDynamic=*/true, Env_);
 
     TCallableBuilder callableBuilder(Env_, __func__, retType);
     callableBuilder.Add(item);
@@ -2593,7 +2556,7 @@ TRuntimeNode TProgramBuilder::ToDynamicLinear(TRuntimeNode item, const std::stri
         callableBuilder.Add(NewDataLiteral(column));
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::FromDynamicLinear(TRuntimeNode item, const std::string_view& file, ui32 row, ui32 column) {
@@ -2604,14 +2567,14 @@ TRuntimeNode TProgramBuilder::FromDynamicLinear(TRuntimeNode item, const std::st
     auto linType = AS_TYPE(TLinearType, item.GetStaticType());
     MKQL_ENSURE(linType->IsDynamic(), "Expected dynamic linear type");
 
-    auto retType = TLinearType::Create(linType->GetItemType(), false, Env_);
+    auto retType = TLinearType::Create(linType->GetItemType(), /*isDynamic=*/false, Env_);
 
     TCallableBuilder callableBuilder(Env_, __func__, retType);
     callableBuilder.Add(item);
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
     callableBuilder.Add(NewDataLiteral(row));
     callableBuilder.Add(NewDataLiteral(column));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 void TProgramBuilder::ValidateMutDictType(TType* type) const {
@@ -2634,7 +2597,7 @@ TRuntimeNode TProgramBuilder::ToMutDict(TRuntimeNode dict, TType* mdictType, con
         callableBuilder.Add(node);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MutDictCreate(TType* dictType, TType* mdictType, const TArrayRef<const TRuntimeNode>& dependentNodes) {
@@ -2645,12 +2608,12 @@ TRuntimeNode TProgramBuilder::MutDictCreate(TType* dictType, TType* mdictType, c
     MKQL_ENSURE(dictType->IsDict(), "Expected dict");
     ValidateMutDictType(mdictType);
     TCallableBuilder callableBuilder(Env_, __func__, mdictType);
-    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(TRuntimeNode(dictType, /*isImmediate=*/true));
     for (auto node : dependentNodes) {
         callableBuilder.Add(node);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MutDictInsert(TType* dictType, TRuntimeNode mdict, TRuntimeNode key, TRuntimeNode value) {
@@ -2664,11 +2627,11 @@ TRuntimeNode TProgramBuilder::MutDictInsert(TType* dictType, TRuntimeNode mdict,
     MKQL_ENSURE(AS_TYPE(TDictType, dictType)->GetPayloadType()->IsSameType(*value.GetStaticType()), "Mismatch value type");
 
     TCallableBuilder callableBuilder(Env_, __func__, mdict.GetStaticType());
-    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(TRuntimeNode(dictType, /*isImmediate=*/true));
     callableBuilder.Add(mdict);
     callableBuilder.Add(key);
     callableBuilder.Add(value);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MutDictUpsert(TType* dictType, TRuntimeNode mdict, TRuntimeNode key, TRuntimeNode value) {
@@ -2682,11 +2645,11 @@ TRuntimeNode TProgramBuilder::MutDictUpsert(TType* dictType, TRuntimeNode mdict,
     MKQL_ENSURE(AS_TYPE(TDictType, dictType)->GetPayloadType()->IsSameType(*value.GetStaticType()), "Mismatch value type");
 
     TCallableBuilder callableBuilder(Env_, __func__, mdict.GetStaticType());
-    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(TRuntimeNode(dictType, /*isImmediate=*/true));
     callableBuilder.Add(mdict);
     callableBuilder.Add(key);
     callableBuilder.Add(value);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MutDictUpdate(TType* dictType, TRuntimeNode mdict, TRuntimeNode key, TRuntimeNode value) {
@@ -2700,11 +2663,11 @@ TRuntimeNode TProgramBuilder::MutDictUpdate(TType* dictType, TRuntimeNode mdict,
     MKQL_ENSURE(AS_TYPE(TDictType, dictType)->GetPayloadType()->IsSameType(*value.GetStaticType()), "Mismatch value type");
 
     TCallableBuilder callableBuilder(Env_, __func__, mdict.GetStaticType());
-    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(TRuntimeNode(dictType, /*isImmediate=*/true));
     callableBuilder.Add(mdict);
     callableBuilder.Add(key);
     callableBuilder.Add(value);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MutDictRemove(TType* dictType, TRuntimeNode mdict, TRuntimeNode key) {
@@ -2717,10 +2680,10 @@ TRuntimeNode TProgramBuilder::MutDictRemove(TType* dictType, TRuntimeNode mdict,
     MKQL_ENSURE(AS_TYPE(TDictType, dictType)->GetKeyType()->IsSameType(*key.GetStaticType()), "Mismatch key type");
 
     TCallableBuilder callableBuilder(Env_, __func__, mdict.GetStaticType());
-    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(TRuntimeNode(dictType, /*isImmediate=*/true));
     callableBuilder.Add(mdict);
     callableBuilder.Add(key);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MutDictPop(TType* dictType, TRuntimeNode mdict, TRuntimeNode key) {
@@ -2735,10 +2698,10 @@ TRuntimeNode TProgramBuilder::MutDictPop(TType* dictType, TRuntimeNode mdict, TR
     auto optValueType = NewOptionalType(AS_TYPE(TDictType, dictType)->GetPayloadType());
     auto retType = NewTupleType({mdict.GetStaticType(), optValueType});
     TCallableBuilder callableBuilder(Env_, __func__, retType);
-    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(TRuntimeNode(dictType, /*isImmediate=*/true));
     callableBuilder.Add(mdict);
     callableBuilder.Add(key);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MutDictContains(TType* dictType, TRuntimeNode mdict, TRuntimeNode key) {
@@ -2753,10 +2716,10 @@ TRuntimeNode TProgramBuilder::MutDictContains(TType* dictType, TRuntimeNode mdic
     auto boolType = NewDataType(NUdf::EDataSlot::Bool);
     auto retType = NewTupleType({mdict.GetStaticType(), boolType});
     TCallableBuilder callableBuilder(Env_, __func__, retType);
-    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(TRuntimeNode(dictType, /*isImmediate=*/true));
     callableBuilder.Add(mdict);
     callableBuilder.Add(key);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MutDictLookup(TType* dictType, TRuntimeNode mdict, TRuntimeNode key) {
@@ -2771,10 +2734,10 @@ TRuntimeNode TProgramBuilder::MutDictLookup(TType* dictType, TRuntimeNode mdict,
     auto optValueType = NewOptionalType(AS_TYPE(TDictType, dictType)->GetPayloadType());
     auto retType = NewTupleType({mdict.GetStaticType(), optValueType});
     TCallableBuilder callableBuilder(Env_, __func__, retType);
-    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(TRuntimeNode(dictType, /*isImmediate=*/true));
     callableBuilder.Add(mdict);
     callableBuilder.Add(key);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MutDictLength(TType* dictType, TRuntimeNode mdict) {
@@ -2788,9 +2751,9 @@ TRuntimeNode TProgramBuilder::MutDictLength(TType* dictType, TRuntimeNode mdict)
     auto ui64Type = NewDataType(NUdf::EDataSlot::Uint64);
     auto retType = NewTupleType({mdict.GetStaticType(), ui64Type});
     TCallableBuilder callableBuilder(Env_, __func__, retType);
-    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(TRuntimeNode(dictType, /*isImmediate=*/true));
     callableBuilder.Add(mdict);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MutDictHasItems(TType* dictType, TRuntimeNode mdict) {
@@ -2804,9 +2767,9 @@ TRuntimeNode TProgramBuilder::MutDictHasItems(TType* dictType, TRuntimeNode mdic
     auto boolType = NewDataType(NUdf::EDataSlot::Bool);
     auto retType = NewTupleType({mdict.GetStaticType(), boolType});
     TCallableBuilder callableBuilder(Env_, __func__, retType);
-    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(TRuntimeNode(dictType, /*isImmediate=*/true));
     callableBuilder.Add(mdict);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MutDictItems(TType* dictType, TRuntimeNode mdict) {
@@ -2823,9 +2786,9 @@ TRuntimeNode TProgramBuilder::MutDictItems(TType* dictType, TRuntimeNode mdict) 
     auto listType = NewListType(listItemType);
     auto retType = NewTupleType({mdict.GetStaticType(), listType});
     TCallableBuilder callableBuilder(Env_, __func__, retType);
-    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(TRuntimeNode(dictType, /*isImmediate=*/true));
     callableBuilder.Add(mdict);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MutDictKeys(TType* dictType, TRuntimeNode mdict) {
@@ -2840,9 +2803,9 @@ TRuntimeNode TProgramBuilder::MutDictKeys(TType* dictType, TRuntimeNode mdict) {
     auto listType = NewListType(listItemType);
     auto retType = NewTupleType({mdict.GetStaticType(), listType});
     TCallableBuilder callableBuilder(Env_, __func__, retType);
-    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(TRuntimeNode(dictType, /*isImmediate=*/true));
     callableBuilder.Add(mdict);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MutDictPayloads(TType* dictType, TRuntimeNode mdict) {
@@ -2857,9 +2820,9 @@ TRuntimeNode TProgramBuilder::MutDictPayloads(TType* dictType, TRuntimeNode mdic
     auto listType = NewListType(listItemType);
     auto retType = NewTupleType({mdict.GetStaticType(), listType});
     TCallableBuilder callableBuilder(Env_, __func__, retType);
-    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(TRuntimeNode(dictType, /*isImmediate=*/true));
     callableBuilder.Add(mdict);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::FromMutDict(TType* dictType, TRuntimeNode mdict) {
@@ -2872,7 +2835,7 @@ TRuntimeNode TProgramBuilder::FromMutDict(TType* dictType, TRuntimeNode mdict) {
 
     TCallableBuilder callableBuilder(Env_, __func__, dictType);
     callableBuilder.Add(mdict);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Coalesce(TRuntimeNode data, TRuntimeNode defaultData) {
@@ -2894,7 +2857,7 @@ TRuntimeNode TProgramBuilder::Coalesce(TRuntimeNode data, TRuntimeNode defaultDa
     TCallableBuilder callableBuilder(Env_, __func__, defaultData.GetStaticType());
     callableBuilder.Add(data);
     callableBuilder.Add(defaultData);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Unwrap(TRuntimeNode optional, TRuntimeNode message, const std::string_view& file, ui32 row, ui32 column) {
@@ -2915,7 +2878,7 @@ TRuntimeNode TProgramBuilder::Unwrap(TRuntimeNode optional, TRuntimeNode message
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
     callableBuilder.Add(NewDataLiteral(row));
     callableBuilder.Add(NewDataLiteral(column));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Increment(TRuntimeNode data) {
@@ -3013,7 +2976,8 @@ TRuntimeNode TProgramBuilder::Div(TRuntimeNode data1, TRuntimeNode data2) {
 }
 
 TRuntimeNode TProgramBuilder::DecimalDiv(TRuntimeNode data1, TRuntimeNode data2) {
-    bool isOptionalLeft, isOptionalRight;
+    bool isOptionalLeft;
+    bool isOptionalRight;
     const auto leftType = static_cast<TDataDecimalType*>(UnpackOptionalData(data1, isOptionalLeft));
     const auto rightType = UnpackOptionalData(data2, isOptionalRight);
 
@@ -3028,11 +2992,12 @@ TRuntimeNode TProgramBuilder::DecimalDiv(TRuntimeNode data1, TRuntimeNode data2)
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(data1);
     callableBuilder.Add(data2);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::DecimalMod(TRuntimeNode data1, TRuntimeNode data2) {
-    bool isOptionalLeft, isOptionalRight;
+    bool isOptionalLeft;
+    bool isOptionalRight;
     const auto leftType = static_cast<TDataDecimalType*>(UnpackOptionalData(data1, isOptionalLeft));
     const auto rightType = UnpackOptionalData(data2, isOptionalRight);
 
@@ -3047,11 +3012,12 @@ TRuntimeNode TProgramBuilder::DecimalMod(TRuntimeNode data1, TRuntimeNode data2)
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(data1);
     callableBuilder.Add(data2);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::DecimalMul(TRuntimeNode data1, TRuntimeNode data2) {
-    bool isOptionalLeft, isOptionalRight;
+    bool isOptionalLeft;
+    bool isOptionalRight;
     const auto leftType = static_cast<TDataDecimalType*>(UnpackOptionalData(data1, isOptionalLeft));
     const auto rightType = UnpackOptionalData(data2, isOptionalRight);
 
@@ -3066,7 +3032,7 @@ TRuntimeNode TProgramBuilder::DecimalMul(TRuntimeNode data1, TRuntimeNode data2)
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(data1);
     callableBuilder.Add(data2);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::AllOf(TRuntimeNode list, const TUnaryLambda& predicate) {
@@ -3151,30 +3117,23 @@ TRuntimeNode TProgramBuilder::BuildMinMax(const std::string_view& callableName, 
     return BuildMinMax(callableName, args.data(), args.size());
 }
 
-TRuntimeNode TProgramBuilder::BuildWideSkipTakeBlocks(const std::string_view& callableName, TRuntimeNode stream, TRuntimeNode count) {
-    ValidateBlockStreamType(stream.GetStaticType());
-    if constexpr (RuntimeVersion < 65U) {
-        stream = ToFlow(stream);
-    }
-
+TRuntimeNode TProgramBuilder::BuildWideSkipTakeBlocks(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode count) {
+    ValidateBlockStreamType(flow.GetStaticType());
     MKQL_ENSURE(count.GetStaticType()->IsData(), "Expected data");
     MKQL_ENSURE(static_cast<const TDataType&>(*count.GetStaticType()).GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64");
 
-    TCallableBuilder callableBuilder(Env_, callableName, stream.GetStaticType());
-    callableBuilder.Add(stream);
+    TCallableBuilder callableBuilder(Env_, callableName, flow.GetStaticType());
+    callableBuilder.Add(flow);
     callableBuilder.Add(count);
-    auto result = TRuntimeNode(callableBuilder.Build(), false);
-    if constexpr (RuntimeVersion < 65U) {
-        result = FromFlow(result);
-    }
-    return result;
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockLogical(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second) {
     auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
     auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
 
-    bool isOpt1, isOpt2;
+    bool isOpt1;
+    bool isOpt2;
     MKQL_ENSURE(UnpackOptionalData(firstType->GetItemType(), isOpt1)->GetSchemeType() == NUdf::TDataType<bool>::Id, "Requires boolean args.");
     MKQL_ENSURE(UnpackOptionalData(secondType->GetItemType(), isOpt2)->GetSchemeType() == NUdf::TDataType<bool>::Id, "Requires boolean args.");
 
@@ -3184,14 +3143,15 @@ TRuntimeNode TProgramBuilder::BuildBlockLogical(const std::string_view& callable
     TCallableBuilder callableBuilder(Env_, callableName, outputType);
     callableBuilder.Add(first);
     callableBuilder.Add(second);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockDecimalBinary(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second) {
     auto firstType = AS_TYPE(TBlockType, first.GetStaticType());
     auto secondType = AS_TYPE(TBlockType, second.GetStaticType());
 
-    bool isOpt1, isOpt2;
+    bool isOpt1;
+    bool isOpt2;
     auto* leftDataType = UnpackOptionalData(firstType->GetItemType(), isOpt1);
     UnpackOptionalData(secondType->GetItemType(), isOpt2);
 
@@ -3210,7 +3170,7 @@ TRuntimeNode TProgramBuilder::BuildBlockDecimalBinary(const std::string_view& ca
     TCallableBuilder callableBuilder(Env_, callableName, outputType);
     callableBuilder.Add(first);
     callableBuilder.Add(second);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Min(const TArrayRef<const TRuntimeNode>& args) {
@@ -3264,10 +3224,11 @@ TRuntimeNode TProgramBuilder::AggrCompare(const std::string_view& callableName, 
     return InvokeBinary(callableName, NewDataType(NUdf::TDataType<bool>::Id), data1, data2);
 }
 
-TRuntimeNode TProgramBuilder::DataCompare(const std::string_view& callableName, TRuntimeNode left, TRuntimeNode right) {
-    bool isOptionalLeft, isOptionalRight;
-    const auto leftType = UnpackOptionalData(left, isOptionalLeft);
-    const auto rightType = UnpackOptionalData(right, isOptionalRight);
+TRuntimeNode TProgramBuilder::DataCompare(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2) {
+    bool isOptionalLeft;
+    bool isOptionalRight;
+    const auto leftType = UnpackOptionalData(data1, isOptionalLeft);
+    const auto rightType = UnpackOptionalData(data2, isOptionalRight);
 
     const auto lId = leftType->GetSchemeType();
     const auto rId = rightType->GetSchemeType();
@@ -3276,31 +3237,31 @@ TRuntimeNode TProgramBuilder::DataCompare(const std::string_view& callableName, 
         const auto& lDec = static_cast<TDataDecimalType*>(leftType)->GetParams();
         const auto& rDec = static_cast<TDataDecimalType*>(rightType)->GetParams();
         if (lDec.second < rDec.second) {
-            left = ToDecimal(left,
-                             std::min<ui8>(lDec.first + rDec.second - lDec.second, NYql::NDecimal::MaxPrecision),
-                             rDec.second);
+            data1 = ToDecimal(data1,
+                              std::min<ui8>(lDec.first + rDec.second - lDec.second, NYql::NDecimal::MaxPrecision),
+                              rDec.second);
         } else if (lDec.second > rDec.second) {
-            right = ToDecimal(right,
+            data2 = ToDecimal(data2,
                               std::min<ui8>(rDec.first + lDec.second - rDec.second, NYql::NDecimal::MaxPrecision),
                               lDec.second);
         }
     } else if (lId == NUdf::TDataType<NUdf::TDecimal>::Id &&
                NUdf::GetDataTypeInfo(NUdf::GetDataSlot(rId)).Features & NUdf::EDataTypeFeatures::IntegralType) {
         const auto scale = static_cast<TDataDecimalType*>(leftType)->GetParams().second;
-        right = ToDecimal(right,
+        data2 = ToDecimal(data2,
                           std::min<ui8>(NYql::NDecimal::MaxPrecision,
                                         NUdf::GetDataTypeInfo(NUdf::GetDataSlot(rId)).DecimalDigits + scale),
                           scale);
     } else if (rId == NUdf::TDataType<NUdf::TDecimal>::Id &&
                NUdf::GetDataTypeInfo(NUdf::GetDataSlot(lId)).Features & NUdf::EDataTypeFeatures::IntegralType) {
         const auto scale = static_cast<TDataDecimalType*>(rightType)->GetParams().second;
-        left = ToDecimal(left,
-                         std::min<ui8>(NYql::NDecimal::MaxPrecision,
-                                       NUdf::GetDataTypeInfo(NUdf::GetDataSlot(lId)).DecimalDigits + scale),
-                         scale);
+        data1 = ToDecimal(data1,
+                          std::min<ui8>(NYql::NDecimal::MaxPrecision,
+                                        NUdf::GetDataTypeInfo(NUdf::GetDataSlot(lId)).DecimalDigits + scale),
+                          scale);
     }
 
-    const std::array<TRuntimeNode, 2> args = {{left, right}};
+    const std::array<TRuntimeNode, 2> args = {{data1, data2}};
     const auto boolType = NewDataType(NUdf::TDataType<bool>::Id);
     const auto resultType = isOptionalLeft || isOptionalRight ? NewOptionalType(boolType) : boolType;
     return Invoke(callableName, resultType, args);
@@ -3319,7 +3280,7 @@ TRuntimeNode TProgramBuilder::BuildRangeLogical(const std::string_view& callable
         callableBuilder.Add(list);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::AggrEquals(TRuntimeNode data1, TRuntimeNode data2) {
@@ -3347,7 +3308,9 @@ TRuntimeNode TProgramBuilder::AggrGreaterOrEqual(TRuntimeNode data1, TRuntimeNod
 }
 
 TRuntimeNode TProgramBuilder::If(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch) {
-    bool condOpt, thenOpt, elseOpt;
+    bool condOpt;
+    bool thenOpt;
+    bool elseOpt;
     const auto conditionType = UnpackOptionalData(condition, condOpt);
     MKQL_ENSURE(conditionType->GetSchemeType() == NUdf::TDataType<bool>::Id, "Expected bool");
 
@@ -3361,7 +3324,7 @@ TRuntimeNode TProgramBuilder::If(TRuntimeNode condition, TRuntimeNode thenBranch
     callableBuilder.Add(condition);
     callableBuilder.Add(thenBranch);
     callableBuilder.Add(elseBranch);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::If(const TArrayRef<const TRuntimeNode>& args) {
@@ -3379,7 +3342,7 @@ TRuntimeNode TProgramBuilder::If(TRuntimeNode condition, TRuntimeNode thenBranch
     callableBuilder.Add(condition);
     callableBuilder.Add(thenBranch);
     callableBuilder.Add(elseBranch);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Ensure(TRuntimeNode value, TRuntimeNode predicate, TRuntimeNode message, const std::string_view& file,
@@ -3402,18 +3365,18 @@ TRuntimeNode TProgramBuilder::Ensure(TRuntimeNode value, TRuntimeNode predicate,
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
     callableBuilder.Add(NewDataLiteral(row));
     callableBuilder.Add(NewDataLiteral(column));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::SourceOf(TType* returnType) {
     MKQL_ENSURE(returnType->IsFlow() || returnType->IsStream(), "Expected flow or stream.");
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Source() {
     TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(NewMultiType({})));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::IfPresent(TRuntimeNode optional, const TUnaryLambda& thenBranch, TRuntimeNode elseBranch) {
@@ -3425,7 +3388,8 @@ TRuntimeNode TProgramBuilder::IfPresent(TRuntimeNode optional, const TUnaryLambd
 
     const auto itemArg = Arg(unpackedType);
     const auto then = thenBranch(itemArg);
-    bool thenOpt, elseOpt;
+    bool thenOpt;
+    bool elseOpt;
     const auto thenUnpacked = UnpackOptional(then, thenOpt);
     const auto elseUnpacked = UnpackOptional(elseBranch, elseOpt);
 
@@ -3436,7 +3400,7 @@ TRuntimeNode TProgramBuilder::IfPresent(TRuntimeNode optional, const TUnaryLambd
     callableBuilder.Add(itemArg);
     callableBuilder.Add(then);
     callableBuilder.Add(elseBranch);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::IfPresent(TRuntimeNode::TList optionals, const TNarrowLambda& thenBranch, TRuntimeNode elseBranch) {
@@ -3468,14 +3432,15 @@ TRuntimeNode TProgramBuilder::Not(TRuntimeNode data) {
 }
 
 TRuntimeNode TProgramBuilder::BuildBinaryLogical(const std::string_view& callableName, TRuntimeNode data1, TRuntimeNode data2) {
-    bool isOpt1, isOpt2;
+    bool isOpt1;
+    bool isOpt2;
     MKQL_ENSURE(UnpackOptionalData(data1, isOpt1)->GetSchemeType() == NUdf::TDataType<bool>::Id, "Requires boolean args.");
     MKQL_ENSURE(UnpackOptionalData(data2, isOpt2)->GetSchemeType() == NUdf::TDataType<bool>::Id, "Requires boolean args.");
     const auto resultType = NewDataType(NUdf::TDataType<bool>::Id, isOpt1 || isOpt2);
     TCallableBuilder callableBuilder(Env_, callableName, resultType);
     callableBuilder.Add(data1);
     callableBuilder.Add(data2);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BuildLogical(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& args) {
@@ -3489,7 +3454,8 @@ TRuntimeNode TProgramBuilder::BuildLogical(const std::string_view& callableName,
     }
 
     const auto half = (args.size() + 1U) >> 1U;
-    const TArrayRef<const TRuntimeNode> one(args.data(), half), two(args.data() + half, args.size() - half);
+    const TArrayRef<const TRuntimeNode> one(args.data(), half);
+    const TArrayRef<const TRuntimeNode> two(args.data() + half, args.size() - half);
     return BuildBinaryLogical(callableName, BuildLogical(callableName, one), BuildLogical(callableName, two));
 }
 
@@ -3517,15 +3483,15 @@ TRuntimeNode TProgramBuilder::Exists(TRuntimeNode data) {
 
     TCallableBuilder callableBuilder(Env_, __func__, NewDataType(NUdf::TDataType<bool>::Id));
     callableBuilder.Add(data);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::NewMTRand(TRuntimeNode seed) {
     auto seedData = AS_TYPE(TDataType, seed);
     MKQL_ENSURE(seedData->GetSchemeType() == NUdf::TDataType<ui64>::Id, "seed must be ui64");
-    TCallableBuilder callableBuilder(Env_, __func__, NewResourceType(RandomMTResource), true);
+    TCallableBuilder callableBuilder(Env_, __func__, NewResourceType(RandomMTResource), /*disableMerge=*/true);
     callableBuilder.Add(seed);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::NextMTRand(TRuntimeNode rand) {
@@ -3537,13 +3503,13 @@ TRuntimeNode TProgramBuilder::NextMTRand(TRuntimeNode rand) {
 
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(rand);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::AggrCountInit(TRuntimeNode value) {
     TCallableBuilder callableBuilder(Env_, __func__, NewDataType(NUdf::TDataType<ui64>::Id));
     callableBuilder.Add(value);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::AggrCountUpdate(TRuntimeNode value, TRuntimeNode state) {
@@ -3551,7 +3517,7 @@ TRuntimeNode TProgramBuilder::AggrCountUpdate(TRuntimeNode value, TRuntimeNode s
     TCallableBuilder callableBuilder(Env_, __func__, NewDataType(NUdf::TDataType<ui64>::Id));
     callableBuilder.Add(value);
     callableBuilder.Add(state);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::AggrMin(TRuntimeNode data1, TRuntimeNode data2) {
@@ -3582,7 +3548,7 @@ TRuntimeNode TProgramBuilder::AggrAdd(TRuntimeNode data1, TRuntimeNode data2) {
     return Invoke(TString("AggrAdd_") += ::ToString(decimalType->GetParams().first), data1.GetStaticType(), args);
 }
 
-TRuntimeNode TProgramBuilder::QueueCreate(TRuntimeNode initCapacity, TRuntimeNode initSize,
+TRuntimeNode TProgramBuilder::QueueCreate(TRuntimeNode initCapacity, TRuntimeNode initCreate,
                                           const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType) {
     auto resType = AS_TYPE(TResourceType, returnType);
     const auto tag = resType->GetTag();
@@ -3592,17 +3558,17 @@ TRuntimeNode TProgramBuilder::QueueCreate(TRuntimeNode initCapacity, TRuntimeNod
         MKQL_ENSURE(initCapacityType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "init capcity must be ui64");
     }
 
-    auto initSizeType = AS_TYPE(TDataType, initSize);
-    MKQL_ENSURE(initSizeType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "init size must be ui64");
+    auto initCreateType = AS_TYPE(TDataType, initCreate);
+    MKQL_ENSURE(initCreateType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "init size must be ui64");
 
-    TCallableBuilder callableBuilder(Env_, __func__, returnType, true);
+    TCallableBuilder callableBuilder(Env_, __func__, returnType, /*disableMerge=*/true);
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(tag));
     callableBuilder.Add(initCapacity);
-    callableBuilder.Add(initSize);
+    callableBuilder.Add(initCreate);
     for (auto node : dependentNodes) {
         callableBuilder.Add(node);
     }
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::QueuePush(TRuntimeNode resource, TRuntimeNode value) {
@@ -3612,7 +3578,7 @@ TRuntimeNode TProgramBuilder::QueuePush(TRuntimeNode resource, TRuntimeNode valu
     TCallableBuilder callableBuilder(Env_, __func__, resource.GetStaticType());
     callableBuilder.Add(resource);
     callableBuilder.Add(value);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::QueuePop(TRuntimeNode resource) {
@@ -3621,7 +3587,7 @@ TRuntimeNode TProgramBuilder::QueuePop(TRuntimeNode resource) {
     MKQL_ENSURE(tag.StartsWith(ResourceQueuePrefix), "Expected Queue resource");
     TCallableBuilder callableBuilder(Env_, __func__, resource.GetStaticType());
     callableBuilder.Add(resource);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::QueuePeek(TRuntimeNode resource, TRuntimeNode index,
@@ -3638,7 +3604,7 @@ TRuntimeNode TProgramBuilder::QueuePeek(TRuntimeNode resource, TRuntimeNode inde
     for (auto node : dependentNodes) {
         callableBuilder.Add(node);
     }
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::QueueRange(TRuntimeNode resource, TRuntimeNode begin, TRuntimeNode end,
@@ -3661,7 +3627,7 @@ TRuntimeNode TProgramBuilder::QueueRange(TRuntimeNode resource, TRuntimeNode beg
     for (auto node : dependentNodes) {
         callableBuilder.Add(node);
     }
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::PreserveStream(TRuntimeNode stream, TRuntimeNode queue, TRuntimeNode outpace) {
@@ -3675,7 +3641,7 @@ TRuntimeNode TProgramBuilder::PreserveStream(TRuntimeNode stream, TRuntimeNode q
     callableBuilder.Add(stream);
     callableBuilder.Add(queue);
     callableBuilder.Add(outpace);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::WinFramesCollector(TRuntimeNode stream, TRuntimeNode storage, TRuntimeNode winBounds) {
@@ -3724,15 +3690,15 @@ TRuntimeNode TProgramBuilder::WinFrame(TRuntimeNode queue,
     for (auto node : dependentNodes) {
         callableBuilder.Add(node);
     }
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::Seq(const TArrayRef<const TRuntimeNode>& args, TType* returnType) {
+TRuntimeNode TProgramBuilder::Seq(const TArrayRef<const TRuntimeNode>& items, TType* returnType) {
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
-    for (auto node : args) {
+    for (auto node : items) {
         callableBuilder.Add(node);
     }
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::FromYsonSimpleType(TRuntimeNode input, NUdf::TDataTypeId schemeType) {
@@ -3746,7 +3712,7 @@ TRuntimeNode TProgramBuilder::FromYsonSimpleType(TRuntimeNode input, NUdf::TData
     TCallableBuilder callableBuilder(Env_, __func__, resultType);
     callableBuilder.Add(input);
     callableBuilder.Add(NewDataLiteral(static_cast<ui32>(schemeType)));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::TryWeakMemberFromDict(TRuntimeNode other, TRuntimeNode rest,
@@ -3759,7 +3725,7 @@ TRuntimeNode TProgramBuilder::TryWeakMemberFromDict(TRuntimeNode other, TRuntime
     callableBuilder.Add(rest);
     callableBuilder.Add(NewDataLiteral(static_cast<ui32>(schemeType)));
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(memberName));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::TimezoneId(TRuntimeNode name) {
@@ -3769,7 +3735,7 @@ TRuntimeNode TProgramBuilder::TimezoneId(TRuntimeNode name) {
     auto resultType = NewOptionalType(NewDataType(NUdf::EDataSlot::Uint16));
     TCallableBuilder callableBuilder(Env_, __func__, resultType);
     callableBuilder.Add(name);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::TimezoneName(TRuntimeNode id) {
@@ -3779,7 +3745,7 @@ TRuntimeNode TProgramBuilder::TimezoneName(TRuntimeNode id) {
     auto resultType = NewOptionalType(NewDataType(NUdf::EDataSlot::String));
     TCallableBuilder callableBuilder(Env_, __func__, resultType);
     callableBuilder.Add(id);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::AddTimezone(TRuntimeNode utc, TRuntimeNode id) {
@@ -3818,7 +3784,7 @@ TRuntimeNode TProgramBuilder::AddTimezone(TRuntimeNode utc, TRuntimeNode id) {
     TCallableBuilder callableBuilder(Env_, __func__, resultType);
     callableBuilder.Add(utc);
     callableBuilder.Add(id);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::RemoveTimezone(TRuntimeNode local) {
@@ -3867,7 +3833,7 @@ TRuntimeNode TProgramBuilder::Nth(TRuntimeNode tuple, ui32 index) {
     TCallableBuilder callableBuilder(Env_, __func__, itemType);
     callableBuilder.Add(tuple);
     callableBuilder.Add(NewDataLiteral<ui32>(index));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Element(TRuntimeNode tuple, ui32 index) {
@@ -3885,7 +3851,7 @@ TRuntimeNode TProgramBuilder::Guess(TRuntimeNode variant, ui32 tupleIndex) {
     TCallableBuilder callableBuilder(Env_, __func__, resType);
     callableBuilder.Add(variant);
     callableBuilder.Add(NewDataLiteral<ui32>(tupleIndex));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Guess(TRuntimeNode variant, const std::string_view& memberName) {
@@ -3899,7 +3865,7 @@ TRuntimeNode TProgramBuilder::Guess(TRuntimeNode variant, const std::string_view
     TCallableBuilder callableBuilder(Env_, __func__, resType);
     callableBuilder.Add(variant);
     callableBuilder.Add(NewDataLiteral<ui32>(structIndex));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Way(TRuntimeNode variant) {
@@ -3912,7 +3878,7 @@ TRuntimeNode TProgramBuilder::Way(TRuntimeNode variant) {
 
     TCallableBuilder callableBuilder(Env_, __func__, resType);
     callableBuilder.Add(variant);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::VariantItem(TRuntimeNode variant) {
@@ -3924,14 +3890,10 @@ TRuntimeNode TProgramBuilder::VariantItem(TRuntimeNode variant) {
 
     TCallableBuilder callableBuilder(Env_, __func__, resType);
     callableBuilder.Add(variant);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::DynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType) {
-    if constexpr (RuntimeVersion < 56U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     auto type = AS_TYPE(TVariantType, variantType);
     auto expectedIndexSlot = type->GetUnderlyingType()->IsTuple() ? NUdf::EDataSlot::Uint32 : NUdf::EDataSlot::Utf8;
     bool isOptional;
@@ -3943,8 +3905,8 @@ TRuntimeNode TProgramBuilder::DynamicVariant(TRuntimeNode item, TRuntimeNode ind
     TCallableBuilder callableBuilder(Env_, __func__, resType);
     callableBuilder.Add(item);
     callableBuilder.Add(index);
-    callableBuilder.Add(TRuntimeNode(variantType, true));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    callableBuilder.Add(TRuntimeNode(variantType, /*isImmediate=*/true));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::VisitAll(TRuntimeNode variant, std::function<TRuntimeNode(ui32, TRuntimeNode)> handler) {
@@ -3988,7 +3950,7 @@ TRuntimeNode TProgramBuilder::VisitAll(TRuntimeNode variant, std::function<TRunt
         callableBuilder.Add(newItems[i]);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::UnaryDataFunction(TRuntimeNode data, const std::string_view& callableName, ui32 flags) {
@@ -4028,7 +3990,7 @@ TRuntimeNode TProgramBuilder::UnaryDataFunction(TRuntimeNode data, const std::st
 
     TCallableBuilder callableBuilder(Env_, callableName, resultType);
     callableBuilder.Add(data);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::ToDict(TRuntimeNode list, bool multi, const TUnaryLambda& keySelector,
@@ -4068,7 +4030,7 @@ TRuntimeNode TProgramBuilder::ToDict(TRuntimeNode list, bool multi, const TUnary
     callableBuilder.Add(NewDataLiteral(multi));
     callableBuilder.Add(NewDataLiteral(isCompact));
     callableBuilder.Add(NewDataLiteral(itemsCountHint));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::SqueezeToDict(TRuntimeNode stream, bool multi, const TUnaryLambda& keySelector,
@@ -4102,14 +4064,14 @@ TRuntimeNode TProgramBuilder::SqueezeToDict(TRuntimeNode stream, bool multi, con
     callableBuilder.Add(NewDataLiteral(multi));
     callableBuilder.Add(NewDataLiteral(isCompact));
     callableBuilder.Add(NewDataLiteral(itemsCountHint));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::NarrowSqueezeToDict(TRuntimeNode flow, bool multi, const TNarrowLambda& keySelector,
+TRuntimeNode TProgramBuilder::NarrowSqueezeToDict(TRuntimeNode stream, bool multi, const TNarrowLambda& keySelector,
                                                   const TNarrowLambda& payloadSelector, std::string_view callableName,
                                                   bool isCompact, ui64 itemsCountHint)
 {
-    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
+    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, stream.GetStaticType()));
 
     TRuntimeNode::TList itemArgs;
     itemArgs.reserve(wideComponents.size());
@@ -4128,7 +4090,7 @@ TRuntimeNode TProgramBuilder::NarrowSqueezeToDict(TRuntimeNode flow, bool multi,
     const auto dictType = TDictType::Create(keyType, payloadType, Env_);
     const auto returnType = TFlowType::Create(dictType, Env_);
     TCallableBuilder callableBuilder(Env_, callableName, returnType);
-    callableBuilder.Add(flow);
+    callableBuilder.Add(stream);
     std::for_each(itemArgs.cbegin(), itemArgs.cend(),
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     callableBuilder.Add(key);
@@ -4136,7 +4098,7 @@ TRuntimeNode TProgramBuilder::NarrowSqueezeToDict(TRuntimeNode flow, bool multi,
     callableBuilder.Add(NewDataLiteral(multi));
     callableBuilder.Add(NewDataLiteral(isCompact));
     callableBuilder.Add(NewDataLiteral(itemsCountHint));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 void TProgramBuilder::ThrowIfListOfVoid(TType* type) {
@@ -4200,7 +4162,7 @@ TRuntimeNode TProgramBuilder::BuildFlatMap(const std::string_view& callableName,
     callableBuilder.Add(list);
     callableBuilder.Add(itemArg);
     callableBuilder.Add(newList);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MultiMap(TRuntimeNode list, const TExpandLambda& handler)
@@ -4228,7 +4190,7 @@ TRuntimeNode TProgramBuilder::MultiMap(TRuntimeNode list, const TExpandLambda& h
     callableBuilder.Add(list);
     callableBuilder.Add(itemArg);
     std::for_each(newList.cbegin(), newList.cend(), std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::NarrowMultiMap(TRuntimeNode flow, const TWideLambda& handler) {
@@ -4251,7 +4213,7 @@ TRuntimeNode TProgramBuilder::NarrowMultiMap(TRuntimeNode flow, const TWideLambd
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     std::for_each(newList.cbegin(), newList.cend(),
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::ExpandMap(TRuntimeNode flow, const TExpandLambda& handler) {
@@ -4269,13 +4231,12 @@ TRuntimeNode TProgramBuilder::ExpandMap(TRuntimeNode flow, const TExpandLambda& 
     callableBuilder.Add(itemArg);
     std::for_each(newItems.cbegin(), newItems.cend(),
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::WideMap(TRuntimeNode flowOrStream, const TWideLambda& handler) {
     MKQL_ENSURE(flowOrStream.GetStaticType()->IsFlow() || flowOrStream.GetStaticType()->IsStream(), "Flow or stream type expected.");
     const auto wideComponents = GetWideComponents(flowOrStream.GetStaticType());
-    bool shouldRewriteToFlow = RuntimeVersion < 67 && flowOrStream.GetStaticType()->IsStream();
     TRuntimeNode::TList itemArgs;
     itemArgs.reserve(wideComponents.size());
     auto i = 0U;
@@ -4295,20 +4256,17 @@ TRuntimeNode TProgramBuilder::WideMap(TRuntimeNode flowOrStream, const TWideLamb
                       std::bind(&TCallableBuilder::Add, std::ref(builder), std::placeholders::_1));
         std::for_each(newItems.cbegin(), newItems.cend(),
                       std::bind(&TCallableBuilder::Add, std::ref(builder), std::placeholders::_1));
-        return TRuntimeNode(builder.Build(), false);
+        return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
     };
 
-    if (shouldRewriteToFlow) {
-        TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(NewMultiType(tupleItems)));
-        return FromFlow(fillCallableBuilder(callableBuilder, ToFlow(flowOrStream)));
-    } else if (flowOrStream.GetStaticType()->IsFlow()) {
+    if (flowOrStream.GetStaticType()->IsFlow()) {
         TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(NewMultiType(tupleItems)));
         return fillCallableBuilder(callableBuilder, flowOrStream);
     } else if (flowOrStream.GetStaticType()->IsStream()) {
         TCallableBuilder callableBuilder(Env_, __func__, NewStreamType(NewMultiType(tupleItems)));
         return fillCallableBuilder(callableBuilder, flowOrStream);
     } else {
-        Y_UNREACHABLE();
+        MKQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -4346,7 +4304,7 @@ TRuntimeNode TProgramBuilder::WideChain1Map(TRuntimeNode flow, const TWideLambda
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     std::for_each(updateItems.cbegin(), updateItems.cend(),
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::NarrowMap(TRuntimeNode flow, const TNarrowLambda& handler) {
@@ -4364,7 +4322,7 @@ TRuntimeNode TProgramBuilder::NarrowMap(TRuntimeNode flow, const TNarrowLambda& 
     std::for_each(itemArgs.cbegin(), itemArgs.cend(),
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     callableBuilder.Add(newItem);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::NarrowFlatMap(TRuntimeNode flow, const TNarrowLambda& handler) {
@@ -4397,7 +4355,7 @@ TRuntimeNode TProgramBuilder::NarrowFlatMap(TRuntimeNode flow, const TNarrowLamb
     std::for_each(itemArgs.cbegin(), itemArgs.cend(),
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     callableBuilder.Add(newList);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BuildWideFilter(const std::string_view& callableName, TRuntimeNode flow, const TNarrowLambda& handler) {
@@ -4415,7 +4373,7 @@ TRuntimeNode TProgramBuilder::BuildWideFilter(const std::string_view& callableNa
     std::for_each(itemArgs.cbegin(), itemArgs.cend(),
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     callableBuilder.Add(predicate);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::WideFilter(TRuntimeNode flow, const TNarrowLambda& handler) {
@@ -4454,7 +4412,7 @@ TRuntimeNode TProgramBuilder::WideFilter(TRuntimeNode flow, TRuntimeNode limit, 
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     callableBuilder.Add(predicate);
     callableBuilder.Add(limit);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BuildFilter(const std::string_view& callableName, TRuntimeNode list, const TUnaryLambda& handler, TType* resultType)
@@ -4486,7 +4444,7 @@ TRuntimeNode TProgramBuilder::BuildFilter(const std::string_view& callableName, 
     callableBuilder.Add(list);
     callableBuilder.Add(itemArg);
     callableBuilder.Add(predicate);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BuildFilter(const std::string_view& callableName, TRuntimeNode list,
@@ -4521,7 +4479,7 @@ TRuntimeNode TProgramBuilder::BuildFilter(const std::string_view& callableName, 
     callableBuilder.Add(limit);
     callableBuilder.Add(itemArg);
     callableBuilder.Add(predicate);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Filter(TRuntimeNode list, const TUnaryLambda& handler, TType* resultType)
@@ -4553,7 +4511,7 @@ TRuntimeNode TProgramBuilder::BuildHeap(const std::string_view& callableName, TR
     callableBuilder.Add(leftArg);
     callableBuilder.Add(rightArg);
     callableBuilder.Add(predicate);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BuildNth(const std::string_view& callableName, TRuntimeNode list, TRuntimeNode n, const TBinaryLambda& comparator) {
@@ -4574,35 +4532,35 @@ TRuntimeNode TProgramBuilder::BuildNth(const std::string_view& callableName, TRu
     callableBuilder.Add(leftArg);
     callableBuilder.Add(rightArg);
     callableBuilder.Add(predicate);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MakeHeap(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::PushHeap(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::PopHeap(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::SortHeap(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::StableSort(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::NthElement(TRuntimeNode list, TRuntimeNode n, const TBinaryLambda& comparator) {
-    return BuildNth(__func__, list, n, std::move(comparator));
+    return BuildNth(__func__, list, n, comparator);
 }
 
 TRuntimeNode TProgramBuilder::PartialSort(TRuntimeNode list, TRuntimeNode n, const TBinaryLambda& comparator) {
-    return BuildNth(__func__, list, n, std::move(comparator));
+    return BuildNth(__func__, list, n, comparator);
 }
 
 TRuntimeNode TProgramBuilder::BuildMap(const std::string_view& callableName, TRuntimeNode list, const TUnaryLambda& handler)
@@ -4647,11 +4605,11 @@ TRuntimeNode TProgramBuilder::BuildMap(const std::string_view& callableName, TRu
     callableBuilder.Add(list);
     callableBuilder.Add(itemArg);
     callableBuilder.Add(newItem);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Invoke(const std::string_view& funcName, TType* resultType, const TArrayRef<const TRuntimeNode>& args) {
-    MKQL_ENSURE(args.size() >= 1U && args.size() <= 3U, "Expected from one to three arguments.");
+    MKQL_ENSURE(!args.empty() && args.size() <= 3U, "Expected from one to three arguments.");
     std::array<TArgType, 4U> argTypes;
     argTypes.front().first = UnpackOptionalData(resultType, argTypes.front().second)->GetSchemeType();
     auto i = 0U;
@@ -4668,7 +4626,7 @@ TRuntimeNode TProgramBuilder::Invoke(const std::string_view& funcName, TType* re
         callableBuilder.Add(arg);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Udf(
@@ -4677,7 +4635,7 @@ TRuntimeNode TProgramBuilder::Udf(
     TType* userType,
     const std::string_view& typeConfig)
 {
-    TRuntimeNode userTypeNode = userType ? TRuntimeNode(userType, true) : TRuntimeNode(Env_.GetVoidLazy()->GetType(), true);
+    TRuntimeNode userTypeNode = userType ? TRuntimeNode(userType, /*isImmediate=*/true) : TRuntimeNode(Env_.GetVoidLazy()->GetType(), /*isImmediate=*/true);
     const ui32 flags = NUdf::IUdfModule::TFlags::TypesOnly;
 
     if (!TypeInfoHelper_) {
@@ -4686,7 +4644,7 @@ TRuntimeNode TProgramBuilder::Udf(
 
     TFunctionTypeInfo funcInfo;
     TStatus status = FunctionRegistry_.FindFunctionTypeInfo(
-        LangVer_, Env_, TypeInfoHelper_, nullptr, funcName, userType, typeConfig, flags, NYql::NUdf::TSourcePosition(), nullptr, nullptr, &funcInfo);
+        LangVer_, *RuntimeSettings_, Env_, TypeInfoHelper_, /*countersProvider=*/nullptr, funcName, userType, typeConfig, flags, NYql::NUdf::TSourcePosition(), /*secureParamsProvider=*/nullptr, /*logProvider=*/nullptr, &funcInfo);
     MKQL_ENSURE(status.IsOk(), status.GetError());
     if (funcInfo.MinLangVer != NYql::UnknownLangVersion && LangVer_ != NYql::UnknownLangVersion && LangVer_ < funcInfo.MinLangVer) {
         throw yexception() << "UDF " << funcName << " is not available in given language version yet";
@@ -4718,7 +4676,7 @@ TRuntimeNode TProgramBuilder::Udf(
     callableBuilder.Add(typeConfigNode);
     callableBuilder.Add(runConfig);
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::TypedUdf(
@@ -4733,7 +4691,7 @@ TRuntimeNode TProgramBuilder::TypedUdf(
 {
     auto funNameNode = NewDataLiteral<NUdf::EDataSlot::String>(funcName);
     auto typeConfigNode = NewDataLiteral<NUdf::EDataSlot::String>(typeConfig);
-    TRuntimeNode userTypeNode = userType ? TRuntimeNode(userType, true) : TRuntimeNode(Env_.GetVoidLazy(), true);
+    TRuntimeNode userTypeNode = userType ? TRuntimeNode(userType, /*isImmediate=*/true) : TRuntimeNode(Env_.GetVoidLazy(), /*isImmediate=*/true);
 
     TCallableBuilder callableBuilder(Env_, "Udf", funcType);
     callableBuilder.Add(funNameNode);
@@ -4744,7 +4702,7 @@ TRuntimeNode TProgramBuilder::TypedUdf(
     callableBuilder.Add(NewDataLiteral(row));
     callableBuilder.Add(NewDataLiteral(column));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::ScriptUdf(
@@ -4768,7 +4726,7 @@ TRuntimeNode TProgramBuilder::ScriptUdf(
     name.reserve(scriptTypeStr.size() + funcName.size() + 1);
     name << scriptTypeStr << '.' << funcName;
     auto funcNameNode = NewDataLiteral<NUdf::EDataSlot::String>(name);
-    TRuntimeNode userTypeNode(funcType, true);
+    TRuntimeNode userTypeNode(funcType, /*isImmediate=*/true);
     auto typeConfigNode = NewDataLiteral<NUdf::EDataSlot::String>("");
 
     TCallableBuilder callableBuilder(Env_, __func__, funcType);
@@ -4780,7 +4738,7 @@ TRuntimeNode TProgramBuilder::ScriptUdf(
     callableBuilder.Add(NewDataLiteral(row));
     callableBuilder.Add(NewDataLiteral(column));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Apply(TRuntimeNode callableNode, const TArrayRef<const TRuntimeNode>& args,
@@ -4817,7 +4775,7 @@ TRuntimeNode TProgramBuilder::Apply(TRuntimeNode callableNode, const TArrayRef<c
         callableBuilder.Add(arg);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Apply(
@@ -4842,19 +4800,20 @@ TRuntimeNode TProgramBuilder::Callable(TType* callableType, const TArrayLambda& 
     }
 
     callableBuilder.Add(res);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::NewNull() {
     if (UseNullType_) {
-        return TRuntimeNode(Env_.GetNullLazy(), true);
+        return TRuntimeNode(Env_.GetNullLazy(), /*isImmediate=*/true);
     }
     TCallableBuilder callableBuilder(Env_, "Null", NewOptionalType(Env_.GetVoidLazy()->GetType()));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Concat(TRuntimeNode data1, TRuntimeNode data2) {
-    bool isOpt1, isOpt2;
+    bool isOpt1;
+    bool isOpt2;
     const auto type1 = UnpackOptionalData(data1, isOpt1)->GetSchemeType();
     const auto type2 = UnpackOptionalData(data2, isOpt2)->GetSchemeType();
     const auto resultType = NewDataType(type1 == type2 ? type1 : NUdf::TDataType<char*>::Id);
@@ -4862,7 +4821,7 @@ TRuntimeNode TProgramBuilder::Concat(TRuntimeNode data1, TRuntimeNode data2) {
 }
 
 TRuntimeNode TProgramBuilder::ConcatMany(const TArrayRef<const TRuntimeNode>& args) {
-    MKQL_ENSURE(args.size() >= 1, "Expected at least one argument");
+    MKQL_ENSURE(!args.empty(), "Expected at least one argument");
     if (args.size() == 1) {
         return args[0];
     }
@@ -4909,7 +4868,8 @@ TRuntimeNode TProgramBuilder::EndsWith(TRuntimeNode string, TRuntimeNode suffix)
 }
 
 TRuntimeNode TProgramBuilder::StringContains(TRuntimeNode string, TRuntimeNode pattern) {
-    bool isOpt1, isOpt2;
+    bool isOpt1;
+    bool isOpt2;
     TDataType* type1 = UnpackOptionalData(string, isOpt1);
     TDataType* type2 = UnpackOptionalData(pattern, isOpt2);
     MKQL_ENSURE(type1->GetSchemeType() == NUdf::TDataType<NUdf::TUtf8>::Id ||
@@ -4941,7 +4901,7 @@ TRuntimeNode TProgramBuilder::ToString(TRuntimeNode data) {
 
     TCallableBuilder callableBuilder(Env_, __func__, resultType);
     callableBuilder.Add(data);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::FromString(TRuntimeNode data, TType* type) {
@@ -4959,7 +4919,7 @@ TRuntimeNode TProgramBuilder::FromString(TRuntimeNode data, TType* type) {
         callableBuilder.Add(NewDataLiteral(params.first));
         callableBuilder.Add(NewDataLiteral(params.second));
     }
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::StrictFromString(TRuntimeNode data, TType* type) {
@@ -4977,7 +4937,7 @@ TRuntimeNode TProgramBuilder::StrictFromString(TRuntimeNode data, TType* type) {
         callableBuilder.Add(NewDataLiteral(params.first));
         callableBuilder.Add(NewDataLiteral(params.second));
     }
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::ToBytes(TRuntimeNode data) {
@@ -5005,7 +4965,7 @@ TRuntimeNode TProgramBuilder::FromBytes(TRuntimeNode data, TType* targetType) {
         callableBuilder.Add(NewDataLiteral(params.second));
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::InversePresortString(TRuntimeNode data) {
@@ -5028,7 +4988,7 @@ TRuntimeNode TProgramBuilder::Random(const TArrayRef<const TRuntimeNode>& depend
         callableBuilder.Add(x);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::RandomNumber(const TArrayRef<const TRuntimeNode>& dependentNodes) {
@@ -5037,7 +4997,7 @@ TRuntimeNode TProgramBuilder::RandomNumber(const TArrayRef<const TRuntimeNode>& 
         callableBuilder.Add(x);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::RandomUuid(const TArrayRef<const TRuntimeNode>& dependentNodes) {
@@ -5046,64 +5006,85 @@ TRuntimeNode TProgramBuilder::RandomUuid(const TArrayRef<const TRuntimeNode>& de
         callableBuilder.Add(x);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::Now(const TArrayRef<const TRuntimeNode>& args) {
+TRuntimeNode TProgramBuilder::Now(const TArrayRef<const TRuntimeNode>& dependentNodes) {
     TCallableBuilder callableBuilder(Env_, __func__, NewDataType(NUdf::TDataType<ui64>::Id));
-    for (const auto& x : args) {
+    for (const auto& x : dependentNodes) {
         callableBuilder.Add(x);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::CurrentUtcDate(const TArrayRef<const TRuntimeNode>& args) {
-    return Cast(CurrentUtcTimestamp(args), NewDataType(NUdf::TDataType<NUdf::TDate>::Id));
+TRuntimeNode TProgramBuilder::HostRuntimeSetting(TRuntimeNode featureName) {
+    if constexpr (RuntimeVersion < 77U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    TCallableBuilder callableBuilder(Env_, __func__, NewOptionalType(NewDataType(NUdf::TDataType<char*>::Id)));
+    callableBuilder.Add(featureName);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::CurrentUtcDatetime(const TArrayRef<const TRuntimeNode>& args) {
-    return Cast(CurrentUtcTimestamp(args), NewDataType(NUdf::TDataType<NUdf::TDatetime>::Id));
+TRuntimeNode TProgramBuilder::UdfRuntimeSetting(TRuntimeNode module, TRuntimeNode featureName) {
+    if constexpr (RuntimeVersion < 77U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    TCallableBuilder callableBuilder(Env_, __func__, NewOptionalType(NewDataType(NUdf::TDataType<char*>::Id)));
+    callableBuilder.Add(module);
+    callableBuilder.Add(featureName);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::CurrentUtcTimestamp(const TArrayRef<const TRuntimeNode>& args) {
-    return Coalesce(ToIntegral(Now(args), NewDataType(NUdf::TDataType<NUdf::TTimestamp>::Id, true)),
+TRuntimeNode TProgramBuilder::CurrentUtcDate(const TArrayRef<const TRuntimeNode>& dependentNodes) {
+    return Cast(CurrentUtcTimestamp(dependentNodes), NewDataType(NUdf::TDataType<NUdf::TDate>::Id));
+}
+
+TRuntimeNode TProgramBuilder::CurrentUtcDatetime(const TArrayRef<const TRuntimeNode>& dependentNodes) {
+    return Cast(CurrentUtcTimestamp(dependentNodes), NewDataType(NUdf::TDataType<NUdf::TDatetime>::Id));
+}
+
+TRuntimeNode TProgramBuilder::CurrentUtcTimestamp(const TArrayRef<const TRuntimeNode>& dependentNodes) {
+    return Coalesce(ToIntegral(Now(dependentNodes), NewDataType(NUdf::TDataType<NUdf::TTimestamp>::Id, /*optional=*/true)),
                     TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(ui64(NUdf::MAX_TIMESTAMP - 1ULL)),
-                                                  NUdf::TDataType<NUdf::TTimestamp>::Id, Env_), true));
+                                                  NUdf::TDataType<NUdf::TTimestamp>::Id, Env_), /*isImmediate=*/true));
 }
 
 TRuntimeNode TProgramBuilder::Pickle(TRuntimeNode data) {
     TCallableBuilder callableBuilder(Env_, __func__, NewDataType(NUdf::EDataSlot::String));
     callableBuilder.Add(data);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::StablePickle(TRuntimeNode data) {
     TCallableBuilder callableBuilder(Env_, __func__, NewDataType(NUdf::EDataSlot::String));
     callableBuilder.Add(data);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Unpickle(TType* type, TRuntimeNode serialized) {
     MKQL_ENSURE(AS_TYPE(TDataType, serialized)->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected String");
     TCallableBuilder callableBuilder(Env_, __func__, type);
-    callableBuilder.Add(TRuntimeNode(type, true));
+    callableBuilder.Add(TRuntimeNode(type, /*isImmediate=*/true));
     callableBuilder.Add(serialized);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Ascending(TRuntimeNode data) {
     auto dataType = NewDataType(NUdf::EDataSlot::String);
     TCallableBuilder callableBuilder(Env_, __func__, dataType);
     callableBuilder.Add(data);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Descending(TRuntimeNode data) {
     auto dataType = NewDataType(NUdf::EDataSlot::String);
     TCallableBuilder callableBuilder(Env_, __func__, dataType);
     callableBuilder.Add(data);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Convert(TRuntimeNode data, TType* type) {
@@ -5186,7 +5167,7 @@ TRuntimeNode TProgramBuilder::ListIf(TRuntimeNode predicate, TRuntimeNode item) 
 TRuntimeNode TProgramBuilder::AsList(TRuntimeNode item) {
     TListLiteralBuilder builder(Env_, item.GetStaticType());
     builder.Add(item);
-    return TRuntimeNode(builder.Build(), true);
+    return TRuntimeNode(builder.Build(), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::AsList(const TArrayRef<const TRuntimeNode>& items) {
@@ -5196,7 +5177,7 @@ TRuntimeNode TProgramBuilder::AsList(const TArrayRef<const TRuntimeNode>& items)
         builder.Add(item);
     }
 
-    return TRuntimeNode(builder.Build(), true);
+    return TRuntimeNode(builder.Build(), /*isImmediate=*/true);
 }
 
 TRuntimeNode TProgramBuilder::MapJoinCore(TRuntimeNode flow, TRuntimeNode dict, EJoinKind joinKind,
@@ -5210,7 +5191,9 @@ TRuntimeNode TProgramBuilder::MapJoinCore(TRuntimeNode flow, TRuntimeNode dict, 
     MKQL_ENSURE(leftRenames.size() % 2U == 0U, "Expected even count");
     MKQL_ENSURE(rightRenames.size() % 2U == 0U, "Expected even count");
 
-    TRuntimeNode::TList leftKeyColumnsNodes, leftRenamesNodes, rightRenamesNodes;
+    TRuntimeNode::TList leftKeyColumnsNodes;
+    TRuntimeNode::TList leftRenamesNodes;
+    TRuntimeNode::TList rightRenamesNodes;
 
     leftKeyColumnsNodes.reserve(leftKeyColumns.size());
     std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(), std::back_inserter(leftKeyColumnsNodes),
@@ -5232,10 +5215,10 @@ TRuntimeNode TProgramBuilder::MapJoinCore(TRuntimeNode flow, TRuntimeNode dict, 
     callableBuilder.Add(NewTuple(leftRenamesNodes));
     callableBuilder.Add(NewTuple(rightRenamesNodes));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::CommonJoinCore(TRuntimeNode flow, EJoinKind joinKind,
+TRuntimeNode TProgramBuilder::CommonJoinCore(TRuntimeNode list, EJoinKind joinKind,
                                              const TArrayRef<const ui32>& leftColumns, const TArrayRef<const ui32>& rightColumns,
                                              const TArrayRef<const ui32>& requiredColumns, const TArrayRef<const ui32>& keyColumns,
                                              ui64 memLimit, std::optional<ui32> sortedTableOrder,
@@ -5243,8 +5226,12 @@ TRuntimeNode TProgramBuilder::CommonJoinCore(TRuntimeNode flow, EJoinKind joinKi
     MKQL_ENSURE(leftColumns.size() % 2U == 0U, "Expected even count");
     MKQL_ENSURE(rightColumns.size() % 2U == 0U, "Expected even count");
 
-    TRuntimeNode::TList leftInputColumnsNodes, rightInputColumnsNodes, requiredColumnsNodes,
-        leftOutputColumnsNodes, rightOutputColumnsNodes, keyColumnsNodes;
+    TRuntimeNode::TList leftInputColumnsNodes;
+    TRuntimeNode::TList rightInputColumnsNodes;
+    TRuntimeNode::TList requiredColumnsNodes;
+    TRuntimeNode::TList leftOutputColumnsNodes;
+    TRuntimeNode::TList rightOutputColumnsNodes;
+    TRuntimeNode::TList keyColumnsNodes;
 
     bool s = false;
     for (const auto idx : leftColumns) {
@@ -5270,7 +5257,7 @@ TRuntimeNode TProgramBuilder::CommonJoinCore(TRuntimeNode flow, EJoinKind joinKi
                    std::bind(&TProgramBuilder::NewDataLiteral<ui32>, this, std::placeholders::_1));
 
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
-    callableBuilder.Add(flow);
+    callableBuilder.Add(list);
     callableBuilder.Add(NewDataLiteral((ui32)joinKind));
     callableBuilder.Add(NewTuple(leftInputColumnsNodes));
     callableBuilder.Add(NewTuple(rightInputColumnsNodes));
@@ -5282,7 +5269,111 @@ TRuntimeNode TProgramBuilder::CommonJoinCore(TRuntimeNode flow, EJoinKind joinKi
     callableBuilder.Add(sortedTableOrder ? NewDataLiteral(*sortedTableOrder) : NewVoid());
     callableBuilder.Add(NewDataLiteral((ui32)anyJoinSettings));
     callableBuilder.Add(NewDataLiteral(tableIndexField));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BuildColumnList(const TColumnsMap& columnsMap) {
+    TRuntimeNode::TList columnsNodes;
+    const auto index2node = std::bind(&TProgramBuilder::NewDataLiteral<ui32>, this, std::placeholders::_1);
+    for (const auto& column : columnsMap) {
+        columnsNodes.emplace_back(NewTuple({index2node(column.first), index2node(column.second)}));
+    }
+    return NewTuple(columnsNodes);
+}
+
+TRuntimeNode TProgramBuilder::ListJoinCore(TRuntimeNode stream,
+                                           TType* keyType, const TColumnsMap& keyColumns,
+                                           const TColumnsMap& leftColumns, const TColumnsMap& rightColumns,
+                                           TType* leftArgType, const TUnaryLambda& leftArgmapLambda,
+                                           TType* rightArgType, const TUnaryLambda& rightArgmapLambda,
+                                           TType* returnType, const TTernaryLambda& joinLambda) {
+    if constexpr (RuntimeVersion < 78U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    std::unordered_set<ui32> keyIndices;
+    std::transform(keyColumns.cbegin(), keyColumns.cend(), std::inserter(keyIndices, keyIndices.end()),
+                   [](const auto& keyColumn) { return keyColumn.first; });
+    MKQL_ENSURE(keyIndices.size() == keyColumns.size(), "Duplication of key columns.");
+
+    const auto inputType = stream.GetStaticType();
+    MKQL_ENSURE(inputType->IsStream(), "Expected Stream as an input stream");
+    const auto inputStreamType = AS_TYPE(TStreamType, inputType);
+    MKQL_ENSURE(inputStreamType->GetItemType()->IsStruct(),
+                "Expected Struct as an input item type");
+    const auto inputStructType = AS_TYPE(TStructType, inputStreamType->GetItemType());
+
+    const auto keyArg = Arg(keyType);
+    if (keyColumns.size() == 1) {
+        const auto [inColumn, outColumn] = keyColumns.front();
+        MKQL_ENSURE(inColumn < inputStructType->GetMembersCount(),
+                    "Key column is out of bounds of input row");
+        MKQL_ENSURE(outColumn == 0U, "Key column has to be 0 for the single key");
+    } else {
+        MKQL_ENSURE(keyType->IsTuple(), "Expected Tuple as a key type");
+        const auto keyTupleType = AS_TYPE(TTupleType, keyType);
+        for (const auto [inColumn, outColumn] : keyColumns) {
+            MKQL_ENSURE(inColumn < inputStructType->GetMembersCount(),
+                        "Key column is out of input row bounds");
+            MKQL_ENSURE(outColumn < keyTupleType->GetElementsCount(),
+                        "Key column is out of key structure bounds");
+        }
+    }
+
+    MKQL_ENSURE(leftArgType->IsStruct(), "Left premap lambda argument must be a struct");
+    const auto leftArgStructType = AS_TYPE(TStructType, leftArgType);
+    for (const auto [inColumn, outColumn] : leftColumns) {
+        MKQL_ENSURE(inColumn < inputStructType->GetMembersCount(),
+                    "Left column is out of input row bounds");
+        const auto inColumnType = inputStructType->GetMemberType(inColumn);
+        MKQL_ENSURE(inColumnType->IsOptional() || inColumnType->IsPg(),
+                    "Left payload has to be optional");
+        MKQL_ENSURE(outColumn < leftArgStructType->GetMembersCount(),
+                    "Left column is out of left argument structure bounds");
+    }
+    const auto leftArgmapLambdaArg = Arg(leftArgType);
+    const auto leftArgmapLambdaRoot = leftArgmapLambda(leftArgmapLambdaArg);
+    const auto leftListType = TListType::Create(leftArgmapLambdaRoot.GetStaticType(), Env_);
+    const auto leftListArg = Arg(leftListType);
+
+    MKQL_ENSURE(rightArgType->IsStruct(), "Right premap lambda argument must be a struct");
+    const auto rightArgStructType = AS_TYPE(TStructType, rightArgType);
+    for (const auto [inColumn, outColumn] : rightColumns) {
+        MKQL_ENSURE(inColumn < inputStructType->GetMembersCount(),
+                    "Right column is out of input row bounds");
+        const auto inColumnType = inputStructType->GetMemberType(inColumn);
+        MKQL_ENSURE(inColumnType->IsOptional() || inColumnType->IsPg(),
+                    "Right payload has to be optional");
+        MKQL_ENSURE(outColumn < rightArgStructType->GetMembersCount(),
+                    "Right column is out of right argument structure bounds");
+    }
+    const auto rightArgmapLambdaArg = Arg(rightArgType);
+    const auto rightArgmapLambdaRoot = rightArgmapLambda(rightArgmapLambdaArg);
+    const auto rightListType = TListType::Create(rightArgmapLambdaRoot.GetStaticType(), Env_);
+    const auto rightListArg = Arg(rightListType);
+
+    const auto joinResult = joinLambda(keyArg, leftListArg, rightListArg);
+    MKQL_ENSURE(returnType->IsSameType(*joinResult.GetStaticType()),
+                "ListJoinCore output type must be the same as the join lambda type");
+
+    const auto keyColumnsNodes = BuildColumnList(keyColumns);
+    const auto leftColumnsNodes = BuildColumnList(leftColumns);
+    const auto rightColumnsNodes = BuildColumnList(rightColumns);
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(stream);
+    callableBuilder.Add(keyColumnsNodes);
+    callableBuilder.Add(leftColumnsNodes);
+    callableBuilder.Add(rightColumnsNodes);
+    callableBuilder.Add(leftArgmapLambdaArg);
+    callableBuilder.Add(leftArgmapLambdaRoot);
+    callableBuilder.Add(rightArgmapLambdaArg);
+    callableBuilder.Add(rightArgmapLambdaRoot);
+    callableBuilder.Add(keyArg);
+    callableBuilder.Add(leftListArg);
+    callableBuilder.Add(rightListArg);
+    callableBuilder.Add(joinResult);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::WideCombiner(TRuntimeNode flow, i64 memLimit, const TWideLambda& extractor,
@@ -5354,7 +5445,7 @@ TRuntimeNode TProgramBuilder::WideCombiner(TRuntimeNode flow, i64 memLimit, cons
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     std::for_each(output.cbegin(), output.cend(),
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::WideLastCombinerCommon(const TStringBuf& funcName, TRuntimeNode flow,
@@ -5425,7 +5516,7 @@ TRuntimeNode TProgramBuilder::WideLastCombinerCommon(const TStringBuf& funcName,
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     std::for_each(output.cbegin(), output.cend(),
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLambda& extractor,
@@ -5437,16 +5528,12 @@ TRuntimeNode TProgramBuilder::WideLastCombiner(TRuntimeNode flow, const TWideLam
 TRuntimeNode TProgramBuilder::WideLastCombinerWithSpilling(TRuntimeNode flow, const TWideLambda& extractor,
                                                            const TBinaryWideLambda& init, const TTernaryWideLambda& update,
                                                            const TBinaryWideLambda& finish) {
-    if constexpr (RuntimeVersion < 49U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     return WideLastCombinerCommon(__func__, flow, extractor, init, update, finish);
 }
 
-TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda& init, const TWideSwitchLambda& switcher,
-                                            const TBinaryWideLambda& update, bool useCtx) {
-    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
+TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode stream, const TWideLambda& init, const TWideSwitchLambda& switcher,
+                                            const TBinaryWideLambda& handler, bool useCtx) {
+    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, stream.GetStaticType()));
 
     TRuntimeNode::TList itemArgs;
     itemArgs.reserve(wideComponents.size());
@@ -5464,7 +5551,7 @@ TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda
 
     const auto chop = switcher(itemArgs, stateArgs);
 
-    const auto next = update(itemArgs, stateArgs);
+    const auto next = handler(itemArgs, stateArgs);
     MKQL_ENSURE(next.size() == first.size(), "Mismatch init and update state size.");
 
     std::vector<TType*> tupleItems;
@@ -5473,7 +5560,7 @@ TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda
                    std::bind(&TRuntimeNode::GetStaticType, std::placeholders::_1));
 
     TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(NewMultiType(tupleItems)));
-    callableBuilder.Add(flow);
+    callableBuilder.Add(stream);
     std::for_each(itemArgs.cbegin(), itemArgs.cend(),
                   std::bind(&TCallableBuilder::Add, std::ref(callableBuilder), std::placeholders::_1));
     std::for_each(first.cbegin(), first.cend(),
@@ -5487,7 +5574,7 @@ TRuntimeNode TProgramBuilder::WideCondense1(TRuntimeNode flow, const TWideLambda
         callableBuilder.Add(NewDataLiteral<bool>(useCtx));
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::CombineCore(TRuntimeNode stream,
@@ -5539,7 +5626,7 @@ TRuntimeNode TProgramBuilder::CombineCore(TRuntimeNode stream,
     callableBuilder.Add(finishItem);
     callableBuilder.Add(NewDataLiteral(memLimit));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::GroupingCore(TRuntimeNode stream,
@@ -5583,7 +5670,7 @@ TRuntimeNode TProgramBuilder::GroupingCore(TRuntimeNode stream,
         callableBuilder.Add(handlerItemArg);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Chopper(TRuntimeNode flow, const TUnaryLambda& keyExtractor,
@@ -5613,7 +5700,7 @@ TRuntimeNode TProgramBuilder::Chopper(TRuntimeNode flow, const TUnaryLambda& key
     callableBuilder.Add(input);
     callableBuilder.Add(output);
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::WideChopper(TRuntimeNode flow, const TWideLambda& extractor,
@@ -5621,7 +5708,8 @@ TRuntimeNode TProgramBuilder::WideChopper(TRuntimeNode flow, const TWideLambda& 
                                           const std::function<TRuntimeNode(TRuntimeNode::TList, TRuntimeNode)>& groupHandler) {
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
-    TRuntimeNode::TList itemArgs, keyArgs;
+    TRuntimeNode::TList itemArgs;
+    TRuntimeNode::TList keyArgs;
     itemArgs.reserve(wideComponents.size());
 
     auto i = 0U;
@@ -5648,7 +5736,7 @@ TRuntimeNode TProgramBuilder::WideChopper(TRuntimeNode flow, const TWideLambda& 
     callableBuilder.Add(groupSwitchResult);
     callableBuilder.Add(input);
     callableBuilder.Add(output);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::HoppingCore(TRuntimeNode list,
@@ -5676,7 +5764,10 @@ TRuntimeNode TProgramBuilder::HoppingCore(TRuntimeNode list,
     auto outStateUpdate = update(itemArg, stateArg);
 
     auto hasSaveLoad = (bool)save;
-    TRuntimeNode saveArg, outSave, loadArg, outLoad;
+    TRuntimeNode saveArg;
+    TRuntimeNode outSave;
+    TRuntimeNode loadArg;
+    TRuntimeNode outLoad;
     if (hasSaveLoad) {
         saveArg = Arg(stateType);
         outSave = save(saveArg);
@@ -5719,7 +5810,7 @@ TRuntimeNode TProgramBuilder::HoppingCore(TRuntimeNode list,
     callableBuilder.Add(interval);
     callableBuilder.Add(delay);
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
@@ -5733,7 +5824,7 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
                                                const TTernaryLambda& finish,
                                                TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay,
                                                TRuntimeNode dataWatermarks, TRuntimeNode watermarksMode,
-                                               TRuntimeNode farFutureSizeLimit, TRuntimeNode farFutureTimeLimit,
+                                               TRuntimeNode farFutureCountMax, TRuntimeNode farFutureTimeMax,
                                                TRuntimeNode earlyPolicy, TRuntimeNode latePolicy)
 {
     auto streamType = AS_TYPE(TStreamType, list);
@@ -5755,7 +5846,10 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
     auto outStateUpdate = update(itemArg, stateArg);
 
     auto hasSaveLoad = (bool)save;
-    TRuntimeNode saveArg, outSave, loadArg, outLoad;
+    TRuntimeNode saveArg;
+    TRuntimeNode outSave;
+    TRuntimeNode loadArg;
+    TRuntimeNode outLoad;
     if (hasSaveLoad) {
         saveArg = Arg(stateType);
         outSave = save(saveArg);
@@ -5801,17 +5895,17 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
     callableBuilder.Add(delay);
     callableBuilder.Add(dataWatermarks);
     callableBuilder.Add(watermarksMode);
-    if (farFutureSizeLimit || farFutureTimeLimit || earlyPolicy || latePolicy) {
+    if (farFutureCountMax || farFutureTimeMax || earlyPolicy || latePolicy) {
         if constexpr (RuntimeVersion < 70U) {
             THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
         }
-        callableBuilder.Add(farFutureSizeLimit);
-        callableBuilder.Add(farFutureTimeLimit);
+        callableBuilder.Add(farFutureCountMax);
+        callableBuilder.Add(farFutureTimeMax);
         callableBuilder.Add(earlyPolicy);
         callableBuilder.Add(latePolicy);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Default(TType* type) {
@@ -5831,48 +5925,48 @@ TRuntimeNode TProgramBuilder::Default(TType* type) {
         value = NUdf::TUnboxedValuePod::Zero();
     }
 
-    return TRuntimeNode(TDataLiteral::Create(value, targetType, Env_), true);
+    return TRuntimeNode(TDataLiteral::Create(value, targetType, Env_), /*isImmediate=*/true);
 }
 
-TRuntimeNode TProgramBuilder::Cast(TRuntimeNode arg, TType* type) {
-    if (arg.GetStaticType()->IsSameType(*type)) {
-        return arg;
+TRuntimeNode TProgramBuilder::Cast(TRuntimeNode data, TType* type) {
+    if (data.GetStaticType()->IsSameType(*type)) {
+        return data;
     }
 
     bool isOptional;
     const auto targetType = UnpackOptionalData(type, isOptional);
-    const auto sourceType = UnpackOptionalData(arg, isOptional);
+    const auto sourceType = UnpackOptionalData(data, isOptional);
 
     const auto sId = sourceType->GetSchemeType();
     const auto tId = targetType->GetSchemeType();
 
     if (sId == NUdf::TDataType<char*>::Id) {
         if (tId != NUdf::TDataType<char*>::Id) {
-            return FromString(arg, type);
+            return FromString(data, type);
         } else {
-            return arg;
+            return data;
         }
     }
 
     if (sId == NUdf::TDataType<NUdf::TUtf8>::Id) {
         if (tId != NUdf::TDataType<char*>::Id) {
-            return FromString(arg, type);
+            return FromString(data, type);
         } else {
-            return ToString(arg);
+            return ToString(data);
         }
     }
 
     if (tId == NUdf::TDataType<char*>::Id) {
-        return ToString(arg);
+        return ToString(data);
     }
 
     if (tId == NUdf::TDataType<NUdf::TUtf8>::Id) {
-        return ToString<true>(arg);
+        return ToString<true>(data);
     }
 
     if (tId == NUdf::TDataType<NUdf::TDecimal>::Id) {
         const auto& params = static_cast<const TDataDecimalType*>(targetType)->GetParams();
-        return ToDecimal(arg, params.first, params.second);
+        return ToDecimal(data, params.first, params.second);
     }
 
     const auto options = NKikimr::NUdf::GetCastResult(*sourceType->GetDataSlot(), *targetType->GetDataSlot());
@@ -5882,7 +5976,7 @@ TRuntimeNode TProgramBuilder::Cast(TRuntimeNode arg, TType* type) {
 
     const bool useToIntegral = (*options & NKikimr::NUdf::ECastOptions::Undefined) ||
                                (*options & NKikimr::NUdf::ECastOptions::MayFail);
-    return useToIntegral ? ToIntegral(arg, type) : Convert(arg, type);
+    return useToIntegral ? ToIntegral(data, type) : Convert(data, type);
 }
 
 TRuntimeNode TProgramBuilder::RangeCreate(TRuntimeNode list) {
@@ -5919,7 +6013,7 @@ TRuntimeNode TProgramBuilder::RangeCreate(TRuntimeNode list) {
     TCallableBuilder callableBuilder(Env_, __func__, TListType::Create(outputRange, Env_));
     callableBuilder.Add(list);
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::RangeUnion(const TArrayRef<const TRuntimeNode>& lists) {
@@ -5981,7 +6075,7 @@ TRuntimeNode TProgramBuilder::RangeMultiply(const TArrayRef<const TRuntimeNode>&
         callableBuilder.Add(args[i]);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::RangeFinalize(TRuntimeNode list) {
@@ -6013,7 +6107,7 @@ TRuntimeNode TProgramBuilder::RangeFinalize(TRuntimeNode list) {
     TCallableBuilder callableBuilder(Env_, __func__, TListType::Create(outputRange, Env_));
     callableBuilder.Add(list);
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Round(const std::string_view& callableName, TRuntimeNode source, TType* targetType) {
@@ -6036,7 +6130,7 @@ TRuntimeNode TProgramBuilder::Round(const std::string_view& callableName, TRunti
     TCallableBuilder callableBuilder(Env_, callableName, TOptionalType::Create(targetType, Env_));
     callableBuilder.Add(source);
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::NextValue(TRuntimeNode value) {
@@ -6050,13 +6144,13 @@ TRuntimeNode TProgramBuilder::NextValue(TRuntimeNode value) {
     TCallableBuilder callableBuilder(Env_, __func__, TOptionalType::Create(valueType, Env_));
     callableBuilder.Add(value);
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::Nop(TRuntimeNode value, TType* returnType) {
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(value);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 bool TProgramBuilder::IsNull(TRuntimeNode arg) {
@@ -6075,7 +6169,7 @@ TRuntimeNode TProgramBuilder::Replicate(TRuntimeNode item, TRuntimeNode count, c
     callableBuilder.Add(NewDataLiteral(row));
     callableBuilder.Add(NewDataLiteral(column));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::PgConst(TPgType* pgType, const std::string_view& value, TRuntimeNode typeMod) {
@@ -6086,32 +6180,68 @@ TRuntimeNode TProgramBuilder::PgConst(TPgType* pgType, const std::string_view& v
         callableBuilder.Add(typeMod);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::PgResolvedCall(bool useContext, const std::string_view& name,
                                              ui32 id, const TArrayRef<const TRuntimeNode>& args,
-                                             TType* returnType, bool rangeFunction) {
-    TCallableBuilder callableBuilder(Env_, __func__, returnType);
-    callableBuilder.Add(NewDataLiteral(useContext));
-    callableBuilder.Add(NewDataLiteral(rangeFunction));
-    callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
-    callableBuilder.Add(NewDataLiteral(id));
-    for (const auto& arg : args) {
-        callableBuilder.Add(arg);
+                                             TType* returnType, bool rangeFunction, ui32 collationOid) {
+    // On old runtimes, always use the "PgResolvedCall" callable exactly as before (and
+    // explicit COLLATE, which needs the collation oid slot, isn't representable at all).
+    // Once the runtime is new enough, ALWAYS use the distinct "PgResolvedCall2" callable -
+    // with an extra collation oid slot right after `id` - even when collationOid is 0, so
+    // that "PgResolvedCall" stops being emitted entirely once the whole fleet is upgraded
+    // past this version, and its read-side support can eventually be deleted. The two
+    // shapes are told apart by callable name rather than input count/type, since an arg's
+    // own static type can legitimately be non-Pg (e.g. a NULL literal).
+    if constexpr (RuntimeVersion < 81U) {
+        Y_ENSURE(collationOid == 0, "Explicit COLLATE requires minikql runtime version >= 81, current: " << RuntimeVersion);
+        TCallableBuilder callableBuilder(Env_, "PgResolvedCall", returnType);
+        callableBuilder.Add(NewDataLiteral(useContext));
+        callableBuilder.Add(NewDataLiteral(rangeFunction));
+        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
+        callableBuilder.Add(NewDataLiteral(id));
+        for (const auto& arg : args) {
+            callableBuilder.Add(arg);
+        }
+        return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+    } else {
+        TCallableBuilder callableBuilder(Env_, "PgResolvedCall2", returnType);
+        callableBuilder.Add(NewDataLiteral(useContext));
+        callableBuilder.Add(NewDataLiteral(rangeFunction));
+        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
+        callableBuilder.Add(NewDataLiteral(id));
+        callableBuilder.Add(NewDataLiteral(collationOid));
+        for (const auto& arg : args) {
+            callableBuilder.Add(arg);
+        }
+        return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
     }
-    return TRuntimeNode(callableBuilder.Build(), false);
 }
 
 TRuntimeNode TProgramBuilder::BlockPgResolvedCall(const std::string_view& name, ui32 id,
-                                                  const TArrayRef<const TRuntimeNode>& args, TType* returnType) {
-    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+                                                  const TArrayRef<const TRuntimeNode>& args, TType* returnType,
+                                                  ui32 collationOid) {
+    // Mirrors TProgramBuilder::PgResolvedCall - see the comment there.
+    if constexpr (RuntimeVersion < 81U) {
+        Y_ENSURE(collationOid == 0, "Explicit COLLATE requires minikql runtime version >= 81, current: " << RuntimeVersion);
+        TCallableBuilder callableBuilder(Env_, "BlockPgResolvedCall", returnType);
+        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
+        callableBuilder.Add(NewDataLiteral(id));
+        for (const auto& arg : args) {
+            callableBuilder.Add(arg);
+        }
+        return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+    }
+
+    TCallableBuilder callableBuilder(Env_, "BlockPgResolvedCall2", returnType);
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
     callableBuilder.Add(NewDataLiteral(id));
+    callableBuilder.Add(NewDataLiteral(collationOid));
     for (const auto& arg : args) {
         callableBuilder.Add(arg);
     }
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::PgArray(const TArrayRef<const TRuntimeNode>& args, TType* returnType) {
@@ -6120,7 +6250,7 @@ TRuntimeNode TProgramBuilder::PgArray(const TArrayRef<const TRuntimeNode>& args,
         callableBuilder.Add(arg);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::PgTableContent(
@@ -6130,14 +6260,10 @@ TRuntimeNode TProgramBuilder::PgTableContent(
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(cluster));
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(table));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::PgToRecord(TRuntimeNode input, const TArrayRef<std::pair<std::string_view, std::string_view>>& members) {
-    if constexpr (RuntimeVersion < 48U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     MKQL_ENSURE(input.GetStaticType()->IsStruct(), "Expected struct");
     auto structType = AS_TYPE(TStructType, input.GetStaticType());
     for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
@@ -6155,7 +6281,7 @@ TRuntimeNode TProgramBuilder::PgToRecord(TRuntimeNode input, const TArrayRef<std
     }
 
     callableBuilder.Add(NewTuple(names));
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::PgCast(TRuntimeNode input, TType* returnType, TRuntimeNode typeMod) {
@@ -6165,19 +6291,19 @@ TRuntimeNode TProgramBuilder::PgCast(TRuntimeNode input, TType* returnType, TRun
         callableBuilder.Add(typeMod);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::FromPg(TRuntimeNode input, TType* returnType) {
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(input);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::ToPg(TRuntimeNode input, TType* returnType) {
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(input);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::PgClone(TRuntimeNode input, const TArrayRef<const TRuntimeNode>& dependentNodes) {
@@ -6187,19 +6313,113 @@ TRuntimeNode TProgramBuilder::PgClone(TRuntimeNode input, const TArrayRef<const 
         callableBuilder.Add(node);
     }
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::WithContext(TRuntimeNode input, const std::string_view& contextType) {
     TCallableBuilder callableBuilder(Env_, __func__, input.GetStaticType());
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(contextType));
     callableBuilder.Add(input);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::PgInternal0(TType* returnType) {
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BlockGuess(TRuntimeNode variant, ui32 tupleIndex) {
+    if constexpr (RuntimeVersion < 79) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto blockType = AS_TYPE(TBlockType, variant.GetStaticType());
+    auto inputItemType = blockType->GetItemType();
+    bool isOptional;
+    auto unpacked = UnpackOptional(inputItemType, isOptional);
+    auto variantType = AS_TYPE(TVariantType, unpacked);
+    auto underlying = AS_TYPE(TTupleType, variantType->GetUnderlyingType());
+    MKQL_ENSURE(tupleIndex < underlying->GetElementsCount(), "Wrong tuple index");
+    auto alternativeType = underlying->GetElementType(tupleIndex);
+    auto returnType = NewBlockType(NewOptionalType(alternativeType), blockType->GetShape());
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(variant);
+    callableBuilder.Add(NewDataLiteral<ui32>(tupleIndex));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BlockGuess(TRuntimeNode variant, const std::string_view& memberName) {
+    if constexpr (RuntimeVersion < 79) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto blockType = AS_TYPE(TBlockType, variant.GetStaticType());
+    auto inputItemType = blockType->GetItemType();
+    bool isOptional;
+    auto unpacked = UnpackOptional(inputItemType, isOptional);
+    auto variantType = AS_TYPE(TVariantType, unpacked);
+    auto underlying = AS_TYPE(TStructType, variantType->GetUnderlyingType());
+    auto structIndex = underlying->GetMemberIndex(memberName);
+    auto alternativeType = underlying->GetMemberType(structIndex);
+    auto returnType = NewBlockType(NewOptionalType(alternativeType), blockType->GetShape());
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(variant);
+    callableBuilder.Add(NewDataLiteral<ui32>(structIndex));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BlockWay(TRuntimeNode variant) {
+    if constexpr (RuntimeVersion < 80) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto blockType = AS_TYPE(TBlockType, variant.GetStaticType());
+    auto inputItemType = blockType->GetItemType();
+    bool isOptional;
+    auto unpacked = UnpackOptional(inputItemType, isOptional);
+    auto variantType = AS_TYPE(TVariantType, unpacked);
+    auto underlying = variantType->GetUnderlyingType();
+    TType* alternativeKeyType = underlying->IsTuple()
+                                    ? NewDataType(NUdf::EDataSlot::Uint32)
+                                    : NewDataType(NUdf::EDataSlot::Utf8);
+    TType* itemReturnType = isOptional ? NewOptionalType(alternativeKeyType)
+                                       : alternativeKeyType;
+    auto returnType = NewBlockType(itemReturnType, blockType->GetShape());
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(variant);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BlockVariant(TRuntimeNode item, ui32 tupleIndex, TType* variantType) {
+    if constexpr (RuntimeVersion < 81) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto itemBlockType = AS_TYPE(TBlockType, item.GetStaticType());
+    auto varType = AS_TYPE(TVariantType, variantType);
+    auto underlying = AS_TYPE(TTupleType, varType->GetUnderlyingType());
+    MKQL_ENSURE(tupleIndex < underlying->GetElementsCount(), "Wrong tuple index");
+
+    auto returnType = NewBlockType(variantType, itemBlockType->GetShape());
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(NewDataLiteral<ui32>(tupleIndex));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BlockVariant(TRuntimeNode item, const std::string_view& memberName, TType* variantType) {
+    if constexpr (RuntimeVersion < 81) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto itemBlockType = AS_TYPE(TBlockType, item.GetStaticType());
+    auto varType = AS_TYPE(TVariantType, variantType);
+    auto underlying = AS_TYPE(TStructType, varType->GetUnderlyingType());
+    auto structIndex = underlying->GetMemberIndex(memberName);
+
+    auto returnType = NewBlockType(variantType, itemBlockType->GetShape());
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(NewDataLiteral<ui32>(structIndex));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockIf(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch) {
@@ -6216,7 +6436,7 @@ TRuntimeNode TProgramBuilder::BlockIf(TRuntimeNode condition, TRuntimeNode thenB
     callableBuilder.Add(condition);
     callableBuilder.Add(thenBranch);
     callableBuilder.Add(elseBranch);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockJust(TRuntimeNode data) {
@@ -6224,7 +6444,7 @@ TRuntimeNode TProgramBuilder::BlockJust(TRuntimeNode data) {
     auto returnType = NewBlockType(NewOptionalType(initialType->GetItemType()), initialType->GetShape());
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(data);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args) {
@@ -6238,7 +6458,7 @@ TRuntimeNode TProgramBuilder::BlockFunc(const std::string_view& funcName, TType*
         builder.Add(arg);
     }
 
-    return TRuntimeNode(builder.Build(), false);
+    return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockCombineAll(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
@@ -6268,20 +6488,15 @@ TRuntimeNode TProgramBuilder::BuildBlockCombineAll(const std::string_view& calla
     }
 
     builder.Add(NewTuple(aggsNodes));
-    return TRuntimeNode(builder.Build(), false);
+    return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode stream, std::optional<ui32> filterColumn,
+TRuntimeNode TProgramBuilder::BlockCombineAll(TRuntimeNode flow, std::optional<ui32> filterColumn,
                                               const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
-    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected stream as input type");
+    MKQL_ENSURE(flow.GetStaticType()->IsStream(), "Expected stream as input type");
     MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
 
-    if constexpr (RuntimeVersion < 52U) {
-        const auto flowReturnType = NewFlowType(AS_TYPE(TStreamType, returnType)->GetItemType());
-        return FromFlow(BuildBlockCombineAll(__func__, ToFlow(stream), filterColumn, aggs, flowReturnType));
-    } else {
-        return BuildBlockCombineAll(__func__, stream, filterColumn, aggs, returnType);
-    }
+    return BuildBlockCombineAll(__func__, flow, filterColumn, aggs, returnType);
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockCombineHashed(const std::string_view& callableName, TRuntimeNode input,
@@ -6318,24 +6533,17 @@ TRuntimeNode TProgramBuilder::BuildBlockCombineHashed(const std::string_view& ca
     }
 
     builder.Add(NewTuple(aggsNodes));
-    return TRuntimeNode(builder.Build(), false);
+    return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode stream, std::optional<ui32> filterColumn,
+TRuntimeNode TProgramBuilder::BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn,
                                                  const TArrayRef<ui32>& keys,
                                                  const TArrayRef<const TAggInfo>& aggs,
                                                  TType* returnType) {
-    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected stream as input type");
+    MKQL_ENSURE(flow.GetStaticType()->IsStream(), "Expected stream as input type");
     MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
 
-    if constexpr (RuntimeVersion < 52U) {
-        const auto flowReturnType = NewFlowType(AS_TYPE(TStreamType, returnType)->GetItemType());
-        return FromFlow(BuildBlockCombineHashed(__func__,
-                                                ToFlow(stream), filterColumn,
-                                                keys, aggs, flowReturnType));
-    } else {
-        return BuildBlockCombineHashed(__func__, stream, filterColumn, keys, aggs, returnType);
-    }
+    return BuildBlockCombineHashed(__func__, flow, filterColumn, keys, aggs, returnType);
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockMergeFinalizeHashed(const std::string_view& callableName, TRuntimeNode input,
@@ -6367,22 +6575,15 @@ TRuntimeNode TProgramBuilder::BuildBlockMergeFinalizeHashed(const std::string_vi
     }
 
     builder.Add(NewTuple(aggsNodes));
-    return TRuntimeNode(builder.Build(), false);
+    return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode stream, const TArrayRef<ui32>& keys,
+TRuntimeNode TProgramBuilder::BlockMergeFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
                                                        const TArrayRef<const TAggInfo>& aggs, TType* returnType) {
-    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected stream as input type");
+    MKQL_ENSURE(flow.GetStaticType()->IsStream(), "Expected stream as input type");
     MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
 
-    if constexpr (RuntimeVersion < 52U) {
-        const auto flowReturnType = NewFlowType(AS_TYPE(TStreamType, returnType)->GetItemType());
-        return FromFlow(BuildBlockMergeFinalizeHashed(__func__,
-                                                      ToFlow(stream), keys,
-                                                      aggs, flowReturnType));
-    } else {
-        return BuildBlockMergeFinalizeHashed(__func__, stream, keys, aggs, returnType);
-    }
+    return BuildBlockMergeFinalizeHashed(__func__, flow, keys, aggs, returnType);
 }
 
 TRuntimeNode TProgramBuilder::BuildBlockMergeManyFinalizeHashed(const std::string_view& callableName, TRuntimeNode input,
@@ -6427,23 +6628,18 @@ TRuntimeNode TProgramBuilder::BuildBlockMergeManyFinalizeHashed(const std::strin
     }
 
     builder.Add(NewTuple(streamsNodes));
-    return TRuntimeNode(builder.Build(), false);
+    return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
 }
 
-TRuntimeNode TProgramBuilder::BlockMergeManyFinalizeHashed(TRuntimeNode stream, const TArrayRef<ui32>& keys,
+TRuntimeNode TProgramBuilder::BlockMergeManyFinalizeHashed(TRuntimeNode flow, const TArrayRef<ui32>& keys,
                                                            const TArrayRef<const TAggInfo>& aggs,
                                                            ui32 streamIndex,
                                                            const TVector<TVector<ui32>>& streams,
                                                            TType* returnType) {
-    MKQL_ENSURE(stream.GetStaticType()->IsStream(), "Expected stream as input type");
+    MKQL_ENSURE(flow.GetStaticType()->IsStream(), "Expected stream as input type");
     MKQL_ENSURE(returnType->IsStream(), "Expected stream as return type");
 
-    if constexpr (RuntimeVersion < 52U) {
-        const auto flowReturnType = NewFlowType(AS_TYPE(TStreamType, returnType)->GetItemType());
-        return FromFlow(BuildBlockMergeManyFinalizeHashed(__func__, ToFlow(stream), keys, aggs, streamIndex, streams, flowReturnType));
-    } else {
-        return BuildBlockMergeManyFinalizeHashed(__func__, stream, keys, aggs, streamIndex, streams, returnType);
-    }
+    return BuildBlockMergeManyFinalizeHashed(__func__, flow, keys, aggs, streamIndex, streams, returnType);
 }
 
 TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& args, const TArrayLambda& handler) {
@@ -6471,14 +6667,10 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
     }
 
     builder.Add(ret);
-    return TRuntimeNode(builder.Build(), false);
+    return TRuntimeNode(builder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockStorage(TRuntimeNode list, TType* returnType) {
-    if constexpr (RuntimeVersion < 62U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     MKQL_ENSURE(list.GetStaticType()->IsList(), "Expected List as input type");
     const auto listType = AS_TYPE(TListType, list.GetStaticType());
 
@@ -6493,7 +6685,7 @@ TRuntimeNode TProgramBuilder::BlockStorage(TRuntimeNode list, TType* returnType)
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(list);
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockMapJoinIndex(TRuntimeNode blockStorage,
@@ -6501,10 +6693,6 @@ TRuntimeNode TProgramBuilder::BlockMapJoinIndex(TRuntimeNode blockStorage,
                                                 const TArrayRef<const ui32>& keyColumns,
                                                 bool any,
                                                 TType* returnType) {
-    if constexpr (RuntimeVersion < 62U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     MKQL_ENSURE(blockStorage.GetStaticType()->IsResource(), "Expected Resource as an input type");
     auto blockStorageType = AS_TYPE(TResourceType, blockStorage.GetStaticType());
     MKQL_ENSURE(blockStorageType->GetTag().StartsWith(BlockStorageResourcePrefix), "Expected block storage resource");
@@ -6526,11 +6714,11 @@ TRuntimeNode TProgramBuilder::BlockMapJoinIndex(TRuntimeNode blockStorage,
 
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(blockStorage);
-    callableBuilder.Add(TRuntimeNode(listItemType, true));
+    callableBuilder.Add(TRuntimeNode(listItemType, /*isImmediate=*/true));
     callableBuilder.Add(NewTuple(keyColumnsNodes));
     callableBuilder.Add(NewDataLiteral((bool)any));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightBlockStorage,
@@ -6540,10 +6728,6 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntime
                                                const TArrayRef<const ui32>& rightKeyColumns,
                                                const TArrayRef<const ui32>& rightKeyDrops,
                                                TType* returnType) {
-    if constexpr (RuntimeVersion < 62U) {
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
-    }
-
     MKQL_ENSURE(rightBlockStorage.GetStaticType()->IsResource(), "Expected Resource as an input type");
     auto rightBlockStorageType = AS_TYPE(TResourceType, rightBlockStorage.GetStaticType());
     if (joinKind != EJoinKind::Cross) {
@@ -6600,14 +6784,14 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntime
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(leftStream);
     callableBuilder.Add(rightBlockStorage);
-    callableBuilder.Add(TRuntimeNode(rightListItemType, true));
+    callableBuilder.Add(TRuntimeNode(rightListItemType, /*isImmediate=*/true));
     callableBuilder.Add(NewDataLiteral((ui32)joinKind));
     callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
     callableBuilder.Add(NewTuple(leftKeyDropsNodes));
     callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
     callableBuilder.Add(NewTuple(rightKeyDropsNodes));
 
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 namespace {
@@ -6632,11 +6816,11 @@ TRuntimeNode PatternToRuntimeNode(const TRowPattern& pattern, const TProgramBuil
             factorBuilder.Add(programBuilder.NewDataLiteral(factor.Greedy));
             factorBuilder.Add(programBuilder.NewDataLiteral(factor.Output));
             factorBuilder.Add(programBuilder.NewDataLiteral(factor.Unused));
-            termBuilder.Add({factorBuilder.Build(), true});
+            termBuilder.Add({factorBuilder.Build(), /*isImmediate=*/true});
         }
-        patternBuilder.Add({termBuilder.Build(), true});
+        patternBuilder.Add({termBuilder.Build(), /*isImmediate=*/true});
     }
-    return {patternBuilder.Build(), true};
+    return {patternBuilder.Build(), /*isImmediate=*/true};
 };
 
 } // namespace
@@ -6701,8 +6885,8 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
         }
 
         measureInputDataArg = Arg(NewListType(measureInputDataRowType));
-        for (size_t i = 0; i != getMeasures.size(); ++i) {
-            measures.push_back(getMeasures[i](measureInputDataArg, matchedVarsArg));
+        for (const auto& getMeasure : getMeasures) {
+            measures.push_back(getMeasure(measureInputDataArg, matchedVarsArg));
         }
     }
 
@@ -6817,15 +7001,11 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
         callableBuilder.Add(d);
     }
     callableBuilder.Add(NewDataLiteral(streamingMode));
-    if constexpr (RuntimeVersion >= 52U) {
-        callableBuilder.Add(NewDataLiteral(static_cast<i32>(skipTo.To)));
-        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(skipTo.Var));
-    }
-    if constexpr (RuntimeVersion >= 54U) {
-        callableBuilder.Add(NewDataLiteral(static_cast<i32>(rowsPerMatch)));
-        callableBuilder.Add(NewList(outputColumnEntryType, outputColumnOrder));
-    }
-    return TRuntimeNode(callableBuilder.Build(), false);
+    callableBuilder.Add(NewDataLiteral(static_cast<i32>(skipTo.To)));
+    callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(skipTo.Var));
+    callableBuilder.Add(NewDataLiteral(static_cast<i32>(rowsPerMatch)));
+    callableBuilder.Add(NewList(outputColumnEntryType, outputColumnOrder));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::TimeOrderRecover(
@@ -6857,7 +7037,7 @@ TRuntimeNode TProgramBuilder::TimeOrderRecover(
     callableBuilder.Add(delay),
         callableBuilder.Add(ahead),
         callableBuilder.Add(rowLimit);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 bool CanExportType(TType* type, const TTypeEnvironment& env) {

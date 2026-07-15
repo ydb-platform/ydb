@@ -26,10 +26,12 @@ public:
 
 private:
     const TBlobFormatConfigPtr Config_;
+
     const std::string DataColumnName_;
-    const std::string PartIndexColumnName_;
     const int DataColumnId_;
-    const int PartIndexColumnId_;
+
+    const std::optional<std::string> PartIndexColumnName_;
+    const std::optional<int> PartIndexColumnId_;
 
     std::optional<i64> LastPartIndex_;
 
@@ -60,19 +62,25 @@ TBlobWriter::TBlobWriter(
         /*keyColumnCount*/ 0)
     , Config_(config)
     , DataColumnName_(Config_->DataColumnName.value_or(TBlobTableSchema::DataColumn))
-    , PartIndexColumnName_(Config_->PartIndexColumnName.value_or(TBlobTableSchema::PartIndexColumn))
     , DataColumnId_(NameTable_->GetIdOrRegisterName(DataColumnName_))
-    , PartIndexColumnId_(NameTable_->GetIdOrRegisterName(PartIndexColumnName_))
+    , PartIndexColumnName_(Config_->EnablePartIndex
+        ? std::optional<std::string>(Config_->PartIndexColumnName.value_or(TBlobTableSchema::PartIndexColumn))
+        : std::nullopt)
+    , PartIndexColumnId_(PartIndexColumnName_
+        ? std::optional<int>(NameTable_->GetIdOrRegisterName(*PartIndexColumnName_))
+        : std::nullopt)
 { }
 
 void TBlobWriter::DoWrite(TRange<TUnversionedRow> rows)
 {
     auto* output = GetOutputStream();
     for (auto row : rows) {
-        auto partIndexValue = GetTypedValue(row, PartIndexColumnId_, PartIndexColumnName_, EValueType::Int64);
-        i64 currentPartIndex = partIndexValue.Data.Int64;
-        ValidatePartIndex(currentPartIndex);
-        LastPartIndex_ = currentPartIndex;
+        if (Config_->EnablePartIndex) {
+            auto partIndexValue = GetTypedValue(row, *PartIndexColumnId_, *PartIndexColumnName_, EValueType::Int64);
+            i64 currentPartIndex = partIndexValue.Data.Int64;
+            ValidatePartIndex(currentPartIndex);
+            LastPartIndex_ = currentPartIndex;
+        }
 
         auto dataValue = GetTypedValue(row, DataColumnId_, DataColumnName_, EValueType::String);
         output->Write(dataValue.AsStringBuf());

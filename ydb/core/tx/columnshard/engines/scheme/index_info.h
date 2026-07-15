@@ -8,7 +8,6 @@
 #include "indexes/abstract/meta.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/program/execution.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -17,6 +16,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/column_ids.h>
+#include <ydb/core/tx/data_events/common/modification_type.h>
 
 #include <ydb/library/formats/arrow/transformer/abstract.h>
 
@@ -31,10 +31,16 @@ class Schema;
 namespace NKikimr::NOlap {
 class TPortionInfo;
 class TCompactedPortionInfo;
+
 namespace NIndexes {
 class TSkipIndex;
 }
+
 namespace NIndexes::NMax {
+class TIndexMeta;
+}
+
+namespace NIndexes::NMinMax {
 class TIndexMeta;
 }
 
@@ -63,8 +69,21 @@ public:
     }
 
     TPresetId(const ui64 presetId)
-        : PresetId(presetId) {
+        : PresetId(presetId)
+    {
     }
+};
+
+struct TInsertOptionsPolicy {
+    std::optional<bool> BuildIndexesEnabled;
+    std::optional<ui64> BuildIndexesMinBlobBytes;
+
+    bool IsConfigured() const {
+        return BuildIndexesEnabled || BuildIndexesMinBlobBytes;
+    }
+
+    bool MeetsMinBlobBytes(ui64 totalBlobBytes) const;
+    bool ShouldBuildIndexesOnInsert(NEvWrite::EModificationType mType, ui64 totalBlobBytes) const;
 };
 
 struct TIndexInfo: public IIndexInfo {
@@ -79,7 +98,7 @@ private:
     std::vector<ui32> ColumnIdxSortedByName;
     std::vector<ui32> PKColumnIds;
     std::vector<TNameTypeInfo> PKColumns;
-    std::vector<TNameTypeInfo> Columns;
+    THashMap<ui32, TNameTypeInfo> Columns;
 
     std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
@@ -89,6 +108,7 @@ private:
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
     std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
     std::optional<TString> ScanReaderPolicyName;
+    TInsertOptionsPolicy InsertOptions;
 
     TPresetId PresetId;
     ui64 Version = 0;
@@ -98,7 +118,8 @@ private:
     NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 
     TIndexInfo(const ui64 presetId)
-        : PresetId(presetId) {
+        : PresetId(presetId)
+    {
     }
 
     static std::shared_ptr<arrow::Field> BuildArrowField(const NTable::TColumn& column, const std::shared_ptr<TSchemaObjectsCache>& cache) {
@@ -184,6 +205,7 @@ public:
     }
 
     NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
+
     std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
         AFL_VERIFY(columnIndex < ColumnFeatures.size());
         return ColumnFeatures[columnIndex]->GetPKColumnIndex();
@@ -197,6 +219,7 @@ public:
         const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
     const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& GetCompactionPlannerConstructor() const;
+
     const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& GetMetadataManagerConstructor() const {
         AFL_VERIFY(MetadataManagerConstructor);
         return MetadataManagerConstructor;
@@ -240,6 +263,10 @@ public:
 
     bool GetSchemeNeedActualization() const {
         return SchemeNeedActualization;
+    }
+
+    const TInsertOptionsPolicy& GetInsertOptions() const {
+        return InsertOptions;
     }
 
     std::set<TString> GetUsedStorageIds(const TString& portionTierName) const {
@@ -319,6 +346,7 @@ public:
     std::shared_ptr<arrow::Schema> GetColumnsSchemaByOrderedIndexes(const std::vector<ui32>& columnIds) const;
     TColumnSaver GetColumnSaver(const ui32 columnId) const;
     virtual const std::shared_ptr<TColumnLoader>& GetColumnLoaderOptional(const ui32 columnId) const override;
+
     std::optional<std::string> GetColumnNameOptional(const ui32 columnId) const {
         auto f = GetColumnFieldOptional(columnId);
         if (!f) {
@@ -376,7 +404,11 @@ public:
     std::vector<std::shared_ptr<NIndexes::TSkipIndex>> FindSkipIndexes(
         const NIndexes::NRequest::TOriginalDataAddress& originalDataAddress, const NArrow::NSSA::TIndexCheckOperation& op) const;
     std::shared_ptr<NIndexes::NMax::TIndexMeta> GetIndexMetaMax(const ui32 columnId) const;
+    std::shared_ptr<NIndexes::NMinMax::TIndexMeta> GetIndexMetaMinMax(const ui32 columnId) const;
     std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const;
+
+    [[nodiscard]] TConclusionStatus ReuseIndexChunks(std::vector<std::shared_ptr<IPortionDataChunk>> chunks, const ui32 indexId,
+        const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier, TSecondaryData& result) const;
 
     [[nodiscard]] TConclusionStatus AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
         const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier,
@@ -384,6 +416,7 @@ public:
 
     /// Returns an id of the column located by name. The name should exists in the schema.
     ui32 GetColumnIdVerified(const std::string& name) const;
+
     std::set<ui32> GetColumnIdsVerified(const std::set<TString>& names) const {
         std::set<ui32> result;
         for (auto&& i : names) {
@@ -391,6 +424,7 @@ public:
         }
         return result;
     }
+
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
     std::optional<ui32> GetColumnIndexOptional(const std::string& name) const;
 
@@ -402,22 +436,25 @@ public:
     std::vector<TString> GetColumnNames() const;
     std::vector<std::string> GetColumnSTLNames(const bool withSpecial = true) const;
     TColumnIdsView GetColumnIds(const bool withSpecial = true) const;
+
     ui32 GetColumnIdByIndexVerified(const ui32 index) const {
         AFL_VERIFY(index < SchemaColumnIdsWithSpecials.size());
         return SchemaColumnIdsWithSpecials[index];
     }
+
     const std::vector<ui32>& GetPKColumnIds() const {
         AFL_VERIFY(PKColumnIds.size());
         return PKColumnIds;
     }
+
     std::vector<ui32> GetEntityIds() const;
 
     /// Traditional Primary Key (includes uniqueness, search and sorting logic)
     const std::vector<TNameTypeInfo>& GetPrimaryKeyColumns() const {
         return PKColumns;
     }
-    
-    const std::vector<TNameTypeInfo>& GetColumns() const {
+
+    const THashMap<ui32, TNameTypeInfo>& GetColumns() const {
         return Columns;
     }
 
@@ -437,9 +474,11 @@ public:
             return std::make_shared<arrow::Schema>(std::move(fields));
         }
     }
+
     const std::shared_ptr<arrow::Schema>& GetReplaceKey() const {
         return PrimaryKey;
     }
+
     const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const {
         return PrimaryKey;
     }
@@ -455,6 +494,7 @@ public:
     bool IsSorted() const {
         return true;
     }
+
     bool IsSortedColumn(const ui32 columnId) const {
         return GetPKFirstColumnId() == columnId;
     }
@@ -464,6 +504,7 @@ public:
     }
 
     TConclusionStatus CheckCompatible(const TIndexInfo& other) const;
+
     NArrow::NSerialization::TSerializerContainer GetDefaultSerializer() const {
         return DefaultSerializer;
     }

@@ -6,6 +6,10 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
 
+namespace NKikimr::Tests {
+class TClient;
+}
+
 namespace NMonitoring::NTests {
 
 using namespace NActors;
@@ -15,7 +19,10 @@ extern const TString TEST_MON_PATH;
 extern const TString TEST_RESPONSE;
 extern const TString AUTHORIZATION_HEADER;
 extern const TString VALID_TOKEN;
+extern const TString ROOT_TOKEN;
 extern const TVector<TString> DEFAULT_TICKET_PARSER_GROUPS;
+
+void GrantConnect(Tests::TClient& client);
 
 class TTestActorPage : public TActorBootstrapped<TTestActorPage> {
 public:

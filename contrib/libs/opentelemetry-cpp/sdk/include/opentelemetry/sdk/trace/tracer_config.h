@@ -49,8 +49,8 @@ public:
   static TracerConfig Default();
 
 private:
-  explicit TracerConfig(const bool disabled = false) : disabled_(disabled) {}
-  bool disabled_;
+  explicit TracerConfig(const bool enabled = true) : enabled_(enabled) {}
+  bool enabled_;
 };
 }  // namespace trace
 }  // namespace sdk

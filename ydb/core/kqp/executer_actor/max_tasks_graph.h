@@ -1,0 +1,164 @@
+#pragma once
+
+#include "kqp_tasks_graph.h"
+
+#include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
+#include <ydb/core/protos/kqp.pb.h>
+
+#include <list>
+#include <optional>
+#include <vector>
+
+namespace NKikimr::NKqp {
+
+// Reflects the original TKqpTasksGraph using tasks count instead of tasks and links stages with tasks dependencies.
+//
+// Placement is column-based. A "column" is one replica slot of a copy group: it holds exactly one task from every stage
+// of the group and lives entirely on a single node. A standalone stage is a group of one stage, so its columns are just
+// its tasks. Placing a column onto a node (PlaceColumnOnNode) is the basic action of the placement algorithm, and Shrink
+// drops whole columns - this keeps copy-paired tasks co-located on the same node and their per-stage counts equal.
+class TMaxTasksGraph {
+    using TNodeIdx = size_t;
+    using TStageIdx = size_t;
+    using TGroupIdx = size_t;
+
+    using TNodeId = ui64;
+    using TStageId = NYql::NDq::TStageId;
+
+    using TColumnsPerNode = std::vector<size_t>; // TNodeIdx -> number of columns on the node
+
+public:
+    enum EStageType : ui8 {
+        FIXED, // fixed number of tasks
+        COPY,  // copies number of tasks from one of previous stages
+        ANY,   // any number of tasks
+    };
+
+    explicit TMaxTasksGraph(size_t maxChannelsCount, TTaskResourceEstimationParams estimationParams = {});
+
+    void AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot);
+    void AddNode(TNodeId node); // TODO: it's workaround. remove later.
+
+    void AddStage(TStageInfo& stageInfo, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput = std::nullopt);
+
+    void AddTask(const TTask& task, std::optional<TNodeId> node);
+
+    void EstimateTasksResources();
+
+    void DistributeTasksToNodes(const TPlacementParams& params = {});
+
+    void Shrink(); // TODO: forbid double call - it's not idempotent.
+
+    // Materializes the placement onto the graph:
+    // - drops the tasks of the columns that didn't survive Shrink(),
+    // - renumbers the survivors so their Ids stay contiguous,
+    // - stamps every survivor's Meta.ExpectedNodeId and fills stageInfo.Tasks.
+    // Runs once, before channels are built.
+    void PlaceTasks(TKqpTasksGraph& graph);
+
+    size_t GetStageTasksCount(const TStageId& stage, TNodeId node) const;
+    size_t GetStageTasksCount(const TStageId& stage) const;
+
+    TString DumpToString() const;
+
+private:
+    // Per-node budget read from the resources snapshot.
+    // Nodes added via the AddNode workaround have no snapshot entry and keep zero budgets.
+    struct TNodeResources {
+        ui64 RemainsMemory = 0;   // TotalMemory - UsedMemory at snapshot time.
+        ui32 RemainsTasks = 0;    // how many more tasks the node can host (one task == one compute actor, from
+                                  // AvailableComputeActors at snapshot time).
+        TString DataCenterId;     // for the local-datacenter placement preference.
+    };
+
+    struct TStage {
+        TStageInfo* Info = nullptr;       // reference to graph-owned stage info (Id, Tasks).
+        EStageType Type;                  // may become FIXED if the group leader is FIXED.
+        std::optional<TStageIdx> Source;  // group leader (root); empty if this stage is itself a root.
+        TGroupIdx Group = 0;              // index into Groups.
+
+        std::list<TStageIdx> Inputs;
+        std::list<TStageIdx> Outputs;
+
+        // Task Ids in creation order; the position is the column index. Every stage of a group holds exactly one task
+        // per column, so all of them have the same number of tasks (== the group's column count).
+        std::vector<ui64> Tasks;
+    };
+
+    // Resource cost of one column, summed over the group's stages (one task per stage per column). Uniform across the
+    // group's columns - see EstimateTasksResources.
+    struct TColumnCost {
+        ui64 Memory = 0;   // sum of per-stage TotalMemoryLimit.
+        ui32 Tasks = 0;    // number of tasks in the column (one per non-empty member stage).
+    };
+
+    // A copy group: a root stage plus the stages that copy from it. Columns are shared by all member stages; the node of
+    // a column applies to that column's task in every member stage.
+    struct TGroup {
+        TStageIdx Root = 0;
+        bool Fixed = false;                                // the root is FIXED -> the group's column count is not scaled.
+        std::vector<TStageIdx> Stages;                     // member stages, root first.
+        std::vector<std::optional<TNodeIdx>> ColumnNodes;  // column index -> node (empty == free, not placed yet).
+        TColumnCost ColumnCost;                            // filled by EstimateTasksResources, used by DistributeTasksToNodes.
+    };
+
+private:
+    size_t NodesCount() const { return NodeIdByIdx.size(); }
+
+    // Maps an external node id to its internal index, ensuring the node is known.
+    TNodeIdx ResolveNodeIdx(TNodeId node) const;
+
+    // The executer's own node index, if it is known to the graph (params.ExecuterNodeId set and present); else nullopt.
+    std::optional<TNodeIdx> LocalNodeIdx(const TPlacementParams& params) const;
+
+    // KqpPlanner's single-node fast path: if the whole query fits on the executer node
+    // and is either small enough or reads from a single node, pin every free column there and return true.
+    // Leaves pinned columns as they are.
+    bool TryPlaceAllLocally(const TPlacementParams& params, TNodeIdx executer);
+
+    // KqpPlanner's final-stage pin: if the deepest (max stage-level) stages hold no more tasks than
+    // MaxNonParallelTopStageExecutionLimit (the merge/union-all collector), pin their free columns to the executer node.
+    void PinTopStageLocally(const TPlacementParams& params, TNodeIdx executer);
+
+    // The basic placement action: pin a column of a group to a node.
+    static void PlaceColumnOnNode(TGroup& group, size_t columnIdx, TNodeIdx node);
+
+    // Greedy resource-aware placement of all free columns (ported from KqpPlanner's strategy). Mirrors its local-DC
+    // preference: when params asks for it, first tries to fit every free column onto the executer's datacenter,
+    // and only if that fails spreads over all nodes.
+    // Returns false (placing nothing) if some column doesn't fit anywhere even across all nodes.
+    bool DistributeByResources(const TPlacementParams& params, std::optional<TNodeIdx> executer);
+
+    // One greedy pass restricted to the `allowedNodes` mask for free-column candidates (pinned columns still pre-charge
+    // their own node regardless). Returns false without mutating anything if some free column doesn't fit.
+    bool DistributeByResourcesOnNodes(const std::vector<bool>& allowedNodes);
+
+    // Fallback placement: every free column round-robin per group, ignoring resources.
+    void DistributeRoundRobin();
+
+    // Per-group column distribution over nodes (every column must be placed). This is what the scaling math works on.
+    std::vector<TColumnsPerNode> GroupColumns() const;
+
+    bool IsFeasible(const std::vector<TColumnsPerNode>& base, double alpha) const;
+    std::vector<TColumnsPerNode> ComputeScaledColumns(const std::vector<TColumnsPerNode>& base, double alpha) const;
+    TColumnsPerNode ScaleColumns(const TColumnsPerNode& origin, double alpha) const;
+    size_t CountChannelsOnNode(const std::vector<TColumnsPerNode>& columns, TNodeIdx nodeIdx) const;
+
+    void CheckInvariants() const;
+
+private:
+    const size_t MaxChannelsCount;
+    const TTaskResourceEstimationParams EstimationParams;
+
+    THashMap<TNodeId, TNodeIdx> NodeIds;          // TNodeId -> TNodeIdx
+    std::vector<TNodeId> NodeIdByIdx;             // TNodeIdx -> TNodeId (reverse of NodeIds)
+    std::vector<TNodeResources> NodeResources;    // TNodeIdx -> per-node budget (parallel to NodeIdByIdx)
+
+    THashMap<TStageId, TStageIdx> StageIds; // TStageId -> TStageIdx
+    std::vector<TStage> Stages;             // TStageIdx -> TStage
+    std::vector<TGroup> Groups;             // TGroupIdx -> TGroup
+
+    mutable std::vector<TColumnsPerNode> LastFeasible; // last feasible per-group column distribution found by Shrink.
+};
+
+} // namespace NKikimr::NKqp

@@ -31,7 +31,7 @@ TStringBuf GetTzPayloadWireType(NUdf::EDataSlot slot) {
 } // namespace
 
 struct TSkiffTypeLoader {
-    typedef NYT::TNode TType;
+    using TType = NYT::TNode;
 
     explicit TSkiffTypeLoader(ui64 nativeYTTypesFlags)
         : NativeYTTypesFlags(nativeYTTypesFlags)
@@ -39,10 +39,10 @@ struct TSkiffTypeLoader {
     }
 
     TMaybe<TType> LoadVoidType(ui32 /*level*/) {
-        return NYT::TNode()("wire_type", (NativeYTTypesFlags & NTCF_VOID) ? "nothing" : "yson32");
+        return NYT::TNode()("wire_type", "nothing");
     }
     TMaybe<TType> LoadNullType(ui32 /*level*/) {
-        return NYT::TNode()("wire_type", (NativeYTTypesFlags & NTCF_NULL) ? "nothing" : "yson32");
+        return NYT::TNode()("wire_type", "nothing");
     }
     TMaybe<TType> LoadUnitType(ui32 /*level*/) {
         ythrow yexception() << "Unsupported type: Unit";

@@ -36,6 +36,8 @@ public:
   AdaptingIntegerArray &operator=(const AdaptingIntegerArray &other) = default;
   AdaptingIntegerArray &operator=(AdaptingIntegerArray &&other)      = default;
 
+  ~AdaptingIntegerArray() = default;
+
   /**
    * Increments the value at the specified index by the given count in the array.
    *
@@ -91,6 +93,8 @@ public:
   AdaptingCircularBufferCounter(AdaptingCircularBufferCounter &&other)                 = default;
   AdaptingCircularBufferCounter &operator=(const AdaptingCircularBufferCounter &other) = default;
   AdaptingCircularBufferCounter &operator=(AdaptingCircularBufferCounter &&other)      = default;
+
+  ~AdaptingCircularBufferCounter() = default;
 
   /**
    * The first index with a recording. May be negative.

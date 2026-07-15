@@ -185,7 +185,7 @@ struct TCustomMin {
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto res = CallBinaryUnboxedValueFunction<&CompareCustoms<Slot>>(Type::getInt32Ty(context), left, right, ctx.Codegen, block);
+        const auto res = EmitFunctionCall<&CompareCustoms<Slot>>(Type::getInt32Ty(context), {left, right}, ctx, block);
         const auto comp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, res, ConstantInt::get(res->getType(), 0), "greater", block);
         const auto max = SelectInst::Create(comp, left, right, "max", block);
         ValueCleanup(EValueRepresentation::String, max, ctx, block);
@@ -207,6 +207,8 @@ void RegisterMin(IBuiltinFunctionRegistry& registry) {
 
     RegisterCustomSameTypesFunction<NUdf::TDataType<char*>, TCustomMin, TBinaryArgsOpt>(registry, "Min");
     RegisterCustomSameTypesFunction<NUdf::TDataType<NUdf::TUtf8>, TCustomMin, TBinaryArgsOpt>(registry, "Min");
+    RegisterCustomSameTypesFunction<NUdf::TDataType<NUdf::TDyNumber>, TCustomMin, TBinaryArgsOpt>(registry, "Min");
+    RegisterCustomSameTypesFunction<NUdf::TDataType<NUdf::TUuid>, TCustomMin, TBinaryArgsOpt>(registry, "Min");
 }
 
 void RegisterAggrMin(IBuiltinFunctionRegistry& registry) {
@@ -220,6 +222,8 @@ void RegisterAggrMin(IBuiltinFunctionRegistry& registry) {
 
     RegisterCustomAggregateFunction<NUdf::TDataType<char*>, TCustomMin, TBinaryArgsSameOpt>(registry, "AggrMin");
     RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TUtf8>, TCustomMin, TBinaryArgsSameOpt>(registry, "AggrMin");
+    RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TDyNumber>, TCustomMin, TBinaryArgsSameOpt>(registry, "AggrMin");
+    RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TUuid>, TCustomMin, TBinaryArgsSameOpt>(registry, "AggrMin");
 }
 
 } // namespace NMiniKQL

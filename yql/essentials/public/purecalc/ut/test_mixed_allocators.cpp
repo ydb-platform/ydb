@@ -6,9 +6,14 @@
 #include <yql/essentials/public/purecalc/io_specs/protobuf/spec.h>
 #include <yql/essentials/public/purecalc/ut/protos/test_structs.pb.h>
 
+#include <utility>
+
 using namespace NYql::NPureCalc;
 
 namespace {
+
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 class TStatelessInputSpec: public TInputSpecBase {
 public:
     TStatelessInputSpec()
@@ -68,8 +73,8 @@ class TStatelessConsumer: public IConsumer<NPureCalcProto::TStringMessage*> {
     ui64 RowId_ = 0;
 
 public:
-    TStatelessConsumer(const TString& expectedData, ui64 expectedRows)
-        : ExpectedData_(expectedData)
+    TStatelessConsumer(TString expectedData, ui64 expectedRows)
+        : ExpectedData_(std::move(expectedData))
         , ExpectedRows_(expectedRows)
     {
     }
@@ -110,7 +115,7 @@ Y_UNIT_TEST(TestPushStream) {
 
     const ui64 numberRows = 5;
     const auto inputConsumer = program->Apply(MakeHolder<TStatelessConsumer>(targetString, numberRows));
-    NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+    NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), /*supportsSizedAllocators=*/true, /*initiallyAcquired=*/false);
 
     const auto pushString = [&](TString inputValue) {
         NYql::NUdf::TUnboxedValue stringValue;

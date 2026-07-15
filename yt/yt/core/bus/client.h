@@ -31,7 +31,7 @@ struct IBusClient
     virtual const NYTree::IAttributeDictionary& GetEndpointAttributes() const = 0;
 
     //! Apply new dynamic config.
-    virtual void Reconfigure(const NBus::TBusClientDynamicConfigPtr& config) = 0;
+    virtual void Reconfigure(const NBus::NTcp::TBusClientDynamicConfigPtr& config) = 0;
 
     //! Creates a new bus.
     /*!

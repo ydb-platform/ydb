@@ -72,7 +72,7 @@ private:
                 Y(
                     "ToIndexDict",
                     BuildAtom(Pos_, VarDataName)),
-                BuildAtom(Pos_, std::move(varKeyName))),
+                BuildAtom(Pos_, varKeyName)),
             Q(Column_));
     }
 
@@ -95,7 +95,7 @@ public:
             ctx.Error(Pos_) << "Unexpected column reference state";
             return false;
         }
-        TColumnRefScope scope(ctx, EColumnRefState::MatchRecognizeDefineAggregate, false, ctx.GetMatchRecognizeDefineVar());
+        TColumnRefScope scope(ctx, EColumnRefState::MatchRecognizeDefineAggregate, /*isTopLevelExpr=*/false, ctx.GetMatchRecognizeDefineVar());
         if (Args_.size() != 1) {
             ctx.Error() << "Exactly one argument is required in MATCH_RECOGNIZE navigation function";
             return false;
@@ -224,7 +224,7 @@ private:
             return false;
         }
 
-        const auto sortTraits = SortSpecs_.empty() ? Y("Void") : src->BuildSortSpec(SortSpecs_, Label_, true, false);
+        const auto sortTraits = SortSpecs_.empty() ? Y("Void") : src->BuildSortSpec(SortSpecs_, Label_, /*traits=*/true, /*assume=*/false);
         if (!sortTraits || !sortTraits->Init(ctx, src)) {
             return false;
         }
@@ -237,18 +237,18 @@ private:
                 return false;
             }
             const auto pos = m.Callable->GetPos();
-            measureNames = L(measureNames, BuildQuotedAtom(m.Callable->GetPos(), std::move(m.Name)));
+            measureNames = L(measureNames, BuildQuotedAtom(m.Callable->GetPos(), m.Name));
             auto measuresVars = Y();
             auto measuresAggregates = Y();
             for (auto& [var, aggr] : ctx.GetMatchRecognizeAggregations()) {
                 if (!aggr) {
                     return false;
                 }
-                auto [traits, result] = aggr->AggregationTraits(Y("TypeOf", Label_), false, false, false, ctx);
+                auto [traits, result] = aggr->AggregationTraits(Y("TypeOf", Label_), /*overState=*/false, /*many=*/false, /*allowAggApply=*/false, ctx);
                 if (!result) {
                     return false;
                 }
-                measuresVars = L(measuresVars, BuildQuotedAtom(pos, std::move(var)));
+                measuresVars = L(measuresVars, BuildQuotedAtom(pos, var));
                 measuresAggregates = L(measuresAggregates, std::move(traits));
             }
             ctx.GetMatchRecognizeAggregations().clear();
@@ -284,7 +284,7 @@ private:
         }
         auto defineNode = Y("MatchRecognizeDefines", inputRowType, Q(PatternVars_), Q(defineNames));
         for (auto& d : Definitions_) {
-            TColumnRefScope scope(ctx, EColumnRefState::MatchRecognizeDefine, true, d.Name);
+            TColumnRefScope scope(ctx, EColumnRefState::MatchRecognizeDefine, /*isTopLevelExpr=*/true, d.Name);
             if (!d.Callable || !d.Callable->Init(ctx, src)) {
                 return false;
             }
@@ -352,7 +352,7 @@ private:
 
 } // anonymous namespace
 
-TNodePtr TMatchRecognizeBuilder::Build(TContext& ctx, TString label, ISource* src) {
+TNodePtr TMatchRecognizeBuilder::Build(TContext& ctx, TString label, ISource* source) {
     const auto node = MakeIntrusive<TMatchRecognize>(
         Pos_,
         std::move(label),
@@ -366,7 +366,7 @@ TNodePtr TMatchRecognizeBuilder::Build(TContext& ctx, TString label, ISource* sr
         std::move(PatternVars_),
         std::move(Subset_),
         std::move(Definitions_));
-    if (!node->Init(ctx, src)) {
+    if (!node->Init(ctx, source)) {
         return {};
     }
     return node;
@@ -378,11 +378,11 @@ TNodePtr BuildMatchRecognizeColumnAccess(TPosition pos, TString var, TString col
 
 TNodePtr BuildMatchRecognizeDefineAggregate(TPosition pos, TString name, TVector<TNodePtr> args) {
     const auto result = MakeIntrusive<TMatchRecognizeDefineAggregate>(pos, std::move(name), std::move(args));
-    return BuildMatchRecognizeVarAccess(pos, std::move(result));
+    return BuildMatchRecognizeVarAccess(pos, result);
 }
 
-TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, TNodePtr aggr) {
-    return MakeIntrusive<TMatchRecognizeVarAccessNode>(pos, std::move(aggr));
+TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, TNodePtr extractor) {
+    return MakeIntrusive<TMatchRecognizeVarAccessNode>(pos, std::move(extractor));
 }
 
 } // namespace NSQLTranslationV1

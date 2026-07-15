@@ -11,8 +11,8 @@
 #include <util/system/tls.h>
 #include <util/generic/noncopyable.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 namespace NActors {
     class TActorSystem;
@@ -132,6 +132,12 @@ namespace NActors {
 
         static i64 GetCurrentEventTicks();
         static double GetCurrentEventTicksAsSeconds();
+        static NHPTimer::STime GetCurrentEventEnqueuedTimestampTs();
+        static TInstant GetCurrentEventEnqueuedTimestamp();
+        static NHPTimer::STime GetCurrentMailboxScheduledTimestampTs();
+        static TInstant GetCurrentMailboxScheduledTimestamp();
+        static ui64 GetCurrentEventDeliveryTimeUs();
+        static ui64 GetCurrentActivationTimeUs();
 
         static void EnableMailboxStats();
 
@@ -144,7 +150,8 @@ namespace NActors {
     struct TActorContext: public TActivationContext {
         const TActorId SelfID;
         using TEventFlags = IEventHandle::TEventFlags;
-        explicit TActorContext(TMailbox& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID)
+        explicit TActorContext(TMailbox& mailbox, TExecutorThread& executorThread,
+                NHPTimer::STime eventStart, const TActorId& selfID)
             : TActivationContext(mailbox, executorThread, eventStart)
             , SelfID(selfID)
         {
@@ -518,6 +525,11 @@ namespace NActors {
          * Schedules a runnable item for execution
          */
         static void Schedule(TActorRunnableItem* runnable) noexcept;
+
+        /**
+         * Removes a runnable item from the queue
+         */
+        static void Cancel(TActorRunnableItem* runnable) noexcept;
 
         /**
          * Execute currently scheduled items

@@ -74,6 +74,25 @@ EExecutionStatus TTruncateUnit::Execute(
     txc.DB.Truncate(localTid);
 
     auto userTable = DataShard.AlterTableSchemaVersion(actorCtx, txc, pathId, version);
+
+    // We must set these flags here for the following reasons:
+    //
+    // 1. Space usage statistics in the local database are aggregated from two sources:
+    //    SSTs and the MemTable.
+    //
+    // 2. If TRUNCATE is executed without these flags, the SST stats will not be
+    //    recalculated. This is because the `userTable` object is copied within
+    //    `AlterTableSchemaVersion`, and that copy can carry over stale statistic
+    //    values from the old `userTable` instance.
+    //
+    // 3. By setting the `StatsUpdateInProgress` and `StatsNeedUpdate` flags, we
+    //    force a full recalculation of LocalDB statistics after the TRUNCATE completes.
+    //
+    // This is primarily crucial for ensuring an accurate calculation of the byte size
+    // occupied by the user table.
+    userTable->StatsUpdateInProgress = false;
+    userTable->StatsNeedUpdate = true;
+
     DataShard.AddUserTable(pathId, userTable, &locksDb);
     if (userTable->NeedSchemaSnapshots()) {
         DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, actorCtx);

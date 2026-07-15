@@ -1,5 +1,6 @@
 #include "cbo_optimizer_new.h"
 
+#include <yql/essentials/utils/yql_panic.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
 #include <library/cpp/iterator/zip.h>
@@ -81,7 +82,7 @@ private:
         }
 
         ParseError(Sprintf("Unknown JoinType: '%s', supported algos: [%s]", reqJoinAlgoStr.c_str(), JoinSeq(", ", joinAlgosStr).c_str()), Pos_ - reqJoinAlgoStr.size());
-        Y_UNREACHABLE();
+        YQL_ENSURE(false, "Unreachable");
     }
 
     void JoinOrder(bool leading /* is keyword "Leading" or "JoinOrder" */) {
@@ -112,7 +113,7 @@ private:
         }
 
         ParseError(Sprintf("JoinOrder args must be either a relation, either a join, example of the format: JoinOrder(t1 (t2 t3))"), Pos_);
-        Y_UNREACHABLE();
+        YQL_ENSURE(false, "Unreachable");
     }
 
     void CardinalityOrBytes(bool isRows) {
@@ -150,7 +151,7 @@ private:
             }
             default: {
                 ParseError(Sprintf("Unknown operation: '%c'", sign), Pos_ - 1);
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
             }
         }
 
@@ -201,14 +202,14 @@ private:
 
     char Char(unsigned char c) {
         std::bitset<256> allowed;
-        allowed[c] = 1;
+        allowed[c] = true;
         return Char(allowed);
     }
 
     char Char(unsigned char intervalBegin, unsigned char intervalEnd) {
         std::bitset<256> allowed;
         for (size_t i = intervalBegin; i <= intervalEnd; ++i) {
-            allowed[i] = 1;
+            allowed[i] = true;
         }
         return Char(allowed);
     }
@@ -230,7 +231,7 @@ private:
         }
 
         ParseError(Sprintf("Expected [%s], but got [%c]", "", nextSym), Pos_);
-        Y_UNREACHABLE();
+        YQL_ENSURE(false, "Unreachable");
     }
 
     std::optional<TString> MaybeKeyword(const TVector<TString>& keywords) {
@@ -256,7 +257,7 @@ private:
         }
 
         ParseError(Sprintf("Expected [%s], but got [%c]", JoinSeq(", ", keywords).c_str(), Text_[Pos_ + 1]), Pos_);
-        Y_UNREACHABLE();
+        YQL_ENSURE(false, "Unreachable");
     }
 
     double Number() {
@@ -274,7 +275,7 @@ private:
         } catch (...) {
             ParseError(Sprintf("Expected a number, got [%s]", term.c_str()), Pos_ - term.size());
         }
-        Y_UNREACHABLE();
+        YQL_ENSURE(false, "Unreachable");
     }
 
 private:
@@ -283,7 +284,7 @@ private:
         std::bitset<256> res;
 
         for (char c : s) {
-            res[c] = 1;
+            res[c] = true;
         }
 
         return res;
@@ -293,10 +294,10 @@ private:
         std::bitset<256> res;
 
         for (unsigned char i = 'a'; i <= 'z'; ++i) {
-            res[i] = 1;
+            res[i] = true;
         }
         for (unsigned char i = 'A'; i <= 'Z'; ++i) {
-            res[i] = 1;
+            res[i] = true;
         }
 
         return res;
@@ -306,7 +307,7 @@ private:
         std::bitset<256> res;
 
         for (unsigned char i = '0'; i <= '9'; ++i) {
-            res[i] = 1;
+            res[i] = true;
         }
 
         return res;
@@ -314,7 +315,7 @@ private:
 
     constexpr std::bitset<256> LabelAllowedSymbols() {
         auto labelSymbols = Digits() | Letters();
-        labelSymbols['_'] = 1;
+        labelSymbols['_'] = true;
         return labelSymbols;
     }
 

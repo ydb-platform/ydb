@@ -41,7 +41,7 @@ ui32 TSelectBuilder::AddFactory(const TStringBuf& udafName, size_t paramCount) {
     return it->second.Id;
 }
 
-TString TSelectBuilder::Build(const TStringBuf& table) const {
+TString TSelectBuilder::Build(const TStringBuf& table, std::optional<ui64> tabletId) const {
     TStringBuilder res;
     for (const auto& [udaf, factory] : Udaf2Factory) {
         TStringBuilder paramsStr;
@@ -52,18 +52,20 @@ TString TSelectBuilder::Build(const TStringBuf& table) const {
             paramsStr << "$p" << i;
         }
 
+        std::string_view finalizeFunc = IsIntermediateAggregation_ ? "Serialize" : "Finalize";
+
         res << std::format(R"($f{0} = ({2}) -> {{ return AggregationFactory(
     "UDAF",
     ($item,$parent) -> {{ return Udf(StatisticsInternal::{1}Create, $parent as Depends)($item,{2}) }},
     ($state,$item,$parent) -> {{ return Udf(StatisticsInternal::{1}AddValue, $parent as Depends)($state, $item) }},
     StatisticsInternal::{1}Merge,
-    StatisticsInternal::{1}Finalize,
+    StatisticsInternal::{1}{3},
     StatisticsInternal::{1}Serialize,
     StatisticsInternal::{1}Deserialize,
 )
 }};
 )",
-            factory.Id, std::string_view(factory.Udaf), std::string_view(paramsStr));
+            factory.Id, std::string_view(factory.Udaf), std::string_view(paramsStr), finalizeFunc);
     }
 
     res << "SELECT ";
@@ -75,9 +77,24 @@ TString TSelectBuilder::Build(const TStringBuf& table) const {
             res << ",";
         }
         if (agg.UdafFactory) {
-            Y_ABORT_UNLESS(agg.ColumnName);
-            res << "AGGREGATE_BY(" << TEscapedId{*agg.ColumnName}
-                << "," << "$f" << *agg.UdafFactory << "(" << agg.Params << "))";
+            res << "AGGREGATE_BY(";
+            if (agg.TupleColumnNames) {
+                res << "StablePickle(AsTuple(";
+                bool firstCol = true;
+                for (const auto& columnName : *agg.TupleColumnNames) {
+                    if (firstCol) {
+                        firstCol = false;
+                    } else {
+                        res << ",";
+                    }
+                    res << TEscapedId{columnName};
+                }
+                res << "))";
+            } else {
+                Y_ABORT_UNLESS(agg.ColumnName);
+                res << TEscapedId{*agg.ColumnName};
+            }
+            res << "," << "$f" << *agg.UdafFactory << "(" << agg.Params << "))";
         } else {
             Y_ABORT_UNLESS(agg.AggName);
             res << *agg.AggName;
@@ -90,6 +107,9 @@ TString TSelectBuilder::Build(const TStringBuf& table) const {
     }
 
     res << " FROM " << TEscapedId{table};
+    if (tabletId) {
+        res << " WITH TabletId = '" << *tabletId << "'";
+    }
     return res;
 }
 

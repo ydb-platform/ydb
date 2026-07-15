@@ -3,13 +3,13 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
-#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/io_formats/arrow/scheme/scheme.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_info.h>
@@ -22,14 +22,11 @@
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/signals/owner.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-
-#define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
-#undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -107,7 +104,8 @@ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& repl
     const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
     const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-    std::shared_ptr<NYql::TIssues> issues);
+    std::shared_ptr<NYql::TIssues> issues,
+    TIntrusivePtr<NACLib::TUserContext> userCtx);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -132,6 +130,7 @@ private:
         ui64 SentOverloadSeqNo = 0;
     };
 
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
     TDuration Timeout;
@@ -170,6 +169,7 @@ public:
         NScheme::TTypeInfo Type;
         i32 Typmod;
         bool NotNull = false;
+        bool SetNotNullInProgress = false;
     };
 protected:
     TVector<TString> KeyColumnNames;
@@ -181,6 +181,7 @@ protected:
     TVector<std::pair<TString, NScheme::TTypeInfo>> SrcColumns; // source columns in CSV could have any order
     TVector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
     std::set<std::string> NotNullColumns;
+    std::set<std::string> SetNotNullInProgressColumns;
     THashMap<ui32, size_t> Id2Position; // columnId -> its position in YdbSchema
     THashMap<TString, NScheme::TTypeInfo> ColumnsToConvert;
     THashMap<TString, NScheme::TTypeInfo> ColumnsToConvertInplace;
@@ -188,6 +189,7 @@ protected:
     bool WriteToTableShadow = false;
     bool AllowWriteToPrivateTable = false;
     bool AllowWriteToIndexImplTable = false;
+    bool DisableChangeCollection = false;
     bool DiskQuotaExceeded = false;
     bool UpsertIfExists = false;
 
@@ -211,10 +213,12 @@ public:
     }
 
     explicit TUploadRowsBase(std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>> rows,
+                             TIntrusivePtr<NACLib::TUserContext> userCtx,
                              TDuration timeout = TDuration::Max(),
                              bool diskQuotaExceeded = false,
                              NWilson::TSpan span = {})
         : TBase()
+        , UserCtx(userCtx)
         , SchemeCache(MakeSchemeCacheID())
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
@@ -269,6 +273,13 @@ protected:
             case NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy_CAST_TO_INFINITY:
                 return true;
         }
+    }
+
+    bool IsBulkUpsertValidationEnabled() const {
+        if (!HasAppData()) {
+            return true;
+        }
+        return AppDataVerified().ColumnShardConfig.GetEnableBulkUpsertValidation();
     }
 
 private:
@@ -385,6 +396,7 @@ private:
         THashMap<TString, ui32> columnByName;
         THashSet<TString> keyColumnsLeft;
         THashSet<TString> notNullColumnsLeft = entry.NotNullColumns;
+        THashSet<TString> setNotNullInProgressColumnsLeft = entry.SetNotNullInProgressColumns;
         THashSet<TString> defaultColumnsLeft;
         SrcColumns.reserve(entry.Columns.size());
         THashSet<TString> HasInternalConversion;
@@ -513,16 +525,21 @@ private:
                 NotNullColumns.emplace(ci.Name);
             }
 
+            if (ci.SetNotNullInProgress) {
+                setNotNullInProgressColumnsLeft.erase(ci.Name);
+                SetNotNullInProgressColumns.emplace(ci.Name);
+            }
+
             if (defaultColumnsLeft.contains(ci.Name)) {
                 defaultColumnsLeft.erase(ci.Name);
             }
 
             if (ci.KeyOrder != -1) {
-                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull};
+                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull, ci.SetNotNullInProgress};
                 keyColumnsLeft.erase(ci.Name);
                 KeyColumnNames[ci.KeyOrder] = ci.Name;
             } else {
-                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull});
+                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, ci.PType, pgTypeMod, notNull, ci.SetNotNullInProgress});
                 ValueColumnNames.emplace_back(ci.Name);
                 ValueColumnTypes.emplace_back(ci.PType);
             }
@@ -536,7 +553,24 @@ private:
         }
 
         for (const auto& index : entry.Indexes) {
-            if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync &&
+            const auto indexType = index.GetType();
+            if ((indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
+                    || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+                    || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+                    || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance)
+                && index.GetFulltextIndexDescription().GetUseRowIdAsDocId())
+            {
+                for (const auto& reqCol : *reqColumns) {
+                    if (reqCol.first == NTableIndex::NFulltext::RowIdColumn) {
+                        return TConclusionStatus::Fail(TStringBuilder()
+                            << "Column " << NTableIndex::NFulltext::RowIdColumn
+                            << " is generated server-side for tables with fulltext indexes"
+                            << " and cannot be set explicitly via BulkUpsert");
+                    }
+                }
+            }
+
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync &&
                 AppData(ctx)->FeatureFlags.GetEnableBulkUpsertToAsyncIndexedTables()) {
                 continue;
             }
@@ -601,6 +635,14 @@ private:
             return TConclusionStatus::Fail(Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()));
         }
 
+        if (!setNotNullInProgressColumnsLeft.empty() && UpsertIfExists) {
+            setNotNullInProgressColumnsLeft.clear();
+        }
+
+        if (!setNotNullInProgressColumnsLeft.empty()) {
+            return TConclusionStatus::Fail(Sprintf("Missing columns under `SET NOT NULL` operation: %s. It is forbidden to insert NULL values.", JoinSeq(", ", setNotNullInProgressColumnsLeft).c_str()));
+        }
+
         if (!defaultColumnsLeft.empty() && UpsertIfExists) {
             // some default columns are not specified in the request, but upsert will only update existing rows
             // and only the columns specified in the request will be updated; unspecified default columns will not be changed.
@@ -608,13 +650,7 @@ private:
         }
 
         if (!defaultColumnsLeft.empty()) {
-            if (AppData(ctx)->FeatureFlags.GetDisableMissingDefaultColumnsInBulkUpsert()) {
-                return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
-            }
-
-            // TODO: Unreachable, delete "MissingDefaultColumns/Count" counter
-            UploadCounters.OnMissingDefaultColumns();
-            LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Missing default columns: " << JoinSeq(", ", defaultColumnsLeft).c_str());
+            return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
         }
 
         TConclusionStatus res = TConclusionStatus::Success();
@@ -946,7 +982,7 @@ private:
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
         DoLongTxWriteSameMailbox(
-            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
+            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, UserCtx);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
@@ -1123,6 +1159,9 @@ private:
 
         auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record = state->Headers;
+        if (UserCtx != nullptr) {
+            UserCtx->SerializeToEvent(ev->Record);
+        }
         for (const auto& pr : state->Rows) {
             auto* row = ev->Record.AddRows();
             row->SetKeyColumns(pr.first.GetBuffer());
@@ -1170,6 +1209,9 @@ private:
                 shardRequests[shardIdx].reset(new TEvDataShard::TEvUploadRowsRequest());
                 ev = shardRequests[shardIdx].get();
                 ev->Record.SetCancelDeadlineMs(Deadline().MilliSeconds());
+                if (UserCtx != nullptr) {
+                    UserCtx->SerializeToEvent(ev->Record);
+                }
 
                 ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
                 if (keyRange->TableId.SchemaVersion) {
@@ -1186,6 +1228,9 @@ private:
                 }
                 if (UpsertIfExists) {
                     ev->Record.SetUpsertIfExists(true);
+                }
+                if (DisableChangeCollection) {
+                    ev->Record.SetDisableChangeCollection(true);
                 }
                 // Copy protobuf settings without rows
                 retryState->Headers = ev->Record;
@@ -1445,8 +1490,13 @@ inline bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescri
             return false;
         }
 
-        if (fd.NotNull && cells.back().IsNull()) {
-            err = TStringBuilder() << "Received NULL value for not null column: " << fd.ColName;
+        if ((fd.NotNull || fd.SetNotNullInProgress) && cells.back().IsNull()) {
+            if (fd.SetNotNullInProgress) {
+                err = TStringBuilder() << "Received NULL value for column " << fd.ColName
+                    << ": `SET NOT NULL` operation is currently in progress for this column";
+            } else {
+                err = TStringBuilder() << "Received NULL value for not null column: " << fd.ColName;
+            }
             return false;
         }
     }

@@ -7,6 +7,10 @@ logger = logging.getLogger(__name__)
 
 
 class TestListingBatching(SolomonReadingTestBase):
+    @classmethod
+    def setup_class(cls):
+        super().setup_class("listing_batching")
+
     def check_full_listing_result(self, result_set, error):
         if error is not None:
             return False, error
@@ -16,7 +20,7 @@ class TestListingBatching(SolomonReadingTestBase):
             rows.extend(result.rows)
 
         total_size, first_label_size = self.listing_batching_metrics_sizes[0], self.listing_batching_metrics_sizes[1]
-        if (len(rows) != total_size):
+        if len(rows) != total_size:
             return False, f"Result size differs from expected: have {len(rows)}, should be {total_size}"
 
         test_labels = []
@@ -38,7 +42,7 @@ class TestListingBatching(SolomonReadingTestBase):
     def test_listing_batching_solomon(self):
         data_source_query = f"""
             CREATE EXTERNAL DATA SOURCE local_solomon WITH (
-                SOURCE_TYPE     = "Solomon",
+                SOURCE_TYPE     = "Monium.Metrics",
                 LOCATION        = "{self.solomon_http_endpoint}",
                 GRPC_LOCATION   = "{self.solomon_grpc_endpoint}",
                 AUTH_METHOD     = "NONE",
@@ -64,7 +68,7 @@ class TestListingBatching(SolomonReadingTestBase):
     def test_listing_batching_monitoring(self):
         data_source_query = f"""
             CREATE EXTERNAL DATA SOURCE local_monitoring WITH (
-                SOURCE_TYPE     = "Solomon",
+                SOURCE_TYPE     = "Monium.Metrics",
                 LOCATION        = "{self.solomon_http_endpoint}",
                 GRPC_LOCATION   = "{self.solomon_grpc_endpoint}",
                 PROJECT         = "listing_batching",

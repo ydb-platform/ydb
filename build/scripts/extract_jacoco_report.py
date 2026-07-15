@@ -3,7 +3,6 @@ import os
 import re
 import tarfile
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 

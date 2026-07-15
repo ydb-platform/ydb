@@ -1,6 +1,7 @@
 #include "ydb_service_scheme.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
 #include <ydb/public/lib/ydb_cli/common/describe.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
@@ -36,6 +37,7 @@ void TCommandMakeDirectory::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to create");
+    SetSchemePathCompletionForDir(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandMakeDirectory::ExtractParams(TConfig& config) {
@@ -44,7 +46,8 @@ void TCommandMakeDirectory::ExtractParams(TConfig& config) {
 }
 
 int TCommandMakeDirectory::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.MakeDirectory(
             Path,
@@ -71,6 +74,7 @@ void TCommandRemoveDirectory::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to remove");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandRemoveDirectory::ExtractParams(TConfig& config) {
@@ -79,7 +83,7 @@ void TCommandRemoveDirectory::ExtractParams(TConfig& config) {
 }
 
 int TCommandRemoveDirectory::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NScheme::TSchemeClient schemeClient(driver);
     const auto settings = FillSettings(NScheme::TRemoveDirectorySettings());
 
@@ -123,6 +127,7 @@ void TCommandDescribe::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to an object to describe. If object is topic consumer, it must be specified as <topic_path>/<consumer_name>");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandDescribe::Parse(TConfig& config) {
@@ -137,7 +142,7 @@ void TCommandDescribe::ExtractParams(TConfig& config) {
 }
 
 int TCommandDescribe::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     TDescribeOptions options;
     options.ShowPermissions = ShowPermissions;
     options.ShowKeyShardBoundaries = ShowKeyShardBoundaries;
@@ -167,6 +172,7 @@ void TCommandList::Config(TConfig& config) {
     AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::Json });
     config.SetFreeArgsMax(1);
     SetFreeArgTitle(0, "<path>", "Path to list");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandList::Parse(TConfig& config) {
@@ -183,7 +189,7 @@ void TCommandList::ExtractParams(TConfig& config) {
 }
 
 int TCommandList::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     ISchemePrinter::TSettings settings = {
         Path,
         Recursive,
@@ -237,6 +243,7 @@ void TCommandPermissionGrant::Config(TConfig& config) {
 
     config.SetFreeArgsNum(2);
     SetFreeArgTitle(0, "<path>", "Path to grant permissions to");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
     SetFreeArgTitle(1, "<subject>", "Subject to grant permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to grant")
@@ -261,7 +268,8 @@ void TCommandPermissionGrant::ExtractParams(TConfig& config) {
 }
 
 int TCommandPermissionGrant::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
@@ -283,6 +291,7 @@ void TCommandPermissionRevoke::Config(TConfig& config) {
 
     config.SetFreeArgsNum(2);
     SetFreeArgTitle(0, "<path>", "Path to revoke permissions to");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
     SetFreeArgTitle(1, "<subject>", "Subject to revoke permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to revoke")
@@ -307,7 +316,8 @@ void TCommandPermissionRevoke::ExtractParams(TConfig& config) {
 }
 
 int TCommandPermissionRevoke::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
@@ -329,6 +339,7 @@ void TCommandPermissionSet::Config(TConfig& config) {
 
     config.SetFreeArgsNum(2);
     SetFreeArgTitle(0, "<path>", "Path to set permissions to");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
     SetFreeArgTitle(1, "<subject>", "Subject to set permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to set")
@@ -353,7 +364,8 @@ void TCommandPermissionSet::ExtractParams(TConfig& config) {
 }
 
 int TCommandPermissionSet::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
@@ -375,6 +387,7 @@ void TCommandChangeOwner::Config(TConfig& config) {
 
     config.SetFreeArgsNum(2);
     SetFreeArgTitle(0, "<path>", "Path to change owner for");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
     SetFreeArgTitle(1, "<owner>", "Owner to set");
 }
 
@@ -392,7 +405,8 @@ void TCommandChangeOwner::ExtractParams(TConfig& config) {
 }
 
 int TCommandChangeOwner::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
@@ -414,6 +428,7 @@ void TCommandPermissionClear::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to clear permissions to");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandPermissionClear::ExtractParams(TConfig& config) {
@@ -422,7 +437,8 @@ void TCommandPermissionClear::ExtractParams(TConfig& config) {
 }
 
 int TCommandPermissionClear::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
@@ -444,6 +460,7 @@ void TCommandPermissionSetInheritance::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to set interrupt-inheritance flag for");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandPermissionSetInheritance::ExtractParams(TConfig& config) {
@@ -452,7 +469,8 @@ void TCommandPermissionSetInheritance::ExtractParams(TConfig& config) {
 }
 
 int TCommandPermissionSetInheritance::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
@@ -474,6 +492,7 @@ void TCommandPermissionClearInheritance::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to set interrupt-inheritance flag for");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandPermissionClearInheritance::ExtractParams(TConfig& config) {
@@ -482,7 +501,8 @@ void TCommandPermissionClearInheritance::ExtractParams(TConfig& config) {
 }
 
 int TCommandPermissionClearInheritance::Run(TConfig& config) {
-    NScheme::TSchemeClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         client.ModifyPermissions(
             Path,
@@ -504,6 +524,7 @@ void TCommandPermissionList::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<path>", "Path to list permissions for");
+    SetSchemePathCompletionForAll(config.Opts->GetOpts().GetFreeArgSpec(0));
 }
 
 void TCommandPermissionList::ExtractParams(TConfig& config) {
@@ -512,7 +533,7 @@ void TCommandPermissionList::ExtractParams(TConfig& config) {
 }
 
 int TCommandPermissionList::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NScheme::TSchemeClient client(driver);
     NScheme::TDescribePathResult result = client.DescribePath(
         Path,

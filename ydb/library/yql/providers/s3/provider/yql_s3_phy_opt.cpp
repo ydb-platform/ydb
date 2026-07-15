@@ -64,6 +64,7 @@ TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
 TString GetExtension(const std::string_view& format, const std::string_view& compression) {
     static const std::unordered_map<std::string_view, std::string_view> formatsMap = {
         {"csv_with_names"sv, "csv"sv},
+        {"csv"sv, "csv"sv},
         {"tsv_with_names"sv, "tsv"sv},
         {"raw"sv, "bin"sv},
         {"json_list"sv, "json"sv},

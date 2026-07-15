@@ -1,5 +1,8 @@
 #include "context.h"
 
+#include <yql/essentials/sql/v1/proto_parser/reflection.h>
+
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/utils/yql_paths.h>
@@ -8,6 +11,8 @@
 #include <util/string/join.h>
 #include <util/stream/null.h>
 #include <util/generic/scope.h>
+
+#include <utility>
 
 #ifdef GetMessage
     #undef GetMessage
@@ -39,9 +44,9 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
     return result.Build();
 }
 
-typedef bool TContext::*TPragmaField;
+using TPragmaField = bool TContext::*;
 
-// TODO(vitya-smirnov): register thsese names automatically using TABLE_ELEM macro.
+// TODO(vityaman): register thsese names automatically using TABLE_ELEM macro.
 THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"AnsiOptionalAs", &TContext::AnsiOptionalAs},
     {"WarnOnAnsiAliasShadowing", &TContext::WarnOnAnsiAliasShadowing},
@@ -80,7 +85,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"WindowNewPipeline", &TContext::WindowNewPipeline},
 };
 
-typedef TMaybe<bool> TContext::*TPragmaMaybeField;
+using TPragmaMaybeField = TMaybe<bool> TContext::*;
 
 THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
     {"AnsiRankForNullableKeys", &TContext::AnsiRankForNullableKeys},
@@ -92,19 +97,19 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
 
 } // namespace
 
-TContext::TContext(const TLexers& lexers, const TParsers& parsers,
+TContext::TContext(TLexers lexers, TParsers parsers,
                    const NSQLTranslation::TTranslationSettings& settings,
-                   const NSQLTranslation::TSQLHints& hints,
+                   NSQLTranslation::TSQLHints hints,
                    TIssues& issues,
-                   const TString& query)
-    : Lexers(lexers)
-    , Parsers(parsers)
+                   TString query)
+    : Lexers(std::move(lexers))
+    , Parsers(std::move(parsers))
     , ClusterMapping_(settings.ClusterMapping)
     , PathPrefix_(settings.PathPrefix)
     , ClusterPathPrefixes_(settings.ClusterPathPrefixes)
-    , SqlHints_(hints)
+    , SqlHints_(std::move(hints))
     , Settings(settings)
-    , Query(query)
+    , Query(std::move(query))
     , Pool(new TMemoryPool(4096))
     , Issues(issues)
     , IncrementMonCounterFunction(settings.IncrementCounter)
@@ -113,22 +118,25 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
     , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
-    , StrictWarningAsError(Settings.Flags.contains("StrictWarningAsError"))
 {
-    if (settings.LangVer >= MakeLangVersion(2025, 2)) {
+    if (settings.LangVer >= NYql::NFeature::GroupByExprAfterWhere.MinLangVer) {
         GroupByExprAfterWhere = true;
     }
 
-    if (settings.LangVer >= MakeLangVersion(2025, 3)) {
-        PersistableFlattenAndAggrExprs = true;
+    if (settings.LangVer >= NYql::NFeature::PersistableFlattenAndAggrExprs.MinLangVer) {
+        FlattenAndAggrExprsPersistence = EFlattenAndAggrExprsPersistence::Auto;
     }
 
-    if (settings.LangVer >= MakeLangVersion(2025, 4)) {
+    if (settings.LangVer > NYql::NFeature::LegacyNotNull.MaxLangVer) {
         DisableLegacyNotNull = true;
     }
 
+    SetYqlSelectMode(settings.YqlSelect);
     if (settings.Flags.contains("AutoYqlSelect")) {
-        SetYqlSelectMode(EYqlSelectMode::Auto);
+        SetYqlSelectMode(EYqlSelect::Auto);
+    }
+    if (settings.Flags.contains("ForceYqlSelect")) {
+        SetYqlSelectMode(EYqlSelect::Force);
     }
 
     for (auto lib : settings.Libraries) {
@@ -213,7 +221,7 @@ IOutputStream& TContext::Error(NYql::TIssueCode code) {
 IOutputStream& TContext::Error(NYql::TPosition pos, NYql::TIssueCode code) {
     HasPendingErrors = true;
     bool isError;
-    return MakeIssue(TSeverityIds::S_ERROR, code, pos, false, isError);
+    return MakeIssue(TSeverityIds::S_ERROR, code, pos, /*forceError=*/false, isError);
 }
 
 bool TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function<void(IOutputStream&)> message,
@@ -221,12 +229,12 @@ bool TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function
     bool isError;
     IOutputStream& out = MakeIssue(TSeverityIds::S_WARNING, code, pos, forceError, isError);
     message(out);
-    return !StrictWarningAsError || !isError;
+    return !isError;
 }
 
 IOutputStream& TContext::Info(NYql::TPosition pos) {
     bool isError;
-    return MakeIssue(TSeverityIds::S_INFO, TIssuesIds::INFO, pos, false, isError);
+    return MakeIssue(TSeverityIds::S_INFO, TIssuesIds::INFO, pos, /*forceError=*/false, isError);
 }
 
 void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action) {
@@ -240,15 +248,71 @@ void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction a
     WarningPolicy.AddRule(rule);
 }
 
-TVector<NSQLTranslation::TSQLHint> TContext::PullHintForToken(NYql::TPosition tokenPos) {
-    TVector<NSQLTranslation::TSQLHint> result;
-    auto it = SqlHints_.find(tokenPos);
-    if (it == SqlHints_.end()) {
-        return result;
+bool TContext::IsAnyUnusedHintForToken(NYql::TPosition tokenPos, std::function<bool(NSQLTranslation::TSQLHint)> pred) {
+    const auto* hints = SqlHints_.FindPtr(tokenPos);
+    if (!hints) {
+        return false;
     }
-    result = std::move(it->second);
-    SqlHints_.erase(it);
-    return result;
+
+    return AnyOf(*hints, pred);
+}
+
+TVector<NSQLTranslation::TSQLHint> TContext::PullHintForToken(NYql::TPosition tokenPos) {
+    return PullHintForToken(tokenPos, [](const auto&) { return true; });
+}
+
+std::expected<NSQLTranslation::TSQLHint, bool> TContext::PullHintForToken(NYql::TPosition tokenPos, TStringBuf name) {
+    const auto isSameName = [&](const NSQLTranslation::TSQLHint& hint) {
+        return to_lower(hint.Name) == name;
+    };
+
+    TVector<NSQLTranslation::TSQLHint> hints = PullHintForToken(tokenPos, isSameName);
+    if (hints.empty()) {
+        return std::unexpected(false);
+    }
+
+    NSQLTranslation::TSQLHint back = std::move(hints.back());
+    hints.pop_back();
+
+    bool hasError = false;
+    for (const NSQLTranslation::TSQLHint& hint : hints) {
+        hasError |= !Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT, [&](auto& out) {
+            out << "Hint " << hint.Name << " will not be used";
+        });
+    }
+    if (hasError) {
+        return std::unexpected(true);
+    }
+
+    return back;
+}
+
+TVector<NSQLTranslation::TSQLHint> TContext::PullHintForToken(
+    NYql::TPosition tokenPos,
+    std::function<bool(NSQLTranslation::TSQLHint)> pred)
+{
+    auto it = SqlHints_.find(tokenPos);
+    if (it == end(SqlHints_)) {
+        return {};
+    }
+
+    auto& hints = it->second;
+
+    // If two or more hints with the same name are
+    // specified in the set, the last one is used.
+    auto tail = std::ranges::stable_partition(hints, std::not_fn(pred));
+
+    TVector<NSQLTranslation::TSQLHint> pulled;
+    pulled.reserve(std::ranges::size(tail));
+
+    std::ranges::move(tail, std::back_inserter(pulled));
+    hints.erase(std::ranges::begin(tail), std::ranges::end(tail));
+
+    if (hints.empty()) {
+        SqlHints_.erase(it);
+    }
+
+    return pulled;
 }
 
 bool TContext::WarnUnusedHints() {
@@ -539,24 +603,17 @@ TScopedStatePtr TContext::CreateScopedState() const {
     return state;
 }
 
-bool TContext::EnsureBackwardCompatibleFeatureAvailable(
-    TPosition position,
-    TStringBuf feature,
-    NYql::TLangVersion version)
-{
-    if (!IsBackwardCompatibleFeatureAvailable(version)) {
-        Error(position)
-            << feature << " is not available before language version "
-            << NYql::FormatLangVersion(version);
+bool TContext::IsAvailable(const NYql::TFeature& feature) const {
+    return NYql::IsAvailableOn(Settings.LangVer, Settings.BackportMode, feature);
+}
+
+bool TContext::EnsureAvailable(TPosition position, const NYql::TFeature& feature) {
+    if (auto r = NYql::EnsureIsAvailableOn(Settings.LangVer, Settings.BackportMode, feature); !r) {
+        Error(std::move(position)) << r.error();
         return false;
     }
 
     return true;
-}
-
-bool TContext::IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const {
-    return NYql::IsBackwardCompatibleFeatureAvailable(
-        Settings.LangVer, featureVer, Settings.BackportMode);
 }
 
 TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex) {
@@ -698,7 +755,7 @@ TString TTranslation::PushNamedAtom(TPosition namePos, const TString& name) {
 bool TTranslation::PopNamedNode(const TString& name) {
     auto mapIt = Ctx_.Scoped->NamedNodes.find(name);
     Y_DEBUG_ABORT_UNLESS(mapIt != Ctx_.Scoped->NamedNodes.end());
-    Y_DEBUG_ABORT_UNLESS(mapIt->second.size() > 0);
+    Y_DEBUG_ABORT_UNLESS(!mapIt->second.empty());
 
     Y_DEFER {
         mapIt->second.pop_front();
@@ -741,15 +798,6 @@ bool TTranslation::WarnUnusedNodes() const {
     }
 
     return true;
-}
-
-TString GetDescription(const google::protobuf::Message& node, const google::protobuf::FieldDescriptor* d) {
-    const auto& field = node.GetReflection()->GetMessage(node, d);
-    return field.GetReflection()->GetString(field, d->message_type()->FindFieldByName("Descr"));
-}
-
-TString TTranslation::AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const {
-    return GetDescription(node, descr->FindFieldByNumber(altCase));
 }
 
 void TTranslation::AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr) {

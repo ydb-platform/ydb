@@ -35,4 +35,4 @@ bool ITxReader::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TAc
     return NextReaderAfterLoad ? NextReaderAfterLoad->Execute(txc, ctx) : true;
 }
 
-}
+}   // namespace NKikimr

@@ -233,9 +233,9 @@ NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
             NUdf::TUnboxedValue* items = nullptr;
             const auto tuple = holderFactory.CreateDirectArrayHolder(width + 1, items);
             for (size_t i = 0; i < width; i++) {
-                items[i] = holderFactory.CreateArrowBlock(std::move(chunk[i]));
+                items[i] = holderFactory.CreateArrowBlock(std::move(chunk[i]), NYql::DefaultDatumTestValidationMode);
             }
-            items[width] = MakeBlockCount(holderFactory, chunkLen);
+            items[width] = MakeBlockCount(holderFactory, chunkLen, NYql::DefaultDatumTestValidationMode);
 
             listValues = listValues.Append(std::move(tuple));
         }
@@ -264,9 +264,9 @@ NUdf::TUnboxedValuePod MakeUint64ScalarBlock(TComputationContext& ctx, size_t bl
         const auto tuple = holderFactory.CreateDirectArrayHolder(width + 1, items);
         for (size_t i = 0; i < width; i++) {
             const NUdf::TUnboxedValuePod& item = row.GetElement(i);
-            items[i] = holderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(item.Get<ui64>())));
+            items[i] = holderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(item.Get<ui64>())), NYql::DefaultDatumTestValidationMode);
         }
-        items[width] = MakeBlockCount(holderFactory, std::min(blockSize, rowsCount - rowOffset));
+        items[width] = MakeBlockCount(holderFactory, std::min(blockSize, rowsCount - rowOffset), NYql::DefaultDatumTestValidationMode);
         listValues = listValues.Append(std::move(tuple));
     }
 

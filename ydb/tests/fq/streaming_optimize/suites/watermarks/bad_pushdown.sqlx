@@ -1,13 +1,10 @@
-PRAGMA dq.WatermarksMode="default";
-PRAGMA pq.Consumer="test_client";
-
 SELECT
     *
-FROM pq.test_topic_input
-WITH(
-    FORMAT=json_each_row,
-    SCHEMA(
-        ts Timestamp NOT NULL
-    ),
-    WATERMARK AS (Unwrap(ts - DateTime::IntervalFromSeconds(5)))
-);
+FROM
+    pq.test_topic_input WITH (
+        FORMAT = json_each_row,
+        SCHEMA (t String, k String, v Int64),
+        WATERMARK = (CAST(t AS Timestamp) - DateTime::IntervalFromSeconds(5)) - Interval('PT5S'),
+        STREAMING = 'TRUE'
+    )
+;

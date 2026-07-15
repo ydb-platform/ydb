@@ -29,20 +29,22 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 1b9eac2decdd87d14a794909c7770925
+KEEP     COPYRIGHT_SERVICE_LABEL 14b5565f6238c8ccb6beb50beea7d0d1
 BELONGS ya.make
-FILE_INCLUDE include/zlib.h found in files: deflate.c at line 3, zlib.h at line 5
-FILE_INCLUDE zlib.h found in files: deflate.c at line 3, zlib.h at line 5
+FILE_INCLUDE include/zlib.h found in files: compress.c at line 3, uncompr.c at line 3, zconf.h at line 3, zutil.h at line 3
+FILE_INCLUDE zlib.h found in files: compress.c at line 3, uncompr.c at line 3, zconf.h at line 3, zutil.h at line 3
     License text:
-         * Copyright (C) 1995-2025 Jean-loup Gailly and Mark Adler
+         * Copyright (C) 1995-2026 Jean-loup Gailly, Mark Adler
          * For conditions of distribution and use, see copyright notice in zlib.h
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        deflate.c [2:3]
-        zlib.h [4:4]
+        compress.c [2:3]
+        uncompr.c [2:3]
+        zconf.h [2:3]
+        zutil.h [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1d5f31657caf93e1a8ab2b96de61cea7
 BELONGS ya.make
@@ -58,6 +60,21 @@ FILE_INCLUDE zlib.h found in files: inflate.h at line 3
     Files with this license:
         inflate.h [2:3]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 1ddb53614aab125b31029bb92d69acc1
+BELONGS ya.make
+FILE_INCLUDE include/zlib.h found in files: deflate.c at line 3, zlib.h at line 5
+FILE_INCLUDE zlib.h found in files: deflate.c at line 3, zlib.h at line 5
+    License text:
+         * Copyright (C) 1995-2026 Jean-loup Gailly and Mark Adler
+         * For conditions of distribution and use, see copyright notice in zlib.h
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        deflate.c [2:3]
+        zlib.h [4:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 277641030d16b4c50c0d9ff434aa1834
 BELONGS ya.make
 FILE_IGNORE include/zlib.h found in files: adler32.c at line 3
@@ -72,25 +89,39 @@ FILE_IGNORE zlib.h found in files: adler32.c at line 3
     Files with this license:
         adler32.c [2:3]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 3196e5b8ddb48a16dad4eae91d2e6164
+KEEP     COPYRIGHT_SERVICE_LABEL 2ae849e492fd8570b79e78a45e55e312
 BELONGS ya.make
-FILE_IGNORE include/zlib.h found in files: inftrees.h at line 3
-FILE_IGNORE zlib.h found in files: inftrees.h at line 3
+FILE_INCLUDE include/zlib.h found in files: deflate.h at line 3, trees.c at line 3, zutil.c at line 3
+FILE_INCLUDE zlib.h found in files: deflate.h at line 3, trees.c at line 3, zutil.c at line 3
     License text:
-         * Copyright (C) 1995-2005, 2010 Mark Adler
+         * Copyright (C) 1995-2026 Jean-loup Gailly
          * For conditions of distribution and use, see copyright notice in zlib.h
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        inftrees.h [2:3]
+        deflate.h [2:3]
+        trees.c [2:4]
+        zutil.c [2:3]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 3df1c3cfd8adc9d57f7e70168b401df8
+KEEP     COPYRIGHT_SERVICE_LABEL 41c9188528a9c5d1232544821b6d4587
+BELONGS ya.make
+    License text:
+        const char inflate_copyright[] =
+           " inflate 1.3.2 Copyright 1995-2026 Mark Adler ";
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        inftrees.c [25:26]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4798e718cd68f454dc9235a16097a3f2
 BELONGS ya.make
     License text:
         const char deflate_copyright[] =
-           " deflate 1.3.1.2 Copyright 1995-2025 Jean-loup Gailly and Mark Adler ";
+           " deflate 1.3.2 Copyright 1995-2026 Jean-loup Gailly and Mark Adler ";
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -98,78 +129,22 @@ BELONGS ya.make
     Files with this license:
         deflate.c [55:56]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 463c9f47797071e41c6fc624d9ee9948
+KEEP     COPYRIGHT_SERVICE_LABEL 72cc701e4b867ba3dbf9747f68968ca4
 BELONGS ya.make
-FILE_INCLUDE include/zlib.h found in files: infback.c at line 3, inffast.c at line 3, inflate.c at line 3, inftrees.c at line 3
-FILE_INCLUDE zlib.h found in files: infback.c at line 3, inffast.c at line 3, inflate.c at line 3, inftrees.c at line 3
+FILE_INCLUDE include/zlib.h found in files: gzguts.h at line 3, gzlib.c at line 3, gzread.c at line 3, gzwrite.c at line 3
+FILE_INCLUDE zlib.h found in files: gzguts.h at line 3, gzlib.c at line 3, gzread.c at line 3, gzwrite.c at line 3
     License text:
-         * Copyright (C) 1995-2025 Mark Adler
+         * Copyright (C) 2004-2026 Mark Adler
          * For conditions of distribution and use, see copyright notice in zlib.h
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        infback.c [2:3]
-        inffast.c [2:3]
-        inflate.c [2:3]
-        inftrees.c [2:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 49deeb0f4c5a46dfc25234cc23c34eda
-BELONGS ya.make
-FILE_INCLUDE include/zlib.h found in files: crc32.c at line 3
-FILE_INCLUDE zlib.h found in files: crc32.c at line 3
-    License text:
-         * Copyright (C) 1995-2022 Mark Adler
-         * For conditions of distribution and use, see copyright notice in zlib.h
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        crc32.c [2:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 79943f8c6d55dcc48ae7b6f34d004918
-BELONGS ya.make
-FILE_INCLUDE include/zlib.h found in files: zconf.h at line 3
-FILE_INCLUDE zlib.h found in files: zconf.h at line 3
-    License text:
-         * Copyright (C) 1995-2025 Jean-loup Gailly, Mark Adler
-         * For conditions of distribution and use, see copyright notice in zlib.h
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        zconf.h [2:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 8e8ddc1e917d1fb6ba149d56d795645a
-BELONGS ya.make
-FILE_IGNORE include/zlib.h found in files: zutil.c at line 3
-FILE_IGNORE zlib.h found in files: zutil.c at line 3
-    License text:
-         * Copyright (C) 1995-2017 Jean-loup Gailly
-         * For conditions of distribution and use, see copyright notice in zlib.h
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        zutil.c [2:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 9a20c729a4f6384624db94bed5392825
-BELONGS ya.make
-FILE_IGNORE include/zlib.h found in files: uncompr.c at line 3
-FILE_IGNORE zlib.h found in files: uncompr.c at line 3
-    License text:
-         * Copyright (C) 1995-2003, 2010, 2014, 2016 Jean-loup Gailly, Mark Adler
-         * For conditions of distribution and use, see copyright notice in zlib.h
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        uncompr.c [2:3]
+        gzguts.h [2:3]
+        gzlib.c [2:3]
+        gzread.c [2:3]
+        gzwrite.c [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL b7a343f9b49ebc230fdd78921a1ea28b
 BELONGS ya.make
@@ -185,42 +160,10 @@ FILE_IGNORE zlib.h found in files: inffast.h at line 3
     Files with this license:
         inffast.h [2:3]
 
-KEEP     COPYRIGHT_SERVICE_LABEL bae3c5c45a23ca79ced2e37882b9ecf6
-BELONGS ya.make
-FILE_INCLUDE include/zlib.h found in files: deflate.h at line 3, trees.c at line 3
-FILE_INCLUDE zlib.h found in files: deflate.h at line 3, trees.c at line 3
-    License text:
-         * Copyright (C) 1995-2024 Jean-loup Gailly
-         * For conditions of distribution and use, see copyright notice in zlib.h
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        deflate.h [2:3]
-        trees.c [2:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL baebb99ea7bb511fa8444456663e2d78
-BELONGS ya.make
-FILE_INCLUDE include/zlib.h found in files: gzguts.h at line 3, gzlib.c at line 3, gzread.c at line 3, gzwrite.c at line 3
-FILE_INCLUDE zlib.h found in files: gzguts.h at line 3, gzlib.c at line 3, gzread.c at line 3, gzwrite.c at line 3
-    License text:
-         * Copyright (C) 2004-2025 Mark Adler
-         * For conditions of distribution and use, see copyright notice in zlib.h
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        gzguts.h [2:3]
-        gzlib.c [2:3]
-        gzread.c [2:3]
-        gzwrite.c [2:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL c69570b8e1d9688d9c2c6915b7c161c8
+KEEP     COPYRIGHT_SERVICE_LABEL be6ecd264848a0392ec8e0f419f4acfa
 BELONGS ya.make
     License text:
-         (C) 1995-2025 Jean-loup Gailly and Mark Adler
+         (C) 1995-2026 Jean-loup Gailly and Mark Adler
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -228,20 +171,6 @@ BELONGS ya.make
     Files with this license:
         LICENSE [3:3]
         README [84:84]
-
-KEEP     COPYRIGHT_SERVICE_LABEL c7562678bd320f530f986d092f559d9e
-BELONGS ya.make
-FILE_INCLUDE include/zlib.h found in files: zutil.h at line 3
-FILE_INCLUDE zlib.h found in files: zutil.h at line 3
-    License text:
-         * Copyright (C) 1995-2024 Jean-loup Gailly, Mark Adler
-         * For conditions of distribution and use, see copyright notice in zlib.h
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        zutil.h [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL cf03aed7948d485e7383fbbc2b3211c8
 BELONGS ya.make
@@ -257,28 +186,21 @@ FILE_IGNORE zlib.h found in files: gzclose.c at line 3
     Files with this license:
         gzclose.c [2:3]
 
-KEEP     COPYRIGHT_SERVICE_LABEL d9b2f390e7a1f7325c8ddd8eedda0c4b
+KEEP     COPYRIGHT_SERVICE_LABEL f3bf2044a8786843d535204372bb1697
 BELONGS ya.make
-FILE_IGNORE include/zlib.h found in files: compress.c at line 3
-FILE_IGNORE zlib.h found in files: compress.c at line 3
+FILE_INCLUDE include/zlib.h found in files: crc32.c at line 3, infback.c at line 3, inffast.c at line 3, inflate.c at line 3, inftrees.c at line 3, inftrees.h at line 3
+FILE_INCLUDE zlib.h found in files: crc32.c at line 3, infback.c at line 3, inffast.c at line 3, inflate.c at line 3, inftrees.c at line 3, inftrees.h at line 3
     License text:
-         * Copyright (C) 1995-2005, 2014, 2016 Jean-loup Gailly, Mark Adler
+         * Copyright (C) 1995-2026 Mark Adler
          * For conditions of distribution and use, see copyright notice in zlib.h
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        compress.c [2:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL f5a87d03b354e8d5a6e04b2166529b53
-BELONGS ya.make
-    License text:
-        const char inflate_copyright[] =
-           " inflate 1.3.1.2 Copyright 1995-2025 Mark Adler ";
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        inftrees.c [11:12]
+        crc32.c [2:3]
+        infback.c [2:3]
+        inffast.c [2:3]
+        inflate.c [2:3]
+        inftrees.c [2:3]
+        inftrees.h [2:3]

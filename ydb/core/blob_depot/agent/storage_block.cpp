@@ -33,6 +33,11 @@ namespace NKikimr::NBlobDepot {
                 block.SetBlockedGeneration(Request.Generation);
                 block.SetIssuerGuid(Request.IssuerGuid);
                 Agent.Issue(std::move(block), this, std::make_shared<TBlockContext>(TActivationContext::Monotonic()));
+
+                if (Agent.Recommissioning) {
+                    Agent.SendToProxy(Agent.DecommitGroupId.value(), std::make_unique<TEvBlobStorage::TEvBlock>(
+                        Request.TabletId, Request.Generation, Request.Deadline, Request.IssuerGuid), this, nullptr);
+                }
             }
 
             void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {

@@ -150,6 +150,7 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
             enable_audit_log=True,
             explicit_hosts_and_host_configs=True,
             default_users=dict((i, '') for i in ('root', 'other-user')),
+            extra_feature_flags=['switch_to_config_v2'],
         )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
@@ -182,6 +183,7 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
 
         config_yaml = yaml.dump(initial_config)
         replace_config_response = self.config_client.replace_config(config_yaml)
+        logger.debug(f"Replace config response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
 
         fetch_config_response = self.config_client.fetch_all_configs()

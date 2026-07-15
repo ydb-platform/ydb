@@ -13,6 +13,8 @@
 #include <util/generic/string.h>
 #include <util/string/hex.h>
 
+#include <limits>
+
 namespace NKikimr {
 
 X509CertificateReader::X509Ptr X509CertificateReader::ReadCertAsPEM(const TStringBuf& cert) {
@@ -23,6 +25,25 @@ X509CertificateReader::X509Ptr X509CertificateReader::ReadCertAsPEM(const TStrin
 
     auto x509 = X509Ptr(PEM_read_bio_X509(bio.get(), NULL, NULL, NULL));
     if (!x509) {
+        return {};
+    }
+
+    return x509;
+}
+
+X509CertificateReader::X509Ptr X509CertificateReader::ReadCertAsDER(const TStringBuf& cert) {
+    if (cert.empty() || cert.size() > std::numeric_limits<long>::max()) {
+        return {};
+    }
+
+    const ui8* certStart = reinterpret_cast<const ui8*>(cert.data());
+    const ui8* certEnd = certStart + cert.size();
+    const long certSize = static_cast<long>(cert.size());
+
+    const ui8* ptr = certStart;
+
+    auto x509 = X509Ptr{d2i_X509(NULL, &ptr, certSize)};
+    if (x509 == nullptr || ptr != certEnd) {
         return {};
     }
 
@@ -158,6 +179,36 @@ TString X509CertificateReader::GetFingerprint(const X509Ptr& x509) {
         return "";
     }
     return HexEncode(fingerprint, FINGERPRINT_LENGTH);
+}
+
+TString X509CertificateReader::GetPublicKey(const X509Ptr& x509) {
+    if (x509 == nullptr) {
+        return "";
+    }
+
+    auto* rawPubkey = X509_get_pubkey(x509.get());
+    if (rawPubkey == nullptr) {
+        return "";
+    }
+    const EVPPKeyPtr pubkey(rawPubkey);
+
+    auto* bio = BIO_new(BIO_s_mem());
+    if (bio == nullptr) {
+        return "";
+    }
+    const BIOPtr pubkeyBio(bio);
+
+    if (PEM_write_bio_PUBKEY(pubkeyBio.get(), pubkey.get()) != 1) {
+        return "";
+    }
+
+    char* pubkeyBuf = nullptr;
+    const long pubkeyLen = BIO_get_mem_data(pubkeyBio.get(), &pubkeyBuf);
+    if (pubkeyLen <= 0) {
+        return "";
+    }
+
+    return TString(pubkeyBuf, static_cast<size_t>(pubkeyLen));
 }
 
 TCertificateAuthorizationParams::TCertificateAuthorizationParams(const TDN& dn, const std::optional<TRDN>& subjectDns, bool requireSameIssuer, const std::vector<TString>& groups)

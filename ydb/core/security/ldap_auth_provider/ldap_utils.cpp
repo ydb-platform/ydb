@@ -5,20 +5,54 @@
 
 namespace NKikimr {
 
+namespace {
+
+// Escape LDAP filter value according to https://www.rfc-editor.org/rfc/rfc2254#page-5
+TString EscapeLdapFilterValue(TStringBuf value) {
+    TStringBuilder escaped;
+    escaped.reserve(value.size() + 4);
+    for (unsigned char ch : value) {
+        switch (ch) {
+            case '*':
+                escaped << "\\2a";
+                break;
+            case '(':
+                escaped << "\\28";
+                break;
+            case ')':
+                escaped << "\\29";
+                break;
+            case '\\':
+                escaped << "\\5c";
+                break;
+            case '\0':
+                escaped << "\\00";
+                break;
+            default:
+                escaped << static_cast<char>(ch);
+                break;
+        }
+    }
+    return TString{escaped};
+}
+
+} // namespace
+
 TSearchFilterCreator::TSearchFilterCreator(const NKikimrProto::TLdapAuthentication& settings)
     : Settings(settings)
 {}
 
 TString TSearchFilterCreator::GetFilter(const TString& userName) const {
+    const TString escapedUserName = EscapeLdapFilterValue(userName);
     if (!Settings.GetSearchFilter().empty()) {
-        return GetFormatSearchFilter(userName);
+        return GetFormatSearchFilter(escapedUserName);
     } else if (!Settings.GetSearchAttribute().empty()) {
-        return Settings.GetSearchAttribute() + "=" + userName;
+        return Settings.GetSearchAttribute() + "=" + escapedUserName;
     }
-    return "uid=" + userName;
+    return "uid=" + escapedUserName;
 }
 
-TString TSearchFilterCreator::GetFormatSearchFilter(const TString& userName) const {
+TString TSearchFilterCreator::GetFormatSearchFilter(const TString& escapedUserName) const {
     const TStringBuf namePlaceHolder = "$username";
     const TString& searchFilter = Settings.GetSearchFilter();
     size_t n = searchFilter.find(namePlaceHolder);
@@ -28,7 +62,7 @@ TString TSearchFilterCreator::GetFormatSearchFilter(const TString& userName) con
     TStringStream result;
     size_t pos = 0;
     while (n != TString::npos) {
-        result << searchFilter.substr(pos, n - pos) << userName;
+        result << searchFilter.substr(pos, n - pos) << escapedUserName;
         pos = n + namePlaceHolder.size();
         n = searchFilter.find(namePlaceHolder, pos);
     }

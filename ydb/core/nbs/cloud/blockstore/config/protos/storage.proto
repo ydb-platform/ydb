@@ -1,0 +1,149 @@
+syntax = "proto3";
+
+package NYdb.NBS.NProto;
+
+import "ydb/core/nbs/cloud/blockstore/config/protos/ddisk_config.proto";
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Mode of write requests.
+enum EWriteMode {
+    // Persistent Buffers replication is going from one of PBuffers. Write request
+    // will be sended to 1 PBuffer, then this PBuffer will send request to other PBuffer.
+    IndirectWrite = 0;
+
+    // WriteRequests are going to all Persistent Buffers directly.
+    DirectWrite = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TOracleConfig
+{
+    // Interval between Oracle thinking in milliseconds.
+    optional uint32 ThinkingInterval = 1;
+
+    // Maximum duration before host going temporary offline in milliseconds.
+    optional uint32 MaxDurationBeforeGoingTemporaryOffline = 2;
+
+    // Maximum duration before host going offline in milliseconds.
+    optional uint32 MaxDurationBeforeGoingOffline = 3;
+
+    // The minimum number of erroneous requests after which the host is taken
+    // offline. If the number of errors is less, the host will not go offline,
+    // regardless of the time during which the errors occurred.
+    optional uint32 MinErrorsCountBeforeGoingOffline = 4;
+
+    // The number of failed requests after which the host is taken offline,
+    // regardless of the time during which the errors occurred. Required to
+    // protect PBuffer from overflow.
+    optional uint32 ErrorsCountForGoingOffline = 5;
+
+    // The total size of failed requests after which the host is taken offline.
+    // Required to protect PBuffer from overflow.
+    optional uint64 ErrorsTotalSizeForGoingOffline = 6;
+
+    // Time prediction history size.
+    // 0 - means do not use time prediction through history.
+    optional uint32 TimePredictionHistorySize = 7;
+
+    // Which element number from the end of the list to use. If take pre-last one
+    // with a queue size of 10, then it is equivalent to the 90th percentile.
+    // 0 - means the last (100th percentile).
+    optional uint32 TimePredictionNthFromEnd = 8;
+}
+
+message TStorageServiceConfig
+{
+    // SchemeShard directory for volumes.
+    optional string SchemeShardDir = 1;
+
+    // Channel configuration.
+    optional string SsdSystemChannelPoolKind = 2;
+    optional string SsdLogChannelPoolKind = 3;
+    optional string SsdIndexChannelPoolKind = 4;
+
+    // FolderId of this NBS instance. Used for authorization.
+    optional string FolderId = 5;
+
+    // Number of reties before pipe client reports failure.
+    optional uint32 PipeClientRetryCount = 6;
+
+    // Minimum timeout before pipe client reconnect attempt.
+    optional uint32 PipeClientMinRetryTime = 7;
+
+    // Maximum timeout before pipe client reconnect attempt.
+    optional uint32 PipeClientMaxRetryTime = 8;
+
+    // DDisk pool name for direct storage.
+    optional string DDiskPoolName = 9;
+
+    // DDisk pool name for persistent buffer.
+    optional string PersistentBufferDDiskPoolName = 10;
+
+    // Period (in milliseconds) for sampling traces.
+    optional uint32 TraceSamplePeriod = 11;
+
+    // Sync requests will be sended when sync queue reaches
+    // this size for ddisk.
+    optional uint32 SyncRequestsBatchSize = 12;
+
+    // Default stripe size for volumes.
+    optional uint64 StripeSize = 13;
+
+    optional EWriteMode WriteMode = 14;
+
+    // Timeout for request to PBuffer.
+    optional uint32 PBufferReplyTimeoutMicroseconds = 15;
+
+    // Delay (in microseconds) before writing to handoff persistent buffers.
+    optional uint32 WriteHedgingDelay = 16;
+
+    // Size of VChunk (in bytes). Default is 128 MB.
+    optional uint64 VChunkSize = 17;
+
+    // Thread pool size.
+    optional uint32 ThreadPoolSize = 18;
+
+    // Global DDisk configuration.
+    optional TDDiskConfig GlobalDDiskConfig = 19;
+    // Global PBuffer configuration.
+    optional TPBufferConfig GlobalPBufferConfig = 20;
+
+    // Timeout (in milliseconds) for write request handlers.
+    optional uint32 WriteRequestTimeout = 21;
+
+    // Config for oracle thinking.
+    optional TOracleConfig OracleConfig = 22;
+
+    // Interval (in milliseconds) for dirty map debug printing.
+    optional uint32 DirtyMapDebugPrintInterval = 23;
+
+    // Number of OS threads in the vhost server pool. Each thread runs
+    // libvhost's request-queue event loop and dispatches dequeued
+    // requests through the device handler. Should be sized to the
+    // expected aggregate vhost-queue concurrency.
+    optional uint32 VhostThreadsCount = 24;
+
+    // Number of virtio-blk request queues each vhost endpoint exposes
+    // to QEMU. A higher count gives more parallelism between queues
+    // (each queue can be served by a different VHOST thread). Capped
+    // at runtime by VhostThreadsCount.
+    optional uint32 VhostQueuesCount = 25;
+
+    // Persistent buffer cleanup is triggered once the cleanup LSN advances by
+    // at least this many LSNs since the last cleanup. 0 disables cleanup.
+    optional uint64 PBufferCleanupLsnStep = 26;
+
+    // Delay (in microseconds) before reading from another location.
+    optional uint32 ReadHedgingDelay = 27;
+
+    // Timeout (in milliseconds) for reading request handlers.
+    optional uint32 ReadRequestTimeout = 28;
+
+    // Timeout (in milliseconds) for flush request handlers.
+    optional uint32 FlushRequestTimeout = 29;
+
+    // Timeout (in milliseconds) for erase request handlers.
+    optional uint32 EraseRequestTimeout = 30;
+}

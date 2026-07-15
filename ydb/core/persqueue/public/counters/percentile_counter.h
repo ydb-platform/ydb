@@ -1,7 +1,8 @@
 #pragma once
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/library/persqueue/topic_parser/type_definitions.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr {
 namespace NPQ {

@@ -43,11 +43,13 @@ public:
     void RecordAnnotation(y_absl::string_view /*annotation*/) override
     { }
 
+    // TODO(babenko): migrate to std::string
     TString TraceId() override
     {
         return {};
     }
 
+    // TODO(babenko): migrate to std::string
     TString SpanId() override
     {
         return {};
@@ -93,6 +95,7 @@ public:
         if (!grpc_error_get_int(error, grpc_core::StatusIntProperty::kRpcStatus, &statusCode)) {
             statusCode = GRPC_STATUS_UNKNOWN;
         }
+        // TODO(babenko): migrate to std::string
         TString statusDetail;
         if (!grpc_error_get_str(error, grpc_core::StatusStrProperty::kDescription, &statusDetail)) {
             statusDetail = "Unknown error";
@@ -110,6 +113,12 @@ public:
 
     void RecordEnd(const gpr_timespec& /*latency*/) override
     { }
+
+    void RecordAnnotation(const Annotation& /*annotation*/) override
+    { }
+
+    std::shared_ptr<grpc_core::TcpTracerInterface> StartNewTcpTrace() override
+    { return {}; }
 
 private:
     AtomicError Error_;
@@ -218,7 +227,7 @@ public:
 
     int GetInflightRequestCount() override
     {
-        return ConcurrentCalls_.load(std::memory_order::relaxed);
+        return ConcurrentCallCount_.load(std::memory_order::relaxed);
     }
 
     const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
@@ -244,7 +253,7 @@ private:
     TGrpcLibraryLockPtr LibraryLock_ = TDispatcher::Get()->GetLibraryLock();
     TGrpcChannelPtr Channel_;
     TGrpcChannelCredentialsPtr Credentials_;
-    std::atomic<int> ConcurrentCalls_;
+    std::atomic<int> ConcurrentCallCount_;
 
 
     class TCallHandler
@@ -264,12 +273,12 @@ private:
             , ResponseHandler_(std::move(responseHandler))
             , GuardedCompletionQueue_(TDispatcher::Get()->PickRandomGuardedCompletionQueue())
         {
-            Owner_->ConcurrentCalls_.fetch_add(1, std::memory_order::relaxed);
+            Owner_->ConcurrentCallCount_.fetch_add(1, std::memory_order::relaxed);
         }
 
         ~TCallHandler()
         {
-            Owner_->ConcurrentCalls_.fetch_sub(1, std::memory_order::relaxed);
+            Owner_->ConcurrentCallCount_.fetch_sub(1, std::memory_order::relaxed);
         }
 
         void Initialize()
@@ -748,12 +757,21 @@ class TChannelFactory
     : public IChannelFactory
 {
 public:
+    explicit TChannelFactory(TChannelFactoryConfigPtr config)
+        : FactoryConfig_(std::move(config))
+    { }
+
     IChannelPtr CreateChannel(const std::string& address) override
     {
-        auto config = New<TChannelConfig>();
-        config->Address = address;
-        return CreateGrpcChannel(config);
+        auto channelConfig = New<TChannelConfig>();
+        channelConfig->Load(ConvertToNode(FactoryConfig_), /*postprocess*/ false, /*setDefaults*/ false);
+        channelConfig->Address = address;
+        channelConfig->Postprocess();
+        return CreateGrpcChannel(channelConfig);
     }
+
+private:
+    const TChannelFactoryConfigPtr FactoryConfig_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -765,9 +783,14 @@ IGrpcChannelPtr CreateGrpcChannel(TChannelConfigPtr config)
     return New<TChannel>(std::move(config));
 }
 
-IChannelFactoryPtr GetGrpcChannelFactory()
+IChannelFactoryPtr CreateGrpcChannelFactory(TChannelFactoryConfigPtr config)
 {
-    return LeakyRefCountedSingleton<TChannelFactory>();
+    return New<TChannelFactory>(std::move(config));
+}
+
+IChannelFactoryPtr GetDefaultGrpcChannelFactory()
+{
+    return LeakyRefCountedSingleton<TChannelFactory>(New<TChannelFactoryConfig>());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

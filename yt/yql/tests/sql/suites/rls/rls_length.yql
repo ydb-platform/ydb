@@ -1,0 +1,6 @@
+/* ytfile can not */
+/* dq can not */
+/* dqfile can not */
+pragma yt.OmitInaccessibleRows;
+
+select count(*) from plato.Input;

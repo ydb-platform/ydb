@@ -1240,7 +1240,7 @@ TExprNode::TPtr PropagateConstPremapIntoCombineByKey(const TExprNode& node, TExp
         .Lambda()
             .Param("item")
             .Apply(*children[2])
-                .With(0, std::move(constItem))
+                .With(0, constItem)
             .Seal()
         .Seal()
         .Build();
@@ -1406,6 +1406,16 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
     }
 
     return node;
+}
+
+bool IsOptimizerToFlowOverIteratorWithDependsAllowed(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "ToFlowOverIteratorWithDepends";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
+bool IsOptimizerToFlowOverCollectAllowed(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "ToFlowOverCollect";
+    return !IsOptimizerDisabled<Flag>(types);
 }
 
 }
@@ -1730,14 +1740,14 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             if (const auto init = ExtractMemberFromLiteral(chain.InitHandler().Ref(), member), update = ExtractMemberFromLiteral(chain.UpdateHandler().Ref(), member);
                 init && update && init->IsCallable("Bool") && !FromString<bool>(init->Tail().Content())) {
                 if (std::map<std::string_view, TExprNode::TPtr> usedFields;
-                    HaveFieldsSubset(update, chain.UpdateHandler().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, false) && !usedFields.empty()
+                    HaveFieldsSubset(update, chain.UpdateHandler().Args().Arg(1).Ref(), usedFields, *optCtx.ParentsMap, /*allowDependsOn=*/false) && !usedFields.empty()
                     && IsPasstroughtFields(usedFields, self.InitHandler().Ref()) && IsPasstroughtFields(usedFields, self.UpdateHandler().Ref())) {
                     YQL_CLOG(DEBUG, Core) << "Fuse " << node->Content() << " with " << node->Head().Content();
                     auto lambda = ctx.Builder(chain.Pos())
                         .Lambda()
                             .Param("item")
                             .Param("state")
-                            .ApplyPartial(chain.UpdateHandler().Args().Ptr(), std::move(update))
+                            .ApplyPartial(chain.UpdateHandler().Args().Ptr(), update)
                                 .With(0, "item")
                                 .With(1, "state")
                             .Seal()
@@ -1746,7 +1756,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
                     return Build<TCoCondense1>(ctx, self.Pos())
                         .Input(chain.Input())
                         .InitHandler(ctx.DeepCopyLambda(self.InitHandler().Ref()))
-                        .SwitchHandler(std::move(lambda))
+                        .SwitchHandler(lambda)
                         .UpdateHandler(ctx.DeepCopyLambda(self.UpdateHandler().Ref()))
                         .Done().Ptr();
                 }
@@ -2073,6 +2083,31 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             }
         }
 
+        return node;
+    };
+
+    map["ToFlow"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (IsOptimizerToFlowOverIteratorWithDependsAllowed(*optCtx.Types)) {
+            const auto head = node->HeadPtr();
+            if (head->IsCallable("Iterator") && optCtx.IsSingleUsage(*head)) {
+                YQL_CLOG(DEBUG, Core) << "ToFlow over Iterator with depends";
+                auto newChildren = node->ChildrenList();
+                const auto headChildren = head->ChildrenList();
+                newChildren.front() = headChildren.front();
+                for (size_t i = 1; i < headChildren.size(); i++) {
+                    newChildren.push_back(headChildren[i]);
+                }
+                return ctx.ChangeChildren(*node, std::move(newChildren));
+            }
+        }
+        if (IsOptimizerToFlowOverCollectAllowed(*optCtx.Types)) {
+            const auto head = node->HeadPtr();
+            if (head->IsCallable("Collect") && optCtx.IsSingleUsage(*head) &&
+                head->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
+                YQL_CLOG(DEBUG, Core) << "Drop ToFlow over Collect";
+                return head->HeadPtr();
+            }
+        }
         return node;
     };
 

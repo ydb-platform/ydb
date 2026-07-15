@@ -28,6 +28,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "y_absl/meta/type_traits.h"
 #include "y_absl/status/status.h"
 #include "y_absl/strings/numbers.h"
 #include "y_absl/strings/str_cat.h"

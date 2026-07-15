@@ -24,6 +24,9 @@ struct TProtobufInteropConfig
     // Note: Applies to each protobuf message only on first seen, changes of flag after do not have effect.
     bool ForceSnakeCaseNames;
 
+    // If `true` convert all enum fields to string type.
+    bool ForceEnumStringType;
+
     TProtobufInteropConfigPtr ApplyDynamic(const TProtobufInteropDynamicConfigPtr& dynamicConfig) const;
 
     REGISTER_YSON_STRUCT(TProtobufInteropConfig);

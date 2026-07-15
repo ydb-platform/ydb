@@ -29,10 +29,13 @@ struct TTopicSessionMetrics {
     void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, const TString& readGroupName, ui32 partitionId, bool enableStreamingQueriesCounters) {
         ReadGroup = counters;
         PartitionGroup = counters;
-        if (enableStreamingQueriesCounters) {
+        PartitionId = partitionId;
+        EnableStreamingQueriesCounters = enableStreamingQueriesCounters;
+        if (EnableStreamingQueriesCounters) {
             const auto topicGroup = counters->GetSubgroup("topic", SanitizeLabel(topicPath));
             ReadGroup = topicGroup->GetSubgroup("read_group", SanitizeLabel(readGroupName));
             PartitionGroup = ReadGroup->GetSubgroup("partition", ToString(partitionId));
+            PartitionGroup = PartitionGroup->GetSubgroup("host", "");   // This partition report metrics only on one host. 
         }
         AllSessionsDataRate = ReadGroup->GetCounter("AllSessionsDataRate", true);
         InFlyAsyncInputData = PartitionGroup->GetCounter("InFlyAsyncInputData");
@@ -42,6 +45,12 @@ struct TTopicSessionMetrics {
         SessionDataRate = PartitionGroup->GetCounter("SessionDataRate", true);
         WaitEventTimeMs = PartitionGroup->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({5, 20, 100, 500, 2000}));
         QueuedBytes = PartitionGroup->GetCounter("QueuedBytes");
+    }
+
+    ~TTopicSessionMetrics() {
+        if (EnableStreamingQueriesCounters) {
+            ReadGroup->RemoveSubgroup("partition", ToString(PartitionId));
+        }
     }
     ::NMonitoring::TDynamicCounterPtr PartitionGroup;
     ::NMonitoring::TDynamicCounterPtr ReadGroup;
@@ -53,6 +62,8 @@ struct TTopicSessionMetrics {
     ::NMonitoring::THistogramPtr WaitEventTimeMs;
     ::NMonitoring::TDynamicCounters::TCounterPtr AllSessionsDataRate;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueuedBytes;
+    ui32 PartitionId = 0;
+    bool EnableStreamingQueriesCounters = false;
 };
 
 struct TEvPrivate {
@@ -84,6 +95,12 @@ constexpr ui64 SendStatisticPeriodSec = 2;
 constexpr ui64 MaxHandledEventsCount = 1000;
 constexpr ui64 MaxHandledEventsSize = 1000000;
 constexpr ui64 GetEventByTimerPeriodSec = 30;
+
+struct TDecompressionException : public yexception {
+    TDecompressionException(ui64 offset, const TString& originalError) {
+        *this << "Decompression error at offset " << offset << ", reason: " << originalError;
+    }
+};
 
 class TTopicSession : public TActorBootstrapped<TTopicSession>, NYql::TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
 private:
@@ -140,10 +157,6 @@ private:
 
             const auto& source = ev->Get()->Record.GetSource();
             Y_ENSURE(source.ColumnsSize() == source.ColumnTypesSize(), "Columns size and types size should be equal, but got " << source.ColumnsSize() << " columns and " << source.ColumnTypesSize() << " types");
-        }
-
-        ~TClientsInfo() {
-            Counters->RemoveSubgroup("query_id", QueryId);
         }
 
         static TVector<TSchemaColumn> GetColumns(const NYql::NPq::NProto::TDqPqTopicSource& source) {
@@ -275,7 +288,7 @@ private:
     const TActorId RowDispatcherActorId;
     const ui32 PartitionId;
     const NYdb::TDriver Driver;
-    const NYql::IPqGateway::TPtr PqGateway;
+    const NYql::IPqStaticGateway::TPtr PqGateway;
     const std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     const TRowDispatcherSettings Config;
     const TActorId CompileServiceActorId;
@@ -307,6 +320,7 @@ private:
     const ::NMonitoring::TDynamicCounterPtr Counters;
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
     bool EnableStreamingQueriesCounters = false;
+    bool CreateSessionScheduled = false;
 
 public:
     TTopicSession(
@@ -323,7 +337,7 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-        const NYql::IPqGateway::TPtr& pqGateway,
+        const NYql::IPqStaticGateway::TPtr& pqGateway,
         ui64 maxBufferSize,
         bool enableStreamingQueriesCounters);
 
@@ -412,7 +426,7 @@ TTopicSession::TTopicSession(
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     ui64 maxBufferSize,
     bool enableStreamingQueriesCounters)
     : ReadGroup(readGroup)
@@ -438,16 +452,20 @@ TTopicSession::TTopicSession(
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
     Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId, EnableStreamingQueriesCounters);
-    LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
-    LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
-        << ", Timeout " << Config.GetTimeoutBeforeStartSession() << " sec");
+    LogPrefix = LogPrefix + " " + SelfId().ToString() + " [" + TopicPathPartition + "] ";
+    LOG_ROW_DISPATCHER_INFO("Bootstrap, Timeout " << Config.GetTimeoutBeforeStartSession() << " sec");
     Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
     Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new NFq::TEvPrivate::TEvGetEventByTimerEvent());
 }
 
 void TTopicSession::PassAway() {
-    LOG_ROW_DISPATCHER_DEBUG("PassAway");
+    LOG_ROW_DISPATCHER_INFO("PassAway");
     StopReadSession();
+    for (const auto& [actorId, clientInfo] : Clients) {
+        if (const auto formatIt = FormatHandlers.find(clientInfo->HandlerSettings); formatIt != FormatHandlers.end()) {
+            formatIt->second->RemoveClient(clientInfo->GetClientId());
+        }
+    }
     FormatHandlers.clear();
     TBase::PassAway();
 }
@@ -516,9 +534,11 @@ NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const T
         << ", BufferSize " << BufferSize << ", GetConsumerMode " << Config.GetConsumerMode());
 
     auto settings = NYdb::NTopic::TReadSessionSettings()
+        .TraceId(LogPrefix)
         .AppendTopics(topicReadSettings)
         .MaxMemoryUsageBytes(BufferSize)
-        .ReadFromTimestamp(minTime);
+        .ReadFromTimestamp(minTime)
+        .AutoPartitioningSupport(true);
 
     if (Config.GetConsumerMode() == TRowDispatcherSettings::EConsumerMode::Without
      || (Config.GetConsumerMode() == TRowDispatcherSettings::EConsumerMode::Auto && !consumerName)) {
@@ -566,6 +586,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
+    CreateSessionScheduled = false;
     CreateTopicSession();
 }
 
@@ -614,7 +635,11 @@ bool TTopicSession::HandleNewEvents() {
         }
         readSomething = true;
 
-        std::visit(TTopicEventProcessor{*this, LogPrefix, handledEventsSize}, *event);
+        try {
+            std::visit(TTopicEventProcessor{*this, LogPrefix, handledEventsSize}, *event);
+        } catch (const TDecompressionException& e) {
+            ThrowFatalError(TStatus::Fail(EStatusId::INTERNAL_ERROR, e.what()));
+        }
         if (handledEventsSize >= MaxHandledEventsSize) {
             break;
         }
@@ -652,7 +677,11 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
 
     for (const auto& message : messages) {
         LOG_ROW_DISPATCHER_TRACE("Data received: " << message.DebugString(true));
-        dataSize += message.GetData().size();
+        try {
+            dataSize += message.GetData().size();
+        } catch (...) {
+            throw TDecompressionException(message.GetOffset(), CurrentExceptionMessage());
+        }
         Self.LastMessageOffset = message.GetOffset();
     }
 
@@ -684,6 +713,12 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
     }
     LOG_ROW_DISPATCHER_DEBUG("Confirm StartPartitionSession with offset " << minOffset);
     event.Confirm(minOffset);
+    if (minOffset) {
+        // ensure we restart session if new client wants earlier offset
+        Self.LastMessageOffset = std::max(*minOffset, ui64{1}) - 1;
+        // max() is for corner case of zero offset; in this case, every new client
+        // with offset 0 will just (unnecessarily) restart session
+    }
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event) {
@@ -693,6 +728,10 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& /*event*/) {
     LOG_ROW_DISPATCHER_WARN("TEndPartitionSessionEvent");
+
+    Self.ThrowFatalError(TStatus::Fail(
+        EStatusId::SCHEME_ERROR,
+        TStringBuilder() << "Topic (" << Self.TopicPath << ") with auto partitioning is not supported."));
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& /*event*/) {
@@ -777,6 +816,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
 }
 
 void TTopicSession::StartClientSession(TClientsInfo& info) {
+    LOG_ROW_DISPATCHER_TRACE("StartClientSession, read actor id " << info.ReadActorId << ", offset " << info.GetNextMessageOffset());
     if (ReadSession) {
         auto offset = info.GetNextMessageOffset();
         if (offset && offset <= LastMessageOffset) {
@@ -789,6 +829,10 @@ void TTopicSession::StartClientSession(TClientsInfo& info) {
     }
 
     if (!ReadSession) {
+        if (CreateSessionScheduled) {
+            return;
+        }
+        CreateSessionScheduled = true;
         Schedule(Config.GetTimeoutBeforeStartSession(), new NFq::TEvPrivate::TEvCreateSession());
     }
 }
@@ -1002,7 +1046,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvGetEventByTimerEvent::TPtr&) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvGetEventByTimerEvent");
+    LOG_ROW_DISPATCHER_TRACE("TEvGetEventByTimerEvent");
     // Workaround for a partition reading bug:
     // In some cases, the partition may stop delivering new events due to missed notifications or lost subscriptions,
     // causing the session to stall and not receive further data. To address this, we periodically schedule a timer event
@@ -1073,7 +1117,7 @@ std::unique_ptr<IActor> NewTopicSession(
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     ui64 maxBufferSize,
     bool enableStreamingQueriesCounters) {
     return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, functionRegistry, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize, enableStreamingQueriesCounters));

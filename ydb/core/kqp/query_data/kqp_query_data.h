@@ -11,7 +11,7 @@
 
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/guid.h>
@@ -265,6 +265,9 @@ public:
     TTypedUnboxedValue* GetParameterUnboxedValuePtr(const TString& name);
     const Ydb::TypedValue* GetParameterTypedValue(const TString& name);
 
+    // Returns true and sets outValue if parameter exists and has type String/Utf8; otherwise sets outError and returns false.
+    bool TryGetParameterAsString(const TString& name, TString& outValue, TString& outError) const;
+
     NYql::NDqProto::TData SerializeParamValue(const TString& name);
     void Clear();
 
@@ -289,6 +292,12 @@ public:
     void Terminate(const char* message) const final;
 };
 
+
+bool GetFirstTypeIncompatibility(
+    const NMiniKQL::TType* expected,
+    const NMiniKQL::TType* actual,
+    TStringBuf path,
+    TString& incompatibility);
 
 
 } // namespace NKikimr::NKqp

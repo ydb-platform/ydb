@@ -1,6 +1,8 @@
 #include "impl.h"
 #include <ydb/core/base/feature_flags.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
+
 
 namespace NKikimr {
 namespace NBsController {
@@ -34,13 +36,17 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             auto& front = Queue.front();
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM03, "Execute tx from queue", (Type, TypeName(*front)));
+            YDB_LOG_DEBUG("Execute tx from queue",
+                {"marker", "BSCTXM03"},
+                {"type", TypeName(*front)});
             return front->Execute(txc);
         }
 
         void Complete(const TActorContext&) override {
             auto& front = Queue.front();
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM04, "Complete tx from queue", (Type, TypeName(*front)));
+            YDB_LOG_DEBUG("Complete tx from queue",
+                {"marker", "BSCTXM04"},
+                {"type", TypeName(*front)});
             front->Complete();
             Queue.pop_front();
             if (Queue) {
@@ -84,10 +90,25 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
 
     class TTxUpdateSchemaVersion : public TTxBase {
     public:
+        TTxUpdateSchemaVersion(bool setCompatibilityInfo)
+            : SetCompatibilityInfo(setCompatibilityInfo)
+        {}
+
+    public:
         bool Execute(TTransactionContext& txc) override {
+            if (SetCompatibilityInfo) {
+                TString currentCompatibilityInfo;
+                auto componentId = NKikimrConfig::TCompatibilityRule::BlobStorageController;
+                bool success = CompatibilityInfo.MakeStored(componentId).SerializeToString(&currentCompatibilityInfo);
+                Y_ABORT_UNLESS(success);
+                NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(true).Update<Schema::State::CompatibilityInfo>(currentCompatibilityInfo);
+            }
             NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(true).Update<Schema::State::SchemaVersion>(Schema::CurrentSchemaVersion);
             return true;
         }
+
+    private:
+        bool SetCompatibilityInfo = false;
     };
 
     class TTxGenerateInstanceId : public TTxBase {
@@ -171,14 +192,6 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
         }
     };
 
-    class TTxUpdateEnableConfigV2 : public TTxBase {
-    public:
-        bool Execute(TTransactionContext& txc) override {
-            NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(true).Update<Schema::State::EnableConfigV2>(true);
-            return true;
-        }
-    };
-
     TDeque<THolder<TTxBase>> Queue;
 
 public:
@@ -187,7 +200,8 @@ public:
     TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_MIGRATE; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM01, "Execute tx");
+        YDB_LOG_DEBUG("Execute tx",
+            {"marker", "BSCTXM01"});
         Queue.clear();
 
         NIceDb::TNiceDb db(txc.DB);
@@ -199,7 +213,8 @@ public:
             return false;
         }
         bool hasInstanceId = false;
-        if (state.IsValid()) {
+        bool emptyState = !state.IsValid();
+        if (!emptyState) {
             std::optional<NKikimrConfig::TStoredCompatibilityInfo> stored;
             if (state.HaveValue<Schema::State::CompatibilityInfo>()) {
                 stored.emplace();
@@ -225,7 +240,14 @@ public:
         Queue.emplace_back(new TTxTrimUnusedSlots);
 
         // update schema version to current value
-        Queue.emplace_back(new TTxUpdateSchemaVersion);
+        Queue.emplace_back(new TTxUpdateSchemaVersion(emptyState));
+
+        if (AppData()->FeatureFlags.GetBsControllerRestartBeforeCompatibilityInfoUpdate()) {
+            YDB_LOG_CRIT("BSController migration was interrupted, this should only occur in specific tests",
+                {"marker", "BSCTXM05"});
+            AppData()->FeatureFlags.SetBsControllerRestartBeforeCompatibilityInfoUpdate(false);
+            return true;
+        }
 
         // generate cluster instance id
         if (!hasInstanceId) {
@@ -238,19 +260,21 @@ public:
 
         Queue.emplace_back(new TTxDropDriveStatus);
 
-        Queue.emplace_back(new TTxUpdateCompatibilityInfo);
-
-        if (!hasInstanceId) {
-            Queue.emplace_back(new TTxUpdateEnableConfigV2);
+        if (!emptyState) {
+            Queue.emplace_back(new TTxUpdateCompatibilityInfo);
         }
 
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM02, "Complete tx", (IncompatibleData, IncompatibleData));
+        YDB_LOG_DEBUG("Complete tx",
+            {"marker", "BSCTXM02"},
+            {"incompatibleData", IncompatibleData});
         if (IncompatibleData) {
-            STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXM00, "CompatibilityInfo check failed", (ErrorReason, CompatibilityError));
+            YDB_LOG_ALERT("CompatibilityInfo check failed",
+                {"marker", "BSCTXM00"},
+                {"errorReason", CompatibilityError});
             ctx.Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->SelfId(), {}, nullptr, 0));
         } else {
             Self->Execute(new TTxQueue(Self, std::move(Queue)));

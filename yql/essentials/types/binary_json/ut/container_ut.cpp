@@ -68,13 +68,13 @@ public:
 
     void TestGetElement() {
         const TVector<TGetElementTestCase> testCases = {
-            {R"([1, {}, [], true, false, "string", null])", 0, "1"},
-            {R"([1, {}, [], true, false, "string", null])", 1, "{}"},
-            {R"([1, {}, [], true, false, "string", null])", 2, "[]"},
-            {R"([1, {}, [], true, false, "string", null])", 3, "true"},
-            {R"([1, {}, [], true, false, "string", null])", 4, "false"},
-            {R"([1, {}, [], true, false, "string", null])", 5, "\"string\""},
-            {R"([1, {}, [], true, false, "string", null])", 6, "null"},
+            {.Json = R"([1, {}, [], true, false, "string", null])", .Index = 0, .Element = "1"},
+            {.Json = R"([1, {}, [], true, false, "string", null])", .Index = 1, .Element = "{}"},
+            {.Json = R"([1, {}, [], true, false, "string", null])", .Index = 2, .Element = "[]"},
+            {.Json = R"([1, {}, [], true, false, "string", null])", .Index = 3, .Element = "true"},
+            {.Json = R"([1, {}, [], true, false, "string", null])", .Index = 4, .Element = "false"},
+            {.Json = R"([1, {}, [], true, false, "string", null])", .Index = 5, .Element = "\"string\""},
+            {.Json = R"([1, {}, [], true, false, "string", null])", .Index = 6, .Element = "null"},
         };
 
         for (const auto& testCase : testCases) {
@@ -94,9 +94,9 @@ public:
 
     void TestArrayIterator() {
         const TVector<TArrayIteratorTestCase> testCases = {
-            {"[]", {}},
-            {"[1, 2, 3, 4, 5]", {"1", "2", "3", "4", "5"}},
-            {R"([1, {}, [], true, false, "string", null])", {"1", "{}", "[]", "true", "false", "\"string\"", "null"}},
+            {.Json = "[]", .Result = {}},
+            {.Json = "[1, 2, 3, 4, 5]", .Result = {"1", "2", "3", "4", "5"}},
+            {.Json = R"([1, {}, [], true, false, "string", null])", .Result = {"1", "{}", "[]", "true", "false", "\"string\"", "null"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -126,22 +126,22 @@ public:
 
     void TestLookup() {
         const TVector<TLookupTestCase> testCases = {
-            {"{}", "key", Nothing()},
-            {R"({"_key_": 123})", "key", Nothing()},
-            {R"({"key": "another"})", "another", Nothing()},
+            {.Json = "{}", .Key = "key", .Result = Nothing()},
+            {.Json = R"({"_key_": 123})", .Key = "key", .Result = Nothing()},
+            {.Json = R"({"key": "another"})", .Key = "another", .Result = Nothing()},
 
-            {R"({"key": 123})", "key", {"123"}},
-            {R"({"key": "string"})", "key", {"\"string\""}},
-            {R"({"key": null})", "key", {"null"}},
-            {R"({"key": true})", "key", {"true"}},
-            {R"({"key": false})", "key", {"false"}},
-            {R"({"key": {}})", "key", {"{}"}},
-            {R"({"key": []})", "key", {"[]"}},
+            {.Json = R"({"key": 123})", .Key = "key", .Result = {"123"}},
+            {.Json = R"({"key": "string"})", .Key = "key", .Result = {"\"string\""}},
+            {.Json = R"({"key": null})", .Key = "key", .Result = {"null"}},
+            {.Json = R"({"key": true})", .Key = "key", .Result = {"true"}},
+            {.Json = R"({"key": false})", .Key = "key", .Result = {"false"}},
+            {.Json = R"({"key": {}})", .Key = "key", .Result = {"{}"}},
+            {.Json = R"({"key": []})", .Key = "key", .Result = {"[]"}},
 
-            {R"({"one": 1, "two": 2, "three": 3, "four": 4})", "one", {"1"}},
-            {R"({"one": 1, "two": 2, "three": 3, "four": 4})", "two", {"2"}},
-            {R"({"one": 1, "two": 2, "three": 3, "four": 4})", "three", {"3"}},
-            {R"({"one": 1, "two": 2, "three": 3, "four": 4})", "four", {"4"}},
+            {.Json = R"({"one": 1, "two": 2, "three": 3, "four": 4})", .Key = "one", .Result = {"1"}},
+            {.Json = R"({"one": 1, "two": 2, "three": 3, "four": 4})", .Key = "two", .Result = {"2"}},
+            {.Json = R"({"one": 1, "two": 2, "three": 3, "four": 4})", .Key = "three", .Result = {"3"}},
+            {.Json = R"({"one": 1, "two": 2, "three": 3, "four": 4})", .Key = "four", .Result = {"4"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -164,9 +164,9 @@ public:
 
     void TestObjectIterator() {
         const TVector<TObjectIteratorTestCase> testCases = {
-            {"{}", {}},
-            {R"({"key": 123})", {{"key", "123"}}},
-            {R"({
+            {.Json = "{}", .Result = {}},
+            {.Json = R"({"key": 123})", .Result = {{"key", "123"}}},
+            {.Json = R"({
                 "one": 123,
                 "two": null,
                 "three": false,
@@ -175,7 +175,7 @@ public:
                 "six": [],
                 "seven": {}
             })",
-             {
+             .Result = {
                  {"one", "123"},
                  {"two", "null"},
                  {"three", "false"},

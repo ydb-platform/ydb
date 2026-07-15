@@ -229,6 +229,18 @@ TKqpReadTableFullTextIndexSettings TKqpReadTableFullTextIndexSettings::Parse(con
         } else if (name == TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
             settings.MinimumShouldMatch = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::ModeSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.Mode = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::TokensSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.Tokens = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::PrefixColumnSettingName) {
+            // Value is a 2-element list: [Atom(columnName), valueExpr].
+            YQL_ENSURE(tuple.Value().IsValid());
+            auto list = tuple.Value().Cast<TExprList>();
+            YQL_ENSURE(list.Size() == 2);
+            settings.AddPrefixColumn(TString(list.Item(0).Cast<TCoAtom>().Value()), list.Item(1).Ptr());
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTableFullTextIndex setting name '" << name << "'");
         }
@@ -280,6 +292,30 @@ NNodes::TCoNameValueTupleList TKqpReadTableFullTextIndexSettings::BuildNode(TExp
         settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(MinimumShouldMatchSettingName)
             .Value(MinimumShouldMatch)
+            .Done());
+    }
+
+    if (Mode) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+        .Name().Build(ModeSettingName)
+        .Value(Mode)
+        .Done());
+    }
+
+    if (Tokens) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(TokensSettingName)
+            .Value(Tokens)
+            .Done());
+    }
+
+    for (const auto& [name, value] : PrefixColumns) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(PrefixColumnSettingName)
+            .Value<TExprList>()
+                .Add<TCoAtom>().Build(name)
+                .Add(value)
+            .Build()
             .Done());
     }
 
@@ -487,10 +523,6 @@ TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList
     return settings;
 }
 
-TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const NNodes::TKqpUpsertRows& node) {
-    return TKqpUpsertRowsSettings::Parse(node.Settings());
-}
-
 NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
     TVector<TCoNameValueTuple> settings;
     settings.reserve(1);
@@ -683,6 +715,7 @@ TKqpReadTableExplainPrompt TKqpReadTableExplainPrompt::Parse(const NNodes::TCoNa
 TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx) {
     try {
         TConvertToAstSettings settings;
+        settings.AllowFreeArgs = true;
         settings.NoInlineFunc = [] (const TExprNode& exprNode) {
             TExprBase node(&exprNode);
 
@@ -764,6 +797,8 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
                 return LookupJoinStrategyName;
             case EStreamLookupStrategyType::LookupSemiJoinRows:
                 return LookupSemiJoinStrategyName;
+            case EStreamLookupStrategyType::LockAndLookupRows:
+                return LockAndLookupStrategyName;
         }
 
         YQL_ENSURE(false, "Unspecified stream lookup startegy type: " << type);
@@ -859,6 +894,8 @@ TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameVa
             return EStreamLookupStrategyType::LookupJoinRows;
         } else if (type == LookupSemiJoinStrategyName) {
             return EStreamLookupStrategyType::LookupSemiJoinRows;
+        } else if (type == LockAndLookupStrategyName) {
+            return EStreamLookupStrategyType::LockAndLookupRows;
         } else {
             YQL_ENSURE(false, "Unknown stream lookup startegy type: " << type);
         }

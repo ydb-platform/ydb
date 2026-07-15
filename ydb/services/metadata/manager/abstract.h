@@ -4,7 +4,6 @@
 
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/tx/locks/sys_tables.h>
-
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
@@ -14,12 +13,17 @@
 #include <ydb/services/metadata/abstract/parsing.h>
 #include <ydb/services/metadata/manager/modification.h>
 
-#include <library/cpp/threading/future/core/future.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
+
+#include <library/cpp/threading/future/core/future.h>
+
+#include <util/system/rwlock.h>
 
 namespace NKikimr::NMetadata::NModifications {
 
 using TOperationParsingResult = TConclusion<NInternal::TTableRecord>;
+
+const TString& GetOldSecretCreationDisabledMessage();
 
 class TAlterOperationContext {
 private:
@@ -94,8 +98,11 @@ public:
 
         }
     };
+
 private:
-    YDB_ACCESSOR_DEF(std::optional<TTableSchema>, ActualSchema);
+    std::optional<TTableSchema> ActualSchema;
+    TRWMutex Mutex;
+
 protected:
     virtual NThreading::TFuture<TYqlConclusionStatus> DoModify(const NYql::TObjectSettingsImpl& settings, const ui32 nodeId,
         const IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const = 0;
@@ -136,10 +143,9 @@ public:
     virtual NThreading::TFuture<TYqlConclusionStatus> ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation,
         const ui32 nodeId, const IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const = 0;
 
-    const TTableSchema& GetSchema() const {
-        Y_ABORT_UNLESS(!!ActualSchema);
-        return *ActualSchema;
-    }
+    TTableSchema GetSchema() const;
+
+    void SetActualSchema(std::optional<TTableSchema>&& schema);
 };
 
 template <class TObject>
@@ -235,4 +241,4 @@ public:
     }
 };
 
-}
+} // namespace NKikimr::NMetadata::NModifications

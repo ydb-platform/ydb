@@ -2,6 +2,7 @@
 #include "mkql_block_builder.h"
 #include "mkql_block_reader.h"
 
+#include <yql/essentials/public/udf/arrow/dense_union_scalar.h>
 #include <yql/essentials/minikql/arrow/mkql_functions.h>
 #include <yql/essentials/minikql/computation/mkql_datum_validate.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
@@ -83,6 +84,17 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
         return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));
     }
 
+    if (type->IsVariant()) {
+        auto variantType = AS_TYPE(TVariantType, type);
+        const ui32 index = value.GetVariantIndex();
+        TType* alternativeType = variantType->GetUnderlyingType()->IsStruct()
+                                     ? SkipTaggedType(AS_TYPE(TStructType, variantType->GetUnderlyingType())->GetMemberType(index))
+                                     : SkipTaggedType(AS_TYPE(TTupleType, variantType->GetUnderlyingType())->GetElementType(index));
+        auto innerValue = value.GetVariantItem();
+        auto innerScalar = DoConvertScalar(alternativeType, innerValue, pool).scalar();
+        return arrow::Datum(std::make_shared<NYql::NUdf::TDenseUnionScalar>(innerScalar, index, arrowType));
+    }
+
     if (type->IsData()) {
         auto slot = *AS_TYPE(TDataType, type)->GetDataSlot();
         switch (slot) {
@@ -119,12 +131,13 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
             case NUdf::EDataSlot::Utf8:
             case NUdf::EDataSlot::Yson:
             case NUdf::EDataSlot::Json:
-            case NUdf::EDataSlot::JsonDocument: {
+            case NUdf::EDataSlot::JsonDocument:
+            case NUdf::EDataSlot::DyNumber: {
                 const auto& str = value.AsStringRef();
                 std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(str.Size(), &pool)));
                 std::memcpy(buffer->mutable_data(), str.Data(), str.Size());
                 std::shared_ptr<arrow::Scalar> scalar;
-                if (slot == NUdf::EDataSlot::String || slot == NUdf::EDataSlot::Yson || slot == NUdf::EDataSlot::JsonDocument) {
+                if (slot == NUdf::EDataSlot::String || slot == NUdf::EDataSlot::Yson || slot == NUdf::EDataSlot::JsonDocument || slot == NUdf::EDataSlot::DyNumber) {
                     scalar = std::make_shared<arrow::BinaryScalar>(buffer, arrow::binary());
                 } else {
                     // NOTE: Do not use |arrow::BinaryScalar| for utf8 and json types directly.
@@ -180,6 +193,13 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
                 *reinterpret_cast<NYql::NDecimal::TInt128*>(buffer->mutable_data()) = value.GetInt128();
                 return arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
             }
+            case NUdf::EDataSlot::Uuid: {
+                std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(UuidBinarySize, &pool)));
+                const auto ref = value.AsStringRef();
+                MKQL_ENSURE(ref.Size() == UuidBinarySize, "Wrong Uuid size: " << ref.Size());
+                std::memcpy(buffer->mutable_data(), ref.Data(), ref.Size());
+                return arrow::Datum(std::make_shared<arrow::FixedSizeBinaryScalar>(std::move(buffer), GetUuidArrowType()));
+            }
             default:
                 MKQL_ENSURE(false, "Unsupported data slot " << slot);
         }
@@ -209,7 +229,7 @@ arrow::Datum ConvertScalar(TType* type, const NUdf::TBlockItem& value, arrow::Me
 arrow::Datum MakeArrayFromScalar(const arrow::Scalar& scalar, size_t len, TType* type, arrow::MemoryPool& pool) {
     MKQL_ENSURE(len > 0, "Invalid block size");
     auto reader = MakeBlockReader(TTypeInfoHelper(), type);
-    auto builder = MakeArrayBuilder(TTypeInfoHelper(), type, pool, len, nullptr);
+    auto builder = MakeArrayBuilder(TTypeInfoHelper(), type, pool, len, /*pgBuilder=*/nullptr);
 
     auto scalarItem = reader->GetScalarItem(scalar);
     builder->Add(scalarItem, len);
@@ -250,12 +270,12 @@ arrow::compute::OutputType ConvertToOutputType(TType* output) {
     return arrow::compute::OutputType(ToValueDescr(output));
 }
 
-NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const uint64_t count) {
-    return holderFactory.CreateArrowBlock(arrow::Datum(count));
+NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const uint64_t count, NYql::EDatumValidationMode validationMode) {
+    return holderFactory.CreateArrowBlock(arrow::Datum(count), validationMode);
 }
 
 TBlockFuncNode::TBlockFuncNode(TComputationMutables& mutables,
-                               NYql::NUdf::EValidateDatumMode validateDatumMode,
+                               NYql::EDatumValidationMode validateDatumMode,
                                TStringBuf name, TComputationNodePtrVector&& argsNodes,
                                const TVector<TType*>& argsTypes,
                                TType* outputType,
@@ -295,7 +315,8 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
         auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
         ARROW_OK(executor->Execute(argDatums, listener.get()));
         auto output = executor->WrapResults(argDatums, listener->values());
-        return ctx.HolderFactory.CreateArrowBlock(std::move(output));
+        ValidateDatum(output, OutValueDescr_, OutputType_, ValidateDatumMode_);
+        return ctx.HolderFactory.CreateArrowBlock(std::move(output), NYql::EDatumValidationMode::None);
     }
 
     NYql::NUdf::TArgsDechunker dechunker(std::move(argDatums));
@@ -314,7 +335,7 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
     }
     auto resultArray = MakeArray(arrays);
     ValidateDatum(resultArray, OutValueDescr_, OutputType_, ValidateDatumMode_);
-    return ctx.HolderFactory.CreateArrowBlock(std::move(resultArray));
+    return ctx.HolderFactory.CreateArrowBlock(std::move(resultArray), NYql::EDatumValidationMode::None);
 }
 
 void TBlockFuncNode::RegisterDependencies() const {
@@ -434,11 +455,12 @@ ui64 TBlockState::Slice() {
 
 NUdf::TUnboxedValuePod TBlockState::Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx) const {
     if (idx == BlockLengthIndex) {
-        return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(sliceSize)));
+        return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(sliceSize)), NYql::EDatumValidationMode::None);
     }
 
+    // Arrays here are slices of already-validated input data; no re-validation needed.
     if (auto array = Arrays[idx]) {
-        return holderFactory.CreateArrowBlock(std::move(array));
+        return holderFactory.CreateArrowBlock(std::move(array), NYql::EDatumValidationMode::None);
     } else {
         return Values[idx];
     }

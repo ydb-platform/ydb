@@ -982,6 +982,17 @@ FromDynamicLinear(DynamicLinear<T>)->Linear<T>
 This function is available since version [2025.04](../changelog/2025.04.md).
 The `FromDynamicLinear` function converts a value from a dynamic [linear](../types/linear.md) type to a static type.
 
+## LinearDestroy
+
+#### Signature
+
+```yql
+LinearDestroy(T, [Linear<U1>...])->T
+```
+
+This function is available since version [2025.05](../changelog/2025.05.md).
+The function returns its first argument, consuming zero or more values ​​of the [linear](../types/linear.md) types listed after the first argument.
+
 ## Block
 
 #### Signature
@@ -1171,6 +1182,20 @@ The reverse operation is [Unwrap](#optional-ops).
 ```yql
 SELECT
   Just("my_string"); --  String?
+```
+
+## AsOptional {#asoptional}
+
+Available since version [2026.01](../changelog/2026.01.md). Adds the ability to contain `NULL` to the passed value. If the value's type is already optional, PostgreSQL type or `NULL`, it returns the value unchanged. Otherwise, it wraps the value in [Just](#optional-ops). Unlike [Just](#optional-ops), it does not add an additional level of nesting for already optional values.
+
+#### Examples
+
+```yql
+SELECT 
+  AsOptional(42), -- Just(42)
+  AsOptional(NULL), -- NULL
+  AsOptional(Just(42)), -- Just(42)
+  AsOptional(1p); -- 1p
 ```
 
 ## Unwrap {#unwrap}

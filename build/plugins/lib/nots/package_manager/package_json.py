@@ -4,7 +4,6 @@ import os
 
 from .utils import build_pj_path
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -214,7 +213,7 @@ class PackageJson(object):
         pj_queue = [(self, 0)]
 
         while len(pj_queue):
-            (pj, depth) = pj_queue.pop()
+            pj, depth = pj_queue.pop()
             pj_dir = os.path.dirname(pj.path)
             if pj_dir in ws_deps:
                 continue

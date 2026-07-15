@@ -32,6 +32,10 @@ CFLAGS(
     -DINSTALLDIR=\"/var/empty/bison-3.7.6/bin\"
 )
 
+IF (OPENSOURCE)
+    LDFLAGS(-Wl,--allow-multiple-definition)
+ENDIF()
+
 SRCS(
     src/AnnotationList.c
     src/InadequacyList.c

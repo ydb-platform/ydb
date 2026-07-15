@@ -44,6 +44,7 @@ CLUSTER_CONFIG = dict(
         'TX_PROXY': LogLevels.CRIT,
     },
     enable_audit_log=True,
+    extra_feature_flags=['enable_column_statistics'],
     audit_log_config={
         'file_backend': {
             'format': 'json',
@@ -97,7 +98,8 @@ def test_create_drop_and_alter_database(ydb_cluster):
             token=TOKEN
         )
         database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
-    ydb_cluster.wait_tenant_up(database, token=TOKEN)
+        # Wait inside the capture so tenant initialization audit records are captured
+        ydb_cluster.wait_tenant_up(database, token=TOKEN)
 
     with capture_audit_alter:
         alter_subdomain_enable_scheme_shard_audit = '''

@@ -47,6 +47,15 @@ enum hsmp_message_ids {
 	HSMP_SET_PCI_RATE,		/* 20h Control link rate on PCIe devices */
 	HSMP_SET_POWER_MODE,		/* 21h Select power efficiency profile policy */
 	HSMP_SET_PSTATE_MAX_MIN,	/* 22h Set the max and min DF P-State  */
+	HSMP_GET_METRIC_TABLE_VER,	/* 23h Get metrics table version */
+	HSMP_GET_METRIC_TABLE,		/* 24h Get metrics table */
+	HSMP_GET_METRIC_TABLE_DRAM_ADDR,/* 25h Get metrics table dram address */
+	HSMP_SET_XGMI_PSTATE_RANGE,	/* 26h Set xGMI P-state range */
+	HSMP_CPU_RAIL_ISO_FREQ_POLICY,	/* 27h Get/Set Cpu Iso frequency policy */
+	HSMP_DFC_ENABLE_CTRL,		/* 28h Enable/Disable DF C-state */
+	HSMP_GET_RAPL_UNITS = 0x30,	/* 30h Get scaling factor for energy */
+	HSMP_GET_RAPL_CORE_COUNTER,	/* 31h Get core energy counter value */
+	HSMP_GET_RAPL_PACKAGE_COUNTER,	/* 32h Get package energy counter value */
 	HSMP_MSG_ID_MAX,
 };
 
@@ -62,6 +71,16 @@ enum hsmp_msg_type {
 	HSMP_RSVD = -1,
 	HSMP_SET  = 0,
 	HSMP_GET  = 1,
+	HSMP_SET_GET	= 2,
+};
+
+enum hsmp_proto_versions {
+	HSMP_PROTO_VER2	= 2,
+	HSMP_PROTO_VER3,
+	HSMP_PROTO_VER4,
+	HSMP_PROTO_VER5,
+	HSMP_PROTO_VER6,
+	HSMP_PROTO_VER7
 };
 
 struct hsmp_msg_desc {
@@ -77,7 +96,8 @@ struct hsmp_msg_desc {
  *
  * Not supported messages would return -ENOMSG.
  */
-static const struct hsmp_msg_desc hsmp_msg_desc_table[] = {
+static const struct hsmp_msg_desc hsmp_msg_desc_table[]
+				__attribute__((unused)) = {
 	/* RESERVED */
 	{0, 0, HSMP_RSVD},
 
@@ -227,7 +247,7 @@ static const struct hsmp_msg_desc hsmp_msg_desc_table[] = {
 	/*
 	 * HSMP_GET_DIMM_THERMAL, num_args = 1, response_sz = 1
 	 * input: args[0] = DIMM address[7:0]
-	 * output: args[0] = temperature in degree celcius[31:21] + update rate in ms[16:8] +
+	 * output: args[0] = temperature in degree celsius[31:21] + update rate in ms[16:8] +
 	 * DIMM address[7:0]
 	 */
 	{1, 1, HSMP_GET},
@@ -288,13 +308,163 @@ static const struct hsmp_msg_desc hsmp_msg_desc_table[] = {
 	 * HSMP_SET_POWER_MODE, num_args = 1, response_sz = 0
 	 * input: args[0] = power efficiency mode[2:0]
 	 */
-	{1, 0, HSMP_SET},
+	{1, 1, HSMP_SET_GET},
 
 	/*
 	 * HSMP_SET_PSTATE_MAX_MIN, num_args = 1, response_sz = 0
 	 * input: args[0] = min df pstate[15:8] + max df pstate[7:0]
 	 */
 	{1, 0, HSMP_SET},
+
+	/*
+	 * HSMP_GET_METRIC_TABLE_VER, num_args = 0, response_sz = 1
+	 * output: args[0] = metrics table version
+	 */
+	{0, 1, HSMP_GET},
+
+	/*
+	 * HSMP_GET_METRIC_TABLE, num_args = 0, response_sz = 0
+	 */
+	{0, 0, HSMP_GET},
+
+	/*
+	 * HSMP_GET_METRIC_TABLE_DRAM_ADDR, num_args = 0, response_sz = 2
+	 * output: args[0] = lower 32 bits of the address
+	 * output: args[1] = upper 32 bits of the address
+	 */
+	{0, 2, HSMP_GET},
+
+	/*
+	 * HSMP_SET_XGMI_PSTATE_RANGE, num_args = 1, response_sz = 0
+	 * input: args[0] = min xGMI p-state[15:8] + max xGMI p-state[7:0]
+	 */
+	{1, 0, HSMP_SET},
+
+	/*
+	 * HSMP_CPU_RAIL_ISO_FREQ_POLICY, num_args = 1, response_sz = 1
+	 * input: args[0] = set/get policy[31] +
+	 * disable/enable independent control[0]
+	 * output: args[0] = current policy[0]
+	 */
+	{1, 1, HSMP_SET_GET},
+
+	/*
+	 * HSMP_DFC_ENABLE_CTRL, num_args = 1, response_sz = 1
+	 * input: args[0] = set/get policy[31] + enable/disable DFC[0]
+	 * output: args[0] = current policy[0]
+	 */
+	{1, 1, HSMP_SET_GET},
+
+	/* RESERVED(0x29-0x2f) */
+	{0, 0, HSMP_RSVD},
+	{0, 0, HSMP_RSVD},
+	{0, 0, HSMP_RSVD},
+	{0, 0, HSMP_RSVD},
+	{0, 0, HSMP_RSVD},
+	{0, 0, HSMP_RSVD},
+	{0, 0, HSMP_RSVD},
+
+	/*
+	 * HSMP_GET_RAPL_UNITS, response_sz = 1
+	 * output: args[0] = tu value[19:16] + esu value[12:8]
+	 */
+	{0, 1, HSMP_GET},
+
+	/*
+	 * HSMP_GET_RAPL_CORE_COUNTER, num_args = 1, response_sz = 1
+	 * input: args[0] = apic id[15:0]
+	 * output: args[0] = lower 32 bits of energy
+	 * output: args[1] = upper 32 bits of energy
+	 */
+	{1, 2, HSMP_GET},
+
+	/*
+	 * HSMP_GET_RAPL_PACKAGE_COUNTER, num_args = 0, response_sz = 1
+	 * output: args[0] = lower 32 bits of energy
+	 * output: args[1] = upper 32 bits of energy
+	 */
+	{0, 2, HSMP_GET},
+
+};
+
+/* Metrics table (supported only with proto version 6) */
+struct hsmp_metric_table {
+	__u32 accumulation_counter;
+
+	/* TEMPERATURE */
+	__u32 max_socket_temperature;
+	__u32 max_vr_temperature;
+	__u32 max_hbm_temperature;
+	__u64 max_socket_temperature_acc;
+	__u64 max_vr_temperature_acc;
+	__u64 max_hbm_temperature_acc;
+
+	/* POWER */
+	__u32 socket_power_limit;
+	__u32 max_socket_power_limit;
+	__u32 socket_power;
+
+	/* ENERGY */
+	__u64 timestamp;
+	__u64 socket_energy_acc;
+	__u64 ccd_energy_acc;
+	__u64 xcd_energy_acc;
+	__u64 aid_energy_acc;
+	__u64 hbm_energy_acc;
+
+	/* FREQUENCY */
+	__u32 cclk_frequency_limit;
+	__u32 gfxclk_frequency_limit;
+	__u32 fclk_frequency;
+	__u32 uclk_frequency;
+	__u32 socclk_frequency[4];
+	__u32 vclk_frequency[4];
+	__u32 dclk_frequency[4];
+	__u32 lclk_frequency[4];
+	__u64 gfxclk_frequency_acc[8];
+	__u64 cclk_frequency_acc[96];
+
+	/* FREQUENCY RANGE */
+	__u32 max_cclk_frequency;
+	__u32 min_cclk_frequency;
+	__u32 max_gfxclk_frequency;
+	__u32 min_gfxclk_frequency;
+	__u32 fclk_frequency_table[4];
+	__u32 uclk_frequency_table[4];
+	__u32 socclk_frequency_table[4];
+	__u32 vclk_frequency_table[4];
+	__u32 dclk_frequency_table[4];
+	__u32 lclk_frequency_table[4];
+	__u32 max_lclk_dpm_range;
+	__u32 min_lclk_dpm_range;
+
+	/* XGMI */
+	__u32 xgmi_width;
+	__u32 xgmi_bitrate;
+	__u64 xgmi_read_bandwidth_acc[8];
+	__u64 xgmi_write_bandwidth_acc[8];
+
+	/* ACTIVITY */
+	__u32 socket_c0_residency;
+	__u32 socket_gfx_busy;
+	__u32 dram_bandwidth_utilization;
+	__u64 socket_c0_residency_acc;
+	__u64 socket_gfx_busy_acc;
+	__u64 dram_bandwidth_acc;
+	__u32 max_dram_bandwidth;
+	__u64 dram_bandwidth_utilization_acc;
+	__u64 pcie_bandwidth_acc[4];
+
+	/* THROTTLERS */
+	__u32 prochot_residency_acc;
+	__u32 ppt_residency_acc;
+	__u32 socket_thm_residency_acc;
+	__u32 vr_thm_residency_acc;
+	__u32 hbm_thm_residency_acc;
+	__u32 spare;
+
+	/* New items at the end to maintain driver compatibility */
+	__u32 gfxclk_frequency[8];
 };
 
 /* Reset to default packing */

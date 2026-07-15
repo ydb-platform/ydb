@@ -1,0 +1,1427 @@
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/index/index_utils.h>
+
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/persqueue/public/utils.h>
+
+namespace NKikimr {
+namespace NTableIndex {
+
+TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc) {
+    TIndexObjectCounts res;
+    res.IndexTableCount = 1;
+    res.SequenceCount = 0;
+    res.IndexTableShards = 0;
+    res.ShardsPerPath = 1;
+    switch (GetIndexType(indexDesc)) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
+            res.IndexTableCount = (prefixVectorIndex ? 3 : 2);
+            res.SequenceCount = (prefixVectorIndex ? 1 : 0);
+            break;
+        }
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+            res.IndexTableCount = 1;
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            res.IndexTableCount = 1;
+            res.SequenceCount = 1;
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            res.IndexTableCount = 4;
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            res.IndexTableCount = 4;
+            res.SequenceCount = 1;
+            break;
+        case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+        case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+        case NKikimrSchemeOp::EIndexTypeLocalMinMax: {
+            // Local indexes create only the index object itself: no impl table, no extra shards.
+            res.IndexTableCount = 0;
+            break;
+        }
+        default:
+            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexDesc.GetType()));
+            break;
+    }
+    if (indexDesc.IndexImplTableDescriptionsSize() == res.IndexTableCount) {
+        for (const auto& indexTableDesc: indexDesc.GetIndexImplTableDescriptions()) {
+            auto implShards = NSchemeShard::TTableInfo::ShardsToCreate(indexTableDesc);
+            res.IndexTableShards += implShards;
+            if (res.ShardsPerPath < implShards) {
+                res.ShardsPerPath = implShards;
+            }
+        }
+    } else {
+        res.IndexTableShards = res.IndexTableCount;
+    }
+    return res;
+}
+
+TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription &tableDescr) {
+    TTableColumns result;
+    for (auto& column: tableDescr.GetColumns()) {
+        result.Columns.insert(column.GetName());
+    }
+    for (auto& keyName: tableDescr.GetKeyColumnNames()) {
+        result.Keys.push_back(keyName);
+    }
+    return result;
+}
+
+TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig &indexDesc) {
+    TIndexColumns result;
+    for (auto& keyName: indexDesc.GetKeyColumnNames()) {
+        result.KeyColumns.push_back(keyName);
+    }
+    for (auto& keyName: indexDesc.GetDataColumnNames()) {
+        result.DataColumns.push_back(keyName);
+    }
+    return result;
+}
+
+TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr &tableInfo) {
+    TTableColumns result;
+    for (auto& item: tableInfo->Columns) {
+        const auto& column = item.second;
+        if (column.IsDropped()) {
+            continue;
+        }
+
+        result.Columns.insert(item.second.Name);
+    }
+
+    for (auto& keyId: tableInfo->KeyColumnIds) {
+        const auto& keyColumn = tableInfo->Columns.at(keyId);
+        if (keyColumn.IsDropped()) {
+            continue;
+        }
+
+        Y_ABORT_UNLESS(result.Columns.contains(keyColumn.Name));
+        result.Keys.push_back(keyColumn.Name);
+    }
+
+    return result;
+}
+
+namespace {
+
+NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
+        const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+        const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    // KIKIMR-6687
+    NKikimrSchemeOp::TPartitionConfig result;
+
+    if (baseTablePartitionConfig.HasNamedCompactionPolicy()) {
+        result.SetNamedCompactionPolicy(baseTablePartitionConfig.GetNamedCompactionPolicy());
+    }
+    if (baseTablePartitionConfig.HasCompactionPolicy()) {
+        result.MutableCompactionPolicy()->CopyFrom(baseTablePartitionConfig.GetCompactionPolicy());
+    }
+    // skip optional uint64 FollowerCount = 3;
+    if (baseTablePartitionConfig.HasExecutorCacheSize()) {
+        result.SetExecutorCacheSize(baseTablePartitionConfig.GetExecutorCacheSize());
+    }
+    // skip     optional bool AllowFollowerPromotion = 5 [default = true];
+    if (baseTablePartitionConfig.HasTxReadSizeLimit()) {
+        result.SetTxReadSizeLimit(baseTablePartitionConfig.GetTxReadSizeLimit());
+    }
+    // skip optional uint32 CrossDataCenterFollowerCount = 8;
+    if (baseTablePartitionConfig.HasChannelProfileId()) {
+        result.SetChannelProfileId(baseTablePartitionConfig.GetChannelProfileId());
+    }
+
+    if (indexTableDesc.GetPartitionConfig().HasPartitioningPolicy()) {
+        result.MutablePartitioningPolicy()->CopyFrom(indexTableDesc.GetPartitionConfig().GetPartitioningPolicy());
+    } else {
+        result.MutablePartitioningPolicy()->SetSizeToSplit(2_GB);
+        result.MutablePartitioningPolicy()->SetMinPartitionsCount(1);
+    }
+    if (baseTablePartitionConfig.HasPipelineConfig()) {
+        result.MutablePipelineConfig()->CopyFrom(baseTablePartitionConfig.GetPipelineConfig());
+    }
+    if (baseTablePartitionConfig.ColumnFamiliesSize()) {
+        // Indexes don't need column families unless it's the default column family
+        for (const auto& family : baseTablePartitionConfig.GetColumnFamilies()) {
+            const bool isDefaultFamily = (
+                (!family.HasId() && !family.HasName()) ||
+                (family.HasId() && family.GetId() == 0) ||
+                (family.HasName() && family.GetName() == "default"));
+            if (isDefaultFamily) {
+                result.AddColumnFamilies()->CopyFrom(family);
+            }
+        }
+    }
+    if (baseTablePartitionConfig.HasResourceProfile()) {
+        result.SetResourceProfile(baseTablePartitionConfig.GetResourceProfile());
+    }
+    if (baseTablePartitionConfig.HasDisableStatisticsCalculation()) {
+        result.SetDisableStatisticsCalculation(baseTablePartitionConfig.GetDisableStatisticsCalculation());
+    }
+    if (baseTablePartitionConfig.HasEnableFilterByKey()) {
+        result.SetEnableFilterByKey(baseTablePartitionConfig.GetEnableFilterByKey());
+    }
+    if (baseTablePartitionConfig.HasExecutorFastLogPolicy()) {
+        result.SetExecutorFastLogPolicy(baseTablePartitionConfig.GetExecutorFastLogPolicy());
+    }
+    if (baseTablePartitionConfig.HasEnableEraseCache()) {
+        result.SetEnableEraseCache(baseTablePartitionConfig.GetEnableEraseCache());
+    }
+    if (baseTablePartitionConfig.HasEraseCacheMinRows()) {
+        result.SetEraseCacheMinRows(baseTablePartitionConfig.GetEraseCacheMinRows());
+    }
+    if (baseTablePartitionConfig.HasEraseCacheMaxBytes()) {
+        result.SetEraseCacheMaxBytes(baseTablePartitionConfig.GetEraseCacheMaxBytes());
+    }
+    if (baseTablePartitionConfig.HasKeepSnapshotTimeout()) {
+        result.SetKeepSnapshotTimeout(baseTablePartitionConfig.GetKeepSnapshotTimeout());
+    }
+    if (indexTableDesc.GetPartitionConfig().FollowerGroupsSize()) {
+        result.MutableFollowerGroups()->CopyFrom(indexTableDesc.GetPartitionConfig().GetFollowerGroups());
+    }
+    // skip repeated NKikimrStorageSettings.TStorageRoom StorageRooms = 17;
+
+    return result;
+}
+
+void SetImplTablePartitionConfig(
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    NKikimrSchemeOp::TTableDescription& tableDescription)
+{
+    if (indexTableDesc.HasUniformPartitionsCount()) {
+        tableDescription.SetUniformPartitionsCount(indexTableDesc.GetUniformPartitionsCount());
+    }
+
+    if (indexTableDesc.SplitBoundarySize()) {
+        tableDescription.MutableSplitBoundary()->CopyFrom(indexTableDesc.GetSplitBoundary());
+    }
+
+    *tableDescription.MutablePartitionConfig() = PartitionConfigForIndexes(baseTablePartitionConfig, indexTableDesc);
+}
+
+void FillIndexImplTableColumns(
+    const auto& baseTableColumns,
+    std::span<const TString> keys,
+    const THashSet<TString>& columns,
+    NKikimrSchemeOp::TTableDescription& implTableDesc)
+{
+    // The function that calls this may have already added some columns
+    // and we want to add new columns after those that have already been added
+    const auto was = implTableDesc.ColumnsSize();
+
+    THashMap<TString, ui32> implKeyToImplColumn;
+    for (ui32 keyId = 0; keyId < keys.size(); ++keyId) {
+        implKeyToImplColumn[keys[keyId]] = keyId;
+    }
+
+    // We want data columns order in index table same as in indexed table,
+    // so we use counter to keep this order in the std::sort
+    // Counter starts with Max/2 to avoid intersection with key columns counter
+    for (ui32 i = Max<ui32>() / 2; auto& columnIt: baseTableColumns) {
+        NKikimrSchemeOp::TColumnDescription* column = nullptr;
+        using TColumn = std::decay_t<decltype(columnIt)>;
+        if constexpr (std::is_same_v<TColumn, std::pair<const ui32, NSchemeShard::TTableInfo::TColumn>>) {
+            const auto& columnInfo = columnIt.second;
+            if (!columnInfo.IsDropped() && columns.contains(columnInfo.Name)) {
+                column = implTableDesc.AddColumns();
+                column->SetName(columnInfo.Name);
+                column->SetType(NScheme::TypeName(columnInfo.PType, columnInfo.PTypeMod));
+                column->SetNotNull(columnInfo.NotNull);
+            }
+        } else if constexpr (std::is_same_v<TColumn, NKikimrSchemeOp::TColumnDescription>) {
+            if (columns.contains(columnIt.GetName())) {
+                column = implTableDesc.AddColumns();
+                *column = columnIt;
+                column->ClearFamily();
+                column->ClearFamilyName();
+                column->ClearDefaultValue();
+            }
+        } else {
+            static_assert(dependent_false<TColumn>::value);
+        }
+        if (column) {
+            ui32 order = i++;
+            if (const auto* id = implKeyToImplColumn.FindPtr(column->GetName())) {
+                order = *id;
+            }
+            column->SetId(order);
+        }
+    }
+
+    std::sort(implTableDesc.MutableColumns()->begin() + was,
+              implTableDesc.MutableColumns()->end(),
+              [] (auto& left, auto& right) {
+                  return left.GetId() < right.GetId();
+              });
+
+    for (auto& column: *implTableDesc.MutableColumns()) {
+        column.ClearId();
+    }
+
+    for (const auto& keyName: keys) {
+        implTableDesc.AddKeyColumnNames(keyName);
+    }
+}
+
+bool GetIsRestore(const NSchemeShard::TTableInfo::TPtr& tableInfo) {
+    return tableInfo->IsRestore;
+}
+
+const auto& GetPartitionConfig(const NSchemeShard::TTableInfo::TPtr& tableInfo) {
+    return tableInfo->PartitionConfig();
+}
+
+const auto& GetColumns(const NSchemeShard::TTableInfo::TPtr& tableInfo) {
+    return tableInfo->Columns;
+}
+
+bool GetIsRestore(const NKikimrSchemeOp::TTableDescription& tableDescr) {
+    return tableDescr.GetIsRestore();
+}
+
+const auto& GetPartitionConfig(const NKikimrSchemeOp::TTableDescription& tableDescr) {
+    return tableDescr.GetPartitionConfig();
+}
+
+const auto& GetColumns(const NKikimrSchemeOp::TTableDescription& tableDescr) {
+    return tableDescr.GetColumns();
+}
+
+auto CalcImplTableDescImpl(
+    const auto& baseTable,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    ui32 uniqueKeySize)
+{
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(NTableIndex::ImplTable);
+    implTableDesc.SetIsRestore(GetIsRestore(baseTable));
+    SetImplTablePartitionConfig(GetPartitionConfig(baseTable), indexTableDesc, implTableDesc);
+    FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns.Keys, implTableColumns.Columns, implTableDesc);
+    if (indexTableDesc.HasReplicationConfig()) {
+        implTableDesc.MutableReplicationConfig()->CopyFrom(indexTableDesc.GetReplicationConfig());
+    }
+    if (uniqueKeySize > 0 && uniqueKeySize < implTableColumns.Keys.size()) {
+        // Unique key may contain all PK columns, then the prefix is not required
+        implTableDesc.MutablePartitionConfig()->SetUniqueIndexKeySize(uniqueKeySize);
+    }
+
+    return implTableDesc;
+}
+
+auto CalcVectorKmeansTreePostingImplTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    std::string_view suffix,
+    bool withForeign)
+{
+    auto tableColumns = ExtractInfo(baseTable);
+    THashSet<TString> indexColumns = indexDataColumns;
+    for (const auto & keyColumn: tableColumns.Keys) {
+        indexColumns.insert(keyColumn);
+    }
+
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(TString::Join(NKMeans::PostingTable, suffix));
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NKMeans::ParentColumn);
+        col->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
+        col->SetTypeId(NSchemeShard::ClusterIdTypeId);
+        col->SetNotNull(true);
+    }
+    if (withForeign) {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NKMeans::IsForeignColumn);
+        col->SetType(NTableIndex::NKMeans::IsForeignTypeName);
+        col->SetTypeId(NTableIndex::NKMeans::IsForeignType);
+        col->SetNotNull(true);
+    }
+    implTableDesc.AddKeyColumnNames(NKMeans::ParentColumn);
+    FillIndexImplTableColumns(GetColumns(baseTable), tableColumns.Keys, indexColumns, implTableDesc);
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
+auto CalcVectorKmeansTreePrefixImplTableDescImpl(
+    const THashSet<TString>& indexKeyColumns,
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc
+) {
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(NKMeans::PrefixTable);
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    auto keys = implTableColumns.Keys;
+    std::erase_if(keys, [&](const auto& key) { return !indexKeyColumns.contains(key); });
+    FillIndexImplTableColumns(GetColumns(baseTable), keys, indexKeyColumns, implTableDesc);
+    {
+        auto idColumn = implTableDesc.AddColumns();
+        idColumn->SetName(NKMeans::IdColumn);
+        idColumn->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
+        idColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
+        idColumn->SetNotNull(true);
+        idColumn->SetDefaultFromSequence(NKMeans::IdColumnSequence);
+    }
+    implTableDesc.AddKeyColumnNames(NKMeans::IdColumn);
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
+auto CalcVectorKmeansTreeBuildOverlapTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    std::string_view suffix)
+{
+    auto tableColumns = ExtractInfo(baseTable);
+    THashSet<TString> indexColumns = indexDataColumns;
+    for (const auto & keyColumn: tableColumns.Keys) {
+        indexColumns.insert(keyColumn);
+    }
+
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(TString::Join(NKMeans::PostingTable, suffix));
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NKMeans::ParentColumn);
+        col->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
+        col->SetTypeId(NSchemeShard::ClusterIdTypeId);
+        col->SetNotNull(true);
+    }
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NKMeans::DistanceColumn);
+        col->SetType(NTableIndex::NKMeans::DistanceTypeName);
+        col->SetTypeId(NTableIndex::NKMeans::DistanceType);
+        col->SetNotNull(true);
+    }
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NKMeans::IsForeignColumn);
+        col->SetType(NTableIndex::NKMeans::IsForeignTypeName);
+        col->SetTypeId(NTableIndex::NKMeans::IsForeignType);
+        col->SetNotNull(true);
+    }
+
+    FillIndexImplTableColumns(GetColumns(baseTable), tableColumns.Keys, indexColumns, implTableDesc);
+    // ParentColumn in the end of the key
+    implTableDesc.AddKeyColumnNames(NKMeans::ParentColumn);
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
+auto CalcFulltextCompactImplTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns,
+    bool isBuild)
+{
+    // In rowid mode the doc id is the synthetic Uint64 __ydb_row_id (its dense low-bits seq), so the
+    // source table may have any (incl. composite, non-integer) primary key. Otherwise the legacy
+    // single-integer-PK doc id is used and __ydb_max_id inherits that PK's type.
+    const bool useRowId = indexDesc && indexDesc->GetUseRowIdAsDocId();
+
+    auto tableColumns = ExtractInfo(baseTable);
+    THashSet<TString> indexColumns;
+    if (!useRowId) {
+        Y_ENSURE(tableColumns.Keys.size() == 1);
+    }
+    for (const auto & keyColumn: tableColumns.Keys) {
+        indexColumns.insert(keyColumn);
+    }
+
+    TColumnTypes baseColumnTypes;
+    TString error;
+    Y_ENSURE(ExtractTypes(baseTable, baseColumnTypes, error), error);
+    NScheme::TTypeId tokenColumnType;
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact) {
+        tokenColumnType = NScheme::NTypeIds::String;
+    } else {
+        Y_ENSURE(indexDesc->GetSettings().columns().size() == 1);
+        auto textColumnInfo = baseColumnTypes.at(indexDesc->GetSettings().columns().at(0).column());
+        tokenColumnType = textColumnInfo.GetTypeId();
+    }
+
+    NScheme::TTypeId idType = useRowId
+        ? NScheme::NTypeIds::Uint64
+        : baseColumnTypes.at(tableColumns.Keys.at(0)).GetTypeId();
+
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(NTableIndex::ImplTable);
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    // Leading prefix key columns: [prefix..., __ydb_token, __ydb_max_id, __ydb_generation].
+    {
+        const THashSet<TString> prefixColumnsSet{prefixColumns.begin(), prefixColumns.end()};
+        FillIndexImplTableColumns(GetColumns(baseTable), prefixColumns, prefixColumnsSet, implTableDesc);
+    }
+    {
+        auto tokenColumn = implTableDesc.AddColumns();
+        tokenColumn->SetName(NFulltext::TokenColumn);
+        tokenColumn->SetType(NScheme::TypeName(tokenColumnType));
+        tokenColumn->SetTypeId(tokenColumnType);
+        tokenColumn->SetNotNull(true);
+        implTableDesc.AddKeyColumnNames(NFulltext::TokenColumn);
+    }
+
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::GenColumn);
+        col->SetType(NScheme::TypeName(NFulltext::GenType));
+        col->SetTypeId(NFulltext::GenType);
+        col->SetNotNull(true);
+        if (!isBuild) {
+            col->SetDefaultFromSequence(NFulltext::GenSequence);
+        }
+        implTableDesc.AddKeyColumnNames(NFulltext::GenColumn);
+    }
+
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::MaxIdColumn);
+        col->SetType(NScheme::TypeName(idType));
+        col->SetTypeId(idType);
+        col->SetNotNull(true);
+        implTableDesc.AddKeyColumnNames(NFulltext::MaxIdColumn);
+    }
+
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::AddedColumn);
+        col->SetType("Bool");
+        col->SetTypeId(Ydb::Type::BOOL);
+        col->SetNotNull(true);
+    }
+
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::SegmentColumn);
+        col->SetType("String");
+        col->SetTypeId(NScheme::NTypeIds::String);
+        col->SetNotNull(true);
+    }
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+        implTableDesc.MutablePartitionConfig()->SetSpecialTableType(NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance);
+    } else {
+        implTableDesc.MutablePartitionConfig()->SetSpecialTableType(NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact);
+    }
+
+    return implTableDesc;
+}
+
+// Transient "row-id source" table for the compact build in rowid mode: the main table re-keyed by the
+// full __ydb_row_id (stored in the __ydb_seq system Uint64 PK column). The posting scan reads this table
+// in row-id order so doc ids arrive ascending, as the compact delta format requires, and stores the full
+// __ydb_row_id as the doc id. Holds the indexed text column + data columns. Dropped once the build completes.
+auto CalcFulltextRowIdSrcImplTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const TString& indexColumn,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    Y_UNUSED(indexDesc);
+    // The indexed column is passed explicitly: fulltext builds carry it in the fulltext settings, but JSON
+    // builds carry no settings (the column lives in buildInfo.IndexColumns), so we cannot read it here.
+    THashSet<TString> valueColumns = indexDataColumns;
+    Y_ENSURE(indexColumn);
+    valueColumns.insert(indexColumn);
+
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(NTableIndex::ImplTable);
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    // Keyed by __ydb_row_id (the doc id): the prepass is a generic secondary-index build over the main
+    // table's __ydb_row_id column, so the impl table's key column must carry that source column's name.
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::RowIdColumn);
+        col->SetType(NScheme::TypeName(NScheme::NTypeIds::Uint64));
+        col->SetTypeId(NScheme::NTypeIds::Uint64);
+        col->SetNotNull(true);
+    }
+    implTableDesc.AddKeyColumnNames(NFulltext::RowIdColumn);
+
+    const TVector<TString> noKeys;
+    FillIndexImplTableColumns(GetColumns(baseTable), noKeys, valueColumns, implTableDesc);
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
+auto CalcFulltextImplTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns)
+{
+    auto tableColumns = ExtractInfo(baseTable);
+    const bool useRowId = indexDesc.GetUseRowIdAsDocId();
+    THashSet<TString> indexColumns;
+    Y_ENSURE(indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain ||
+        indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance ||
+        indexType == NKikimrSchemeOp::EIndexTypeGlobalJson);
+    if (indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
+        indexColumns = indexDataColumns;
+    }
+    TVector<TString> docIdKeys;
+    if (useRowId) {
+        docIdKeys.push_back(NFulltext::RowIdColumn);
+        indexColumns.insert(NFulltext::RowIdColumn);
+    } else {
+        docIdKeys = tableColumns.Keys;
+        for (const auto & keyColumn: tableColumns.Keys) {
+            indexColumns.insert(keyColumn);
+        }
+    }
+    // Prefix columns become the leading key columns of the posting table.
+    // Prefix columns must be disjoint from the doc-id columns (validated at index creation),
+    // so the posting key is [prefix..., __ydb_token, doc_id...] with no duplicate key column.
+    for (const auto& prefixColumn : prefixColumns) {
+        indexColumns.insert(prefixColumn);
+    }
+
+    TColumnTypes baseColumnTypes;
+    TString error;
+    Y_ENSURE(ExtractTypes(baseTable, baseColumnTypes, error), error);
+    NScheme::TTypeId tokenColumnType;
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalJson) {
+        tokenColumnType = NScheme::NTypeIds::String;
+    } else {
+        Y_ENSURE(indexDesc.GetSettings().columns().size() == 1);
+        auto textColumnInfo = baseColumnTypes.at(indexDesc.GetSettings().columns().at(0).column());
+        tokenColumnType = textColumnInfo.GetTypeId();
+    }
+
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(NTableIndex::ImplTable);
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    // Leading prefix key columns (their column descriptions are filled by FillIndexImplTableColumns below).
+    for (const auto& prefixColumn : prefixColumns) {
+        implTableDesc.AddKeyColumnNames(prefixColumn);
+    }
+    {
+        auto tokenColumn = implTableDesc.AddColumns();
+        tokenColumn->SetName(NFulltext::TokenColumn);
+        tokenColumn->SetType(NScheme::TypeName(tokenColumnType));
+        tokenColumn->SetTypeId(tokenColumnType);
+        tokenColumn->SetNotNull(true);
+    }
+    implTableDesc.AddKeyColumnNames(NFulltext::TokenColumn);
+    FillIndexImplTableColumns(GetColumns(baseTable), docIdKeys, indexColumns, implTableDesc);
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::FreqColumn);
+        col->SetType(NFulltext::TokenCountTypeName);
+        col->SetTypeId(NFulltext::TokenCountType);
+        col->SetNotNull(true);
+    }
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
+auto CalcFulltextDocsImplTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    auto tableColumns = ExtractInfo(baseTable);
+    const bool useRowId = indexDesc.GetUseRowIdAsDocId();
+    THashSet<TString> indexColumns = indexDataColumns;
+    TVector<TString> docIdKeys;
+    if (useRowId) {
+        docIdKeys.push_back(NFulltext::RowIdColumn);
+        indexColumns.insert(NFulltext::RowIdColumn);
+    } else {
+        docIdKeys = tableColumns.Keys;
+        for (const auto & keyColumn: tableColumns.Keys) {
+            indexColumns.insert(keyColumn);
+        }
+    }
+
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(NTableIndex::NFulltext::DocsTable);
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    FillIndexImplTableColumns(GetColumns(baseTable), docIdKeys, indexColumns, implTableDesc);
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::DocLengthColumn);
+        col->SetType(NFulltext::TokenCountTypeName);
+        col->SetTypeId(NFulltext::TokenCountType);
+        col->SetNotNull(true);
+    }
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
+auto CalcFulltextDictImplTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    auto tableColumns = ExtractInfo(baseTable);
+
+    TColumnTypes baseColumnTypes;
+    TString error;
+    Y_ENSURE(ExtractTypes(baseTable, baseColumnTypes, error), error);
+    Y_ENSURE(indexDesc.GetSettings().columns().size() == 1);
+    auto textColumnInfo = baseColumnTypes.at(indexDesc.GetSettings().columns().at(0).column());
+
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(NTableIndex::NFulltext::DictTable);
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::TokenColumn);
+        col->SetType(NScheme::TypeName(textColumnInfo.GetTypeId()));
+        col->SetTypeId(textColumnInfo.GetTypeId());
+        col->SetNotNull(true);
+    }
+    implTableDesc.AddKeyColumnNames(NFulltext::TokenColumn);
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::FreqColumn);
+        col->SetType(NFulltext::DocCountTypeName);
+        col->SetTypeId(NFulltext::DocCountType);
+        col->SetNotNull(true);
+    }
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
+auto CalcFulltextStatsImplTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    auto tableColumns = ExtractInfo(baseTable);
+
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(NTableIndex::NFulltext::StatsTable);
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::IdColumn);
+        col->SetType("Uint32");
+        col->SetTypeId(Ydb::Type::UINT32);
+        col->SetNotNull(true);
+    }
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::DocCountColumn);
+        col->SetType(NFulltext::DocCountTypeName);
+        col->SetTypeId(NFulltext::DocCountType);
+        col->SetNotNull(true);
+    }
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::SumDocLengthColumn);
+        col->SetType(NFulltext::DocCountTypeName);
+        col->SetTypeId(NFulltext::DocCountType);
+        col->SetNotNull(true);
+    }
+    implTableDesc.AddKeyColumnNames(NFulltext::IdColumn);
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
+}
+
+void FillIndexTableColumns(
+    const TMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
+    std::span<const TString> keys,
+    const THashSet<TString>& columns,
+    NKikimrSchemeOp::TTableDescription& implTableDesc) {
+    FillIndexImplTableColumns(baseTableColumns, keys, columns, implTableDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    ui32 uniqueKeySize)
+{
+    return CalcImplTableDescImpl(baseTableInfo, implTableColumns, indexTableDesc, uniqueKeySize);
+}
+
+NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    ui32 uniqueKeySize)
+{
+    return CalcImplTableDescImpl(baseTableDescr, implTableColumns, indexTableDesc, uniqueKeySize);
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+
+    implTableDesc.SetName(NKMeans::LevelTable);
+
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+
+    {
+        auto parentColumn = implTableDesc.AddColumns();
+        parentColumn->SetName(NKMeans::ParentColumn);
+        parentColumn->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
+        parentColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
+        parentColumn->SetNotNull(true);
+    }
+    {
+        auto idColumn = implTableDesc.AddColumns();
+        idColumn->SetName(NKMeans::IdColumn);
+        idColumn->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
+        idColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
+        idColumn->SetNotNull(true);
+    }
+    {
+        auto centroidColumn = implTableDesc.AddColumns();
+        centroidColumn->SetName(NKMeans::CentroidColumn);
+        centroidColumn->SetType("String");
+        centroidColumn->SetTypeId(NScheme::NTypeIds::String);
+        centroidColumn->SetNotNull(true);
+    }
+
+    implTableDesc.AddKeyColumnNames(NKMeans::ParentColumn);
+    implTableDesc.AddKeyColumnNames(NKMeans::IdColumn);
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    std::string_view suffix,
+    bool withForeign)
+{
+    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, suffix, withForeign);
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    std::string_view suffix)
+{
+    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, suffix, false);
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    return CalcVectorKmeansTreePrefixImplTableDescImpl(indexKeyColumns, baseTableInfo, baseTablePartitionConfig, implTableColumns, indexTableDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const TTableColumns& implTableColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    return CalcVectorKmeansTreePrefixImplTableDescImpl(indexKeyColumns, baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeBuildOverlapTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    std::string_view suffix)
+{
+    return CalcVectorKmeansTreeBuildOverlapTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, suffix);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns)
+{
+    return CalcFulltextImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc, indexType, prefixColumns);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns)
+{
+    return CalcFulltextImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc, indexType, prefixColumns);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns,
+    bool isBuild)
+{
+    return CalcFulltextCompactImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType, prefixColumns, isBuild);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns,
+    bool isBuild)
+{
+    return CalcFulltextCompactImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType, prefixColumns, isBuild);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextRowIdSrcImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const TString& indexColumn,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    return CalcFulltextRowIdSrcImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexColumn, indexTableDesc, indexDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextRowIdSrcImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const TString& indexColumn,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    return CalcFulltextRowIdSrcImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexColumn, indexTableDesc, indexDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    return CalcFulltextDocsImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    return CalcFulltextDocsImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    return CalcFulltextDictImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexTableDesc, indexDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    return CalcFulltextDictImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc, indexDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    return CalcFulltextStatsImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexTableDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+{
+    return CalcFulltextStatsImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc);
+}
+
+bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TColumnTypes& columnTypes, TString& explain) {
+    const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
+    Y_ABORT_UNLESS(typeRegistry);
+
+    for (auto& column: baseTableDescr.GetColumns()) {
+        auto& columnName = column.GetName();
+        auto typeName = NMiniKQL::AdaptLegacyYqlType(column.GetType());
+
+        NScheme::TTypeInfo typeInfo;
+        if (!GetTypeInfo(typeRegistry->GetType(typeName), column.GetTypeInfo(), typeName, columnName, typeInfo, explain)) {
+            return false;
+        }
+
+        columnTypes[columnName] = typeInfo;
+    }
+
+    return true;
+}
+
+bool ExtractTypes(const NSchemeShard::TTableInfo::TPtr& baseTableInfo, TColumnTypes& columnsTypes, TString& explain) {
+    Y_UNUSED(explain);
+
+    for (const auto& [_, column] : baseTableInfo->Columns) {
+        columnsTypes[column.Name] = column.PType;
+    }
+
+    return true;
+}
+
+namespace {
+
+bool IsIntegerPrimaryKeyType(NScheme::TTypeId typeId) {
+    return typeId == NScheme::NTypeIds::Uint64
+        || typeId == NScheme::NTypeIds::Int64
+        || typeId == NScheme::NTypeIds::Uint32
+        || typeId == NScheme::NTypeIds::Int32;
+}
+
+} // namespace
+
+bool CheckSingleIntegerPrimaryKey(
+    const TTableColumns& baseTableColumns,
+    const TColumnTypes& baseColumnTypes,
+    TStringBuf indexKind,
+    TString& error)
+{
+    if (baseTableColumns.Keys.size() != 1) {
+        error = TStringBuilder()
+            << indexKind << " index requires exactly one primary key column of type 'Uint64', 'Int64', 'Uint32' or 'Int32'"
+            << ", but table has " << baseTableColumns.Keys.size() << " primary key columns";
+        return false;
+    }
+
+    const TString& pkColumnName = baseTableColumns.Keys[0];
+    Y_ABORT_UNLESS(baseColumnTypes.contains(pkColumnName));
+    const auto pkTypeInfo = baseColumnTypes.at(pkColumnName);
+    if (!IsIntegerPrimaryKeyType(pkTypeInfo.GetTypeId())) {
+        error = TStringBuilder()
+            << indexKind << " index requires primary key column '" << pkColumnName
+            << "' to be of type 'Uint64', 'Int64', 'Uint32' or 'Int32' but got " << NScheme::TypeName(pkTypeInfo);
+        return false;
+    }
+
+    return true;
+}
+
+TFulltextRowIdClassification ClassifyFulltextRowId(
+    const NSchemeShard::TTableInfo::TPtr& tableInfo,
+    const TMap<TString, TPathId>& tableChildren,
+    const THashMap<TPathId, NSchemeShard::TTableIndexInfo::TPtr>& indexes,
+    const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
+    TString& error)
+{
+    TFulltextRowIdClassification result;
+
+    const auto indexType = GetIndexType(indexDesc);
+    switch (indexType) {
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            break;
+        default:
+            // Non-fulltext indexes have nothing to decide.
+            result.Plan = EFulltextRowIdPlan::NotApplicable;
+            return result;
+    }
+    // Used in user-facing error messages so a JSON index build does not talk about "Fulltext".
+    const bool isJson = indexType == NKikimrSchemeOp::EIndexTypeGlobalJson
+        || indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact;
+    const TStringBuf indexKind = isJson ? "JSON" : "Fulltext";
+
+    // Feature-flag gate: when __ydb_row_id support is disabled, no row_id column or unique index is
+    // used or auto-provisioned. Only the legacy doc_id=PK layout is allowed, which requires a single
+    // integer primary key.
+    if (!AppData()->FeatureFlags.GetEnableFulltextIndexRowId()) {
+        const TTableColumns baseTableColumns = ExtractInfo(tableInfo);
+        TColumnTypes baseColumnTypes;
+        if (!ExtractTypes(tableInfo, baseColumnTypes, error)) {
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+        TString legacyError;
+        if (CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, indexKind, legacyError)) {
+            result.Plan = EFulltextRowIdPlan::LegacyIntegerPk;
+        } else {
+            error = TStringBuilder()
+                << indexKind << " index over a table without a single integer primary key requires the"
+                << " __ydb_row_id doc_id feature, which is disabled (feature flag EnableFulltextIndexRowId)";
+            result.Plan = EFulltextRowIdPlan::Error;
+        }
+        return result;
+    }
+
+    // Look for a live __ydb_row_id column on the main table.
+    const NSchemeShard::TTableInfo::TColumn* rowIdColumn = nullptr;
+    for (const auto& [_, column] : tableInfo->Columns) {
+        if (column.IsDropped()) {
+            continue;
+        }
+        if (column.Name == NFulltext::RowIdColumn) {
+            rowIdColumn = &column;
+            break;
+        }
+    }
+
+    // Scan the table children for a single-column GlobalUnique index over __ydb_row_id.
+    bool hasReadyUniqueIndexOnRowId = false;
+    bool hasUnreadyUniqueIndexOnRowId = false;
+    for (const auto& [_, childPathId] : tableChildren) {
+        const auto it = indexes.find(childPathId);
+        if (it == indexes.end()) {
+            continue;
+        }
+        const auto& info = it->second;
+        if (info->Type != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+            continue;
+        }
+        if (info->IndexKeys.size() != 1) {
+            continue;
+        }
+        if (info->IndexKeys.front() != NFulltext::RowIdColumn) {
+            continue;
+        }
+        if (info->State == NKikimrSchemeOp::EIndexStateReady) {
+            hasReadyUniqueIndexOnRowId = true;
+        } else {
+            hasUnreadyUniqueIndexOnRowId = true;
+        }
+    }
+
+    if (rowIdColumn) {
+        // A user-managed or previously auto-provisioned __ydb_row_id column exists: it must be well-formed.
+        if (rowIdColumn->PType.GetTypeId() != NScheme::NTypeIds::Uint64) {
+            error = TStringBuilder()
+                << indexKind << " index opt-in requires column '" << NFulltext::RowIdColumn
+                << "' to be of type 'Uint64' but got " << NScheme::TypeName(rowIdColumn->PType);
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+        if (!rowIdColumn->NotNull) {
+            error = TStringBuilder()
+                << indexKind << " index opt-in requires column '" << NFulltext::RowIdColumn << "' to be NOT NULL";
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+
+        if (hasReadyUniqueIndexOnRowId) {
+            result.Plan = EFulltextRowIdPlan::Reuse;
+            return result;
+        }
+        if (hasUnreadyUniqueIndexOnRowId) {
+            // A unique index on __ydb_row_id exists but is not Ready - either a concurrent build or an
+            // interrupted prior auto-provisioning. Refuse rather than create a duplicate.
+            error = TStringBuilder()
+                << indexKind << " index over '" << NFulltext::RowIdColumn << "' found a not-yet-Ready unique"
+                << " secondary index on '" << NFulltext::RowIdColumn << "'; wait for it to complete or drop"
+                << " index '" << NFulltext::RowIdUniqueIndexName << "' and retry";
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+        // The column is fine but the unique index is missing - provision just the unique index.
+        result.Plan = EFulltextRowIdPlan::Provision;
+        result.NeedColumn = false;
+        result.NeedUniqueIndex = true;
+        return result;
+    }
+
+    // No __ydb_row_id column. A single integer PK keeps the legacy doc_id=PK behaviour.
+    const TTableColumns baseTableColumns = ExtractInfo(tableInfo);
+    TColumnTypes baseColumnTypes;
+    if (!ExtractTypes(tableInfo, baseColumnTypes, error)) {
+        result.Plan = EFulltextRowIdPlan::Error;
+        return result;
+    }
+
+    TString ignore;
+    if (CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, indexKind, ignore)) {
+        result.Plan = EFulltextRowIdPlan::LegacyIntegerPk;
+        return result;
+    }
+
+    // Custom PK and no __ydb_row_id infrastructure at all - provision both the column and the unique index.
+    result.Plan = EFulltextRowIdPlan::Provision;
+    result.NeedColumn = true;
+    result.NeedUniqueIndex = true;
+    return result;
+}
+
+TFulltextRowIdClassification ClassifyFulltextRowIdForCreate(
+    const NKikimrSchemeOp::TIndexedTableCreationConfig& createConfig,
+    const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
+    TString& error)
+{
+    // Keep the decision rules in sync with ClassifyFulltextRowId above; this variant reads the
+    // create-table request protos instead of the live schema. Every object is created atomically here,
+    // so there is no not-yet-Ready unique index to consider.
+    TFulltextRowIdClassification result;
+
+    const auto indexType = GetIndexType(indexDesc);
+    // Compact variants are reachable here too: with EnableCompactFulltextIndex on, the KQP DDL layer emits
+    // the Compact index type directly (see yql_kikimr_type_ann.cpp), so an inline CREATE TABLE with a
+    // fulltext/JSON index over a non-integer PK must auto-provision __ydb_row_id just like the plain type.
+    if (indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain &&
+        indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance &&
+        indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact &&
+        indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance &&
+        indexType != NKikimrSchemeOp::EIndexTypeGlobalJson &&
+        indexType != NKikimrSchemeOp::EIndexTypeGlobalJsonCompact) {
+        result.Plan = EFulltextRowIdPlan::NotApplicable;
+        return result;
+    }
+    // Used in user-facing error messages so a JSON index create does not talk about "Fulltext".
+    const bool isJson = indexType == NKikimrSchemeOp::EIndexTypeGlobalJson
+        || indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact;
+    const TStringBuf indexKind = isJson ? "JSON" : "Fulltext";
+
+    const auto& tableDesc = createConfig.GetTableDescription();
+
+    // Feature-flag gate: mirror ClassifyFulltextRowId. When __ydb_row_id support is disabled, no row_id
+    // column or unique index is used or provisioned; only the legacy single-integer-PK layout is allowed.
+    if (!AppData()->FeatureFlags.GetEnableFulltextIndexRowId()) {
+        const TTableColumns baseTableColumns = ExtractInfo(tableDesc);
+        TColumnTypes baseColumnTypes;
+        if (!ExtractTypes(tableDesc, baseColumnTypes, error)) {
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+        TString legacyError;
+        if (CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, indexKind, legacyError)) {
+            result.Plan = EFulltextRowIdPlan::LegacyIntegerPk;
+        } else {
+            error = TStringBuilder()
+                << indexKind << " index over a table without a single integer primary key requires the"
+                << " __ydb_row_id doc_id feature, which is disabled (feature flag EnableFulltextIndexRowId)";
+            result.Plan = EFulltextRowIdPlan::Error;
+        }
+        return result;
+    }
+
+    // Look for a __ydb_row_id column declared on the table being created.
+    const NKikimrSchemeOp::TColumnDescription* rowIdColumn = nullptr;
+    for (const auto& column : tableDesc.GetColumns()) {
+        if (column.GetName() == NFulltext::RowIdColumn) {
+            rowIdColumn = &column;
+            break;
+        }
+    }
+
+    // Scan the indexes requested alongside the table for a single-column GlobalUnique index over
+    // __ydb_row_id (a user can supply both the column and its unique index explicitly).
+    bool hasUniqueIndexOnRowId = false;
+    for (const auto& index : createConfig.GetIndexDescription()) {
+        if (GetIndexType(index) != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+            continue;
+        }
+        if (index.KeyColumnNamesSize() != 1) {
+            continue;
+        }
+        if (index.GetKeyColumnNames(0) != NFulltext::RowIdColumn) {
+            continue;
+        }
+        hasUniqueIndexOnRowId = true;
+    }
+
+    if (rowIdColumn) {
+        // A user-supplied __ydb_row_id column must be well-formed.
+        TColumnTypes baseColumnTypes;
+        if (!ExtractTypes(tableDesc, baseColumnTypes, error)) {
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+        const auto& rowIdType = baseColumnTypes.at(NFulltext::RowIdColumn);
+        if (rowIdType.GetTypeId() != NScheme::NTypeIds::Uint64) {
+            error = TStringBuilder()
+                << indexKind << " index opt-in requires column '" << NFulltext::RowIdColumn
+                << "' to be of type 'Uint64' but got " << NScheme::TypeName(rowIdType);
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+        if (!rowIdColumn->GetNotNull()) {
+            error = TStringBuilder()
+                << indexKind << " index opt-in requires column '" << NFulltext::RowIdColumn << "' to be NOT NULL";
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+
+        if (hasUniqueIndexOnRowId) {
+            result.Plan = EFulltextRowIdPlan::Reuse;
+            return result;
+        }
+        // The column is supplied but its unique index is missing - provision just the unique index.
+        result.Plan = EFulltextRowIdPlan::Provision;
+        result.NeedColumn = false;
+        result.NeedUniqueIndex = true;
+        return result;
+    }
+
+    // No __ydb_row_id column. A single integer PK keeps the legacy doc_id=PK behaviour.
+    const TTableColumns baseTableColumns = ExtractInfo(tableDesc);
+    TColumnTypes baseColumnTypes;
+    if (!ExtractTypes(tableDesc, baseColumnTypes, error)) {
+        result.Plan = EFulltextRowIdPlan::Error;
+        return result;
+    }
+
+    TString ignore;
+    if (CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, indexKind, ignore)) {
+        result.Plan = EFulltextRowIdPlan::LegacyIntegerPk;
+        return result;
+    }
+
+    // Custom PK and no __ydb_row_id infrastructure at all - provision both the column and the unique index.
+    result.Plan = EFulltextRowIdPlan::Provision;
+    result.NeedColumn = true;
+    result.NeedUniqueIndex = true;
+    return result;
+}
+
+bool MaybeEnableFulltextRowIdMode(
+    const NSchemeShard::TTableInfo::TPtr& tableInfo,
+    const TMap<TString, TPathId>& tableChildren,
+    const THashMap<TPathId, NSchemeShard::TTableIndexInfo::TPtr>& indexes,
+    NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
+    TString& error)
+{
+    const auto classification = ClassifyFulltextRowId(tableInfo, tableChildren, indexes, indexDesc, error);
+    switch (classification.Plan) {
+        case EFulltextRowIdPlan::NotApplicable:
+        case EFulltextRowIdPlan::LegacyIntegerPk:
+            return true;
+        case EFulltextRowIdPlan::Reuse:
+            indexDesc.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
+            return true;
+        case EFulltextRowIdPlan::Provision:
+            // This strict path expects the infrastructure to be present already; auto-provisioning is
+            // driven by ClassifyFulltextRowId in the build-service entry point (TTxCreate) instead.
+            if (error.empty()) {
+                error = TStringBuilder()
+                    << "Index over '" << NFulltext::RowIdColumn
+                    << "' requires a Ready unique secondary index on '" << NFulltext::RowIdColumn << "'";
+            }
+            return false;
+        case EFulltextRowIdPlan::Error:
+            return false;
+    }
+    return false;
+}
+
+bool IsCompatibleKeyTypes(
+    const TColumnTypes& baseTableColumnTypes,
+    const TTableColumns& implTableColumns,
+    bool uniformTable,
+    TString& explain)
+{
+    const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
+    Y_ABORT_UNLESS(typeRegistry);
+
+    for (auto& keyName: implTableColumns.Keys) {
+        Y_ABORT_UNLESS(baseTableColumnTypes.contains(keyName));
+        auto typeInfo = baseTableColumnTypes.at(keyName);
+
+        if (typeInfo.GetTypeId() == NScheme::NTypeIds::Uuid) {
+            if (!AppData()->FeatureFlags.GetEnableUuidAsPrimaryKey()) {
+                explain += TStringBuilder() << "Uuid as primary key is forbiden by configuration: " << keyName;
+                return false;
+            }
+        }
+
+        if (uniformTable) {
+            switch (typeInfo.GetTypeId()) {
+            case NScheme::NTypeIds::Uint32:
+            case NScheme::NTypeIds::Uint64:
+                break;
+            default:
+                explain += TStringBuilder() << "Column '" << keyName << "' has wrong key type "
+                                            << NScheme::TypeName(typeInfo) << " for being key of table with uniform partitioning";
+                return false;
+            }
+        }
+
+        if (!NKikimr::IsAllowedKeyType(typeInfo)) {
+            explain += TStringBuilder() << "Column '" << keyName << "' has wrong key type " << NScheme::TypeName(typeInfo) << " for being key";
+            return false;
+        }
+    }
+
+    return true;
+}
+
+}
+
+}

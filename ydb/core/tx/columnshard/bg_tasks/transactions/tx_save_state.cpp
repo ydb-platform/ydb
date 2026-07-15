@@ -1,4 +1,5 @@
 #include "tx_save_state.h"
+
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 
 namespace NKikimr::NOlap::NBackground {
@@ -17,4 +18,4 @@ void TTxSaveSessionState::DoComplete(const TActorContext& ctx) {
     }
 }
 
-}
+}   // namespace NKikimr::NOlap::NBackground

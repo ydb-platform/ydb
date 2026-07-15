@@ -1,10 +1,13 @@
-#include <ydb/library/actors/http/http.h>
-#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
-#include <ydb/library/security/util.h>
-#include <ydb/mvp/core/mvp_tokens.h>
+#include "oidc_session_create_yandex.h"
+
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_log.h>
-#include "oidc_session_create_yandex.h"
+#include <ydb/mvp/core/mvp_tokens.h>
+
+#include <ydb/library/actors/http/http.h>
+#include <ydb/library/security/util.h>
+
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 namespace NMVP {
 namespace NOIDC {
@@ -83,7 +86,8 @@ void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");
         SetCORS(Request, &responseHeaders);
-        ReplyAndPassAway(Request->CreateResponse( event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details));
+        SetRequestIdHeader(responseHeaders, GetRequestId());
+        ReplyAndPassAway(Request->CreateResponse(event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details));
     }
 }
 

@@ -1,6 +1,10 @@
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition_blob_encoder.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition_util.h>
 #include <ydb/core/persqueue/pqtablet/partition/blob_key_filter.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
@@ -11,6 +15,7 @@
 #include <ydb/public/lib/base/msgbus_status.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -22,6 +27,10 @@
 #include <util/system/types.h>
 
 #include "make_config.h"
+
+#include <deque>
+#include <functional>
+#include <memory>
 
 template<>
 void Out<NKikimrPQ::TEvProposeTransactionResult_EStatus>(IOutputStream& out, NKikimrPQ::TEvProposeTransactionResult_EStatus v) {
@@ -69,6 +78,30 @@ public:
     {}
 
     void LoadMeta(const NKikimrPQ::TPartitionCounterData& data);
+
+    static ui64 GetCompactionZoneEmptyStartOffset(TPartition& partition) {
+        return partition.GetCompactionZoneEmptyStartOffset();
+    }
+
+    static TPartitionBlobEncoder& CompactionBlobEncoder(TPartition& partition) {
+        return partition.CompactionBlobEncoder;
+    }
+
+    static TPartitionBlobEncoder& BlobEncoder(TPartition& partition) {
+        return partition.BlobEncoder;
+    }
+
+    static void FinalizeEmptyBlobEncoder(TPartition& partition,
+                                         TPartitionBlobEncoder& encoder,
+                                         ui64 startOffset,
+                                         bool updateEndOffset) {
+        partition.FinalizeEmptyBlobEncoder(encoder, startOffset, updateEndOffset);
+    }
+
+    static bool CleanUpBlobs(TPartition& partition, const TActorContext& ctx) {
+        return partition.CleanUpBlobs(nullptr, ctx);
+    }
+
 private:
     TInitMetaStep* MetaStep;
 };
@@ -140,6 +173,8 @@ protected:
         TMaybe<size_t> Count;
         TMaybe<ui64> PlanStep;
         TMaybe<ui64> TxId;
+        TMaybe<ui64> MetaStartOffset;
+        TMaybe<ui64> MetaEndOffset;
         THashMap<size_t, TUserInfoMatcher> UserInfos;
         THashMap<size_t, TDeleteRangeMatcher> DeleteRanges;
     };
@@ -180,6 +215,15 @@ protected:
         TMaybe<ui64> Step;
         TMaybe<ui64> TxId;
         TMaybe<TPartitionId> Partition;
+    };
+
+    /// Optional payload for TEvTxCommit (defaults match the old SendCommitTx(step, txId) behaviour).
+    struct TSendCommitTxOptions {
+        TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+        TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfig;
+        TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfig;
+        TMaybe<NKikimrPQ::TPartitions> PartitionsData;
+        TEvPQ::TMessageGroupsPtr ExplicitMessageGroups;
     };
 
     struct TChangePartitionConfigMatcher {
@@ -277,7 +321,7 @@ protected:
                            const TActorId& suppPartitionId = {});
     void WaitCalcPredicateResult(const TCalcPredicateMatcher& matcher = TCalcPredicateMatcher::EmptyMatcher());
 
-    void SendCommitTx(ui64 step, ui64 txId);
+    void SendCommitTx(ui64 step, ui64 txId, const TSendCommitTxOptions& options = {});
     void SendRollbackTx(ui64 step, ui64 txId);
     void WaitCommitTxDone(const TTxDoneMatcher& matcher = {});
     void WaitRollbackTxDone(const TTxDoneMatcher& matcher = {});
@@ -290,7 +334,7 @@ protected:
     void SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force = true);
     void SendWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data,
                    bool ignoreQuotaDeadline = false, ui64 seqNo = 0, bool isDirectWrite = false);
-    void SendGetWriteInfo();
+    void SendGetWriteInfo(bool skipSrcIdInfo);
     void ShadowPartitionCountersTest(bool isFirstClass);
 
     void TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration, bool ignoreQuotaDeadline);
@@ -321,6 +365,27 @@ protected:
                                TString message,
                                const TActorId& suppPartitionId);
     void WaitForCalcPredicateResult(ui64 txId, bool predicate);
+
+    // OldPlanStep*: partition meta ahead of commit (stale SerializedTx persist before TEvTxDone).
+    static constexpr ui64 StaleReplayMetaPlanStep = 99999;
+    static constexpr ui64 StaleReplayMetaTxId = 55555;
+
+    void CreatePartitionStaleReplayAhead(const TPartitionId& partition, ui64 begin, ui64 end);
+
+    NKikimrPQ::TTransaction MakeStaleSerializedTxBody(
+        const TPartitionId& partition,
+        ui64 step,
+        ui64 txId) const;
+
+    void AssertNoUnexpectedStaleMetaTxDone(const TString& reason) const;
+
+    THolder<TEvKeyValue::TEvRequest> GrabStaleMetaKvRequest(const TString& failReason) const;
+
+    void AssertStaleMetaKvHasTxKey(
+        const TEvKeyValue::TEvRequest& kv,
+        ui64 txId,
+        ui32 originalPartitionId,
+        const TString& failCtx) const;
 
     TMaybe<TTestContext> Ctx;
     TMaybe<TFinalizer> Finalizer;
@@ -408,6 +473,7 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                                      false,
                                      1,
                                      quoterId,
+                                     TActorId{},
                                      std::move(samplingControl),
                                      newPartition);
     ActorId = Ctx->Runtime->Register(actor);
@@ -536,12 +602,27 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
     Cerr << "Got cmd write: \n" << event->Record.DebugString() << Endl;
+    bool metaFound = false;
     for (unsigned i = 0; i < event->Record.CmdWriteSize(); ++i) {
         auto& cmd = event->Record.GetCmdWrite(i);
         TString key = cmd.GetKey();
 
         UNIT_ASSERT(key.size() >= 1);
         switch (key[0]) {
+        case TKeyPrefix::TypeMeta: {
+            NKikimrPQ::TPartitionMeta meta;
+            UNIT_ASSERT(meta.ParseFromString(cmd.GetValue()));
+            if (matcher.MetaStartOffset.Defined()) {
+                UNIT_ASSERT(meta.HasStartOffset());
+                UNIT_ASSERT_VALUES_EQUAL(*matcher.MetaStartOffset, meta.GetStartOffset());
+            }
+            if (matcher.MetaEndOffset.Defined()) {
+                UNIT_ASSERT(meta.HasEndOffset());
+                UNIT_ASSERT_VALUES_EQUAL(*matcher.MetaEndOffset, meta.GetEndOffset());
+            }
+            metaFound = true;
+            break;
+        }
         case TKeyPrefix::TypeTxMeta: {
             NKikimrPQ::TPartitionTxMeta meta;
             UNIT_ASSERT(meta.ParseFromString(event->Record.GetCmdWrite(i).GetValue()));
@@ -621,6 +702,10 @@ void TPartitionFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
             UNIT_ASSERT_VALUES_EQUAL(*deleteRange.Consumer, consumer);
         }
     }
+
+    if (matcher.MetaStartOffset.Defined() || matcher.MetaEndOffset.Defined()) {
+        UNIT_ASSERT(metaFound);
+    }
 }
 
 void TPartitionFixture::WaitCmdWriteTx(const TCmdWriteTxMatcher& matcher)
@@ -679,7 +764,7 @@ void TPartitionFixture::SendWrite
     TVector<TEvPQ::TEvWrite::TMsg> msgs;
     msgs.push_back(msg);
 
-    auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), isDirectWrite, std::nullopt);
+    auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), isDirectWrite, std::nullopt, TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -689,8 +774,8 @@ void TPartitionFixture::SendChangeOwner(const ui64 cookie, const TString& owner,
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TPartitionFixture::SendGetWriteInfo() {
-    auto event = MakeHolder<TEvPQ::TEvGetWriteInfoRequest>();
+void TPartitionFixture::SendGetWriteInfo(bool skipSrcIdInfo) {
+    auto event = MakeHolder<TEvPQ::TEvGetWriteInfoRequest>(skipSrcIdInfo);
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -1083,9 +1168,14 @@ void TPartitionFixture::WaitCalcPredicateResult(const TCalcPredicateMatcher& mat
     }
 }
 
-void TPartitionFixture::SendCommitTx(ui64 step, ui64 txId)
+void TPartitionFixture::SendCommitTx(ui64 step, ui64 txId, const TSendCommitTxOptions& options)
 {
-    auto event = MakeHolder<TEvPQ::TEvTxCommit>(step, txId);
+    TEvPQ::TMessageGroupsPtr explicitMessageGroups = options.ExplicitMessageGroups;
+    auto event = MakeHolder<TEvPQ::TEvTxCommit>(step, txId, std::move(explicitMessageGroups));
+    event->SerializedTx = options.SerializedTx;
+    event->TabletConfig = options.TabletConfig;
+    event->BootstrapConfig = options.BootstrapConfig;
+    event->PartitionsData = options.PartitionsData;
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -1114,6 +1204,60 @@ void TPartitionFixture::WaitCommitTxDone(const TTxDoneMatcher& matcher)
 void TPartitionFixture::WaitRollbackTxDone(const TTxDoneMatcher& matcher)
 {
     WaitCommitTxDone(matcher);
+}
+
+void TPartitionFixture::CreatePartitionStaleReplayAhead(const TPartitionId& partition, ui64 begin, ui64 end)
+{
+    CreatePartition({
+        .Partition = partition,
+        .Begin = begin,
+        .End = end,
+        .PlanStep = StaleReplayMetaPlanStep,
+        .TxId = StaleReplayMetaTxId,
+    });
+}
+
+NKikimrPQ::TTransaction TPartitionFixture::MakeStaleSerializedTxBody(
+    const TPartitionId& partition,
+    ui64 step,
+    ui64 txId) const
+{
+    NKikimrPQ::TTransaction tx;
+    tx.SetKind(NKikimrPQ::TTransaction::KIND_DATA);
+    tx.SetTxId(txId);
+    tx.SetState(NKikimrPQ::TTransaction::EXECUTED);
+    tx.SetStep(step);
+    auto* operation = tx.AddOperations();
+    operation->SetPartitionId(partition.InternalPartitionId);
+    return tx;
+}
+
+void TPartitionFixture::AssertNoUnexpectedStaleMetaTxDone(const TString& reason) const
+{
+    // Poll > 0 sim time: absence of TEvTxDone must be observable, not "instant Grab".
+    UNIT_ASSERT_C(!Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxDone>(TDuration::MilliSeconds(200)), reason);
+}
+
+THolder<TEvKeyValue::TEvRequest> TPartitionFixture::GrabStaleMetaKvRequest(const TString& failReason) const
+{
+    auto kv = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(10));
+    UNIT_ASSERT_C(kv, failReason);
+    return kv;
+}
+
+void TPartitionFixture::AssertStaleMetaKvHasTxKey(
+    const TEvKeyValue::TEvRequest& kv,
+    ui64 txId,
+    ui32 originalPartitionId,
+    const TString& failCtx) const
+{
+    const TString expectedKey = GetTxKey(txId, originalPartitionId);
+    for (ui32 i = 0; i < kv.Record.CmdWriteSize(); ++i) {
+        if (kv.Record.GetCmdWrite(i).GetKey() == expectedKey) {
+            return;
+        }
+    }
+    UNIT_ASSERT_C(false, failCtx << ": missing CmdWrite for serialized tx key " << expectedKey);
 }
 
 void TPartitionFixture::SendChangePartitionConfig(const TConfigParams& config)
@@ -1246,7 +1390,7 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
     }
     TVector<ui64> msgSizesExpected{2, 2, 1, 1, 1, 1, 1, 1};
     CompareVectors(msgSizesExpected, finalCounters.GetMessagesSizes());
-    SendGetWriteInfo();
+    SendGetWriteInfo(false);
     {
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoResponse>(TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
@@ -1868,7 +2012,7 @@ ui64 TPartitionTxTestHelper::AddAndSendNormalWrite(
             msgs.push_back(makeMsg( sourceId, seqNo));
         }
     }
-    auto event = MakeHolder<TEvPQ::TEvWrite>(id, messageNo, act.OwnerCookie, id * 10, std::move(msgs), false, std::nullopt);
+    auto event = MakeHolder<TEvPQ::TEvWrite>(id, messageNo, act.OwnerCookie, id * 10, std::move(msgs), false, std::nullopt, TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked);
     SendEvent(event.Release());
     UserActs.emplace(id, act);
     messageNo++;
@@ -1964,7 +2108,7 @@ Y_UNIT_TEST_F(UserActCount, TPartitionFixture)
 
     CreatePartition();
 
-    Ctx->Runtime->SetScheduledLimit(6000);
+    Ctx->Runtime->SetScheduledLimit(60000);
 
     SendCreateSession(1, "client", "session-id", 2, 3);
     WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session="session-id", .Offset=0, .Generation=2, .Step=3}}}});
@@ -2323,17 +2467,63 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
 
 Y_UNIT_TEST_F(OldPlanStep, TPartitionFixture)
 {
+    // Partition meta is ahead of the commit (stale replay). Tablet always sends SerializedTx on commit;
+    // partition must persist tx KV before TEvTxDone (stable-25-4 -> stable-26-1).
     const TPartitionId partition{3};
-    const ui64 begin = 0;
-    const ui64 end = 10;
-
     const ui64 step = 12345;
     const ui64 txId = 67890;
 
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=99999, .TxId=55555});
+    CreatePartitionStaleReplayAhead(partition, 0, 10);
 
-    SendCommitTx(step, txId);
+    auto serializedTxBody = MakeStaleSerializedTxBody(partition, step, txId);
+    SendCommitTx(step, txId, {.SerializedTx = std::move(serializedTxBody)});
+
+    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone must not precede KV response for stale commit with SerializedTx");
+
+    auto kv = GrabStaleMetaKvRequest("expected KV request with stale tx meta persist");
+    AssertStaleMetaKvHasTxKey(*kv, txId, partition.OriginalPartitionId, "first KV");
+
+    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone must not arrive before SendCmdWriteResponse");
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
     WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
+}
+
+Y_UNIT_TEST_F(OldPlanStep_SecondStaleCommitWhileKvInflight, TPartitionFixture)
+{
+    // Two stale commits: second arrives while first KV response is still pending — must not crash
+    // (TryAppendStaleTxMetaWrites runs again only after InFlight is cleared on write complete).
+    const TPartitionId partition{3};
+    const ui64 step = 12345;
+    const ui64 txId1 = 67890;
+    const ui64 txId2 = 67891;
+
+    CreatePartitionStaleReplayAhead(partition, 0, 10);
+
+    auto body = MakeStaleSerializedTxBody(partition, step, txId1);
+    SendCommitTx(step, txId1, {.SerializedTx = std::move(body)});
+
+    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone before first KV");
+
+    auto kv = GrabStaleMetaKvRequest("expected first stale-meta KV request");
+    AssertStaleMetaKvHasTxKey(*kv, txId1, partition.OriginalPartitionId, "first KV");
+
+    body = MakeStaleSerializedTxBody(partition, step, txId2);
+    SendCommitTx(step, txId2, {.SerializedTx = std::move(body)});
+
+    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone must not appear while first KV unanswered");
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    WaitCommitTxDone({.TxId=txId1, .Partition=TPartitionId(partition)});
+
+    kv = GrabStaleMetaKvRequest("expected second stale-meta KV after first completes");
+    AssertStaleMetaKvHasTxKey(*kv, txId2, partition.OriginalPartitionId, "second KV");
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    WaitCommitTxDone({.TxId=txId2, .Partition=TPartitionId(partition)});
 }
 
 Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)
@@ -2673,7 +2863,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoSuccess, TPartitionFixture) {
         auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
     }
-    SendGetWriteInfo();
+    SendGetWriteInfo(false);
     {
         {
             auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
@@ -2746,7 +2936,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
     SendWrite(++cookie, 0, ownerCookie, 100, data, false, 1);
 
     {
-        SendGetWriteInfo();
+        SendGetWriteInfo(false);
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
     }
@@ -2757,7 +2947,7 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
         UNIT_ASSERT(event != nullptr);
     }
     {
-        SendGetWriteInfo();
+        SendGetWriteInfo(false);
         Cerr << "Wait write info error(2)\n";
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
         UNIT_ASSERT(event != nullptr);
@@ -3935,6 +4125,933 @@ Y_UNIT_TEST(BlobKeyFilfer)
     filteredKeys = filterKeys(actualKeys, TPartitionId(0));
 
     UNIT_ASSERT_EQUAL(filteredKeys, expectedKeys);
+}
+
+Y_UNIT_TEST_F(GetPartitionWriteInfoWithoutSrcIdInfo, TPartitionFixture) {
+    Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+
+    CreatePartition({
+                    .Partition=TPartitionId{2, TWriteId{0, 10}, 100'001},
+                    //
+                    // partition configuration
+                    //
+                    .Config={.Version=1, .Consumers={}}
+                    },
+                    //
+                    // tablet configuration
+                    //
+                    {.Version=2, .Consumers={}}
+    );
+
+    ui64 cookie = 1;
+
+    SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
+    auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
+    UNIT_ASSERT(ownerEvent != nullptr);
+    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+
+    TAutoPtr<IEventHandle> handle;
+    auto truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
+
+    TString data = "data for write";
+
+    for (auto i = 0; i < 3; i++) {
+        SendWrite(++cookie, i, ownerCookie, i + 100, data, true, (i+1)*2);
+        SendDiskStatusResponse();
+        {
+            auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvError>(TDuration::Seconds(1));
+            UNIT_ASSERT(event == nullptr);
+        }
+        auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
+    SendWrite(++cookie, 3, ownerCookie, 110, data, true, 7);
+    SendDiskStatusResponse();
+    {
+        auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+    }
+    SendGetWriteInfo(true);
+    {
+        {
+            auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
+            UNIT_ASSERT(event == nullptr);
+        }
+        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoResponse>(TDuration::Seconds(1));
+        UNIT_ASSERT(event != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(event->BodyKeys.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(event->SrcIdInfo.size(), 0);
+
+        UNIT_ASSERT(event->BodyKeys.begin()->Key.ToString().StartsWith("D0000100001_"));
+    }
+}
+
+namespace {
+
+TClientBlob MakeSinglePartBodyReadBlob(ui64 seqNo, char fill) {
+    TString data(24, fill);
+    const ui32 sz = data.size();
+    return {
+        TString("src"),
+        seqNo,
+        std::move(data),
+        TMaybe<TPartData>(),
+        TInstant::MilliSeconds(1),
+        TInstant::MilliSeconds(1),
+        sz,
+        TString(),
+        TString()
+    };
+}
+
+TClientBlob MakeMultipartBodyReadBlob(ui64 seqNo, ui16 partNo, ui16 totalParts, ui32 bytesPerPart, char fill) {
+    const ui32 totalSize = bytesPerPart * totalParts;
+    TString data(bytesPerPart, fill);
+    TMaybe<TPartData> partData = TPartData(partNo, totalParts, totalSize);
+    return {
+        TString("src"),
+        seqNo,
+        std::move(data),
+        std::move(partData),
+        TInstant::MilliSeconds(1),
+        TInstant::MilliSeconds(1),
+        bytesPerPart,
+        TString(),
+        TString()
+    };
+}
+
+TString SerializePackedBatchForReadBodyTest(TBatch batch) {
+    batch.Pack();
+    TString raw;
+    batch.SerializeTo(raw);
+    return raw;
+}
+
+TRequestedBlob MakeRequestedBlobForRead(
+    ui64 offset,
+    ui16 partNo,
+    ui32 count,
+    ui16 internalPartsCount,
+    TString payload,
+    const TKey& key)
+{
+    const ui32 sz = static_cast<ui32>(payload.size());
+    return {
+        offset,
+        partNo,
+        count,
+        internalPartsCount,
+        sz,
+        std::move(payload),
+        key,
+        TInstant::Now().Seconds()
+    };
+}
+
+constexpr ui32 kAddBlobsFromBodyDefaultMsgLimit = 100;
+constexpr ui32 kAddBlobsFromBodyDefaultByteLimit = static_cast<ui32>(1_MB);
+
+constexpr ui64 kAddBlobsFromBodyProbeEndOffset = 100;
+constexpr ui64 kAddBlobsFromBodyProbeSizeLag = 1_MB;
+constexpr ui64 kAddBlobsFromBodyProbeReadOffset10 = 10;
+constexpr ui64 kAddBlobsFromBodyProbeReadOffset12 = 12;
+constexpr ui64 kAddBlobsFromBodyProbeReadOffset20 = 20;
+
+TReadInfo MakeReadInfoForAddBlobsFromBodyTest(
+    const TActorId& edge,
+    ui64 readOffset,
+    ui64 lastOffset = 0,
+    ui16 partNo = 0,
+    ui64 messageCountLimit = kAddBlobsFromBodyDefaultMsgLimit,
+    ui32 byteSizeLimit = kAddBlobsFromBodyDefaultByteLimit,
+    ui64 readTimestampMs = 0)
+{
+    return {
+        TString("user"),
+        TString("dc"),
+        readOffset,
+        lastOffset,
+        partNo,
+        messageCountLimit,
+        byteSizeLimit,
+        true, // readToBlobEnd
+        ui64{0},
+        readTimestampMs,
+        TDuration::Zero(),
+        false,
+        edge,
+        false,
+        edge
+    };
+}
+
+class TAddBlobsFromBodyReadTestActor : public TActorBootstrapped<TAddBlobsFromBodyReadTestActor> {
+public:
+    TAddBlobsFromBodyReadTestActor(TActorId edge, std::function<void(const TActorContext&)> body)
+        : Edge(edge)
+        , Body(std::move(body))
+    {}
+
+    void Bootstrap(const TActorContext& ctx) {
+        Body(ctx);
+        Send(Edge, new NActors::TEvents::TEvWakeup());
+        PassAway();
+    }
+
+private:
+    TActorId Edge;
+    std::function<void(const TActorContext&)> Body;
+};
+
+}
+
+// Regression: in the FindPos branch, trueSearchOffset must use blobs[blobIdx].Key, not blobs[0].Key.
+// Two non-overlapping body blobs: [10..12] then [13..17] (five messages in blob1). After blob0 the reader
+// is at 13. Correct Key.GetOffset()==13 → all five rows are read (8 results total). If the bug used
+// Key from blob0 (GetOffset()==10), trueSearchOffset becomes 13-10+13=16, FindPos(16,0) skips the first
+// three rows of blob1: the client loses messages at offsets 13, 14, 15 and only gets 16 and 17
+// (5 vs 8 results). Multipart ++PartNo is covered elsewhere (e.g. AddBlobsFromBodyGotGap).
+Y_UNIT_TEST_F(AddBlobsFromBodyUsesKeyOfCurrentBlob, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    const TPartitionId partitionId(1);
+
+    std::deque<TClientBlob> dq0;
+    dq0.push_back(MakeSinglePartBodyReadBlob(1, 'a'));
+    dq0.push_back(MakeSinglePartBodyReadBlob(2, 'b'));
+    dq0.push_back(MakeSinglePartBodyReadBlob(3, 'b'));
+    TString raw0 = SerializePackedBatchForReadBodyTest(TBatch::FromBlobs(10, std::move(dq0)));
+
+    const TKey key0 = TKey::ForBody(TKeyPrefix::TypeData, partitionId, 10, 0, 3, 0);
+    TRequestedBlob blob0 = MakeRequestedBlobForRead(10, 0, 3, 0, std::move(raw0), key0);
+
+    std::deque<TClientBlob> dq1;
+    dq1.push_back(MakeSinglePartBodyReadBlob(4, 'c'));
+    dq1.push_back(MakeSinglePartBodyReadBlob(5, 'd'));
+    dq1.push_back(MakeSinglePartBodyReadBlob(6, 'e'));
+    dq1.push_back(MakeSinglePartBodyReadBlob(7, 'f'));
+    dq1.push_back(MakeSinglePartBodyReadBlob(8, 'g'));
+    TString raw1 = SerializePackedBatchForReadBodyTest(TBatch::FromBlobs(13, std::move(dq1)));
+
+    const TKey key1 = TKey::ForBody(TKeyPrefix::TypeData, partitionId, 13, 0, 5, 0);
+    TRequestedBlob blob1 = MakeRequestedBlobForRead(13, 0, 5, 0, std::move(raw1), key1);
+
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(std::move(blob0));
+    blobs.push_back(std::move(blob1));
+
+    auto probe = [&](const TActorContext& ctx) {
+        TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, kAddBlobsFromBodyProbeReadOffset10);
+        info.Blobs = blobs;
+        info.CompactedBlobsCount = 2;
+
+        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        NKikimrClient::TResponse& res = *answer->Response;
+        auto* readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
+
+        bool needStop = false;
+        ui32 cnt = 0;
+        ui32 size = 0;
+        ui32 lastBlobSize = 0;
+
+        TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
+                                                          0,
+                                                          2,
+                                                          nullptr,
+                                                          kAddBlobsFromBodyProbeReadOffset10,
+                                                          kAddBlobsFromBodyProbeEndOffset,
+                                                          kAddBlobsFromBodyProbeSizeLag,
+                                                          Ctx->Edge,
+                                                          kAddBlobsFromBodyProbeReadOffset10,
+                                                          readResult,
+                                                          answer,
+                                                          needStop,
+                                                          cnt,
+                                                          size,
+                                                          lastBlobSize,
+                                                          ctx);
+
+        UNIT_ASSERT(!early.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 8u);
+        for (ui32 i = 0; i < 8; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(i).GetOffset(), 10u + i);
+        }
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
+// Empty TRequestedBlob body (retention / requested range past data): AddBlobsFromBody logs
+// "Not full answer here!", fills read result metadata and returns TReadAnswer early.
+Y_UNIT_TEST_F(AddBlobsFromBodyStopsOnEmptyBlob, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    const TPartitionId partitionId(1);
+
+    std::deque<TClientBlob> dq0;
+    dq0.push_back(MakeSinglePartBodyReadBlob(1, 'z'));
+    TString raw0 = SerializePackedBatchForReadBodyTest(TBatch::FromBlobs(10, std::move(dq0)));
+
+    const TKey key0 = TKey::ForBody(TKeyPrefix::TypeData, partitionId, 10, 0, 1, 0);
+    TRequestedBlob blob0 = MakeRequestedBlobForRead(10, 0, 1, 0, std::move(raw0), key0);
+
+    // Key must not use Count==0 and InternalPartsCount==0 together; body is still empty (Empty()).
+    const TKey key1 = TKey::ForBody(TKeyPrefix::TypeData, partitionId, 11, 0, 1, 0);
+    TRequestedBlob blob1 = MakeRequestedBlobForRead(11, 0, 0, 0, TString(), key1);
+
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(std::move(blob0));
+    blobs.push_back(std::move(blob1));
+
+    auto probe = [&](const TActorContext& ctx) {
+        const ui32 consumedBytes = MakeSinglePartBodyReadBlob(1, 'z').GetSerializedSize();
+
+        TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, kAddBlobsFromBodyProbeReadOffset10);
+        info.Blobs = blobs;
+        info.CompactedBlobsCount = 2;
+
+        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        NKikimrClient::TResponse& res = *answer->Response;
+        auto* readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
+
+        bool needStop = false;
+        ui32 cnt = 0;
+        ui32 size = 0;
+        ui32 lastBlobSize = 0;
+
+        TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
+                                                          0,
+                                                          2,
+                                                          nullptr,
+                                                          kAddBlobsFromBodyProbeReadOffset10,
+                                                          kAddBlobsFromBodyProbeEndOffset,
+                                                          kAddBlobsFromBodyProbeSizeLag,
+                                                          Ctx->Edge,
+                                                          kAddBlobsFromBodyProbeReadOffset10,
+                                                          readResult,
+                                                          answer,
+                                                          needStop,
+                                                          cnt,
+                                                          size,
+                                                          lastBlobSize,
+                                                          ctx);
+
+        UNIT_ASSERT(early.Defined());
+        UNIT_ASSERT(early->Event.Get() != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(0).GetOffset(), 10u);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetLastOffset(), i64{10});
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetStartOffset(), kAddBlobsFromBodyProbeReadOffset10);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetEndOffset(), kAddBlobsFromBodyProbeEndOffset);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetSizeLag(), kAddBlobsFromBodyProbeSizeLag - consumedBytes);
+        UNIT_ASSERT_VALUES_EQUAL(info.RealReadOffset, kAddBlobsFromBodyProbeReadOffset10);
+        UNIT_ASSERT_VALUES_EQUAL(info.LastOffset, 10u);
+        UNIT_ASSERT_VALUES_EQUAL(info.Offset, 11u);
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
+// Covers "got gap": jump read cursor to blobs[blobIdx].Offset / PartNo when BS returns a hole.
+Y_UNIT_TEST_F(AddBlobsFromBodyGotGap, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    const TPartitionId partitionId(1);
+
+    auto probe = [&](const TActorContext& ctx) {
+        // Gap in partition offsets: reader at 10, first data in response starts at 12.
+        {
+            std::deque<TClientBlob> dq;
+            dq.push_back(MakeSinglePartBodyReadBlob(1, 'g'));
+            TString raw = SerializePackedBatchForReadBodyTest(TBatch::FromBlobs(12, std::move(dq)));
+
+            const TKey key = TKey::ForBody(TKeyPrefix::TypeData, partitionId, 12, 0, 1, 0);
+            TRequestedBlob blob = MakeRequestedBlobForRead(12, 0, 1, 0, std::move(raw), key);
+
+            TVector<TRequestedBlob> blobs;
+            blobs.push_back(std::move(blob));
+
+            TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, kAddBlobsFromBodyProbeReadOffset10);
+            info.Blobs = blobs;
+            info.CompactedBlobsCount = 1;
+
+            auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            NKikimrClient::TResponse& res = *answer->Response;
+            auto* readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
+
+            bool needStop = false;
+            ui32 cnt = 0;
+            ui32 size = 0;
+            ui32 lastBlobSize = 0;
+
+            TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
+                                                              0,
+                                                              1,
+                                                              nullptr,
+                                                              kAddBlobsFromBodyProbeReadOffset10,
+                                                              kAddBlobsFromBodyProbeEndOffset,
+                                                              kAddBlobsFromBodyProbeSizeLag,
+                                                              Ctx->Edge,
+                                                              kAddBlobsFromBodyProbeReadOffset10,
+                                                              readResult,
+                                                              answer,
+                                                              needStop,
+                                                              cnt,
+                                                              size,
+                                                              lastBlobSize,
+                                                              ctx);
+
+            UNIT_ASSERT(!early.Defined());
+            UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(0).GetOffset(), 12u);
+            UNIT_ASSERT_VALUES_EQUAL(info.Offset, 13u);
+            UNIT_ASSERT_VALUES_EQUAL(info.PartNo, 0u);
+        }
+
+        // Same partition offset, higher PartNo: reader expects part 0, blob carries part 1+.
+        {
+            std::deque<TClientBlob> dq;
+            dq.push_back(MakeMultipartBodyReadBlob(2, 1, 2, 16, 'h'));
+            TString raw = SerializePackedBatchForReadBodyTest(TBatch::FromBlobs(12, std::move(dq)));
+
+            const TKey key = TKey::ForBody(TKeyPrefix::TypeData, partitionId, 12, 1, 1, 0);
+            TRequestedBlob blob = MakeRequestedBlobForRead(12, 1, 1, 0, std::move(raw), key);
+
+            TVector<TRequestedBlob> blobs;
+            blobs.push_back(std::move(blob));
+
+            TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, kAddBlobsFromBodyProbeReadOffset12);
+            info.Blobs = blobs;
+            info.CompactedBlobsCount = 1;
+
+            auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            NKikimrClient::TResponse& res = *answer->Response;
+            auto* readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
+
+            bool needStop = false;
+            ui32 cnt = 0;
+            ui32 size = 0;
+            ui32 lastBlobSize = 0;
+
+            TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
+                                                              0,
+                                                              1,
+                                                              nullptr,
+                                                              kAddBlobsFromBodyProbeReadOffset12,
+                                                              kAddBlobsFromBodyProbeEndOffset,
+                                                              kAddBlobsFromBodyProbeSizeLag,
+                                                              Ctx->Edge,
+                                                              kAddBlobsFromBodyProbeReadOffset12,
+                                                              readResult,
+                                                              answer,
+                                                              needStop,
+                                                              cnt,
+                                                              size,
+                                                              lastBlobSize,
+                                                              ctx);
+
+            UNIT_ASSERT(!early.Defined());
+            UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(0).GetOffset(), 12u);
+            UNIT_ASSERT_VALUES_EQUAL(info.Offset, 13u);
+            UNIT_ASSERT_VALUES_EQUAL(info.PartNo, 0u);
+        }
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
+// Reader is past this blob's data: FindPos returns Max → "this batch does not contain data to read, skip it".
+Y_UNIT_TEST_F(AddBlobsFromBodySkipsBatchWhenReaderAhead, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    const TPartitionId partitionId(1);
+
+    std::deque<TClientBlob> dq;
+    dq.push_back(MakeSinglePartBodyReadBlob(1, 'p'));
+    dq.push_back(MakeSinglePartBodyReadBlob(2, 'q'));
+    dq.push_back(MakeSinglePartBodyReadBlob(3, 'r'));
+    TString raw = SerializePackedBatchForReadBodyTest(TBatch::FromBlobs(12, std::move(dq)));
+
+    const TKey key = TKey::ForBody(TKeyPrefix::TypeData, partitionId, 12, 0, 3, 0);
+    TRequestedBlob blob = MakeRequestedBlobForRead(12, 0, 3, 0, std::move(raw), key);
+
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(std::move(blob));
+
+    auto probe = [&](const TActorContext& ctx) {
+        TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, kAddBlobsFromBodyProbeReadOffset20);
+        info.Blobs = blobs;
+        info.CompactedBlobsCount = 1;
+
+        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        NKikimrClient::TResponse& res = *answer->Response;
+        auto* readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
+
+        bool needStop = false;
+        ui32 cnt = 0;
+        ui32 size = 0;
+        ui32 lastBlobSize = 0;
+
+        TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
+                                                          0,
+                                                          1,
+                                                          nullptr,
+                                                          kAddBlobsFromBodyProbeReadOffset20,
+                                                          kAddBlobsFromBodyProbeEndOffset,
+                                                          kAddBlobsFromBodyProbeSizeLag,
+                                                          Ctx->Edge,
+                                                          kAddBlobsFromBodyProbeReadOffset20,
+                                                          readResult,
+                                                          answer,
+                                                          needStop,
+                                                          cnt,
+                                                          size,
+                                                          lastBlobSize,
+                                                          ctx);
+
+        UNIT_ASSERT(!early.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(info.Offset, kAddBlobsFromBodyProbeReadOffset20);
+        UNIT_ASSERT_VALUES_EQUAL(info.PartNo, 0u);
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
+// Covers: (1) `if (res.IsLastPart())` then + inner `if (ReachedLastOffset())`;
+// (2) UpdateUsage last-part branch with inner `if (messageSkippingBehaviour)` true vs false.
+Y_UNIT_TEST_F(AddBlobsFromBodyLastOffsetAndUpdateUsageSkips, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    const TPartitionId partitionId(1);
+
+    auto probe = [&](const TActorContext& ctx) {
+        auto makeOneBlob10 = [&]() {
+            std::deque<TClientBlob> dq;
+            dq.push_back(MakeSinglePartBodyReadBlob(1, 'u'));
+            TString raw = SerializePackedBatchForReadBodyTest(TBatch::FromBlobs(10, std::move(dq)));
+            const TKey key = TKey::ForBody(TKeyPrefix::TypeData, partitionId, 10, 0, 1, 0);
+            TVector<TRequestedBlob> blobs;
+            blobs.push_back(MakeRequestedBlobForRead(10, 0, 1, 0, std::move(raw), key));
+            return blobs;
+        };
+
+        // LastOffset bound: after finishing one message, Offset reaches TReadInfo::LastOffset → needStop
+        // before UpdateUsage on that row.
+        {
+            TVector<TRequestedBlob> blobs = makeOneBlob10();
+            constexpr ui64 kLastOff = 11;
+            TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, kAddBlobsFromBodyProbeReadOffset10, kLastOff);
+            info.Blobs = blobs;
+            info.CompactedBlobsCount = 1;
+
+            auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
+            bool needStop = false;
+            ui32 cnt = 0;
+            ui32 size = 0;
+            ui32 lastBlobSize = 0;
+
+            TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
+                                                              0,
+                                                              1,
+                                                              nullptr,
+                                                              kAddBlobsFromBodyProbeReadOffset10,
+                                                              kAddBlobsFromBodyProbeEndOffset,
+                                                              kAddBlobsFromBodyProbeSizeLag,
+                                                              Ctx->Edge,
+                                                              kAddBlobsFromBodyProbeReadOffset10,
+                                                              readResult,
+                                                              answer,
+                                                              needStop,
+                                                              cnt,
+                                                              size,
+                                                              lastBlobSize,
+                                                              ctx);
+
+            UNIT_ASSERT(!early.Defined());
+            UNIT_ASSERT(needStop);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(info.Offset, kLastOff);
+        }
+
+        // UpdateUsage: messageSkippingBehaviour true (FCC + ReadTimestampMs > write ts) → cnt not charged.
+        Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableSkipMessagesWithObsoleteTimestamp(false);
+        Ctx->Runtime->GetAppData(0).PQConfig.SetTopicsAreFirstClassCitizen(true);
+        NKikimr::AppData(ctx)->PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+        {
+            TVector<TRequestedBlob> blobs = makeOneBlob10();
+            TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge,
+                                                                 kAddBlobsFromBodyProbeReadOffset10,
+                                                                 0,
+                                                                 0,
+                                                                 1,
+                                                                 kAddBlobsFromBodyDefaultByteLimit,
+                                                                 1'000'000);
+            info.Blobs = blobs;
+            info.CompactedBlobsCount = 1;
+
+            auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
+            bool needStop = false;
+            ui32 cnt = 0;
+            ui32 size = 0;
+            ui32 lastBlobSize = 0;
+
+            TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
+                                                              0,
+                                                              1,
+                                                              nullptr,
+                                                              kAddBlobsFromBodyProbeReadOffset10,
+                                                              kAddBlobsFromBodyProbeEndOffset,
+                                                              kAddBlobsFromBodyProbeSizeLag,
+                                                              Ctx->Edge,
+                                                              kAddBlobsFromBodyProbeReadOffset10,
+                                                              readResult,
+                                                              answer,
+                                                              needStop,
+                                                              cnt,
+                                                              size,
+                                                              lastBlobSize,
+                                                              ctx);
+
+            UNIT_ASSERT(!early.Defined());
+            UNIT_ASSERT(!needStop);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 1u);
+        }
+
+        // UpdateUsage: no timestamp skip → cnt reaches Count → needStop from UpdateUsage.
+        Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableSkipMessagesWithObsoleteTimestamp(false);
+        Ctx->Runtime->GetAppData(0).PQConfig.SetTopicsAreFirstClassCitizen(false);
+        NKikimr::AppData(ctx)->PQConfig.SetTopicsAreFirstClassCitizen(false);
+
+        {
+            TVector<TRequestedBlob> blobs = makeOneBlob10();
+            TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, kAddBlobsFromBodyProbeReadOffset10, 0, 0, 1);
+            info.Blobs = blobs;
+            info.CompactedBlobsCount = 1;
+
+            auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            auto* readResult = answer->Response->MutablePartitionResponse()->MutableCmdReadResult();
+            bool needStop = false;
+            ui32 cnt = 0;
+            ui32 size = 0;
+            ui32 lastBlobSize = 0;
+
+            TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
+                                                              0,
+                                                              1,
+                                                              nullptr,
+                                                              kAddBlobsFromBodyProbeReadOffset10,
+                                                              kAddBlobsFromBodyProbeEndOffset,
+                                                              kAddBlobsFromBodyProbeSizeLag,
+                                                              Ctx->Edge,
+                                                              kAddBlobsFromBodyProbeReadOffset10,
+                                                              readResult,
+                                                              answer,
+                                                              needStop,
+                                                              cnt,
+                                                              size,
+                                                              lastBlobSize,
+                                                              ctx);
+
+            UNIT_ASSERT(!early.Defined());
+            UNIT_ASSERT(needStop);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 1u);
+        }
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
+TBlobKeyTokenPtr MakeTestBlobKeyToken() {
+    auto token = std::make_shared<TBlobKeyToken>();
+    token->NeedDelete = false;
+    return token;
+}
+
+void AddHeadKeyWithBatch(
+    TPartitionBlobEncoder& encoder,
+    ui32 levelBorder,
+    const TPartitionId& partitionId,
+    ui64 offset,
+    char fill,
+    ui64 seqNo,
+    ui32 levelIndex = 0)
+{
+    std::deque<TClientBlob> dq;
+    dq.push_back(MakeSinglePartBodyReadBlob(seqNo, fill));
+    TBatch batch = TBatch::FromBlobs(offset, std::move(dq));
+    batch.Pack();
+    const ui32 blobSize = batch.GetPackedSize();
+
+    const TKey key = TKey::ForHead(TKeyPrefix::TypeData, partitionId, offset, 0, 1, 0);
+
+    if (encoder.DataKeysHead.size() <= levelIndex) {
+        while (encoder.DataKeysHead.size() <= levelIndex) {
+            encoder.DataKeysHead.emplace_back(levelBorder);
+        }
+    }
+    encoder.DataKeysHead[levelIndex].AddKey(key, blobSize);
+    encoder.HeadKeys.push_back(TDataKey{key, blobSize, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()});
+    encoder.Head.AddBatch(batch);
+}
+
+void AddBodyKeyToEncoder(
+    TPartitionBlobEncoder& encoder,
+    const TPartitionId& partitionId,
+    ui64 offset,
+    ui32 size)
+{
+    const TKey key = TKey::ForBody(TKeyPrefix::TypeData, partitionId, offset, 0, 1, 0);
+    encoder.DataKeysBody.push_back(TDataKey{key, size, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()});
+    encoder.BodySize += size;
+}
+
+void AddHeadKeyWithPartNo(
+    TPartitionBlobEncoder& encoder,
+    ui32 levelBorder,
+    const TPartitionId& partitionId,
+    ui64 offset,
+    ui16 partNo,
+    char fill,
+    ui64 seqNo,
+    ui32 levelIndex = 0)
+{
+    std::deque<TClientBlob> dq;
+    dq.push_back(MakeSinglePartBodyReadBlob(seqNo, fill));
+    TBatch batch = TBatch::FromBlobs(offset, std::move(dq));
+    batch.Pack();
+    const ui32 blobSize = batch.GetPackedSize();
+
+    const TKey key = TKey::ForHead(TKeyPrefix::TypeData, partitionId, offset, partNo, 1, 0);
+
+    if (encoder.DataKeysHead.size() <= levelIndex) {
+        while (encoder.DataKeysHead.size() <= levelIndex) {
+            encoder.DataKeysHead.emplace_back(levelBorder);
+        }
+    }
+    encoder.DataKeysHead[levelIndex].AddKey(key, blobSize);
+    encoder.HeadKeys.push_back(TDataKey{key, blobSize, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()});
+    encoder.Head.AddBatch(batch);
+    encoder.Head.Offset = offset;
+    encoder.Head.PartNo = partNo;
+}
+
+Y_UNIT_TEST_F(GetCompactionZoneEmptyStartOffsetUsesFwzBodyStart, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    const TPartitionId partitionId(1);
+    TPartitionTestWrapper::CompactionBlobEncoder(*partition).DataKeysBody.clear();
+    TPartitionTestWrapper::CompactionBlobEncoder(*partition).HeadKeys.clear();
+
+    AddBodyKeyToEncoder(TPartitionTestWrapper::BlobEncoder(*partition), partitionId, 100, 1000);
+    TPartitionTestWrapper::BlobEncoder(*partition).StartOffset = 100;
+    TPartitionTestWrapper::BlobEncoder(*partition).EndOffset = 202;
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetCompactionZoneEmptyStartOffset(*partition), 100u);
+}
+
+Y_UNIT_TEST_F(GetCompactionZoneEmptyStartOffsetUsesFwzHeadPartNo, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    const TPartitionId partitionId(1);
+    TPartitionTestWrapper::CompactionBlobEncoder(*partition).DataKeysBody.clear();
+    TPartitionTestWrapper::CompactionBlobEncoder(*partition).HeadKeys.clear();
+
+    TPartitionTestWrapper::BlobEncoder(*partition).DataKeysBody.clear();
+    TPartitionTestWrapper::BlobEncoder(*partition).StartOffset = 8;
+    TPartitionTestWrapper::BlobEncoder(*partition).EndOffset = 10;
+
+    AddHeadKeyWithPartNo(TPartitionTestWrapper::BlobEncoder(*partition), 8_MB, partitionId, 8, 2, 'm', 1);
+
+    // Old bug used GetEndOffset()==10; correct boundary is offset + 1 when PartNo > 0.
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetCompactionZoneEmptyStartOffset(*partition), 9u);
+}
+
+Y_UNIT_TEST_F(GetCompactionZoneEmptyStartOffsetPrefersCzhHead, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    const TPartitionId partitionId(1);
+    AddHeadKeyWithPartNo(TPartitionTestWrapper::CompactionBlobEncoder(*partition), 8_MB, partitionId, 4, 1, 'h', 1);
+
+    AddBodyKeyToEncoder(TPartitionTestWrapper::BlobEncoder(*partition), partitionId, 100, 1000);
+    TPartitionTestWrapper::BlobEncoder(*partition).StartOffset = 100;
+    TPartitionTestWrapper::BlobEncoder(*partition).EndOffset = 202;
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetCompactionZoneEmptyStartOffset(*partition), 5u);
+}
+
+class TPartitionMethodTestActor : public TActorBootstrapped<TPartitionMethodTestActor> {
+public:
+    TPartitionMethodTestActor(TActorId edge, std::function<void(const TActorContext&)> body)
+        : Edge(edge)
+        , Body(std::move(body))
+    {}
+
+    void Bootstrap(const TActorContext& ctx) {
+        Body(ctx);
+        Send(Edge, new NActors::TEvents::TEvWakeup());
+        PassAway();
+    }
+
+private:
+    TActorId Edge;
+    std::function<void(const TActorContext&)> Body;
+};
+
+Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderResetsHeadPartNo, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    const TPartitionId partitionId(1);
+    auto& encoder = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    while (encoder.DataKeysHead.size() < 4) {
+        encoder.DataKeysHead.emplace_back(8_MB);
+    }
+    AddHeadKeyWithPartNo(encoder, 8_MB, partitionId, 4, 2, 'h', 1);
+    encoder.Head.PartNo = 2;
+
+    TPartitionTestWrapper::FinalizeEmptyBlobEncoder(*partition, encoder, 100, true);
+
+    UNIT_ASSERT(encoder.HeadKeys.empty());
+    UNIT_ASSERT(encoder.Head.GetBatches().empty());
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.PartNo, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.Offset, 100u);
+}
+
+Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderClearsNewHead, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    const TPartitionId partitionId(1);
+    auto& encoder = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    while (encoder.DataKeysHead.size() < 4) {
+        encoder.DataKeysHead.emplace_back(8_MB);
+    }
+
+    std::deque<TClientBlob> dq;
+    dq.push_back(MakeSinglePartBodyReadBlob(1, 'n'));
+    TBatch newHeadBatch = TBatch::FromBlobs(50, std::move(dq));
+    newHeadBatch.Pack();
+    const ui32 newHeadBatchSize = newHeadBatch.GetPackedSize();
+
+    encoder.NewHead.Offset = 50;
+    encoder.NewHead.PartNo = 1;
+    encoder.NewHead.PackedSize = newHeadBatchSize;
+    encoder.NewHead.AddBatch(newHeadBatch);
+
+    const TKey newHeadKey = TKey::ForHead(TKeyPrefix::TypeData, partitionId, 50, 1, 1, 0);
+    encoder.NewHeadKey = TDataKey{newHeadKey, newHeadBatchSize, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()};
+
+    UNIT_ASSERT(!encoder.NewHead.GetBatches().empty());
+    UNIT_ASSERT_VALUES_UNEQUAL(encoder.NewHeadKey.Size, 0u);
+
+    TPartitionTestWrapper::FinalizeEmptyBlobEncoder(*partition, encoder, 100, true);
+
+    UNIT_ASSERT(encoder.NewHead.GetBatches().empty());
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHead.PackedSize, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHead.PartNo, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHead.Offset, 100u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHeadKey.Size, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHeadKey.Key.GetOffset(), 0u);
+}
+
+Y_UNIT_TEST_F(CleanUpBlobsResetsStaleCompactionZoneHeadPartNo, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(true);
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    auto& czEncoder = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    czEncoder.DataKeysBody.clear();
+    czEncoder.HeadKeys.clear();
+    czEncoder.Head.Clear();
+    czEncoder.Head.Offset = 200;
+    czEncoder.Head.PartNo = 2;
+
+    auto& fwzEncoder = TPartitionTestWrapper::BlobEncoder(*partition);
+    fwzEncoder.StartOffset = 200;
+    fwzEncoder.EndOffset = 202;
+
+    auto probe = [&](const TActorContext& ctx) {
+        TPartitionTestWrapper::CleanUpBlobs(*partition, ctx);
+        UNIT_ASSERT_VALUES_EQUAL(czEncoder.Head.PartNo, 0u);
+    };
+
+    Ctx->Runtime->Register(new TPartitionMethodTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
+Y_UNIT_TEST(PopFrontHeadKeySyncsHeadWithRemainingHeadKeys) {
+    const TPartitionId partitionId(1);
+    TPartitionBlobEncoder encoder(partitionId, false);
+
+    AddHeadKeyWithBatch(encoder, 8_MB, partitionId, 10, 'a', 1, 0);
+    AddHeadKeyWithBatch(encoder, 8_MB, partitionId, 11, 'b', 2, 0);
+
+    encoder.Head.Offset = 10;
+    encoder.Head.PartNo = 0;
+    encoder.Head.PackedSize = encoder.HeadKeys[0].Size + encoder.HeadKeys[1].Size;
+
+    UNIT_ASSERT_VALUES_EQUAL(encoder.HeadKeys.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.GetBatches().size(), 2u);
+
+    encoder.PopFrontHeadKey();
+
+    UNIT_ASSERT_VALUES_EQUAL(encoder.HeadKeys.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.HeadKeys.front().Key.GetOffset(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.Offset, 11u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.PartNo, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.GetBatches().size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.GetBatch(0).GetOffset(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.PackedSize, encoder.HeadKeys.front().Size);
+
+    TVector<TClientBlob> remaining;
+    encoder.Head.GetBatch(0).UnpackTo(&remaining);
+    UNIT_ASSERT_VALUES_EQUAL(remaining.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(remaining[0].Data[0], 'b');
 }
 
 } // End of suite

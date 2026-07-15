@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+import "ydb/core/protos/blobstorage_ddisk.proto";
+import "ydb/core/protos/blockstore_config.proto";
+import "ydb/core/nbs/cloud/blockstore/config/protos/storage.proto";
+
+package NYdb.NBS.PartitionDirect.NProto;
+option java_package = "ru.yandex.ydb.core.nbs.partition_direct.proto";
+
+message TDirectBlockGroupConnections {
+    message TConnection {
+        NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 1;
+        NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 2;
+    }
+    repeated TConnection Connections = 1;
+}
+
+message TDirectBlockGroupsConnections {
+    repeated TDirectBlockGroupConnections DirectBlockGroupConnections = 1;
+}
+
+// One vchunk's host layout, persisted only when it deviates from the default
+// TVChunkConfig::Make() produces. PBufferHostRoles[i] / DDiskHostRoles[i] hold
+// the EHostRole value for host i; EnabledHosts lists the enabled host indices.
+
+// TODO. Make inner message THostConfig
+message TVChunkConfig {
+    message Watermark {
+        uint32 HostIndex = 1;
+        uint64 Value = 2;
+    }
+
+    uint32 VChunkIndex = 1;
+    repeated uint32 PBufferHostRoles = 2;
+    repeated uint32 DDiskHostRoles = 3;
+    repeated uint32 EnabledHosts = 4;
+    repeated Watermark Watermarks = 5;
+}
+
+message TTabletInfo {
+    NYdb.NBS.NProto.TStorageServiceConfig StorageConfig = 1;
+    NKikimrBlockStore.TVolumeConfig VolumeConfig = 2;
+    TDirectBlockGroupsConnections DirectBlockGroupsConnections = 3;
+}
+
+// An in-flight AddHost, persisted so it can be finished (replayed) on restart.
+message TAddHostInProgress {
+    uint32 DirectBlockGroupId = 1;
+    uint32 NewHostIndex = 2;
+}

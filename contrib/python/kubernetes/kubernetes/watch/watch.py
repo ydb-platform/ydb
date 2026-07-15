@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import http
 import json
 import pydoc
-import sys
 
 from kubernetes import client
 
-PYDOC_RETURN_LABEL = ":return:"
+PYDOC_RETURN_LABEL = ":rtype:"
 PYDOC_FOLLOW_PARAM = ":param bool follow:"
 
 # Removing this suffix from return type name should give us event's object
@@ -28,14 +28,7 @@ PYDOC_FOLLOW_PARAM = ":param bool follow:"
 # provide return_type to Watch class's __init__.
 TYPE_LIST_SUFFIX = "List"
 
-
-PY2 = sys.version_info[0] == 2
-if PY2:
-    import httplib
-    HTTP_STATUS_GONE = httplib.GONE
-else:
-    import http
-    HTTP_STATUS_GONE = http.HTTPStatus.GONE
+HTTP_STATUS_GONE = http.HTTPStatus.GONE
 
 
 class SimpleNamespace:
@@ -83,7 +76,7 @@ def iter_resp_lines(resp):
             next_newline = buffer.find(b'\n')
 
 
-class Watch(object):
+class Watch:
 
     def __init__(self, return_type=None):
         self._raw_return_type = return_type
@@ -93,6 +86,21 @@ class Watch(object):
 
     def stop(self):
         self._stop = True
+        if hasattr(self, '_resp') and self._resp:
+            import socket
+            try:
+                # Python SSL/socket GIL Workaround: Force-shutdown the raw socket under HTTP/1.1 
+                # to immediately unblock the background thread blocked in CPython's ssl.read() recv_into
+                # call. This avoids deadlock where close() hangs waiting for SSL socket locks held by 
+                # the blocked read call. The actual response/connection closing is handled in the finally 
+                # block when the stream loop exits.
+                conn = getattr(self._resp, 'connection', None)
+                sock = getattr(conn, 'sock', None) if conn else None
+                if sock:
+                    sock.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
+
 
     def get_return_type(self, func):
         if self._raw_return_type:
@@ -114,11 +122,18 @@ class Watch(object):
         try:
             js = json.loads(data)
             js['raw_object'] = js['object']
-            # BOOKMARK event is treated the same as ERROR for a quick fix of
-            # decoding exception
-            # TODO: make use of the resource_version in BOOKMARK event for more
-            # efficient WATCH
-            if return_type and js['type'] != 'ERROR' and js['type'] != 'BOOKMARK':
+
+            if not return_type:
+                return js
+
+            if js['type'] == 'BOOKMARK':
+                # Extract and store resource_version from BOOKMARK event for
+                # efficiency. No deserialization as event can be incomplete.
+                if isinstance(js['object'], dict) and 'metadata' in js['object']:
+                    metadata = js['object']['metadata']
+                    if isinstance(metadata, dict) and 'resourceVersion' in metadata:
+                        self.resource_version = metadata['resourceVersion']
+            elif js['type'] != 'ERROR':
                 obj = SimpleNamespace(data=json.dumps(js['raw_object']))
                 js['object'] = self._api_client.deserialize(obj, return_type)
                 if hasattr(js['object'], 'metadata'):
@@ -182,6 +197,7 @@ class Watch(object):
         deserialize = kwargs.pop('deserialize', True)
         while True:
             resp = func(*args, **kwargs)
+            self._resp = resp
             try:
                 for line in iter_resp_lines(resp):
                     # unmarshal when we are receiving events from watch,
@@ -219,6 +235,7 @@ class Watch(object):
             finally:
                 resp.close()
                 resp.release_conn()
+                self._resp = None
                 if self.resource_version is not None:
                     kwargs['resource_version'] = self.resource_version
                 else:

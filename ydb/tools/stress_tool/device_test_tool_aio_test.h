@@ -133,7 +133,7 @@ class TAioTest : public TPerfTest {
         void Exec(NPDisk::TAsyncIoOperationResult *res) {
             Y_VERIFY_S(res->Result == NPDisk::EIoResult::Ok, "Operation ended on device with error# " << res->Result);
             TTestJob *doneJob = static_cast<TTestJob*>(res->Operation->GetCookie());
-            Test->FlightControl.MarkComplete(doneJob->Idx);
+            Test->FlightControl.MarkComplete(doneJob->Idx, doneJob->Op->GetSize());
             AtomicDecrement(Test->CurrentInFlight);
             const ui64 now = HPNow();
             const ui64 durationUs = HPMicroSeconds(now - doneJob->Start);
@@ -188,7 +188,7 @@ public:
         : TPerfTest(cfg)
         , QueueDepth(testProto.GetQueueDepth() != 0 ? FastClp2(testProto.GetQueueDepth()) : 4)
         , IoContext(NPDisk::CreateAsyncIoContextReal(cfg.Path, 0, 0))
-        , FlightControl(CountTrailingZeroBits(QueueDepth))
+        , FlightControl(QueueDepth)
         , DurationSec(testProto.GetDurationSeconds() != 0 ? testProto.GetDurationSeconds() : 180)
         , PrepareDurationSec(DurationSec >= 60 ? 30 : DurationSec / 2)
         , BuffSize(testProto.GetRequestSize() != 0 ? testProto.GetRequestSize() : 4096)
@@ -296,7 +296,7 @@ public:
             }
 
             double blockedMs = 0;
-            ReqPool[CurrentJob].Idx = FlightControl.Schedule(blockedMs);
+            ReqPool[CurrentJob].Idx = FlightControl.Schedule(blockedMs, op->GetSize());
             ReqPool[CurrentJob].Start = HPNow();
             CurrentJob = (CurrentJob + 1) % ReqPool.size();
             NHPTimer::STime submitStartTime = HPNow();

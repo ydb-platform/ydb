@@ -19,6 +19,7 @@
 #include <yt/yt/core/yson/pull_parser_deserialize.h>
 
 #include <library/cpp/yt/misc/cast.h>
+#include <library/cpp/yt/string/stream.h>
 
 #include <type_traits>
 #include <limits>
@@ -37,8 +38,8 @@ template <class T>
 TYsonString ConvertToYsonString(const T& value, EYsonFormat format)
 {
     auto type = NYTree::GetYsonType(value);
-    TString result;
-    TStringOutput stringOutput(result);
+    std::string result;
+    TStdStringOutput stringOutput(result);
     NYTree::WriteYson(&stringOutput, value, type, format);
     return NYson::TYsonString(std::move(result), type);
 }
@@ -47,8 +48,8 @@ template <class T>
 TYsonString ConvertToYsonString(const T& value, EYsonFormat format, int indent)
 {
     auto type = NYTree::GetYsonType(value);
-    TString result;
-    TStringOutput stringOutput(result);
+    std::string result;
+    TStdStringOutput stringOutput(result);
     NYTree::WriteYson(&stringOutput, value, type, format, indent);
     return NYson::TYsonString(std::move(result), type);
 }
@@ -168,10 +169,6 @@ IAttributeDictionaryPtr ConvertToAttributes(const T& value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const NYson::TToken& SkipAttributes(NYson::TTokenizer* tokenizer);
-
-////////////////////////////////////////////////////////////////////////////////
-
 template <class T>
 T ConstructYTreeConvertibleObject()
 {
@@ -181,50 +178,6 @@ T ConstructYTreeConvertibleObject()
         return T::Create();
     }
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-namespace {
-
-double ConvertYsonStringBaseToDouble(const NYson::TYsonStringBuf& yson)
-{
-    using namespace NYT::NYTree;
-
-    NYson::TTokenizer tokenizer(yson.AsStringBuf());
-    const auto& token = SkipAttributes(&tokenizer);
-    switch (token.GetType()) {
-        case NYson::ETokenType::Int64:
-            return token.GetInt64Value();
-        case NYson::ETokenType::Double:
-            return token.GetDoubleValue();
-        case NYson::ETokenType::Boolean:
-            return token.GetBooleanValue();
-        default:
-            THROW_ERROR_EXCEPTION("Cannot parse \"double\" from %Qlv",
-                token.GetType())
-                << TErrorAttribute("data", yson.AsStringBuf());
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TString ConvertYsonStringBaseToString(const NYson::TYsonStringBuf& yson)
-{
-    using namespace NYT::NYTree;
-
-    NYson::TTokenizer tokenizer(yson.AsStringBuf());
-    const auto& token = SkipAttributes(&tokenizer);
-    switch (token.GetType()) {
-        case NYson::ETokenType::String:
-            return TString(token.GetStringValue());
-        default:
-            THROW_ERROR_EXCEPTION("Cannot parse \"string\" from %Qlv",
-                token.GetType())
-                << TErrorAttribute("data", yson.AsStringBuf());
-    }
-}
-
-} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -269,12 +222,22 @@ TTo ConvertTo(const TFrom& value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+
+double ConvertYsonStringBufToDouble(const NYson::TYsonStringBuf& yson);
+std::string ConvertYsonStringBufToString(const NYson::TYsonStringBuf& yson);
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
 #define IMPLEMENT_CHECKED_INTEGRAL_CONVERT_TO(type) \
     template <> \
     inline type ConvertTo(const NYson::TYsonString& str) \
     { \
         NYson::TTokenizer tokenizer(str.AsStringBuf()); \
-        const auto& token = SkipAttributes(&tokenizer); \
+        tokenizer.SkipAttributes(); \
+        const auto& token = tokenizer.CurrentToken(); \
         switch (token.GetType()) { \
             case NYson::ETokenType::Int64: \
                 return CheckedIntegralCast<type>(token.GetInt64Value()); \
@@ -303,25 +266,25 @@ IMPLEMENT_CHECKED_INTEGRAL_CONVERT_TO(ui8)
 template <>
 inline double ConvertTo(const NYson::TYsonString& str)
 {
-    return ConvertYsonStringBaseToDouble(str);
+    return NDetail::ConvertYsonStringBufToDouble(str);
 }
 
 template <>
 inline double ConvertTo(const NYson::TYsonStringBuf& str)
 {
-    return ConvertYsonStringBaseToDouble(str);
+    return NDetail::ConvertYsonStringBufToDouble(str);
 }
 
 template <>
-inline TString ConvertTo(const NYson::TYsonString& str)
+inline std::string ConvertTo(const NYson::TYsonString& str)
 {
-    return ConvertYsonStringBaseToString(str);
+    return NDetail::ConvertYsonStringBufToString(str);
 }
 
 template <>
-inline TString ConvertTo(const NYson::TYsonStringBuf& str)
+inline std::string ConvertTo(const NYson::TYsonStringBuf& str)
 {
-    return ConvertYsonStringBaseToString(str);
+    return NDetail::ConvertYsonStringBufToString(str);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -345,6 +308,10 @@ T TagInvoke(TFrom<T>, TStringBuf value)
 
 namespace NYT {
 
+////////////////////////////////////////////////////////////////////////////////
+
 using NYT::NYTree::ConvertTo;
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

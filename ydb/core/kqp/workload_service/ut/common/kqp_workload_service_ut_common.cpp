@@ -298,7 +298,7 @@ private:
         featureFlags.SetEnableExternalDataSourcesOnServerless(Settings_.EnableExternalDataSourcesOnServerless_);
         featureFlags.SetEnableExternalDataSources(true);
         featureFlags.SetEnableResourcePoolsCounters(true);
-        featureFlags.SetEnableStreamingQueries(true);
+        featureFlags.SetEnableStreamingQueries(Settings_.EnableStreamingQueries_);
         featureFlags.SetEnableResourcePoolsScheduler(Settings_.EnableResourcePoolsScheduler_);
 
         auto& queryServiceConfig = *appConfig.MutableQueryServiceConfig();
@@ -398,6 +398,10 @@ private:
         ui32 grpcPort = PortManager_.GetPort();
         TServerSettings serverSettings = GetServerSettings(grpcPort);
 
+        if (SettingsTweakFnc_) {
+            SettingsTweakFnc_(serverSettings);
+        }
+
         Server_ = MakeIntrusive<TServer>(serverSettings);
         Server_->EnableGRpc(grpcPort);
         GetRuntime()->SetDispatchTimeout(FUTURE_WAIT_TIMEOUT);
@@ -430,8 +434,10 @@ private:
     }
 
 public:
-    explicit TWorkloadServiceYdbSetup(const TYdbSetupSettings& settings)
+    explicit TWorkloadServiceYdbSetup(const TYdbSetupSettings& settings,
+        std::function<void(Tests::TServerSettings&)> fnc = nullptr)
         : Settings_(settings)
+        , SettingsTweakFnc_(fnc)
     {
         if (Settings_.WorkSafeWithGlobalObjects_) {
             GetGlobalObjectHolder();
@@ -439,7 +445,10 @@ public:
 
         EnableYDBBacktraceFormat();
         InitializeServer();
-        CreateSamplePool();
+
+        if (Settings_.CreateSamplePool_) {
+            CreateSamplePool();
+        }
     }
 
     virtual ~TWorkloadServiceYdbSetup() {
@@ -486,7 +495,13 @@ public:
 
     // Scheme queries helpers
     NYdb::NScheme::TSchemeClient GetSchemeClient() const override {
+        Y_ENSURE(YdbDriver_);
         return NYdb::NScheme::TSchemeClient(*YdbDriver_);
+    }
+
+    NYdb::NTable::TTableClient GetTableClient(NYdb::NTable::TClientSettings settings) const override {
+        Y_ENSURE(YdbDriver_);
+        return NYdb::NTable::TTableClient(*YdbDriver_, settings.UseQueryCache(false));
     }
 
     void ExecuteSchemeQuery(const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const override {
@@ -565,21 +580,13 @@ public:
     }
 
     // Pools actions
-    void CreateResourcePool(const TString& poolId, const NResourcePool::TPoolSettings& settings) const override {
-        auto edgeActor = GetRuntime()->AllocateEdgeActor();
-
-        GetRuntime()->Register(CreatePoolCreatorActor(edgeActor, Settings_.DomainName_, poolId, settings, nullptr, {}));
-        auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvCreatePoolResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
-        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
-    }
-
-    void CreateSamplePoolOn(const TString& databaseId) const override {
+    void CreateResourcePool(const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& settings) const override {
         auto edgeActor = GetRuntime()->AllocateEdgeActor();
         auto actor = CreatePoolCreatorActor(
             edgeActor,
             databaseId,
-            Settings_.PoolId_,
-            Settings_.GetDefaultPoolSettings(),
+            poolId,
+            settings,
             nullptr,
             {}
         );
@@ -587,6 +594,14 @@ public:
         GetRuntime()->Register(actor);
         auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvCreatePoolResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
+    }
+
+    void CreateResourcePool(const TString& poolId, const NResourcePool::TPoolSettings& settings) const override {
+        CreateResourcePool(Settings_.DomainName_, poolId, settings);
+    }
+
+    void CreateSamplePoolOn(const TString& databaseId) const override {
+        CreateResourcePool(databaseId, Settings_.PoolId_, Settings_.GetDefaultPoolSettings());
     }
 
     TPoolStateDescription GetPoolDescription(TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const override {
@@ -688,6 +703,26 @@ public:
         return sharedInfo;
     }
 
+    void CreateDedicatedTenant(const TString& path, const TString& unitKind) override {
+        Ydb::Cms::CreateDatabaseRequest request;
+        request.set_path(path);
+
+        auto storage = request.mutable_resources()->add_storage_units();
+        storage->set_unit_kind(unitKind);
+        storage->set_count(1);
+
+        Tenants_->CreateTenant(std::move(request));
+
+        auto tenants = Tenants_->List(path);
+        if (!tenants.empty()) {
+            Server_->EnableGRpc(PortManager_.GetPort(), tenants[0], path);
+        }
+    }
+
+    void DropDedicatedTenant(const TString& path) override {
+        Tenants_->RemoveTenant(path);
+    }
+
 private:
     void SetupDefaultSettings(TQueryRunnerSettings& settings, bool asyncExecution) const {
         UNIT_ASSERT_C(!settings.HangUpDuringExecution_ || asyncExecution, "Hang up during execution is not supported for sync queries");
@@ -709,6 +744,9 @@ private:
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request->SetDatabase(settings.Database_ ? settings.Database_ : Settings_.DomainName_);
         request->SetPoolId(*settings.PoolId_);
+        if (!settings.ApplicationName_.empty()) {
+            request->SetApplicationName(settings.ApplicationName_);
+        }
 
         return event;
     }
@@ -747,6 +785,7 @@ private:
 
 private:
     const TYdbSetupSettings Settings_;
+    std::function<void(TServerSettings&)> SettingsTweakFnc_;
 
     TPortManager PortManager_;
     TServer::TPtr Server_;
@@ -807,12 +846,13 @@ NResourcePool::TPoolSettings TYdbSetupSettings::GetDefaultPoolSettings() const {
     poolConfig.QueueSize = QueueSize_;
     poolConfig.QueryCancelAfter = QueryCancelAfter_;
     poolConfig.QueryMemoryLimitPercentPerNode = QueryMemoryLimitPercentPerNode_;
+    poolConfig.TotalMemoryLimitPercentPerNode = TotalMemoryLimitPercentPerNode_;
     poolConfig.DatabaseLoadCpuThreshold = DatabaseLoadCpuThreshold_;
     return poolConfig;
 }
 
-TIntrusivePtr<IYdbSetup> TYdbSetupSettings::Create() const {
-    return MakeIntrusive<TWorkloadServiceYdbSetup>(*this);
+TIntrusivePtr<IYdbSetup> TYdbSetupSettings::Create(std::function<void(Tests::TServerSettings&)> fnc) const {
+    return MakeIntrusive<TWorkloadServiceYdbSetup>(*this, fnc);
 }
 
 TString TYdbSetupSettings::GetDedicatedTenantName() const {
@@ -840,6 +880,34 @@ void IYdbSetup::WaitFor(TDuration timeout, TString description, std::function<bo
         Sleep(TDuration::Seconds(1));
     }
     UNIT_ASSERT_C(false, "Waiting " << description << " timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout);
+}
+
+//// Classifier helpers
+
+void WaitForClassifierFail(TIntrusivePtr<IYdbSetup> ydb, const TString& query, const TQueryRunnerSettings& settings, const TString& poolId) {
+    ydb->WaitFor(TDuration::Seconds(10), "Resource pool classifier fail", [ydb, query, settings, poolId](TString& errorString) {
+        auto result = ydb->ExecuteQuery(query, settings);
+
+        errorString = result.GetIssues().ToOneLineString();
+        return result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED && errorString.Contains(TStringBuilder() << "Resource pool " << poolId << " was disabled due to zero concurrent query limit");
+    });
+}
+
+void WaitForClassifierFail(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings, const TString& poolId) {
+    WaitForClassifierFail(ydb, TSampleQueries::TSelect42::Query, settings, poolId);
+}
+
+void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TString& query, const TQueryRunnerSettings& settings) {
+    ydb->WaitFor(TDuration::Seconds(30), "Resource pool classifier success", [ydb, query, settings](TString& errorString) {
+        auto result = ydb->ExecuteQuery(query, settings);
+
+        errorString = result.GetIssues().ToOneLineString();
+        return result.GetStatus() == NYdb::EStatus::SUCCESS;
+    });
+}
+
+void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings) {
+    WaitForClassifierSuccess(ydb, TSampleQueries::TSelect42::Query, settings);
 }
 
 //// TSampleQueriess

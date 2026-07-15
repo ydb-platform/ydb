@@ -2,6 +2,7 @@
 #include "upload_rows_common_impl.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr {
 namespace NTxProxy {
@@ -14,12 +15,14 @@ public:
         const TString& table,
         std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> types,
         std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>>&& rows,
+        TIntrusivePtr<NACLib::TUserContext> userCtx,
         EUploadRowsMode mode,
         bool writeToPrivateTable,
         bool writeToIndexImplTable,
+        bool disableChangeCollection,
         ui64 cookie,
         TBackoff backoff)
-        : TUploadRowsBase(std::move(rows))
+        : TUploadRowsBase(std::move(rows), userCtx)
         , Sender(sender)
         , Database(database)
         , Table(table)
@@ -28,6 +31,7 @@ public:
     {
         AllowWriteToPrivateTable = writeToPrivateTable;
         AllowWriteToIndexImplTable = writeToIndexImplTable;
+        DisableChangeCollection = disableChangeCollection;
 
         switch (mode) {
             case EUploadRowsMode::Normal:
@@ -105,6 +109,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
     EUploadRowsMode mode,
     bool writeToPrivateTable,
     bool writeToIndexImplTable,
+    bool disableChangeCollection,
     ui64 cookie,
     TBackoff backoff)
 {
@@ -113,9 +118,11 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
         table,
         types,
         std::move(rows),
+        NACLib::TUserContextBuilder().Build(),
         mode,
         writeToPrivateTable,
         writeToIndexImplTable,
+        disableChangeCollection,
         cookie,
         backoff);
 }

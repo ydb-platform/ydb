@@ -1,0 +1,9 @@
+USE plato;
+
+pragma yt.FuseMapToMapReduce="late";
+
+SELECT
+    key,
+    max(subkey),
+FROM Input
+GROUP BY key;

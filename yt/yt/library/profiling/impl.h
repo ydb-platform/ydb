@@ -15,84 +15,84 @@ struct IRegistry
     : public TRefCounted
 {
     virtual ICounterPtr RegisterCounter(
-        const std::string& name,
+        TStringBuf name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
     virtual ITimeCounterPtr RegisterTimeCounter(
-        const std::string& name,
+        TStringBuf name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
     virtual IGaugePtr RegisterGauge(
-        const std::string& name,
+        TStringBuf name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
     virtual ITimeGaugePtr RegisterTimeGauge(
-        const std::string& name,
+        TStringBuf name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
     virtual ISummaryPtr RegisterSummary(
-        const std::string& name,
+        TStringBuf name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
     virtual IGaugePtr RegisterGaugeSummary(
-        const std::string& name,
+        TStringBuf name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
     virtual ITimeGaugePtr RegisterTimeGaugeSummary(
-        const std::string& name,
+        TStringBuf name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
     virtual ITimerPtr RegisterTimerSummary(
-        const std::string& name,
+        TStringBuf name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
     virtual ITimerPtr RegisterTimeHistogram(
-        const std::string& name,
+        TStringBuf name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
     virtual IHistogramPtr RegisterGaugeHistogram(
-        const std::string& name,
+        TStringBuf name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
     virtual IHistogramPtr RegisterRateHistogram(
-        const std::string& name,
+        TStringBuf name,
         const TTagSet& tags,
         TSensorOptions options) = 0;
 
     virtual void RegisterFuncCounter(
-        const std::string& name,
+        TStringBuf name,
         const TTagSet& tags,
         TSensorOptions options,
         const TRefCountedPtr& owner,
         std::function<i64()> reader) = 0;
 
     virtual void RegisterFuncGauge(
-        const std::string& name,
+        TStringBuf name,
         const TTagSet& tags,
         TSensorOptions options,
         const TRefCountedPtr& owner,
         std::function<double()> reader) = 0;
 
     virtual void RegisterProducer(
-        const std::string& prefix,
+        TStringBuf prefix,
         const TTagSet& tags,
         TSensorOptions options,
         const ISensorProducerPtr& owner) = 0;
 
     virtual void RenameDynamicTag(
         const TDynamicTagPtr& tag,
-        const std::string& name,
-        const std::string& value) = 0;
+        TStringBuf name,
+        TStringBuf value) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IRegistry)

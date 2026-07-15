@@ -34,16 +34,8 @@ public:
              TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
      );
 
-     TCommitOffsetActor(
-             NKikimr::NGRpcService::IRequestOpCtx* ctx, const NPersQueue::TTopicsListController& topicsHandler,
-             const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
-             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
-     );
-
      TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx* ctx);
 
-     TCommitOffsetActor(NGRpcService::TEvCommitOffsetRequest* request);
-     
     ~TCommitOffsetActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -90,7 +82,6 @@ private:
     void SendCommit(const TTopicInitInfo& topicInitInfo, const Ydb::Topic::CommitOffsetRequest* commitRequest, const TActorContext& ctx);
 
     void AnswerError(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
-    void ProcessAnswers(const TActorContext& ctx);
 
 private:
     TActorId SchemeCache;

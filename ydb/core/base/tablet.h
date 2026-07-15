@@ -56,6 +56,9 @@ struct TEvTablet {
         EvReady,
         EvFollowerDetached, // from leader to user tablet when a follower is removed
         EvCompleteRecoveryBoot, // from user tablet to sys tablet
+        EvSnapshotConfirmed, // from sys tablet to user tablet
+        EvMoveData,
+        EvMoveDataResponse,
 
         EvCommit = EvBoot + 512,
         EvAux,
@@ -410,6 +413,18 @@ struct TEvTablet {
             , ApproximateFreeSpaceShareByChannel(std::move(approximateFreeSpaceShareByChannel))
             , GroupWrittenBytes(std::move(written))
             , GroupWrittenOps(std::move(writtenOps))
+        {}
+    };
+
+    struct TEvSnapshotConfirmed : public TEventLocal<TEvSnapshotConfirmed, EvSnapshotConfirmed> {
+        const ui64 TabletID;
+        const ui32 Generation;
+        const ui32 Step;
+
+        TEvSnapshotConfirmed(ui64 tabletId, ui32 gen, ui32 step)
+            : TabletID(tabletId)
+            , Generation(gen)
+            , Step(step)
         {}
     };
 
@@ -965,6 +980,22 @@ struct TEvTablet {
         {}
 
         EMode Mode;
+    };
+
+    struct TEvMoveData : TEventPB<TEvMoveData, NKikimrTabletBase::TEvMoveData, EvMoveData> {
+        TEvMoveData() = default;
+
+        explicit TEvMoveData(const std::vector<ui32>& groups) {
+            Record.MutableGroups()->Assign(groups.begin(), groups.end());
+        }
+    };
+
+    struct TEvMoveDataResponse : TEventPB<TEvMoveDataResponse, NKikimrTabletBase::TEvMoveDataResponse, EvMoveDataResponse> {
+        TEvMoveDataResponse() = default;
+
+        TEvMoveDataResponse(ui64 tabletId) {
+            Record.SetTabletId(tabletId);
+        }
     };
 };
 

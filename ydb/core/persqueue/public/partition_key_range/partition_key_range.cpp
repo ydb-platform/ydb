@@ -6,7 +6,6 @@
 
 #include <library/cpp/digest/md5/md5.h>
 
-
 namespace NKikimr {
 namespace NPQ {
 
@@ -150,5 +149,6 @@ void TPartitionKeyRange::ParseBound(const TString& data, TMaybe<TSerializedCellV
     bound.ConstructInPlace(std::move(cells));
 }
 
-} // NPQ
-} // NKikimr
+} // namespace NKikimr::NPQ
+
+} // namespace NKikimr

@@ -1,4 +1,4 @@
-#include "schemeshard__shred_manager.h"
+#include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_states.h"
@@ -84,10 +84,10 @@ public:
         const ui64 dstSchemaVersion = NEW_TABLE_ALTER_VERSION;
 
         for (ui32 i = 0; i < dstTableInfo->GetPartitions().size(); ++i) {
-            TShardIdx srcShardIdx = srcTableInfo->GetPartitions()[i].ShardIdx;
+            TShardIdx srcShardIdx = srcTableInfo->GetPartitions()[i]->ShardIdx;
             TTabletId srcDatashardId = context.SS->ShardInfos[srcShardIdx].TabletID;
 
-            TShardIdx dstShardIdx = dstTableInfo->GetPartitions()[i].ShardIdx;
+            TShardIdx dstShardIdx = dstTableInfo->GetPartitions()[i]->ShardIdx;
             TTabletId dstDatashardId = context.SS->ShardInfos[dstShardIdx].TabletID;
 
             auto seqNo = context.SS->StartRound(*txState);
@@ -257,13 +257,19 @@ public:
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
 
             const auto now = context.Ctx.Now();
-            for (auto& shard : table->GetPartitions()) {
+            for (const auto& shard : table->GetPartitionStore() | std::views::values) {
                 auto& lag = shard.LastCondEraseLag;
                 Y_DEBUG_ABORT_UNLESS(!lag.Defined());
 
                 lag = now - shard.LastCondErase;
                 context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
             }
+        }
+
+        if (table->PartitionsInShardIdxFormat) {
+            context.SS->TabletCounters->Simple()[COUNTER_FORMAT_SHARDIDX_TABLE_COUNT].Add(1);
+        } else {
+            context.SS->TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Add(1);
         }
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -276,8 +282,10 @@ public:
         if (srcPathId != InvalidPathId && context.SS->PathsById.contains(srcPathId)) {
             auto srcPath = context.SS->PathsById.at(srcPathId);
 
-            srcPath->PathState = TPathElement::EPathState::EPathStateNoChanges;
-            srcPath->LastTxId = InvalidTxId;
+            Y_VERIFY_S(!srcPath->Dropped(),
+                "TCopyTable TPropose::HandleReply: source path is dropped at plan step"
+                << ", srcPathId: " << srcPathId
+                << ", StepDropped: " << srcPath->StepDropped);
             context.SS->PersistPath(db, srcPathId);
             context.SS->ClearDescribePathCaches(srcPath);
 
@@ -625,7 +633,6 @@ public:
                 checks
                     .IsValidLeafName(context.UserToken.Get())
                     .IsTheSameDomain(srcPath)
-                    .PathShardsLimit(maxShardsToCreate)
                     .IsValidACL(acl);
             }
 
@@ -633,7 +640,9 @@ public:
                 checks
                     .PathsLimit()
                     .DirChildrenLimit()
-                    .ShardsLimit(maxShardsToCreate);
+                    .PathShardsLimit(maxShardsToCreate)
+                    .ShardsLimit(maxShardsToCreate)
+                ;
             }
 
             if (!checks) {
@@ -748,6 +757,8 @@ public:
             .EnableTablePgTypes = true,
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
+            .EnableDetailedMetrics = true,
+            .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);
@@ -758,6 +769,9 @@ public:
 
         TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
         alterData.Reset();
+
+        // Preserve table partitions storage format from source table.
+        tableInfo->PartitionsInShardIdxFormat = srcTableInfo->PartitionsInShardIdxFormat;
 
         TChannelsBindings channelsBinding;
         bool storePerShardConfig = false;
@@ -845,17 +859,17 @@ public:
             newShardsIdx.push_back(part.ShardIdx);
         }
         context.SS->SetPartitioning(newTable->PathId, tableInfo, std::move(newPartition));
-        if (context.SS->EnableShred && context.SS->ShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+        if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
             context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
         }
-        for (const auto& shard : tableInfo->GetPartitions()) {
-            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.ShardIdx), "shard info is set before");
+        for (const auto& shardIdx : tableInfo->GetPartitionStore() | std::views::keys) {
+            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx), "shard info is set before");
             if (storePerShardConfig) {
-                tableInfo->PerShardPartitionConfig[shard.ShardIdx].CopyFrom(perShardConfig);
+                tableInfo->PerShardPartitionConfig[shardIdx].CopyFrom(perShardConfig);
             }
         }
 
-        Y_ABORT_UNLESS(tableInfo->GetPartitions().back().EndOfRange.empty(), "End of last range must be +INF");
+        Y_ABORT_UNLESS(tableInfo->GetPartitions().back()->EndOfRange.empty(), "End of last range must be +INF");
 
         context.SS->Tables[newTable->PathId] = tableInfo;
         context.SS->IncrementPathDbRefCount(newTable->PathId);
@@ -1034,6 +1048,11 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
 
         TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
+
+        if (indexInfo->State != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
+            continue;
+        }
+
         {
             auto schema = TransactionTemplate(dstPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
             schema.SetFailOnExist(tx.GetFailOnExist());
@@ -1053,8 +1072,19 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                 case NKikimrSchemeOp::EIndexTypeGlobal:
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+                case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
                     // no specialized index description
                     Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+                    break;
+                case NKikimrSchemeOp::EIndexTypeGlobalJson:
+                case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                    // JSON indexes carry a fulltext description only in rowid mode (__ydb_row_id as doc_id).
+                    if (const auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexInfo->SpecializedIndexDescription)) {
+                        *operation->MutableFulltextIndexDescription() = *ft;
+                    } else {
+                        Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+                    }
                     break;
                 case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                     *operation->MutableVectorIndexKmeansTreeDescription() =
@@ -1062,14 +1092,34 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                     break;
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                     *operation->MutableFulltextIndexDescription() =
                         std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
+                    break;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                    *operation->MutableBloomFilterDescription() =
+                        std::get<NKikimrSchemeOp::TBloomFilter>(indexInfo->SpecializedIndexDescription);
+                    break;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                    *operation->MutableBloomNGrammFilterDescription() =
+                        std::get<NKikimrSchemeOp::TBloomNGrammFilter>(indexInfo->SpecializedIndexDescription);
                     break;
                 default:
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, InvalidIndexType(indexInfo->Type))};
             }
 
-            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+            if (TTableIndexInfo::IsLocalIndex(indexInfo->Type)) {
+                // Column tables use the OLAP local-index op; row tables use the generic one.
+                if (srcPath.Base()->IsColumnTable()) {
+                    result.push_back(CreateNewColumnTableLocalIndex(NextPartId(nextId, result), schema));
+                } else {
+                    result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+                }
+                continue; // local indexes have no impl tables
+            } else {
+                result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+            }
         }
 
         // Skip impl table copies if OmitIndexes is set (handled by CreateConsistentCopyTables for incremental backups)
@@ -1079,6 +1129,9 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
 
         for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
             TPath implTable = childPath.Child(implTableName);
+            if (implTable.IsDeleted()) {
+                continue;
+            }
             Y_ABORT_UNLESS(implTable.Base()->PathId == implTablePathId);
 
             NKikimrSchemeOp::TModifyScheme schema;

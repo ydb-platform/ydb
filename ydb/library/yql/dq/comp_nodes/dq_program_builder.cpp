@@ -131,7 +131,8 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
                                                 const TArrayRef<const ui32>& leftKeyColumns,
                                                 const TArrayRef<const ui32>& rightKeyColumns,
                                                 const TArrayRef<const ui32>& leftRenames,
-                                                const TArrayRef<const ui32>& rightRenames, TType* returnType) {
+                                                const TArrayRef<const ui32>& rightRenames, TType* returnType,
+                                                TBlockHashJoinSettings settings) {
 
     MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
@@ -148,6 +149,8 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
     callableBuilder.Add(AsTuple(rightKeyColumns));
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
+
+    callableBuilder.Add(NewTuple({NewDataLiteral(static_cast<ui32>(settings.BuildSide))}));
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
@@ -180,6 +183,41 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
     callableBuilder.Add(AsTuple(rightKeyColumns));
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TDqProgramBuilder::DqWatermarkGenerator(
+    TRuntimeNode input,
+    const TUnaryLambda& watermarkExtractor,
+    const TUnaryLambda& partitionKeyExtractor,
+    const TUnaryLambda& writeTimeExtractor,
+    TConstArrayRef<std::pair<std::string, std::string>> watermarkSettings,
+    TRuntimeNode partitionKeys
+) {
+    auto returnType = AS_TYPE(TStreamType, input);
+    auto itemType = returnType->GetItemType();
+
+    const auto itemArg = Arg(itemType);
+    const auto watermark = watermarkExtractor(itemArg);
+    const auto partitionKey = partitionKeyExtractor(itemArg);
+    const auto writeTime = writeTimeExtractor(itemArg);
+
+    TRuntimeNode::TList watermarkSettingItems;
+    for (const auto& [name, value] : watermarkSettings) {
+        watermarkSettingItems.push_back(NewDataLiteral<NUdf::EDataSlot::String>(name));
+        watermarkSettingItems.push_back(NewDataLiteral<NUdf::EDataSlot::String>(value));
+    }
+    const auto watermarkSettingsNode = NewList(NewDataType(NUdf::EDataSlot::String), watermarkSettingItems);
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(input);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(watermark);
+    callableBuilder.Add(partitionKey);
+    callableBuilder.Add(writeTime);
+    callableBuilder.Add(watermarkSettingsNode);
+    callableBuilder.Add(partitionKeys);
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

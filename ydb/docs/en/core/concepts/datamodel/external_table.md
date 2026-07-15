@@ -25,4 +25,4 @@ INSERT INTO s3_test_data
 SELECT * FROM Table
 ```
 
-More details on working with external tables describing S3 buckets ({{ objstorage-name }}) can be found in section [{#T}](../federated_query/s3/external_table.md).
+More details on working with external tables describing S3 buckets ({{ objstorage-name }}) can be found in section [{#T}](../query_execution/federated_query/s3/external_table.md).

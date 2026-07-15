@@ -1,0 +1,7 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+USE plato;
+
+SELECT '1' IN (SELECT subkey FROM Input);
+
+SELECT '1' IN (SELECT Input.subkey FROM Input JOIN Input2 ON Input.subkey = Input2.key);

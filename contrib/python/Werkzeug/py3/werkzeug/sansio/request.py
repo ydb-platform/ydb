@@ -1,7 +1,10 @@
-import typing as t
-from datetime import datetime
+from __future__ import annotations
 
-from .._internal import _to_str
+import typing as t
+import warnings
+from datetime import datetime
+from urllib.parse import parse_qsl
+
 from ..datastructures import Accept
 from ..datastructures import Authorization
 from ..datastructures import CharsetAccept
@@ -17,7 +20,6 @@ from ..datastructures import MultiDict
 from ..datastructures import Range
 from ..datastructures import RequestCacheControl
 from ..http import parse_accept_header
-from ..http import parse_authorization_header
 from ..http import parse_cache_control_header
 from ..http import parse_date
 from ..http import parse_etags
@@ -26,11 +28,11 @@ from ..http import parse_list_header
 from ..http import parse_options_header
 from ..http import parse_range_header
 from ..http import parse_set_header
-from ..urls import url_decode
 from ..user_agent import UserAgent
 from ..utils import cached_property
 from ..utils import header_property
 from .http import parse_cookie
+from .utils import get_content_length
 from .utils import get_current_url
 from .utils import get_host
 
@@ -60,11 +62,91 @@ class Request:
     .. versionadded:: 2.0
     """
 
-    #: The charset used to decode most data in the request.
-    charset = "utf-8"
+    _charset: str
 
-    #: the error handling procedure for errors, defaults to 'replace'
-    encoding_errors = "replace"
+    @property
+    def charset(self) -> str:
+        """The charset used to decode body, form, and cookie data. Defaults to UTF-8.
+
+        .. deprecated:: 2.3
+            Will be removed in Werkzeug 3.0. Request data must always be UTF-8.
+        """
+        warnings.warn(
+            "The 'charset' attribute is deprecated and will not be used in Werkzeug"
+            " 2.4. Interpreting bytes as text in body, form, and cookie data will"
+            " always use UTF-8.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._charset
+
+    @charset.setter
+    def charset(self, value: str) -> None:
+        warnings.warn(
+            "The 'charset' attribute is deprecated and will not be used in Werkzeug"
+            " 2.4. Interpreting bytes as text in body, form, and cookie data will"
+            " always use UTF-8.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self._charset = value
+
+    _encoding_errors: str
+
+    @property
+    def encoding_errors(self) -> str:
+        """How errors when decoding bytes are handled. Defaults to "replace".
+
+        .. deprecated:: 2.3
+            Will be removed in Werkzeug 3.0.
+        """
+        warnings.warn(
+            "The 'encoding_errors' attribute is deprecated and will not be used in"
+            " Werkzeug 3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._encoding_errors
+
+    @encoding_errors.setter
+    def encoding_errors(self, value: str) -> None:
+        warnings.warn(
+            "The 'encoding_errors' attribute is deprecated and will not be used in"
+            " Werkzeug 3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self._encoding_errors = value
+
+    _url_charset: str
+
+    @property
+    def url_charset(self) -> str:
+        """The charset to use when decoding percent-encoded bytes in :attr:`args`.
+        Defaults to the value of :attr:`charset`, which defaults to UTF-8.
+
+        .. deprecated:: 2.3
+            Will be removed in Werkzeug 3.0. Percent-encoded bytes must always be UTF-8.
+
+        .. versionadded:: 0.6
+        """
+        warnings.warn(
+            "The 'url_charset' attribute is deprecated and will not be used in"
+            " Werkzeug 3.0. Percent-encoded bytes must always be UTF-8.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._url_charset
+
+    @url_charset.setter
+    def url_charset(self, value: str) -> None:
+        warnings.warn(
+            "The 'url_charset' attribute is deprecated and will not be used in"
+            " Werkzeug 3.0. Percent-encoded bytes must always be UTF-8.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self._url_charset = value
 
     #: the class to use for `args` and `form`.  The default is an
     #: :class:`~werkzeug.datastructures.ImmutableMultiDict` which supports
@@ -75,7 +157,7 @@ class Request:
     #: possible to use mutable structures, but this is not recommended.
     #:
     #: .. versionadded:: 0.6
-    parameter_storage_class: t.Type[MultiDict] = ImmutableMultiDict
+    parameter_storage_class: type[MultiDict] = ImmutableMultiDict
 
     #: The type to be used for dict values from the incoming WSGI
     #: environment. (For example for :attr:`cookies`.) By default an
@@ -85,16 +167,16 @@ class Request:
     #:     Changed to ``ImmutableMultiDict`` to support multiple values.
     #:
     #: .. versionadded:: 0.6
-    dict_storage_class: t.Type[MultiDict] = ImmutableMultiDict
+    dict_storage_class: type[MultiDict] = ImmutableMultiDict
 
     #: the type to be used for list values from the incoming WSGI environment.
     #: By default an :class:`~werkzeug.datastructures.ImmutableList` is used
     #: (for example for :attr:`access_list`).
     #:
     #: .. versionadded:: 0.6
-    list_storage_class: t.Type[t.List] = ImmutableList
+    list_storage_class: type[t.List] = ImmutableList
 
-    user_agent_class: t.Type[UserAgent] = UserAgent
+    user_agent_class: type[UserAgent] = UserAgent
     """The class used and returned by the :attr:`user_agent` property to
     parse the header. Defaults to
     :class:`~werkzeug.user_agent.UserAgent`, which does no parsing. An
@@ -114,19 +196,53 @@ class Request:
     #: the application is being run behind one).
     #:
     #: .. versionadded:: 0.9
-    trusted_hosts: t.Optional[t.List[str]] = None
+    trusted_hosts: list[str] | None = None
 
     def __init__(
         self,
         method: str,
         scheme: str,
-        server: t.Optional[t.Tuple[str, t.Optional[int]]],
+        server: tuple[str, int | None] | None,
         root_path: str,
         path: str,
         query_string: bytes,
         headers: Headers,
-        remote_addr: t.Optional[str],
+        remote_addr: str | None,
     ) -> None:
+        if not isinstance(type(self).charset, property):
+            warnings.warn(
+                "The 'charset' attribute is deprecated and will not be used in Werkzeug"
+                " 2.4. Interpreting bytes as text in body, form, and cookie data will"
+                " always use UTF-8.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self._charset = self.charset
+        else:
+            self._charset = "utf-8"
+
+        if not isinstance(type(self).encoding_errors, property):
+            warnings.warn(
+                "The 'encoding_errors' attribute is deprecated and will not be used in"
+                " Werkzeug 3.0.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self._encoding_errors = self.encoding_errors
+        else:
+            self._encoding_errors = "replace"
+
+        if not isinstance(type(self).url_charset, property):
+            warnings.warn(
+                "The 'url_charset' attribute is deprecated and will not be used in"
+                " Werkzeug 3.0. Percent-encoded bytes must always be UTF-8.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self._url_charset = self.url_charset
+        else:
+            self._url_charset = self._charset
+
         #: The method the request was made with, such as ``GET``.
         self.method = method.upper()
         #: The URL scheme of the protocol the request used, such as
@@ -157,17 +273,8 @@ class Request:
 
         return f"<{type(self).__name__} {url!r} [{self.method}]>"
 
-    @property
-    def url_charset(self) -> str:
-        """The charset that is assumed for URLs. Defaults to the value
-        of :attr:`charset`.
-
-        .. versionadded:: 0.6
-        """
-        return self.charset
-
     @cached_property
-    def args(self) -> "MultiDict[str, str]":
+    def args(self) -> MultiDict[str, str]:
         """The parsed URL parameters (the part in the URL after the question
         mark).
 
@@ -176,16 +283,21 @@ class Request:
         is returned from this function.  This can be changed by setting
         :attr:`parameter_storage_class` to a different type.  This might
         be necessary if the order of the form data is important.
+
+        .. versionchanged:: 2.3
+            Invalid bytes remain percent encoded.
         """
-        return url_decode(
-            self.query_string,
-            self.url_charset,
-            errors=self.encoding_errors,
-            cls=self.parameter_storage_class,
+        return self.parameter_storage_class(
+            parse_qsl(
+                self.query_string.decode(),
+                keep_blank_values=True,
+                encoding=self._url_charset,
+                errors="werkzeug.url_quote",
+            )
         )
 
     @cached_property
-    def access_route(self) -> t.List[str]:
+    def access_route(self) -> list[str]:
         """If a forwarded header exists this is a list of all ip addresses
         from the client ip to the last proxy server.
         """
@@ -200,7 +312,7 @@ class Request:
     @cached_property
     def full_path(self) -> str:
         """Requested path, including the query string."""
-        return f"{self.path}?{_to_str(self.query_string, self.url_charset)}"
+        return f"{self.path}?{self.query_string.decode()}"
 
     @property
     def is_xhr(self):
@@ -266,14 +378,16 @@ class Request:
         )
 
     @cached_property
-    def cookies(self) -> "ImmutableMultiDict[str, str]":
+    def cookies(self) -> ImmutableMultiDict[str, str]:
         """A :class:`dict` with the contents of all cookies transmitted with
         the request."""
         wsgi_combined_cookie = ";".join(self.headers.getlist("Cookie"))
+        charset = self._charset if self._charset != "utf-8" else None
+        errors = self._encoding_errors if self._encoding_errors != "replace" else None
         return parse_cookie(  # type: ignore
             wsgi_combined_cookie,
-            self.charset,
-            self.encoding_errors,
+            charset=charset,
+            errors=errors,
             cls=self.dict_storage_class,
         )
 
@@ -289,23 +403,16 @@ class Request:
     )
 
     @cached_property
-    def content_length(self) -> t.Optional[int]:
+    def content_length(self) -> int | None:
         """The Content-Length entity-header field indicates the size of the
         entity-body in bytes or, in the case of the HEAD method, the size of
         the entity-body that would have been sent had the request been a
         GET.
         """
-        if self.headers.get("Transfer-Encoding", "") == "chunked":
-            return None
-
-        content_length = self.headers.get("Content-Length")
-        if content_length is not None:
-            try:
-                return max(0, int(content_length))
-            except (ValueError, TypeError):
-                pass
-
-        return None
+        return get_content_length(
+            http_content_length=self.headers.get("Content-Length"),
+            http_transfer_encoding=self.headers.get("Transfer-Encoding"),
+        )
 
     content_encoding = header_property[str](
         "Content-Encoding",
@@ -380,7 +487,7 @@ class Request:
         return self._parsed_content_type[0].lower()
 
     @property
-    def mimetype_params(self) -> t.Dict[str, str]:
+    def mimetype_params(self) -> dict[str, str]:
         """The mimetype parameters as dict.  For example if the content
         type is ``text/html; charset=utf-8`` the params would be
         ``{'charset': 'utf-8'}``.
@@ -460,7 +567,7 @@ class Request:
         return parse_etags(self.headers.get("If-None-Match"))
 
     @cached_property
-    def if_modified_since(self) -> t.Optional[datetime]:
+    def if_modified_since(self) -> datetime | None:
         """The parsed `If-Modified-Since` header as a datetime object.
 
         .. versionchanged:: 2.0
@@ -469,7 +576,7 @@ class Request:
         return parse_date(self.headers.get("If-Modified-Since"))
 
     @cached_property
-    def if_unmodified_since(self) -> t.Optional[datetime]:
+    def if_unmodified_since(self) -> datetime | None:
         """The parsed `If-Unmodified-Since` header as a datetime object.
 
         .. versionchanged:: 2.0
@@ -489,7 +596,7 @@ class Request:
         return parse_if_range_header(self.headers.get("If-Range"))
 
     @cached_property
-    def range(self) -> t.Optional[Range]:
+    def range(self) -> Range | None:
         """The parsed `Range` header.
 
         .. versionadded:: 0.7
@@ -507,19 +614,24 @@ class Request:
         :class:`~werkzeug.user_agent.UserAgent` to provide parsing for
         the other properties or other extended data.
 
-        .. versionchanged:: 2.0
-            The built in parser is deprecated and will be removed in
-            Werkzeug 2.1. A ``UserAgent`` subclass must be set to parse
-            data from the string.
+        .. versionchanged:: 2.1
+            The built-in parser was removed. Set ``user_agent_class`` to a ``UserAgent``
+            subclass to parse data from the string.
         """
         return self.user_agent_class(self.headers.get("User-Agent", ""))
 
     # Authorization
 
     @cached_property
-    def authorization(self) -> t.Optional[Authorization]:
-        """The `Authorization` object in parsed form."""
-        return parse_authorization_header(self.headers.get("Authorization"))
+    def authorization(self) -> Authorization | None:
+        """The ``Authorization`` header parsed into an :class:`.Authorization` object.
+        ``None`` if the header is not present.
+
+        .. versionchanged:: 2.3
+            :class:`Authorization` is no longer a ``dict``. The ``token`` attribute
+            was added for auth schemes that use a token instead of parameters.
+        """
+        return Authorization.from_header(self.headers.get("Authorization"))
 
     # CORS
 

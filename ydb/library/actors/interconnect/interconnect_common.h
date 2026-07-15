@@ -39,7 +39,9 @@ namespace NActors {
         ui64 OutputBuffersTotalSizeLimitInMB = 0;
         ui32 TotalInflightAmountOfData = 0;
         bool MergePerPeerCounters = false;
+        bool MergePerHostCounters = false;
         bool MergePerDataCenterCounters = false;
+        bool MergePerScopeClassCounters = false;
         ui32 TCPSocketBufferSize = 0;
         TDuration PingPeriod = TDuration::Seconds(3);
         TDuration ForceConfirmPeriod = TDuration::Seconds(1);
@@ -59,6 +61,14 @@ namespace NActors {
         ui32 PreallocatedBufferSize = 8 << 10; // 8 KB
         ui32 NumPreallocatedBuffers = 16;
         bool EnableExternalDataChannel = true;
+        bool EnableKernelLiveness = false;
+        TDuration KernelKeepAliveIdle = TDuration::Seconds(5);
+        TDuration KernelKeepAliveInterval = TDuration::Seconds(1);
+        ui32 KernelKeepAliveProbes = 5;
+        TDuration KernelUserTimeout = TDuration::Seconds(10);
+        // Period for user-space ping/clock probes that keep clock-skew metrics up to date
+        // when kernel keepalive mode disables user-space dead-peer logic.
+        TDuration ClockSkewPingTimeout = TDuration::Minutes(1);
         bool ValidateIncomingPeerViaDirectLookup = false;
         ui32 SocketBacklogSize = 0; // SOMAXCONN if zero
         TDuration FirstErrorSleep = TDuration::MilliSeconds(10);
@@ -67,6 +77,15 @@ namespace NActors {
         TDuration EventDelay = TDuration::Zero();
         ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
         bool RdmaChecksum = true;
+        ui32 RdmaPayloadCopySizeThreshold = 64 << 10;
+        // 5s * 2^8 = 1280s, about 21 minutes with the current RDMA retry base delay.
+        ui32 MaxRdmaRetryBackoffLevel = 8;
+        bool CollectSubscriptionStackTrace = false;
+        bool UseUring = false;
+        bool EnableUringSQPOLL = false; // only effective when UseUring is set
+        // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).
+        // v2 is used only when both peers have this enabled and encryption is not in effect.
+        bool EnableInterconnectSessionV2 = false;
     };
 
     struct TWhiteboardSessionStatus {
@@ -140,9 +159,13 @@ namespace NActors {
         std::atomic_uint64_t CyclesWithNonzeroSessions = 0;
         std::atomic_uint64_t CyclesWithZeroSessions = 0;
 
+        std::atomic_uint64_t ErrorStateLogLastMicroSeconds = 0;
+        std::atomic_uint64_t ErrorStateLogSuppressed = 0;
+
         double CalculateNetworkUtilization();
         void AddSessionWithDataInQueue();
         void RemoveSessionWithDataInQueue();
+        TActorId MetricsAggregatorId;
 
         struct TVersionInfo {
             TString Tag; // version tag for this node

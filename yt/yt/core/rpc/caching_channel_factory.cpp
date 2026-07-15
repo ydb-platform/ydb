@@ -91,7 +91,7 @@ public:
             std::min(ExpirationCheckInterval, IdleChannelTtl_)))
     { }
 
-    void Initialize()
+    void InitializeRefCounted()
     {
         ExpirationExecutor_->Start();
     }
@@ -220,7 +220,7 @@ private:
                     lastActivityTime,
                     IdleChannelTtl_);
                 expiredItems.emplace_back(std::move(it->first), std::move(channel));
-                *it = std::move(TtlCheckQueue_.back());
+                std::swap(*it, TtlCheckQueue_.back());
                 TtlCheckQueue_.pop_back();
             } else {
                 ++it;
@@ -265,11 +265,9 @@ IChannelFactoryPtr CreateCachingChannelFactory(
 {
     YT_VERIFY(underlyingFactory);
 
-    auto factory = New<TCachingChannelFactory>(
+    return New<TCachingChannelFactory>(
         std::move(underlyingFactory),
         idleChannelTtl);
-    factory->Initialize();
-    return factory;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

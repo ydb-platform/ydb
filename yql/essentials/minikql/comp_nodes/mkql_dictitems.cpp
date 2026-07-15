@@ -196,7 +196,7 @@ private:
         const auto keyPtr = GetElementPtrInst::CreateInBounds(pairType, pairPtr, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 0)}, "key_ptr", block);
         const auto payPtr = GetElementPtrInst::CreateInBounds(pairType, pairPtr, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 1)}, "pay_ptr", block);
 
-        const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::NextPair>(statusType, container, codegen, block, keyPtr, payPtr);
+        const auto status = CallBoxedValueNextPair(container, ctx, block, keyPtr, payPtr);
 
         BranchInst::Create(good, done, status, block);
         block = good;

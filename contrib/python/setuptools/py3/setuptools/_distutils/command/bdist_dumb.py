@@ -138,4 +138,4 @@ class bdist_dumb(Command):
         self.distribution.dist_files.append(('bdist_dumb', pyversion, filename))
 
         if not self.keep_temp:
-            remove_tree(self.bdist_dir, dry_run=self.dry_run)
+            remove_tree(self.bdist_dir)

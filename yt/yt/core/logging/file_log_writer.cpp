@@ -12,7 +12,11 @@
 #include "zstd_log_codec.h"
 #include "formatter.h"
 
+#include <yt/yt/core/misc/pattern_formatter.h>
+#include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/fs.h>
+
+#include <library/cpp/yt/system/process_id.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
@@ -22,9 +26,38 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
+namespace {
+
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
+
 constexpr size_t BufferSize = 64_KB;
-const char* LogrotateTimestampSuffixFormat = ".%Y%m%d-%H%M%S";
+constexpr TStringBuf LogrotateTimestampSuffixFormat = ".%Y%m%d-%H%M%S";
+
+std::string SanitizeFileName(TStringBuf fileName)
+{
+    std::string result;
+    result.reserve(fileName.size());
+    for (auto ch : fileName) {
+        if (ch == '/') {
+            result.push_back('_');
+        } else {
+            result.push_back(ch);
+        }
+    }
+    return result;
+}
+
+std::string FormatFileName(TStringBuf fileNamePattern)
+{
+    TPatternFormatter formatter;
+    formatter
+        .SetProperty("process_id", ToString(GetProcessId()))
+        .SetProperty("process_name", SanitizeFileName(GetCurrentProcessName()))
+        .SetProperty("process_command_line", SanitizeFileName(GetCurrentProcessCommandLine()));
+    return formatter.Format(fileNamePattern);
+}
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -36,7 +69,7 @@ public:
     TFileLogWriter(
         std::unique_ptr<ILogFormatter> formatter,
         std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
-        TString name,
+        std::string name,
         const TFileLogWriterConfigPtr& config,
         ILogWriterHost* host)
         : TStreamLogWriterBase(
@@ -46,8 +79,9 @@ public:
             config)
         , Config_(config)
         , Host_(host)
-        , DirectoryName_(NFS::GetDirectoryName(Config_->FileName))
-        , FileNamePrefix_(NFS::GetFileName(Config_->FileName))
+        , BaseFileName_(FormatFileName(Config_->FileName))
+        , DirectoryName_(NFS::GetDirectoryName(BaseFileName_))
+        , FileNamePrefix_(NFS::GetFileName(BaseFileName_))
         , LastRotationTimestamp_(TInstant::Now())
     {
         Open();
@@ -59,7 +93,7 @@ public:
         Open();
     }
 
-    const TString& GetFileName() const override
+    const std::string& GetFileName() const override
     {
         return FileName_;
     }
@@ -95,17 +129,22 @@ public:
                 }
             } else {
                 if (Disabled_.load(std::memory_order::acquire)) {
-                    Reload(); // Reinitialize all descriptors.
-
-                    YT_LOG_INFO("Log file enabled: space check passed (FileName: %v)",
-                        Config_->FileName);
-                    Disabled_ = false;
+                    try {
+                        // Reinitialize all descriptors.
+                        Reload();
+                        YT_LOG_INFO("Log file enabled: space check passed (FileName: %v)",
+                            BaseFileName_);
+                        Disabled_ = false;
+                    } catch (const std::exception& ex) {
+                        YT_LOG_ERROR(ex, "Log file disabled: reload failed (FileName: %v)",
+                            BaseFileName_);
+                    }
                 }
             }
         } catch (const std::exception& ex) {
             Disabled_ = true;
             YT_LOG_ERROR(ex, "Log file disabled: space check failed (FileName: %v)",
-                Config_->FileName);
+                BaseFileName_);
 
             Close();
         }
@@ -114,7 +153,7 @@ public:
 protected:
     IOutputStream* GetOutputStream() const noexcept override
     {
-        if (Y_UNLIKELY(Disabled_.load(std::memory_order::acquire))) {
+        if (Disabled_.load(std::memory_order::acquire)) [[unlikely]] {
             return nullptr;
         }
         return OutputStream_.Get();
@@ -124,7 +163,7 @@ protected:
     {
         Disabled_ = true;
         YT_LOG_ERROR(ex, "Disabled log file (FileName: %v)",
-            Config_->FileName);
+            BaseFileName_);
 
         Close();
     }
@@ -133,9 +172,11 @@ private:
     const TFileLogWriterConfigPtr Config_;
     ILogWriterHost* const Host_;
 
-    const TString DirectoryName_;
-    const TString FileNamePrefix_;
-    TString FileName_;
+    const std::string BaseFileName_;
+    const std::string DirectoryName_;
+    const std::string FileNamePrefix_;
+
+    std::string FileName_;
 
     std::atomic<bool> Disabled_ = false;
     TInstant LastRotationTimestamp_;
@@ -176,7 +217,7 @@ private:
             }
 
             // Generate filename.
-            FileName_ = Config_->FileName;
+            FileName_ = BaseFileName_;
             if (Config_->UseTimestampSuffix) {
                 FileName_ += "." + LastRotationTimestamp_.ToStringLocalUpToSeconds();
             }
@@ -311,7 +352,7 @@ private:
             return;
         }
         if (Config_->UseLogrotateCompatibleTimestampSuffix) {
-            auto newFileName = FileNamePrefix_ + TInstant::Now().FormatLocalTime(LogrotateTimestampSuffixFormat);
+            auto newFileName = FileNamePrefix_ + TInstant::Now().FormatLocalTime(LogrotateTimestampSuffixFormat.data());
             auto oldPath = NFS::CombinePaths(DirectoryName_, fileNames[0]);
             auto newPath = NFS::CombinePaths(DirectoryName_, newFileName);
             NFS::Rename(oldPath, newPath);
@@ -319,7 +360,7 @@ private:
         }
 
         int width = ToString(ssize(fileNames)).length();
-        TString formatString = "%v.%0" + ToString(width) + "d";
+        std::string formatString = "%v.%0" + ToString(width) + "d";
         for (int index = ssize(fileNames); index > 0; --index) {
             auto newFileName = Format(TRuntimeFormat{formatString}, FileNamePrefix_, index);
             auto oldPath = NFS::CombinePaths(DirectoryName_, fileNames[index - 1]);
@@ -335,7 +376,7 @@ private:
 IFileLogWriterPtr CreateFileLogWriter(
     std::unique_ptr<ILogFormatter> formatter,
     std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
-    TString name,
+    std::string name,
     TFileLogWriterConfigPtr config,
     ILogWriterHost* host)
 {
@@ -361,7 +402,7 @@ public:
 
     ILogWriterPtr CreateWriter(
         std::unique_ptr<ILogFormatter> formatter,
-        TString name,
+        std::string name,
         const NYTree::IMapNodePtr& configNode,
         ILogWriterHost* host) noexcept override
     {

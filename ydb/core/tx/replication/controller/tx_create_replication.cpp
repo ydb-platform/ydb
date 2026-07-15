@@ -48,6 +48,9 @@ public:
             NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString()),
             NIceDb::TUpdate<Schema::Replications::Database>(record.GetDatabase())
         );
+        if (record.HasLocation()) {
+            record.MutableConfig()->MutableLocation()->CopyFrom(record.GetLocation());
+        }
         Replication = Self->Add(rid, pathId, std::move(*record.MutableConfig()), std::move(record.GetDatabase()));
 
         Result->Record.SetStatus(NKikimrReplication::TEvCreateReplicationResult::SUCCESS);

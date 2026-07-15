@@ -25,8 +25,8 @@
 #include "y_absl/status/statusor.h"
 #include "y_absl/strings/string_view.h"
 #include "y_absl/types/optional.h"
-#include "upb/arena.h"
-#include "upb/def.h"
+#include "upb/mem/arena.h"
+#include "upb/reflection/def.h"
 
 #include "src/core/ext/xds/xds_bootstrap.h"
 #include "src/core/lib/debug/trace.h"
@@ -62,7 +62,7 @@ class XdsResourceType {
     // non-OK status.
     y_absl::optional<TString> name;
     // The parsed and validated resource, or an error status.
-    y_absl::StatusOr<std::unique_ptr<ResourceData>> resource;
+    y_absl::StatusOr<std::shared_ptr<const ResourceData>> resource;
   };
 
   virtual ~XdsResourceType() = default;
@@ -79,12 +79,6 @@ class XdsResourceType {
   // method.
   virtual bool ResourcesEqual(const ResourceData* r1,
                               const ResourceData* r2) const = 0;
-
-  // Returns a copy of resource.
-  // Must be invoked only on resources returned by this object's Decode()
-  // method.
-  virtual std::unique_ptr<ResourceData> CopyResource(
-      const ResourceData* resource) const = 0;
 
   // Indicates whether the resource type requires that all resources must
   // be present in every SotW response from the server.  If true, a

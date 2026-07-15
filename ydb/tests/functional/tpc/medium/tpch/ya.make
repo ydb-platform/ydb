@@ -9,14 +9,14 @@ TEST_SRCS(
     test_duplicates.py
 )
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-REQUIREMENTS(ram:16)
+REQUIREMENTS(ram:16 cpu:4)
 
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
@@ -43,5 +43,5 @@ DATA(
 )
 
 FORK_TEST_FILES()
-REQUIREMENTS(ram:28)
+FORK_SUBTESTS()
 END()

@@ -1,15 +1,22 @@
 #pragma once
+#include <ydb/mvp/core/appdata.h>
+#include <ydb/mvp/core/mvp_log.h>
+#include <ydb/mvp/core/mvp_startup_options.h>
+#include <ydb/mvp/core/mvp_tokens.h>
+#include <ydb/mvp/core/protos/mvp.pb.h>
+#include <ydb/mvp/core/signals.h>
+#include <ydb/mvp/meta/meta_capabilities.h>
+#include <ydb/mvp/meta/meta_settings.h>
+
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http.h>
+
 #include <library/cpp/getopt/last_getopt.h>
-#include <ydb/mvp/core/mvp_log.h>
-#include <ydb/mvp/core/signals.h>
-#include <ydb/mvp/core/appdata.h>
-#include <ydb/mvp/core/mvp_tokens.h>
-#include <ydb/mvp/core/mvp_startup_options.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
-#include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
+#include <util/generic/vector.h>
+
+#include <memory>
 
 namespace NMVP {
 
@@ -27,8 +34,8 @@ protected:
 public:
     TString GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr&);
 
-    TString MetaApiEndpoint;
-    TString MetaDatabase;
+    TString MetaApiEndpoint = "";
+    TString MetaDatabase = "";
     bool MetaCache = false;
     static TString MetaDatabaseTokenName;
     static bool DbUserTokenSource;
@@ -41,14 +48,19 @@ public:
     THolder<NActors::TActorSystemSetup> BuildActorSystemSetup();
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
     void InitMeta();
+    void RegisterMetaHandler(const NActors::TActorId& proxyId, const TString& path, NActors::TActorId handlerId, ui32 version = 1);
 
     TString static GetMetaDatabaseAuthToken(const TRequest& request);
     NYdb::NTable::TClientSettings static GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
+    NYdb::NTable::TClientSettings static GetStrictMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
 
-    void TryGetMetaOptionsFromConfig(const YAML::Node& config);
+    void TryGetMetaOptionsFromConfig();
+    void TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaAppConfig& appConfig);
 
     TMVPAppData AppData;
     const TMvpStartupOptions StartupOptions;
+    std::shared_ptr<TMetaCapabilities> MetaCapabilities = std::make_shared<TMetaCapabilities>();
+    TMetaSettings MetaSettings;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;
     THolder<NActors::TActorSystemSetup> ActorSystemSetup;
     NActors::TActorSystem ActorSystem;

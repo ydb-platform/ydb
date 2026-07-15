@@ -55,7 +55,7 @@ class TestWatermarks(TestYdsBase):
         )
         self.init_topics(f"test_watermarks_{'shared' if shared_reading else 'no_shared'}")
 
-        ts = "CAST(ts AS Timestamp)" if shared_reading else "SystemMetadata('write_time')"
+        ts = "CAST(ts AS Timestamp)" if shared_reading else "__ydb_write_time"
 
         sql = Rf'''
             USE {YDS_CONNECTION};
@@ -75,7 +75,7 @@ class TestWatermarks(TestYdsBase):
                         ts String NOT NULL,
                         pass Uint64
                     )
-                    , WATERMARK AS ({ts} - Interval("PT0.1S"))
+                    , WATERMARK = {ts} - Interval("PT0.1S")
                     , WATERMARK_GRANULARITY = "PT0.5S"
                 );
 
@@ -125,7 +125,7 @@ class TestWatermarks(TestYdsBase):
         )
         self.init_topics(f"test_idle_watermarks_{'shared' if shared_reading else 'no_shared'}", partitions_count=2)
 
-        ts = "CAST(ts AS Timestamp)" if shared_reading else "SystemMetadata('write_time')"
+        ts = "CAST(ts AS Timestamp)" if shared_reading else "__ydb_write_time"
 
         sql = Rf'''
             USE {YDS_CONNECTION};
@@ -145,7 +145,7 @@ class TestWatermarks(TestYdsBase):
                         ts String NOT NULL,
                         pass Uint64
                     )
-                    , WATERMARK AS ({ts} - Interval("PT0.1S"))
+                    , WATERMARK = {ts} - Interval("PT0.1S")
                     , WATERMARK_IDLE_TIMEOUT = "PT0.2S"
                     , WATERMARK_GRANULARITY = "PT0.5S"
                 );

@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "scheduler_api.h"
 #endif
-#undef SCHEDULER_API_INL_H_
 
 namespace NYT::NConcurrency {
 
@@ -19,7 +18,7 @@ TErrorOr<typename TFuture::TValueType> WaitFor(TFuture future, IInvokerPtr invok
 
     WaitUntilSet(future.AsVoid(), std::move(invoker));
 
-    return future.Get();
+    return future.GetOrCrash();
 }
 
 template <CFuture TFuture>
@@ -32,17 +31,17 @@ TErrorOr<typename TFuture::TValueType> WaitForFast(TFuture future)
         WaitUntilSet(future.AsVoid(), GetCurrentInvoker());
     }
 
-    return future.Get();
+    return future.GetOrCrash();
 }
 
 template <CFuture TFuture>
 TErrorOr<typename TFuture::TValueType> WaitForWithStrategy(TFuture future, EWaitForStrategy strategy)
 {
     switch (strategy) {
-        case EWaitForStrategy::WaitFor:
+        case EWaitForStrategy::SuspendFiber:
             return WaitFor(future);
-        case EWaitForStrategy::Get:
-            return future.Get();
+        case EWaitForStrategy::BlockThread:
+            return future.BlockingGet();
         default:
             YT_ABORT();
     }
@@ -60,4 +59,4 @@ inline void SwitchTo(IInvokerPtr invoker)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} //namespace NYT::NConcurrency
+} // namespace NYT::NConcurrency

@@ -8,6 +8,8 @@
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/protos/config.pb.h>
 
+#include <library/cpp/time_provider/monotonic.h>
+
 namespace NKikimr::NTable {
     class TBackupExclusion;
 }
@@ -22,9 +24,15 @@ enum EEv {
     EvSnapshotCompleted,
 
     EvWriteChangelog,
+    EvWriteChangelogAck,
     EvChangelogFailed,
 
     EvStartNewBackup,
+
+    EvSnapshotStats,
+    EvChangelogStats,
+
+    EvStop,
 
     EvEnd
 };
@@ -70,15 +78,25 @@ struct TEvWriteSnapshot : public TEventLocal<TEvWriteSnapshot, EvWriteSnapshot> 
 struct TEvWriteSnapshotAck : public TEventLocal<TEvWriteSnapshotAck, EvWriteSnapshotAck> {};
 
 struct TEvWriteChangelog : public TEventLocal<TEvWriteChangelog, EvWriteChangelog> {
-    TEvWriteChangelog(ui32 step, const TString& logBody, const TVector<TEvTablet::TLogEntryReference>& references)
+    TEvWriteChangelog(ui32 step, const TString& logBody, const TVector<TEvTablet::TLogEntryReference>& references, TMonotonic createdAt)
         : Step(step)
         , EmbeddedLogBody(logBody)
         , References(references)
+        , CreatedAt(createdAt)
     {}
 
     ui32 Step;
     TString EmbeddedLogBody;
     TVector<TEvTablet::TLogEntryReference> References;
+    TMonotonic CreatedAt;
+};
+
+struct TEvWriteChangelogAck : public TEventLocal<TEvWriteChangelogAck, EvWriteChangelogAck> {
+    TEvWriteChangelogAck(ui64 bytes)
+        : Bytes(bytes)
+    {}
+
+    ui64 Bytes;
 };
 
 struct TEvChangelogFailed : public TEventLocal<TEvChangelogFailed, EvChangelogFailed> {
@@ -91,13 +109,42 @@ struct TEvChangelogFailed : public TEventLocal<TEvChangelogFailed, EvChangelogFa
 
 struct TEvStartNewBackup : public TEventLocal<TEvStartNewBackup, EvStartNewBackup> {};
 
+struct TEvSnapshotStats : public TEventLocal<TEvSnapshotStats, EvSnapshotStats> {
+    TEvSnapshotStats(ui64 bytesWritten)
+        : BytesWritten(bytesWritten)
+    {}
+
+    ui64 BytesWritten;
+};
+
+struct TEvChangelogStats : public TEventLocal<TEvChangelogStats, EvChangelogStats> {
+    TEvChangelogStats(ui64 bytesWritten, TDuration latency, TDuration lag)
+        : BytesWritten(bytesWritten)
+        , Latency(latency)
+        , Lag(lag)
+    {}
+
+    ui64 BytesWritten;
+    TDuration Latency;
+    TDuration Lag;
+};
+
+struct TEvStop : public TEventLocal<TEvStop, EvStop> {
+    TEvStop(bool flush = false)
+        : Flush(flush)
+    {}
+
+    bool Flush;
+};
+
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                              const THashMap<ui32, NTable::TScheme::TTableInfo>& tables,
                              TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation, ui32 step,
                              TAutoPtr<NTable::TSchemeChanges> schema, TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
 
 NTable::IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, NTable::TColumn>& columns,
-                                  TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
+                                  TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion,
+                                  ui32 workBudgetPercent);
 
 IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                               TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation, ui32 step,

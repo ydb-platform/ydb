@@ -3,6 +3,7 @@
 Code generation script for class methods
 to be exported as public API
 """
+
 from __future__ import annotations
 
 import argparse
@@ -347,7 +348,7 @@ IMPORTS_RUN = """\
 from collections.abc import Awaitable, Callable
 from typing import Any, TYPE_CHECKING
 
-from outcome import Outcome
+import outcome
 import contextvars
 
 from ._run import _NO_SEND, RunStatistics, Task

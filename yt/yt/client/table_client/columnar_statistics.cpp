@@ -61,7 +61,7 @@ TUnversionedOwningValue ApproximateMaxValue(TUnversionedValue value)
         // String was larger than any possible approximation.
         return MakeSentinelValue<TUnversionedValue>(EValueType::Max);
     } else {
-        auto string = TString{truncatedStringBuf};
+        auto string = std::string{truncatedStringBuf};
         int lastIndex = string.size() - 1;
         string[lastIndex] = static_cast<unsigned char>(string[lastIndex]) + 1;
         auto ref = TSharedRef::FromString(std::move(string));
@@ -90,7 +90,7 @@ void UpdateColumnarStatistics(
     bool needsValueStatistics,
     bool needsLargeStatistics)
 {
-    if (Y_UNLIKELY(static_cast<int>(value.Id) >= statistics->GetColumnCount())) {
+    if (static_cast<int>(value.Id) >= statistics->GetColumnCount()) [[unlikely]] {
         statistics->Resize(value.Id + 1);
 
         if (needsValueStatistics) {
@@ -109,7 +109,7 @@ void UpdateColumnarStatistics(
             minValue = MakeSentinelValue<TUnversionedValue>(EValueType::Min);
             maxValue = MakeSentinelValue<TUnversionedValue>(EValueType::Max);
         } else if (value.Type != EValueType::Null) {
-            if (Y_UNLIKELY(minValue.Type == EValueType::Null)) {
+            if (minValue.Type == EValueType::Null) [[unlikely]] {
                 // minValue has not been initialized yet, so this is the first value.
                 minValue = value;
                 maxValue = value;

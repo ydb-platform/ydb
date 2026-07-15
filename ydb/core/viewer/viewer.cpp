@@ -25,6 +25,8 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
+
 template<>
 void Out<std::vector<ui32>>(IOutputStream& o, const std::vector<ui32>& v) {
     for (size_t i = 0; i < v.size(); ++i) {
@@ -38,6 +40,26 @@ void Out<std::vector<ui32>>(IOutputStream& o, const std::vector<ui32>& v) {
 namespace NKikimr::NViewer {
 
 using namespace NNodeWhiteboard;
+
+namespace {
+
+enum class EViewerEndpointAccessType {
+    Administration,
+    Viewer,
+    Database
+};
+
+struct TEndpointAccessSettings {
+    EViewerEndpointAccessType AccessType = EViewerEndpointAccessType::Database;
+    bool RequireDatabaseParam = false;
+};
+
+struct TEndpointAccessRule {
+    TStringBuf Path;
+    TEndpointAccessSettings Settings;
+};
+
+}
 
 extern void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers);
 extern void InitViewerBrowseJsonHandlers(TJsonHandlers& jsonHandlers);
@@ -70,6 +92,7 @@ public:
             TVector<TString> databaseAllowedSIDs;
             TVector<TString> viewerAllowedSIDs;
             TVector<TString> monitoringAllowedSIDs;
+            TVector<TString> administrationAllowedSIDs;
             {
                 const auto& protoAllowedSIDs = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetDatabaseAllowedSIDs();
                 for (const auto& sid : protoAllowedSIDs) {
@@ -97,6 +120,7 @@ public:
                     databaseAllowedSIDs.emplace_back(sid);
                     viewerAllowedSIDs.emplace_back(sid);
                     monitoringAllowedSIDs.emplace_back(sid);
+                    administrationAllowedSIDs.emplace_back(sid);
                 }
             }
             mon->RegisterActorPage({
@@ -105,12 +129,6 @@ public:
                 .ActorId = ctx.SelfID,
                 .AuthMode = TMon::EAuthMode::Enforce,
                 .AllowedSIDs = databaseAllowedSIDs,
-            });
-            mon->RegisterActorPage({
-                .RelPath = "viewer/capabilities",
-                .ActorSystem = ctx.ActorSystem(),
-                .ActorId = ctx.SelfID,
-                .AuthMode = TMon::EAuthMode::Disabled,
             });
             mon->RegisterActorPage({
                 .Title = "Viewer",
@@ -133,14 +151,13 @@ public:
                 .AuthMode = requireCountersAuth ? TMon::EAuthMode::Enforce : TMon::EAuthMode::Disabled,
                 .AllowedSIDs = requireCountersAuth ? viewerAllowedSIDs : TVector<TString>(),
             });
-            // For healthcheck, always extract token if enforce_user_token_requirement is enabled, so access can be checked in handler.
-            const bool enforceUserToken = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
-            mon->RegisterActorPage({
-                .RelPath = "healthcheck",
-                .ActorSystem = ctx.ActorSystem(),
-                .ActorId = ctx.SelfID,
-                .AuthMode = enforceUserToken ? TMon::EAuthMode::ExtractOnly : TMon::EAuthMode::Disabled,
-                // No need to set AllowedSIDs since the SIDs will be checked in handler if required.
+            // Healthcheck: extract user token for handler-side checks.
+            // Do not enforce monitoring AllowedSIDs here.
+            mon->RegisterActorHandler({
+                .Path = "/healthcheck",
+                .Handler = ctx.SelfID,
+                .AuthMode = TMon::EAuthMode::Relaxed,
+                // No AllowedSIDs: access is enforced in the handler when required.
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",
@@ -207,25 +224,138 @@ public:
                 JsonHandlers.JsonHandlersIndex[oldPath] = JsonHandlers.JsonHandlersIndex[newPath];
             }
 
+            auto applyAccessRule = [this](const TEndpointAccessRule& rule) {
+                EndpointAccess[TString(rule.Path)] = rule.Settings;
+            };
+
+            auto applyAccessRules = [&](std::initializer_list<TEndpointAccessRule> rules) {
+                for (const auto& rule : rules) {
+                    applyAccessRule(rule);
+                }
+            };
+
+            if (AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
+                applyAccessRules({
+                    // Viewer-level endpoints.
+                    {"/viewer/hiveinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/hiveinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/hivestats", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/hivestats", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/counters", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/counters", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/graph", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/graph", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/tenants", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/tenants", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/storage", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/storage", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/peers", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/peers", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/nodeinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/nodeinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/pdiskinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/pdiskinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/vdiskinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/vdiskinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/bsgroupinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/bsgroupinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/multipart_counter", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/multipart_counter", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/simple_counter", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/simple_counter", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/sse_counter", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/sse_counter", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/feature_flags", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/feature_flags", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/groups", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/groups", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/render", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/render", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/cluster", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/cluster", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/config", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/config", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/compute", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/compute", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/netinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/netinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/topicinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/topicinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/storage_usage", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/storage_usage", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/pqconsumerinfo", {EViewerEndpointAccessType::Viewer}},
+                    {"/viewer/json/pqconsumerinfo", {EViewerEndpointAccessType::Viewer}},
+
+                    // Administration-level endpoints.
+                    {"/viewer/bscontrollerinfo", {EViewerEndpointAccessType::Administration}},
+                    {"/viewer/json/bscontrollerinfo", {EViewerEndpointAccessType::Administration}},
+                    {"/viewer/topic_data", {EViewerEndpointAccessType::Administration}},
+                    {"/viewer/json/topic_data", {EViewerEndpointAccessType::Administration}},
+
+                    // Database-level endpoints that require explicit database parameter for strict database tokens.
+                    {"/viewer/sysinfo", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/json/sysinfo", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/autocomplete", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/json/autocomplete", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/nodelist", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/json/nodelist", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/nodes", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/json/nodes", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/tabletinfo", {EViewerEndpointAccessType::Database, true}},
+                    {"/viewer/json/tabletinfo", {EViewerEndpointAccessType::Database, true}},
+                    {"/storage/groups", {EViewerEndpointAccessType::Database, true}},
+                });
+            }
+
+            auto addV2JsonAlias = [&](TStringBuf aliasPath, TStringBuf canonicalPath) {
+                JsonHandlers.JsonHandlersIndex[TString(aliasPath)] = JsonHandlers.JsonHandlersIndex[TString(canonicalPath)];
+                const auto it = EndpointAccess.find(canonicalPath);
+                if (it != EndpointAccess.end()) {
+                    EndpointAccess[TString(aliasPath)] = it->second;
+                }
+            };
+
             // TODO: redirect of very old paths
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/config"] = JsonHandlers.JsonHandlersIndex["/viewer/config"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/sysinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/sysinfo"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/pdiskinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/pdiskinfo"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/vdiskinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/vdiskinfo"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/storage"] = JsonHandlers.JsonHandlersIndex["/viewer/storage"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodelist"] = JsonHandlers.JsonHandlersIndex["/viewer/nodelist"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/tabletinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/tabletinfo"];
-            JsonHandlers.JsonHandlersIndex["/viewer/v2/json/nodeinfo"] = JsonHandlers.JsonHandlersIndex["/viewer/nodeinfo"];
+            addV2JsonAlias("/viewer/v2/json/config", "/viewer/config");
+            addV2JsonAlias("/viewer/v2/json/sysinfo", "/viewer/sysinfo");
+            addV2JsonAlias("/viewer/v2/json/pdiskinfo", "/viewer/pdiskinfo");
+            addV2JsonAlias("/viewer/v2/json/vdiskinfo", "/viewer/vdiskinfo");
+            addV2JsonAlias("/viewer/v2/json/storage", "/viewer/storage");
+            addV2JsonAlias("/viewer/v2/json/nodelist", "/viewer/nodelist");
+            addV2JsonAlias("/viewer/v2/json/tabletinfo", "/viewer/tabletinfo");
+            addV2JsonAlias("/viewer/v2/json/nodeinfo", "/viewer/nodeinfo");
+
+            auto resolveAllowedSids = [&](const TString& path) -> const TVector<TString>& {
+                auto accessType = GetEndpointAccessType(path, EViewerEndpointAccessType::Database);
+                switch (accessType) {
+                    case EViewerEndpointAccessType::Administration:
+                        return administrationAllowedSIDs;
+                    case EViewerEndpointAccessType::Viewer:
+                        return viewerAllowedSIDs;
+                    case EViewerEndpointAccessType::Database:
+                    default:
+                        return databaseAllowedSIDs;
+                }
+            };
 
             for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
                 // temporary handling of new handlers
                 if (handler->IsHttpEvent()) {
-                    mon->RegisterActorHandler({
-                        .Path = name,
-                        .Handler = ctx.SelfID,
-                        .AuthMode = TMon::EAuthMode::Enforce,
-                        .AllowedSIDs = databaseAllowedSIDs,
-                    });
+                    if (name == "/viewer/capabilities" || name == "/viewer/json/capabilities") {
+                        // this handler is used to discover capabilities, including auth requirements, so it must be always available without authentication
+                        mon->RegisterActorHandler({
+                            .Path = name,
+                            .Handler = ctx.SelfID,
+                            .AuthMode = TMon::EAuthMode::Disabled,
+                        });
+                    } else {
+                        mon->RegisterActorHandler({
+                            .Path = name,
+                            .Handler = ctx.SelfID,
+                            .AuthMode = TMon::EAuthMode::Enforce,
+                            .AllowedSIDs = resolveAllowedSids(name),
+                        });
+                    }
                 }
             }
         }
@@ -248,36 +378,21 @@ public:
     TString GetHTTPFORWARD(const TRequestState& request, const TString& location, const TString& candidates) override;
 
     bool CheckAccessAdministration(const TRequestState& request) override {
-        auto userTokenObject = request.GetUserTokenObject();
-        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
-            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
-                return true;
-            }
-        }
-        return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+        const auto userTokenObject = request.GetUserTokenObject();
+        return IsAdministrator(AppData(), userTokenObject);
     }
 
     bool CheckAccessMonitoring(const TRequestState& request) override {
         auto userTokenObject = request.GetUserTokenObject();
-        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
-            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
-                return true;
-            }
-        }
-        return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs())
-            || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+        return IsAdministrator(AppData(), userTokenObject)
+            || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
     }
 
     bool CheckAccessViewer(const TRequestState& request) override {
         auto userTokenObject = request.GetUserTokenObject();
-        if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()) {
-            if (!KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenCheckRequirement() || userTokenObject.empty()) {
-                return true;
-            }
-        }
-        return IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs())
+        return IsAdministrator(AppData(), userTokenObject)
             || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs())
-            || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
+            || IsTokenAllowed(userTokenObject, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
     }
 
     static bool IsStaticGroup(ui32 groupId) {
@@ -465,6 +580,7 @@ private:
     TJsonHandlers JsonHandlers;
     std::mutex JsonHandlersMutex;
     std::unordered_map<TString, TString> Redirect307;
+    THashMap<TString, TEndpointAccessSettings> EndpointAccess;
     const TKikimrRunConfig KikimrRunConfig;
     std::unordered_multimap<NKikimrViewer::EObjectType, TVirtualHandler> VirtualHandlersByParentType;
     std::unordered_map<NKikimrViewer::EObjectType, TContentHandler> ContentHandlers;
@@ -472,6 +588,71 @@ private:
     ui32 CurrentMonitoringPort;
     TString CurrentWorkerName;
     NProtobufJson::TProto2JsonConfig Proto2JsonConfig;
+
+    EViewerEndpointAccessType GetEndpointAccessType(const TString& path, EViewerEndpointAccessType defaultAccessType) const {
+        const auto itAccess = EndpointAccess.find(path);
+        return itAccess != EndpointAccess.end()
+            ? itAccess->second.AccessType
+            : defaultAccessType;
+    }
+
+    bool IsDatabaseAccessEndpoint(const TString& path) const {
+        auto accessType = GetEndpointAccessType(path, EViewerEndpointAccessType::Database);
+        return accessType == EViewerEndpointAccessType::Database;
+    }
+
+    // Returns true if the token has sufficient access for the endpoint's required access level.
+    // Used for old-style (non-IsHttpEvent) handlers where per-endpoint SID enforcement is not
+    // done at the monitoring layer.
+    bool CheckEndpointAccess(const TString& path, const TString& serializedToken) const {
+        if (!AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
+            return true;
+        }
+        const auto itAccess = EndpointAccess.find(path);
+        if (itAccess == EndpointAccess.end()) {
+            return true; // no specific access requirement
+        }
+        const auto& sec = AppData()->DomainsConfig.GetSecurityConfig();
+        switch (itAccess->second.AccessType) {
+            case EViewerEndpointAccessType::Administration:
+                return IsTokenAllowed(serializedToken, sec.GetAdministrationAllowedSIDs());
+            case EViewerEndpointAccessType::Viewer:
+                return IsTokenAllowed(serializedToken, sec.GetViewerAllowedSIDs())
+                    || IsTokenAllowed(serializedToken, sec.GetMonitoringAllowedSIDs())
+                    || IsTokenAllowed(serializedToken, sec.GetAdministrationAllowedSIDs());
+            case EViewerEndpointAccessType::Database:
+            default:
+                return false;
+        }
+    }
+
+    enum class EDatabaseScopedRequestValidationResult {
+        Ok,
+        DatabaseRequired,
+    };
+
+    EDatabaseScopedRequestValidationResult ValidateDatabaseScopedRequest(
+        const TString& path,
+        const TCgiParameters& params,
+        const TString& serializedToken,
+        TString& error) const
+    {
+        if (!AppData()->FeatureFlags.GetEnableExtraSidsControlForHttpViewer()) {
+            return EDatabaseScopedRequestValidationResult::Ok;
+        }
+        if (!IsDatabaseAccessEndpoint(path)) {
+            return EDatabaseScopedRequestValidationResult::Ok;
+        }
+        if (!IsStrictDatabaseOnlyToken(AppData(), serializedToken)) {
+            return EDatabaseScopedRequestValidationResult::Ok;
+        }
+        const auto itAccess = EndpointAccess.find(path);
+        if (itAccess != EndpointAccess.end() && itAccess->second.RequireDatabaseParam && params.Get("database").empty()) {
+            error = TStringBuilder() << "`database` is required for " << path;
+            return EDatabaseScopedRequestValidationResult::DatabaseRequired;
+        }
+        return EDatabaseScopedRequestValidationResult::Ok;
+    }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
         DeleteOldSharedCacheData();
@@ -575,10 +756,24 @@ private:
         return instantTime;
     }
 
+    static bool IsPathSafe(const TString& path) {
+        TStringBuf remaining(path);
+        while (remaining) {
+            TStringBuf component = remaining.NextTok('/');
+            if (component == "..") {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool ReplyWithFile(NMon::TEvHttpInfo::TPtr& ev, const TString& name) {
         if (name == "/api/viewer.yaml") {
             Send(ev->Sender, new NMon::TEvHttpInfoRes(GetHTTPOKYAML(ev->Get(), Dump(GetSwaggerYaml()), GetCompileTime()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return true;
+        }
+        if (!IsPathSafe(name)) {
+            return false;
         }
         TString filename("content" + name);
         TString blob;
@@ -608,6 +803,9 @@ private:
                 }
             }
             lastModified = GetCompileTime().ToRfc822String();
+        }
+        if (type.empty()) {
+            type = "text/html";
         }
         if (!blob.empty()) {
             if (name == "/index.html" || name == "/v2/index.html") { // we send root's index in such format that it could be embedded into existing web interface
@@ -640,7 +838,8 @@ private:
         if (actor) {
             Register(actor);
         } else {
-            BLOG_ERROR("Unable to process EvViewerRequest");
+            YDB_LOG_ERROR("Unable to process EvViewerRequest",
+                {"logPrefix", GetLogPrefix()});
             Send(ev->Sender, new TEvViewer::TEvViewerResponse(), 0, ev->Cookie);
         }
     }
@@ -672,6 +871,21 @@ private:
         }
         auto handler = JsonHandlers.FindHandler(path);
         if (handler) {
+            // For old-style (non-IsHttpEvent) handlers the per-endpoint SID check is not done at
+            // the monitoring layer, so we enforce it here based on EndpointAccess.
+            // Database-level endpoints are validated by ValidateDatabaseScopedRequest instead.
+            if (!handler->IsHttpEvent() && !IsDatabaseAccessEndpoint(path) && !CheckEndpointAccess(path, msg->UserToken)) {
+                Send(ev->Sender, new NMon::TEvHttpInfoRes(GETHTTPACCESSDENIED(ev->Get(), "text/plain", "Access denied"), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                return;
+            }
+            TString scopeError;
+            switch (ValidateDatabaseScopedRequest(path, msg->Request.GetParams(), msg->UserToken, scopeError)) {
+                case EDatabaseScopedRequestValidationResult::DatabaseRequired:
+                    Send(ev->Sender, new NMon::TEvHttpInfoRes(GetHTTPBADREQUEST(ev->Get(), "text/plain", scopeError), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                    return;
+                case EDatabaseScopedRequestValidationResult::Ok:
+                    break;
+            }
             auto sender(ev->Sender);
             try {
                 IActor* requestActor = handler->CreateRequestActor(this, ev);
@@ -689,10 +903,6 @@ private:
         }
         if (path.StartsWith("/counters/hosts")) {
             Register(new TCountersHostsList(this, ev));
-            return;
-        }
-        if (path.StartsWith("/healthcheck")) { // healthcheck no auth scrapping
-            Register(new TJsonHealthCheck(this, ev));
             return;
         }
         // TODO: check path validity
@@ -747,7 +957,7 @@ private:
             Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(response)));
             return;
         }
-        TString path(ev->Get()->Request->GetURI());
+        const TString path(ev->Get()->Request->GetURI());
         auto itRedirect307 = Redirect307.find(path);
         if (itRedirect307 != Redirect307.end()) {
             TString redirect(ev->Get()->Request->URL);
@@ -761,8 +971,18 @@ private:
             Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(response)));
             return;
         }
+        const TCgiParameters proxyParams(ev->Get()->Request->URL.After('?'));
         auto handler = JsonHandlers.FindHandler(path);
         if (handler) {
+            TString scopeError;
+            switch (ValidateDatabaseScopedRequest(path, proxyParams, ev->Get()->UserToken, scopeError)) {
+                case EDatabaseScopedRequestValidationResult::DatabaseRequired:
+                    Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
+                        ev->Get()->Request->CreateResponseString(GetHTTPBADREQUEST(ev->Get(), "text/plain", scopeError))));
+                    return;
+                case EDatabaseScopedRequestValidationResult::Ok:
+                    break;
+            }
             auto sender(ev->Sender);
             try {
                 IActor* requestActor = handler->CreateRequestActor(this, ev);
@@ -778,6 +998,10 @@ private:
                 Send(sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseBadRequest()));
                 return;
             }
+        }
+        if (path.StartsWith("/healthcheck")) { // healthcheck no auth scrapping
+            Register(new TJsonHealthCheck(this, ev));
+            return;
         }
         Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(GetHTTPNOTFOUND(ev->Get()))));
     }
@@ -1016,6 +1240,7 @@ NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrWhiteboard::TTabletStateInfo:
         flag = NKikimrViewer::EFlag::Yellow;
         break;
     case NKikimrWhiteboard::TTabletStateInfo::Deleted:
+        break;
     case NKikimrWhiteboard::TTabletStateInfo::Active:
         flag = NKikimrViewer::EFlag::Green;
         break;
@@ -1043,20 +1268,6 @@ NKikimrViewer::EFlag GetFlagFromTabletState(NKikimrHive::ETabletVolatileState st
         default:
             flag = NKikimrViewer::EFlag::Red;
             break;
-    }
-    return flag;
-}
-
-NKikimrViewer::EFlag GetFlagFromUsage(double usage) {
-    NKikimrViewer::EFlag flag = NKikimrViewer::EFlag::Grey;
-    if (usage >= 0.94) {
-        flag = NKikimrViewer::EFlag::Red;
-    } else if (usage >= 0.92) {
-        flag = NKikimrViewer::EFlag::Orange;
-    } else if (usage >= 0.85) {
-        flag = NKikimrViewer::EFlag::Yellow;
-    } else  {
-        flag = NKikimrViewer::EFlag::Green;
     }
     return flag;
 }
@@ -1204,8 +1415,9 @@ NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag) {
         return NKikimrViewer::EFlag::Orange;
     case NKikimrWhiteboard::EFlag::Red:
         return NKikimrViewer::EFlag::Red;
+    default:
+        return NKikimrViewer::EFlag::Grey;
     }
-    return static_cast<NKikimrViewer::EFlag>((int)flag);
 }
 
 }

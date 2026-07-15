@@ -16,7 +16,7 @@
 
 namespace NKikimr::NPersQueueTests {
 
-static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const std::vector<std::pair<std::string, std::vector<std::string>>>& acl) {
+static void ModifyTopicACL(const NYdb::TDriver* driver, const TString& topic, const std::vector<std::pair<std::string, std::vector<std::string>>>& acl) {
 
     NYdb::NScheme::TSchemeClient schemeClient(*driver);
     auto modifyPermissionsSettings = NYdb::NScheme::TModifyPermissionsSettings();

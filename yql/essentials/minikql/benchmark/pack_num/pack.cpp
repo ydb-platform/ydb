@@ -1,5 +1,7 @@
 #include "pack.h"
 
+#include <array>
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 // Pack
@@ -40,19 +42,19 @@ ui32 Unpack(const ui8*& data) {
 
 int PackU32(ui32 value, void* buf) {
     ui8* p = (ui8*)buf;      // 654 3210  <-- bit of 'value' (7 bits total)
-    if (value < (1u << 7)) { // [0--- ----]
+    if (value < (1U << 7)) { // [0--- ----]
         p[0] = (ui8)value;   // ^       ^
         return 1;            // MSB     LSB
     }
-    value -= (1u << 7);       // DC BA98   7654 3210 <-- bit of 'value' (14 == 0xD bits total)
-    if (value < (1u << 14)) { // [10-- ----] [---- ----]
+    value -= (1U << 7);       // DC BA98   7654 3210 <-- bit of 'value' (14 == 0xD bits total)
+    if (value < (1U << 14)) { // [10-- ----] [---- ----]
         p[1] = (ui8)value;
         value >>= 8;
         p[0] = 0x80 | (ui8)value;
         return 2;
     }
-    value -= (1u << 14);      // And so on...
-    if (value < (1u << 21)) { // [110- ----] [---- ----] [---- ----]
+    value -= (1U << 14);      // And so on...
+    if (value < (1U << 21)) { // [110- ----] [---- ----] [---- ----]
         p[2] = (ui8)value;
         value >>= 8;
         p[1] = (ui8)value;
@@ -60,8 +62,8 @@ int PackU32(ui32 value, void* buf) {
         p[0] = 0xc0 | (ui8)value;
         return 3;
     }
-    value -= (1u << 21);
-    if (value < (1u << 28)) { // [1110 ----] [---- ----] [---- ----] [---- ----]
+    value -= (1U << 21);
+    if (value < (1U << 28)) { // [1110 ----] [---- ----] [---- ----] [---- ----]
         p[3] = (ui8)value;
         value >>= 8;
         p[2] = (ui8)value;
@@ -71,7 +73,7 @@ int PackU32(ui32 value, void* buf) {
         p[0] = 0xe0 | (ui8)value;
         return 4;
     } // ...but for largest numbers, whole first byte is reserved.
-    value -= (1u << 28); // [1111 0000] [---- ----] [---- ----] [---- ----] [---- ----]
+    value -= (1U << 28); // [1111 0000] [---- ----] [---- ----] [---- ----] [---- ----]
     p[4] = (ui8)value;
     value >>= 8;
     p[3] = (ui8)value;
@@ -107,7 +109,7 @@ int UnpackU32(ui32* value, const void* buf) {
 }
 
 int SkipU32(const void* buf) {
-    static const i8 Skip[16] = {1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 5};
+    static const std::array<i8, 16> Skip = {1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 5};
     int i = ((const ui8*)buf)[0] >> 4;
     return Skip[i];
 }
@@ -119,19 +121,19 @@ int SkipU32(const void* buf) {
 
 int PackU64(ui64 value, void* buf) { // Packing scheme is analogous to PackU32()
     ui8* p = (ui8*)buf;
-    if (value < (1u << 7)) {
+    if (value < (1U << 7)) {
         p[0] = (ui8)value;
         return 1;
     }
-    value -= (1u << 7);
-    if (value < (1u << 14)) {
+    value -= (1U << 7);
+    if (value < (1U << 14)) {
         p[1] = (ui8)value;
         value >>= 8;
         p[0] = 0x80 | (ui8)value;
         return 2;
     }
-    value -= (1u << 14);
-    if (value < (1u << 21)) {
+    value -= (1U << 14);
+    if (value < (1U << 21)) {
         p[2] = (ui8)value;
         value >>= 8;
         p[1] = (ui8)value;
@@ -139,8 +141,8 @@ int PackU64(ui64 value, void* buf) { // Packing scheme is analogous to PackU32()
         p[0] = 0xc0 | (ui8)value;
         return 3;
     }
-    value -= (1u << 21);
-    if (value < (1u << 28)) {
+    value -= (1U << 21);
+    if (value < (1U << 28)) {
         p[3] = (ui8)value;
         value >>= 8;
         p[2] = (ui8)value;
@@ -150,7 +152,7 @@ int PackU64(ui64 value, void* buf) { // Packing scheme is analogous to PackU32()
         p[0] = 0xe0 | (ui8)value;
         return 4;
     }
-    value -= (1u << 28);
+    value -= (1U << 28);
     if (value < (ui64(1) << 35)) {
         p[4] = (ui8)value;
         value >>= 8;
@@ -263,7 +265,7 @@ int UnpackU64(ui64* value, const void* buf) {
         return 5;
     }
     if (!(b & 0x04)) {
-        *value = 0x0810204080ull + ((ui64(b & 0x03) << 40) |
+        *value = 0x0810204080ULL + ((ui64(b & 0x03) << 40) |
                                     (ui64(p[1]) << 32) |
                                     (ui32(p[2]) << 24) |
                                     (p[3] << 16) |
@@ -272,7 +274,7 @@ int UnpackU64(ui64* value, const void* buf) {
         return 6;
     }
     if (!(b & 0x02)) {
-        *value = 0x040810204080ull + ((ui64(b & 0x01) << 48) |
+        *value = 0x040810204080ULL + ((ui64(b & 0x01) << 48) |
                                       (ui64(p[1]) << 40) |
                                       (ui64(p[2]) << 32) |
                                       (ui32(p[3]) << 24) |
@@ -282,7 +284,7 @@ int UnpackU64(ui64* value, const void* buf) {
         return 7;
     }
     if (!(b & 0x01)) {
-        *value = 0x02040810204080ull + ((ui64(p[1]) << 48) |
+        *value = 0x02040810204080ULL + ((ui64(p[1]) << 48) |
                                         (ui64(p[2]) << 40) |
                                         (ui64(p[3]) << 32) |
                                         (ui32(p[4]) << 24) |
@@ -291,7 +293,7 @@ int UnpackU64(ui64* value, const void* buf) {
                                         p[7]);
         return 8;
     }
-    *value = 0x0102040810204080ull + ((ui64(p[1]) << 56) |
+    *value = 0x0102040810204080ULL + ((ui64(p[1]) << 56) |
                                       (ui64(p[2]) << 48) |
                                       (ui64(p[3]) << 40) |
                                       (ui64(p[4]) << 32) |
@@ -308,7 +310,7 @@ int UnpackU64(ui64* value, const void* buf) {
 #define REPEAT_128(x) REPEAT_64(x), REPEAT_64(x)
 
 int SkipU64(const void* buf) {
-    static const i8 Skip[256] = {
+    static const std::array<i8, 256> Skip = {
         REPEAT_128(1), REPEAT_64(2), REPEAT_32(3), REPEAT_16(4),
         5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 8, 9};
     return Skip[*(const ui8*)buf];

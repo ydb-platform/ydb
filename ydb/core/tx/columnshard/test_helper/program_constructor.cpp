@@ -13,8 +13,7 @@ ui32 TProgramProtoBuilder::AddConstant(const TString& bytes) {
     return CurrentGenericColumnId;
 }
 
-ui32 TProgramProtoBuilder::AddOperation(
-    const NKikimrSSA::TProgram::TAssignment::EFunction op, const std::vector<ui32>& arguments) {
+ui32 TProgramProtoBuilder::AddOperation(const NKikimrSSA::TProgram::TAssignment::EFunction op, const std::vector<ui32>& arguments) {
     auto* command = Proto.AddCommand();
     auto* functionProto = command->MutableAssign()->MutableFunction();
     for (auto&& i : arguments) {

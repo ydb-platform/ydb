@@ -28,7 +28,8 @@ public:
 
     public:
         TGuard(TCompositeReadBlobs* blobs)
-            : Blobs(blobs) {
+            : Blobs(blobs)
+        {
         }
 
         TString ExtractVerified(const TString& storageId, const TBlobRange& range) {
@@ -76,15 +77,19 @@ public:
     THashMap<TString, TActionReadBlobs>::iterator begin() {
         return BlobsByStorage.begin();
     }
+
     THashMap<TString, TActionReadBlobs>::iterator end() {
         return BlobsByStorage.end();
     }
+
     void Add(const TString& storageId, TActionReadBlobs&& data) {
         AFL_VERIFY(BlobsByStorage.emplace(storageId, std::move(data)).second);
     }
+
     void Add(const TString& storageId, const TBlobRange& blobId, TString&& value) {
         BlobsByStorage[storageId].Add(blobId, std::move(value));
     }
+
     bool Contains(const TString& storageId, const TBlobRange& range) const {
         auto it = BlobsByStorage.find(storageId);
         if (it == BlobsByStorage.end()) {
@@ -92,6 +97,7 @@ public:
         }
         return it->second.Contains(range);
     }
+
     std::optional<TString> GetBlobRangeOptional(const TString& storageId, const TBlobRange& range) const {
         auto it = BlobsByStorage.find(storageId);
         if (it == BlobsByStorage.end()) {
@@ -99,11 +105,13 @@ public:
         }
         return it->second.GetBlobRangeOptional(range);
     }
+
     const TString& GetBlobRangeVerified(const TString& storageId, const TBlobRange& range) const {
         auto it = BlobsByStorage.find(storageId);
         AFL_VERIFY(it != BlobsByStorage.end());
         return it->second.GetBlobRangeVerified(range);
     }
+
     std::optional<TString> ExtractOptional(const TString& storageId, const TBlobRange& range) {
         auto it = BlobsByStorage.find(storageId);
         if (it == BlobsByStorage.end()) {
@@ -118,6 +126,7 @@ public:
         }
         return result;
     }
+
     TString ExtractVerified(const TString& storageId, const TBlobRange& range) {
         auto result = ExtractOptional(storageId, range);
         AFL_VERIFY(result)("range", range.ToString())("storage_id", storageId);
@@ -228,7 +237,8 @@ public:
         TReadSubscriber(const std::shared_ptr<NRead::ITask>& readTask, const ui32 cpu, const ui64 memory, const TString& name,
             const NResourceBroker::NSubscribe::TTaskContext& context)
             : TBase(cpu, memory, name, context)
-            , Task(readTask) {
+            , Task(readTask)
+        {
         }
     };
 };

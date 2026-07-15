@@ -16,6 +16,10 @@ struct TControllerSystemViewsState {
     std::unordered_map<TVSlotId, NKikimrSysView::TVSlotInfo, THash<TVSlotId>> VSlots;
     std::unordered_map<TGroupId, NKikimrSysView::TGroupInfo, THash<TGroupId>> Groups;
     std::unordered_map<TBoxStoragePoolId, NKikimrSysView::TStoragePoolInfo, THash<TBoxStoragePoolId>> StoragePools;
+
+    explicit operator bool() const noexcept {
+        return !PDisks.empty() && !VSlots.empty() && !Groups.empty() && !StoragePools.empty();
+    } 
 };
 
 struct TEvControllerUpdateSystemViews :
@@ -53,6 +57,6 @@ struct TGroupDiskInfo {
     ui32 ExpectedSlotCount;
 };
 
-void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vector<TGroupDiskInfo>& disks, TBlobStorageGroupType type);
+void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vector<TGroupDiskInfo>& disks, TBlobStorageGroupType type, ui32 groupSizeInUnits);
 
 } // NKikimr::NBsController

@@ -215,4 +215,47 @@ TResultOrError<TSgList> SgListNormalize(TSgList sglist, ui32 blockSize)
     return result;
 }
 
+TSgList CreateSgList(const TRope& rope)
+{
+    TSgList result;
+    for (const auto& it: rope) {
+        result.push_back(TBlockDataRef(it.first, it.second));
+    }
+    return result;
+}
+
+TSgList CreateSgList(const TVector<TRope>& ropes)
+{
+    TSgList result;
+    for (const auto& rope: ropes) {
+        for (const auto& it: rope) {
+            result.push_back(TBlockDataRef(it.first, it.second));
+        }
+    }
+    return result;
+}
+
+TSgList CreateSgListSubRange(const TSgList& sgList, size_t offset, size_t size)
+{
+    TSgList result;
+    size_t currentOffset = 0;
+    for (const auto& block: sgList) {
+        if (!size) {
+            break;
+        }
+        if (currentOffset + block.size() <= offset) {
+            currentOffset += block.size();
+            continue;
+        }
+        const char* const start = block.data() + offset - currentOffset;
+        const size_t subSize =
+            Min(size, block.size() - (offset - currentOffset));
+        result.push_back(TBlockDataRef(start, subSize));
+        size -= subSize;
+        currentOffset += block.size();
+        offset = currentOffset;
+    }
+    return result;
+}
+
 }   // namespace NYdb::NBS

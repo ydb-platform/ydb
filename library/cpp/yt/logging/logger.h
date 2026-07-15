@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <library/cpp/yt/misc/port.h>
+
 #include <library/cpp/yt/string/format.h>
 
 #include <library/cpp/yt/memory/ref.h>
@@ -12,7 +14,7 @@
 
 #include <library/cpp/yt/misc/guid.h>
 
-#include <library/cpp/yt/misc/thread_name.h>
+#include <library/cpp/yt/system/thread_name.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 
@@ -225,21 +227,21 @@ public:
 
     void Write(TLogEvent&& event) const;
 
-    void AddRawTag(const std::string& tag);
+    void AddRawTag(TStringBuf tag);
     template <class... TArgs>
-    void AddTag(const char* format, TArgs&&... args);
+    void AddTag(TFormatString<TArgs...> format, TArgs&&... args);
 
     template <class TType>
     void AddStructuredTag(TStringBuf key, TType value);
 
     void AddStructuredValidator(TStructuredValidator validator);
 
-    TLogger WithRawTag(const std::string& tag) const &;
-    TLogger WithRawTag(const std::string& tag) &&;
+    TLogger WithRawTag(TStringBuf tag) const &;
+    TLogger WithRawTag(TStringBuf tag) &&;
     template <class... TArgs>
-    TLogger WithTag(const char* format, TArgs&&... args) const &;
+    TLogger WithTag(TFormatString<TArgs...> format, TArgs&&... args) const &;
     template <class... TArgs>
-    TLogger WithTag(const char* format, TArgs&&... args) &&;
+    TLogger WithTag(TFormatString<TArgs...> format, TArgs&&... args) &&;
 
     template <class TType>
     TLogger WithStructuredTag(TStringBuf key, TType value) const &;
@@ -340,14 +342,47 @@ void LogStructuredEvent(
  *    clients in any specific way.
  * 2. Most places where this could be used have trace_id enabled, which would make it easy for
  *    administrators to find a correlation between an alert and an error, if a user were to report it.
- * 3. Administrators will receive this alert, so there is no need to enrich the error with
- *    additional information.
+ * 3. Original log message is stored in "message" attribute of the raised exception.
+ * 4. The exception is raised regardless of the logging level configured for the |Logger| and
+ *    and the currently active message suppressions.
  */
 #define YT_LOG_ALERT_AND_THROW(...) \
-    YT_LOG_EVENT(Logger, ::NYT::NLogging::ELogLevel::Alert, __VA_ARGS__); \
-    THROW_ERROR_EXCEPTION( \
-        ::NYT::EErrorCode::Fatal, \
-        "Malformed request or incorrect state detected")
+    do { \
+         /* NOLINTBEGIN(bugprone-reserved-identifier, readability-identifier-naming) */ \
+        const auto& logger__ = Logger(); \
+        auto level__ = ::NYT::NLogging::ELogLevel::Alert; \
+        auto location__ = __LOCATION__; \
+        \
+        auto loggingContext__ = ::NYT::NLogging::GetLoggingContext(); \
+        auto message__ = ::NYT::NLogging::NDetail::BuildLogMessage(loggingContext__, logger__, __VA_ARGS__); \
+        auto messageStr__ = ::std::string(message__.MessageRef.ToStringBuf()); \
+        \
+        static ::NYT::TLeakyStorage<::NYT::NLogging::TLoggingAnchor> anchorStorage__; \
+        auto* anchor__ = anchorStorage__.Get(); \
+        \
+        bool anchorUpToDate__ = logger__.IsAnchorUpToDate(*anchor__); \
+        if (!anchorUpToDate__) [[unlikely]] { \
+            static std::atomic<bool> anchorRegistered__; \
+            logger__.UpdateStaticAnchor(anchor__, &anchorRegistered__, location__, message__.Anchor); \
+        } \
+        \
+        auto effectiveLevel__ = ::NYT::NLogging::TLogger::GetEffectiveLoggingLevel(level__, *anchor__); \
+        if (logger__.IsLevelEnabled(effectiveLevel__)) { \
+            ::NYT::NLogging::NDetail::LogEventImpl( \
+                loggingContext__, \
+                logger__, \
+                effectiveLevel__, \
+                location__, \
+                anchor__, \
+                std::move(message__.MessageRef)); \
+        } \
+        \
+        THROW_ERROR_EXCEPTION( \
+            ::NYT::EErrorCode::Fatal, \
+            "Malformed request or incorrect state detected") \
+            << ::NYT::TErrorAttribute("message", std::move(messageStr__)); \
+        /* NOLINTEND(bugprone-reserved-identifier, readability-identifier-naming) */ \
+    } while (false)
 
 #define YT_LOG_ALERT_AND_THROW_IF(condition, ...) \
     if (Y_UNLIKELY(condition)) { \
@@ -371,7 +406,7 @@ void LogStructuredEvent(
         auto* anchor__ = anchorStorage__.Get(); \
         \
         bool anchorUpToDate__ = logger__.IsAnchorUpToDate(*anchor__); \
-        [[likely]] if (anchorUpToDate__) { \
+        if (anchorUpToDate__) [[likely]] { \
             auto effectiveLevel__ = ::NYT::NLogging::TLogger::GetEffectiveLoggingLevel(level__, *anchor__); \
             if (!logger__.IsLevelEnabled(effectiveLevel__)) { \
                 break; \
@@ -381,7 +416,7 @@ void LogStructuredEvent(
         auto loggingContext__ = ::NYT::NLogging::GetLoggingContext(); \
         auto message__ = ::NYT::NLogging::NDetail::BuildLogMessage(loggingContext__, logger__, __VA_ARGS__); \
         \
-        [[unlikely]] if (!anchorUpToDate__) { \
+        if (!anchorUpToDate__) [[unlikely]] { \
             static std::atomic<bool> anchorRegistered__; \
             logger__.UpdateStaticAnchor(anchor__, &anchorRegistered__, location__, message__.Anchor); \
         } \
@@ -409,7 +444,7 @@ void LogStructuredEvent(
         auto* anchor__ = (anchor); \
         \
         bool anchorUpToDate__ = logger__.IsAnchorUpToDate(*anchor__); \
-        [[unlikely]] if (!anchorUpToDate__) { \
+        if (!anchorUpToDate__) [[unlikely]] { \
             logger__.UpdateDynamicAnchor(anchor__); \
         } \
         \

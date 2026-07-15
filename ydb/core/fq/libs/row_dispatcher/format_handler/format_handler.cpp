@@ -285,7 +285,7 @@ private:
             const auto numberRows = newNumberRows - NumberRows;
             const auto rowSize = newDataPackerSize - DataPackerSize;
 
-            if (!numberRows && !rowSize && !Watermark) {
+            if (!numberRows && !Watermark) {
                 return;
             }
 
@@ -314,7 +314,7 @@ private:
 
             with_lock(Self.Alloc) {
                 const auto rowType = Self.ProgramBuilder->NewMultiType(columnTypes);
-                DataPacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(rowType, NKikimr::NMiniKQL::EValuePackerVersion::V0);
+                DataPacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(rowType, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumValidationMode);
             }
             return TStatus::Success();
         }
@@ -382,6 +382,8 @@ public:
     )
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) {
+        ForceRefresh(); // Clear parser before client is started (otherwise the client may receive too many new messages).
+
         if (Filters) {
             Filters->OnCompileResponse(ev);
         }

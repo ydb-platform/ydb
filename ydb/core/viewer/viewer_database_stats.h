@@ -64,7 +64,7 @@ class TJsonDatabaseStats : public TViewerPipeClient {
     };
 
     std::deque<TMetricsSample> MetricsHistory;
-    
+
     enum class EWakeupTag : ui64 {
         Timeout,
         Refresh,
@@ -106,7 +106,6 @@ public:
         RequestDatabaseNodes();
         ProcessResponses();
 
-        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         if (Streaming = GetRequest().Accepts("text/event-stream")) {
             HttpStream = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), "text/event-stream"));
             Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(HttpStream));
@@ -406,7 +405,8 @@ public:
                     incompleteStorageStats = true;
                 } else {
                     for (const auto& record : response->Record.GetVDiskStateInfo()) {
-                        if (StorageGroups.count(record.GetVDiskId().GetGroupID()) == 0) {
+                        auto itGroup = StorageGroups.find(record.GetVDiskId().GetGroupID());
+                        if (itGroup == StorageGroups.end()) {
                             continue;
                         }
                         diskReadBytes += record.GetReadThroughput();
@@ -424,7 +424,7 @@ public:
                                 }
                                 slotSize = itPDisk->second.GetTotalSize() / slotCount;
                             }
-                            storageTotal += slotSize;
+                            storageTotal += slotSize * TPDiskConfig::GetOwnerWeight(itGroup->second.GetInfo().GetGroupSizeInUnits(), itPDisk->second.GetSlotSizeInUnits());
                         } else {
                             unknownPDisk = true;
                         }
@@ -574,7 +574,8 @@ public:
             hFunc(TEvWakeup, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
-            cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 
@@ -692,10 +693,6 @@ public:
             ProcessResponses();
             RequestDone();
         }
-    }
-
-    void Cancelled() {
-        PassAway();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {

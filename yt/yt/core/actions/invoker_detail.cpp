@@ -54,7 +54,7 @@ void TInvokerWrapper<VirtualizeBase>::SubscribeWaitTimeObserved(const IInvoker::
 template <bool VirtualizeBase>
 void TInvokerWrapper<VirtualizeBase>::UnsubscribeWaitTimeObserved(const IInvoker::TWaitTimeObserver& callback)
 {
-    return UnderlyingInvoker_->SubscribeWaitTimeObserved(callback);
+    return UnderlyingInvoker_->UnsubscribeWaitTimeObserved(callback);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

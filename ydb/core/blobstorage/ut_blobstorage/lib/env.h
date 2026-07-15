@@ -7,10 +7,11 @@
 
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/retro_tracing_impl/distributed_collector/distributed_retro_collector.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
-#include <ydb/library/actors/retro_tracing/retro_collector.h>
+#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
 
 static auto& Cconf = Cnull;
 
@@ -44,6 +45,7 @@ struct TEnvironmentSetup {
         const bool Encryption = false;
         const std::function<void(ui32, TNodeWardenConfig&)> ConfigPreprocessor = nullptr;
         const std::function<void(TTestActorSystem&)> PrepareRuntime = nullptr;
+        const std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor = nullptr;
         const ui32 ControllerNodeId = 1;
         const bool Cache = false;
         const ui32 NumDataCenters = 0;
@@ -72,9 +74,12 @@ struct TEnvironmentSetup {
         const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
         const bool EnablePhantomFlagStorage = false;
         const ui64 PhantomFlagStorageLimitPerVDiskBytes = 10'000'000; // 10_MB
+        const ui64 VolatilePhantomFlagStorageBlobSizeLimitBytes = 1;
         const bool TinySyncLog = false;
         const TDuration MaxPutTimeoutDSProxy = TDuration::Seconds(60);
         const bool StartFakeWilsonCollectors = false;
+        const bool EnableChunkKeeper = true;
+        const bool EnablePersistentPhantomFlagStorage = false;
     };
 
     const TSettings Settings;
@@ -441,6 +446,7 @@ struct TEnvironmentSetup {
                         auto *hostconf = config->BlobStorageConfig.AddDefineHostConfig();
                         hostconf->SetHostConfigId(1);
                         auto *drive = hostconf->AddDrive();
+                        drive->SetPath("SectorMap:X:1000");
                         drive->SetType(NKikimrBlobStorage::EPDiskType::NVME);
 
                         auto& ns = config->NameserviceConfig;
@@ -505,6 +511,7 @@ config:
                 }
                 config->UseActorSystemTimeInBSQueue = Settings.UseActorSystemTimeInBSQueue;
                 config->TinySyncLog = Settings.TinySyncLog;
+                config->VDiskConfigPreprocessor = Settings.VDiskConfigPreprocessor;
                 if (Settings.ConfigPreprocessor) {
                     Settings.ConfigPreprocessor(nodeId, *config);
                 }
@@ -526,14 +533,20 @@ config:
                 }
 
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
+                appData->FeatureFlags.MergeFrom(Settings.FeatureFlags);
 
                 auto& icb = *appData->Icb;
 #define ADD_ICB_CONTROL(ICB_CONTROL_PATH, defaultVal, minVal, maxVal, currentValue) {       \
                     auto& icbControl = icb.ICB_CONTROL_PATH;                                \
                     TControlWrapper control(defaultVal, minVal, maxVal);                    \
                     TControlBoard::RegisterSharedControl(control, icbControl);              \
-                    control = currentValue;                                                 \
-                    IcbControls.insert({{nodeId, #ICB_CONTROL_PATH}, std::move(control)});  \
+                    TIcbControlKey key{nodeId, #ICB_CONTROL_PATH};                          \
+                    if (IcbControls.contains(key)) {                                        \
+                        control = (i64)IcbControls[key];                                    \
+                    } else {                                                                \
+                        control = currentValue;                                             \
+                    }                                                                       \
+                    IcbControls[key] = std::move(control);                                  \
                 }
 
                 if (Settings.BurstThresholdNs) {
@@ -557,15 +570,30 @@ config:
                 ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksSSD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL(DSProxyControls.MaxPutTimeoutSeconds, 60, 1, 1'000'000, Settings.MaxPutTimeoutDSProxy.Seconds());
 
+                ADD_ICB_CONTROL(BlobDepotControls.MaxLoadedTrashRecords, 1'000'000, 1, 100'000'000, 1'000'000);
+
+                ADD_ICB_CONTROL(RetroTracingControls.EnableStorageGeneration, false, false, true, false);
+                ADD_ICB_CONTROL(RetroTracingControls.EnableStorageCollectionSlowRequests, false, false, true, false);
+                ADD_ICB_CONTROL(DSProxyControls.LongRequestThresholdMs, 50'000, 1, 1'000'000'000, 50'000);
+
                 ADD_ICB_CONTROL(VDiskControls.EnableDeepScrubbing, false, false, true, Settings.EnableDeepScrubbing);
                 ADD_ICB_CONTROL(VDiskControls.HullCompThrottlerBytesRate, 0, 0, 10737418240, 0);
                 ADD_ICB_CONTROL(VDiskControls.DefragThrottlerBytesRate, 0, 0, 10'000'000'000, 0);
+                ADD_ICB_CONTROL(VDiskControls.MaxInProgressStartupDataSyncCount, 0, 0, 10'000, 0);
+                ADD_ICB_CONTROL(VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount, 0, 0, 10'000, 0);
+                ADD_ICB_CONTROL(VDiskControls.MaxInProgressLocalRecoveryCount, 0, 0, 10'000, 0);
+                ADD_ICB_CONTROL(VDiskControls.MaxInProgressLocalRecoveryPerPDiskCount, 0, 0, 10'000, 0);
+                ADD_ICB_CONTROL(VDiskControls.MaxInProgressSyncCount, 0, 0, 1'000, 0);
                 ADD_ICB_CONTROL(VDiskControls.MaxChunksToDefragInflight, 10, 1, 50, 10);
                 ADD_ICB_CONTROL(VDiskControls.DefaultHugeGarbagePerMille, 300, 0, 1000, 300);
+                ADD_ICB_CONTROL(PDiskControls.MaxActiveCompactionsPerPDisk, 0, 0, 1'000'000, 0);
                 ADD_ICB_CONTROL(VDiskControls.GarbageThresholdToRunFullCompactionPerMille, 0, 0, 300, 0);
                 ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, true, false, true, Settings.EnablePhantomFlagStorage);
+                ADD_ICB_CONTROL(VDiskControls.EnablePersistentPhantomFlagStorage, false, false, true, Settings.EnablePersistentPhantomFlagStorage);
                 ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
-
+                ADD_ICB_CONTROL(VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes, 1'000'000, 1, 10'000'000, Settings.VolatilePhantomFlagStorageBlobSizeLimitBytes);
+                ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
+                ADD_ICB_CONTROL(VDiskControls.HullCompFreeSpaceThresholdPerMille, 2000, 0, 100'000, 2000);
 #undef ADD_ICB_CONTROL
 
                 {
@@ -590,7 +618,7 @@ config:
                 Runtime->RegisterService(NWilson::MakeWilsonUploaderId(), Runtime->Register(fakeUploader, nodeId));
             }
             Runtime->RegisterService(NRetroTracing::MakeRetroCollectorId(),
-                    Runtime->Register(NRetroTracing::CreateRetroCollector(), nodeId));
+                    Runtime->Register(CreateDistributedRetroCollector(), nodeId));
         }
     }
 
@@ -623,6 +651,10 @@ config:
         localConfig->TabletClassInfo[TTabletTypes::BlobDepot] = TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
             &NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, Runtime->SYSTEM_POOL_ID, TMailboxType::ReadAsFilled,
             Runtime->SYSTEM_POOL_ID));
+
+        localConfig->TabletClassInfo[TTabletTypes::NbsLoadTablet] = TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+            &NKikimr::NNbsDbgLike::CreateNbsDbgLikeLoadTablet, TMailboxType::ReadAsFilled, Runtime->SYSTEM_POOL_ID,
+            TMailboxType::ReadAsFilled, Runtime->SYSTEM_POOL_ID));
 
         auto tenantPoolConfig = MakeIntrusive<TTenantPoolConfig>(localConfig);
         tenantPoolConfig->AddStaticSlot(DomainName);
@@ -1260,5 +1292,11 @@ config:
             Y_ABORT_UNLESS(it != IcbControls.end());
             it->second = value;
         }
+    }
+
+    void SetPDiskStatusFlags(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+        auto it = PDiskMockStates.find({nodeId, pdiskId});
+        UNIT_ASSERT_C(it != PDiskMockStates.end(), "PDisk not found: nodeId# " << nodeId << " pdiskId# " << pdiskId);
+        it->second->SetStatusFlags(color);
     }
 };

@@ -21,7 +21,7 @@
 namespace {
 const size_t MaxStrLen = 512;
 const size_t MaxDemangleLen = 1024 * 1024;
-char Buff[MaxDemangleLen];
+char Buff[MaxDemangleLen]; // NOLINT(modernize-avoid-c-arrays)
 
 class TNoThrowingMemoryOutput: public TMemoryOutput {
 public:
@@ -92,15 +92,15 @@ int HandleLibBacktraceFrame(void* data, uintptr_t, const char* filename, int lin
 namespace NYql::NBacktrace {
 namespace {
 std::mutex Mutex;
-char* Result[Limit];
-size_t Order[Limit];
-char TmpBuffer[MaxStrLen * Limit]{};
+char* Result[Limit];                 // NOLINT(modernize-avoid-c-arrays)
+size_t Order[Limit];                 // NOLINT(modernize-avoid-c-arrays)
+char TmpBuffer[MaxStrLen * Limit]{}; // NOLINT(modernize-avoid-c-arrays)
 auto CreateState(const char* filename) {
     return backtrace_create_state(
         filename,
         0,
         HandleLibBacktraceError,
-        nullptr);
+        /*data=*/nullptr);
 }
 } // namespace
 
@@ -115,7 +115,7 @@ void Symbolize(const TStackFrame* frames, size_t count, IOutputStream* out) {
     }
     const std::lock_guard lock{Mutex};
 
-    std::iota(Order, Order + count, 0u);
+    std::iota(Order, Order + count, 0U);
     std::sort(Order, Order + count, [&frames](auto a, auto b) { return strcmp(frames[a].File, frames[b].File) < 0; });
 
     struct backtrace_state* state = nullptr;

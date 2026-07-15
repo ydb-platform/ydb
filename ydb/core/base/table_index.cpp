@@ -89,6 +89,10 @@ bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
             return false;
         default:
             Y_ENSURE(false, InvalidIndexType(indexType));
@@ -106,7 +110,11 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
     if (!isSecondaryIndex) { // vector and fulltext indexes have special embedding and text key columns
         Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
-            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance);
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalJson
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact);
         takeKeyColumns--;
     }
 
@@ -136,6 +144,12 @@ NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexCreationCo
         : NKikimrSchemeOp::EIndexTypeGlobal;
 }
 
+NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexAlteringConfig& indexAlter) {
+    return indexAlter.HasType()
+        ? indexAlter.GetType()
+        : NKikimrSchemeOp::EIndexTypeGlobal;
+}
+
 TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType) {
     return TStringBuilder() << "Invalid index type " << static_cast<int>(indexType);
 }
@@ -155,6 +169,8 @@ std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::Table
             return NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextRelevanceIndex:
             return NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalJsonIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobalJson;
         default:
             return std::nullopt;
     }
@@ -164,6 +180,24 @@ NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase ty
     const auto result = TryConvertIndexType(type);
     Y_ENSURE(result);
     return *result;
+}
+
+bool IsLocalTableIndex(Ydb::Table::TableIndex::TypeCase type) {
+    switch (type) {
+        case Ydb::Table::TableIndex::kGlobalIndex:
+        case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+        case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
+        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
+        case Ydb::Table::TableIndex::kGlobalJsonIndex:
+        case Ydb::Table::TableIndex::TYPE_NOT_SET:
+            return false;
+        case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
+        case Ydb::Table::TableIndex::kLocalMinMaxIndex:
+            return true;
+    }
 }
 
 bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain) {
@@ -241,7 +275,11 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
         // Vector and fulltext indexes allow to add all columns both to index & data
         Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
-            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance);
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalJson
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact);
     }
     if (const auto* broken = IsContains(index.DataColumns, tmp, true)) {
         explain = TStringBuilder()
@@ -260,6 +298,10 @@ bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
             return false;
         default:
             Y_DEBUG_ABORT_S(InvalidIndexType(indexType));
@@ -283,19 +325,17 @@ std::span<const std::string_view> GetImplTables(
                 return PrefixedGlobalKMeansTreeImplTables;
             }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
-            return GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::FLAT);
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            return GlobalFulltextPlainImplTables;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
-            return GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            return GlobalFulltextWithRelevanceImplTables;
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            return GlobalFulltextPlainImplTables;
         default:
             Y_ENSURE(false, InvalidIndexType(indexType));
     }
-}
-
-std::span<const std::string_view> GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::Layout layout) {
-    if (layout == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-        return GlobalFulltextWithRelevanceImplTables;
-    }
-    return GlobalFulltextPlainImplTables;
 }
 
 bool IsImplTable(std::string_view tableName) {
@@ -305,7 +345,9 @@ bool IsImplTable(std::string_view tableName) {
 bool IsBuildImplTable(std::string_view tableName) {
     // all impl tables that ends with "build" should be used only for index creation and dropped when index build is finished
     return tableName.ends_with(NKMeans::BuildSuffix0)
-        || tableName.ends_with(NKMeans::BuildSuffix1);
+        || tableName.ends_with(NKMeans::BuildSuffix1)
+        // transient compact-fulltext rowid-mode source table - dropped on apply like the *build tables
+        || tableName.ends_with(NFulltext::RowIdSrcBuildSuffix);
 }
 
 namespace NFulltext {

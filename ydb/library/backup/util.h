@@ -15,11 +15,17 @@
 #define LOG_W(message) LOG_IMPL(NYdb::NBackup::GetLog(), ELogPriority::TLOG_WARNING, message)
 #define LOG_E(message) LOG_IMPL(NYdb::NBackup::GetLog(), ELogPriority::TLOG_ERR, message)
 
+namespace google::protobuf {
+    class Message;
+}
+
 namespace NYdb {
 
 namespace NBackup {
     void SetLog(const std::shared_ptr<::TLog>& log);
     const std::shared_ptr<::TLog>& GetLog();
+
+    TString ProtoToString(const google::protobuf::Message& message);
 }
 
 // Retrive path relative to database root from absolute

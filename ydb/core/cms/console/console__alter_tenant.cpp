@@ -1,6 +1,10 @@
 #include "console_tenants_manager.h"
 #include "console_impl.h"
 
+#include <ydb/core/tx/schemeshard/schemeshard_user_attr_limits.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
+
 namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxAlterTenant : public TTransactionBase<TTenantsManager> {
@@ -16,7 +20,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Cannot alter tenant: " << error);
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot alter tenant",
+            {"error", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
@@ -38,8 +43,8 @@ public:
 
         auto &rec = Request->Get()->Record.GetRequest();
         auto &token = Request->Get()->Record.GetUserToken();
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "TTxAlterTenant: "
-                    << Request->Get()->Record.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant execute",
+            {"ev", Request->Get()->Record.ShortDebugString()});
 
         Response = new TEvConsole::TEvAlterTenantResponse;
 
@@ -58,7 +63,7 @@ public:
 
         // Check idempotency key
         if (rec.idempotency_key() && Tenant->AlterIdempotencyKey == rec.idempotency_key()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Returning success due to idempotency key match");
+            YDB_LOG_DEBUG_CTX(ctx, "Returning success due to idempotency key match");
             auto &operation = *Response->Record.MutableResponse()->mutable_operation();
             operation.set_ready(true);
             operation.set_status(Ydb::StatusIds::SUCCESS);
@@ -138,8 +143,38 @@ public:
             if (!Self->MakeBasicPoolCheck(kind, size, code, error))
                 return Error(code, error, ctx);
 
-            PoolsToAdd[kind] += size;
+            PoolsToChange[kind] += size;
             newGroups += size;
+        }
+
+        // Check removed storage resource units
+        for (const auto &unit : rec.storage_units_to_remove()) {
+            if (Tenant->AreResourcesShared) {
+                return Error(Ydb::StatusIds::UNSUPPORTED,
+                            Sprintf("Database '%s' is shared, cannot remove storage units", path.data()), ctx);
+            }
+            if (Tenant->SharedDomainId) {
+                return Error(Ydb::StatusIds::UNSUPPORTED,
+                            Sprintf("Database '%s' is serverless, cannot remove storage units", path.data()), ctx);
+            }
+
+            const auto &kind = unit.unit_kind();
+            auto poolIt = Tenant->StoragePools.find(kind);
+            if (poolIt == Tenant->StoragePools.end()) {
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                             Sprintf("Unsupported storage unit kind '%s'.", kind.data()), ctx);
+            }
+            if (poolIt->second->Borrowed) {
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                            Sprintf("Pool '%s' is borrowed, cannot alter", kind.data()), ctx);
+            }
+            if (std::cmp_less_equal(static_cast<i64>(poolIt->second->GetGroups()) + PoolsToChange[kind], unit.count())) {
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                             Sprintf("Not enough units of kind '%s' to remove",
+                                     kind.data()),
+                             ctx);
+            }
+            PoolsToChange[kind] -= unit.count();
         }
 
         // Check deregistered computational units.
@@ -207,7 +242,7 @@ public:
             if (!Self->FeatureFlags.GetEnableScaleRecommender()) {
                 return Error(Ydb::StatusIds::UNSUPPORTED, "Feature flag EnableScaleRecommender is off", ctx);
             }
-            
+
             const auto& policies = rec.scale_recommender_policies();
             if (policies.policies().size() > 1) {
                 return Error(Ydb::StatusIds::BAD_REQUEST, "Currently, no more than one policy is supported at a time", ctx);
@@ -243,16 +278,33 @@ public:
                 }
             }
         }
-        
+
         // Check attributes.
         THashSet<TString> attrNames;
         for (const auto& [key, value] : rec.alter_attributes()) {
+
             if (!key)
                return Error(Ydb::StatusIds::BAD_REQUEST,
                              "Attribute name shouldn't be empty", ctx);
+
+            if (key.size() > NSchemeShard::TUserAttributesLimits::MaxNameLen) {
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                    Sprintf("Key '%s' is too long, max: " PRIu32 ", actual: " PRIu32,
+                        key.data(), NSchemeShard::TUserAttributesLimits::MaxNameLen, key.size()),
+                    ctx);
+            }
+
+            if (value.size() > NSchemeShard::TUserAttributesLimits::MaxValueLen) {
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                    Sprintf("Value for key '%s' is too long, max: " PRIu32 ", actual: " PRIu32,
+                        key.data(), NSchemeShard::TUserAttributesLimits::MaxValueLen, value.size()),
+                    ctx);
+            }
+
             if (attrNames.contains(key))
                 return Error(Ydb::StatusIds::BAD_REQUEST,
                              Sprintf("Multiple attributes with name '%s'", key.data()), ctx);
+
             attrNames.insert(key);
         }
 
@@ -276,7 +328,7 @@ public:
         }
 
         // Apply storage units changes.
-        for (auto &pr : PoolsToAdd) {
+        for (auto &pr : PoolsToChange) {
             TStoragePool::TPtr pool;
             auto &kind = pr.first;
             auto size = pr.second;
@@ -284,7 +336,7 @@ public:
                 auto cur = Tenant->StoragePools.at(kind);
                 Y_ABORT_UNLESS(!cur->Borrowed);
                 pool = new TStoragePool(*cur);
-                pool->AddRequiredGroups(size);
+                pool->ChangeRequiredGroups(size);
                 pool->State = TStoragePool::NOT_UPDATED;
             } else {
                 Y_ABORT_UNLESS(!Tenant->AreResourcesShared);
@@ -326,6 +378,11 @@ public:
             Self->DbUpdateTenantAlterIdempotencyKey(Tenant, Tenant->AlterIdempotencyKey, txc, ctx);
         }
 
+        // Attributes with empty values are kept forever as tombstones
+        // to self-heal divergence with subdomain if subdomain AlterUserAttributes
+        // request didn't reach SchemeShard (due to Console restart
+        // right after persisting updated Tenant->Attributes in local db
+        // but before sending request into subdomain, etc)
         if (!rec.alter_attributes().empty()) {
             for (const auto& [key, value] : rec.alter_attributes()) {
                 const auto it = attributeMap.find(key);
@@ -364,13 +421,14 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG(ctx, NKikimrServices::CMS_TENANTS, "TTxAlterTenant Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant Complete");
 
         Y_ABORT_UNLESS(Response);
         Self->Counters.Inc(Response->Record.GetResponse().operation().status(),
                            COUNTER_ALTER_RESPONSES);
 
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS, "Send: " << Response->ToString());
+        YDB_LOG_TRACE_CTX(ctx, "Send",
+            {"ev", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         if (Tenant) {
@@ -393,20 +451,24 @@ public:
                 Self->Counters.Inc(pr.second.Kind, COUNTER_REGISTERED_UNITS);
                 Tenant->RegisteredComputationalUnits[pr.first] = pr.second;
             }
-            for (auto &pr : PoolsToAdd) {
+            for (auto &pr : PoolsToChange) {
                 TStoragePool::TPtr pool;
                 auto &kind = pr.first;
                 auto size = pr.second;
                 if (Tenant->StoragePools.contains(kind)) {
                     pool = Tenant->StoragePools.at(kind);
-                    pool->AddRequiredGroups(size);
+                    pool->ChangeRequiredGroups(size);
                     pool->State = TStoragePool::NOT_UPDATED;
                 } else {
                     pool = Self->MakeStoragePool(Tenant, kind, size);
                     Tenant->StoragePools.emplace(std::make_pair(kind, pool));
                 }
 
-                Self->Counters.Inc(kind, COUNTER_REQUESTED_STORAGE_UNITS, size);
+                if (size >= 0) {
+                    Self->Counters.Inc(kind, COUNTER_REQUESTED_STORAGE_UNITS, size);
+                } else {
+                    Self->Counters.Dec(kind, COUNTER_REQUESTED_STORAGE_UNITS, -size);
+                }
             }
             if (SchemaOperationQuotas) {
                 Tenant->SchemaOperationQuotas.ConstructInPlace(*SchemaOperationQuotas);
@@ -437,7 +499,7 @@ private:
     THashMap<std::pair<TString, TString>, ui64> NewComputationalUnits;
     THashMap<std::pair<TString, ui32>, TAllocatedComputationalUnit> UnitsToRegister;
     THashSet<std::pair<TString, ui32>> UnitsToDeregister;
-    THashMap<TString, ui64> PoolsToAdd;
+    THashMap<TString, i64> PoolsToChange;
     TMaybe<Ydb::Cms::SchemaOperationQuotas> SchemaOperationQuotas;
     TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas;
     TMaybe<Ydb::Cms::ScaleRecommenderPolicies> ScaleRecommenderPolicies;

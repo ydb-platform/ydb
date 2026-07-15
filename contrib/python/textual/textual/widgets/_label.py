@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from rich.console import RenderableType
-
-from textual.visual import SupportsVisual
+from textual.visual import VisualType
 from textual.widgets._static import Static
 
 LabelVariant = Literal["success", "error", "warning", "primary", "secondary", "accent"]
@@ -50,7 +48,7 @@ class Label(Static):
 
     def __init__(
         self,
-        renderable: RenderableType | SupportsVisual = "",
+        content: VisualType = "",
         *,
         variant: LabelVariant | None = None,
         expand: bool = False,
@@ -62,7 +60,7 @@ class Label(Static):
         disabled: bool = False,
     ) -> None:
         super().__init__(
-            renderable,
+            content,
             expand=expand,
             shrink=shrink,
             markup=markup,

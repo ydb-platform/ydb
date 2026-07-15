@@ -43,15 +43,6 @@ from .common import (YsonError,
                      FALSE_MARKER, TRUE_MARKER, UINT64_MARKER)
 from . import yson_types
 
-try:
-    from yt.packages.six.moves import map as imap
-    from yt.packages.six import (integer_types, text_type, binary_type,
-                                 iteritems, iterkeys, iterbytes, PY3)
-except ImportError:
-    from six.moves import map as imap
-    from six import (integer_types, text_type, binary_type,
-                     iteritems, iterkeys, iterbytes, PY3)
-
 import math
 import struct
 # Python3 compatibility
@@ -97,7 +88,7 @@ def _escape_bytes(obj):
         return b""
 
     res = bytearray()
-    iterator = iterbytes(obj)
+    iterator = iter(obj)
     cur = next(iterator)
     for nxt in iterator:
         _escape_byte(cur, nxt, res)
@@ -143,7 +134,7 @@ def _raise_error_with_context(message, context):
     if context.row_index is not None:
         attributes["row_index"] = context.row_index
 
-    path_parts = imap(str, context.path_parts)
+    path_parts = map(str, context.path_parts)
     if context.path_parts:
         attributes["row_key_path"] = "/" + "/".join(path_parts)
     raise YsonError(message, attributes=attributes)
@@ -235,7 +226,7 @@ class Dumper(object):
                 result = b"%true"
             else:
                 result = TRUE_MARKER
-        elif isinstance(obj, integer_types):
+        elif isinstance(obj, int):
             if obj < -2 ** 63 or obj >= 2 ** 64:
                 _raise_error_with_context("Integer {0} cannot be represented in YSON "
                                           "since it is out of range [-2^63, 2^64 - 1])".format(obj), context)
@@ -249,7 +240,7 @@ class Dumper(object):
             result = self._dump_integer(obj, greater_than_max_int64)
         elif isinstance(obj, float):
             result = self._dump_float(obj)
-        elif isinstance(obj, (text_type, binary_type, yson_types.YsonStringProxy)):
+        elif isinstance(obj, (str, bytes, yson_types.YsonStringProxy)):
             result = self._dump_string(obj, context)
         elif isinstance(obj, Mapping):
             result = self._dump_map(obj, context)
@@ -270,8 +261,6 @@ class Dumper(object):
                 obj_str = str(obj)
 
             result = obj_str.encode("ascii")
-            if not PY3:
-                result = result.rstrip(b"L")
             if force_uint64 or isinstance(obj, yson_types.YsonUint64):
                 result += b"u"
         else:
@@ -301,9 +290,9 @@ class Dumper(object):
         return result
 
     def _dump_string(self, obj, context):
-        if isinstance(obj, binary_type):
+        if isinstance(obj, bytes):
             result = obj
-        elif isinstance(obj, text_type):
+        elif isinstance(obj, str):
             if self._encoding is None:
                 _raise_error_with_context('Cannot encode unicode object {0!r} to bytes since "encoding" '
                                           'parameter is None. Consider using byte strings '
@@ -327,7 +316,7 @@ class Dumper(object):
             result += [b"{", self._format.nextline()]
 
         for k, v in self._format.mapping_iter(obj):
-            if not isinstance(k, (text_type, binary_type, yson_types.YsonStringProxy)):
+            if not isinstance(k, (str, bytes, yson_types.YsonStringProxy)):
                 _raise_error_with_context("Only string can be Yson map key. Key: {0!r}".format(k), context)
 
             @self._circular_check(v)
@@ -375,7 +364,7 @@ class Dumper(object):
     def _dump_attributes(self, obj, context):
         result = [b"<", self._format.nextline()]
         for k, v in obj.items():
-            if not isinstance(k, (text_type, binary_type)):
+            if not isinstance(k, (str, bytes)):
                 _raise_error_with_context("Only string can be Yson map key. Key: {0!r}".format(obj), context)
 
             @self._circular_check(v)
@@ -437,6 +426,6 @@ class FormatDetails(object):
 
     def mapping_iter(self, mapping):
         if self._sort_keys:
-            return ((key, mapping[key]) for key in sorted(iterkeys(mapping)))
+            return ((key, mapping[key]) for key in sorted(mapping.keys()))
         else:
-            return iteritems(mapping)
+            return mapping.items()

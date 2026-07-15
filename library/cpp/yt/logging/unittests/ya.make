@@ -9,6 +9,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/testing/gtest
+    library/cpp/yt/error
     library/cpp/yt/logging
 )
 

@@ -99,6 +99,22 @@ TVector<TConfigTemplate> BuildExamples() {
     }
 })_"
         }
+        ,TConfigTemplate{
+            .LoadName = "PersistentBufferWriteLoad",
+            .Template = R"_(PersistentBufferWriteLoad: {
+    DurationSeconds: 60
+    DDiskId: {
+        NodeId: 1
+        PDiskId: 1
+        DDiskSlotId: 1
+    }
+    WriteInfos: [
+        { Size: 4096 Weight: 5 }
+        { Size: 8192 Weight: 5 }
+        { Size: 32768 Weight: 1 }
+    ]
+})_"
+        }
 #endif
     };
     return result;

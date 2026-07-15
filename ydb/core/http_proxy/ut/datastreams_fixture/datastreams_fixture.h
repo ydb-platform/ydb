@@ -1,9 +1,6 @@
 #pragma once
 
-#include <ydb/library/actors/http/http_proxy.h>
-
-#include <ydb/library/grpc/server/actors/logger.h>
-
+#include <ydb/core/http_proxy/auth_factory.h>
 #include <ydb/core/http_proxy/discovery_actor.h>
 #include <ydb/core/http_proxy/events.h>
 #include <ydb/core/http_proxy/grpc_service.h>
@@ -12,22 +9,18 @@
 #include <ydb/core/http_proxy/metrics_actor.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
-
+#include <ydb/core/ymq/actor/serviceid.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/folder_service/folder_service.h>
+#include <ydb/library/grpc/server/actors/logger.h>
 #include <ydb/library/persqueue/tests/counters.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
-
 #include <ydb/services/ydb/ydb_common_ut.h>
-
-#include <ydb/core/http_proxy/auth_factory.h>
-
-#include <ydb/library/folder_service/folder_service.h>
-#include <ydb/core/ymq/actor/serviceid.h>
 
 #include <library/cpp/http/misc/parsed_request.h>
 #include <library/cpp/json/json_reader.h>
@@ -75,9 +68,24 @@ public:
 
     void SetUp(NUnitTest::TTestContext&) override;
 
-    void InitAll(bool yandexCloudMode = true, bool enableMetering = false, bool extendedQueueUrl = false);
+    struct TInitParameters {
+        bool YandexCloudMode : 1 = true;
+        bool EnableMetering : 1 = false;
+        bool EnableSqsTopic : 1 = false;
+        bool EnforceUserTokenRequirement : 1 = false;
+        bool EnableTopicPartitionSplitBasedOnKllSketch : 1 = false;
+        bool EnableTopicPartitionSplitBasedOnMessages : 1 = false;
+        bool EnableTopicMessagesBatching : 1 = false;
+        bool EnableAccessServiceV2Interface : 1 = false;
+        bool TopicsAreFirstClassCitizen : 1 = true;
+    };
 
-    static TString FormAuthorizationStr(const TString& region);
+    void InitAll(const TInitParameters initParameters);
+
+    TString FormAuthorizationStr(const TString& region) const;
+
+    void EnableAuthorization();
+    void DisableAuthorization();
 
     static NJson::TJsonValue CreateCreateStreamRequest();
 
@@ -107,7 +115,12 @@ public:
 
     THttpResult SendHttpRequestRaw(const TString& handler, const TString& target,
                                    const IOutputStream::TPart& body, const TString& authorizationStr,
-                                   const TString& contentType = "application/json");
+                                   const TString& contentType = "application/json",
+                                   const TString& securityToken = "");
+
+    THttpResult SendHttpRequestXmlRaw(const TString& handler, const IOutputStream::TPart& body,
+                                      const TString& authorizationStr,
+                                      const TString& securityToken = "");
 
     THttpResult SendHttpRequestRawSpecified(const TString& handler, const TString& target,
                                    const TString& host, const TString& date, const TString& userAgent,
@@ -117,7 +130,12 @@ public:
 
     THttpResult SendHttpRequest(const TString& handler, const TString& target, NJson::TJsonValue value,
                                 const TString& authorizationStr,
-                                const TString& contentType = "application/json");
+                                const TString& contentType = "application/json",
+                                const TString& securityToken = "");
+
+    NJson::TJsonMap CreateQueueWithSecurityToken(NJson::TJsonMap request,
+                                                 const TString& securityToken = "root@builtin",
+                                                 ui32 expectedHttpCode = 200);
 
     THttpResult SendHttpRequestSpecified(const TString& handler, const TString& target, NJson::TJsonValue value,
                                 const TString& host, const TString& date, const TString& userAgent,
@@ -128,7 +146,7 @@ public:
 
     NJson::TJsonMap CreateQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", request, FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, expectedHttpCode, res.Body);
         NJson::TJsonMap json;
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
         if (expectedHttpCode == 200) {
@@ -146,14 +164,43 @@ public:
         return json;
     }
 
+    NJson::TJsonMap CreateQueueXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto json = SendXmlRequest("CreateQueue", request, expectedHttpCode);
+        if (expectedHttpCode == 200) {
+            const TString url = GetByPath<TString>(json, "QueueUrl");
+            const TString queue = GetByPath<TString>(request, "QueueName");
+            if (SqsTopicMode) {
+                TStringBuf topic, consumer;
+                TStringBuf{queue}.RSplit('@', topic, consumer);
+                UNIT_ASSERT_C(url.contains(topic), LabeledOutput(url, queue, topic));
+                UNIT_ASSERT_C(url.contains(consumer), LabeledOutput(url, queue, consumer));
+            } else {
+                UNIT_ASSERT_C(url.EndsWith(queue), LabeledOutput(url, queue));
+            }
+        }
+        return json;
+    }
+
     NJson::TJsonMap SendJsonRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode = 200);
+
+    NJson::TJsonMap SendXmlRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode = 200);
+
+    NJson::TJsonMap SendJsonRequestWithRetries(TString method, NJson::TJsonMap request, ui32 expectedHttpCode, ui32 retries = 10);
 
     NJson::TJsonMap DeleteQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("DeleteQueue", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap DeleteQueueXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("DeleteQueue", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap GetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("GetQueueAttributes", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap GetQueueAttributesXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("GetQueueAttributes", request, expectedHttpCode);
     }
 
     NJson::TJsonMap SendMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
@@ -164,48 +211,104 @@ public:
         return json;
     }
 
+    NJson::TJsonMap SendMessageXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto json = SendXmlRequest("SendMessage", request, expectedHttpCode);
+        if (expectedHttpCode == 200) {
+            UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+        }
+        return json;
+    }
+
+    NJson::TJsonMap SendMessageWithRetries(NJson::TJsonMap request, ui32 expectedHttpCode = 200, ui32 retries = 20) {
+        return SendJsonRequestWithRetries("SendMessage", request, expectedHttpCode, retries);
+    }
+
     NJson::TJsonMap SendMessageBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("SendMessageBatch", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap SendMessageBatchXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("SendMessageBatch", request, expectedHttpCode);
     }
 
     NJson::TJsonMap ReceiveMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("ReceiveMessage", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap ReceiveMessageXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("ReceiveMessage", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap DeleteMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("DeleteMessage", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap DeleteMessageXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("DeleteMessage", request, expectedHttpCode);
     }
 
     NJson::TJsonMap DeleteMessageBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("DeleteMessageBatch", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap DeleteMessageBatchXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("DeleteMessageBatch", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap GetQueueUrl(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("GetQueueUrl", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap GetQueueUrlXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("GetQueueUrl", request, expectedHttpCode);
     }
 
     NJson::TJsonMap ListQueues(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("ListQueues", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap ListQueuesXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("ListQueues", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap PurgeQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("PurgeQueue", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap PurgeQueueXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("PurgeQueue", request, expectedHttpCode);
     }
 
     NJson::TJsonMap SetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("SetQueueAttributes", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap SetQueueAttributesXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("SetQueueAttributes", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap ListQueueTags(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("ListQueueTags", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap ListQueueTagsXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("ListQueueTags", request, expectedHttpCode);
     }
 
     NJson::TJsonMap TagQueue(NJson::TJsonMap request = {}, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("TagQueue", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap TagQueueXml(NJson::TJsonMap request = {}, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("TagQueue", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap UntagQueue(NJson::TJsonMap request = {}, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("UntagQueue", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap UntagQueueXml(NJson::TJsonMap request = {}, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("UntagQueue", request, expectedHttpCode);
     }
 
     void WaitQueueAttributes(TString queueUrl, size_t retries, NJson::TJsonMap attributes);
@@ -216,18 +319,26 @@ public:
         return SendJsonRequest("ChangeMessageVisibility", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap ChangeMessageVisibilityXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("ChangeMessageVisibility", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap ChangeMessageVisibilityBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("ChangeMessageVisibilityBatch", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap ChangeMessageVisibilityBatchXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("ChangeMessageVisibilityBatch", request, expectedHttpCode);
     }
 
 private:
     TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query);
 
-    void InitKikimr(bool yandexCloudMode, bool enableMetering);
+    void InitKikimr(const TInitParameters& initParameters);
 
-    void InitAccessServiceService();
+    void InitAccessServiceService(bool enableAccessServiceV2Interface);
 
-    void InitHttpServer(bool yandexCloudMode, bool enableSqsTopic);
+    void InitHttpServer(bool yandexCloudMode, bool enableSqsTopic, bool enableAccessServiceV2Interface);
 
 public:
     std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> AuthFactory;
@@ -235,6 +346,7 @@ public:
     TPortManager PortManager;
     TTestActorRuntime* ActorRuntime = nullptr;
     TAccessServiceMock AccessServiceMock;
+    TAccessServiceMockV2 AccessServiceMockV2;
     TString AccessServiceEndpoint;
     std::unique_ptr<grpc::Server> AccessServiceServer;
     std::unique_ptr<grpc::Server> IamTokenServer;
@@ -251,22 +363,60 @@ public:
     ui16 MonPort = 0;
     ui16 KikimrGrpcPort = 0;
     bool SqsTopicMode = false;
+    bool SendAuthorizationStr = true;
 };
 
 class THttpProxyTestMockForSQS : public THttpProxyTestMock {
+    public:
     void SetUp(NUnitTest::TTestContext&) override {
-        InitAll(false);
+        InitAll(TInitParameters{
+            .YandexCloudMode = false,
+        });
     }
 };
 
 class THttpProxyTestMockWithMetering : public THttpProxyTestMock {
+    public:
     void SetUp(NUnitTest::TTestContext&) override {
-        InitAll(true, true);
+        InitAll(TInitParameters{
+            .EnableMetering = true,
+        });
     }
 };
 
 class THttpProxyTestMockForSQSTopic : public THttpProxyTestMock {
+    public:
     void SetUp(NUnitTest::TTestContext&) override {
-        InitAll(true, false, true);
+        InitAll(TInitParameters{
+            .EnableSqsTopic = true,
+        });
+    }
+};
+
+class THttpProxyTestMockForSQSTopicWithKllAutosplit : public THttpProxyTestMock {
+public:
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(TInitParameters{
+            .EnableSqsTopic = true,
+            .EnableTopicPartitionSplitBasedOnKllSketch = true,
+        });
+    }
+};
+
+class THttpProxyTestMockForKinesisWithKllAutosplit : public THttpProxyTestMock {
+public:
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(TInitParameters{
+            .EnableTopicPartitionSplitBasedOnKllSketch = true,
+        });
+    }
+};
+
+class THttpProxyTestMockForAccessServiceV2 : public THttpProxyTestMock {
+public:
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(TInitParameters{
+            .EnableAccessServiceV2Interface = true,
+        });
     }
 };

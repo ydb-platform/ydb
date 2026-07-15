@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(ConnectionChecker) {
         std::atomic_uint32_t numNotify = 0;
         std::atomic_uint32_t numNotifySuccess = 0;
         auto checkerFactory = [&](ui32 nodeId) { return new TCheckerActor(nodeId, &numIncoming, &numOutgoing, &numNotify, &numNotifySuccess); };
-        TTestICCluster testCluster(2, {}, nullptr, nullptr, TTestICCluster::EMPTY, checkerFactory);
+        TTestICCluster testCluster(2, {}, nullptr, nullptr, TTestICCluster::DISABLE_RDMA, checkerFactory);
         auto pongerId = testCluster.RegisterActor(new TPonger, 1);
         TManualEvent ev;
         testCluster.RegisterActor(new TPinger(pongerId, &ev, &numConnected, &numDisconnected), 2);
@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(ConnectionChecker) {
         std::atomic_uint32_t numNotify = 0;
         std::atomic_uint32_t numNotifySuccess = 0;
         auto checkerFactory = [&](ui32 nodeId) { return new TCheckerActor(nodeId, &numIncoming, &numOutgoing, &numNotify, &numNotifySuccess, true); };
-        TTestICCluster testCluster(2, {}, nullptr, nullptr, TTestICCluster::EMPTY, checkerFactory);
+        TTestICCluster testCluster(2, {}, nullptr, nullptr, TTestICCluster::DISABLE_RDMA, checkerFactory);
         auto pongerId = testCluster.RegisterActor(new TPonger, 1);
         TManualEvent ev;
         testCluster.RegisterActor(new TPinger(pongerId, &ev, &numConnected, &numDisconnected), 2);

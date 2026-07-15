@@ -24,6 +24,7 @@ from google.protobuf import text_format
 import grpc
 from . import issues, _apis, _utilities
 from . import default_pem
+from .opentelemetry.tracing import get_trace_metadata
 
 _stubs_list = (
     _apis.TableService.Stub,
@@ -98,6 +99,9 @@ def _rpc_error_handler(
             return issues.Unimplemented("Method or feature is not implemented on server!")
         elif rpc_error.code() == grpc.StatusCode.CANCELLED:
             return issues.Cancelled(rpc_error.details())
+        elif rpc_error.code() == grpc.StatusCode.RESOURCE_EXHAUSTED:
+            if "Sent message larger than max" in rpc_error.details():
+                return issues.BadRequest(rpc_error.details())
         elif use_unavailable and rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
             return issues.Unavailable(rpc_error.details())
 
@@ -175,7 +179,10 @@ def _construct_metadata(driver_config, settings):
             metadata.append((YDB_REQUEST_TYPE_HEADER, settings.request_type))
         metadata.extend(getattr(settings, "headers", []))
 
-    metadata.append(_utilities.x_ydb_sdk_build_info_header())
+    metadata.append(_utilities.x_ydb_sdk_build_info_header(getattr(driver_config, "_additional_sdk_headers", ())))
+
+    metadata.extend(get_trace_metadata())
+
     return metadata
 
 
@@ -191,11 +198,14 @@ def _get_request_timeout(settings):
 
 
 class EndpointOptions(object):
-    __slots__ = ("ssl_target_name_override", "node_id")
+    __slots__ = ("ssl_target_name_override", "node_id", "address", "port", "location")
 
-    def __init__(self, ssl_target_name_override=None, node_id=None):
+    def __init__(self, ssl_target_name_override=None, node_id=None, address=None, port=None, location=None):
         self.ssl_target_name_override = ssl_target_name_override
         self.node_id = node_id
+        self.address = address
+        self.port = port
+        self.location = location
 
 
 def _construct_channel_options(driver_config, endpoint_options=None):
@@ -402,6 +412,9 @@ class Connection(object):
         "closing",
         "endpoint_key",
         "node_id",
+        "peer_address",
+        "peer_port",
+        "peer_location",
     )
 
     def __init__(
@@ -416,9 +429,11 @@ class Connection(object):
         discovered by the YDB endpoint discovery mechanism
         :param driver_config: A driver config instance to be used for RPC call interception
         """
-        global _stubs_list
         self.endpoint = endpoint
         self.node_id = getattr(endpoint_options, "node_id", None)
+        self.peer_address = getattr(endpoint_options, "address", None)
+        self.peer_port = getattr(endpoint_options, "port", None)
+        self.peer_location = getattr(endpoint_options, "location", None)
         self.endpoint_key = EndpointKey(endpoint, getattr(endpoint_options, "node_id", None))
         self._channel = channel_factory(self.endpoint, driver_config, endpoint_options=endpoint_options)
         self._driver_config = driver_config
@@ -587,8 +602,12 @@ class Connection(object):
                 self.destroy()
 
     def destroy(self):
-        if hasattr(self, "_channel") and hasattr(self._channel, "close"):
-            self._channel.close()
+        channel = getattr(self, "_channel", None)
+        if channel is not None and hasattr(channel, "close"):
+            channel.close()
+
+        self._stub_instances.clear()
+        self._channel = None
 
     def ready_future(self):
         """

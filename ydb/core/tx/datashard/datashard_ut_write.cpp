@@ -42,15 +42,12 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         return {runtime, server, sender};
     }
 
-    Y_UNIT_TEST_TWIN(ExecSQLUpsertImmediate, EvWrite) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
+    Y_UNIT_TEST(ExecSQLUpsertImmediate) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -678,15 +675,82 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(ExecSQLUpsertPrepared, EvWrite, Volatile) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
+    Y_UNIT_TEST(UpsertIncrementPrecharge) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        auto opts = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint64", true, false},           // key (id=1)
+                {"uint32_val", "Uint32", false, false},   // id=2
+                {"uint64_val", "Uint64", false, false}    // id=3
+            });
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        ui64 txId = 100;
+
+        Cout << "========= Upsert 1000 rows =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2, 3}; // key and numeric columns
+            TVector<TCell> increments;
+            for (ui64 id = 1; id <= 1000; id++) {
+                increments.push_back(TCell::Make(id));
+                increments.push_back(TCell::Make(ui32(1)));
+                increments.push_back(TCell::Make(ui64(1)));
+            }
+            auto result = UpsertIncrement(runtime, sender, shard, tableId, txId,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        Cout << "========= Compact and reboot to clear cache =========\n";
+        CompactTable(runtime, shard, tableId, false);
+        RebootTablet(runtime, shard, sender);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        auto getTabletNotReadyCount = [&]() -> ui64 {
+            auto edge = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, edge, new TEvTablet::TEvGetCounters(),
+                0, GetPipeConfigWithRetries());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(edge);
+            UNIT_ASSERT(ev);
+            for (const auto& counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
+                if (counter.GetName() == "DataShard/TxTabletNotReady") {
+                    return counter.GetValue();
+                }
+            }
+            return 0;
+        };
+
+        ui64 notReadyBefore = getTabletNotReadyCount();
+
+        Cout << "========= UPSERT_INCREMENT on rows 1, 500, 1000 =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2, 3};
+            TVector<TCell> increments = {
+                TCell::Make(ui64(1)), TCell::Make(ui32(10)), TCell::Make(ui64(100)),
+                TCell::Make(ui64(500)), TCell::Make(ui32(10)), TCell::Make(ui64(100)),
+                TCell::Make(ui64(1000)), TCell::Make(ui32(10)), TCell::Make(ui64(100)),
+            };
+
+            auto result = UpsertIncrement(runtime, sender, shard, tableId, txId,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        ui64 notReadyAfter = getTabletNotReadyCount();
+
+        // Should have at most 1 TabletNotReady
+        Cout << "TabletNotReady count after UPSERT_INCREMENT: " << (notReadyAfter - notReadyBefore) << "\n";
+        UNIT_ASSERT_C(notReadyAfter - notReadyBefore <= 1, "Too many page faults: " << (notReadyAfter - notReadyBefore));
+    }
+
+    Y_UNIT_TEST_TWIN(ExecSQLUpsertPrepared, Volatile) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -1239,6 +1303,151 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 1);"));
             Upsert(runtime, sender, shard, tableId, opts.Columns_, rowCount, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        }
+    }
+
+    Y_UNIT_TEST(CancelMultipleImmediateTransactionsFromQueue) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const TString tableName = "table-1";
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", tableName, opts);
+        const ui64 shard = shards[0];
+
+        TActorId shardActorId = ResolveTablet(runtime, shard, 0, false);
+
+        const ui64 txId1 = 101, txId2 = 102, txId3 = 103, txId4 = 104, txId5 = 105;
+
+        auto sendWrite = [&](ui64 txId, ui32 key, ui32 value) {
+            auto request = MakeWriteRequestOneKeyValue(
+                txId,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, opts.Columns_, key, value);
+            runtime.Send(new IEventHandle(shardActorId, sender, request.release()), 0, true);
+        };
+
+        // All 6 writes and both cancels are sent with viaActorSystem=true — they are
+        // queued in the shard mailbox but NOT dispatched yet.  Because the actor mailbox
+        // is FIFO, the shard will:
+        //   1. Enqueue tx1 → ProposeQueue sends TEvDelayedProposeTransaction to self (to
+        //      the END of the same mailbox, after all messages already in it)
+        //   2. Enqueue tx2 (first), tx2 (retry), tx3, tx4, tx5 (no new drive event —
+        //      idempotent scalar queue).  The two tx2 items are linked via NextForTxId.
+        //   3. Cancel tx2 → ProposeQueue.Cancel walks the NextForTxId chain, removes
+        //      BOTH tx2 items, sends 2 CANCELLED replies
+        //   4. Cancel tx3 → ProposeQueue.Cancel removes tx3, sends 1 CANCELLED reply
+        //   5. TEvDelayedProposeTransaction fires → drains remaining queue: tx1, tx4, tx5
+        // So we expect 6 total replies: 2×CANCELLED(tx2) + 1×CANCELLED(tx3) +
+        // 3×COMPLETED(tx1, tx4, tx5).
+
+        Cout << "========= Enqueue 6 immediate writes into ProposeQueue =========\n";
+        sendWrite(txId1, 1, 10);
+        sendWrite(txId2, 2, 20);         // first attempt
+        sendWrite(txId2, 2, 20);         // retry of the same txId — goes into NextForTxId chain
+        sendWrite(txId3, 3, 30);
+        sendWrite(txId4, 4, 40);
+        sendWrite(txId5, 5, 50);
+
+        Cout << "========= Send cancels for tx2 and tx3 (still not dispatched) =========\n";
+        {
+            auto cancel2 = std::make_unique<TEvDataShard::TEvCancelTransactionProposal>(txId2);
+            runtime.Send(new IEventHandle(shardActorId, sender, cancel2.release()), 0, true);
+            auto cancel3 = std::make_unique<TEvDataShard::TEvCancelTransactionProposal>(txId3);
+            runtime.Send(new IEventHandle(shardActorId, sender, cancel3.release()), 0, true);
+        }
+
+        Cout << "========= Collect 6 write results =========\n";
+        // Use GrabEdgeEventRethrow directly: WaitForWriteCompleted asserts a fixed status
+        // and would fail if it received STATUS_CANCELLED for tx2/tx3.
+        // Cancel(txId2) sends 2 replies (one per NextForTxId chain element), so we
+        // expect 6 results total, not 5.
+        THashMap<ui64, NKikimrDataEvents::TEvWriteResult::EStatus> results;
+        ui32 cancelledTx2Count = 0;
+        for (int i = 0; i < 6; ++i) {
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+            const auto& rec = ev->Get()->Record;
+            if (rec.GetTxId() == txId2 &&
+                rec.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED) {
+                ++cancelledTx2Count;
+            }
+            results[rec.GetTxId()] = rec.GetStatus();
+        }
+
+        // Both retries of tx2 must be cancelled
+        UNIT_ASSERT_VALUES_EQUAL(cancelledTx2Count, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(results[txId1], NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL(results[txId2], NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(results[txId3], NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(results[txId4], NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL(results[txId5], NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+        Cout << "========= Verify table state: only rows 1, 4, 5 =========\n";
+        {
+            auto tableData = ReadShardedTable(server, "/Root/table-1");
+            UNIT_ASSERT_VALUES_EQUAL(tableData,
+                "key = 1, value = 10\n"
+                "key = 4, value = 40\n"
+                "key = 5, value = 50\n");
+        }
+
+        Cout << "========= Verify shard still works correctly =========\n";
+        {
+            Upsert(runtime, sender, shard, tableId, opts.Columns_, 1, 106,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        }
+    }
+
+    // Companion test to CancelMultipleFromQueue that exercises the
+    // TEvProposeTransaction::EventType branch in SendCancelledProposeReply.
+    // Enqueues a TX_KIND_DATA|Immediate TEvProposeTransaction (old MiniKQL path)
+    // into ProposeQueue and cancels it before the queue is drained.
+    Y_UNIT_TEST(CancelImmediateProposeTransaction) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const TString tableName = "table-1";
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", tableName, opts);
+        const ui64 shard = shards[0];
+        Y_UNUSED(shard);
+        Y_UNUSED(tableId);
+
+        TActorId shardActorId = ResolveTablet(runtime, shard, 0, false);
+
+        const ui64 txId = 201;
+
+        // Both messages are sent with viaActorSystem=true — they sit in the shard
+        // mailbox in FIFO order and are NOT dispatched until the runtime runs.
+        // ProposeQueue appends TEvDelayedProposeTransaction to the END of the
+        // mailbox when the first propose is enqueued, so the order is:
+        //   propose(txId) → cancel(txId) → TEvDelayedProposeTransaction
+        // The cancel fires before the drive event, so ProposeQueue.Cancel finds
+        // the item, removes it, and calls SendCancelledProposeReply through the
+        // TEvProposeTransaction::EventType branch, sending CANCELLED immediately.
+        // When TEvDelayedProposeTransaction fires the queue is already empty.
+        Cout << "========= Enqueue immediate TEvProposeTransaction into ProposeQueue =========\n";
+        {
+            auto request = std::make_unique<TEvDataShard::TEvProposeTransaction>(
+                NKikimrTxDataShard::TX_KIND_DATA,
+                sender,
+                txId,
+                /* txBody = */ TString{},
+                NDataShard::TTxFlags::Immediate);
+            runtime.Send(new IEventHandle(shardActorId, sender, request.release()), 0, true);
+        }
+
+        Cout << "========= Cancel while still in ProposeQueue =========\n";
+        {
+            auto cancel = std::make_unique<TEvDataShard::TEvCancelTransactionProposal>(txId);
+            runtime.Send(new IEventHandle(shardActorId, sender, cancel.release()), 0, true);
+        }
+
+        Cout << "========= Expect CANCELLED TEvProposeTransactionResult =========\n";
+        {
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvProposeTransactionResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetTxId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetStatus(),
+                NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED);
         }
     }
 
@@ -2444,13 +2653,10 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(DoubleWriteUncommittedThenDoubleReadWithCommit) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -2593,12 +2799,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(WriteCommitVersion) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -2688,12 +2891,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(WriteUniqueRowsInsertDuplicateBeforeCommit) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -2752,12 +2952,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(WriteUniqueRowsInsertDuplicateAtCommit) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -2829,12 +3026,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST_TWIN(DistributedInsertReadSetWithoutLocks, Volatile) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -2942,12 +3136,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST_TWIN(DistributedInsertWithoutLocks, Volatile) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -3055,12 +3246,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST_TWIN(DistributedInsertDuplicateWithLocks, Volatile) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -3235,12 +3423,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(VolatileAndNonVolatileWritePlanStepCommitFailure) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -3480,12 +3665,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(UncommittedUpdateLockMissingRow) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -3587,12 +3769,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(UncommittedUpdateLockNewRowAboveSnapshot) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -3695,12 +3874,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(UncommittedUpdateLockDeletedRowAboveSnapshot) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -3802,12 +3978,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(UncommittedUpdateLockUncommittedNewRow) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -3926,12 +4099,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(UncommittedUpdateLockUncommittedDeleteRow) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -4157,12 +4327,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(ImmediateWriteVolatileTxIdOnPageFault) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -4220,6 +4387,102 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 UNIT_ASSERT_C(txId > 1000000, "unexpected open tx " << txId << " at shard " << shards.at(0));
             }
         }
+    }
+
+    Y_UNIT_TEST(TxCompleteLagForEvWrite) {
+        // Verifies that a planned-but-not-completed TEvWrite transaction
+        // contributes to the TxCompleteLag metric.
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+        const TActorId shardActor = ResolveTablet(runtime, shard);
+
+        auto getDataTxCompleteLag = [&]() -> ui64 {
+            auto edge = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, edge, new TEvDataShard::TEvGetInfoRequest(),
+                0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto* resp = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetInfoResponse>(handle);
+            UNIT_ASSERT(resp);
+            return resp->Record.GetActivities().GetDataTxCompleteLag();
+        };
+
+        auto getTxCompleteLagCounter = [&]() -> ui64 {
+            auto edge = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, edge, new TEvTablet::TEvGetCounters(),
+                0, GetPipeConfigWithRetries());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(edge);
+            UNIT_ASSERT(ev);
+            for (const auto& counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+                if (counter.GetName() == "DataShard/TxCompleteLag") {
+                    return counter.GetValue();
+                }
+            }
+            UNIT_ASSERT_C(false, "DataShard/TxCompleteLag counter not found");
+            return 0;
+        };
+
+        Cout << "========= Baseline: no pending tx, lag must be 0 =========\n";
+        UNIT_ASSERT_VALUES_EQUAL(getDataTxCompleteLag(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(getTxCompleteLagCounter(), 0u);
+
+        Cout << "========= Prepare a distributed write =========\n";
+        const ui64 txId = 100;
+        const ui32 rowCount = 1;
+        ui64 minStep, maxStep;
+        {
+            const auto writeResult = Upsert(runtime, sender, shard, tableId, opts.Columns_, rowCount,
+                txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+            minStep = writeResult.GetMinStep();
+            maxStep = writeResult.GetMaxStep();
+        }
+
+        // Block TEvPrivate::TEvProgressTransaction so the write stays in the plan
+        // queue after the plan step is processed. This keeps the oldest-planned
+        // WriteTx pinned at its plan step while mediator time keeps advancing.
+        TBlockEvents<IEventHandle> blockedProgress(runtime,
+            [shardActor](const TAutoPtr<IEventHandle>& ev) {
+                return ev->GetRecipientRewrite() == shardActor &&
+                    ev->GetTypeRewrite() == EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0;
+            });
+
+        Cout << "========= Send propose to coordinator =========\n";
+        SendProposeToCoordinator(runtime, sender, shards, {
+            .TxId = txId,
+            .Coordinator = coordinator,
+            .MinStep = minStep,
+            .MaxStep = maxStep,
+        });
+
+        runtime.WaitFor("blocked progress transaction",
+            [&]{ return blockedProgress.size() >= 1; });
+
+        // Sleep long enough for mediator time to advance past the plan step and
+        // for at least one periodic tablet wakeup (5s) to refresh the counter.
+        Cout << "========= Let mediator time advance past the plan step =========\n";
+        runtime.SimulateSleep(TDuration::Seconds(6));
+
+        const ui64 lag = getDataTxCompleteLag();
+        Cout << "========= Observed DataTxCompleteLag = " << lag << " ms =========\n";
+        UNIT_ASSERT_C(lag > 0,
+            "Expected non-zero DataTxCompleteLag for a pending WriteTx, got " << lag);
+
+        const ui64 counterLag = getTxCompleteLagCounter();
+        Cout << "========= Observed TxCompleteLag counter = " << counterLag << " ms =========\n";
+        UNIT_ASSERT_C(counterLag > 0,
+            "Expected non-zero TxCompleteLag counter for a pending WriteTx, got " << counterLag);
+
+        // Unblock and let the write finish so the lag returns to 0.
+        blockedProgress.Stop().Unblock();
+        WaitForWriteCompleted(runtime, sender);
+
+        // Another periodic wakeup is needed for the counter to be refreshed.
+        runtime.SimulateSleep(TDuration::Seconds(6));
+        UNIT_ASSERT_VALUES_EQUAL(getDataTxCompleteLag(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(getTxCompleteLagCounter(), 0u);
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardWrite)

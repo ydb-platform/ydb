@@ -175,6 +175,8 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("chunk_meta_cache_failure_probability", &TThis::ChunkMetaCacheFailureProbability)
         .Default();
+    registrar.Parameter("fail_on_unresolved_node_id", &TThis::FailOnUnresolvedNodeId)
+        .Default(false);
     registrar.Parameter("use_chunk_prober", &TThis::UseChunkProber)
         .Default(false);
     registrar.Parameter("use_read_blocks_batcher", &TThis::UseReadBlocksBatcher)
@@ -183,6 +185,8 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("partial_peer_probing_timeouts", &TThis::PartialPeerProbingTimeouts)
         .Default();
+    registrar.Parameter("io_consumed_report_window", &TThis::IoConsumedReportWindow)
+        .Default(TDuration::Minutes(5));
 
     registrar.Postprocessor([] (TThis* config) {
         // Seems unreasonable to make backoff greater than half of total session timeout.
@@ -356,8 +360,13 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("use_probe_put_blocks", &TThis::UseProbePutBlocks)
         .Default(false);
 
+    registrar.Parameter("use_send_blocks", &TThis::UseSendBlocks)
+        .Default(true);
+
     registrar.Parameter("preallocate_disk_space", &TThis::PreallocateDiskSpace)
         .Default(false);
+    registrar.Parameter("io_consumed_report_window", &TThis::IoConsumedReportWindow)
+        .Default(TDuration::Minutes(1));
 
     registrar.Preprocessor([] (TThis* config) {
         config->NodeChannel->RetryBackoffTime = TDuration::Seconds(10);
@@ -384,11 +393,13 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
 int TReplicationWriterConfig::GetDirectUploadNodeCount()
 {
     auto replicationFactor = std::min(MinUploadReplicationFactor, UploadReplicationFactor);
-    if (DirectUploadNodeCount) {
+    if (!UseSendBlocks) {
+        return UploadReplicationFactor;
+    } else if (DirectUploadNodeCount) {
         return std::min(*DirectUploadNodeCount, replicationFactor);
+    } else {
+        return std::max(static_cast<int>(std::sqrt(replicationFactor)), 1);
     }
-
-    return std::max(static_cast<int>(std::sqrt(replicationFactor)), 1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -444,7 +455,7 @@ void TMultiChunkWriterConfig::Register(TRegistrar registrar)
         .LessThanOrEqual(64_MB)
         .Default(30_MB);
 
-    registrar.Parameter("tesing_delay_before_chunk_close", &TThis::TestingDelayBeforeChunkClose)
+    registrar.Parameter("testing_delay_before_chunk_close", &TThis::TestingDelayBeforeChunkClose)
         .Default()
         .DontSerializeDefault();
 }

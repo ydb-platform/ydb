@@ -2,7 +2,6 @@ package NYql.NDqProto;
 option cc_enable_arenas = true;
 
 import "google/protobuf/any.proto";
-import "google/protobuf/duration.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/actors/protos/dq_status_codes.proto";
@@ -11,6 +10,7 @@ import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/library/yql/dq/proto/dq_transport.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 enum ECheckpointType {
     CHECKPOINT_TYPE_UNSPECIFIED = 0;
@@ -98,6 +98,23 @@ message TEvComputeActorState {
 message TEvComputeStateRequest {
 }
 
+message TEvNodeState {
+    optional uint32 NodeId = 1; // by default == Sender.NodeId()
+
+    optional uint64 MemPhysicalUsage = 2;
+    optional uint64 MemSysAllocated  = 3;
+    optional uint64 MemSysFragmented = 4;
+
+    optional uint64 MemArrowDefault  = 5;
+
+    optional uint64 MemMkqlAllocated = 6;
+    optional uint64 MemMkqlFreeList  = 7;
+
+    optional uint64 InputInflightBytes  = 8;
+    optional uint64 OutputInflightBytes = 9;
+    optional uint64 LocalInflightBytes  = 10;
+}
+
 message TEvComputeChannelData {
     optional TChannelData ChannelData = 1;
     optional uint64 SendTime = 2;
@@ -123,11 +140,11 @@ message TRlPath {
     optional string CoordinationNode = 1;
     optional string ResourcePath = 2;
     optional string Database = 3;
-    optional string Token = 4;
+    optional string Token = 4 [(Ydb.sensitive) = true];
 }
 
 message TComputeRuntimeSettings {
-    optional uint32 TimeoutMs = 1;
+    optional uint64 TimeoutMs = 1;
 
     enum EExecType {
         UNSPECIFIED = 0;
@@ -225,6 +242,8 @@ message TMessageTransportMeta {
 
 message TEvChannelDiscoveryV2 {
     optional uint64 GenMajor = 1;
+    optional uint64 GenMinor = 2;
+    optional uint64 SeqNo = 3;
 }
 
 message TEvChannelDataV2 {
@@ -250,6 +269,11 @@ message TEvChannelDataV2 {
     optional bool Leading = 13;
     optional bool Finished = 14;
     optional uint64 ConfirmedPopBytes = 15;
+    optional bool ConfirmFinish = 18;
+    optional uint32 ChannelSeqNo = 19;
+
+    optional TCheckpoint Checkpoint = 16;
+    optional TWatermark Watermark = 17;
 };
 
 message TEvChannelAckV2 {
@@ -258,6 +282,7 @@ message TEvChannelAckV2 {
         OK     = 0;      // Confirmed
         RESEND = 1;      // Ask to resend missed msgs
         ERROR  = 2;      // Fail Channel
+        FAIL   = 3;      // Fail Session and request Reconciliation
     }
 
     // Service level
@@ -300,32 +325,5 @@ message TEvChannelUpdateV2 {
 
     optional bool EarlyFinished = 8;
     optional uint64 PopBytes = 9;
+    optional bool Finishing = 10;
 };
-
-message TEvUpdateCounterValue {
-    // Settings applied only on first aggregated value registration
-    message TSettings {
-        // If no over rules applied, report aggregate with this period
-        optional google.protobuf.Duration ReportPeriod = 1;
-
-        // If scalar aggregate changed on this value, it will be immediately reported
-        optional int64 ScalarAggDeltaThreshold = 2;
-    }
-
-    // Each CounterId creates own aggregated value (all events for one CounterId should have same settings and same Action case)
-    optional string CounterId = 1;
-    optional TSettings Settings = 2;
-
-    oneof Action {
-        int64 AggMin = 3;
-        int64 AggSum = 4;
-    }
-}
-
-message TEvOnAggregatedValueUpdated {
-    optional string CounterId = 1;
-
-    oneof Update {
-        int64 Scalar = 2;
-    }
-}

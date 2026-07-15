@@ -15,14 +15,14 @@ using namespace NUdf;
 
 namespace {
 
-static const auto CreateName = TStringRef::Of("Create");
-static const auto AddName = TStringRef::Of("Add");
-static const auto SerializeName = TStringRef::Of("Serialize");
-static const auto DeserializeName = TStringRef::Of("Deserialize");
-static const auto MergeName = TStringRef::Of("Merge");
-static const auto GetResultValueName = TStringRef::Of("GetResultValue");
-static const auto GetResultListName = TStringRef::Of("GetResultList");
-static const auto ResourcePrefix = TStringRef::Of("ReservoirSampling_");
+const auto CreateName = TStringRef::Of("Create");
+const auto AddName = TStringRef::Of("Add");
+const auto SerializeName = TStringRef::Of("Serialize");
+const auto DeserializeName = TStringRef::Of("Deserialize");
+const auto MergeName = TStringRef::Of("Merge");
+const auto GetResultValueName = TStringRef::Of("GetResultValue");
+const auto GetResultListName = TStringRef::Of("GetResultList");
+const auto ResourcePrefix = TStringRef::Of("ReservoirSampling_");
 
 using namespace NReservoirSampling;
 

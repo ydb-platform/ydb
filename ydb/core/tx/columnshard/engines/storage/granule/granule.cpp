@@ -11,10 +11,15 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info->DebugString())("path_id", GetPathId());
+    YDB_LOG_TRACE("",
+        {"event", "upsert_portion"},
+        {"portion", info->DebugString()},
+        {"pathId", GetPathId()});
     AFL_VERIFY(!Portions.contains(info->GetPortionId()));
     AFL_VERIFY(info->GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info->DebugString())("path_id", GetPathId());
 
@@ -25,9 +30,9 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
     OnAfterChangePortion(info, nullptr);
 
     if (IntervalTree) {
-        IntervalTree->AddRange(PortionIntervalTree::TPortionIntervalTree::TOwnedRange(
-            PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(info), true,
-            PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(info), true), info);
+        IntervalTree->AddRange(
+            PortionIntervalTree::TPortionIntervalTree::TOwnedRange(PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(info), true,
+                PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(info), true), info);
     }
 }
 
@@ -39,10 +44,16 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionDataAccessor>& in
 bool TGranuleMeta::ErasePortion(const ui64 portion) {
     auto it = Portions.find(portion);
     if (it == Portions.end()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased_already")("portion_id", portion)("pathId", PathId);
+        YDB_LOG_WARN("",
+            {"event", "portion_erased_already"},
+            {"portionId", portion},
+            {"pathId", PathId});
         return false;
     } else {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second->DebugString())("pathId", PathId);
+        YDB_LOG_TRACE("",
+            {"event", "portion_erased"},
+            {"portionInfo", it->second->DebugString()},
+            {"pathId", PathId});
     }
     if (IntervalTree) {
         IntervalTree->RemoveRanges(it->second);
@@ -103,13 +114,18 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
 
 void TGranuleMeta::OnCompactionFinished() {
     AllowInsertionFlag = false;
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFinished")("info", DebugString());
+    YDB_LOG_DEBUG("",
+        {"event", "OnCompactionFinished"},
+        {"info", DebugString()});
     Stats->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionFailed(const TString& reason) {
     AllowInsertionFlag = false;
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFailed")("reason", reason)("info", DebugString());
+    YDB_LOG_WARN("",
+        {"event", "OnCompactionFailed"},
+        {"reason", reason},
+        {"info", DebugString()});
     Stats->UpdateGranuleInfo(*this);
 }
 
@@ -146,7 +162,8 @@ TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage&
     , PortionInfoGuard(owner.GetCounters().BuildPortionBlobsGuard())
     , Stats(owner.GetStats())
     , StoragesManager(owner.GetStoragesManager())
-    , PortionsIndex(*this, Counters.GetPortionsIndexCounters()) {
+    , PortionsIndex(*this, Counters.GetPortionsIndexCounters())
+{
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(
         PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
     OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
@@ -177,16 +194,18 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
         auto portionId = portion->GetPortionId();
         AFL_VERIFY(Portions.emplace(portionId, portion).second);
         if (IntervalTree) {
-            IntervalTree->AddRange(PortionIntervalTree::TPortionIntervalTree::TOwnedRange(
-                PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(portion), true,
-                PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(portion), true), portion);
+            IntervalTree->AddRange(
+                PortionIntervalTree::TPortionIntervalTree::TOwnedRange(PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(portion),
+                    true, PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(portion), true), portion);
         }
     }
 }
 
 void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const {
     if (context.GetActualInstant() < NextActualizations) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_actualization")("waiting", NextActualizations - context.GetActualInstant());
+        YDB_LOG_DEBUG("",
+            {"event", "skip_actualization"},
+            {"waiting", NextActualizations - context.GetActualInstant()});
         return;
     }
     NActualizer::TExternalTasksContext extTasks(Portions);
@@ -202,10 +221,14 @@ void TGranuleMeta::ResetAccessorsManager(const std::shared_ptr<NDataAccessorCont
 void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
     std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema) {
     if (constructor->ApplyToCurrentObject(OptimizerPlanner)) {
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "applied_optimizer")("constructor", constructor->GetClassName());
+        YDB_LOG_NOTICE("",
+            {"event", "applied_optimizer"},
+            {"constructor", constructor->GetClassName()});
         return;
     }
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "reset_optimizer")("constructor", constructor->GetClassName());
+    YDB_LOG_NOTICE("",
+        {"event", "reset_optimizer"},
+        {"constructor", constructor->GetClassName()});
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId, storages, pkSchema);
     OptimizerPlanner = constructor->BuildPlanner(context).DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);
@@ -218,6 +241,7 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
     }
     OptimizerPlanner->ModifyPortions(std::move(portions), {});
 }
+
 /*
 
 void TGranuleMeta::ResetMetadataManager(const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& constructor,
@@ -257,30 +281,31 @@ std::shared_ptr<NKikimr::ITxReader> TGranuleMeta::BuildLoader(
 bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex) {
     TInGranuleConstructors constructors;
     {
-        if (!db.LoadPortions(
-                PathId, [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-                    const TIndexInfo& indexInfo = portion->GetSchema(versionedIndex)->GetIndexInfo();
-                    AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
-                    AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
-                })) {
+        if (!db.LoadPortions([&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+                const TIndexInfo& indexInfo = portion->GetSchema(versionedIndex)->GetIndexInfo();
+                AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
+                AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
+                return true;
+            }, PathId)) {
             return false;
         }
     }
 
     {
-        if (!db.LoadColumns(PathId, [&](TColumnChunkLoadContextV2&& loadContext) {
+        if (!db.LoadColumns([&](TColumnChunkLoadContextV2&& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(loadContext.GetPortionId());
                 constructor->AddBuildInfo(loadContext.CreateBuildInfo());
-            })) {
+            }, PathId)) {
             return false;
         }
     }
 
     {
-        if (!db.LoadIndexes(PathId, [&](const TInternalPathId /*pathId*/, const ui64 portionId, TIndexChunkLoadContext&& loadContext) {
+        if (!db.LoadIndexes([&](const TInternalPathId /*pathId*/, const ui64 portionId, TIndexChunkLoadContext&& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(portionId);
                 constructor->LoadIndex(std::move(loadContext));
-            })) {
+                return true;
+            }, PathId)) {
             return false;
         };
     }

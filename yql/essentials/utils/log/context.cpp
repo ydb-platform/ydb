@@ -81,7 +81,7 @@ std::pair<TString, TString> CurrentLogContextPath() {
     }
 
     TStringStream ss;
-    OutputLogCtx(&ss, false, !sessionId.empty());
+    OutputLogCtx(&ss, /*withBraces=*/false, !sessionId.empty());
     return std::make_pair(sessionId, ss.Str());
 }
 
@@ -93,7 +93,7 @@ TString ThrowedLogContextPath() {
 TAutoPtr<TLogElement> TContextPreprocessor::Preprocess(TAutoPtr<TLogElement> element)
 {
     TStringStream out;
-    OutputLogCtx(&out, false);
+    OutputLogCtx(&out, /*withBraces=*/false);
 
     if (!out.Empty()) {
         element->With(ToStringBuf(EContextKey::Path), std::move(out.Str()));
@@ -105,7 +105,7 @@ TAutoPtr<TLogElement> TContextPreprocessor::Preprocess(TAutoPtr<TLogElement> ele
 void TYqlLogContextLocation::SetThrowedLogContextPath() const {
     TStringStream ss;
     ss << Location_ << TStringBuf(": ");
-    OutputLogCtx(&ss, true);
+    OutputLogCtx(&ss, /*withBraces=*/true);
     TThrowedLogContext* tlc = FastTlsSingleton<TThrowedLogContext>();
     tlc->LocationWithLogContext = ss.Str();
 }

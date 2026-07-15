@@ -17,7 +17,8 @@ private:
 public:
     TChunkIndexData(const std::shared_ptr<IIndexHeader>& header, const ui32 recordsCount)
         : Header(header)
-        , RecordsCount(recordsCount) {
+        , RecordsCount(recordsCount)
+    {
         AFL_VERIFY(RecordsCount);
         AFL_VERIFY(Header);
     }
@@ -37,6 +38,15 @@ public:
             UncategorizedData.reset();
         } else {
             AFL_VERIFY(DataByCategory.erase(*category));
+        }
+    }
+
+    const TString* GetDataOptional(const std::optional<ui64> category) const {
+        if (!category) {
+            return UncategorizedData ? &*UncategorizedData : nullptr;
+        } else {
+            auto it = DataByCategory.find(*category);
+            return it != DataByCategory.end() ? &it->second : nullptr;
         }
     }
 
@@ -74,7 +84,8 @@ private:
 
 public:
     TIndexColumnChunked(const std::shared_ptr<IIndexMeta>& meta)
-        : IndexMeta(meta) {
+        : IndexMeta(meta)
+    {
     }
 
     ui32 GetChunksCount() const {
@@ -84,6 +95,13 @@ public:
     const std::shared_ptr<IIndexHeader>& GetHeader(const ui32 idx) const {
         AFL_VERIFY(idx < Chunks.size())("idx", idx)("chunks", Chunks.size());
         return Chunks[idx].GetHeader();
+    }
+
+    const TString* GetChunkDataOptional(const ui32 chunkIdx, const std::optional<ui64> category) const {
+        if (chunkIdx >= Chunks.size()) {
+            return nullptr;
+        }
+        return Chunks[chunkIdx].GetDataOptional(category);
     }
 
     void AddData(const std::optional<ui64> category, const std::vector<TString>& data) {

@@ -1,4 +1,5 @@
 #include "ydb_service_operation.h"
+#include "ydb_common.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
@@ -7,6 +8,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 
+#include <library/cpp/getopt/small/completer.h>
 #include <util/string/builder.h>
 
 namespace NYdb {
@@ -19,16 +21,9 @@ namespace {
     template <typename T>
     int GetOperation(NOperation::TOperationClient& client, const TOperationId& id, EDataFormat format) {
         T operation = client.Get<T>(id).GetValueSync();
+        ThrowOnError(operation);
         PrintOperation(operation, format);
-        if (!operation.Ready()) {
-            return EXIT_SUCCESS;
-        }
-        switch (operation.Status().GetStatus()) {
-        case EStatus::SUCCESS:
-            return EXIT_SUCCESS;
-        default:
-            return EXIT_FAILURE;
-        }
+        return EXIT_SUCCESS;
     }
 
     template <typename T>
@@ -84,18 +79,23 @@ void TCommandGetOperation::Parse(TConfig& config) {
 }
 
 int TCommandGetOperation::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
 
     switch (OperationId.GetKind()) {
     case TOperationId::EXPORT:
         if (OperationId.GetSubKind() == "s3") {
             return GetOperation<NExport::TExportToS3Response>(client, OperationId, OutputFormat);
+        } else if (OperationId.GetSubKind() == "fs") {
+            return GetOperation<NExport::TExportToFsResponse>(client, OperationId, OutputFormat);
         } else { // fallback to "yt"
             return GetOperation<NExport::TExportToYtResponse>(client, OperationId, OutputFormat);
         }
     case TOperationId::IMPORT:
         if (OperationId.GetSubKind() == "s3") {
             return GetOperation<NImport::TImportFromS3Response>(client, OperationId, OutputFormat);
+        } else if (OperationId.GetSubKind() == "fs") {
+            return GetOperation<NImport::TImportFromFsResponse>(client, OperationId, OutputFormat);
         } else {
             throw TMisuseException() << "Invalid operation ID (unexpected sub-kind of operation)";
         }
@@ -105,8 +105,16 @@ int TCommandGetOperation::Run(TConfig& config) {
         return GetOperation<NQuery::TScriptExecutionOperation>(client, OperationId, OutputFormat);
     case TOperationId::INCREMENTAL_BACKUP:
         return GetOperation<NBackup::TIncrementalBackupResponse>(client, OperationId, OutputFormat);
+    case TOperationId::FULL_BACKUP:
+        return GetOperation<NBackup::TFullBackupResponse>(client, OperationId, OutputFormat);
     case TOperationId::RESTORE:
         return GetOperation<NBackup::TBackupCollectionRestoreResponse>(client, OperationId, OutputFormat);
+    case TOperationId::COMPACTION:
+        return GetOperation<NTable::TCompactionOperation>(client, OperationId, OutputFormat);
+    case TOperationId::ANALYZE:
+        return GetOperation<NTable::TAnalyzeOperation>(client, OperationId, OutputFormat);
+    case TOperationId::SET_NOT_NULL:
+        return GetOperation<NTable::TSetNotNullOperation>(client, OperationId, OutputFormat);
     default:
         throw TMisuseException() << "Invalid operation ID (unexpected kind of operation)";
     }
@@ -120,7 +128,8 @@ TCommandCancelOperation::TCommandCancelOperation()
 }
 
 int TCommandCancelOperation::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Cancel(OperationId).GetValueSync());
     return EXIT_SUCCESS;
 }
@@ -131,7 +140,8 @@ TCommandForgetOperation::TCommandForgetOperation()
 }
 
 int TCommandForgetOperation::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Forget(OperationId).GetValueSync());
     return EXIT_SUCCESS;
 }
@@ -139,11 +149,17 @@ int TCommandForgetOperation::Run(TConfig& config) {
 void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
     KindToHandler = {
         {"export/s3", &ListOperations<NExport::TExportToS3Response>},
+        {"export/nfs", &ListOperations<NExport::TExportToFsResponse>},
         {"import/s3", &ListOperations<NImport::TImportFromS3Response>},
+        {"import/nfs", &ListOperations<NImport::TImportFromFsResponse>},
         {"buildindex", &ListOperations<NTable::TBuildIndexOperation>},
         {"scriptexec", &ListOperations<NQuery::TScriptExecutionOperation>},
         {"incbackup", &ListOperations<NBackup::TIncrementalBackupResponse>},
+        {"fullbackup", &ListOperations<NBackup::TFullBackupResponse>},
         {"restore", &ListOperations<NBackup::TBackupCollectionRestoreResponse>},
+        {"compaction", &ListOperations<NTable::TCompactionOperation>},
+        {"analyze", &ListOperations<NTable::TAnalyzeOperation>},
+        {"setnotnull", &ListOperations<NTable::TSetNotNullOperation>},
     };
     if (config.UseExportToYt) {
         KindToHandler.emplace("export", THandlerWrapper(&ListOperations<NExport::TExportToYtResponse>, true)); // deprecated
@@ -189,6 +205,15 @@ void TCommandListOperations::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<kind>", KindChoices());
+
+    TVector<NLastGetopt::NComp::TChoice> kindChoices;
+    for (const auto& [kind, handler] : KindToHandler) {
+        if (!handler.Hidden) {
+            kindChoices.emplace_back(kind);
+        }
+    }
+    config.Opts->GetOpts().GetFreeArgSpec(0)
+        .Completer(NLastGetopt::NComp::Choice(std::move(kindChoices)));
 }
 
 void TCommandListOperations::Parse(TConfig& config) {
@@ -202,7 +227,8 @@ void TCommandListOperations::Parse(TConfig& config) {
 }
 
 int TCommandListOperations::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     KindToHandler.at(Kind)(client, PageSize, PageToken, OutputFormat);
     return EXIT_SUCCESS;
 }

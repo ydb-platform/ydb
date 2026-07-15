@@ -14,8 +14,7 @@ def post_install(self):
 """,
     )
     with open(curl_config, "a") as config:
-        config.write(
-            """
+        config.write("""
 // Do not misrepresent host on Android and iOS.
 #undef CURL_OS
 #define CURL_OS "arcadia"
@@ -50,8 +49,7 @@ def post_install(self):
 #else
     #error "No dns resolver is specified or resolver specification is wrong"
 #endif
-"""
-        )
+""")
 
     # curl uses SIZEOF_ macros to test current platform bitness in compile-time
     # As we only control curl_config-linux.h during yamaker installation,
@@ -168,6 +166,7 @@ curl = GNUMakeNixProject(
         "floss.h",
         "gnutls/",
         "gss.h",
+        "gssapi/",
         "idn2.h",
         "lber.h",
         "ldap.h",
@@ -192,6 +191,7 @@ curl = GNUMakeNixProject(
         "openssl/ech.h",
         "openssl/provider.h",
         "plarenas.h",
+        "psa/",
         "proto/",
         "quiche.h",
         "setup-os400.h",

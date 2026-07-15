@@ -17,24 +17,24 @@ from allure_pytest.utils import ALLURE_LABEL_MARK, ALLURE_LINK_MARK
 
 
 def pytest_addoption(parser):
-    parser.getgroup("reporting").addoption('--alluredir',
+    parser.getgroup("reporting").addoption("--alluredir",
                                            action="store",
                                            dest="allure_report_dir",
                                            metavar="DIR",
                                            default=None,
                                            help="Generate Allure report in the specified directory (may not exist)")
 
-    parser.getgroup("reporting").addoption('--clean-alluredir',
+    parser.getgroup("reporting").addoption("--clean-alluredir",
                                            action="store_true",
                                            dest="clean_alluredir",
                                            help="Clean alluredir folder if it exists")
 
-    parser.getgroup("reporting").addoption('--allure-no-capture',
+    parser.getgroup("reporting").addoption("--allure-no-capture",
                                            action="store_false",
                                            dest="attach_capture",
                                            help="Do not attach pytest captured logging/stdout/stderr to report")
 
-    parser.getgroup("reporting").addoption('--inversion',
+    parser.getgroup("reporting").addoption("--inversion",
                                            action="store",
                                            dest="inversion",
                                            default=False,
@@ -42,21 +42,21 @@ def pytest_addoption(parser):
 
     def label_type(type_name, legal_values=set()):
         def a_label_type(string):
-            atoms = set(string.split(','))
+            atoms = set(string.split(","))
             if type_name is LabelType.SEVERITY:
                 if not atoms <= legal_values:
-                    raise argparse.ArgumentTypeError('Illegal {} values: {}, only [{}] are allowed'.format(
+                    raise argparse.ArgumentTypeError("Illegal {} values: {}, only [{}] are allowed".format(
                         type_name,
-                        ', '.join(atoms - legal_values),
-                        ', '.join(legal_values)
+                        ", ".join(atoms - legal_values),
+                        ", ".join(legal_values)
                     ))
                 return set((type_name, allure.severity_level(atom)) for atom in atoms)
             return set((type_name, atom) for atom in atoms)
         return a_label_type
 
     severities = [x.value for x in list(allure.severity_level)]
-    formatted_severities = ', '.join(severities)
-    parser.getgroup("general").addoption('--allure-severities',
+    formatted_severities = ", ".join(severities)
+    parser.getgroup("general").addoption("--allure-severities",
                                          action="store",
                                          dest="allure_severities",
                                          metavar="SEVERITIES_SET",
@@ -66,7 +66,7 @@ def pytest_addoption(parser):
                                          Tests only with these severities will be run.
                                          Possible values are: {formatted_severities}.""")
 
-    parser.getgroup("general").addoption('--allure-epics',
+    parser.getgroup("general").addoption("--allure-epics",
                                          action="store",
                                          dest="allure_epics",
                                          metavar="EPICS_SET",
@@ -75,7 +75,7 @@ def pytest_addoption(parser):
                                          help="""Comma-separated list of epic names.
                                          Run tests that have at least one of the specified feature labels.""")
 
-    parser.getgroup("general").addoption('--allure-features',
+    parser.getgroup("general").addoption("--allure-features",
                                          action="store",
                                          dest="allure_features",
                                          metavar="FEATURES_SET",
@@ -84,7 +84,7 @@ def pytest_addoption(parser):
                                          help="""Comma-separated list of feature names.
                                          Run tests that have at least one of the specified feature labels.""")
 
-    parser.getgroup("general").addoption('--allure-stories',
+    parser.getgroup("general").addoption("--allure-stories",
                                          action="store",
                                          dest="allure_stories",
                                          metavar="STORIES_SET",
@@ -93,7 +93,7 @@ def pytest_addoption(parser):
                                          help="""Comma-separated list of story names.
                                          Run tests that have at least one of the specified story labels.""")
 
-    parser.getgroup("general").addoption('--allure-ids',
+    parser.getgroup("general").addoption("--allure-ids",
                                          action="store",
                                          dest="allure_ids",
                                          metavar="IDS_SET",
@@ -107,7 +107,7 @@ def pytest_addoption(parser):
         atoms = set(values.split(","))
         return [(type_name, atom) for atom in atoms]
 
-    parser.getgroup("general").addoption('--allure-label',
+    parser.getgroup("general").addoption("--allure-label",
                                          action="append",
                                          dest="allure_labels",
                                          metavar="LABELS_SET",
@@ -117,15 +117,15 @@ def pytest_addoption(parser):
                                          "Run tests that have at least one of the specified labels.""")
 
     def link_pattern(string):
-        pattern = string.split(':', 1)
+        pattern = string.split(":", 1)
         if not pattern[0]:
-            raise argparse.ArgumentTypeError('Link type is mandatory.')
+            raise argparse.ArgumentTypeError("Link type is mandatory.")
 
         if len(pattern) != 2:
-            raise argparse.ArgumentTypeError('Link pattern is mandatory')
+            raise argparse.ArgumentTypeError("Link pattern is mandatory")
         return pattern
 
-    parser.getgroup("general").addoption('--allure-link-pattern',
+    parser.getgroup("general").addoption("--allure-link-pattern",
                                          action="append",
                                          dest="allure_link_pattern",
                                          metavar="LINK_TYPE:LINK_PATTERN",
@@ -160,7 +160,7 @@ def pytest_configure(config):
     if report_dir:
         report_dir = os.path.abspath(report_dir)
         test_listener = AllureListener(config)
-        config.pluginmanager.register(test_listener, 'allure_listener')
+        config.pluginmanager.register(test_listener, "allure_listener")
         allure_commons.plugin_manager.register(test_listener)
         config.add_cleanup(cleanup_factory(test_listener))
 

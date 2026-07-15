@@ -75,7 +75,7 @@ public:
             cookieCount,
             startOptions);
 
-        TTableWriteDistributedSessionOptions sessionOptions{.PingInterval = options.PingInterval};
+        TTableWriteDistributedSessionOptions sessionOptions{.PingInterval = options.PingInterval, .RetriesBeforeThrow = options.RetriesBeforeThrow};
         return MakeIntrusive<TTableWriteDistributedSession>(
             sessionWithCookies.Session_,
             TVector<NYT::TDistributedWriteTableCookie>(sessionWithCookies.Cookies_),
@@ -103,8 +103,14 @@ public:
         auto client = CreateClient(clusterConnection);
         auto richPath = ytTable.RichPath;
         NormalizeRichPath(richPath);
+
+        auto parentPath = richPath.Path_.substr(0, richPath.Path_.rfind('/'));
+        if (!parentPath.empty()) {
+            client->Create(parentPath, NYT::NT_MAP, NYT::TCreateOptions().Recursive(true).IgnoreExisting(true));
+        }
+
         auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
-        transaction->Create(richPath.Path_, NYT::NT_TABLE, NYT::TCreateOptions().Recursive(true).IgnoreExisting(true).Attributes(attributes));
+        transaction->Create(richPath.Path_, NYT::NT_TABLE, NYT::TCreateOptions().IgnoreExisting(true).Attributes(attributes));
     }
 };
 

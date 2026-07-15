@@ -9,6 +9,8 @@
 #include <util/generic/scope.h>
 #include <util/generic/hash.h>
 
+#include <utility>
+
 
 namespace NYql {
 
@@ -25,7 +27,7 @@ namespace {
         TMaybe<TFunctionStack> FunctionStack;
 
         TOptimizationContext(TOptimizer optimizer, const TNodeOnNodeOwnedMap* replaces, TExprContext& expr, const TOptimizeExprSettings& settings)
-            : Optimizer(optimizer)
+            : Optimizer(std::move(optimizer))
             , Expr(expr)
             , Settings(settings)
             , Replaces(replaces)
@@ -182,7 +184,7 @@ namespace {
                     }
                 }
                 if (bodyChanged) {
-                    if (std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
+                    if (ctx.Settings.ReuseLambda || std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
                         ret = ctx.Expr.NewLambda(node->Pos(), node->HeadPtr(), std::move(newBody));
                     } else {
                         ret = ctx.Expr.DeepCopyLambda(*current, std::move(newBody));
@@ -304,7 +306,7 @@ namespace {
                 }
 
                 if (bodyChanged) {
-                    if (std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
+                    if (ctx.Settings.ReuseLambda || std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
                         ret = ctx.Expr.NewLambda(node->Pos(), node->HeadPtr(), std::move(newBody));
                     } else {
                         ret = ctx.Expr.DeepCopyLambda(*node, std::move(newBody));
@@ -546,7 +548,7 @@ namespace {
         }
 
         if (!settings.VisitChanges && (output != input)) {
-            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
         }
 
         return IGraphTransformer::TStatus::Ok;
@@ -559,7 +561,7 @@ namespace {
         TExprContext& ctx, const TOptimizeExprSettings& settings) try
     {
         YQL_ENSURE(optimizer);
-        TOptimizationContext<TCallableOptimizerFast> optCtx(optimizer, nullptr, ctx, settings);
+        TOptimizationContext<TCallableOptimizerFast> optCtx(optimizer, /*replaces=*/nullptr, ctx, settings);
         bool changed = false;
         output = OptimizeNode(input, changed, optCtx, 0U);
 
@@ -567,7 +569,7 @@ namespace {
             return IGraphTransformer::TStatus::Error;
 
         if (changed)
-            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
 
         return IGraphTransformer::TStatus::Ok;
     } catch (const std::exception& e) {
@@ -579,13 +581,13 @@ namespace {
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizer optimizer,
     TExprContext& ctx, const TOptimizeExprSettings& settings)
 {
-    return OptimizeExprInternal(input, output, optimizer, nullptr, ctx, settings);
+    return OptimizeExprInternal(input, output, optimizer, /*replaces=*/nullptr, ctx, settings);
 }
 
 IGraphTransformer::TStatus OptimizeExprEx(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizerEx optimizer,
     TExprContext& ctx, const TOptimizeExprSettings& settings)
 {
-    return OptimizeExprInternal(input, output, optimizer, nullptr, ctx, settings);
+    return OptimizeExprInternal(input, output, optimizer, /*replaces=*/nullptr, ctx, settings);
 }
 
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, const TCallableOptimizerFast& optimizer,
@@ -668,7 +670,7 @@ IGraphTransformer::TStatus ExpandSeq(const TExprNode::TPtr& input, TExprNode::TP
     return ret;
 }
 
-IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+IGraphTransformer::TStatus ExpandApplyImpl(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, bool expandCons) {
     if (ctx.Step.IsDone(TExprStep::ExpandApplyForLambdas))
         return IGraphTransformer::TStatus::Ok;
 
@@ -855,6 +857,34 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
 
                 changed = true;
                 return ctx.NewAtom(node->Pos(), content, flags);
+            } else if (expandCons && node->Content() == "Left!") {
+                if (!EnsureArgsCount(*node, 1, ctx)) {
+                    return nullptr;
+                }
+
+                if (!node->Head().IsCallable("Cons!")) {
+                    return node;
+                }
+
+                if (!EnsureArgsCount(node->Head(), 2, ctx)) {
+                    return nullptr;
+                }
+                changed = true;
+                return node->Head().HeadPtr();
+            } else if (expandCons && node->Content() == "Right!") {
+                if (!EnsureArgsCount(*node, 1, ctx)) {
+                    return nullptr;
+                }
+
+                if (!node->Head().IsCallable("Cons!")) {
+                    return node;
+                }
+
+                if (!EnsureArgsCount(node->Head(), 2, ctx)) {
+                    return nullptr;
+                }
+                changed = true;
+                return node->Head().TailPtr();
             } else if (node->Content() == "Nth") {
                 if (!EnsureArgsCount(*node, 2, ctx)) {
                     return nullptr;
@@ -972,6 +1002,14 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
     }
 
     return ret;
+}
+
+IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+    return ExpandApplyImpl(input, output, ctx, /*expandCons=*/true);
+}
+
+IGraphTransformer::TStatus ExpandApplyWithoutCons(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+    return ExpandApplyImpl(input, output, ctx, /*expandCons=*/false);
 }
 
 IGraphTransformer::TStatus ExpandApplyNoRepeat(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -1147,7 +1185,8 @@ TExprNode::TListType FindNodes(const TExprNode::TPtr& root, const TExprVisitPtrF
 
 std::pair<TExprNode::TPtr, bool> FindSharedNode(const TExprNode::TPtr& firstRoot, const TExprNode::TPtr& secondRoot, const TExprVisitPtrFunc& predicate)
 {
-    TNodeSet nodes, visited;
+    TNodeSet nodes;
+    TNodeSet visited;
     VisitExpr(firstRoot, [&nodes, &predicate] (const TExprNode::TPtr& node) {
         if (predicate(node)) {
             nodes.insert(node.Get());

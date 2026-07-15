@@ -49,7 +49,6 @@
   - dvidef.h
   - fastmath.h
   - fcntl--.h
-  - fftw3.h
   - file.h
   - flags.h
   - floatingpoint.h

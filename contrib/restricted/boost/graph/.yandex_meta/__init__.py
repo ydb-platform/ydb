@@ -5,7 +5,7 @@ from devtools.yamaker.project import NixSourceProject
 
 
 def post_install(self):
-    self.yamakes["."] = boost.make_library(self, populate_srcs=True)
+    self.yamakes["."] = boost.make_library(self, populate_srcs=True, optional_deps=["foreach"])
     with self.yamakes["."] as graph:
         # Disable parallel version which makes use of OpenMP / MPI
         fileutil.re_sub_dir(

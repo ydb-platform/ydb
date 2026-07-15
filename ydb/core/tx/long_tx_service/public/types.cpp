@@ -186,3 +186,11 @@ namespace NLongTxService {
 Y_DECLARE_OUT_SPEC(, NKikimr::NLongTxService::TLongTxId, out, txId) {
     out << txId.ToString();
 }
+
+Y_DECLARE_OUT_SPEC(, NKikimr::NLongTxService::TLockInfo, o, li) {
+    o << "{ LockId: " << li.LockId << ", LockNodeId: " << li.LockNodeId << " }";
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimr::NLongTxService::TWaitEdgeId, o, id) {
+    o << "{ OwnerId: " << id.OwnerId << ", RequestId: " << id.RequestId << " }";
+}

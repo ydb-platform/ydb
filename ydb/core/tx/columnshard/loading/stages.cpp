@@ -1,10 +1,13 @@
 #include "stages.h"
 
+#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/transactions/locks_db.h>
 #include <ydb/core/tx/tiering/manager.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard::NLoading {
 
@@ -125,6 +128,12 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     }
     Self->SpaceWatcher->SubDomainOutOfSpace = outOfSpace;
 
+    ui64 smallBlobsQuotaExceeded = 0;
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::SubDomainSmallBlobsQuotaExceeded, smallBlobsQuotaExceeded)) {
+        return false;
+    }
+    Self->SpaceWatcher->SubDomainSmallBlobsQuotaExceeded = smallBlobsQuotaExceeded;
+
     {
         ui64 lastCompletedStep = 0;
         ui64 lastCompletedTx = 0;
@@ -136,14 +145,44 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         }
         Self->LastCompletedTx = NOlap::TSnapshot(lastCompletedStep, lastCompletedTx);
     }
-    
-    TString serializedLastCompletedBackupTransaction;
-    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCompletedBackupTransaction, serializedLastCompletedBackupTransaction)) {
+    {
+        ui64 lastCleanupStep = 0;
+        ui64 lastCleanupTxId = 0;
+        if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCleanupSnapshotStep, lastCleanupStep)) {
+            return false;
+        }
+        if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCleanupSnapshotTxId, lastCleanupTxId)) {
+            return false;
+        }
+        Self->LastCleanupSnapshot = NOlap::TSnapshot(lastCleanupStep, lastCleanupTxId);
+    }
+
+    auto rowset = db.Table<Schema::TableInfoV1>().Range().Select();
+    if (!rowset.IsReady()) {
         return false;
     }
 
-    if (serializedLastCompletedBackupTransaction) {
-        Y_VERIFY(Self->LastCompletedBackupTransaction.ParseFromString(serializedLastCompletedBackupTransaction));
+    while (!rowset.EndOfSet()) {
+        const auto schemeShardLocalPathId =
+            TSchemeShardLocalPathId::FromRawValue(rowset.GetValue<Schema::TableInfoV1::SchemeShardLocalPathId>());
+        const auto serializedBackupTx = rowset.HaveValue<Schema::TableInfoV1::LastCompletedBackupTransaction>()
+                                            ? rowset.GetValue<Schema::TableInfoV1::LastCompletedBackupTransaction>()
+                                            : TString{};
+        if (serializedBackupTx) {
+            NKikimrTxColumnShard::TCompletedBackupTransaction backupTx;
+            if (backupTx.ParseFromString(serializedBackupTx)) {
+                Self->LastCompletedBackupTransactions[schemeShardLocalPathId] = backupTx;
+                Self->LastCompletedBackupTransactionsByTxId[backupTx.GetTxId()] = backupTx;
+            } else {
+                YDB_LOG_ERROR("",
+                    {"event", "cannot_parse_last_completed_backup_transaction"},
+                    {"schemeShardLocalPathId", schemeShardLocalPathId},
+                    {"serializedSize", serializedBackupTx.size()});
+            }
+        }
+        if (!rowset.Next()) {
+            return false;
+        }
     }
 
     return true;
@@ -151,7 +190,7 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
 
 bool TSpecialValuesInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return Schema::Precharge<Schema::Value>(db, txc.DB.GetScheme());
+    return Schema::Precharge<Schema::Value>(db, txc.DB.GetScheme()) && Schema::Precharge<Schema::TableInfoV1>(db, txc.DB.GetScheme());
 }
 
 bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {

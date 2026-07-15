@@ -30,6 +30,8 @@
 #include <util/system/spinlock.h>
 #include <util/system/thread.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PDISK
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -263,12 +265,13 @@ class TRealBlockDevice : public IBlockDevice {
                     if (SubmitCondVar.WaitT(SubmitMtx, TDuration::Seconds(1))) {
                         return;
                     } else {
-                        P_LOG(PRI_WARN, BPD01, "Exceed 1 second deadline in SubmitThreadQueue",
-                                    (PDiskId, Device.PCtx->PDiskId),
-                                    (Path, Device.Path),
-                                    (TotalTimeInWaitingSec, NHPTimer::GetSeconds(HPNow() - start)),
-                                    (SubmitInFlightBytes, AtomicGet(SubmitInFlightBytes)),
-                                    (SubmitInFlightBytesMax, SubmitInFlightBytesMax));
+                        YDB_LOG_P_LOG(PRI_WARN, "Exceed 1 second deadline in SubmitThreadQueue",
+                            {"marker", "BPD01"},
+                            {"PDiskId", Device.PCtx->PDiskId},
+                            {"path", Device.Path},
+                            {"totalTimeInWaitingSec", NHPTimer::GetSeconds(HPNow() - start)},
+                            {"submitInFlightBytes", AtomicGet(SubmitInFlightBytes)},
+                            {"submitInFlightBytesMax", SubmitInFlightBytesMax});
                     }
                 }
             }
@@ -299,6 +302,7 @@ class TRealBlockDevice : public IBlockDevice {
 
         void Submit(IAsyncIoOperation *op) {
             TCompletionAction *action = static_cast<TCompletionAction*>(op->GetCookie());
+            const ui64 opSize = op->GetSize();
 
             if (!Device.QuitCounter.Increment()) {
                 Device.FreeOperation(op);
@@ -306,18 +310,18 @@ class TRealBlockDevice : public IBlockDevice {
                 SubmitCondVar.Signal();
                 return;
             }
-            Device.IdleCounter.Increment();
-
-            Device.IncrementMonInFlight(op->GetType(), op->GetSize());
 
             double blockedMs = 0;
-            action->OperationIdx = Device.FlightControl.Schedule(blockedMs);
+            action->OperationIdx = Device.FlightControl.Schedule(blockedMs, opSize);
 
             *Device.Mon.DeviceWaitTimeMs += blockedMs;
 
             if (action->FlushAction) {
                 action->FlushAction->OperationIdx = action->OperationIdx;
             }
+
+            Device.IdleCounter.Increment();
+            Device.IncrementMonInFlight(op->GetType(), opSize);
 
             EIoResult ret = EIoResult::TryAgain;
             while (ret == EIoResult::TryAgain) {
@@ -443,7 +447,9 @@ class TRealBlockDevice : public IBlockDevice {
                         << " offset# " << op->GetOffset()
                         << " size# " << op->GetSize()
                         << " Result# " << result);
-                P_LOG(PRI_ERROR, BPD01, "IAsyncIoOperation error",  (Reason, action->ErrorReason));
+                YDB_LOG_P_LOG(PRI_ERROR, "IAsyncIoOperation error",
+                    {"marker", "BPD01"},
+                    {"reason", action->ErrorReason});
                 ++*Device.Mon.DeviceIoErrors;
             }
         }
@@ -463,9 +469,11 @@ class TRealBlockDevice : public IBlockDevice {
                 LWTRACK(PDiskDeviceGetFromDevice, completionAction->FlushAction->Orbit);
             }
 
+            const ui64 opSize = op->GetSize();
             Device.QuitCounter.Decrement();
             Device.IdleCounter.Decrement();
-            Device.FlightControl.MarkComplete(completionAction->OperationIdx);
+            Device.DecrementMonInFlight(op->GetType(), opSize);
+            Device.FlightControl.MarkComplete(completionAction->OperationIdx, opSize);
 
             NHPTimer::STime startCycle = Max(completionAction->SubmitTime, (i64)PrevEventGotAtCycle);
             NHPTimer::STime durationCycles = (eventGotAtCycle > startCycle) ? eventGotAtCycle - startCycle : 0;
@@ -474,8 +482,6 @@ class TRealBlockDevice : public IBlockDevice {
 
             bool isSeekExpected = (completionAction->SubmitTime + (NHPTimer::STime)Device.SeekCostNs / 25ll >= PrevEventGotAtCycle);
 
-            const ui64 opSize = op->GetSize();
-            Device.DecrementMonInFlight(op->GetType(), opSize);
             if (opSize == 0) { // Special case for flush operation, which is a read operation with 0 bytes size
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
                     Y_VERIFY_S(WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] == nullptr,
@@ -500,8 +506,12 @@ class TRealBlockDevice : public IBlockDevice {
                     Device.Mon.DeviceWriteDuration.Increment(duration);
                     LWPROBE(PDiskDeviceWriteDuration, Device.GetPDiskId(), duration, opSize);
                 }
-                P_LOG(PRI_TRACE, BPD01, "iop is done", (Type, op->GetType()), (Duration, duration),
-                    (Offset, op->GetOffset()), (Size, opSize));
+                YDB_LOG_P_LOG(PRI_TRACE, "Iop is done",
+                    {"marker", "BPD01"},
+                    {"type", op->GetType()},
+                    {"duration", duration},
+                    {"offset", op->GetOffset()},
+                    {"size", opSize});
                 if (completionAction->FlushAction) {
                     ui64 idx = completionAction->FlushAction->OperationIdx;
                     Y_VERIFY_S(WaitingNoops[idx % MaxWaitingNoops] == nullptr, PCtx->PDiskLogPrefix);
@@ -608,8 +618,9 @@ class TRealBlockDevice : public IBlockDevice {
 
         bool Submit(IAsyncIoOperation *op, i64 *inFlight) {
             TCompletionAction *action = static_cast<TCompletionAction*>(op->GetCookie());
+            const ui64 opSize = op->GetSize();
 
-            action->OperationIdx = Device.FlightControl.TrySchedule();
+            action->OperationIdx = Device.FlightControl.TrySchedule(opSize);
             if (action->OperationIdx == 0) {
                 if (OpScheduleFailedTime == 0) {
                     // If failed to schedule, remember the time to use it when scheduling succeeds.
@@ -638,7 +649,7 @@ class TRealBlockDevice : public IBlockDevice {
                 action->FlushAction->OperationIdx = action->OperationIdx;
             }
 
-            if (op->GetSize() == 0) {
+            if (opSize == 0) {
                 TAsyncIoOperationResult result;
                 result.Operation = op;
                 result.Result = EIoResult::Ok;
@@ -647,7 +658,7 @@ class TRealBlockDevice : public IBlockDevice {
                 return true;
             }
 
-            Device.IncrementMonInFlight(op->GetType(), op->GetSize());
+            Device.IncrementMonInFlight(op->GetType(), opSize);
 
             EIoResult ret = EIoResult::TryAgain;
             while (ret == EIoResult::TryAgain) {
@@ -772,12 +783,13 @@ class TRealBlockDevice : public IBlockDevice {
                             Device.Mon.DeviceTrimDuration.Increment(duration);
                             *Device.Mon.DeviceEstimatedCostNs += completion->CostNs;
                             if (Device.PCtx->ActorSystem && Device.IsTrimEnabled) {
-                                P_LOG(PRI_DEBUG, BPD01, "trim is done",
-                                        (ReqId, op->GetReqId()),
-                                        (TrimDurationMs, HPMilliSeconds(endTime - startTime)),
-                                        (Path, Device.Path),
-                                        (Offset, op->GetOffset()),
-                                        (Size, op->GetSize()));
+                                YDB_LOG_P_LOG(PRI_DEBUG, "Trim is done",
+                                    {"marker", "BPD01"},
+                                    {"reqId", op->GetReqId()},
+                                    {"trimDurationMs", HPMilliSeconds(endTime - startTime)},
+                                    {"path", Device.Path},
+                                    {"offset", op->GetOffset()},
+                                    {"size", op->GetSize()});
                             }
                             LWPROBE(PDiskDeviceTrimDuration, Device.GetPDiskId(), duration, op->GetOffset());
                         }
@@ -833,7 +845,8 @@ private:
     static constexpr int MaxEvents = 32;
 
     ui64 DeviceInFlight;
-    TFlightControl FlightControl;
+    ui64 PDiskBufferSize;
+    TFlightControlFace FlightControl;
     TAtomicBlockCounter QuitCounter;
     TString LastWarning;
     bool ReadOnly;
@@ -845,7 +858,8 @@ private:
 public:
     TRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, bool readOnly)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, ui64 pDiskBufferSize, bool readOnly,
+            bool useBytesFlightControl)
         : Mon(mon)
         , Path(path)
         , CompletionThreads(nullptr)
@@ -864,10 +878,12 @@ public:
         , Flags(flags)
         , SectorMap(sectorMap)
         , DeviceInFlight(FastClp2(deviceInFlight))
-        , FlightControl(CountTrailingZeroBits(DeviceInFlight))
+        , PDiskBufferSize(pDiskBufferSize)
+        , FlightControl(DeviceInFlight, useBytesFlightControl, 2ull * PDiskBufferSize)
         , LastWarning(IsPowerOf2(deviceInFlight) ? "" : "Device inflight must be a power of 2")
         , ReadOnly(readOnly)
     {
+        Y_VERIFY(PDiskBufferSize > 0);
         if (sectorMap) {
             DriveData = TDriveData();
             DriveData->Path = path;
@@ -919,7 +935,8 @@ protected:
         IoContext->InitializeMonitoring(Mon);
         //IoContext->InitializeMonitoring(Mon.DeviceOperationPoolTotalAllocations, Mon.DeviceOperationPoolFreeObjectsMin);
         if (!LastWarning.empty() && PCtx->ActorSystem) {
-            P_LOG(PRI_WARN, BPD01, "", (Warning, LastWarning));
+            YDB_LOG_P_LOG(PRI_WARN, LastWarning,
+                {"marker", "BPD01"});
         }
         if (IsFileOpened) {
             IoContext->SetActorSystem(PCtx->ActorSystem);
@@ -1043,7 +1060,7 @@ protected:
         doneEvent.WaitI();
     }
 
-    void TrimSync(ui32 size, ui64 offset) override {
+    void TrimSync(ui64 size, ui64 offset) override {
         Y_VERIFY_S(!ReadOnly, PCtx->PDiskLogPrefix);
         IAsyncIoOperation* op = IoContext->CreateAsyncIoOperation(nullptr, {}, nullptr);
         IoContext->PreparePTrim(op, size, offset);
@@ -1129,7 +1146,7 @@ protected:
         CompletionThreads->ScheduleHackForLogReader(completionAction);
     }
 
-    void TrimAsync(ui32 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) override {
+    void TrimAsync(ui64 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) override {
         Y_VERIFY_S(completionAction, PCtx->PDiskLogPrefix);
         if (!IsInitialized || QuitCounter.IsBlocked()) {
             return;
@@ -1148,10 +1165,14 @@ protected:
         if (!DriveData) {
             TStringStream details;
             if (DriveData = ::NKikimr::NPDisk::GetDriveData(Path, &details)) {
-                P_LOG(PRI_NOTICE, BPD01, "Gathered DriveData", (Data, DriveData->ToString(false)),
-                    (Details, details.Str()));
+                YDB_LOG_P_LOG(PRI_NOTICE, "Gathered DriveData",
+                    {"marker", "BPD01"},
+                    {"data", DriveData->ToString(false)},
+                    {"details", details.Str()});
             } else {
-                P_LOG(PRI_WARN, BPD01, "Error on gathering DriveData", (Details, details.Str()));
+                YDB_LOG_P_LOG(PRI_WARN, "Error on gathering DriveData",
+                    {"marker", "BPD01"},
+                    {"details", details.Str()});
             }
         }
         return DriveData.value_or(TDriveData());
@@ -1162,7 +1183,9 @@ protected:
             TStringStream details;
             EWriteCacheResult res = NKikimr::NPDisk::SetWriteCache(*handle, Path, isEnable, &details);
             if (res != WriteCacheResultOk) {
-                P_LOG(PRI_WARN, BPD01, "Error on setting write cache", (Details, details.Str()));
+                YDB_LOG_P_LOG(PRI_WARN, "Error on setting write cache",
+                    {"marker", "BPD01"},
+                    {"details", details.Str()});
             }
         }
     }
@@ -1281,14 +1304,20 @@ class TCachedBlockDevice : public TRealBlockDevice {
 
         void Exec(TActorSystem *actorSystem) override {
             if (actorSystem) {
-                STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "Exec TCachedReadCompletion", (ReqId, ReqId), (Offset, Offset));
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Exec TCachedReadCompletion",
+                    {"marker", "BPD01"},
+                    {"reqId", ReqId},
+                    {"offset", Offset});
             }
             CachedBlockDevice.ExecRead(this, actorSystem);
         }
 
         void Release(TActorSystem *actorSystem) override {
             if (actorSystem) {
-                STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "Release TCachedReadCompletion", (ReqId, ReqId), (Offset, Offset));
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Release TCachedReadCompletion",
+                    {"marker", "BPD01"},
+                    {"reqId", ReqId},
+                    {"offset", Offset});
             }
             CachedBlockDevice.ReleaseRead(this, actorSystem);
         }
@@ -1365,9 +1394,11 @@ class TCachedBlockDevice : public TRealBlockDevice {
 public:
     TCachedBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, ui64 pDiskBufferSize,
+            TPDisk * const pdisk, bool readOnly, bool useBytesFlightControl)
         : TRealBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-                maxQueuedCompletionActions, completionThreadsCount, sectorMap, readOnly)
+                maxQueuedCompletionActions, completionThreadsCount, sectorMap, pDiskBufferSize, readOnly,
+                useBytesFlightControl)
         , ReadsInFly(0)
         , PDisk(pdisk)
     {}
@@ -1387,7 +1418,8 @@ public:
             if (TChunkState::DATA_COMMITTED == PDisk->ChunkState[chunkIdx].CommitState) {
                 if ((offset % PDisk->Format.ChunkSize) + completion->GetSize() > PDisk->Format.ChunkSize) {
                     // TODO: split buffer if crossing chunk boundary instead of completely discarding it
-                    P_LOG(PRI_INFO, BPD01, "Skip caching log read due to chunk boundary crossing");
+                    YDB_LOG_P_LOG(PRI_INFO, "Skip caching log read due to chunk boundary crossing",
+                        {"marker", "BPD01"});
                 } else {
                     if (Cache.Size() >= MaxCount) {
                         Cache.Pop();
@@ -1503,14 +1535,18 @@ public:
 
 IBlockDevice* CreateRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
         ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-        ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly) {
+        ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, ui64 pDiskBufferSize,
+        TPDisk * const pdisk, bool readOnly, bool useBytesFlightControl) {
     return new TCachedBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-            maxQueuedCompletionActions, completionThreadsCount, sectorMap, pdisk, readOnly);
+            maxQueuedCompletionActions, completionThreadsCount, sectorMap, pDiskBufferSize, pdisk, readOnly,
+            useBytesFlightControl);
 }
 
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
-        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk, bool readOnly) {
-    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, 1, sectorMap, pdisk, readOnly);
+        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem,
+        TPDisk * const pdisk, bool readOnly, bool useBytesFlightControl) {
+    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, 1, sectorMap, 512ull << 10,
+            pdisk, readOnly, useBytesFlightControl);
     device->Initialize(std::make_shared<TPDiskCtx>(actorSystem));
     return device;
 }

@@ -23,6 +23,7 @@ import ydb.core.protos.grpc_pb2_grpc as kikimr_grpc
 import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
+import ydb.core.protos.whiteboard_disk_states_pb2 as whiteboard_disk_states
 import ydb.core.protos.cms_pb2 as kikimr_cms
 import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc_server
@@ -296,6 +297,13 @@ def get_pdisk_inferred_settings(pdisk):
         return pdisk.PDiskMetrics.SlotCount, pdisk.PDiskMetrics.SlotSizeInUnits
     else:
         return pdisk.ExpectedSlotCount, pdisk.PDiskConfig.SlotSizeInUnits
+
+
+def get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units):
+    # Identical to blobstorage/pdisk/blobstorage_pdisk_config.h GetOwnerWeight()
+    vu = group_size_in_units if group_size_in_units else 1
+    pu = pdisk_slot_size_in_units if pdisk_slot_size_in_units else 1
+    return int(vu / pu) + (1 if (vu % pu) else 0)
 
 
 class Location(typing.NamedTuple):
@@ -735,10 +743,20 @@ def invoke_nbs_request(request_type, request):
     return invoke_grpc(request_type, request, stub_factory=nbs_grpc_server.NbsServiceStub)
 
 
+def get_status(response):
+    return response.operation.ready and response.operation.status == StatusIds.SUCCESS
+
+
+def get_status_str(response):
+    success = get_status(response)
+
+    return 'success' if success else 'failure'
+
+
 def print_nbs_request_result(args, request, response):
-    success = response.operation.ready and response.operation.status == StatusIds.SUCCESS
+    status = get_status(response)
     error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
-    print_status_if_verbose(args, success, error_reason)
+    print_status(args, status, error_reason)
 
 
 @inmemcache('base_config_and_storage_pools', cache_enable_param='cache')
@@ -828,21 +846,21 @@ def bytes_to_string(num, round, suffix):
     return f'{res}{right}{suffix}'
 
 
-def gib_string(num):
-    return bytes_to_string(num, 1024 ** 3, '')
+def gb_string(num):
+    return bytes_to_string(num, 1000 ** 3, ' GB')
 
 
 def bytes_string(num):
-    if num > 1024 ** 5:
-        return bytes_to_string(num, 1024 ** 5, ' PiB')
-    if num > 1024 ** 4:
-        return bytes_to_string(num, 1024 ** 4, ' TiB')
-    if num > 1024 ** 3:
-        return bytes_to_string(num, 1024 ** 3, ' GiB')
-    if num > 1024 ** 2:
-        return bytes_to_string(num, 1024 ** 2, ' MiB')
-    if num > 1024:
-        return bytes_to_string(num, 1024, ' kiB')
+    if num > 1000 ** 5:
+        return bytes_to_string(num, 1000 ** 5, ' PB')
+    if num > 1000 ** 4:
+        return bytes_to_string(num, 1000 ** 4, ' TB')
+    if num > 1000 ** 3:
+        return bytes_to_string(num, 1000 ** 3, ' GB')
+    if num > 1000 ** 2:
+        return bytes_to_string(num, 1000 ** 2, ' MB')
+    if num > 1000:
+        return bytes_to_string(num, 1000, ' kB')
     return bytes_to_string(num, 1, '')
 
 
@@ -1002,11 +1020,16 @@ def build_pdisk_static_slots_map(base_config):
 def build_pdisk_usage_map(base_config, count_donors=False, storage_pool=None):
     pdisk_usage_map = {}
 
+    group_size_map = {group.GroupId: group.GroupSizeInUnits for group in base_config.Group}
+
+    pdisk_slot_size_in_units_map = {}
     for pdisk in base_config.PDisk:
         if storage_pool is not None and not pdisk_matches_storage_pool(pdisk, storage_pool):
             continue
         pdisk_id = get_pdisk_id(pdisk)
         pdisk_usage_map[pdisk_id] = pdisk.NumStaticSlots
+        _, slot_size_in_units = get_pdisk_inferred_settings(pdisk)
+        pdisk_slot_size_in_units_map[pdisk_id] = slot_size_in_units
 
     for vslot in base_config.VSlot:
         if not (vslot.GroupId & 0x80000000):  # don't count vslots from static groups twice
@@ -1014,10 +1037,13 @@ def build_pdisk_usage_map(base_config, count_donors=False, storage_pool=None):
         pdisk_id = get_pdisk_id(vslot.VSlotId)
         if pdisk_id not in pdisk_usage_map:
             continue
-        pdisk_usage_map[pdisk_id] += 1
+        group_size_in_units = group_size_map.get(vslot.GroupId, 0)
+        weight = get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units_map.get(pdisk_id, 0))
+        pdisk_usage_map[pdisk_id] += weight
         for donor in vslot.Donors if count_donors else []:
             donor_pdisk_id = get_pdisk_id(donor.VSlotId)
-            pdisk_usage_map[donor_pdisk_id] += 1
+            donor_weight = get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units_map.get(donor_pdisk_id, 0))
+            pdisk_usage_map[donor_pdisk_id] += donor_weight
 
     return pdisk_usage_map
 
@@ -1214,25 +1240,24 @@ def get_vslots_by_vdisk_ids(base_config, vdisk_ids):
     return res
 
 
+def vdisk_is_ok(vslot):
+    metrics = vslot.VDiskMetrics
+    return metrics.Replicated and metrics.State == whiteboard_disk_states.EVDiskState.OK
+
+
 def filter_healthy_groups(groups, base_config, vslot_map):
-    res = {
-        group.GroupId: len(group.VSlotId)
-        for group in base_config.Group
-        if group.GroupId in groups
-        if all(vslot.Status == 'READY' for vslot in vslots_of_group(group, vslot_map))
-    }
-    check_set = {
-        (*vslot_id, *attrgetter('GroupId', 'FailRealmIdx', 'FailDomainIdx', 'VDiskIdx')(vslot))
-        for vslot_id, vslot in vslot_map.items()
-        if vslot.GroupId in res
-    }
-    for vdisk_id, j in fetch_json_info('vdiskinfo', {node_id for node_id, _, _, _, _, _, _ in check_set}).items():
-        if j.get('Replicated') and j.get('VDiskState') == 'OK':
-            check_item = *vdisk_id, *itemgetter('GroupID', 'Ring', 'Domain', 'VDisk')(j['VDiskId'])
-            if check_item in check_set:
-                check_set.remove(check_item)
-                res[j['VDiskId']['GroupID']] -= 1
-    return {group_id for group_id, count in res.items() if not count}
+    healthy = set()
+    for group in base_config.Group:
+        if group.GroupId not in groups:
+            continue
+        vslots = list(vslots_of_group(group, vslot_map))
+        if not vslots:
+            continue
+        if not all(vslot.Status == 'READY' for vslot in vslots):
+            continue
+        if all(vdisk_is_ok(vslot) for vslot in vslots):
+            healthy.add(group.GroupId)
+    return healthy
 
 
 def add_host_access_options(parser):
@@ -1310,19 +1335,7 @@ def print_result(format: str, status: str, description: str = None, file=None):
 def print_request_result(args, request, response):
     success = is_successful_bsc_response(response)
     error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
-    print_status_if_verbose(args, success, error_reason)
-
-
-def print_status_if_verbose(args, success, error_reason):
-    format = getattr(args, 'format', 'pretty')
-    verbose = getattr(args, 'verbose', False)
-    if success:
-        print_result(format, 'success')
-    else:
-        if verbose:
-            print_result(format, 'error', error_reason)
-        else:
-            print_result(format, 'error', 'add --verbose for more info')
+    print_status(args, success, error_reason)
 
 
 def print_status_if_not_quiet(args, success, error_reason):

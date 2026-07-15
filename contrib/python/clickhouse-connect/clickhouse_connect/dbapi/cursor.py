@@ -1,23 +1,21 @@
 import logging
 import re
-
-from typing import Optional, Sequence, List, Dict
+from collections.abc import Mapping, Sequence
 
 from clickhouse_connect.datatypes.registry import get_from_name
+from clickhouse_connect.driver import Client
 from clickhouse_connect.driver.common import unescape_identifier
 from clickhouse_connect.driver.exceptions import ProgrammingError
-from clickhouse_connect.driver import Client
 from clickhouse_connect.driver.parser import parse_callable
 from clickhouse_connect.driver.query import remove_sql_comments
 
 logger = logging.getLogger(__name__)
 
-insert_re = re.compile(r'^\s*INSERT\s+INTO\s+(.*$)', re.IGNORECASE)
-str_type = get_from_name('String')
-int_type = get_from_name('Int32')
+insert_re = re.compile(r"^\s*INSERT\s+INTO\s+(.*$)", re.IGNORECASE)
+str_type = get_from_name("String")
+int_type = get_from_name("Int32")
 
 
-# pylint: disable=too-many-instance-attributes
 class Cursor:
     """
     See :ref:`https://peps.python.org/pep-0249/`
@@ -26,16 +24,16 @@ class Cursor:
     def __init__(self, client: Client):
         self.client = client
         self.arraysize = 1
-        self.data: Optional[Sequence] = None
+        self.data: Sequence | None = None
         self.names = []
         self.types = []
         self._rowcount = 0
-        self._summary: List[Dict[str, str]] = []
+        self._summary: list[dict[str, str]] = []
         self._ix = 0
 
     def check_valid(self):
         if self.data is None:
-            raise ProgrammingError('Cursor is not valid')
+            raise ProgrammingError("Cursor is not valid")
 
     @property
     def description(self):
@@ -46,13 +44,20 @@ class Cursor:
         return self._rowcount
 
     @property
-    def summary(self) -> List[Dict[str, str]]:
+    def summary(self) -> list[dict[str, str]]:
         return self._summary
 
     def close(self):
         self.data = None
 
     def execute(self, operation: str, parameters=None):
+        if not parameters and isinstance(operation, str):
+            # Per PEP 249 pyformat paramstyle, callers (e.g. SQLAlchemy) escape
+            # literal percent signs as %% in operation strings.  When there are
+            # parameters, Python's % operator in finalize_query handles the
+            # unescaping automatically.  When there are no parameters,
+            # finalize_query short-circuits, so we must unescape here.
+            operation = operation.replace("%%", "%")
         query_result = self.client.query(operation, parameters)
         self.data = query_result.result_set
         self._rowcount = len(self.data)
@@ -65,27 +70,43 @@ class Cursor:
             self.names = query_result.column_names
             self.types = [x.name for x in query_result.column_types]
         elif self.data:
-            self.names = [f'col_{x}' for x in range(len(self.data[0]))]
+            self.names = [f"col_{x}" for x in range(len(self.data[0]))]
             self.types = [x.__class__ for x in self.data[0]]
+        else:
+            stripped = operation.strip().rstrip(";").strip()
+            if stripped.upper().startswith(("SELECT", "WITH")):
+                meta_result = self.client.query(f"SELECT * FROM ({stripped}) LIMIT 0", parameters)
+                if meta_result.column_names:
+                    self.names = meta_result.column_names
+                    self.types = [x.name for x in meta_result.column_types]
 
     def _try_bulk_insert(self, operation: str, data):
         match = insert_re.match(remove_sql_comments(operation))
         if not match:
             return False
         temp = match.group(1)
-        table_end = min(temp.find(' '), temp.find('('))
+        table_end = min(temp.find(" "), temp.find("("))
         table = temp[:table_end].strip()
         temp = temp[table_end:].strip()
-        if temp[0] == '(':
+        if temp[0] == "(":
             _, op_columns, temp = parse_callable(temp)
         else:
             op_columns = None
-        if 'VALUES' not in temp.upper():
+        if "VALUES" not in temp.upper():
             return False
-        col_names = list(data[0].keys())
-        if op_columns and {unescape_identifier(x) for x in op_columns} != set(col_names):
-            return False  # Data sent in doesn't match the columns in the insert statement
-        data_values = [list(row.values()) for row in data]
+        first_row = data[0]
+        if isinstance(first_row, Mapping):
+            col_names = list(first_row.keys())
+            if op_columns and {unescape_identifier(x) for x in op_columns} != set(col_names):
+                return False  # Data sent in doesn't match the columns in the insert statement
+            data_values = [list(row.values()) for row in data]
+        elif isinstance(first_row, Sequence) and not isinstance(first_row, (str, bytes)):
+            # PEP 249 also allows rows as sequences; take column names from the
+            # insert statement if present, otherwise insert into all columns
+            col_names = [unescape_identifier(x) for x in op_columns] if op_columns else "*"
+            data_values = data
+        else:
+            return False
         self.client.insert(table, data_values, col_names)
         self.data = []
         return True
@@ -100,14 +121,18 @@ class Cursor:
                 self.data.extend(query_result.result_set)
                 if self.names or self.types:
                     if query_result.column_names != self.names:
-                        logger.warning('Inconsistent column names %s : %s for operation %s in cursor executemany',
-                                       self.names, query_result.column_names, operation)
+                        logger.warning(
+                            "Inconsistent column names %s : %s for operation %s in cursor executemany",
+                            self.names,
+                            query_result.column_names,
+                            operation,
+                        )
                 else:
                     self.names = query_result.column_names
                     self.types = query_result.column_types
                 self._summary.append(query_result.summary)
         except TypeError as ex:
-            raise ProgrammingError(f'Invalid parameters {parameters} passed to cursor executemany') from ex
+            raise ProgrammingError(f"Invalid parameters {parameters} passed to cursor executemany") from ex
         self._rowcount = len(self.data)
 
         # Need to reset cursor _ix after performing an execute
@@ -115,7 +140,7 @@ class Cursor:
 
     def fetchall(self):
         self.check_valid()
-        ret = self.data[self._ix:]
+        ret = self.data[self._ix :]
         self._ix = self._rowcount
         return ret
 
@@ -138,7 +163,7 @@ class Cursor:
             return []
 
         end = min(self._ix + size, self._rowcount)
-        ret = self.data[self._ix: end]
+        ret = self.data[self._ix : end]
         self._ix = end
         return ret
 

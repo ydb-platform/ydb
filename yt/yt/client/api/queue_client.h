@@ -37,6 +37,8 @@ struct TPullRowsOptions
 struct TPullRowsResult
 {
     THashMap<NTabletClient::TTabletId, i64> EndReplicationRowIndexes;
+    NTransactionClient::TTimestamp PullRowsMaxTimestamp = NTransactionClient::NullTimestamp;
+    NTransactionClient::TTimestamp PullRowsMinTimestamp = NTransactionClient::NullTimestamp;
     i64 RowCount = 0;
     i64 DataWeight = 0;
     NChaosClient::TReplicationProgress ReplicationProgress;

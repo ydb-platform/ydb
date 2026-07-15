@@ -1,4 +1,5 @@
 #include "kqp_compute_actor.h"
+#include "kqp_compute_actor_impl.h"
 
 #include "kqp_scan_compute_actor.h"
 #include "kqp_scan_fetcher_actor.h"
@@ -12,16 +13,19 @@
 #include <ydb/core/kqp/runtime/kqp_vector_actor.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor.h>
 #include <ydb/core/kqp/runtime/kqp_full_text_source.h>
+#include <ydb/core/kqp/runtime/kqp_sys_view_source.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_info_aggregation_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
+#include <ydb/library/yql/providers/solomon/events/events.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -83,29 +87,104 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
                 return WrapFulltextAnalyze(callable, ctx);
             }
 
+            if (name == "KqpStreamEnumerate"sv) {
+                return WrapKqpStreamEnumerate(callable, ctx);
+            }
+
             return nullptr;
         };
 }
 } // namespace NMiniKQL
 
+namespace {
+
+class TKqpApplyEffectsConsumer : public NYql::NDq::IDqOutputConsumer {
+public:
+    TKqpApplyEffectsConsumer(NUdf::IApplyContext* applyCtx)
+        : ApplyCtx(applyCtx) {}
+
+    NYql::NDq::EDqFillLevel GetFillLevel() const override {
+        return NYql::NDq::NoLimit;
+    }
+
+    void Consume(NUdf::TUnboxedValue&& value) final {
+        value.Apply(*ApplyCtx);
+    }
+
+    void WideConsume(NUdf::TUnboxedValue* values, ui32 count) final {
+        Y_UNUSED(values);
+        Y_UNUSED(count);
+        Y_ABORT("WideConsume not supported yet");
+    }
+
+    void Consume(NYql::NDqProto::TCheckpoint&&) final {
+        Y_ABORT("Shouldn't be called");
+    }
+
+    void Consume(NYql::NDqProto::TWatermark&&) final {
+        Y_ABORT("Shouldn't be called");
+    }
+
+    void Finish() final {}
+
+    void Flush() final {}
+
+    bool IsFinished() const final {
+        return false;
+    }
+
+    bool IsEarlyFinished() const final {
+        return false;
+    }
+
+private:
+    NUdf::IApplyContext* ApplyCtx;
+};
+
+}
+
 namespace NKqp {
+
+
+
+IDqOutputConsumer::TPtr TKqpTaskRunnerExecutionContext::CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc,
+    const NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx, const NMiniKQL::TTypeEnvironment& typeEnv,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    TVector<IDqOutput::TPtr>&& outputs, NUdf::IPgBuilder* /* pgBuilder */) const
+{
+    switch (outputDesc.GetTypeCase()) {
+        case NDqProto::TTaskOutput::kRangePartition: {
+            YQL_ENSURE(false, "unsupported");
+        }
+
+        case NDqProto::TTaskOutput::kEffects: {
+            return MakeIntrusive<TKqpApplyEffectsConsumer>(applyCtx);
+        }
+
+        default: {
+            return DqBuildOutputConsumer(outputDesc, type, typeEnv, holderFactory, std::move(outputs), MinFillPercentage_);
+        }
+    }
+}
 
 NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     TIntrusivePtr<TKqpCounters> counters,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+    TIntrusivePtr<TVectorIndexLevelsCache> vectorIndexLevelsCache
     ) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-    RegisterStreamLookupActorFactory(*factory, counters);
+    RegisterStreamLookupActorFactory(*factory, counters, std::move(vectorIndexLevelsCache));
     RegisterKqpReadActor(*factory, counters);
     RegisterKqpWriteActor(*factory, counters);
     RegisterSequencerActorFactory(*factory, counters);
     RegisterKqpVectorResolveActor(*factory, counters);
     RegisterKqpFullTextSource(*factory, counters);
+    RegisterKqpSysViewSource(*factory, counters);
     NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory);
 
     if (federatedQuerySetup) {
-        auto s3HttpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
+        auto s3HttpRetryPolicy = NYql::GetFqHTTPRetryPolicy();
         s3ActorsFactory->RegisterS3ReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway, s3HttpRetryPolicy, federatedQuerySetup->S3ReadActorFactoryConfig, nullptr, federatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles());
         s3ActorsFactory->RegisterS3WriteActorFactory(*factory,  federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway, s3HttpRetryPolicy);
 
@@ -113,11 +192,23 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
             RegisterGenericProviderFactories(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->ConnectorClient);
         }
 
+        static_assert(
+            static_cast<ui32>(NYql::NDq::EEventSpaceSolomonProvider::ES_SOLOMON_PROVIDER) == static_cast<ui32>(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER),
+            "ES_SOLOMON_PROVIDER is out of sync with ydb/core/base/events.h");
         NYql::NDq::RegisterDQSolomonReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
         bool enableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
         NYql::NDq::RegisterDQSolomonWriteActorFactory(*factory, federatedQuerySetup->CredentialsFactory, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters);
-        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"), {}, enableStreamingQueriesCounters);
-        NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters);
+
+        const auto& pqGatewayFactory = federatedQuerySetup->PqGatewayFactory;
+        Y_VALIDATE(pqGatewayFactory, "Missing PQ gateway factory in federated query setup");
+        const NYql::IPqStaticGateway::TPtr pqGateway = pqGatewayFactory->CreatePqGateway();
+
+        const auto& driver = federatedQuerySetup->Driver;
+        Y_VALIDATE(driver, "Missing YDB driver in federated query setup");
+
+        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"), {}, enableStreamingQueriesCounters);
+        NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters, NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesPqSinkDeduplication());
+        NYql::NDq::RegisterDqPqInfoAggregationActorFactory(*factory);
     }
 
     return factory;
@@ -150,11 +241,11 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
     if (enableShardsSequentialScan) {
         maxInFlight = 1;
     } else if (hasGroupByWithFields) {
-        maxInFlight = ProtoConfig.GetAggregationGroupByLimit();
+        maxInFlight = AggregationGroupByLimit;
     } else if (hasGroupByWithNoFields) {
-        maxInFlight = ProtoConfig.GetAggregationNoGroupLimit();
+        maxInFlight = AggregationNoGroupLimit;
     } else {
-        maxInFlight = ProtoConfig.GetScanLimit();
+        maxInFlight = ScanLimit;
     }
 }
 

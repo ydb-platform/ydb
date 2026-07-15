@@ -4,7 +4,7 @@
 
 namespace NYql {
 
-const char IssueMapResource[] = "yql_issue.txt";
+const std::array<char, 14> IssueMapResource = {"yql_issue.txt"};
 
 static_assert(DEFAULT_ERROR == TIssuesIds::DEFAULT_ERROR,
               "value of particular and common error mismatched for \"DEFAULT_ERROR\"");

@@ -114,8 +114,12 @@ constexpr TOperationId InvalidOperationId = TOperationId(InvalidTxId, InvalidSub
 NKikimrSchemeOp::TShardIdx AsProto(const TShardIdx& shardIdx);
 TShardIdx FromProto(const NKikimrSchemeOp::TShardIdx& shardIdx);
 
+// TODO(flown4qqqq): Rename TIndexBuildId.
 STRONG_UI64_TYPE_DEF_DV(TIndexBuildId, Max<ui64>(), Max<ui64>());
 constexpr TIndexBuildId InvalidIndexBuildId = TIndexBuildId();
+
+STRONG_UI64_TYPE_DEF_DV(TIncrementalRestoreOpId, Max<ui64>(), Max<ui64>());
+constexpr TIncrementalRestoreOpId InvalidIncrementalRestoreOpId = TIncrementalRestoreOpId();
 
 enum class EIndexColumnKind : ui8 {
     KeyColumn = 0,

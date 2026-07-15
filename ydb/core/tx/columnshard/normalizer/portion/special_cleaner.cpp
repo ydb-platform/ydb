@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NNormalizer::NSpecialColumns {
 
 namespace {
@@ -104,6 +106,7 @@ public:
         : Actions(std::move(actions))
     {
     }
+
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /*normController*/) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
@@ -113,7 +116,9 @@ public:
                 return false;
             }
         }
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("normalizer", "TDeleteTrash")("message", TStringBuilder() << GetSize() << " chunks deleted");
+        YDB_LOG_NOTICE("",
+            {"normalizer", "TDeleteTrash"},
+            {"message", TStringBuilder() << GetSize() << " chunks deleted"});
         return true;
     }
 
@@ -152,8 +157,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TDeleteTrashImpl::DoInit(
         result.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TChanges>(std::move(batch))));
         ++batchCount;
     }
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("normalizer", "TDeleteTrash")(
-        "message", TStringBuilder() << "found " << keysToDelete->size() << " columns to delete grouped in " << batchCount << " batches");
+    YDB_LOG_NOTICE("",
+        {"normalizer", "TDeleteTrash"},
+        {"message", TStringBuilder() << "found " << keysToDelete->size() << " columns to delete grouped in " << batchCount << " batches"});
     return result;
 }
 
@@ -162,11 +168,13 @@ bool TDeleteTrashImpl::PrechargeV0(NTabletFlatExecutor::TTransactionContext& txc
     using namespace NColumnShard;
     return Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme());
 }
+
 bool TDeleteTrashImpl::PrechargeV1(NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
     using namespace NColumnShard;
     return Schema::Precharge<Schema::IndexColumnsV1>(db, txc.DB.GetScheme());
 }
+
 bool TDeleteTrashImpl::PrechargeV2(NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
     using namespace NColumnShard;

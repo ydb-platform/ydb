@@ -6,7 +6,7 @@ namespace NKikimr::NPQ::NMLP {
 
 Y_UNIT_TEST_SUITE(TMLPDLQMoverTests) {
 
-void MoveToDLQ(const TString& msg) {
+void MoveToDLQ(const TString& msg, bool shortDlqName = false) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
 
@@ -24,7 +24,7 @@ void MoveToDLQ(const TString& msg) {
                     .BeginCondition()
                         .MaxProcessingAttempts(1)
                     .EndCondition()
-                    .MoveAction("/Root/topic1-dlq")
+                    .MoveAction(shortDlqName ? "topic1-dlq" : "/Root/topic1-dlq")
                 .EndDeadLetterPolicy()
             .EndAddConsumer()).GetValueSync();
 
@@ -59,7 +59,7 @@ void MoveToDLQ(const TString& msg) {
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Success, true);
+        UNIT_ASSERT(result->Messages[0].Status == EOperationResult::Success);
     }
 
 
@@ -70,7 +70,6 @@ void MoveToDLQ(const TString& msg) {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1-dlq",
             .Consumer = "mlp-consumer",
-            .UncompressMessages = true
         });
         auto response = GetReadResponse(runtime);
         if (i < 9 && response->Messages.empty()) {
@@ -99,8 +98,12 @@ void MoveToDLQ(const TString& msg) {
     }
 }
 
-Y_UNIT_TEST(MoveToDLQ_ShortMessage) {
-    MoveToDLQ(NUnitTest::RandomString(1_KB));
+Y_UNIT_TEST(MoveToDLQ_ShortDlqTopicName) {
+    MoveToDLQ(NUnitTest::RandomString(1_KB), true);
+}
+
+Y_UNIT_TEST(MoveToDLQ_FullDlqTopicName) {
+    MoveToDLQ(NUnitTest::RandomString(1_KB), false);
 }
 
 Y_UNIT_TEST(MoveToDLQ_BigMessage) {
@@ -145,7 +148,6 @@ Y_UNIT_TEST(MoveToDLQ_ManyMessages) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .MaxNumberOfMessage = 3,
-            .UncompressMessages = true
         });
         auto response = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
@@ -181,7 +183,6 @@ Y_UNIT_TEST(MoveToDLQ_ManyMessages) {
             .TopicName = "/Root/topic1-dlq",
             .Consumer = "mlp-consumer",
             .MaxNumberOfMessage = 10,
-            .UncompressMessages = true
         });
         auto response = GetReadResponse(runtime);
         if (i < 9 && response->Messages.size() != 3) {
@@ -258,7 +259,6 @@ Y_UNIT_TEST(MoveToDLQ_TopicNotExists) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
         auto response = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
@@ -295,7 +295,6 @@ Y_UNIT_TEST(MoveToDLQ_TopicNotExists) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
 
         auto response = GetReadResponse(runtime);

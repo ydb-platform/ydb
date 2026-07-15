@@ -46,6 +46,12 @@ enum EPileState {
     DISCONNECTED = 6 /* "disconnected" */
 };
 
+enum class EGrpcCompressionAlgorithm {
+    None,
+    Deflate,
+    Gzip
+};
+
 class TBalancingPolicy {
     friend class TDriverConfig;
     friend class TDriver;

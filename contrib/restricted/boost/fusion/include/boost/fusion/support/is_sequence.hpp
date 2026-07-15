@@ -4,7 +4,7 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#if !defined(FUSION_IS_SEQUENCE_05052005_1002)
+#ifndef FUSION_IS_SEQUENCE_05052005_1002
 #define FUSION_IS_SEQUENCE_05052005_1002
 
 #include <boost/fusion/support/config.hpp>

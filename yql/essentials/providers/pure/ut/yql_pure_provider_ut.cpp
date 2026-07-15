@@ -24,7 +24,7 @@ TString Run(const TString& query, TSettings settings = {}) {
     auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
     TVector<TDataProviderInitializer> dataProvidersInit;
     dataProvidersInit.push_back(GetPureDataProviderInitializer());
-    TProgramFactory factory(true, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
+    TProgramFactory factory(/*useRepeatableRandomAndTimeProviders=*/true, functionRegistry.Get(), 0ULL, dataProvidersInit, "ut");
     TProgramPtr program = factory.Create("-stdin-", query);
     program->ConfigureYsonResultFormat(settings.Pretty ? NYson::EYsonFormat::Pretty : NYson::EYsonFormat::Text);
     bool parseRes;
@@ -156,12 +156,12 @@ void Sql1RowImpl(const TString& query) {
 }
 
 Y_UNIT_TEST(Sql1Row_LLVM_On) {
-    const auto s = "pragma config.flags(\"LLVM\",\"--dump-stats\");select 1 as x";
+    const auto s = R"(pragma config.flags("LLVM","--dump-stats");select 1 as x)";
     Sql1RowImpl(s);
 }
 
 Y_UNIT_TEST(Sql1Row_LLVM_Off) {
-    const auto s = "pragma config.flags(\"LLVM\",\"OFF\");select 1 as x";
+    const auto s = R"(pragma config.flags("LLVM","OFF");select 1 as x)";
     Sql1RowImpl(s);
 }
 

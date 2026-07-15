@@ -593,7 +593,7 @@ TRefCountedProto<TProto>::TRefCountedProto(const TRefCountedProto<TProto>& other
 }
 
 template <class TProto>
-TRefCountedProto<TProto>::TRefCountedProto(TRefCountedProto<TProto>&& other)
+TRefCountedProto<TProto>::TRefCountedProto(TRefCountedProto<TProto>&& other) noexcept
 {
     TProto::Swap(&other);
     RegisterExtraSpace();
@@ -607,7 +607,7 @@ TRefCountedProto<TProto>::TRefCountedProto(const TProto& other)
 }
 
 template <class TProto>
-TRefCountedProto<TProto>::TRefCountedProto(TProto&& other)
+TRefCountedProto<TProto>::TRefCountedProto(TProto&& other) noexcept
 {
     TProto::Swap(&other);
     RegisterExtraSpace();

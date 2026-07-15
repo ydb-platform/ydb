@@ -6,11 +6,12 @@ import random
 from typing import Any, Callable, Optional, Tuple, TYPE_CHECKING
 
 from ydb import issues
+from ydb.opentelemetry.tracing import SpanName, create_ydb_span
 from ydb.pool import ConnectionsCache as _ConnectionsCache, IConnectionPool
 
 from .connection import Connection, EndpointKey
 
-from . import resolver
+from . import resolver, _utilities
 
 if TYPE_CHECKING:
     from ydb.driver import DriverConfig
@@ -145,6 +146,47 @@ class Discovery:
             if cached_endpoint.endpoint not in resolved_endpoints:
                 self._cache.make_outdated(cached_endpoint)
 
+        local_dc = resolve_details.self_location
+
+        # Detect local DC using TCP latency if enabled and preferred is meaningful
+        if self._driver_config.detect_local_dc and not self._driver_config.use_all_nodes:
+            # Use only endpoints that match the SSL requirements for detection
+            ssl_filtered_endpoints = [
+                endpoint
+                for endpoint in resolve_details.endpoints
+                if (self._ssl_required and endpoint.ssl) or (not self._ssl_required and not endpoint.ssl)
+            ]
+
+            if ssl_filtered_endpoints:
+                try:
+                    detected_location = await _utilities.detect_local_dc(
+                        ssl_filtered_endpoints, max_per_location=3, timeout=self._ready_timeout
+                    )
+                    if detected_location:
+                        local_dc = detected_location
+                        self.logger.info(
+                            "Detected local DC via TCP latency: %s (server reported: %s)",
+                            local_dc,
+                            resolve_details.self_location,
+                        )
+                    else:
+                        self.logger.warning(
+                            "Failed to detect local DC via TCP latency, using server location: %s",
+                            resolve_details.self_location,
+                        )
+                except Exception as e:
+                    self.logger.warning(
+                        "Failed to detect local DC via TCP latency, using server location: %s. Error: %s",
+                        resolve_details.self_location,
+                        e,
+                        exc_info=True,
+                    )
+            else:
+                self.logger.warning(
+                    "No SSL-compatible endpoints for local DC detection, using server location: %s",
+                    resolve_details.self_location,
+                )
+
         for resolved_endpoint in resolve_details.endpoints:
             if self._ssl_required and not resolved_endpoint.ssl:
                 continue
@@ -152,7 +194,7 @@ class Discovery:
             if not self._ssl_required and resolved_endpoint.ssl:
                 continue
 
-            preferred = resolve_details.self_location == resolved_endpoint.location
+            preferred = local_dc == resolved_endpoint.location
 
             for (
                 endpoint,
@@ -206,17 +248,36 @@ class ConnectionPool(IConnectionPool):
         self._store = ConnectionsCache(driver_config.use_all_nodes)
         self._grpc_init = Connection(self._driver_config.endpoint, self._driver_config)
         self._stopped = False
+        self._stopping = False
         self._discovery: Optional[Discovery] = None
         self._discovery_task: "asyncio.Task[None]"
 
         if driver_config.disable_discovery:
             # If discovery is disabled, just add the initial endpoint to the store
             async def init_connection() -> None:
-                ready_connection = Connection(self._driver_config.endpoint, self._driver_config)
-                await ready_connection.connection_ready(
-                    ready_timeout=getattr(self._driver_config, "discovery_request_timeout", 10)
-                )
-                self._store.add(ready_connection)
+                ready_timeout = getattr(self._driver_config, "discovery_request_timeout", 10)
+                while not self._stopping:
+                    ready_connection = Connection(self._driver_config.endpoint, self._driver_config)
+                    try:
+                        await ready_connection.connection_ready(ready_timeout=ready_timeout)
+                    except asyncio.CancelledError:
+                        try:
+                            await ready_connection.close()
+                        except Exception:
+                            logger.debug("Failed to close cancelled initial connection", exc_info=True)
+                        raise
+                    except Exception:
+                        logger.debug("Initial connection attempt failed", exc_info=True)
+                        try:
+                            await ready_connection.close()
+                        except Exception:
+                            logger.debug("Failed to close unsuccessful initial connection", exc_info=True)
+                        if not self._stopping:
+                            await asyncio.sleep(1)
+                        continue
+
+                    self._store.add(ready_connection)
+                    return
 
             # Create and schedule the task to initialize the connection
             self._discovery_task = asyncio.get_event_loop().create_task(init_connection())
@@ -226,6 +287,7 @@ class ConnectionPool(IConnectionPool):
             self._discovery_task = asyncio.get_event_loop().create_task(self._discovery.run())
 
     async def stop(self, timeout: int = 10) -> None:  # type: ignore[override]  # async override of sync method
+        self._stopping = True
         if self._discovery:
             self._discovery.stop()
         await self._grpc_init.close()
@@ -233,6 +295,12 @@ class ConnectionPool(IConnectionPool):
             await asyncio.wait_for(self._discovery_task, timeout=timeout)
         except asyncio.TimeoutError:
             self._discovery_task.cancel()
+            try:
+                await self._discovery_task
+            except asyncio.CancelledError:
+                pass
+        if self._discovery is None:
+            await self._store.cleanup()
         self._stopped = True
 
     def _on_disconnected(self, connection: Connection) -> Callable[[], Any]:
@@ -244,7 +312,8 @@ class ConnectionPool(IConnectionPool):
         return __wrapper__
 
     async def wait(self, timeout: Optional[float] = 7.0, fail_fast: bool = False) -> None:  # type: ignore[override]  # async override of sync method
-        await self._store.get(fast_fail=fail_fast, wait_timeout=timeout if timeout is not None else 7.0)
+        with create_ydb_span(SpanName.DRIVER_INITIALIZE, self._driver_config, kind="internal").attach_context():
+            await self._store.get(fast_fail=fail_fast, wait_timeout=timeout if timeout is not None else 7.0)
 
     def discovery_debug_details(self) -> str:
         if self._discovery:

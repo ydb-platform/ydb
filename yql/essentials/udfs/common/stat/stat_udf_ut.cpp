@@ -202,10 +202,10 @@ Y_UNIT_TEST(SerializedMergedPercentile) {
     }
 
     TRuntimeNode pgmDigest;
-    for (size_t i = 0; i < pgmSerializedDataVector.size(); ++i) {
+    for (const auto& it : pgmSerializedDataVector) {
         TRuntimeNode pgmDigest2;
         {
-            TVector<TRuntimeNode> params = {pgmSerializedDataVector[i]};
+            TVector<TRuntimeNode> params = {it};
             pgmDigest2 = pgmBuilder.Apply(udfTDigest_Deserialize, params);
         }
         if (!pgmDigest) {

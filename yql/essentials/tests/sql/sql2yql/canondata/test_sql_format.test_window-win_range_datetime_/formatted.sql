@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
 $data = [
     <|a: Datetime('2017-11-27T13:22:00Z'), b: 1, count: 0|>,
@@ -30,7 +29,7 @@ $str = ($x) -> {
 };
 
 SELECT
-    Ensure(count, count IS NOT DISTINCT FROM actual_count, 'Got: ' || $str(actual_count) || ', but expected: ' || $str(count))
+    Ensure(actual_count, count IS NOT DISTINCT FROM actual_count, 'Got: ' || $str(actual_count) || ', but expected: ' || $str(count))
 FROM
     $win_result
 ;

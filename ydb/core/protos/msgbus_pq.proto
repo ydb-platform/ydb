@@ -1,11 +1,11 @@
 import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/pqdata_transaction.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/library/actors/protos/actors.proto";
 
 package NKikimrClient;
 option java_package = "ru.yandex.kikimr.proto";
-
 
 message TReadSessionKey {
     optional string SessionId = 1;
@@ -38,6 +38,8 @@ message TPersQueuePartitionRequest {
         optional int64 LastOffset = 17;
 
         optional uint64 SizeEstimate = 18;
+        optional bool ReadToBlobEnd = 19 [default = false];
+        optional bool CanReadBatches = 20 [default = false];
     }
 
     message TCmdUpdateReadMetrics {
@@ -82,6 +84,11 @@ message TPersQueuePartitionRequest {
         optional string ClientId = 1; // mandatory
     }
 
+    message TBatchMessagePartitionKey {
+        optional string Key = 1;
+        optional int64 Size = 2;
+    }
+
     message TCmdWrite {
         optional bytes SourceId = 1; //mandatory
         optional int64 SeqNo = 2; //mandatory
@@ -108,6 +115,14 @@ message TPersQueuePartitionRequest {
 
         optional bool EnableKafkaDeduplication = 18 [ default = false ];
         optional int32 ProducerEpoch = 19;  // For idempotent producer in Kafka protocol
+
+        optional bytes ChoosePartitionKey = 20; // Bytes that are used to choose partition for the message
+        optional string MessageDeduplicationId = 21; // Deduplication id for the message
+
+        optional int64 MaxSeqNo = 22;
+        optional int64 LogicalMessageCount = 23 [default = 1];
+        repeated TBatchMessagePartitionKey PartitionKeys = 24;
+        optional bool IsBatch = 25;
     }
 
     message TCmdUpdateWriteTimestamp {
@@ -150,6 +165,10 @@ message TPersQueuePartitionRequest {
         repeated TCmdRegisterMessageGroup RegisterGroups = 2;
     }
 
+    // Internal: discard orphan deferred-publication supportive (writer rollback).
+    message TCmdAbortDeferredStaging {
+    }
+
     optional string Topic = 1; //mandatory for request for partitions
     optional int32 Partition = 2; //mandatory for request for partitions
     optional string OwnerCookie = 3; //mandatory for write
@@ -173,6 +192,7 @@ message TPersQueuePartitionRequest {
     optional TCmdDeregisterMessageGroup CmdDeregisterMessageGroup = 21;
     optional TCmdSplitMessageGroup CmdSplitMessageGroup = 22;
     optional TCmdUpdateReadMetrics CmdUpdateReadMetrics = 29;
+    optional TCmdAbortDeferredStaging CmdAbortDeferredStaging = 30;
 
     optional NActorsProto.TActorId PipeClient = 15;
 
@@ -267,7 +287,7 @@ message TPersQueueRequest {
 
     //only one from data, meta or fetch request must be set.
     optional string SecurityToken = 5 [(Ydb.sensitive) = true];
-    optional string Ticket = 6; //if set, check for acl
+    optional string Ticket = 6 [(Ydb.sensitive) = true]; // if set, check for acl
 
     optional string RequestId = 100; //for logging
 }
@@ -414,6 +434,8 @@ message TCmdReadResult {
 
         optional string PartitionKey = 11;
         optional bytes ExplicitHash = 12;
+        optional uint64 LogicalMessageCount = 13 [default = 1];
+        optional bool IsBatch = 14;
     }
     optional uint64 MaxOffset = 2;
     repeated TResult Result = 3;
@@ -520,6 +542,8 @@ message TPersQueuePartitionResponse {
     message TCmdRestoreDirectReadSessionResult {
     }
 
+    message TCmdAbortDeferredStagingResult {
+    }
 
     repeated TCmdWriteResult CmdWriteResult = 1;
     optional TCmdGetMaxSeqNoResult CmdGetMaxSeqNoResult = 2;
@@ -530,6 +554,7 @@ message TPersQueuePartitionResponse {
     optional TCmdPublishDirectReadResult CmdPublishReadResult = 8;
     optional TCmdPublishDirectReadResult CmdForgetReadResult = 9;
     optional TCmdRestoreDirectReadSessionResult CmdRestoreDirectReadResult = 10;
+    optional TCmdAbortDeferredStagingResult CmdAbortDeferredStagingResult = 11;
 
     optional uint64 Cookie = 6;
 }

@@ -123,6 +123,27 @@ void WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<void
     }
 }
 
+bool WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<bool(const TIssue&, uint16_t level)> fn) {
+    TStack<std::tuple<uint16_t, const TIssue*>> issuesStack;
+    issuesStack.push(std::make_tuple(0, &topIssue));
+    while (!issuesStack.empty()) {
+        auto level = std::get<0>(issuesStack.top());
+        const auto& curIssue = *std::get<1>(issuesStack.top());
+        issuesStack.pop();
+        if (!leafOnly || curIssue.GetSubIssues().empty()) {
+            if (!fn(curIssue, level)) {
+                return false;
+            }
+        }
+        level++;
+        const auto& subIssues = curIssue.GetSubIssues();
+        for (int i = subIssues.size() - 1; i >= 0; i--) {
+            issuesStack.push(std::make_tuple(level, subIssues[i].Get()));
+        }
+    }
+    return true;
+}
+
 namespace {
 
 Y_NO_INLINE void Indent(IOutputStream& out, uint32_t indentation) {
@@ -161,7 +182,7 @@ void ProgramLinesWithErrors(
     }
 }
 
-} // namspace
+} // namespace
 
 void TIssues::PrintTo(IOutputStream& out, bool oneLine) const
 {

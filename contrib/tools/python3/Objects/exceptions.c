@@ -759,7 +759,7 @@ BaseExceptionGroup_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         if (!PyExceptionInstance_Check(exc)) {
             PyErr_Format(
                 PyExc_ValueError,
-                "Item %d of second argument (exceptions) is not an exception",
+                "Item %zd of second argument (exceptions) is not an exception",
                 i);
             goto error;
         }
@@ -1512,7 +1512,7 @@ PyUnstable_Exc_PrepReraiseStar(PyObject *orig, PyObject *excs)
         PyObject *exc = PyList_GET_ITEM(excs, i);
         if (exc == NULL || !(PyExceptionInstance_Check(exc) || Py_IsNone(exc))) {
             PyErr_Format(PyExc_TypeError,
-                         "item %d of excs is not an exception", i);
+                         "item %zd of excs is not an exception", i);
             return NULL;
         }
     }
@@ -1541,7 +1541,8 @@ static PyMemberDef BaseExceptionGroup_members[] = {
 
 static PyMethodDef BaseExceptionGroup_methods[] = {
     {"__class_getitem__", (PyCFunction)Py_GenericAlias,
-      METH_O|METH_CLASS, PyDoc_STR("See PEP 585")},
+      METH_O|METH_CLASS,
+      PyDoc_STR("Exception groups are generic over the type of their contained exceptions")},
     {"derive", (PyCFunction)BaseExceptionGroup_derive, METH_O},
     {"split", (PyCFunction)BaseExceptionGroup_split, METH_O},
     {"subgroup", (PyCFunction)BaseExceptionGroup_subgroup, METH_O},
@@ -2466,22 +2467,23 @@ SyntaxError_init(PySyntaxErrorObject *self, PyObject *args, PyObject *kwds)
             return -1;
         }
 
-        self->end_lineno = NULL;
-        self->end_offset = NULL;
+        PyObject *filename, *lineno, *offset, *text;
+        PyObject *end_lineno = NULL;
+        PyObject *end_offset = NULL;
         if (!PyArg_ParseTuple(info, "OOOO|OO",
-                              &self->filename, &self->lineno,
-                              &self->offset, &self->text,
-                              &self->end_lineno, &self->end_offset)) {
+                              &filename, &lineno,
+                              &offset, &text,
+                              &end_lineno, &end_offset)) {
             Py_DECREF(info);
             return -1;
         }
 
-        Py_INCREF(self->filename);
-        Py_INCREF(self->lineno);
-        Py_INCREF(self->offset);
-        Py_INCREF(self->text);
-        Py_XINCREF(self->end_lineno);
-        Py_XINCREF(self->end_offset);
+        Py_XSETREF(self->filename, Py_NewRef(filename));
+        Py_XSETREF(self->lineno, Py_NewRef(lineno));
+        Py_XSETREF(self->offset, Py_NewRef(offset));
+        Py_XSETREF(self->text, Py_NewRef(text));
+        Py_XSETREF(self->end_lineno, Py_XNewRef(end_lineno));
+        Py_XSETREF(self->end_offset, Py_XNewRef(end_offset));
         Py_DECREF(info);
 
         if (self->end_lineno != NULL && self->end_offset == NULL) {
@@ -3932,4 +3934,3 @@ _PyException_AddNote(PyObject *exc, PyObject *note)
     Py_XDECREF(r);
     return res;
 }
-

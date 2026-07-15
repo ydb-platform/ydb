@@ -106,7 +106,7 @@ namespace {
         ui64 old = LastTick_.load();
         const auto secondsSinceLastTick = now - old;
 
-        if (secondsSinceLastTick > INTERVAL_SECONDS) {
+        if (now > old && secondsSinceLastTick > INTERVAL_SECONDS) {
             // round to the interval grid
             const ui64 newLast = now - (secondsSinceLastTick % INTERVAL_SECONDS);
             if (LastTick_.compare_exchange_strong(old, newLast)) {

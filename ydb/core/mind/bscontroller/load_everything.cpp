@@ -6,6 +6,8 @@
 
 #include <ydb/library/yaml_config/yaml_config.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
+
 namespace NKikimr {
 namespace NBsController {
 
@@ -18,7 +20,8 @@ public:
     TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_LOAD_EVERYTHING; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE01, "TTxLoadEverything Execute");
+        YDB_LOG_DEBUG("TTxLoadEverything Execute",
+            {"marker", "BSCTXLE01"});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -162,6 +165,13 @@ public:
                 return false;
             }
             while (vslot.IsValid()) {
+                if (vslot.HaveValue<Table::Mood>() && vslot.GetValue<Table::Mood>() == TMood::Delete) {
+                    if (!vslot.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
+
                 const auto groupId = vslot.GetValue<Table::GroupID>();
                 auto& record = geometry[groupId];
 
@@ -248,6 +258,7 @@ public:
                 OPTIONAL(BlobDepotConfig)
                 OPTIONAL(BlobDepotId)
                 OPTIONAL(ErrorReason)
+                OPTIONAL(AppliedGroupGeneration)
 
                 if (groups.HaveValue<T::Metrics>()) {
                     const bool success = group.GroupMetrics.emplace().ParseFromString(groups.GetValue<T::Metrics>());
@@ -280,11 +291,50 @@ public:
             Self->SysViewChangedStoragePools.insert(storagePoolId);
         }
 
+        const bool selfManagementConfigEnabled = Self->SelfManagementEnabled ||
+            (Self->StorageConfig && Self->StorageConfig->GetSelfManagementConfig().GetEnabled());
+
+        // when self-management is enabled, HostRecords is sourced from distconf and may no longer contain nodes
+        // that are still referenced by stale BoxHostV2 records in BSC's local database.
+        Self->StaleBoxHostKeys.clear();
+        auto resolveBoxHost = [&](const auto& host, const auto& value) -> std::optional<ui32> {
+            if (value.EnforcedNodeId) {
+                if (Self->HostRecords->GetHostId(*value.EnforcedNodeId)) {
+                    return *value.EnforcedNodeId;
+                }
+                return std::nullopt;
+            }
+            if (const auto& resolved = Self->HostRecords->ResolveNodeId(host)) {
+                return *resolved;
+            }
+            return std::nullopt;
+        };
+
+        if (selfManagementConfigEnabled) {
+            for (auto& [boxId, box] : Self->Boxes) {
+                for (auto it = box.Hosts.begin(); it != box.Hosts.end(); ) {
+                    const auto& [host, value] = *it;
+                    if (!resolveBoxHost(host, value)) {
+                        YDB_LOG_DEBUG("Skipping stale Box host for unresolvable node during load",
+                            {"marker", "BSCTXLE06"},
+                            {"boxId", boxId},
+                            {"fqdn", host.Fqdn},
+                            {"icPort", host.IcPort},
+                            {"enforcedNodeId", value.EnforcedNodeId});
+                        Self->StaleBoxHostKeys.emplace_back(host.BoxId, host.Fqdn, host.IcPort);
+                        it = box.Hosts.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            }
+        }
+
         // create revmap
         std::map<std::tuple<TNodeId, TString>, TBoxId> driveToBox;
         for (const auto& [boxId, box] : Self->Boxes) {
             for (const auto& [host, value] : box.Hosts) {
-                const auto& nodeId = value.EnforcedNodeId ? value.EnforcedNodeId : Self->HostRecords->ResolveNodeId(host);
+                const auto nodeId = resolveBoxHost(host, value);
                 Y_VERIFY_S(nodeId, "HostKey# " << host.Fqdn << ":" << host.IcPort << " does not resolve to a node");
                 if (const auto it = Self->HostConfigs.find(value.HostConfigId); it != Self->HostConfigs.end()) {
                     for (const auto& [drive, info] : it->second.Drives) {
@@ -309,15 +359,16 @@ public:
 
         // PDisks
         Self->PDisks.clear();
+        Self->StalePDiskKeys.clear();
         {
             using T = Schema::PDisk;
             auto disks = db.Table<T>().Range().Select();
             if (!disks.IsReady())
                 return false;
             while (!disks.EndOfSet()) {
-                auto getOpt = [&](auto col) {
+                auto getOpt = [&]<template<typename> class TOptional>(auto col) {
                     using TCol = decltype(col);
-                    TMaybe<typename TCol::Type> res;
+                    TOptional<typename TCol::Type> res;
                     if (disks.HaveValue<TCol>()) {
                         res = disks.GetValue<TCol>();
                     }
@@ -331,6 +382,15 @@ public:
 
                 if (const auto& x = Self->HostRecords->GetHostId(disks.GetValue<T::NodeID>())) {
                     hostId = *x;
+                } else if (selfManagementConfigEnabled) {
+                    YDB_LOG_DEBUG("Skipping stale PDisk for unresolvable node during load",
+                        {"marker", "BSCTXLE07"},
+                        {"nodeId", disks.GetValue<T::NodeID>()},
+                        {"PDiskId", disks.GetValue<T::PDiskID>()});
+                    Self->StalePDiskKeys.emplace_back(disks.GetValue<T::NodeID>(), disks.GetValue<T::PDiskID>());
+                    if (!disks.Next())
+                        return false;
+                    continue;
                 } else {
                     Y_ABORT("unknown node NodeId# %" PRIu32, disks.GetValue<T::NodeID>());
                 }
@@ -349,7 +409,8 @@ public:
 
                 // construct PDisk item
                 Self->AddPDisk(disks.GetKey(), hostId, disks.GetValue<T::Path>(), disks.GetValue<T::Category>(),
-                    disks.GetValue<T::Guid>(), getOpt(T::SharedWithOs()), getOpt(T::ReadCentric()),
+                    disks.GetValue<T::Guid>(), getOpt.operator()<TMaybe>(T::SharedWithOs()),
+                    getOpt.operator()<TMaybe>(T::ReadCentric()), getOpt.operator()<std::optional>(T::DiskScope()),
                     disks.GetValueOrDefault<T::NextVSlotId>(), disks.GetValue<T::PDiskConfig>(), boxId,
                     Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
                     disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::Mood>(), disks.GetValue<T::ExpectedSerial>(),
@@ -373,7 +434,7 @@ public:
             while (!table.EndOfSet()) {
                 const TPDiskId pdiskId(table.GetValue<Table::NodeID>(), table.GetValue<Table::PDiskID>());
                 if (TPDiskInfo *pdisk = Self->FindPDisk(pdiskId)) {
-                    pdisk->Metrics = table.GetValueOrDefault<Table::Metrics>();
+                    pdisk->PersistedMetrics = pdisk->Metrics = table.GetValueOrDefault<Table::Metrics>();
                 } else {
                     pdiskMetricsToDelete.push_back(table.GetKey());
                 }
@@ -386,6 +447,7 @@ public:
         // VSlots
         const TMonotonic mono = TActivationContext::Monotonic();
         Self->VSlots.clear();
+        Self->StaleVSlotKeys.clear();
         {
             using T = Schema::VSlot;
             auto slot = db.Table<T>().Range().Select();
@@ -394,6 +456,15 @@ public:
             while (!slot.EndOfSet()) {
                 const TVSlotId& vslotId(slot.GetKey());
                 TPDiskInfo *pdisk = Self->FindPDisk(vslotId.ComprisingPDiskId());
+                if (!pdisk && selfManagementConfigEnabled) {
+                    YDB_LOG_DEBUG("Skipping stale VSlot for missing PDisk during load",
+                        {"marker", "BSCTXLE08"},
+                        {"VSlotId", vslotId});
+                    Self->StaleVSlotKeys.push_back(vslotId);
+                    if (!slot.Next())
+                        return false;
+                    continue;
+                }
                 Y_ABORT_UNLESS(pdisk);
 
                 const TGroupId groupId = slot.GetValue<T::GroupID>();
@@ -403,7 +474,8 @@ public:
                     slot.GetValue<T::GroupGeneration>(), slot.GetValue<T::Category>(), slot.GetValue<T::RingIdx>(),
                     slot.GetValue<T::FailDomainIdx>(), slot.GetValue<T::VDiskIdx>(), slot.GetValueOrDefault<T::Mood>(),
                     Self->FindGroup(groupId), &Self->VSlotReadyTimestampQ, slot.GetValue<T::LastSeenReady>(),
-                    slot.GetValue<T::ReplicationTime>(), slot.GetValueOrDefault<T::DDiskNumVChunksClaimed>(0));
+                    slot.GetValue<T::ReplicationTime>(), slot.GetValueOrDefault<T::DDiskNumVChunksClaimed>(0),
+                    slot.GetValueOrDefault<T::PersistentBufferRefs>(0));
                 if (x.LastSeenReady != TInstant::Zero()) {
                     Self->NotReadyVSlotIds.insert(x.VSlotId);
                 }
@@ -445,7 +517,7 @@ public:
                 const TVDiskID key(TGroupId::FromValue(table.GetValue<Table::GroupID>()), table.GetValue<Table::GroupGeneration>(),
                     table.GetValue<Table::Ring>(), table.GetValue<Table::FailDomain>(), table.GetValue<Table::VDisk>());
                 if (TVSlotInfo *slot = Self->FindVSlot(key)) {
-                    slot->Metrics = table.GetValueOrDefault<Table::Metrics>();
+                    slot->PersistedMetrics = slot->Metrics = table.GetValueOrDefault<Table::Metrics>();
                     slot->UpdateVDiskMetrics();
                 } else {
                     vdiskMetricsToDelete.push_back(table.GetKey());
@@ -476,7 +548,9 @@ public:
                         groupInfo->LatencyStats.GetFast = TDuration::MicroSeconds(groupLatencies.GetValue<Table::GetFastLatencyUs>());
                     }
                 } else {
-                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXLE02, "Nonexistent group in GroupLatencies", (GroupId, groupId));
+                    YDB_LOG_ERROR("Nonexistent group in GroupLatencies",
+                        {"marker", "BSCTXLE02"},
+                        {"groupId", groupId});
                 }
 
                 if (!groupLatencies.Next()) {
@@ -687,16 +761,8 @@ public:
                 kvp->SetKey(Sprintf("G%08" PRIx32, groupId));
                 kvp->SetGeneration(groupInfo->Generation);
 
-                TMaybe<TKikimrScopeId> scopeId;
-                const TStoragePoolInfo& info = Self->StoragePools.at(groupInfo->StoragePoolId);
-                if (info.SchemeshardId && info.PathItemId) {
-                    scopeId = TKikimrScopeId(*info.SchemeshardId, *info.PathItemId);
-                } else {
-                    Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
-                }
-
                 NKikimrBlobStorage::TGroupInfo proto;
-                SerializeGroupInfo(&proto, *groupInfo, info, scopeId);
+                SerializeGroupInfo(&proto, *groupInfo, Self->StoragePools);
                 const bool success = proto.SerializeToString(kvp->MutableValue());
                 Y_DEBUG_ABORT_UNLESS(success);
             }
@@ -708,12 +774,22 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE03, "TTxLoadEverything Complete");
+        YDB_LOG_DEBUG("TTxLoadEverything Complete",
+            {"marker", "BSCTXLE03"});
         Self->LoadFinished();
+        if (Self->EnableConfigV2) {
+            Self->PendingV2MigrationCheck = true;
+        }
         if (!Self->SelfManagementEnabled) {
+            YDB_LOG_DEBUG("TTxLoadEverything StartConsoleInteraction",
+                {"marker", "BSCTXLE05"});
             Self->ConsoleInteraction->Start();
         }
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE04, "TTxLoadEverything InitQueue processed");
+        if (!Self->StaleBoxHostKeys.empty() || !Self->StalePDiskKeys.empty() || !Self->StaleVSlotKeys.empty()) {
+            Self->Execute(Self->CreateTxCleanupStaleStorageEntries());
+        }
+        YDB_LOG_DEBUG("TTxLoadEverything InitQueue processed",
+            {"marker", "BSCTXLE04"});
     }
 };
 

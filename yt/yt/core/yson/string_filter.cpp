@@ -7,6 +7,8 @@
 #include <yt/yt/core/ypath/stack.h>
 #include <yt/yt/core/ytree/convert.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/mem.h>
 
 namespace NYT::NYson {
@@ -58,8 +60,8 @@ public:
     }
 
 private:
-    TString Result_;
-    TStringOutput Output_ = TStringOutput(Result_);
+    std::string Result_;
+    TStdStringOutput Output_{Result_};
     TCheckedInDebugYsonTokenWriter Writer_ = TCheckedInDebugYsonTokenWriter(&Output_);
     TYPathStack Stack_;
     bool IsFirstStack_ = true;
@@ -67,9 +69,9 @@ private:
     //! Open a map or a list for the given stack entry.
     void OpenEntry(const TYPathStack::TEntry& entry)
     {
-        if (std::holds_alternative<TString>(entry)) {
+        if (std::holds_alternative<std::string>(entry)) {
             Writer_.WriteBeginMap();
-            Writer_.WriteBinaryString(std::get<TString>(entry));
+            Writer_.WriteBinaryString(std::get<std::string>(entry));
             Writer_.WriteKeyValueSeparator();
         } else {
             Writer_.WriteBeginList();
@@ -84,7 +86,7 @@ private:
     //! Close a map or a list for the given stack entry.
     void CloseEntry(const TYPathStack::TEntry& entry)
     {
-        if (std::holds_alternative<TString>(entry)) {
+        if (std::holds_alternative<std::string>(entry)) {
             Writer_.WriteEndMap();
         } else {
             Writer_.WriteEndList();
@@ -129,13 +131,13 @@ private:
         const auto& oldStackFirstDifferingItem = oldStackItems[firstDifferingItemIndex];
         const auto& newStackFirstDifferingItem = newStackItems[firstDifferingItemIndex];
         YT_VERIFY(
-            std::holds_alternative<TString>(oldStackFirstDifferingItem) ==
-            std::holds_alternative<TString>(newStackFirstDifferingItem));
+            std::holds_alternative<std::string>(oldStackFirstDifferingItem) ==
+            std::holds_alternative<std::string>(newStackFirstDifferingItem));
 
-        if (std::holds_alternative<TString>(oldStackFirstDifferingItem)) {
+        if (std::holds_alternative<std::string>(oldStackFirstDifferingItem)) {
             // Switch key to a proper key.
             Writer_.WriteItemSeparator();
-            Writer_.WriteBinaryString(std::get<TString>(newStackFirstDifferingItem));
+            Writer_.WriteBinaryString(std::get<std::string>(newStackFirstDifferingItem));
             Writer_.WriteKeyValueSeparator();
         } else {
             // If current index and desired index are not adjacent, we must
@@ -345,9 +347,9 @@ TYsonString FilterYsonStringFallback(TYsonStringBuf yson)
     }
     switch (cursor->GetType()) {
         case EYsonItemType::BeginList:
-            return TYsonString(TString("[]"));
+            return TYsonString(std::string("[]"));
         case EYsonItemType::BeginMap:
-            return TYsonString(TString("{}"));
+            return TYsonString(std::string("{}"));
         case EYsonItemType::StringValue:
         case EYsonItemType::Int64Value:
         case EYsonItemType::Uint64Value:
@@ -355,8 +357,8 @@ TYsonString FilterYsonStringFallback(TYsonStringBuf yson)
         case EYsonItemType::BooleanValue:
         case EYsonItemType::EntityValue: {
             // Copy the value to a new YSON string and return it.
-            TString result;
-            TStringOutput output(result);
+            std::string result;
+            TStdStringOutput output(result);
             TCheckedInDebugYsonTokenWriter writer(&output);
             cursor.TransferComplexValue(&writer);
             writer.Flush();

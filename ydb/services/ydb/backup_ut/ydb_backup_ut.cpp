@@ -1,8 +1,8 @@
 #include "ydb_common_ut.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/api/protos/draft/ydb_view.pb.h>
@@ -20,6 +20,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -32,6 +33,7 @@
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <google/protobuf/text_format.h>
 #include <google/protobuf/util/message_differencer.h>
 
 #include <contrib/libs/fmt/include/fmt/format.h>
@@ -345,7 +347,15 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                 case EIndexType::GlobalSync:
                 case EIndexType::GlobalAsync:
                 case EIndexType::GlobalUnique:
+                case EIndexType::GlobalJson:
+                case EIndexType::LocalMinMax:
                     UNIT_ASSERT(std::holds_alternative<std::monostate>(indexDesc.GetIndexSettings()));
+                    break;
+                case EIndexType::LocalBloomFilter:
+                    UNIT_ASSERT(std::holds_alternative<TLocalBloomFilterSettings>(indexDesc.GetIndexSettings()));
+                    break;
+                case EIndexType::LocalBloomNgramFilter:
+                    UNIT_ASSERT(std::holds_alternative<TLocalBloomNgramFilterSettings>(indexDesc.GetIndexSettings()));
                     break;
                 case EIndexType::GlobalVectorKMeansTree: {
                     Ydb::Table::KMeansTreeSettings settings;
@@ -367,7 +377,6 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     Ydb::Table::FulltextIndexSettings settings;
                     std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
                     Ydb::Table::FulltextIndexSettings expected;
-                    expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
                     auto column = expected.add_columns();
                     column->set_column("Value");
                     column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
@@ -383,7 +392,6 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     Ydb::Table::FulltextIndexSettings settings;
                     std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
                     Ydb::Table::FulltextIndexSettings expected;
-                    expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
                     auto column = expected.add_columns();
                     column->set_column("Value");
                     column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
@@ -757,6 +765,37 @@ void TestRestoreTableWithSerial(
     CompareResults(GetTableContent(session, table), originalContent);
 }
 
+void TestRestoreTableWithMultiColumnStatistics(
+    const char* table, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    using namespace fmt::literals;
+    ExecuteDataDefinitionQuery(session, fmt::format(R"(
+            CREATE TABLE `{table}` (
+                key Uint32,
+                value Utf8,
+                PRIMARY KEY (key),
+                STATISTICS s1 ON (value) WITH (COUNT_MIN_SKETCH)
+            )
+        )",
+        "table"_a = table
+    ));
+    backup();
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            DROP TABLE `%s`;
+        )", table
+    ));
+    restore();
+    auto describe = session.DescribeTable(table).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+    const auto statistics = describe.GetTableDescription().GetMultiColumnStatisticsDescriptions();
+    UNIT_ASSERT_VALUES_EQUAL(statistics.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetName(), "s1");
+    UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetColumns().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetColumns()[0], "value");
+    UNIT_ASSERT_VALUES_EQUAL(statistics[0].GetTypes().size(), 1);
+    UNIT_ASSERT(statistics[0].GetTypes()[0] == EMultiColumnStatisticsType::CountMinSketch);
+}
+
 const char* ConvertIndexTypeToSQL(NKikimrSchemeOp::EIndexType indexType) {
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
@@ -782,9 +821,14 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
             return NYdb::NTable::EIndexType::GlobalFulltextPlain;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
             return NYdb::NTable::EIndexType::GlobalFulltextRelevance;
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            return NYdb::NTable::EIndexType::GlobalJson;
         default:
             UNIT_FAIL("No conversion to API for this index type");
             return NYdb::NTable::EIndexType::Unknown;
@@ -797,6 +841,7 @@ void TestRestoreTableWithIndex(
 ) {
     using namespace fmt::literals;
     TString query;
+    TString type;
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -835,25 +880,30 @@ void TestRestoreTableWithIndex(
             }
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
-            query = fmt::format(R"(CREATE TABLE `{table}` (
-                Key Uint32,
-                Group Uint32,
-                Value String,
-                PRIMARY KEY (Key),
-                INDEX {index} GLOBAL USING fulltext_plain
-                    ON (Value)
-                    WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
-                ))", "table"_a = table, "index"_a = index);
-            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            type = type.empty() ? "fulltext_plain" : type;
+            [[fallthrough]];
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            type = type.empty() ? "fulltext_relevance" : type;
             query = fmt::format(R"(CREATE TABLE `{table}` (
-                Key Uint32,
+                Key Uint64,
                 Group Uint32,
                 Value String,
                 PRIMARY KEY (Key),
-                INDEX {index} GLOBAL USING fulltext_relevance
+                INDEX {index} GLOBAL USING {type}
                     ON (Value)
                     WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
+                ))", "table"_a = table, "index"_a = index, "type"_a = type);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            query = fmt::format(R"(CREATE TABLE `{table}` (
+                Key Uint64,
+                Group Uint32,
+                Value Json,
+                PRIMARY KEY (Key),
+                INDEX {index} GLOBAL USING json ON (Value)
                 ))", "table"_a = table, "index"_a = index);
             break;
         default:
@@ -1314,6 +1364,128 @@ GetChangefeedAndTopicDescriptions(const char* table, TSession& session, NTopic::
     });
 
     return {changefeedsStr, topicsStr};
+}
+
+TString ChangefeedAndTopicDescriptionsStableText(
+    const std::pair<std::vector<TString>, std::vector<TString>>& descriptions)
+{
+    const auto& changefeedTexts = descriptions.first;
+    const auto& topicTexts = descriptions.second;
+    TStringBuilder out;
+    out << "changefeed_descriptions_count: " << changefeedTexts.size() << '\n';
+    for (size_t i = 0; i < changefeedTexts.size(); ++i) {
+        out << "--- changefeed [" << i << "] ---\n" << changefeedTexts[i] << '\n';
+    }
+    out << "topic_descriptions_count: " << topicTexts.size() << '\n';
+    for (size_t i = 0; i < topicTexts.size(); ++i) {
+        out << "--- topic_description [" << i << "] ---\n" << topicTexts[i] << '\n';
+    }
+    return TString{out};
+}
+
+void TestChangefeedSharedConsumersPreservedThroughBackupRestore(
+    TSession& session,
+    NTopic::TTopicClient& topicClient,
+    TBackupFunction&& backup,
+    TRestoreFunction&& restore
+) {
+    constexpr const char* dlqTopic = "/Root/cf_shared_br_dlq";
+    constexpr const char* table = "/Root/cf_shared_br_table";
+    constexpr const char* changefeed = "scf";
+    const TString changefeedTopicPath = TStringBuilder() << table << "/" << changefeed;
+
+    {
+        const auto st = topicClient.CreateTopic(dlqTopic,
+            NTopic::TCreateTopicSettings().PartitioningSettings(NTopic::TPartitioningSettings(1, 1))
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(st.IsSuccess(), st.GetIssues().ToString());
+    }
+
+    ExecuteDataDefinitionQuery(session, fmt::format(R"(
+            CREATE TABLE `{}` (
+                Key Uint32,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            )
+        )",
+        table
+    ));
+
+    ExecuteDataDefinitionQuery(session, fmt::format(R"(
+            ALTER TABLE `{}` ADD CHANGEFEED `{}` WITH (
+                FORMAT = 'JSON',
+                MODE = 'UPDATES'
+            );
+        )",
+        table,
+        changefeed
+    ));
+
+    {
+        const auto st = topicClient.AlterTopic(changefeedTopicPath,
+            NTopic::TAlterTopicSettings()
+                .BeginAddSharedConsumer("shared_sqs_del")
+                    .SetAvailiabilityPeriod(TDuration::Hours(2))
+                    .AddAttribute("marker", "v1")
+                    .KeepMessagesOrder(true)
+                    .DefaultProcessingTimeout(TDuration::Seconds(33))
+                    .ReceiveMessageWaitTime(TDuration::Seconds(4))
+                    .ReceiveMessageDelay(TDuration::Seconds(1))
+                    .BeginDeadLetterPolicy()
+                        .Enabled(true)
+                        .BeginCondition()
+                            .MaxProcessingAttempts(9)
+                        .EndCondition()
+                        .DeleteAction()
+                    .EndDeadLetterPolicy()
+                .EndAddConsumer()
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(st.IsSuccess(), st.GetIssues().ToString());
+    }
+
+    {
+        const auto st = topicClient.AlterTopic(changefeedTopicPath,
+            NTopic::TAlterTopicSettings()
+                .BeginAddSharedConsumer("shared_sqs_move")
+                    .SetImportant(false)
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(11))
+                    .ReceiveMessageWaitTime(TDuration::Seconds(20))
+                    .BeginDeadLetterPolicy()
+                        .Enabled(true)
+                        .BeginCondition()
+                            .MaxProcessingAttempts(4)
+                        .EndCondition()
+                        .MoveAction(dlqTopic)
+                    .EndDeadLetterPolicy()
+                .EndAddConsumer()
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(st.IsSuccess(), st.GetIssues().ToString());
+    }
+
+    auto changefeedsAndTopicsBefore = GetChangefeedAndTopicDescriptions(table, session, topicClient);
+    backup();
+
+    ExecuteDataDefinitionQuery(session, fmt::format(R"(
+            DROP TABLE `{}`;
+        )",
+        table
+    ));
+    {
+        const auto st = topicClient.DropTopic(dlqTopic).ExtractValueSync();
+        UNIT_ASSERT_C(st.IsSuccess(), st.GetIssues().ToString());
+    }
+
+    restore();
+
+    auto changefeedsAndTopicsAfter = GetChangefeedAndTopicDescriptions(table, session, topicClient);
+    const TString snapshotBefore = ChangefeedAndTopicDescriptionsStableText(changefeedsAndTopicsBefore);
+    const TString snapshotAfter = ChangefeedAndTopicDescriptionsStableText(changefeedsAndTopicsAfter);
+    UNIT_ASSERT_STRINGS_EQUAL_C(
+        snapshotAfter,
+        snapshotBefore,
+        "changefeed ToString() + topic DescribeTopic textproto after restore must match pre-backup snapshot"
+    );
 }
 
 void TestChangefeedAndTopicDescriptionsIsPreserved(
@@ -2142,6 +2314,63 @@ void TestPrimitiveType(
     CompareResults(GetTableContent(session, tableName.c_str()), originalTableContent);
 }
 
+TString FetchShowCreateTableDdl(NQuery::TSession& session, const char* table) {
+    const auto r = ExecuteQuery(session, std::format("SHOW CREATE TABLE `{}`;", table));
+    UNIT_ASSERT_VALUES_EQUAL(r.GetResultSets().size(), 1u);
+    TResultSetParser parser(r.GetResultSet(0));
+    UNIT_ASSERT(parser.TryNextRow());
+    const auto ddl = parser.ColumnParser("CreateQuery").GetOptionalUtf8();
+    UNIT_ASSERT_C(ddl.has_value(), "SHOW CREATE TABLE: empty CreateQuery");
+    return TString{*ddl};
+}
+
+void TestOlapColumnEncodingsPreservedThroughBackup(
+    const char* table,
+    NQuery::TSession& session,
+    TBackupFunction&& backup,
+    TRestoreFunction&& restore
+) {
+    ExecuteQuery(session, std::format(R"(
+            CREATE TABLE `{}` (
+                pk Uint64 NOT NULL,
+                dict_col Utf8 ENCODING(DICT),
+                off_col Uint64 NOT NULL ENCODING(OFF),
+                def_col Int32 ENCODING(),
+                PRIMARY KEY (pk)
+            )
+            PARTITION BY HASH(pk)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )", table
+    ), true);
+    ExecuteQuery(session, std::format(R"(
+            UPSERT INTO `{}` (pk, dict_col, off_col, def_col)
+            VALUES
+                (1u, "a", 10u, 100),
+                (2u, "b", 20u, NULL),
+                (3u, NULL, 30u, 300);
+        )", table
+    ));
+
+    const TString ddlBefore = FetchShowCreateTableDdl(session, table);
+    UNIT_ASSERT_C(ddlBefore.Contains("ENCODING (DICT)"), ddlBefore);
+    UNIT_ASSERT_C(ddlBefore.Contains("ENCODING (OFF)"), ddlBefore);
+    const auto originalContent = GetTableContent(session, table, "pk");
+
+    backup();
+
+    ExecuteQuery(session, std::format(R"(
+            DROP TABLE `{}`;
+        )", table
+    ), true);
+
+    restore();
+
+    const TString ddlAfter = FetchShowCreateTableDdl(session, table);
+    UNIT_ASSERT_STRINGS_EQUAL(ddlBefore, ddlAfter);
+
+    CompareResults(GetTableContent(session, table, "pk"), originalContent);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
@@ -2495,7 +2724,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreViewToDifferentDatabase) {
         TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableShowCreate(true);
 
         constexpr const char* alice = "/Root/tenants/alice";
         constexpr const char* bob = "/Root/tenants/bob";
@@ -2647,6 +2875,23 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    Y_UNIT_TEST(RestoreChangefeedSharedConsumersThroughDump) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        NTopic::TTopicClient topicClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        TestChangefeedSharedConsumersPreservedThroughBackupRestore(
+            session,
+            topicClient,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
     void TestTableBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
@@ -2668,9 +2913,15 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         NKikimrConfig::TAppConfig appConfig;
+        if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact) {
+            appConfig.MutableFeatureFlags()->SetEnableCompactFulltextIndex(true);
+        }
         appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
+        appConfig.MutableFeatureFlags()->SetEnableJsonIndex(true);
         TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
 
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
@@ -2703,6 +2954,25 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         constexpr const char* table = "/Root/table";
 
         TestRestoreTableWithSerial(
+            table,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    void TestTableWithMultiColumnStatisticsBackupRestore() {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableColumnStatistics(true);
+        TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        constexpr const char* table = "/Root/table";
+
+        TestRestoreTableWithMultiColumnStatistics(
             table,
             session,
             CreateBackupLambda(driver, pathToBackup),
@@ -2839,7 +3109,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     void TestTransferBackupRestore(const TTransferTestConfig& config = {}) {
         AssertAuthAndSecretTypes(config);
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(config.SecretType == ESecretType::SecretTypeScheme);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
@@ -2875,6 +3144,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
             pathToBackup, config
         );
+
+        driver.Stop(true);
     }
 
 
@@ -3064,7 +3335,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestSystemViewBackupRestore() {
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableShowCreate(true);
         TKikimrWithGrpcAndRootSchema server(config);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TSchemeClient schemeClient(driver);
@@ -3079,7 +3349,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 systemDirectory,
                 schemeClient,
                 CreateBackupLambda(driver, pathToBackup),
-                CreateRestoreLambda(driver, pathToBackup)
+                CreateRestoreLambda(driver, pathToBackup, "/Root", NDump::TRestoreSettings().ReplaceSysACL(true))
             );
         }
 
@@ -3092,7 +3362,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 session,
                 schemeClient,
                 CreateBackupLambda(driver, pathToBackup),
-                CreateRestoreLambda(driver, pathToBackup)
+                CreateRestoreLambda(driver, pathToBackup, "/Root", NDump::TRestoreSettings().ReplaceSysACL(true))
             );
         }
     }
@@ -3149,6 +3419,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
+            case EPathTypeTestShardSet:
                 break; // not applicable
             case EPathTypeRtmrVolume:
             case EPathTypeBlockStoreVolume:
@@ -3174,22 +3445,33 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalVectorKmeansTree:
             case EIndexTypeGlobalFulltextPlain:
             case EIndexTypeGlobalFulltextRelevance:
+            case EIndexTypeGlobalJson:
+            case EIndexTypeGlobalFulltextCompact:
+            case EIndexTypeGlobalFulltextCompactRelevance:
+            case EIndexTypeGlobalJsonCompact:
                 return TestTableWithIndexBackupRestore(Value);
+            case EIndexTypeLocalBloomFilter:
+            case EIndexTypeLocalBloomNgramFilter:
+            case EIndexTypeLocalMinMax:
+            case EIndexTypeLocalCountMinSketch:
             case EIndexTypeInvalid:
                 break; // not applicable
-            default:
-                UNIT_FAIL("Client backup/restore were not implemented for this index type");
         }
     }
 
     Y_UNIT_TEST_TWIN(TestReplaceRestoreOption, IsOlap) {
+        if (IsOlap) {
+            // TODO
+            // https://github.com/ydb-platform/ydb/issues/36786
+            return;
+        }
+
+
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableShowCreate(true);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
         server.GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
         server.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_DEBUG);
@@ -3237,7 +3519,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         constexpr const char* systemDirectory = "/Root/.sys";
         constexpr const char* sysView = "/Root/.sys/partition_stats";
 
-        const auto restorationSettings = NDump::TRestoreSettings().Replace(true);
+        const auto restorationSettings = NDump::TRestoreSettings().Replace(true).ReplaceSysACL(true);
 
         cleanup();
         TestTableContentIsPreserved(table, querySession,
@@ -3295,11 +3577,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST(TestReplaceRestoreOptionOnNonExistingSchemeObjects) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
-        config.MutableFeatureFlags()->SetEnableShowCreate(true);
         TKikimrWithGrpcAndRootSchema server(config);
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
@@ -3679,6 +3959,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
+    Y_UNIT_TEST(BackupRestoreTableWithMultiColumnStatistics) {
+        TestTableWithMultiColumnStatisticsBackupRestore();
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestoreS3) {
@@ -3706,12 +3990,17 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         TDataShardExportFactory DataShardExportFactory;
 
     public:
-        TS3TestEnv()
+        explicit TS3TestEnv(bool alwaysSetSystemOwner = false)
             : Server([&] {
                     NKikimrConfig::TAppConfig appConfig;
                     appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
+                    appConfig.MutableFeatureFlags()->SetEnableJsonIndex(true);
+                    appConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
+                    appConfig.MutableFeatureFlags()->SetEnableColumnStatistics(true);
+                    appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+                    appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetAlwaysSetSystemOwner(alwaysSetSystemOwner);
                     return appConfig;
                 }())
             , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())).SetDatabase("/Root"))
@@ -4144,10 +4433,32 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    Y_UNIT_TEST(OlapColumnEncodingsPreservedThroughS3BackupRestore) {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/olap_col_encodings_backup";
+
+        TestOlapColumnEncodingsPreservedThroughBackup(
+            table,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "olap_col_encodings_backup" })
+        );
+    }
+
     // TO DO: test view restoration to a different database
 
-    void TestTableBackupRestore() {
-        TS3TestEnv testEnv;
+    void CheckObjectOwnerIsSystem(const TDriver& driver, const TString& path, bool alwaysSetSystemOwner) {
+        if (!alwaysSetSystemOwner) {
+            return;
+        }
+        TSchemeClient schemeClient(driver);
+        auto result = schemeClient.DescribePath(path).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetEntry().Owner, BUILTIN_ACL_BASIC_OWNER, "unexpected owner for " << path);
+    }
+
+    void TestTableBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         constexpr const char* table = "/Root/table";
 
         TestTableContentIsPreserved(
@@ -4157,10 +4468,16 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
             false
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), table, alwaysSetSystemOwner);
     }
 
-    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
-        TS3TestEnv testEnv;
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false, bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
+        if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact) {
+            testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(true);
+        }
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "value_idx";
 
@@ -4173,10 +4490,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), table, alwaysSetSystemOwner);
     }
 
-    void TestTableWithSerialBackupRestore() {
-        TS3TestEnv testEnv;
+    void TestTableWithSerialBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         constexpr const char* table = "/Root/table";
 
         TestRestoreTableWithSerial(
@@ -4185,10 +4503,23 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), table, alwaysSetSystemOwner);
     }
 
-    void TestViewBackupRestore() {
+    void TestTableWithMultiColumnStatisticsBackupRestore() {
         TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/table";
+
+        TestRestoreTableWithMultiColumnStatistics(
+            table,
+            testEnv.GetTableSession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
+        );
+    }
+
+    void TestViewBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         constexpr const char* view = "/Root/view";
 
         TestViewOutputIsPreserved(
@@ -4197,6 +4528,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view" })
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), view, alwaysSetSystemOwner);
     }
 
     void TestSystemViewBackupRestore() {
@@ -4213,8 +4545,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
-    void TestChangefeedBackupRestore() {
-        TS3TestEnv testEnv;
+    void TestChangefeedBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         NTopic::TTopicClient topicClient(testEnv.GetDriver());
 
         constexpr const char* table = "/Root/table";
@@ -4229,10 +4561,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
             {"a", "b", "c"}
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), table, alwaysSetSystemOwner);
     }
 
-    void TestReplicationBackupRestore( const TMaybe<ESecretType>& tokenSecretType) {
-        TS3TestEnv testEnv;
+    void TestReplicationBackupRestore(const TMaybe<ESecretType>& tokenSecretType, bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
         featureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
 
@@ -4263,11 +4596,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), {"replication"}),
             tokenSecretType
         );
-
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), "/Root/replication", alwaysSetSystemOwner);
     }
 
-    void TestTransferBackupRestore(const TMaybe<ESecretType>& tokenSecretType) {
-        TS3TestEnv testEnv;
+    void TestTransferBackupRestore(const TMaybe<ESecretType>& tokenSecretType, bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
         featureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
 
@@ -4304,10 +4637,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             tempDir.Path(),
             config
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), "/Root/test_transfer", alwaysSetSystemOwner);
     }
 
-    void TestExternalTableBackupRestore() {
-        TS3TestEnv testEnv;
+    void TestExternalTableBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
         featureFlags.SetEnableExternalDataSources(true);
 
@@ -4328,10 +4662,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(driver, testEnv.GetS3Port()),
             CreateRestoreLambda(driver, testEnv.GetS3Port(), {"externalTable", "externalDataSource"})
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), "/Root/externalTable", alwaysSetSystemOwner);
     }
 
-    void TestExternalDataSourceBackupRestore(const TMaybe<ESecretType>& secretType, EAuthType authType) {
-        TS3TestEnv testEnv;
+    void TestExternalDataSourceBackupRestore(const TMaybe<ESecretType>& secretType, EAuthType authType, bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
         featureFlags.SetEnableExternalDataSources(true);
         featureFlags.SetEnableSchemaSecrets(secretType == ESecretType::SecretTypeScheme);
@@ -4367,10 +4702,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             secretType,
             authType
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), "/Root/externalDataSource", alwaysSetSystemOwner);
     }
 
-    void TestTopicBackupRestoreWithoutData() {
-        TS3TestEnv testEnv;
+    void TestTopicBackupRestoreWithoutData(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         NTopic::TTopicClient topicClient(testEnv.GetDriver());
         constexpr const char* topic = "/Root/topic";
 
@@ -4381,54 +4717,59 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "topic" })
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), topic, alwaysSetSystemOwner);
     }
 
-    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES_WITH_FLAG(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType, AlwaysSetSystemOwner) {
         using namespace NKikimrSchemeOp;
 
         switch (Value) {
             case EPathTypeTable:
-                TestTableBackupRestore();
+                TestTableBackupRestore(AlwaysSetSystemOwner);
                 break;
             case EPathTypeTableIndex:
-                TestTableWithIndexBackupRestore();
+                TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobal, false, AlwaysSetSystemOwner);
                 break;
             case EPathTypeSequence:
-                TestTableWithSerialBackupRestore();
+                TestTableWithSerialBackupRestore(AlwaysSetSystemOwner);
                 break;
             case EPathTypeDir:
                 break; // https://github.com/ydb-platform/ydb/issues/10430
             case EPathTypePersQueueGroup:
-                TestTopicBackupRestoreWithoutData();
+                TestTopicBackupRestoreWithoutData(AlwaysSetSystemOwner);
                 break;
             case EPathTypeSubDomain:
             case EPathTypeExtSubDomain:
                 break; // https://github.com/ydb-platform/ydb/issues/10432
             case EPathTypeView:
-                TestViewBackupRestore();
+                TestViewBackupRestore(AlwaysSetSystemOwner);
                 break;
             case EPathTypeCdcStream:
-                TestChangefeedBackupRestore();
+                TestChangefeedBackupRestore(AlwaysSetSystemOwner);
                 break;
             case EPathTypeReplication:
-                TestReplicationBackupRestore(ESecretType::SecretTypeOld);
-                TestReplicationBackupRestore(ESecretType::SecretTypeScheme);
+                if (!AlwaysSetSystemOwner) { // Replications with old secrets don't support the owner change
+                    TestReplicationBackupRestore(ESecretType::SecretTypeOld, AlwaysSetSystemOwner);
+                }
+                TestReplicationBackupRestore(ESecretType::SecretTypeScheme, AlwaysSetSystemOwner);
                 return;
             case EPathTypeTransfer:
-                TestTransferBackupRestore(ESecretType::SecretTypeOld);
-                TestTransferBackupRestore(ESecretType::SecretTypeScheme);
+                if (!AlwaysSetSystemOwner) { // Transfers with old secrets don't support the owner change
+                    TestTransferBackupRestore(ESecretType::SecretTypeOld, AlwaysSetSystemOwner);
+                }
+                TestTransferBackupRestore(ESecretType::SecretTypeScheme, AlwaysSetSystemOwner);
                 break;
             case EPathTypeSysView:
                 TestSystemViewBackupRestore();
                 break;
             case EPathTypeExternalTable:
-                return TestExternalTableBackupRestore();
+                return TestExternalTableBackupRestore(AlwaysSetSystemOwner);
             case EPathTypeExternalDataSource: {
-                TestExternalDataSourceBackupRestore(/* secretType */ Nothing(), EAuthType::AuthTypeNone);
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeToken);
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken);
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeAws);
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeAws);
+                TestExternalDataSourceBackupRestore(/* secretType */ Nothing(), EAuthType::AuthTypeNone, AlwaysSetSystemOwner);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeToken, AlwaysSetSystemOwner);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken, AlwaysSetSystemOwner);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeAws, AlwaysSetSystemOwner);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeAws, AlwaysSetSystemOwner);
                 return;
             }
             case EPathTypeResourcePool:
@@ -4443,6 +4784,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
+            case EPathTypeTestShardSet:
+                break; // not applicable
             case EPathTypeRtmrVolume:
             case EPathTypeBlockStoreVolume:
             case EPathTypeSolomonVolume:
@@ -4465,12 +4808,18 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobalVectorKmeansTree:
             case EIndexTypeGlobalFulltextPlain:
             case EIndexTypeGlobalFulltextRelevance:
+            case EIndexTypeGlobalJson:
+            case EIndexTypeGlobalFulltextCompact:
+            case EIndexTypeGlobalFulltextCompactRelevance:
+            case EIndexTypeGlobalJsonCompact:
                 TestTableWithIndexBackupRestore(Value);
                 break;
+            case EIndexTypeLocalBloomFilter:
+            case EIndexTypeLocalBloomNgramFilter:
+            case EIndexTypeLocalMinMax:
+            case EIndexTypeLocalCountMinSketch:
             case EIndexTypeInvalid:
                 break; // not applicable
-            default:
-                UNIT_FAIL("S3 backup/restore were not implemented for this index type");
         }
     }
 
@@ -4600,5 +4949,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         UNIT_ASSERT_VALUES_EQUAL(items[0].Dst, "Dest/Dir/Table");
         UNIT_ASSERT_VALUES_EQUAL(items[1].Src, "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(items[1].Dst, "Dest/Table");
+    }
+
+    Y_UNIT_TEST(BackupRestoreTableWithMultiColumnStatistics) {
+        TestTableWithMultiColumnStatisticsBackupRestore();
     }
 }

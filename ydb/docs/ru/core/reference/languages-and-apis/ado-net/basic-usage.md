@@ -93,7 +93,7 @@ await using var ydbConnection = ydbDataSource.OpenRetryableConnectionAsync();
 ```c#
 await using var ydbConnection = new YdbConnection(
     "Host=database-sample-grpc;Port=2135;Database=/root/database-sample");
-await ydbConnection.OpenAsync(); 
+await ydbConnection.OpenAsync();
 ```
 
 - Вариант с `YdbConnectionStringBuilder`:
@@ -276,7 +276,7 @@ await transaction.CommitAsync();
 
 {% note warning %}
 
-В таком случае обработка ошибок ([Transaction Lock Invalidated](https://ydb.tech/docs/ru/troubleshooting/performance/queries/transaction-lock-invalidation)) становится заботой пользователя. YDB может откатить транзакцию в случае инвалидации MVC локов.
+Подробнее про обработку ошибок ([Transaction Locks Invalidated](https://ydb.tech/docs/ru/troubleshooting/performance/queries/transaction-lock-invalidation)).
 
 {% endnote %}
 
@@ -340,7 +340,7 @@ await transaction.CommitAsync();
 |------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------|
 | `MaxAttempts`            | Общее число попыток, включая первую. Значение 1 полностью отключает повторы.                                                                                                                   | `10`                        |
 | `EnableRetryIdempotence` | Включает повторы для статусов с неизвестным результатом выполнения на сервере. Используйте только для идемпотентных операций — иначе возможен повторный эффект выполнения.                     | `false`                     |
-| `FastBackoffBaseMs`      | Базовая задержка (мс) для быстрых повторов: ошибки, которые обычно быстро проходят (например, временная недоступность, TLI — Transaction Lock Invalidated). Экспоненциальный backoff с jitter. | `5`                         |
+| `FastBackoffBaseMs`      | Базовая задержка (мс) для быстрых повторов: ошибки, которые обычно быстро проходят (например, временная недоступность, TLI — Transaction Locks Invalidated). Экспоненциальный backoff с jitter. | `5`                         |
 | `FastCapBackoffMs`       | Максимальная задержка (мс) для быстрых повторов. Экспоненциальный backoff с jitter не превышает этот предел.                                                                                   | `500`                       |
 | `SlowBackoffBaseMs`      | Базовая задержка (мс) для «медленных» повторов: перегрузка, исчерпание ресурсов и т.п. Экспоненциальный backoff с jitter.                                                                      | `50`                        |
 | `SlowCapBackoffMs`       | Максимальная задержка (мс) для «медленных» повторов. Экспоненциальный backoff с jitter не превышает этот предел.                                                                               | `5000`                      |

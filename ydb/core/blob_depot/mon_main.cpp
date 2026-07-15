@@ -564,14 +564,16 @@ namespace NKikimr::NBlobDepot {
                 return true;
             }
         } else {
-            RenderMainPage(s);
+            TString nonce = NActors::NMon::GenerateCspNonce();
+            RenderMainPage(s, nonce);
+            auto* res = new NMon::TEvRemoteHttpInfoRes(s.Str());
+            res->Nonce = nonce;
+            Send(ev->Sender, res, 0, ev->Cookie);
+            return true;
         }
-
-        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(s.Str()), 0, ev->Cookie);
-        return true;
     }
 
-    void TBlobDepot::RenderMainPage(IOutputStream& s) {
+    void TBlobDepot::RenderMainPage(IOutputStream& s, const TString& nonce) {
         HTML(s) {
             if (S3Manager) {
                 s << "<a href='app?TabletID=" << TabletID() << "&page=s3config'>S3 config</a><br>";
@@ -579,7 +581,8 @@ namespace NKikimr::NBlobDepot {
 
             s << "<a href='app?TabletID=" << TabletID() << "&page=data'>Contained data</a><br>";
 
-            s << R"(<script>
+            s << "<script nonce='" << nonce << "'>";
+            s << R"(
 function ready() {
     doFetch();
 }
@@ -648,7 +651,7 @@ document.addEventListener("DOMContentLoaded", ready);
                         KEYVALUE_UP("Data, bytes", "data", FormatByteSize(Data->GetTotalStoredDataSize()));
                         KEYVALUE_UP("Data in S3, bytes", "data_s3", FormatByteSize(Data->GetTotalS3DataSize()));
                         KEYVALUE_UP("Trash in flight, bytes", "trash_in_flight", FormatByteSize(Data->GetInFlightTrashSize()));
-                        KEYVALUE_UP("Trash pending, bytes", "trash_pending", FormatByteSize(Data->GetTotalStoredTrashSize()));
+                        KEYVALUE_UP("Loaded trash pending, bytes", "trash_pending", FormatByteSize(Data->GetTotalStoredTrashSize()));
 
                         std::vector<ui32> groups;
                         for (const auto& [groupId, _] : Groups) {
@@ -728,11 +731,15 @@ document.addEventListener("DOMContentLoaded", ready);
             }
         };
 
+        const auto trashLoadState = TData::TrashLoadStateToString(Data->GetTrashLoadState());
+
         NJson::TJsonMap data{
             {"data", formatSize(Data->GetTotalStoredDataSize())},
             {"data_s3", formatSize(Data->GetTotalS3DataSize())},
             {"trash_in_flight", formatSize(Data->GetInFlightTrashSize())},
             {"trash_pending", formatSize(Data->GetTotalStoredTrashSize())},
+            {"trash_load_state", trashLoadState},
+            {"loaded_trash_blobs", Data->GetLoadedTrashRecords()},
         };
 
         for (const auto& [groupId, group] : Groups) {

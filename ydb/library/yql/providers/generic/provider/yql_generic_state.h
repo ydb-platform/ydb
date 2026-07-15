@@ -3,6 +3,7 @@
 #include "yql_generic_settings.h"
 
 #include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
@@ -84,7 +85,7 @@ namespace NYql {
             bool HasSplitsForSelect(const TSelectKey& key) const;
 
             void AttachSplitsForSelect(const TSelectKey& key,
-                                       std::vector<NYql::NConnector::NApi::TSplit>& splits);
+                                       std::vector<NYql::NConnector::NApi::TSplit>&& splits);
 
             const std::vector<NYql::NConnector::NApi::TSplit>& GetSplitsForSelect(const TSelectKey& key) const;
         };
@@ -114,7 +115,7 @@ namespace NYql {
         void AddTable(const TTableAddress& tableAddress, TTableMeta&& tableMeta);
         std::optional<TIssue> AttachSplitsToTable(const TTableAddress& tableAddress,
                                                   const TSelectKey& key,
-                                                  std::vector<NYql::NConnector::NApi::TSplit>& splits);
+                                                  std::vector<NYql::NConnector::NApi::TSplit>&& splits);
         TGetTableResult GetTable(const TTableAddress& tableAddress) const;
 
         TTypeAnnotationContext* Types;

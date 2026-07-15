@@ -153,9 +153,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(AsyncCreateDirWithSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true)
-                                               .EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
+
+        auto sysDirDesc = DescribePath(runtime, "/MyRoot/.sys");
+        TestForceDropUnsafe(runtime, ++txId, sysDirDesc.GetPathId());
+        env.TestWaitNotification(runtime, txId);
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", ".sys");
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",

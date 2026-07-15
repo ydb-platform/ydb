@@ -27,10 +27,12 @@
 #include <util/string/cast.h>
 #include <util/system/user.h>
 
+#include <utility>
+
 namespace NYql {
 
 TString DumpNode(const TExprNode& node, TExprContext& exprCtx) {
-    auto ast = ConvertToAst(node, exprCtx, TExprAnnotationFlags::None, true);
+    auto ast = ConvertToAst(node, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     return ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote | TAstPrintFlags::AdaptArbitraryContent);
 }
 
@@ -42,7 +44,8 @@ void ParseAst(const TString& sexpr, TExprNode::TPtr& root, TExprContext& ctx) {
 
 void CompareAst(const TString& sexpr1, const TString& sexpr2) {
     TExprContext ctx;
-    TExprNode::TPtr root1, root2;
+    TExprNode::TPtr root1;
+    TExprNode::TPtr root2;
     ParseAst(sexpr1, root1, ctx);
     ParseAst(sexpr2, root2, ctx);
     const TExprNode* ptr1 = root1.Get();
@@ -79,7 +82,7 @@ TExprNode::TPtr ParseAndOptimize(const TString& program, TExprContext& exprCtx, 
     typesCtx = MakeIntrusive<TTypeAnnotationContext>();
     typesCtx->RandomProvider = CreateDeterministicRandomProvider(1);
 
-    typesCtx->AddDataSource(ConfigProviderName, CreateConfigProvider(*typesCtx, nullptr, ""));
+    typesCtx->AddDataSource(ConfigProviderName, CreateConfigProvider(*typesCtx, /*config=*/nullptr, ""));
     auto pureState = MakeIntrusive<TPureState>();
     pureState->Types = typesCtx.Get();
     pureState->FunctionRegistry = functionRegistry.Get();
@@ -173,8 +176,8 @@ struct TRunSingleProgram {
     IOutputStream& Err;
     TVector<TString> Res;
 
-    TRunSingleProgram(const TString& src, IOutputStream& err)
-        : Src(src)
+    TRunSingleProgram(TString src, IOutputStream& err)
+        : Src(std::move(src))
         , Err(err)
     {
     }
@@ -184,7 +187,7 @@ struct TRunSingleProgram {
         TVector<TDataProviderInitializer> dataProvidersInit;
         dataProvidersInit.push_back(GetPureDataProviderInitializer());
 
-        TProgramFactory factory(true, funcReg, 0ULL, dataProvidersInit, "ut");
+        TProgramFactory factory(/*useRepeatableRandomAndTimeProviders=*/true, funcReg, 0ULL, dataProvidersInit, "ut");
 
         TProgramPtr program = factory.Create("-stdin-", Src);
         program->ConfigureYsonResultFormat(NYson::EYsonFormat::Text);

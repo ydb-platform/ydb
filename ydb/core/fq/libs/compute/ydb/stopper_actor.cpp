@@ -20,12 +20,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
-
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [Stopper] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
-#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [Stopper] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
-#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [Stopper] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [Stopper] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [Stopper] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << OperationId.ToString() << " " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
 namespace NFq {
 
@@ -81,7 +76,13 @@ public:
     static constexpr char ActorName[] = "FQ_STOPPER_ACTOR";
 
     void Start() {
-        LOG_I("Start stopper actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
+        YDB_LOG_INFO("[ydb] [Stopper] Start stopper actor. Compute",
+            {"cloudId", Params.CloudId},
+            {"scope", Params.Scope},
+            {"queryId", Params.QueryId},
+            {"jobId", Params.JobId},
+            {"operationId", OperationId},
+            {"state", FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)});
         Become(&TStopperActor::StateFunc);
         Register(new TRetryActor<TEvYdbCompute::TEvCancelOperationRequest, TEvYdbCompute::TEvCancelOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_CANCEL_OPERATION), SelfId(), Connector, OperationId));
     }
@@ -95,37 +96,73 @@ public:
     void Handle(const TEvYdbCompute::TEvCancelOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::NOT_FOUND && response.Status != NYdb::EStatus::PRECONDITION_FAILED) {
-            LOG_E("Can't cancel operation: " << response.Issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [Stopper] Can't cancel operation",
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId},
+                {"operationId", OperationId},
+                {"issues", response.Issues.ToOneLineString()});
             Failed(response.Status, response.Issues);
             return;
         }
 
         if (response.Status == NYdb::EStatus::NOT_FOUND) {
-            LOG_I("Operation successfully canceled and already removed");
+            YDB_LOG_INFO("[ydb] [Stopper] Operation successfully canceled and already removed",
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId},
+                {"operationId", OperationId});
             Complete();
             return;
         }
 
-        LOG_I("Operation successfully canceled: " << response.Status);
+        YDB_LOG_INFO("[ydb] [Stopper] Operation successfully",
+            {"cloudId", Params.CloudId},
+            {"scope", Params.Scope},
+            {"queryId", Params.QueryId},
+            {"jobId", Params.JobId},
+            {"operationId", OperationId},
+            {"status", response.Status});
         Register(new TRetryActor<TEvYdbCompute::TEvGetOperationRequest, TEvYdbCompute::TEvGetOperationResponse, NYdb::TOperation::TOperationId>(Counters.GetCounters(ERequestType::RT_GET_OPERATION), SelfId(), Connector, OperationId));
     }
 
     void Handle(const TEvYdbCompute::TEvGetOperationResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::NOT_FOUND) {
-            LOG_E("Can't get operation: " << response.Issues.ToOneLineString());
+            YDB_LOG_ERROR("[ydb] [Stopper] Can't get operation",
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId},
+                {"operationId", OperationId},
+                {"issues", response.Issues.ToOneLineString()});
             Failed(response.Status, response.Issues);
             return;
         }
 
         if (response.Status == NYdb::EStatus::NOT_FOUND) {
-            LOG_I("Operation has been already removed");
+            YDB_LOG_INFO("[ydb] [Stopper] Operation has been already removed",
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId},
+                {"operationId", OperationId});
             Complete();
             return;
         }
 
         auto statusCode = NYql::NDq::YdbStatusToDqStatus(response.StatusCode);
-        LOG_I("Operation successfully fetched, Status: " << response.Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(statusCode) << " Issues: " << response.Issues.ToOneLineString());
+        YDB_LOG_INFO("[ydb] [Stopper] Operation successfully fetched,",
+            {"cloudId", Params.CloudId},
+            {"scope", Params.Scope},
+            {"queryId", Params.QueryId},
+            {"jobId", Params.JobId},
+            {"operationId", OperationId},
+            {"status", response.Status},
+            {"statusCode", NYql::NDqProto::StatusIds::StatusCode_Name(statusCode)},
+            {"issues", response.Issues.ToOneLineString()});
 
         StartTime = TInstant::Now();
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
@@ -133,7 +170,13 @@ public:
 
         Fq::Private::PingTaskRequest pingTaskRequest = Builder.Build(response.QueryStats, response.Issues, FederatedQuery::QueryMeta::ABORTING_BY_USER, statusCode);
         if (Builder.Issues) {
-            LOG_W(Builder.Issues.ToOneLineString());
+            YDB_LOG_WARN("[ydb] [Stopper]",
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId},
+                {"operationId", OperationId},
+                {"issues", Builder.Issues.ToOneLineString()});
             GetStepCountersSubgroup()->GetCounter("StatIssues", true)->Inc();
         }
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
@@ -146,10 +189,20 @@ public:
 
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
-            LOG_I("Information about the status of operation is updated");
+            YDB_LOG_INFO("[ydb] [Stopper] Information about the status of operation is updated",
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId},
+                {"operationId", OperationId});
         } else {
             pingCounters->Error->Inc();
-            LOG_E("Error updating information about the status of operation");
+            YDB_LOG_ERROR("[ydb] [Stopper] Error updating information about the status of operation",
+                {"cloudId", Params.CloudId},
+                {"scope", Params.Scope},
+                {"queryId", Params.QueryId},
+                {"jobId", Params.JobId},
+                {"operationId", OperationId});
         }
         Complete();
     }

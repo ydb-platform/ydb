@@ -5,6 +5,8 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NMLP {
 
 TWriterActor::TWriterActor(const TActorId& parentId, const TWriterSettings& settings)
@@ -27,7 +29,8 @@ void TWriterActor::PassAway() {
 }
 
 void TWriterActor::DoDescribe() {
-    LOG_D("Start describe");
+    YDB_LOG_DEBUG("Start describe",
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TWriterActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -38,7 +41,8 @@ void TWriterActor::DoDescribe() {
 }
 
 void TWriterActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-    LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+    YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     ChildActorId = {};
 
@@ -68,14 +72,16 @@ STFUNC(TWriterActor::DescribeState) {
 namespace {
 
 size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmdWrite) {
-    size_t totalSize = item.MessageBody.size() + (item.SerializedMessageAttributes.has_value() ?
-        item.SerializedMessageAttributes.value().size() : 0);
+    size_t totalSize = item.MessageBody.size();
 
     cmdWrite.SetSourceId("");
     cmdWrite.SetDisableDeduplication(true);
     cmdWrite.SetCreateTimeMS(TInstant::Now().MilliSeconds());
     cmdWrite.SetUncompressedSize(item.MessageBody.size());
     cmdWrite.SetExternalOperation(true);
+    if (item.MessageGroupId) {
+        cmdWrite.SetChoosePartitionKey(AsKeyBound(Hash(*item.MessageGroupId)));
+    }
 
     NKikimrPQClient::TDataChunk proto;
     proto.SetCodec(0); // NPersQueue::CODEC_RAW
@@ -87,19 +93,22 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
         m->set_value(std::move(*item.MessageGroupId));
     }
     if (item.MessageDeduplicationId.has_value()) {
+        cmdWrite.SetMessageDeduplicationId(*item.MessageDeduplicationId);
         auto* m = proto.AddMessageMeta();
         m->set_key(MESSAGE_ATTRIBUTE_DEDUPLICATION_ID);
-        m->set_value(std::move(*item.MessageDeduplicationId));
-    }
-    if (item.SerializedMessageAttributes.has_value()) {
-        auto* m = proto.AddMessageMeta();
-        m->set_key(MESSAGE_ATTRIBUTE_ATTRIBUTES);
-        m->set_value(std::move(*item.SerializedMessageAttributes));
+        m->set_value(*item.MessageDeduplicationId);
     }
     if (item.Delay != TDuration::Zero()) {
         auto* m = proto.AddMessageMeta();
         m->set_key(MESSAGE_ATTRIBUTE_DELAY_SECONDS);
         m->set_value(ToString(item.Delay.Seconds()));
+    }
+    for (auto&& [key, value] : item.Attributes) {
+        totalSize += key.size() + value.size();
+
+        auto* m = proto.AddMessageMeta();
+        m->set_key(std::move(key));
+        m->set_value(std::move(value));
     }
 
     TString dataStr;
@@ -113,7 +122,8 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
 }
 
 void TWriterActor::DoWrite() {
-    LOG_D("Start write");
+    YDB_LOG_DEBUG("Start write",
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TWriterActor::WriteState);
 
     struct TInfo {
@@ -172,7 +182,8 @@ void TWriterActor::DoWrite() {
 }
 
 void TWriterActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvResponse");
+    YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     bool alreadyReceived = false;
     auto& record = ev->Get()->Record;
@@ -205,7 +216,8 @@ void TWriterActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 }
 
 void TWriterActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
+    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     const auto tabletId = ev->Get()->TabletId;
 
@@ -237,8 +249,12 @@ void TWriterActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 }
 
 bool TWriterActor::OnUnhandledException(const std::exception& exc) {
-    LOG_C("unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-        << TBackTrace::FromCurrentException().PrintToString());
+    YDB_LOG_CRIT("Unhandled exception",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"exceptionType", TypeName(exc)},
+        {"exceptionMessage", exc.what()},
+        {"endl", Endl},
+        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 
     PendingRequests = 0;
     ReplyIfPossible();
@@ -248,11 +264,15 @@ bool TWriterActor::OnUnhandledException(const std::exception& exc) {
 
 bool TWriterActor::IsSuccess(const NKikimrClient::TResponse& record) {
     if (record.HasErrorCode() && record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
-        LOG_W("Write error: " << record.ShortDebugString());
+        YDB_LOG_WARN("Write",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"error", record.ShortDebugString()});
         return false;
     }
     if (!record.HasPartitionResponse()) {
-        LOG_W("Missing partition response: " << record.ShortDebugString());
+        YDB_LOG_WARN("Missing partition",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"response", record.ShortDebugString()});
         return false;
     }
 
@@ -271,6 +291,9 @@ void TWriterActor::ReplyIfPossible() {
 
     auto response = std::make_unique<TEvWriteResponse>();
     response->DescribeStatus = DescribeStatus;
+    if (TopicInfo) {
+        response->BalancerTabletId = TopicInfo->Description.GetBalancerTabletID();
+    }
     for (auto& message : PendingMessages) {
         std::optional<TMessageId> messageId;
         if (message.Status == Ydb::StatusIds::SUCCESS || message.Status == Ydb::StatusIds::ALREADY_EXISTS) {

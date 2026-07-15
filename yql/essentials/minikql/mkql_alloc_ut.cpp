@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/size_literals.h>
+
 namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
@@ -59,19 +61,6 @@ Y_UNIT_TEST(TestDeallocated) {
     UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 1);
 }
 
-Y_UNIT_TEST(FreeInWrongAllocator) {
-    if (true) {
-        return;
-    }
-    TScopedAlloc alloc1(__LOCATION__);
-    void* p1 = TWithDefaultMiniKQLAlloc::AllocWithSize(10);
-    void* p2 = TWithDefaultMiniKQLAlloc::AllocWithSize(10);
-    {
-        TScopedAlloc alloc2(__LOCATION__);
-        TWithDefaultMiniKQLAlloc::FreeWithSize(p1, 10);
-    }
-    TWithDefaultMiniKQLAlloc::FreeWithSize(p2, 10);
-}
 Y_UNIT_TEST(InitiallyAcquired) {
     {
         TScopedAlloc alloc(__LOCATION__);
@@ -83,7 +72,7 @@ Y_UNIT_TEST(InitiallyAcquired) {
         UNIT_ASSERT_VALUES_EQUAL(true, alloc.IsAttached());
     }
     {
-        TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), false, false);
+        TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), /*supportsSizedAllocators=*/false, /*initiallyAcquired=*/false);
         UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsAttached());
         {
             auto guard = Guard(alloc);
@@ -102,13 +91,13 @@ Y_UNIT_TEST(ArrowAllocateZeroSize) {
 
     // Populate the current page on arena to maximum offset
     TScopedAlloc alloc(__LOCATION__);
-    for (auto i = 0ul; i < pieceCount; ++i) {
+    for (auto i = 0UL; i < pieceCount; ++i) {
         ptrs[i] = MKQLArrowAllocate(pieceSize);
     }
 
     // Check all pieces are on the same page
     void* pageStart = TAllocState::GetPageStart(ptrs[0]);
-    for (auto i = 1ul; i < pieceCount; ++i) {
+    for (auto i = 1UL; i < pieceCount; ++i) {
         UNIT_ASSERT_VALUES_EQUAL(pageStart, TAllocState::GetPageStart(ptrs[i]));
     }
 
@@ -126,7 +115,7 @@ Y_UNIT_TEST(ArrowAllocateZeroSize) {
     MKQLArrowUntrack(ptrZero1);
 
     // Deallocate all the stuff
-    for (auto i = 0ul; i < pieceCount; ++i) {
+    for (auto i = 0UL; i < pieceCount; ++i) {
         MKQLArrowFree(ptrs[i], pieceSize);
     }
     MKQLArrowFree(ptrZero1, 0);
@@ -136,6 +125,18 @@ Y_UNIT_TEST(ArrowAllocateZeroSize) {
     delete[] ptrs;
 }
 #endif
+
+Y_UNIT_TEST(ArrowAllocateWithDefaultArrowAllocator) {
+    TScopedAlloc alloc(__LOCATION__);
+    UseDefaultArrowAllocator();
+
+    constexpr ui64 size = 1_KB;
+    auto* ptr = MKQLArrowAllocate(size);
+    UNIT_ASSERT(ptr);
+
+    MKQLArrowFree(ptr, size);
+}
+
 } // Y_UNIT_TEST_SUITE(TMiniKQLAllocTest)
 
 } // namespace NKikimr::NMiniKQL

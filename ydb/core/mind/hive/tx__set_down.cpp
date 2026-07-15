@@ -1,5 +1,7 @@
 #include "tx__set_down.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr::NHive {
 
 
@@ -22,8 +24,8 @@ bool TTxSetDown::SetDown(NIceDb::TNiceDb& db) {
         if (Forward) {
             auto tenantHive = Self->GetPipeToTenantHive(node);
             if (tenantHive) {
-                SideEffects.Callback([source = Source, tablet = *tenantHive, node = NodeId] {
-                    NTabletPipe::SendData(source, tablet, new TEvHive::TEvSetDown(node));
+                SideEffects.Callback([source = Source, tablet = *tenantHive, node = NodeId, down = Down] {
+                    NTabletPipe::SendData(source, tablet, new TEvHive::TEvSetDown(node, down));
                 });
             } else {
                 SideEffects.Send(Source, new TEvHive::TEvSetDownReply(), 0, Cookie);
@@ -46,7 +48,10 @@ bool TTxSetDown::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxSetDown::Complete(const TActorContext& ctx) {
-    BLOG_D("THive::TTxSetDown(" << NodeId << ")::Complete");
+        YDB_LOG_DEBUG("THive::TTxSetDown::Complete setting node down state",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", NodeId},
+            {"down", Down});
     SideEffects.Complete(ctx);
 }
 

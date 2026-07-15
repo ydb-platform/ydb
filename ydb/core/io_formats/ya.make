@@ -1,6 +1,7 @@
 RECURSE(
     arrow
     cell_maker
+    json
     ydb_dump
 )
 

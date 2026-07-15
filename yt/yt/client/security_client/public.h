@@ -53,7 +53,7 @@ extern const std::string AdminsGroupName;
 extern const std::string ReplicatorUserName;
 extern const std::string OwnerUserName;
 
-using TSecurityTag = TString;
+using TSecurityTag = std::string;
 constexpr int MaxSecurityTagLength = 128;
 
 DEFINE_ENUM(ESecurityAction,

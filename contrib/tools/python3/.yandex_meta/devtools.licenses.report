@@ -566,7 +566,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/gary-s-brown.LICENSE
     Files with this license:
-        Modules/binascii.c [636:637]
+        Modules/binascii.c [641:642]
 
 KEEP     Python-2.0           6a19cf8041a37669b2cd07b9cd3eace3
 BELONGS ya.make
@@ -969,7 +969,6 @@ BELONGS Lib/ya.make
         Lib/_pyrepl/__init__.py [7:19]
         Lib/_pyrepl/completing_reader.py [7:19]
         Lib/_pyrepl/console.py [6:18]
-        Lib/_pyrepl/curses.py [7:19]
         Lib/_pyrepl/fancy_termios.py [6:18]
         Lib/_pyrepl/reader.py [8:20]
         Lib/_pyrepl/unix_console.py [8:20]
@@ -1246,7 +1245,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
     Files with this license:
-        Modules/selectmodule.c [1734:1753]
+        Modules/selectmodule.c [1735:1754]
 
 KEEP     X11-Hanson           fee24880a028f5d50965c0ed93a7a806
 BELONGS ya.make

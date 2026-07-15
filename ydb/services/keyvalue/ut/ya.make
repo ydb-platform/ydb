@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/services/keyvalue)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 SRCS(
     grpc_service_ut.cpp

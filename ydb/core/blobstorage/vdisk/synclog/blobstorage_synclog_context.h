@@ -45,6 +45,7 @@ public:
     const TActorId LoggerID;
     const TActorId LogCutterID;
     const TActorId SkeletonId;
+    const TActorId ChunkKeeperId;
 
     const ui64 SyncLogMaxDiskAmount;
     const ui64 SyncLogMaxEntryPointSize;
@@ -59,7 +60,9 @@ public:
     const bool IsReadOnlyVDisk;
 
     TControlWrapper EnablePhantomFlagStorage;
+    bool EnablePersistentPhantomFlagStorage;
     TControlWrapper PhantomFlagStorageLimit;
+    TControlWrapper VolatilePhantomFlagStorageBlobSizeLimit;
 
     TSyncLogCtx(TIntrusivePtr<TVDiskContext> vctx,
             TIntrusivePtr<TLsnMngr> lsnMngr,
@@ -67,6 +70,7 @@ public:
             const TActorId &loggerId,
             const TActorId &logCutterId,
             const TActorId& skeletonId,
+            const TActorId& chunkKeeperId,
             ui64 syncLogMaxDiskAmount,
             ui64 syncLogMaxEntryPointSize,
             ui64 syncLogMaxMemAmount,
@@ -74,13 +78,16 @@ public:
             std::shared_ptr<TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep,
             bool isReadOnlyVDisk,
             const TControlWrapper& enablePhantomFlagStorage,
-            const TControlWrapper& phantomFlagStorageLimit)
+            bool enablePersistentPhantomFlagStorage,
+            const TControlWrapper& phantomFlagStorageLimit,
+            const TControlWrapper& volatilePhantomFlagStorageBlobSizeLimit)
         : VCtx(std::move(vctx))
         , LsnMngr(std::move(lsnMngr))
         , PDiskCtx(std::move(pdiskCtx))
         , LoggerID(loggerId)
         , LogCutterID(logCutterId)
         , SkeletonId(skeletonId)
+        , ChunkKeeperId(chunkKeeperId)
         , SyncLogMaxDiskAmount(syncLogMaxDiskAmount)
         , SyncLogMaxEntryPointSize(syncLogMaxEntryPointSize)
         , SyncLogMaxMemAmount(syncLogMaxMemAmount)
@@ -91,7 +98,9 @@ public:
         , PhantomFlagStorageGroup(VCtx->VDiskCounters, "subsystem", "phantomflagstorage")
         , IsReadOnlyVDisk(isReadOnlyVDisk)
         , EnablePhantomFlagStorage(enablePhantomFlagStorage)
+        , EnablePersistentPhantomFlagStorage(enablePersistentPhantomFlagStorage)
         , PhantomFlagStorageLimit(phantomFlagStorageLimit)
+        , VolatilePhantomFlagStorageBlobSizeLimit(volatilePhantomFlagStorageBlobSizeLimit)
     {}
 };
 

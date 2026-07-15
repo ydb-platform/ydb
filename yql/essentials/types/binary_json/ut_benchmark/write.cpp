@@ -16,7 +16,7 @@ using namespace NKikimr::NBinaryJson;
 
 namespace {
 
-static ui64 seed = 0;
+ui64 seed = 0;
 
 NJson::TJsonValue GetTestJson(ui64 depth = 10, ui64 nChildren = 2) {
     NJson::TJsonValue value;
@@ -35,7 +35,7 @@ TString GetTestJsonString() {
     return NJson::WriteJson(GetTestJson(3, 50));
 }
 
-static void BenchWriteSimdJson(benchmark::State& state) {
+void BenchWriteSimdJson(benchmark::State& state) {
     TString value = GetTestJsonString();
     TStringBuf buf(value);
     for (auto _ : state) {

@@ -32,7 +32,6 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .StoreMappedResult(&Scenario.DefaultProcessingTimeout, ParseDuration);
         config.Opts->AddLongOption("dlq-queue-name", "SQS DLQ queue name.")
-            .Optional()
             .StoreResult(&Scenario.DlqQueueName);
         config.Opts->AddLongOption("max-receive-count", "SQS max receive count.")
             .DefaultValue(0)

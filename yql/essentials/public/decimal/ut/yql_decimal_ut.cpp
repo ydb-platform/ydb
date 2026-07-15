@@ -18,13 +18,13 @@ void SimpleNegativeFormatTest(TInt128 v, ui8 precision, ui8 scale) {
 }
 
 void SimpleSerializeAndDeserialize(TInt128 v, size_t expectedSize) {
-    char buff[sizeof(TInt128)];
-    const auto s = Serialize(v, buff);
+    std::array<char, sizeof(TInt128)> buff;
+    const auto s = Serialize(v, buff.data());
     UNIT_ASSERT_VALUES_EQUAL(s, expectedSize);
-    const auto& des = Deserialize(buff, expectedSize);
+    const auto& des = Deserialize(buff.data(), expectedSize);
     UNIT_ASSERT_VALUES_EQUAL(des.second, expectedSize);
     UNIT_ASSERT(des.first == v);
-    const auto& e = Deserialize(buff, expectedSize - 1);
+    const auto& e = Deserialize(buff.data(), expectedSize - 1);
     UNIT_ASSERT(e.first == Err());
 }
 
@@ -118,8 +118,8 @@ Y_UNIT_TEST(TestFormats) {
     SimplePositiveTest(12345678, 15, 6, "12.345678");
     SimplePositiveTest(123456789, 15, 6, "123.456789");
     SimplePositiveTest(1234567898, 15, 6, "1234.567898");
-    SimplePositiveTest(12345678987ll, 15, 6, "12345.678987");
-    SimplePositiveTest(123456789876ll, 15, 6, "123456.789876");
+    SimplePositiveTest(12345678987LL, 15, 6, "12345.678987");
+    SimplePositiveTest(123456789876LL, 15, 6, "123456.789876");
 }
 
 Y_UNIT_TEST(TestHugeNumberFormat) {

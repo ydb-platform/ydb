@@ -48,6 +48,9 @@ public:
     {}
 };
 
+TString SecureDebugString(const google::protobuf::Message& message);
+TString SecureDebugStringMultiline(const google::protobuf::Message& message);
+
 template <typename TMsg>
 inline TString SecureDebugString(const TMsg& message) {
     TString result;

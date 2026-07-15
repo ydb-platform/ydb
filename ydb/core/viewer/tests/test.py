@@ -14,6 +14,27 @@ import re
 
 
 class TestViewer(object):
+    BSC_STORAGE_STATS_VALUE_FIELDS = {
+        'AvailableGroupsToCreate',
+        'AvailableSizeToCreate',
+        'CurrentAllocatedSize',
+        'CurrentAvailableSize',
+        'CurrentGroupsCreated',
+        'ImmediateGroupsToCreate',
+        'ImmediateSizeToCreate',
+    }
+    # Pool-derived rows depend on the async BSC snapshot; keep only
+    # calculator-prefilled rows in canonical /viewer/cluster output.
+    BSC_STORAGE_STATS_STABLE_KEYS = (
+        ('mirror-3-dc', 'Type:ROT'),
+        ('mirror-3-dc', 'Type:SSD'),
+        ('block-4-2', 'Type:ROT'),
+        ('block-4-2', 'Type:SSD'),
+    )
+    BSC_STORAGE_STATS_STABLE_KEY_ORDER = {
+        key: index for index, key in enumerate(BSC_STORAGE_STATS_STABLE_KEYS)
+    }
+
     @pytest.fixture(autouse=True, scope='class')
     @classmethod
     def cluster_fixture(cls):
@@ -21,6 +42,10 @@ class TestViewer(object):
             'enable_alter_database_create_hive_first': True,
             'enable_topic_transfer': True,
             'enable_script_execution_operations': True,
+            'enable_local_bloom_filter_index': True,
+            'enable_local_index_as_scheme_object': True,
+            'enable_extra_sids_control_for_http_viewer': True,
+            'enable_column_statistics': True,
             },
             enable_static_auth=True)
         config.yaml_config['domains_config']['security_config']['enforce_user_token_requirement'] = False
@@ -58,8 +83,10 @@ class TestViewer(object):
         cls.cluster.wait_tenant_up(cls.serverless_db, token=cls.root_token)
         cls.databases = [cls.domain_name, cls.dedicated_db, cls.shared_db, cls.serverless_db]
         cls.databases_and_no_database = ['no-database', cls.domain_name, cls.dedicated_db, cls.shared_db, cls.serverless_db]
+        cls.csrf_token = 'test-csrf-token'
         cls.default_headers = {
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+            'Cookie': 'ydb_session_id=' + cls.root_session_id + '; csrf_token=' + cls.csrf_token,
+            'X-CSRF-Token': cls.csrf_token,
         }
         cls.wait_for_cluster_ready()
         yield
@@ -70,25 +97,49 @@ class TestViewer(object):
         return requests.post("http://localhost:%s/login" % cls.cluster.nodes[1].mon_port, json=request)
 
     @classmethod
+    def _split_cookies_from_headers(cls, headers):
+        if not headers or 'Cookie' not in headers:
+            return headers, {}
+        headers = dict(headers)
+        cookie_str = headers.pop('Cookie')
+        cookies = {}
+        for part in cookie_str.split(';'):
+            part = part.strip()
+            if '=' in part:
+                name, value = part.split('=', 1)
+                cookies[name.strip()] = value.strip()
+        return headers, cookies
+
+    @classmethod
+    def make_cookie_headers(cls, session_id):
+        return {
+            'Cookie': 'ydb_session_id=' + session_id + '; csrf_token=' + cls.csrf_token,
+            'X-CSRF-Token': cls.csrf_token,
+        }
+
+    @classmethod
     def call_viewer_api_get(cls, url, headers=None):
         if headers is None:
             headers = cls.default_headers
+        headers, cookies = cls._split_cookies_from_headers(headers)
         port = cls.cluster.nodes[1].mon_port
-        return requests.get("http://localhost:%s%s" % (port, url), headers=headers)
+        return requests.get("http://localhost:%s%s" % (port, url), headers=headers, cookies=cookies)
 
     @classmethod
     def call_viewer_api_post(cls, url, body=None, headers=None):
         if headers is None:
             headers = cls.default_headers
+        headers, cookies = cls._split_cookies_from_headers(headers)
         port = cls.cluster.nodes[1].mon_port
-        return requests.post("http://localhost:%s%s" % (port, url), json=body, headers=headers)
+        return requests.post("http://localhost:%s%s" % (port, url), json=body, headers=headers, cookies=cookies)
 
     @classmethod
     def call_viewer_api_delete(cls, url, headers=None):
         if headers is None:
             headers = cls.default_headers
+        headers, cookies = cls._split_cookies_from_headers(headers)
         port = cls.cluster.nodes[1].mon_port
-        return requests.delete("http://localhost:%s%s" % (port, url), headers=headers)
+        return requests.delete("http://localhost:%s%s" % (port, url), headers=headers, cookies=cookies)
 
     @classmethod
     def get_result(cls, result):
@@ -178,6 +229,13 @@ class TestViewer(object):
         return cls.call_viewer_delete(url, params)
 
     @classmethod
+    def _make_request(cls, method, url, headers=None, **kwargs):
+        if headers is None:
+            headers = cls.default_headers
+        headers, cookies = cls._split_cookies_from_headers(headers)
+        return method(url, headers=headers, cookies=cookies, **kwargs)
+
+    @classmethod
     def wait_for_cluster_ready(cls):
         wait_time = 0
         max_wait_time = 300
@@ -187,10 +245,10 @@ class TestViewer(object):
                 while True:
                     try:
                         print("Waiting for node %s to be ready" % node_id)
-                        result_counter = cls.get_result(requests.get("http://localhost:%s/viewer/simple_counter?max_counter=1&period=1" % node.mon_port, headers=cls.default_headers))
+                        result_counter = cls.get_result(cls._make_request(requests.get, "http://localhost:%s/viewer/simple_counter?max_counter=1&period=1" % node.mon_port))
                         if result_counter['status_code'] != 200:
                             break
-                        result = cls.get_result(requests.get("http://localhost:%s/viewer/sysinfo?node_id=." % node.mon_port, headers=cls.default_headers))
+                        result = cls.get_result(cls._make_request(requests.get, "http://localhost:%s/viewer/sysinfo?node_id=." % node.mon_port))
                         if 'status_code' in result and result.status_code != 200:
                             break
                         if 'SystemStateInfo' not in result or len(result['SystemStateInfo']) == 0:
@@ -266,16 +324,18 @@ class TestViewer(object):
                 all_good = False
                 print("Waiting for database %s to be ready" % database)
                 while True:
-                    result = cls.get_result(requests.get(
+                    result = cls.get_result(cls._make_request(
+                        requests.get,
                         "http://localhost:%s/viewer/tenantinfo?database=%s" %
-                        (cls.cluster.nodes[1].mon_port, database), headers=cls.default_headers))  # force connect between nodes
+                        (cls.cluster.nodes[1].mon_port, database)))  # force connect between nodes
                     if 'status_code' in result and result['status_code'] != 200:
                         break
                     if 'CoresUsed' not in result['TenantInfo'][0]:
                         break
-                    result = cls.get_result(requests.get(
+                    result = cls.get_result(cls._make_request(
+                        requests.get,
                         "http://localhost:%s/viewer/healthcheck?database=%s" %
-                        (cls.cluster.nodes[1].mon_port, database), headers=cls.default_headers))  # force connect between nodes
+                        (cls.cluster.nodes[1].mon_port, database)))  # force connect between nodes
                     if 'status_code' in result and result['status_code'] != 200:
                         break
                     if result['self_check_result'] != 'GOOD':
@@ -301,16 +361,18 @@ class TestViewer(object):
                         bad += 1
                 if bad > 0:
                     break
-                result = cls.get_result(requests.get(
+                result = cls.get_result(cls._make_request(
+                    requests.get,
                     "http://localhost:%s/storage/groups?fields_required=all" %
-                    (cls.cluster.nodes[1].mon_port), headers=cls.default_headers))  # force connect between nodes
+                    (cls.cluster.nodes[1].mon_port)))  # force connect between nodes
                 if 'status_code' in result and result['status_code'] != 200:
                     break
                 if len(result['StorageGroups']) < 5:
                     break
-                result = cls.get_result(requests.get(
+                result = cls.get_result(cls._make_request(
+                    requests.get,
                     "http://localhost:%s/viewer/cluster" %
-                    (cls.cluster.nodes[1].mon_port), headers=cls.default_headers))  # force connect between nodes
+                    (cls.cluster.nodes[1].mon_port)))  # force connect between nodes
                 if 'status_code' in result and result['status_code'] != 200:
                     break
                 if 'StorageTotal' not in result or result['StorageTotal'] == 0:
@@ -324,6 +386,10 @@ class TestViewer(object):
             time.sleep(1)
             wait_time += 1
         print('Wait for cluster to be ready took %s seconds' % wait_time)
+
+    @classmethod
+    def test_waiting_for_cluster_ready(cls):
+        return {}
 
     @classmethod
     def test_whoami_root(cls):
@@ -461,12 +527,15 @@ class TestViewer(object):
     @classmethod
     def normalize_result(cls, result):
         cls.delete_keys_recursively(result, {'Version',
+                                             'version',
                                              'MemoryUsed',
                                              'WriteThroughput',
                                              'ReadThroughput',
                                              'Read',
                                              'Write',
                                              'size_bytes',
+                                             'GrpcRequestBytes',
+                                             'GrpcResponseBytes',
                                              })
         result = cls.wipe_values_by_key(result, {'LatencyGetFast',
                                                  'LatencyPutTabletLog',
@@ -602,9 +671,27 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def normalize_result_viewer_config(cls, result):
+        """Normalize dynamic local cluster settings returned by /viewer/config."""
+        return cls.replace_values_by_key(result, {'BackendFileName',
+                                                  'MaxInFlight',
+                                                  'MaxInFlightBySize',
+                                                  'MonitoringPort',
+                                                  'NetDataFilePath',
+                                                  'NumWorkers',
+                                                  'Port',
+                                                  'StartupConfigYaml',
+                                                  })
+
+    @classmethod
     def normalize_result_healthcheck(cls, result):
         result = cls.replace_values_by_key_and_value(result, ['self_check_result'], ['GOOD', 'DEGRADED', 'MAINTENANCE_REQUIRED', 'EMERGENCY'])
         cls.delete_keys_recursively(result, {'issue_log'})
+        return result
+
+    @classmethod
+    def normalize_result_transfer_describe(cls, result):
+        cls.delete_keys_recursively(result, ['stats'])
         return result
 
     @classmethod
@@ -614,6 +701,33 @@ class TestViewer(object):
     @classmethod
     def get_viewer_db_normalized(cls, url, params=None):
         return cls.normalize_result(cls.get_viewer_db(url, params))
+
+    @classmethod
+    def has_calculated_bsc_storage_stats(cls, result):
+        for entry in result.get('StorageStats', []):
+            for key in cls.BSC_STORAGE_STATS_VALUE_FIELDS:
+                value = entry.get(key)
+                if value is None:
+                    continue
+                try:
+                    if int(value) != 0:
+                        return True
+                except (TypeError, ValueError):
+                    continue
+        return False
+
+    @classmethod
+    def get_viewer_cluster_with_calculated_storage_stats(cls):
+        result = {}
+        tries = 15
+        while tries > 0:
+            result = cls.get_viewer("/viewer/cluster")
+            if cls.has_calculated_bsc_storage_stats(result):
+                return result
+            tries -= 1
+            time.sleep(1)
+        assert cls.has_calculated_bsc_storage_stats(result), \
+            "BSC storage stats were not calculated in /viewer/cluster response: %s" % result.get('StorageStats', [])
 
     @classmethod
     def test_viewer_nodelist(cls):
@@ -707,11 +821,72 @@ class TestViewer(object):
         ]
 
     @classmethod
+    def test_viewer_groups_sort_by_vdisk_slot_usage_with_allocation_units(cls):
+        def request_and_check(fields_required):
+            result = cls.get_viewer("/viewer/groups", {
+                'fields_required': fields_required,
+                'sort': '-MaxVDiskSlotUsage',
+                'limit': 1,
+            })
+            assert 'status_code' not in result, result
+            assert not result.get('NeedFilter'), result
+            assert not result.get('NeedSort'), result
+            assert not result.get('NeedLimit'), result
+            assert result.get('Problems', []) == [], result
+            groups = result.get('StorageGroups', [])
+            assert len(groups) == 1, result
+            assert 'MaxVDiskSlotUsage' in groups[0], result
+            return {
+                'FoundGroups': result.get('FoundGroups'),
+                'ReturnedGroups': len(groups),
+                'HasMaxVDiskSlotUsage': 'MaxVDiskSlotUsage' in groups[0],
+                'NeedFilter': result.get('NeedFilter', False),
+                'NeedSort': result.get('NeedSort', False),
+                'NeedLimit': result.get('NeedLimit', False),
+                'Problems': result.get('Problems', []),
+            }
+
+        return {
+            'without_allocation_units': request_and_check('MaxVDiskSlotUsage'),
+            'with_allocation_units': request_and_check('AllocationUnits,MaxVDiskSlotUsage'),
+        }
+
+    @classmethod
+    def test_viewer_groups_allocation_units_without_pool_name(cls):
+        return cls.get_viewer_normalized("/viewer/groups", {
+            'fields_required': 'AllocationUnits',
+        })
+
+    @classmethod
     def test_viewer_groups_with_invalid_database(cls):
         # Test that the endpoint doesn't crash when provided with an invalid database
         result = cls.call_viewer("/viewer/groups", {
             'database': '/invalid_database_name_that_does_not_exist',
         })
+        return result
+
+    @classmethod
+    def test_viewer_content_and_tabletcounters_missing_params(cls):
+        """Stable 400 for missing path / tablet selector (avoid browse / scheme timeouts)."""
+        result = {}
+        result['content_no_path'] = cls.get_viewer("/viewer/content", {
+            'database': cls.dedicated_db,
+        })
+        result['content_whitespace_path'] = cls.get_viewer("/viewer/content", {
+            'database': cls.dedicated_db,
+            'path': '   ',
+        })
+        result['tabletcounters_no_path_no_tablet'] = cls.get_viewer("/viewer/tabletcounters", {
+            'database': cls.dedicated_db,
+        })
+        assert result['content_no_path'].get('status_code') == 400, result['content_no_path']
+        assert "Parameter 'path' is required" in result['content_no_path'].get('text', ''), result['content_no_path']
+        assert result['content_whitespace_path'].get('status_code') == 400, result['content_whitespace_path']
+        assert "Parameter 'path' is required" in result['content_whitespace_path'].get('text', ''), result['content_whitespace_path']
+        assert result['tabletcounters_no_path_no_tablet'].get('status_code') == 400, result['tabletcounters_no_path_no_tablet']
+        assert (
+            "Parameter 'path' or 'tablet_id' is required" in result['tabletcounters_no_path_no_tablet'].get('text', '')
+        ), result['tabletcounters_no_path_no_tablet']
         return result
 
     @classmethod
@@ -757,15 +932,45 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_cluster(cls):
-        return cls.get_viewer_normalized("/viewer/cluster")
+        result = cls.get_viewer_cluster_with_calculated_storage_stats()
+        result = cls.normalize_result(result)
+        cls.delete_keys_recursively(result, cls.BSC_STORAGE_STATS_VALUE_FIELDS)
+        if 'StorageStats' in result:
+            stable_key_order = cls.BSC_STORAGE_STATS_STABLE_KEY_ORDER
+
+            def get_storage_stats_key(entry):
+                return (entry.get('ErasureSpecies'), entry.get('PDiskFilter'))
+
+            result['StorageStats'] = sorted(
+                (
+                    entry for entry in result['StorageStats']
+                    if get_storage_stats_key(entry) in stable_key_order
+                ),
+                key=lambda entry: stable_key_order[get_storage_stats_key(entry)],
+            )
+        return result
 
     @classmethod
     def test_viewer_tenantinfo(cls):
-        return cls.get_viewer_normalized("/viewer/tenantinfo")
-
-    @classmethod
-    def test_viewer_tenantinfo_db(cls):
-        return cls.get_viewer_db_normalized("/viewer/tenantinfo")
+        result = {}
+        tries = 15
+        all_ready = False
+        while tries > 0:
+            result = cls.get_viewer_db_normalized("/viewer/tenantinfo")
+            all_ready = True
+            for name in cls.databases_and_no_database:
+                tenant_info = result[name].get('TenantInfo', [{}])
+                if tenant_info and 'CoresUsed' not in tenant_info[0]:
+                    all_ready = False
+                    break
+            if all_ready:
+                break
+            tries -= 1
+            time.sleep(1)
+        assert all_ready, "CoresUsed was not populated in /viewer/tenantinfo response after %d retries" % 15
+        for name in cls.databases_and_no_database:
+            result[name]['TenantInfo'].sort(key=lambda x: x['Name'])
+        return result
 
     @classmethod
     def test_viewer_healthcheck(cls):
@@ -821,8 +1026,31 @@ class TestViewer(object):
             })]
 
     @classmethod
+    def test_viewer_acl_write_invalid(cls):
+        return cls.post_viewer("/viewer/acl", {
+            'database': cls.dedicated_db,
+            'path': cls.dedicated_db
+        }, headers={
+            'Cookie': 'ydb_session_id=XXX; csrf_token=' + cls.csrf_token,
+            'X-CSRF-Token': cls.csrf_token,
+        }, body={
+            'AddAccess': [{
+                'Subject': 'userX',
+                'AccessRights': ['Full']
+            }]
+        })
+
+    @classmethod
     def test_viewer_autocomplete(cls):
-        return cls.get_viewer_db("/viewer/autocomplete", {'prefix': ''})
+        result = {}
+        result['empty'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': ''})
+        result['root'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': '/Root'})
+        result['dedicated_db'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'dedicated_db'})
+        result['root_dedicated_db'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': '/Root/dedicated_db'})
+        result['tab'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'tab'})
+        result['table1'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'table1'})
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_check_access(cls):
@@ -831,11 +1059,15 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_query(cls):
-        return cls.get_viewer_db("/viewer/query", {'query': 'select 7*6', 'schema': 'multi'})
+        result = cls.get_viewer_db("/viewer/query", {'query': 'select 7*6', 'schema': 'multi'})
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_query_from_table(cls):
-        return cls.get_viewer_db_not_domain("/viewer/query", {'query': 'select * from table1', 'schema': 'multi'})
+        result = cls.get_viewer_db_not_domain("/viewer/query", {'query': 'select * from table1', 'schema': 'multi'})
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_query_from_table_different_schemas(cls):
@@ -846,21 +1078,35 @@ class TestViewer(object):
                 'query': 'select * from table1',
                 'schema': schema
                 })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
         return result
 
     @classmethod
     def test_viewer_query_issue_13757(cls):
-        return cls.get_viewer_db("/viewer/query", {
+        result = cls.get_viewer_db("/viewer/query", {
             'query': 'SELECT CAST(<|one:"8912", two:42|> AS Struct<two:Utf8, three:Date?>);',
             'schema': 'multi'
         })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_query_issue_13945(cls):
-        return cls.get_viewer_db("/viewer/query", {
+        result = cls.get_viewer_db("/viewer/query", {
             'query': 'SELECT AsList();',
             'schema': 'multi'
         })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
+
+    @classmethod
+    def test_viewer_query_issues_printing(cls):
+        result = cls.get_viewer_db("/viewer/query", {
+            'query': '$y = SELECT CAST(1 AS Uint32) + 1 AS Data; SELECT CAST(Data AS List<List<Int32>>) FROM $y',
+            'schema': 'multi'
+        })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_pqrb_tablet(cls):
@@ -879,8 +1125,8 @@ class TestViewer(object):
             'response_create_topic': response_create_topic,
             'response_tablet_info': response_tablet_info,
         }
-        return cls.replace_values_by_key(result, ['version',
-                                                  'ResponseTime',
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return cls.replace_values_by_key(result, ['ResponseTime',
                                                   'ChangeTime',
                                                   'HiveId',
                                                   'NodeId',
@@ -1055,6 +1301,7 @@ class TestViewer(object):
             res = cls.replace_values_by_key(resp, ['CreateTimestamp',
                                                    'WriteTimestamp',
                                                    'ProducerId',
+                                                   'Ip',
                                                    ])
             res = cls.replace_types_by_key(res, ['TimestampDiff'])
             logging.info(res)
@@ -1119,6 +1366,7 @@ class TestViewer(object):
 
         final_result = {"alter" : alter_response, "insert" : insert_response, "update" : update_response, "data" : data_response}
         logging.info("Results: {}".format(final_result))
+        cls.delete_keys_recursively(final_result, {'Version', 'version'})
         return final_result
 
     @classmethod
@@ -1185,6 +1433,8 @@ class TestViewer(object):
 
             time.sleep(1)
 
+        describe_result = cls.normalize_result_transfer_describe(describe_result)
+
         return {
             'topic_result': topic_result,
             'table_result': table_result,
@@ -1202,6 +1452,7 @@ class TestViewer(object):
                                                     'ProcessDuration',
                                                     'id',
                                                     ])
+        cls.delete_keys_recursively(result, {'Version', 'version'})
         return result
 
     @classmethod
@@ -1273,7 +1524,8 @@ class TestViewer(object):
         # Make raw HTTP request to get multipart response
         port = cls.cluster.nodes[1].mon_port
         headers = {'Accept': 'multipart/x-mixed-replace'}
-        response = requests.get("http://localhost:%s%s?%s" % (port, path, urlencode(params)), headers=headers)
+        response = cls._make_request(requests.get, "http://localhost:%s%s?%s" % (port, path, urlencode(params)),
+                                     headers={**cls.default_headers, **headers})
 
         if response.status_code != 200:
             return {"status_code": response.status_code, "text": response.text}
@@ -1414,10 +1666,12 @@ class TestViewer(object):
             'action': 'execute-query',
             'schema': 'multipart',
         }
-        response = cls.call_viewer_api_post("/viewer/query", body, headers={
+        headers = dict(cls.default_headers)
+        headers.update({
             'Content-Type': 'application/json',
             'Accept': 'text/event-stream',
         })
+        response = cls.call_viewer_api_post("/viewer/query", body, headers=headers)
         result = {
             'status_code': response.status_code,
             'content_type': response.headers.get('Content-Type')
@@ -1486,161 +1740,244 @@ class TestViewer(object):
         return result
 
     @classmethod
-    def test_security(cls):
-        result = {}
-        result['database_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
+    def test_viewer_query_forget_immediate(cls):
+        """Test execute-query-and-forget immediate return when query finishes quickly"""
+        # Run query that executes and completes before forget_after (10 seconds)
+        result = cls.call_viewer("/viewer/query", {
             'database': cls.dedicated_db,
-            'fields_required': 'NodeId',
+            'action': 'execute-query-and-forget',
+            'query': 'SELECT 7*6;',
+            'schema': 'multi',
+            'forget_after': 10000
+        })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
+
+    @classmethod
+    def test_viewer_query_forget_delayed(cls):
+        """Test execute-query-and-forget when query takes longer than forget_after"""
+        # Run query with very small forget_after (1ms) so it will be forgotten and run in background
+        result = cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'action': 'execute-query-and-forget',
+            'query': 'SELECT * FROM table1 LIMIT 3;',
+            'schema': 'multi',
+            'forget_after': 1
+        })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
+
+    @classmethod
+    def test_viewer_external_http_access_controls(cls):
+        result = {}
+
+        result['viewer_simple_counter_root'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.root_session_id,
         })
-        result['database_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'database': cls.dedicated_db,
-            'fields_required': 'NodeId',
+        result['viewer_simple_counter_monitoring'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
         })
-        result['database_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'database': cls.dedicated_db,
-            'fields_required': 'NodeId',
+        result['viewer_simple_counter_viewer'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
         })
+        result['viewer_simple_counter_database'] = cls.get_viewer("/viewer/simple_counter", params={
+            'max_counter': 1,
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        result['administration_bscontrollerinfo_root'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
+        result['administration_bscontrollerinfo_monitoring'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        })
+        result['administration_bscontrollerinfo_viewer'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        })
+        result['administration_bscontrollerinfo_database'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        result['viewer_config_root'] = cls.normalize_result_viewer_config(cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        }))
+        result['viewer_config_monitoring'] = cls.normalize_result_viewer_config(cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        }))
+        result['viewer_config_viewer'] = cls.normalize_result_viewer_config(cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        }))
+        result['viewer_config_database'] = cls.get_viewer("/viewer/config", headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        })
+
+        result['database_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
+        result['database_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
+        result['database_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
         result['database_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'database': cls.dedicated_db,
             'fields_required': 'NodeId',
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         })
-
-        result['cluster_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
-        result['cluster_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
-        result['cluster_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
-            'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
-        result['cluster_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
+        result['database_nodes_missing_database_database'] = cls.get_viewer("/viewer/nodes", params={
             'fields_required': 'NodeId',
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         })
+
+        return result
+
+    @classmethod
+    def test_security(cls):
+        result = {}
+        result['database_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
+        result['database_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
+        result['database_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
+        result['database_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'database': cls.dedicated_db,
+            'fields_required': 'NodeId',
+        }, headers=cls.make_cookie_headers(cls.database_session_id))
+
+        result['cluster_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'fields_required': 'NodeId',
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
+        result['cluster_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'fields_required': 'NodeId',
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
+        result['cluster_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'fields_required': 'NodeId',
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
+        result['cluster_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
+            'fields_required': 'NodeId',
+        }, headers=cls.make_cookie_headers(cls.database_session_id))
 
         result['storage_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
             'database': cls.dedicated_db,
             'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
         result['storage_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
             'database': cls.dedicated_db,
             'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         result['storage_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
             'database': cls.dedicated_db,
             'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
         result['storage_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
             'database': cls.dedicated_db,
             'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.database_session_id))
 
         result['down_node_root'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
             'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
         result['down_node_monitoring'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
             'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         result['down_node_viewer'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
             'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
         result['down_node_database'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
             'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.database_session_id))
+
+        # /pdisk/restart had undefined behavior when pdisk_id is empty or had more than two '-' parts
+        result['restart_pdisk_empty_pdisk_id_root'] = cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '',
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
+        result['restart_pdisk_three_part_pdisk_id_root'] = cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-2-3',
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
+        result['restart_pdisk_missing_pdisk_id_root'] = cls.post_viewer("/pdisk/restart", body={}, headers=cls.make_cookie_headers(cls.root_session_id))
+
+        result['status_pdisk_empty_pdisk_id_root'] = cls.post_viewer("/pdisk/status", body={
+            'pdisk_id': '',
+            'status': 'ACTIVE',
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
+        result['status_pdisk_three_part_pdisk_id_root'] = cls.post_viewer("/pdisk/status", body={
+            'pdisk_id': '1-2-3',
+            'status': 'ACTIVE',
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
 
         result['restart_pdisk_root'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.root_session_id)), ['debugMessage'])
         result['restart_pdisk_monitoring'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id)), ['debugMessage'])
         result['restart_pdisk_viewer'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id)), ['debugMessage'])
         result['restart_pdisk_database'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.database_session_id)), ['debugMessage'])
 
         result['restart_pdisk_database_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.database_session_id)), ['debugMessage'])
         result['restart_pdisk_viewer_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id)), ['debugMessage'])
         result['restart_pdisk_monitoring_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id)), ['debugMessage'])
         result['restart_pdisk_root_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-999999',
+            'force': '1',
+        }, headers=cls.make_cookie_headers(cls.root_session_id)), ['debugMessage'])
+
+        result['status_pdisk_monitoring_force'] = cls.post_viewer("/pdisk/status", body={
             'pdisk_id': '1-1',
             'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
+        result['evict_vdisk_monitoring_force'] = cls.post_viewer("/vdisk/evict", body={
+            'force': '1',
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         return result
 
     @classmethod
@@ -1663,3 +2000,165 @@ class TestViewer(object):
         result = cls.get_viewer_normalized("/viewer/peers")
         cls.delete_keys_recursively(result, {'ScopeId', 'PoolStats'})
         return result
+
+    @classmethod
+    def test_viewer_domain_peers(cls):
+        result = cls.get_viewer_normalized("/viewer/nodes", {
+            'tablets': False,
+            'database': cls.domain_name,
+            'fields_required': 'ConnectStatus',
+            'filter_peer_role': 'database',
+        })
+        return result
+
+    @classmethod
+    def test_viewer_nodes_deleted_tablets(cls):
+        def tablet_summary(tablets):
+            return sorted(
+                [{
+                    'Overall': tablet.get('Overall'),
+                    'State': tablet.get('State'),
+                    'Type': tablet.get('Type'),
+                } for tablet in tablets],
+                key=lambda tablet: (tablet['Type'], tablet['State'], tablet['Overall']))
+
+        def node_tablets():
+            response = cls.get_viewer_normalized("/viewer/nodes", {
+                'database': cls.dedicated_db,
+                'tablets': 'true',
+            })
+            tablets = []
+            for node in response.get('Nodes', []):
+                for tablet in node.get('Tablets', []):
+                    tablets.append({
+                        'Count': tablet.get('Count', 1),
+                        'State': tablet.get('State'),
+                        'Type': tablet.get('Type'),
+                    })
+            return sorted(tablets, key=lambda tablet: (tablet['Type'], tablet['State'], tablet['Count']))
+
+        def count_tablets(tablets, tablet_type):
+            return sum(int(tablet.get('Count', 1)) for tablet in tablets if tablet.get('Type') == tablet_type)
+
+        def non_green_datashards(tablets):
+            return [
+                tablet for tablet in tablets
+                if tablet.get('Type') == 'DataShard' and tablet.get('State') != 'Green'
+            ]
+
+        table_name = 'table_deleted_tablet_state'
+        table_path = cls.dedicated_db + '/' + table_name
+
+        cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'query': 'drop table if exists ' + table_name,
+            'schema': 'multi'
+        })
+
+        baseline_node_tablets = node_tablets()
+        baseline_datashards = count_tablets(baseline_node_tablets, 'DataShard')
+
+        create_result = cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'query': 'create table ' + table_name + '(id int64, primary key(id))',
+            'schema': 'multi'
+        })
+        assert create_result.get('status') == 'SUCCESS', create_result
+
+        created_tablets = []
+        created_tablet_info = {}
+        for _ in range(30):
+            created_tablet_info = cls.call_viewer("/viewer/tabletinfo", {
+                'database': cls.dedicated_db,
+                'path': table_path,
+                'enums': 'true',
+            })
+            created_tablets = [
+                tablet for tablet in created_tablet_info.get('TabletStateInfo', [])
+                if tablet.get('Type') == 'DataShard'
+            ]
+            if created_tablets and all(
+                tablet.get('State') == 'Active' and tablet.get('Overall') == 'Green'
+                for tablet in created_tablets
+            ):
+                break
+            time.sleep(1)
+        assert created_tablets, created_tablet_info
+        created_tablet_ids = {tablet['TabletId'] for tablet in created_tablets}
+
+        drop_result = cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'query': 'drop table ' + table_name,
+            'schema': 'multi'
+        })
+        assert drop_result.get('status') == 'SUCCESS', drop_result
+
+        deleted_tablets = []
+        deleted_tablet_info = {}
+        after_drop_node_tablets = []
+        for _ in range(30):
+            deleted_tablet_info = cls.call_viewer("/viewer/tabletinfo", {
+                'database': cls.dedicated_db,
+                'enums': 'true',
+            })
+            deleted_tablets = [
+                tablet for tablet in deleted_tablet_info.get('TabletStateInfo', [])
+                if tablet.get('TabletId') in created_tablet_ids and tablet.get('State') == 'Deleted'
+            ]
+            after_drop_node_tablets = node_tablets()
+            if deleted_tablets and count_tablets(after_drop_node_tablets, 'DataShard') == baseline_datashards:
+                break
+            time.sleep(1)
+
+        assert deleted_tablets, deleted_tablet_info
+        assert all(tablet.get('Overall') == 'Grey' for tablet in deleted_tablets), deleted_tablets
+        assert count_tablets(after_drop_node_tablets, 'DataShard') == baseline_datashards, after_drop_node_tablets
+        assert not non_green_datashards(after_drop_node_tablets), after_drop_node_tablets
+
+        return {
+            'created_tablets': tablet_summary(created_tablets),
+            'deleted_tablets': tablet_summary(deleted_tablets),
+            'nodes': {
+                'datashards_delta': count_tablets(after_drop_node_tablets, 'DataShard') - baseline_datashards,
+                'non_green_datashards': non_green_datashards(after_drop_node_tablets),
+            },
+        }
+
+    @classmethod
+    def test_viewer_describe_column_table_local_index(cls):
+        cls.call_viewer("/viewer/query", {
+            'database': cls.dedicated_db,
+            'query': '''CREATE TABLE TestColumnTable (
+                `timestamp` Timestamp NOT NULL,
+                `data` Utf8,
+                PRIMARY KEY (`timestamp`),
+                INDEX bloom_data LOCAL USING bloom_filter ON (`data`) WITH (false_positive_probability = 0.05)
+            ) WITH (STORE = COLUMN)''',
+            'schema': 'multi'
+        })
+
+        describe_table = cls.call_viewer("/viewer/describe", {
+            'database': cls.dedicated_db,
+            'path': cls.dedicated_db + '/TestColumnTable',
+            'subs': '1',
+        })
+
+        table_children = [
+            {'Name': c['Name'], 'PathType': c['PathType']}
+            for c in describe_table['PathDescription']['Children']
+        ]
+
+        describe_root = cls.call_viewer("/viewer/describe", {
+            'path': cls.domain_name,
+            'subs': '1',
+        })
+
+        root_child_names = sorted([
+            c['Name'] for c in describe_root['PathDescription']['Children']
+        ])
+
+        return {
+            'table_children_exist': describe_table['PathDescription']['Self']['ChildrenExist'],
+            'table_children': table_children,
+            'root_child_names': root_child_names,
+        }

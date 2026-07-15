@@ -8,6 +8,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/http/simple/http_client.h>
 
+#include <mutex>
+
 using namespace yandex::cloud::iam::v1;
 
 namespace NYdb::inline Dev {
@@ -24,10 +26,34 @@ public:
     }
 
     std::string GetAuthInfo() const override {
-        if (TInstant::Now() >= NextTicketUpdate_) {
-            GetTicket();
+        std::string ticket;
+        TInstant nextTicketUpdate;
+        auto now = TInstant::Now();
+        std::optional<TString> lastErrorMessage;
+        {
+            std::lock_guard lock(Lock_);
+            if (LastErrorMessage_.has_value() && now > ExpiresAt_) {
+                Ticket_.clear();
+            }
+            ticket = Ticket_;
+            nextTicketUpdate = NextTicketUpdate_;
+            lastErrorMessage = LastErrorMessage_;
         }
-        return Ticket_;
+        if (now >= nextTicketUpdate) {
+            GetTicket();
+            {
+                std::lock_guard lock(Lock_);
+                if (LastErrorMessage_.has_value() && now > ExpiresAt_) {
+                    Ticket_.clear();
+                }
+                ticket = Ticket_;
+                lastErrorMessage = LastErrorMessage_;
+            }
+        }
+        if (ticket.empty() && lastErrorMessage.has_value()) {
+            throw yexception() << *lastErrorMessage;
+        }
+        return ticket;
     }
 
     bool IsValid() const override {
@@ -37,8 +63,11 @@ public:
 private:
     TSimpleHttpClient HttpClient_;
     std::string Request_;
+    mutable std::mutex Lock_;
     mutable std::string Ticket_;
     mutable TInstant NextTicketUpdate_;
+    mutable TInstant ExpiresAt_ = TInstant::Zero();
+    mutable std::optional<TString> LastErrorMessage_;
     TDuration RefreshPeriod_;
 
     void GetTicket() const {
@@ -52,23 +81,52 @@ private:
 
             auto respMap = resp.GetMap();
 
+            std::string ticket;
             if (auto it = respMap.find("access_token"); it == respMap.end())
                 ythrow yexception() << "Result doesn't contain access_token";
-            else if (std::string ticket = it->second.GetStringSafe(); ticket.empty())
+            else if (ticket = it->second.GetStringSafe(); ticket.empty())
                 ythrow yexception() << "Got empty ticket";
-            else
+
+            const auto now = TInstant::Now();
+            TInstant nextUpdate;
+            TDuration expiresIn;
+            TInstant expiresAt = TInstant::Max();
+            if (auto it = respMap.find("expires_in"); it != respMap.end()) {
+                auto seconds = it->second.GetUInteger();
+                if (seconds > 0) {
+                    expiresIn = TDuration::Seconds(seconds);
+                    expiresAt = now + expiresIn;
+                }
+            } else if (auto it = respMap.find("expiry"); it != respMap.end()) {
+                try {
+                    TInstant expiry;
+                    if (TInstant::TryParseIso8601(it->second.GetStringSafe(), expiry) && expiry > now) {
+                        expiresIn = expiry - now;
+                        expiresAt = expiry;
+                    }
+                } catch (...) {
+                    expiresAt = now;
+                }
+            }
+            if (expiresIn > TDuration::Zero()) {
+                const auto halfLife = expiresIn / 2;
+                const auto interval = std::max(std::min(halfLife, RefreshPeriod_), TDuration::MilliSeconds(100));
+                nextUpdate = now + interval;
+            } else {
+                nextUpdate = now + std::min(RefreshPeriod_, TDuration::Minutes(30));
+            }
+
+            {
+                std::lock_guard lock(Lock_);
                 Ticket_ = std::move(ticket);
-
-            if (auto it = respMap.find("expires_in"); it == respMap.end())
-                ythrow yexception() << "Result doesn't contain expires_in";
-            else {
-                const TDuration expiresIn = TDuration::Seconds(it->second.GetUInteger()) / 2;
-
-                const auto interval = std::max(std::min(expiresIn, RefreshPeriod_), TDuration::MilliSeconds(100));
-
-                NextTicketUpdate_ = TInstant::Now() + interval;
+                NextTicketUpdate_ = nextUpdate;
+                ExpiresAt_ = expiresAt;
+                LastErrorMessage_.reset();
             }
         } catch (...) {
+            std::lock_guard lock(Lock_);
+            NextTicketUpdate_ = TInstant::Now() + std::min(RefreshPeriod_, TDuration::Seconds(10));
+            LastErrorMessage_ = CurrentExceptionMessage();
         }
     }
 };
@@ -79,6 +137,12 @@ public:
 
     TCredentialsProviderPtr CreateProvider() const final {
         return std::make_shared<TIAMCredentialsProvider>(Params_);
+    }
+
+    std::string GetClientIdentity() const final {
+        return TStringBuilder() <<
+                "TIamCredentialsProviderFactory" << '\t' <<
+                Params_.Host << ':' << Params_.Port << '@' << Params_.RefreshPeriod;
     }
 
 private:

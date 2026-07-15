@@ -20,8 +20,8 @@ class ICoreFacility;
 class ICredentialsProviderFactory {
 public:
     virtual ~ICredentialsProviderFactory() = default;
+    // deprecated, use CreateProvider(std::weak_ptr<ICoreFacility> facility) instead
     virtual TCredentialsProviderPtr CreateProvider() const = 0;
-    // !!!Experimental!!!
     virtual TCredentialsProviderPtr CreateProvider([[maybe_unused]] std::weak_ptr<ICoreFacility> facility) const {
         return CreateProvider();
     }

@@ -5,10 +5,10 @@
 
 namespace NYql::NJsonPath {
 
-const TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_t maxParseErrors);
+TAstNodePtr ParseJsonPathAst(TStringBuf path, TIssues& issues, size_t maxParseErrors);
 
-const TJsonPathPtr PackBinaryJsonPath(const TAstNodePtr ast, TIssues& issues);
+const TJsonPathPtr PackBinaryJsonPath(const TAstNodePtr& ast, TIssues& issues);
 
-const TJsonPathPtr ParseJsonPath(const TStringBuf path, TIssues& issues, size_t maxParseErrors);
+TJsonPathPtr ParseJsonPath(TStringBuf path, TIssues& issues, size_t maxParseErrors);
 
 } // namespace NYql::NJsonPath

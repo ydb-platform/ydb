@@ -70,15 +70,18 @@ def _get_grpc_host():
     return "[::]"
 
 
-def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, log_configs):
+def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, log_configs, default_log_level):
+    if default_log_level is None:
+        ydb_default_log_level = int(LogLevels.from_string(os.getenv("YDB_DEFAULT_LOG_LEVEL", "NOTICE")))
+    else:
+        ydb_default_log_level = int(default_log_level)
     data = read_binary(__name__, "resources/default_yaml.yml")
     if isinstance(data, bytes):
         data = data.decode('utf-8')
     data = data.format(
         ydb_result_rows_limit=os.getenv("YDB_KQP_RESULT_ROWS_LIMIT", 1000),
-        ydb_yql_syntax_version=os.getenv("YDB_YQL_SYNTAX_VERSION", "1"),
         ydb_defaut_tablet_node_ids=str(default_tablet_node_ids),
-        ydb_default_log_level=int(LogLevels.from_string(os.getenv("YDB_DEFAULT_LOG_LEVEL", "NOTICE"))),
+        ydb_default_log_level=ydb_default_log_level,
         ydb_domain_name=ydb_domain_name,
         ydb_static_erasure=static_erasure,
         ydb_grpc_host=_get_grpc_host(),
@@ -121,6 +124,7 @@ class KikimrConfigGenerator(object):
             binary_paths=None,
             nodes=None,
             additional_log_configs=None,
+            default_log_level=None,
             port_allocator=None,
             udfs_path=None,
             output_path=None,
@@ -194,10 +198,17 @@ class KikimrConfigGenerator(object):
             cms_config=None,
             explicit_statestorage_config=None,
             system_tablets=None,
+            system_tablet_backup_config=None,
             protected_mode=False,  # Authentication
             enable_pool_encryption=False,
             tiny_mode=False,
             module=None,
+            http_proxy_config=None,
+            enable_nbs=False,
+            nbs_database_name="/Root/NBS",
+            enable_topic_cloud_events=False,
+            shutdown_config=None,
+            replication_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -245,6 +256,7 @@ class KikimrConfigGenerator(object):
         self.monitoring_tls_cert_path = None
         self.monitoring_tls_key_path = None
         self.monitoring_tls_ca_path = None
+        self.enable_topic_cloud_events = enable_topic_cloud_events
 
         self.__binary_paths = binary_paths
         rings_count = 3 if erasure == Erasure.MIRROR_3_DC else 1
@@ -270,11 +282,6 @@ class KikimrConfigGenerator(object):
 
         self.__additional_log_configs = {} if additional_log_configs is None else additional_log_configs
         self.__additional_log_configs.update(_get_additional_log_configs())
-        if pg_compatible_expirement:
-            self.__additional_log_configs.update({
-                'PGWIRE': LogLevels.from_string('DEBUG'),
-                'LOCAL_PGWIRE': LogLevels.from_string('DEBUG'),
-            })
 
         self.dynamic_pdisk_size = dynamic_pdisk_size
         self.dynamic_storage_pools = dynamic_storage_pools
@@ -300,7 +307,13 @@ class KikimrConfigGenerator(object):
 
         self.__bs_cache_file_path = bs_cache_file_path
 
-        self.yaml_config = _load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
+        self.yaml_config = _load_default_yaml(
+            self.__node_ids,
+            self.domain_name,
+            self.static_erasure,
+            self.__additional_log_configs,
+            default_log_level=default_log_level,
+        )
 
         security_config_root = self.yaml_config["domains_config"]
         if self.use_self_management:
@@ -329,10 +342,6 @@ class KikimrConfigGenerator(object):
         # nodes. These compute nodes are not properly tested and maintained on darwin platform.
         if sys.platform == "darwin":
             self.yaml_config["table_service_config"]["resource_manager"]["kqp_pattern_cache_compiled_capacity_bytes"] = 0
-
-        if os.getenv('PGWIRE_LISTENING_PORT', ''):
-            self.yaml_config["local_pg_wire_config"] = {}
-            self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
 
         # dirty hack for internal ydbd flavour
         if "cert" in self.get_binary_path(0):
@@ -455,12 +464,17 @@ class KikimrConfigGenerator(object):
         if query_service_config:
             self.yaml_config["query_service_config"] = query_service_config
 
+        if replication_config:
+            self.yaml_config["replication_config"] = replication_config
+
         if scan_grouped_memory_limiter_config:
             self.yaml_config["scan_grouped_memory_limiter_config"] = scan_grouped_memory_limiter_config
         if comp_grouped_memory_limiter_config:
             self.yaml_config["comp_grouped_memory_limiter_config"] = comp_grouped_memory_limiter_config
         if deduplication_grouped_memory_limiter_config:
             self.yaml_config["deduplication_grouped_memory_limiter_config"] = deduplication_grouped_memory_limiter_config
+        if http_proxy_config:
+            self.yaml_config["http_proxy_config"] = http_proxy_config
 
         self.__build()
         if self.grpc_ssl_enable:
@@ -546,13 +560,7 @@ class KikimrConfigGenerator(object):
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
-            self.yaml_config['feature_flags']['enable_pg_syntax'] = True
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
-            if "local_pg_wire_config" not in self.yaml_config:
-                self.yaml_config["local_pg_wire_config"] = {}
-
-            ydb_pgwire_port = self.port_allocator.get_node_port_allocator(node_id).pgwire_port
-            self.yaml_config['local_pg_wire_config']['listening_port'] = ydb_pgwire_port
 
             # https://github.com/ydb-platform/ydb/issues/5152
             # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True
@@ -594,6 +602,26 @@ class KikimrConfigGenerator(object):
         if bridge_config is not None:
             self.yaml_config["bridge_config"] = bridge_config
 
+        if enable_nbs:
+            # vchunk_size must match pdisk chunk size
+            # in-mem pdisks have 32 mb chunks, default is 128 mb
+            vchunk_size = 32 * (1 << 20) if self.__use_in_memory_pdisks else 128 * (1 << 20)
+            self.yaml_config["nbs_config"] = {
+                "enabled": True,
+                "nbs_storage_config": {
+                    "scheme_shard_dir": nbs_database_name,
+                    "folder_id": "testFolder",
+                    "ssd_system_channel_pool_kind": "hdd",
+                    "ssd_log_channel_pool_kind": "hdd",
+                    "ssd_index_channel_pool_kind": "hdd",
+                    "pipe_client_retry_count": 3,
+                    "pipe_client_min_retry_time": 1,
+                    "pipe_client_max_retry_time": 10,
+                    "sync_requests_batch_size": 3,
+                    "vchunk_size": vchunk_size,
+                }
+            }
+
         self.full_config = dict()
         if self.explicit_hosts_and_host_configs:
             self._add_host_config_and_hosts()
@@ -607,8 +635,16 @@ class KikimrConfigGenerator(object):
                 self.yaml_config["grpc_config"]["services"].append("config")
 
             self.yaml_config["default_disk_type"] = "ROT"
-            self.yaml_config["fail_domain_type"] = "rack"
+
+            if self.static_erasure == Erasure.MIRROR_3_DC and len(self.__node_ids) == 3:
+                self.yaml_config["fail_domain_type"] = "disk"
+            else:
+                self.yaml_config["fail_domain_type"] = "rack"
+
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
+
+            if self.domain_name != "Root":
+                self.yaml_config["domain_name"] = self.domain_name
 
             for name in ['blob_storage_config', 'domains_config', 'system_tablets',
                          'channel_profile_config']:
@@ -635,8 +671,21 @@ class KikimrConfigGenerator(object):
         if self.system_tablets:
             self.yaml_config["system_tablets"] = self.system_tablets
 
+        if system_tablet_backup_config:
+            self.yaml_config["system_tablet_backup_config"] = system_tablet_backup_config
+
+        if shutdown_config:
+            self.yaml_config["shutdown_config"] = shutdown_config
+
         if metadata_section:
             self.full_config["metadata"] = metadata_section
+            self.full_config["config"] = self.yaml_config
+        elif self.use_self_management:
+            self.full_config["metadata"] = {
+                "kind": "MainConfig",
+                "version": 0,
+                "cluster": "",
+            }
             self.full_config["config"] = self.yaml_config
         else:
             self.full_config = self.yaml_config
@@ -730,6 +779,16 @@ class KikimrConfigGenerator(object):
                     audit_file.write('')
         self.yaml_config['audit_config'] = cfg
 
+        # Topic cloud events: config has enabled + uri. Use file:// for tests (TFileEventsWriter).
+        # Write to a dedicated file in working_dir so tests can read it (topic cloud events
+        # go to ua_uri, not to audit log).
+        if 'pqconfig' in self.yaml_config and self.enable_topic_cloud_events:
+            topic_cloud_events_path = os.path.join(self.__working_dir, 'topic_cloud_events.json')
+            self.yaml_config['pqconfig']['cloud_events_config'] = {
+                'enabled': True,
+                'file_path': topic_cloud_events_path,
+            }
+
     @property
     def metering_file_path(self):
         return self.yaml_config.get('metering_config', {}).get('metering_file_path')
@@ -739,8 +798,30 @@ class KikimrConfigGenerator(object):
         return self.yaml_config.get('audit_config', {}).get('file_backend', {}).get('file_path')
 
     @property
+    def topic_cloud_events_file_path(self):
+        """Path to topic cloud events file (when enable_topic_cloud_events=True)."""
+        if not self.enable_topic_cloud_events:
+            return None
+        cfg = self.yaml_config.get('pqconfig', {}).get('cloud_events_config', {})
+        uri = cfg.get('ua_uri', '')
+        if uri.startswith('file://'):
+            path = uri[7:]
+            if path.startswith('//'):
+                path = path[1:]
+            return path
+        return os.path.join(self.__working_dir, 'topic_cloud_events.json')
+
+    @property
     def sqs_service_enabled(self):
         return self.yaml_config['sqs_config']['enable_sqs']
+
+    @property
+    def http_proxy_enabled(self):
+        return self.yaml_config.get('http_proxy_config', {}).get('enabled')
+
+    @property
+    def kafka_proxy_enabled(self):
+        return self.yaml_config.get('kafka_proxy_config', {}).get('enable_kafka_proxy', False)
 
     @property
     def working_dir(self):

@@ -65,6 +65,25 @@ message TTaskSensorLabel {
     string Value = 2;
 }
 
+message TOffsetPredicateItem {       // (partition = PartitionId AND offset >= Begin AND offset < End)
+    optional uint64 PartitionId = 1; // all partitions if not set
+    optional uint64 Begin = 2;       // inclusive   
+    optional uint64 End = 3;         // exclusive
+}
+message TOffsetPredicate {
+    repeated TOffsetPredicateItem Item = 1;
+}
+
+message TWriteTimePredicateItem {    // (partition = PartitionId AND write_time >= Begin AND write_time < End)
+    optional uint64 PartitionId = 1; // all partitions if not set
+    optional uint64 Begin = 2;       // inclusive  
+    optional uint64 End = 3;         // exclusive
+}
+
+message TWriteTimePredicate {  
+    repeated TWriteTimePredicateItem Item = 1;
+}
+
 message TDqPqTopicSource {
     string TopicPath = 1;
     string ConsumerName = 2;
@@ -95,6 +114,11 @@ message TDqPqTopicSource {
     bool SkipJsonErrors = 27;
     google.protobuf.Duration MaxPartitionReadSkew = 28;
     uint64 ReadSessionBufferBytes = 29;
+    google.protobuf.Duration PartitionsBalancingIdleTimeout = 30;
+    repeated string UserSchemaColumns = 31;
+    bool StopAtCurrentEndOffsets = 32;
+    TOffsetPredicate OffsetPredicate = 33;
+    TWriteTimePredicate WriteTimePredicate = 34;
 }
 
 message TDqPqTopicSink {
@@ -106,4 +130,35 @@ message TDqPqTopicSink {
     bool AddBearerToToken = 6;
     EClusterType ClusterType = 7;
     bool UseActorSystemThreadsInTopicClient = 8;
+    bool EnableDeduplication = 9;
+}
+
+message TEvDqPqUpdateCounterValue {
+    // Settings applied only on first aggregated value registration
+    message TSettings {
+        // If no over rules applied, report aggregate with this period
+        optional google.protobuf.Duration ReportPeriod = 1;
+
+        // If scalar aggregate changed on this value, it will be immediately reported
+        optional int64 ScalarAggDeltaThreshold = 2;
+    }
+
+    // Each CounterId creates own aggregated value (all events for one CounterId should have same settings and same Action case)
+    optional string CounterId = 1;
+    optional uint64 SeqNo = 5;
+    optional TSettings Settings = 2;
+
+    oneof Action {
+        int64 AggMin = 3;
+        int64 AggSum = 4;
+    }
+}
+
+message TEvDqPqOnAggregatedValueUpdated {
+    optional string CounterId = 1;
+    optional uint64 SeqNo = 3;
+
+    oneof Update {
+        int64 Scalar = 2;
+    }
 }

@@ -15,6 +15,8 @@
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <util/system/unaligned_mem.h>
 
+#include <ydb/library/wilson_ids/wilson.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
@@ -62,6 +64,8 @@ private:
     TVector<TString> CommonPrefixesRows;
     TVector<TSerializedCellVec> ContentsRows;
 
+    NWilson::TSpan Span;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
@@ -78,6 +82,7 @@ public:
         , WaitingResolveReply(false)
         , Finished(false)
         , CurrentShardIdx(0)
+        , Span(TWilsonGrpc::RequestActor, GrpcRequest->GetWilsonTraceId(), "ObjectStorageListingRpc")
     {
     }
 
@@ -142,7 +147,7 @@ private:
         }
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
         request->ResultSet.emplace_back(entry);
-        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
+        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, 0, Span.GetTraceId());
 
         TimeoutTimerActorId = CreateLongTimer(ctx, Timeout,
             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
@@ -168,6 +173,10 @@ private:
         GrpcRequest->Reply(resp, grpcStatus);
 
         Finished = true;
+
+        if (Span) {
+            Span.EndError(message);
+        }
 
         // We cannot Die() while scheme cache request is in flight because that request has pointer to
         // KeyRange member so we must not destroy it before we get the response
@@ -448,7 +457,7 @@ private:
         request->ResultSet.emplace_back(std::move(KeyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
-        ctx.Send(SchemeCache, resolveReq.Release());
+        ctx.Send(SchemeCache, resolveReq.Release(), 0, 0, Span.GetTraceId());
 
         TBase::Become(&TThis::StateWaitResolveShards);
         WaitingResolveReply = true;
@@ -580,7 +589,7 @@ private:
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Sending request to shards " << shardId);
 
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.Release(), shardId, true), IEventHandle::FlagTrackDelivery);
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.Release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
 
         TBase::Become(&TThis::StateWaitResults);
     }
@@ -828,6 +837,11 @@ private:
         }
 
         Finished = true;
+
+        if (Span) {
+            Span.EndOk();
+        }
+
         Die(ctx);
     }
 };

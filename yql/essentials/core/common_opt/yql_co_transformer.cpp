@@ -42,8 +42,8 @@ private:
     bool ScanErrors(const TExprNode& node, TExprContext& ctx);
 
 private:
-    TProcessedNodesSet SimpleProcessedNodes_[TCoCallableRules::SIMPLE_STEPS];
-    TProcessedNodesSet FlowProcessedNodes_[TCoCallableRules::FLOW_STEPS];
+    std::array<TProcessedNodesSet, TCoCallableRules::SIMPLE_STEPS> SimpleProcessedNodes_;
+    std::array<TProcessedNodesSet, TCoCallableRules::FLOW_STEPS> FlowProcessedNodes_;
     TProcessedNodesSet FinalProcessedNodes_;
     TProcessedNodesSet ErrorProcessedNodes_;
     THashSet<TIssue> AddedErrors_;
@@ -56,11 +56,11 @@ private:
 }
 
 TAutoPtr<IGraphTransformer> CreateCommonOptTransformer(bool forPeephole, TTypeAnnotationContext* typeCtx) {
-    return new TCommonOptTransformer(typeCtx, false, forPeephole);
+    return new TCommonOptTransformer(typeCtx, /*final=*/false, forPeephole);
 }
 
 TAutoPtr<IGraphTransformer> CreateCommonOptFinalTransformer(TTypeAnnotationContext* typeCtx) {
-    return new TCommonOptTransformer(typeCtx, true, false);
+    return new TCommonOptTransformer(typeCtx, /*final=*/true, /*forPeephole=*/false);
 }
 
 IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -72,18 +72,18 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr in
     }
 
     if (Final_) {
-        return DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().FinalCallables, FinalProcessedNodes_, true);
+        return DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().FinalCallables, FinalProcessedNodes_, /*withParents=*/true);
     }
 
     for (ui32 i = 0; i < TCoCallableRules::SIMPLE_STEPS; ++i) {
-        status = DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().SimpleCallables[i], SimpleProcessedNodes_[i], true);
+        status = DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().SimpleCallables[i], SimpleProcessedNodes_[i], /*withParents=*/true);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
         }
     }
 
     for (ui32 i = 0; i < TCoCallableRules::FLOW_STEPS; ++i) {
-        status = DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().FlowCallables[i], FlowProcessedNodes_[i], true);
+        status = DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().FlowCallables[i], FlowProcessedNodes_[i], /*withParents=*/true);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -254,6 +254,7 @@ TCoCallableRules::TCoCallableRules() {
     RegisterCoSimpleCallables3(SimpleCallables[SIMPLE_STEP_3]);
     RegisterCoFlowCallables1(FlowCallables[FLOW_STEP_1]);
     RegisterCoFlowCallables2(FlowCallables[FLOW_STEP_2]);
+    RegisterCoFlowCallables3(FlowCallables[FLOW_STEP_3]);
     RegisterCoFinalizers(Finalizers);
     RegisterCoFinalCallables(FinalCallables);
 }

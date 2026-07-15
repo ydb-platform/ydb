@@ -18,38 +18,46 @@
 
 #include "Dictionary.hh"
 
+#include <google/protobuf/arena.h>
+#include <memory>
+#include <utility>
+
+using google::protobuf::Arena;
+
 namespace orc {
+  SortedStringDictionary::SortedStringDictionary()
+      : totalLength_(0), arena_(std::make_unique<Arena>()) {
+#ifdef BUILD_SPARSEHASH
+    /// Need to set empty key otherwise dense_hash_map will not work correctly
+    keyToIndex_.set_empty_key(std::string_view{});
+#endif
+  }
+
+  SortedStringDictionary::~SortedStringDictionary() = default;
 
   // insert a new string into dictionary, return its insertion order
   size_t SortedStringDictionary::insert(const char* str, size_t len) {
-    size_t index = flatDict_.size();
+    size_t index = keyToIndex_.size();
 
     auto it = keyToIndex_.find(std::string_view{str, len});
     if (it != keyToIndex_.end()) {
       return it->second;
     } else {
-      flatDict_.emplace_back(str, len, index);
+      auto s = Arena::Create<std::string>(arena_.get(), str, len);
+      keyToIndex_.emplace(std::string_view{s->data(), s->length()}, index);
       totalLength_ += len;
-
-      const auto& lastEntry = flatDict_.back().entry;
-      keyToIndex_.emplace(std::string_view{lastEntry.data->data(), lastEntry.data->size()}, index);
       return index;
     }
   }
 
-  // write dictionary data & length to output buffer
-  void SortedStringDictionary::flush(AppendOnlyBufferedStream* dataStream,
-                                     RleEncoder* lengthEncoder) const {
-    std::sort(flatDict_.begin(), flatDict_.end(), LessThan());
-
-    for (const auto& entryWithIndex : flatDict_) {
-      dataStream->write(entryWithIndex.entry.data->data(), entryWithIndex.entry.data->size());
-      lengthEncoder->write(static_cast<int64_t>(entryWithIndex.entry.data->size()));
-    }
+  // reserve space for dictionary entries
+  void SortedStringDictionary::reserve(size_t size) {
+    keyToIndex_.reserve(size);
   }
 
   /**
-   * Reorder input index buffer from insertion order to dictionary order
+   * Write dictionary data & length to output buffer and
+   * reorder input index buffer from insertion order to dictionary order
    *
    * We require this function because string values are buffered by indexes
    * in their insertion order. Until the entire dictionary is complete can
@@ -58,11 +66,24 @@ namespace orc {
    * the indexes from insertion order to dictionary value order for final
    * output.
    */
-  void SortedStringDictionary::reorder(std::vector<int64_t>& idxBuffer) const {
-    // iterate the dictionary to get mapping from insertion order to value order
-    std::vector<size_t> mapping(flatDict_.size());
-    for (size_t i = 0; i < flatDict_.size(); ++i) {
-      mapping[flatDict_[i].index] = i;
+  void SortedStringDictionary::flush(AppendOnlyBufferedStream* dataStream,
+                                     RleEncoder* lengthEncoder,
+                                     std::vector<int64_t>& idxBuffer) const {
+    std::vector<std::pair<std::string_view, size_t>> flatDict;
+    flatDict.reserve(keyToIndex_.size());
+    for (auto [key, index] : keyToIndex_) {
+      flatDict.emplace_back(key, index);
+    }
+    std::sort(flatDict.begin(), flatDict.end());
+
+    for (const auto& [entry, _] : flatDict) {
+      dataStream->write(entry.data(), entry.size());
+      lengthEncoder->write(static_cast<int64_t>(entry.size()));
+    }
+
+    std::vector<size_t> mapping(flatDict.size());
+    for (size_t i = 0; i < flatDict.size(); ++i) {
+      mapping[flatDict[i].second] = i;
     }
 
     // do the transformation
@@ -72,18 +93,22 @@ namespace orc {
   }
 
   // get dict entries in insertion order
-  void SortedStringDictionary::getEntriesInInsertionOrder(
-      std::vector<const DictEntry*>& entries) const {
-    /// flatDict_ is sorted in insertion order before [[SortedStringDictionary::flush]] is invoked.
-    entries.resize(flatDict_.size());
-    for (size_t i = 0; i < flatDict_.size(); ++i) {
-      entries[i] = &(flatDict_[i].entry);
+  std::vector<std::string_view> SortedStringDictionary::getEntriesInInsertionOrder() const {
+    std::vector<std::string_view> entries(keyToIndex_.size());
+    for (auto [key, index] : keyToIndex_) {
+      entries[index] = key;
     }
+    return entries;
   }
 
   // return count of entries
   size_t SortedStringDictionary::size() const {
-    return flatDict_.size();
+    return keyToIndex_.size();
+  }
+
+  // return capacity of dictionary
+  size_t SortedStringDictionary::capacity() const {
+    return keyToIndex_.bucket_count() * keyToIndex_.max_load_factor();
   }
 
   // return total length of strings in the dictioanry
@@ -94,6 +119,6 @@ namespace orc {
   void SortedStringDictionary::clear() {
     totalLength_ = 0;
     keyToIndex_.clear();
-    flatDict_.clear();
+    arena_->Reset();
   }
 }  // namespace orc

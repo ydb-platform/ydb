@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 $formatTagged = ($x)->{return AsStruct(FormatType($x.Base) as Base, $x.Tag as Tag)};
 $formatArgument = ($x)->{return AsStruct(FormatType($x.Type) as Type, $x.Name as Name, $x.Flags as Flags)};
 $formatCallable = ($x)->{return AsStruct(

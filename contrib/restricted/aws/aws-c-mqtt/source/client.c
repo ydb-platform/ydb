@@ -6,6 +6,7 @@
 
 #include <aws/mqtt/private/client_impl.h>
 #include <aws/mqtt/private/mqtt_client_test_helper.h>
+#include <aws/mqtt/private/mqtt_iot_metrics.h>
 #include <aws/mqtt/private/packets.h>
 #include <aws/mqtt/private/shared.h>
 #include <aws/mqtt/private/topic_tree.h>
@@ -58,6 +59,15 @@ void mqtt_connection_unlock_synced_data(struct aws_mqtt_client_connection_311_im
     int err = aws_mutex_unlock(&connection->synced_data.lock);
     AWS_ASSERT(!err);
     (void)err;
+}
+
+/* To configure the connection, ensure the state is DISCONNECTED or CONNECTED. The function should be wrapped by
+ * connection synced_data lock.
+ */
+static bool s_is_valid_connection_state_for_configuration(struct aws_mqtt_client_connection_311_impl *connection) {
+
+    return connection->synced_data.state == AWS_MQTT_CLIENT_STATE_DISCONNECTED ||
+           connection->synced_data.state == AWS_MQTT_CLIENT_STATE_CONNECTED;
 }
 
 static void s_aws_mqtt_schedule_reconnect_task(struct aws_mqtt_client_connection_311_impl *connection) {
@@ -503,6 +513,8 @@ static void s_mqtt_client_init(
     AWS_FATAL_ASSERT((error_code != 0) == (channel == NULL));
 
     struct aws_mqtt_client_connection_311_impl *connection = user_data;
+    struct aws_byte_buf username_with_metrics_buf;
+    AWS_ZERO_STRUCT(username_with_metrics_buf);
 
     if (error_code != AWS_OP_SUCCESS) {
         /* client shutdown already handles this case, so just call that. */
@@ -623,25 +635,53 @@ static void s_mqtt_client_init(
             &connect, topic_cur, connection->will.qos, connection->will.retain, payload_cur);
     }
 
-    if (connection->username) {
-        struct aws_byte_cursor username_cur = aws_byte_cursor_from_string(connection->username);
-
-        AWS_LOGF_DEBUG(
-            AWS_LS_MQTT_CLIENT,
-            "id=%p: Adding username " PRInSTR " to connection",
-            (void *)connection,
-            AWS_BYTE_CURSOR_PRI(username_cur));
-
-        struct aws_byte_cursor password_cur = {
-            .ptr = NULL,
-            .len = 0,
-        };
-
-        if (connection->password) {
-            password_cur = aws_byte_cursor_from_string(connection->password);
+    if (connection->username || connection->metrics_storage) {
+        struct aws_byte_cursor username_cur;
+        AWS_ZERO_STRUCT(username_cur);
+        if (connection->username) {
+            username_cur = aws_byte_cursor_from_string(connection->username);
         }
 
-        aws_mqtt_packet_connect_add_credentials(&connect, username_cur, password_cur);
+        /* Apply metrics to username if configured */
+        if (connection->metrics_storage) {
+            if (aws_mqtt_append_sdk_metrics_to_username(
+                    connection->allocator,
+                    &username_cur,
+                    &connection->metrics_storage->storage_view,
+                    &username_with_metrics_buf,
+                    NULL) == AWS_OP_SUCCESS) {
+                username_cur = aws_byte_cursor_from_buf(&username_with_metrics_buf);
+            } else {
+                AWS_LOGF_WARN(
+                    AWS_LS_MQTT_CLIENT,
+                    "id=%p: Failed to apply metrics to username, using original",
+                    (void *)connection);
+            }
+        }
+
+        if (aws_byte_cursor_is_valid(&username_cur) && username_cur.len > 0) {
+
+            struct aws_byte_cursor password_cur;
+            AWS_ZERO_STRUCT(password_cur);
+
+            if (connection->password) {
+                password_cur = aws_byte_cursor_from_string(connection->password);
+            }
+
+            AWS_LOGF_DEBUG(
+                AWS_LS_MQTT_CLIENT,
+                "id=%p: Adding username " PRInSTR " to connection",
+                (void *)connection,
+                AWS_BYTE_CURSOR_PRI(username_cur));
+
+            aws_mqtt_packet_connect_add_credentials(&connect, username_cur, password_cur);
+        } else {
+            AWS_LOGF_INFO(
+                AWS_LS_MQTT_CLIENT,
+                "id=%p: Failed to set username and password. Most likely there is an issue in metrics. (e.x.: username "
+                "is empty and metrics string exceed the size limit). ",
+                (void *)connection);
+        }
     }
 
     message = mqtt_get_message_for_packet(connection, &connect.fixed_header);
@@ -663,12 +703,15 @@ static void s_mqtt_client_init(
         goto handle_error;
     }
 
+    aws_byte_buf_clean_up(&username_with_metrics_buf);
     return;
 
 handle_error:
     MQTT_CLIENT_CALL_CALLBACK_ARGS(connection, on_connection_complete, aws_last_error(), 0, false);
     MQTT_CLIENT_CALL_CALLBACK_ARGS(connection, on_connection_failure, aws_last_error());
     aws_channel_shutdown(channel, aws_last_error());
+
+    aws_byte_buf_clean_up(&username_with_metrics_buf);
 
     if (message) {
         aws_mem_release(message->allocator, message);
@@ -835,6 +878,7 @@ static void s_mqtt_client_connection_destroy_final(struct aws_mqtt_client_connec
     aws_memory_pool_clean_up(&connection->synced_data.requests_pool);
 
     aws_mutex_clean_up(&connection->synced_data.lock);
+    aws_rw_lock_clean_up(&connection->callback_lock);
 
     aws_tls_connection_options_clean_up(&connection->tls_options);
 
@@ -842,6 +886,12 @@ static void s_mqtt_client_connection_destroy_final(struct aws_mqtt_client_connec
     if (connection->http_proxy_config) {
         aws_http_proxy_config_destroy(connection->http_proxy_config);
         connection->http_proxy_config = NULL;
+    }
+
+    /* Clean up metrics */
+    if (connection->metrics_storage) {
+        aws_mqtt_iot_metrics_storage_destroy(connection->metrics_storage);
+        connection->metrics_storage = NULL;
     }
 
     aws_mqtt_client_release(connection->client);
@@ -900,26 +950,6 @@ static void s_mqtt_client_connection_start_destroy(struct aws_mqtt_client_connec
  * Connection Configuration
  ******************************************************************************/
 
-/* To configure the connection, ensure the state is DISCONNECTED or CONNECTED */
-static int s_check_connection_state_for_configuration(struct aws_mqtt_client_connection_311_impl *connection) {
-    int result = AWS_OP_SUCCESS;
-    { /* BEGIN CRITICAL SECTION */
-        mqtt_connection_lock_synced_data(connection);
-
-        if (connection->synced_data.state != AWS_MQTT_CLIENT_STATE_DISCONNECTED &&
-            connection->synced_data.state != AWS_MQTT_CLIENT_STATE_CONNECTED) {
-            AWS_LOGF_ERROR(
-                AWS_LS_MQTT_CLIENT,
-                "id=%p: Connection is currently pending connect/disconnect. Unable to make configuration changes until "
-                "pending operation completes.",
-                (void *)connection);
-            result = AWS_OP_ERR;
-        }
-        mqtt_connection_unlock_synced_data(connection);
-    } /* END CRITICAL SECTION */
-    return result;
-}
-
 static int s_aws_mqtt_client_connection_311_set_will(
     void *impl,
     const struct aws_byte_cursor *topic,
@@ -931,9 +961,6 @@ static int s_aws_mqtt_client_connection_311_set_will(
 
     AWS_PRECONDITION(connection);
     AWS_PRECONDITION(topic);
-    if (s_check_connection_state_for_configuration(connection)) {
-        return aws_raise_error(AWS_ERROR_INVALID_STATE);
-    }
 
     if (!aws_mqtt_is_valid_topic(topic)) {
         AWS_LOGF_ERROR(AWS_LS_MQTT_CLIENT, "id=%p: Will topic is invalid", (void *)connection);
@@ -962,28 +989,46 @@ static int s_aws_mqtt_client_connection_311_set_will(
         goto cleanup;
     }
 
-    connection->will.qos = qos;
-    connection->will.retain = retain;
-
     struct aws_byte_buf payload_buf = aws_byte_buf_from_array(payload->ptr, payload->len);
     if (aws_byte_buf_init_copy(&local_payload_buf, connection->allocator, &payload_buf)) {
         AWS_LOGF_ERROR(AWS_LS_MQTT_CLIENT, "id=%p: Failed to copy will body", (void *)connection);
         goto cleanup;
     }
 
-    if (connection->will.topic.len) {
-        AWS_LOGF_TRACE(AWS_LS_MQTT_CLIENT, "id=%p: Will has been set before, resetting it.", (void *)connection);
-    }
-    /* Succeed. */
-    result = AWS_OP_SUCCESS;
+    { /* BEGIN CRITICAL SECTION */
+        mqtt_connection_lock_synced_data(connection);
 
-    /* swap the local buffer with connection */
-    struct aws_byte_buf temp = local_topic_buf;
-    local_topic_buf = connection->will.topic;
-    connection->will.topic = temp;
-    temp = local_payload_buf;
-    local_payload_buf = connection->will.payload;
-    connection->will.payload = temp;
+        /* Check state and modify connection under lock to ensure thread safety */
+        if (!s_is_valid_connection_state_for_configuration(connection)) {
+            AWS_LOGF_ERROR(
+                AWS_LS_MQTT_CLIENT,
+                "id=%p: Connection is currently pending connect/disconnect. Unable to make configuration changes until "
+                "pending operation completes.",
+                (void *)connection);
+            result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+        } else {
+            connection->will.qos = qos;
+            connection->will.retain = retain;
+
+            if (connection->will.topic.len) {
+                AWS_LOGF_TRACE(
+                    AWS_LS_MQTT_CLIENT, "id=%p: Will has been set before, resetting it.", (void *)connection);
+            }
+
+            /* swap the local buffer with connection */
+            struct aws_byte_buf temp = local_topic_buf;
+            local_topic_buf = connection->will.topic;
+            connection->will.topic = temp;
+            temp = local_payload_buf;
+            local_payload_buf = connection->will.payload;
+            connection->will.payload = temp;
+
+            /* Succeed. */
+            result = AWS_OP_SUCCESS;
+        }
+
+        mqtt_connection_unlock_synced_data(connection);
+    } /* END CRITICAL SECTION */
 
 cleanup:
     aws_byte_buf_clean_up(&local_topic_buf);
@@ -1001,9 +1046,6 @@ static int s_aws_mqtt_client_connection_311_set_login(
 
     AWS_PRECONDITION(connection);
     AWS_PRECONDITION(username);
-    if (s_check_connection_state_for_configuration(connection)) {
-        return aws_raise_error(AWS_ERROR_INVALID_STATE);
-    }
 
     if (username != NULL && aws_mqtt_validate_utf8_text(*username) == AWS_OP_ERR) {
         AWS_LOGF_DEBUG(
@@ -1031,20 +1073,39 @@ static int s_aws_mqtt_client_connection_311_set_login(
         }
     }
 
-    if (connection->username) {
-        AWS_LOGF_TRACE(
-            AWS_LS_MQTT_CLIENT, "id=%p: Login information has been set before, resetting it.", (void *)connection);
-    }
-    /* Succeed. */
-    result = AWS_OP_SUCCESS;
+    { /* BEGIN CRITICAL SECTION */
+        mqtt_connection_lock_synced_data(connection);
+        /* Check state and modify connection under lock to ensure thread safety */
+        if (!s_is_valid_connection_state_for_configuration(connection)) {
+            AWS_LOGF_ERROR(
+                AWS_LS_MQTT_CLIENT,
+                "id=%p: Connection is currently pending connect/disconnect. Unable to make configuration changes until "
+                "pending operation completes.",
+                (void *)connection);
+            result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+        } else {
 
-    /* swap the local string with connection */
-    struct aws_string *temp = username_string;
-    username_string = connection->username;
-    connection->username = temp;
-    temp = password_string;
-    password_string = connection->password;
-    connection->password = temp;
+            if (connection->username) {
+                AWS_LOGF_TRACE(
+                    AWS_LS_MQTT_CLIENT,
+                    "id=%p: Login information has been set before, resetting it.",
+                    (void *)connection);
+            }
+
+            /* swap the local string with connection */
+            struct aws_string *temp = username_string;
+            username_string = connection->username;
+            connection->username = temp;
+            temp = password_string;
+            password_string = connection->password;
+            connection->password = temp;
+
+            /* Succeed. */
+            result = AWS_OP_SUCCESS;
+        }
+
+        mqtt_connection_unlock_synced_data(connection);
+    } /* END CRITICAL SECTION */
 
 cleanup:
     aws_string_destroy_secure(username_string);
@@ -1061,20 +1122,39 @@ static int s_aws_mqtt_client_connection_311_set_reconnect_timeout(
     struct aws_mqtt_client_connection_311_impl *connection = impl;
 
     AWS_PRECONDITION(connection);
-    if (s_check_connection_state_for_configuration(connection)) {
-        return aws_raise_error(AWS_ERROR_INVALID_STATE);
-    }
+
     AWS_LOGF_TRACE(
         AWS_LS_MQTT_CLIENT,
         "id=%p: Setting reconnect timeouts min: %" PRIu64 " max: %" PRIu64,
         (void *)connection,
         min_timeout,
         max_timeout);
+
+    int result = AWS_OP_ERR;
+    /* BEGIN CRITICAL SECTION */
+    mqtt_connection_lock_synced_data(connection);
+
+    /* Check state and modify connection under lock to ensure thread safety */
+    if (!s_is_valid_connection_state_for_configuration(connection)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT,
+            "id=%p: Connection is currently pending connect/disconnect. Unable to make configuration changes until "
+            "pending operation completes.",
+            (void *)connection);
+        result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+        goto done;
+    }
+
     connection->reconnect_timeouts.min_sec = min_timeout;
     connection->reconnect_timeouts.max_sec = max_timeout;
     connection->reconnect_timeouts.current_sec = min_timeout;
+    result = AWS_OP_SUCCESS;
 
-    return AWS_OP_SUCCESS;
+done:
+    mqtt_connection_unlock_synced_data(connection);
+    /* END CRITICAL SECTION */
+
+    return result;
 }
 
 static int s_aws_mqtt_client_connection_311_set_connection_result_handlers(
@@ -1087,17 +1167,44 @@ static int s_aws_mqtt_client_connection_311_set_connection_result_handlers(
     struct aws_mqtt_client_connection_311_impl *connection = impl;
 
     AWS_PRECONDITION(connection);
-    if (s_check_connection_state_for_configuration(connection)) {
-        return aws_raise_error(AWS_ERROR_INVALID_STATE);
-    }
+    int result = AWS_OP_ERR;
+
     AWS_LOGF_TRACE(AWS_LS_MQTT_CLIENT, "id=%p: Setting connection success and failure handlers", (void *)connection);
+
+    /* BEGIN CRITICAL SECTION */
+    mqtt_connection_lock_synced_data(connection);
+
+    /* Check state and modify connection under lock to ensure thread safety */
+    if (!s_is_valid_connection_state_for_configuration(connection)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT,
+            "id=%p: Connection is currently pending connect/disconnect. Unable to make configuration changes until "
+            "pending operation completes.",
+            (void *)connection);
+        result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+        goto done;
+    }
+
+    if (aws_rw_lock_try_wlock(&connection->callback_lock)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT, "id=%p: Failed to set callback handlers, callbacks are in use.", (void *)connection);
+        result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+        goto done;
+    }
 
     connection->on_connection_success = on_connection_success;
     connection->on_connection_success_ud = on_connection_success_ud;
     connection->on_connection_failure = on_connection_failure;
     connection->on_connection_failure_ud = on_connection_failure_ud;
+    result = AWS_OP_SUCCESS;
 
-    return AWS_OP_SUCCESS;
+    aws_rw_lock_wunlock(&connection->callback_lock);
+
+done:
+    mqtt_connection_unlock_synced_data(connection);
+    /* END CRITICAL SECTION */
+
+    return result;
 }
 
 static int s_aws_mqtt_client_connection_311_set_connection_interruption_handlers(
@@ -1110,18 +1217,46 @@ static int s_aws_mqtt_client_connection_311_set_connection_interruption_handlers
     struct aws_mqtt_client_connection_311_impl *connection = impl;
 
     AWS_PRECONDITION(connection);
-    if (s_check_connection_state_for_configuration(connection)) {
-        return aws_raise_error(AWS_ERROR_INVALID_STATE);
-    }
+
     AWS_LOGF_TRACE(
         AWS_LS_MQTT_CLIENT, "id=%p: Setting connection interrupted and resumed handlers", (void *)connection);
+
+    int result = AWS_OP_ERR;
+
+    /* BEGIN CRITICAL SECTION */
+    mqtt_connection_lock_synced_data(connection);
+
+    /* Check state and modify connection under lock to ensure thread safety */
+    if (!s_is_valid_connection_state_for_configuration(connection)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT,
+            "id=%p: Connection is currently pending connect/disconnect. Unable to make configuration changes until "
+            "pending operation completes.",
+            (void *)connection);
+        result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+        goto done;
+    }
+
+    if (aws_rw_lock_try_wlock(&connection->callback_lock)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT, "id=%p: Failed to set callback handlers, callbacks are in use.", (void *)connection);
+        result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+        goto done;
+    }
 
     connection->on_interrupted = on_interrupted;
     connection->on_interrupted_ud = on_interrupted_ud;
     connection->on_resumed = on_resumed;
     connection->on_resumed_ud = on_resumed_ud;
+    result = AWS_OP_SUCCESS;
 
-    return AWS_OP_SUCCESS;
+    aws_rw_lock_wunlock(&connection->callback_lock);
+
+done:
+    mqtt_connection_unlock_synced_data(connection);
+    /* END CRITICAL SECTION */
+
+    return result;
 }
 
 static int s_aws_mqtt_client_connection_311_set_connection_closed_handler(
@@ -1132,15 +1267,42 @@ static int s_aws_mqtt_client_connection_311_set_connection_closed_handler(
     struct aws_mqtt_client_connection_311_impl *connection = impl;
 
     AWS_PRECONDITION(connection);
-    if (s_check_connection_state_for_configuration(connection)) {
-        return aws_raise_error(AWS_ERROR_INVALID_STATE);
-    }
+
     AWS_LOGF_TRACE(AWS_LS_MQTT_CLIENT, "id=%p: Setting connection closed handler", (void *)connection);
+
+    int result = AWS_OP_ERR;
+
+    /* BEGIN CRITICAL SECTION */
+    mqtt_connection_lock_synced_data(connection);
+
+    /* Check state and modify connection under lock to ensure thread safety */
+    if (!s_is_valid_connection_state_for_configuration(connection)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT,
+            "id=%p: Connection is currently pending connect/disconnect. Unable to make configuration changes until "
+            "pending operation completes.",
+            (void *)connection);
+        result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+        goto done;
+    }
+
+    if (aws_rw_lock_try_wlock(&connection->callback_lock)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT, "id=%p: Failed to set callback handlers, callbacks are in use.", (void *)connection);
+        result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+        goto done;
+    }
 
     connection->on_closed = on_closed;
     connection->on_closed_ud = on_closed_ud;
 
-    return AWS_OP_SUCCESS;
+    aws_rw_lock_wunlock(&connection->callback_lock);
+    result = AWS_OP_SUCCESS;
+
+done:
+    /* END CRITICAL SECTION */
+    mqtt_connection_unlock_synced_data(connection);
+    return result;
 }
 
 static int s_aws_mqtt_client_connection_311_set_on_any_publish_handler(
@@ -1149,29 +1311,41 @@ static int s_aws_mqtt_client_connection_311_set_on_any_publish_handler(
     void *on_any_publish_ud) {
 
     struct aws_mqtt_client_connection_311_impl *connection = impl;
+    int result = AWS_OP_ERR;
 
     AWS_PRECONDITION(connection);
-    { /* BEGIN CRITICAL SECTION */
-        mqtt_connection_lock_synced_data(connection);
+    /* BEGIN CRITICAL SECTION */
+    mqtt_connection_lock_synced_data(connection);
 
-        if (connection->synced_data.state == AWS_MQTT_CLIENT_STATE_CONNECTED) {
-            mqtt_connection_unlock_synced_data(connection);
-            AWS_LOGF_ERROR(
-                AWS_LS_MQTT_CLIENT,
-                "id=%p: Connection is connected, publishes may arrive anytime. Unable to set publish handler until "
-                "offline.",
-                (void *)connection);
-            return aws_raise_error(AWS_ERROR_INVALID_STATE);
-        }
-        mqtt_connection_unlock_synced_data(connection);
-    } /* END CRITICAL SECTION */
+    if (connection->synced_data.state == AWS_MQTT_CLIENT_STATE_CONNECTED) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT,
+            "id=%p: Connection is connected, publishes may arrive anytime. Unable to set publish handler until "
+            "offline.",
+            (void *)connection);
+        result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+        goto done;
+    }
+
+    if (aws_rw_lock_try_wlock(&connection->callback_lock)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT, "id=%p: Failed to set callback handlers, callbacks are in use.", (void *)connection);
+        result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+        goto done;
+    }
 
     AWS_LOGF_TRACE(AWS_LS_MQTT_CLIENT, "id=%p: Setting on_any_publish handler", (void *)connection);
-
     connection->on_any_publish = on_any_publish;
     connection->on_any_publish_ud = on_any_publish_ud;
 
-    return AWS_OP_SUCCESS;
+    aws_rw_lock_wunlock(&connection->callback_lock);
+    result = AWS_OP_SUCCESS;
+
+done:
+    mqtt_connection_unlock_synced_data(connection);
+    /* END CRITICAL SECTION */
+
+    return result;
 }
 
 static int s_aws_mqtt_client_connection_311_set_connection_termination_handler(
@@ -1182,15 +1356,42 @@ static int s_aws_mqtt_client_connection_311_set_connection_termination_handler(
     struct aws_mqtt_client_connection_311_impl *connection = impl;
 
     AWS_PRECONDITION(connection);
-    if (s_check_connection_state_for_configuration(connection)) {
-        return aws_raise_error(AWS_ERROR_INVALID_STATE);
-    }
+
     AWS_LOGF_TRACE(AWS_LS_MQTT_CLIENT, "id=%p: Setting connection termination handler", (void *)connection);
+
+    int result = AWS_OP_ERR;
+    /* BEGIN CRITICAL SECTION */
+    mqtt_connection_lock_synced_data(connection);
+
+    /* Check state and modify connection under lock to ensure thread safety */
+    if (!s_is_valid_connection_state_for_configuration(connection)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT,
+            "id=%p: Connection is currently pending connect/disconnect. Unable to make configuration changes until "
+            "pending operation completes.",
+            (void *)connection);
+        result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+        goto done;
+    }
+
+    if (aws_rw_lock_try_wlock(&connection->callback_lock)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT, "id=%p: Failed to set callback handlers, callbacks are in use.", (void *)connection);
+        result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+        goto done;
+    }
 
     connection->on_termination = on_termination;
     connection->on_termination_ud = on_termination_ud;
 
-    return AWS_OP_SUCCESS;
+    aws_rw_lock_wunlock(&connection->callback_lock);
+    result = AWS_OP_SUCCESS;
+
+done:
+    mqtt_connection_unlock_synced_data(connection);
+    /* END CRITICAL SECTION */
+
+    return result;
 }
 
 /*******************************************************************************
@@ -1222,17 +1423,36 @@ static int s_aws_mqtt_client_connection_311_set_http_proxy_options(
     struct aws_http_proxy_options *proxy_options) {
 
     struct aws_mqtt_client_connection_311_impl *connection = impl;
+    int result = AWS_OP_ERR;
 
-    /* If there is existing proxy options, nuke em */
-    if (connection->http_proxy_config) {
-        aws_http_proxy_config_destroy(connection->http_proxy_config);
-        connection->http_proxy_config = NULL;
+    /* BEGIN CRITICAL SECTION */
+    mqtt_connection_lock_synced_data(connection);
+
+    /* Check state and modify connection under lock to ensure thread safety */
+    if (!s_is_valid_connection_state_for_configuration(connection)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT,
+            "id=%p: Connection is currently pending connect/disconnect. Unable to make configuration changes until "
+            "pending operation completes.",
+            (void *)connection);
+        result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+    } else {
+        /* If there is existing proxy options, nuke em */
+        if (connection->http_proxy_config) {
+            aws_http_proxy_config_destroy(connection->http_proxy_config);
+            connection->http_proxy_config = NULL;
+        }
+
+        connection->http_proxy_config =
+            aws_http_proxy_config_new_tunneling_from_proxy_options(connection->allocator, proxy_options);
+
+        result = connection->http_proxy_config != NULL ? AWS_OP_SUCCESS : AWS_OP_ERR;
     }
 
-    connection->http_proxy_config =
-        aws_http_proxy_config_new_tunneling_from_proxy_options(connection->allocator, proxy_options);
+    mqtt_connection_unlock_synced_data(connection);
+    /* END CRITICAL SECTION */
 
-    return connection->http_proxy_config != NULL ? AWS_OP_SUCCESS : AWS_OP_ERR;
+    return result;
 }
 
 static int s_aws_mqtt_client_connection_311_set_host_resolution_options(
@@ -1241,9 +1461,27 @@ static int s_aws_mqtt_client_connection_311_set_host_resolution_options(
 
     struct aws_mqtt_client_connection_311_impl *connection = impl;
 
-    connection->host_resolution_config = *host_resolution_config;
+    int result = AWS_OP_ERR;
+    /* BEGIN CRITICAL SECTION */
+    mqtt_connection_lock_synced_data(connection);
 
-    return AWS_OP_SUCCESS;
+    /* Check state and modify connection under lock to ensure thread safety */
+    if (!s_is_valid_connection_state_for_configuration(connection)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT,
+            "id=%p: Connection is currently pending connect/disconnect. Unable to make configuration changes until "
+            "pending operation completes.",
+            (void *)connection);
+        result = aws_raise_error(AWS_ERROR_INVALID_STATE);
+    } else {
+
+        connection->host_resolution_config = *host_resolution_config;
+        result = AWS_OP_SUCCESS;
+    }
+
+    mqtt_connection_unlock_synced_data(connection);
+    /* END CRITICAL SECTION */
+    return result;
 }
 
 static void s_on_websocket_shutdown(struct aws_websocket *websocket, int error_code, void *user_data) {
@@ -3341,6 +3579,65 @@ int aws_mqtt_client_connection_set_on_operation_statistics_handler(
     return AWS_OP_SUCCESS;
 }
 
+static int s_aws_mqtt_client_connection_311_set_metrics(void *impl, const struct aws_mqtt_iot_metrics *metrics) {
+
+    struct aws_mqtt_client_connection_311_impl *connection = impl;
+    AWS_PRECONDITION(connection);
+
+    struct aws_mqtt_iot_metrics_storage *metrics_storage = NULL;
+    if (metrics) {
+        if (aws_mqtt_validate_iot_metrics(metrics) == AWS_OP_ERR) {
+            AWS_LOGF_ERROR(AWS_LS_MQTT_CLIENT, "id=%p: Invalid metrics.", (void *)connection);
+            return AWS_OP_ERR;
+        }
+
+        metrics_storage = aws_mqtt_iot_metrics_storage_new(connection->allocator, metrics);
+        if (!metrics_storage) {
+            int error = aws_last_error();
+            AWS_LOGF_ERROR(
+                AWS_LS_MQTT_CLIENT,
+                "id=%p: Failed to create IoT SDK metrics storage, error %d (%s)",
+                (void *)connection,
+                error,
+                aws_error_name(error));
+            return aws_raise_error(error);
+        }
+    }
+
+    int result = AWS_OP_ERR;
+
+    /* BEGIN CRITICAL SECTION */
+    mqtt_connection_lock_synced_data(connection);
+
+    if (connection->synced_data.state != AWS_MQTT_CLIENT_STATE_DISCONNECTED &&
+        connection->synced_data.state != AWS_MQTT_CLIENT_STATE_CONNECTED) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT,
+            "id=%p: Connection is currently pending connect/disconnect. Unable to make configuration changes until "
+            "pending operation completes.",
+            (void *)connection);
+        aws_raise_error(AWS_ERROR_INVALID_STATE);
+        goto done;
+    }
+
+    AWS_LOGF_TRACE(AWS_LS_MQTT_CLIENT, "id=%p: Setting IoT SDK metrics", (void *)connection);
+    aws_mqtt_iot_metrics_storage_destroy(connection->metrics_storage);
+    connection->metrics_storage = metrics_storage;
+
+    metrics_storage = NULL;
+    result = AWS_OP_SUCCESS;
+
+done:
+    mqtt_connection_unlock_synced_data(connection);
+    /* END CRITICAL SECTION */
+
+    if (metrics_storage) {
+        aws_mqtt_iot_metrics_storage_destroy(metrics_storage);
+    }
+
+    return result;
+}
+
 static struct aws_mqtt_client_connection *s_aws_mqtt_client_connection_311_acquire(void *impl) {
     struct aws_mqtt_client_connection_311_impl *connection = impl;
 
@@ -3390,6 +3687,7 @@ static struct aws_mqtt_client_connection_vtable s_aws_mqtt_client_connection_311
     .unsubscribe_fn = s_aws_mqtt_client_connection_311_unsubscribe,
     .publish_fn = s_aws_mqtt_client_connection_311_publish,
     .get_stats_fn = s_aws_mqtt_client_connection_311_get_stats,
+    .set_metrics_fn = s_aws_mqtt_client_connection_311_set_metrics,
     .get_impl_type = s_aws_mqtt_client_connection_311_get_impl,
     .get_event_loop = s_aws_mqtt_client_connection_311_get_event_loop,
 };
@@ -3433,6 +3731,16 @@ struct aws_mqtt_client_connection *aws_mqtt_client_connection_new(struct aws_mqt
             aws_last_error(),
             aws_error_name(aws_last_error()));
         goto failed_init_mutex;
+    }
+
+    if (aws_rw_lock_init(&connection->callback_lock)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_CLIENT,
+            "id=%p: Failed to initialize callback lock, error %d (%s)",
+            (void *)connection,
+            aws_last_error(),
+            aws_error_name(aws_last_error()));
+        goto failed_init_callback_lock;
     }
 
     struct aws_mqtt311_decoder_options config = {
@@ -3504,10 +3812,21 @@ failed_init_requests_pool:
     aws_mqtt_topic_tree_clean_up(&connection->thread_data.subscriptions);
 
 failed_init_subscriptions:
+    aws_rw_lock_clean_up(&connection->callback_lock);
+
+failed_init_callback_lock:
     aws_mutex_clean_up(&connection->synced_data.lock);
 
 failed_init_mutex:
     aws_mem_release(client->allocator, connection);
 
     return NULL;
+}
+
+int aws_mqtt_client_connection_set_metrics(
+    struct aws_mqtt_client_connection *connection,
+    const struct aws_mqtt_iot_metrics *metrics) {
+
+    AWS_PRECONDITION(connection);
+    return connection->vtable->set_metrics_fn(connection->impl, metrics);
 }

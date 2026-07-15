@@ -1,13 +1,11 @@
 #include <ydb/core/http_proxy/ut/datastreams_fixture/datastreams_fixture.h>
-
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/testlib/test_client.h>
-
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
 
-#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/http/misc/httpcodes.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr::NHttpProxy;
 using namespace NKikimr::Tests;

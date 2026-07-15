@@ -40,6 +40,8 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnablePipeRetries, true);
         OPTION(bool, RunFakeConfigDispatcher, false);
         OPTION(bool, InitYdbDriver, false);
+        OPTION(bool, EnableFulltextIndexPrefix, true);
+        OPTION(bool, EnableFulltextIndexRowId, true);
         OPTION(std::optional<bool>, EnablePersistentQueryStats, std::nullopt);
         OPTION(std::optional<bool>, EnablePersistentPartitionStats, std::nullopt);
         OPTION(std::optional<bool>, AllowUpdateChannelsBindingOfSolomonPartitions, std::nullopt);
@@ -55,7 +57,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableNotNullDataColumns, std::nullopt);
         OPTION(std::optional<bool>, EnableAlterDatabaseCreateHiveFirst, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicDiskSubDomainQuota, std::nullopt);
-        OPTION(std::optional<bool>, EnableTopicSplitMerge, std::nullopt);
+        OPTION(std::optional<bool>, EnableTopicMessageLevelParallelism, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedDynamoDBStreamsFormat, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedDebeziumJsonFormat, std::nullopt);
         OPTION(std::optional<bool>, EnableTablePgTypes, std::nullopt);
@@ -66,10 +68,8 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableChangefeedsOnIndexTables, std::nullopt);
         OPTION(std::optional<bool>, EnableTieringInColumnShard, std::nullopt);
         OPTION(std::optional<bool>, EnableParameterizedDecimal, std::nullopt);
-        OPTION(std::optional<bool>, EnableTopicAutopartitioningForCDC, std::nullopt);
         OPTION(std::optional<bool>, EnableBackupService, std::nullopt);
         OPTION(std::optional<bool>, EnableReplication, std::nullopt);
-        OPTION(std::optional<bool>, EnableTopicTransfer, std::nullopt);
         OPTION(bool, SetupKqpProxy, false);
         OPTION(bool, EnableStrictAclCheck, false);
         OPTION(std::optional<bool>, EnableStrictUserManagement, std::nullopt);
@@ -88,6 +88,12 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnableConditionalEraseResponseBatching, false);
         OPTION(std::optional<ui32>, CondEraseResponseBatchSize, std::nullopt);
         OPTION(std::optional<ui32>, CondEraseResponseBatchMaxTimeMs, std::nullopt);
+        OPTION(std::optional<ui32>, MaxBuildIndexShardsInFlight, std::nullopt);
+        OPTION(std::optional<ui32>, MaxStoredIndexBuilds, std::nullopt);
+        OPTION(bool, EnableDataShardSplitHistogramSorting, false);
+        OPTION(bool, EnableDataShardSplitKeySelection, false);
+        OPTION(bool, EnableDataShardSplitHistogramOmission, false);
+        OPTION(bool, DisableFileStoreSSDSystemSpaceAccounting, false);
 
         #undef OPTION
     };

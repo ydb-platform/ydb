@@ -1,12 +1,12 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "2.7.4";
+  version = "2.8.1";
   versionTag = "R_${lib.replaceStrings ["."] ["_"] version}";
 
   src = fetchFromGitHub {
     owner = "libexpat";
     repo = "libexpat";
     rev = "${versionTag}";
-    hash = "sha256-0Zi2/KzhMa4hL5n6RwVMU1r7Hbvmomyx3QaGLw7Ub/I=";
+    hash = "sha256-XHQN6Wd29Furdu8VB1UokZMmIFKq4sCG+Aa8/KfSoi4=";
   };
 
   nativeBuildInputs = [ autoreconfHook ];

@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/read_session.h>
 
@@ -599,7 +600,7 @@ TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
     if (!DefaultExecutor) {
         ThreadPool = std::make_shared<TThreadPool>();
         ThreadPool->Start(1);
-        DefaultExecutor = CreateExternalThreadPoolExecutorAdapter(ThreadPool);
+        DefaultExecutor = NAdapters::CreateExternalThreadPoolExecutorAdapter(ThreadPool);
     }
     return DefaultExecutor;
 }
@@ -1861,7 +1862,8 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 \
             auto event = sessionQueue.GetEventImpl(maxByteSize, accumulator); \
 \
-            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event.GetEvent()));\
+            UNIT_ASSERT(event);\
+            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event->GetEvent()));\
         }
 
 #define UNIT_ASSERT_DATA_EVENT(count) \
@@ -1873,8 +1875,9 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 \
             auto event = sessionQueue.GetEventImpl(maxByteSize, accumulator); \
 \
-            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event.GetEvent())); \
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TExpectedEvent>(event.GetEvent()).GetMessagesCount(), count); \
+            UNIT_ASSERT(event);\
+            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event->GetEvent())); \
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TExpectedEvent>(event->GetEvent()).GetMessagesCount(), count); \
         }
 
         NTopic::TAReadSessionSettings<true> settings;

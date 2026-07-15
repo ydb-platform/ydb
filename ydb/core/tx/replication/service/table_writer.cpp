@@ -4,6 +4,7 @@
 
 #include <ydb/core/change_exchange/resolve_partition.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr::NReplication::NService {
 

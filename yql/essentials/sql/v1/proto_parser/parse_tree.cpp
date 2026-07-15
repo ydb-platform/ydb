@@ -1,15 +1,78 @@
 #include "parse_tree.h"
 
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <util/generic/vector.h>
+
 namespace NSQLTranslationV1 {
+
+TVector<const TRule_sql_stmt_core*> Statements(const TRule_sql_stmt_list& rule) {
+    if (!rule.HasBlock2()) {
+        return {};
+    }
+
+    const auto& block = rule.GetBlock2();
+
+    TVector<const TRule_sql_stmt_core*> statements(Reserve(1 + block.GetBlock2().size()));
+    statements.emplace_back(&block.GetRule_sql_stmt1().GetRule_sql_stmt_core2());
+    for (const auto& block : block.GetBlock2()) {
+        statements.emplace_back(&block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
+    }
+    return statements;
+}
+
+TVector<const TRule_sql_stmt_core*> Statements(const TRule_sql_query& rule) {
+    switch (rule.GetAltCase()) {
+        case NSQLv1Generated::TRule_sql_query::kAltSqlQuery1:
+            return Statements(rule.GetAlt_sql_query1().GetRule_sql_stmt_list1());
+        case NSQLv1Generated::TRule_sql_query::kAltSqlQuery2:
+            return {};
+        case NSQLv1Generated::TRule_sql_query::ALT_NOT_SET:
+            Y_UNREACHABLE();
+    }
+}
+
+bool IsEmptyQuery(google::protobuf::Message* message) {
+    YQL_ENSURE(message);
+
+    auto ast = static_cast<const TSQLv1ParserAST&>(*message);
+    const auto& sqlQuery = ast.GetRule_sql_query();
+
+    return sqlQuery.GetAltCase() == NSQLv1Generated::TRule_sql_query::kAltSqlQuery1 &&
+           !sqlQuery.GetAlt_sql_query1().GetRule_sql_stmt_list1().HasBlock2();
+}
+
+const TRule_id_table_or_type* GetCTERef(const TRule_table_ref& rule) {
+    if (rule.HasBlock1()) {
+        return nullptr;
+    }
+
+    if (rule.HasBlock2()) {
+        return nullptr;
+    }
+
+    const auto& block = rule.GetBlock3();
+    if (!block.HasAlt1()) {
+        return nullptr;
+    }
+
+    const auto& key = block.GetAlt1().GetRule_table_key1();
+    if (key.HasBlock2()) {
+        return nullptr;
+    }
+
+    return &key.GetRule_id_table_or_type1();
+}
 
 const TRule_select_or_expr* GetSelectOrExpr(const TRule_smart_parenthesis& msg) {
     if (!msg.GetBlock2().HasAlt1()) {
         return nullptr;
     }
 
-    return &msg.GetBlock2()
-                .GetAlt1()
-                .GetRule_select_subexpr1()
+    const auto& select_subexpr = msg.GetBlock2().GetAlt1().GetRule_select_subexpr1();
+
+    return &select_subexpr
+                .GetRule_select_subexpr_core2()
                 .GetRule_select_subexpr_intersect1()
                 .GetRule_select_or_expr1();
 }
@@ -76,21 +139,25 @@ const TRule_smart_parenthesis* GetParenthesis(const TRule_expr& msg) {
                 .GetRule_smart_parenthesis1();
 }
 
+bool IsSelect(const TRule_select_or_expr& msg) {
+    if (msg.HasAlt_select_or_expr1()) {
+        return true;
+    }
+
+    return IsSelect(
+        msg
+            .GetAlt_select_or_expr2()
+            .GetRule_tuple_or_expr1()
+            .GetRule_expr1());
+}
+
 bool IsSelect(const TRule_smart_parenthesis& msg) {
     const auto* select_or_expr = GetSelectOrExpr(msg);
     if (!select_or_expr) {
         return false;
     }
 
-    if (select_or_expr->HasAlt_select_or_expr1()) {
-        return true;
-    }
-
-    return IsSelect(
-        select_or_expr
-            ->GetAlt_select_or_expr2()
-            .GetRule_tuple_or_expr1()
-            .GetRule_expr1());
+    return IsSelect(*select_or_expr);
 }
 
 bool IsSelect(const TRule_expr& msg) {
@@ -102,9 +169,27 @@ bool IsSelect(const TRule_expr& msg) {
     return IsSelect(*parenthesis);
 }
 
-bool IsOnlySubExpr(const TRule_select_subexpr& node) {
-    return node.GetBlock2().size() == 0 &&
-           node.GetRule_select_subexpr_intersect1().GetBlock2().size() == 0;
+bool IsOnlySubExpr(const TRule_select_subexpr& msg) {
+    return !msg.HasBlock1() &&
+           msg.GetRule_select_subexpr_core2().GetBlock2().empty() &&
+           msg.GetRule_select_subexpr_core2().GetRule_select_subexpr_intersect1().GetBlock2().empty();
+}
+
+bool IsOnlySelect(const TRule_select_stmt& rule) {
+    return !rule.HasBlock1() &&
+           rule.GetRule_select_stmt_core2().GetBlock2().empty() &&
+           rule.GetRule_select_stmt_core2().GetRule_select_stmt_intersect1().GetBlock2().empty();
+}
+
+const TRule_select_kind_partial& Unpack(const TRule_select_kind_parenthesis& rule) {
+    switch (rule.GetAltCase()) {
+        case NSQLv1Generated::TRule_select_kind_parenthesis::kAltSelectKindParenthesis1:
+            return rule.GetAlt_select_kind_parenthesis1().GetRule_select_kind_partial1();
+        case NSQLv1Generated::TRule_select_kind_parenthesis::kAltSelectKindParenthesis2:
+            return rule.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2();
+        case NSQLv1Generated::TRule_select_kind_parenthesis::ALT_NOT_SET:
+            YQL_ENSURE(false, "Unreachable");
+    }
 }
 
 } // namespace NSQLTranslationV1

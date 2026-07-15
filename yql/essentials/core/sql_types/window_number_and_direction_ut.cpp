@@ -4,7 +4,7 @@
 
 using namespace NYql::NWindow;
 
-Y_UNIT_TEST_SUITE(TNumberAndDirectionTest) {
+Y_UNIT_TEST_SUITE(NumberAndDirectionTest) {
 
 Y_UNIT_TEST(Comparison_LeftInf_vs_LeftInf) {
     TNumberAndDirection<i64> a = TNumberAndDirection<i64>::Inf(EDirection::Preceding);
@@ -424,4 +424,33 @@ Y_UNIT_TEST(Comparison_DifferentZeroes_Equal) {
     UNIT_ASSERT(!(a > b));
     UNIT_ASSERT(a >= b);
 }
-} // Y_UNIT_TEST_SUITE(TNumberAndDirectionTest)
+
+Y_UNIT_TEST(Int128_ZeroEqualityAcrossDirections) {
+    using T = NYql::NDecimal::TInt128;
+    TNumberAndDirection<T> a(T(0), EDirection::Preceding);
+    TNumberAndDirection<T> b(T(0), EDirection::Following);
+    UNIT_ASSERT(a == b);
+}
+
+Y_UNIT_TEST(Int128_SameDirection_Following_SmallLessThanLarge) {
+    using T = NYql::NDecimal::TInt128;
+    TNumberAndDirection<T> small(T(100), EDirection::Following);
+    TNumberAndDirection<T> large(T(200), EDirection::Following);
+    UNIT_ASSERT(small < large);
+}
+
+Y_UNIT_TEST(Int128_SameDirection_Preceding_LargerValueIsLess) {
+    using T = NYql::NDecimal::TInt128;
+    TNumberAndDirection<T> small(T(100), EDirection::Preceding);
+    TNumberAndDirection<T> large(T(200), EDirection::Preceding);
+    UNIT_ASSERT(large < small);
+}
+
+Y_UNIT_TEST(Int128_DifferentDirections_FollowingAlwaysGreater) {
+    using T = NYql::NDecimal::TInt128;
+    TNumberAndDirection<T> preceding(T(500), EDirection::Preceding);
+    TNumberAndDirection<T> following(T(100), EDirection::Following);
+    UNIT_ASSERT(following > preceding);
+}
+
+} // Y_UNIT_TEST_SUITE(NumberAndDirectionTest)

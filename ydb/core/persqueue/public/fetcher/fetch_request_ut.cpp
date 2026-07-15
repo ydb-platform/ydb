@@ -1,11 +1,12 @@
 #include "fetch_request_actor.h"
 
-#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NPQ {
 using namespace ::NPersQueue;
@@ -301,7 +302,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
             runtime.EnableScheduleForActor(fetchId);
 
             auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
-            UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SUCCESS, ev->Message);
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Status,Ydb::StatusIds::SUCCESS, ev->Message);
         }
 
         {
@@ -320,7 +321,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
             runtime.EnableScheduleForActor(fetchId);
 
             auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
-            UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::UNAUTHORIZED, ev->Message);
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::UNAUTHORIZED, ev->Message);
         }
     }
 };

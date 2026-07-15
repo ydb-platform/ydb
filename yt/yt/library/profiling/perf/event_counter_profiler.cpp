@@ -38,7 +38,7 @@ private:
 
     void CollectSensors(ISensorWriter* writer) final
     {
-        auto writeCounter = [&] (const std::string& name, EPerfEventType type) {
+        auto writeCounter = [&] (TStringBuf name, EPerfEventType type) {
             try {
                 auto value = GetCounter(type)->Read();
                 writer->AddCounter(name, value);

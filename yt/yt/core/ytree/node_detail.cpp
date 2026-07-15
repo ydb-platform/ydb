@@ -91,7 +91,7 @@ void TNodeBase::GetKeySelf(
         THROW_ERROR_EXCEPTION("Node has no parent");
     }
 
-    TString key;
+    std::string key;
     switch (parent->GetType()) {
         case ENodeType::Map:
             key = parent->AsMap()->GetChildKeyOrThrow(this);
@@ -165,14 +165,14 @@ IYPathService::TResolveResult TNodeBase::ResolveRecursive(
 
 TYPath TNodeBase::GetPath() const
 {
-    TCompactVector<TString, 64> tokens;
+    TCompactVector<std::string, 64> tokens;
     IConstNodePtr current(this);
     while (true) {
         auto parent = current->GetParent();
         if (!parent) {
             break;
         }
-        TString token;
+        std::string token;
         switch (parent->GetType()) {
             case ENodeType::List: {
                 auto index = parent->AsList()->GetChildIndexOrThrow(current);
@@ -362,7 +362,7 @@ void TMapNodeMixin::ListSelf(
         }));
 }
 
-std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChildOrChildValue(
+std::pair<std::string, INodePtr> TMapNodeMixin::PrepareSetChildOrChildValue(
     INodeFactory* factory,
     const TYPath& path,
     std::variant<INodePtr, NYson::TYsonString> childOrChildValue,
@@ -381,7 +381,7 @@ std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChildOrChildValue(
 
     IMapNodePtr rootNode = AsMap();
     INodePtr rootChild;
-    TString rootKey;
+    std::optional<std::string> rootKey;
 
     auto currentNode = rootNode;
     try {
@@ -406,7 +406,7 @@ std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChildOrChildValue(
 
             auto newChild = lastStep
                 ? Visit(childOrChildValue,
-                    [] (INodePtr child) {
+                    [] (const INodePtr& child) {
                         return child;
                     },
                     [&] (const TYsonString& childValue) {
@@ -434,10 +434,10 @@ std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChildOrChildValue(
     }
 
     YT_VERIFY(rootKey);
-    return {rootKey, rootChild};
+    return {std::move(*rootKey), std::move(rootChild)};
 }
 
-std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChild(
+std::pair<std::string, INodePtr> TMapNodeMixin::PrepareSetChild(
     INodeFactory* factory,
     const TYPath& path,
     INodePtr child,

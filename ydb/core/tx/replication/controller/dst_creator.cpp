@@ -341,27 +341,27 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         const auto& record = ev->Get()->GetRecord();
 
         switch (record.GetStatus()) {
-            case NKikimrScheme::StatusSuccess: {
-                TString error;
-                if (!CheckScheme(record.GetPathDescription(), error)) {
-                    return Error(NKikimrScheme::StatusSchemeError, error);
-                } else {
-                    DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
-                    return Success();
-                }
-                break;
+        case NKikimrScheme::StatusSuccess: {
+            TString error;
+            if (!CheckScheme(record.GetPathDescription(), error)) {
+                return Error(NKikimrScheme::StatusSchemeError, error);
+            } else {
+                DstPathId = TPathId(record.GetPathOwnerId(), record.GetPathId());
+                return Success();
             }
-            case NKikimrScheme::StatusPathDoesNotExist:
-                return AllocateTxId();
-            case NKikimrScheme::StatusSchemeError:
-            case NKikimrScheme::StatusAccessDenied:
-            case NKikimrScheme::StatusRedirectDomain:
-            case NKikimrScheme::StatusNameConflict:
-            case NKikimrScheme::StatusInvalidParameter:
-            case NKikimrScheme::StatusPreconditionFailed:
-                return Error(record.GetStatus(), record.GetReason());
-            default:
-                return Retry();
+            break;
+        }
+        case NKikimrScheme::StatusPathDoesNotExist:
+            return AllocateTxId();
+        case NKikimrScheme::StatusSchemeError:
+        case NKikimrScheme::StatusAccessDenied:
+        case NKikimrScheme::StatusRedirectDomain:
+        case NKikimrScheme::StatusNameConflict:
+        case NKikimrScheme::StatusInvalidParameter:
+        case NKikimrScheme::StatusPreconditionFailed:
+            return Error(record.GetStatus(), record.GetReason());
+        default:
+            return Retry();
         }
     }
 
@@ -544,13 +544,14 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         LOG_T("Handle " << ev->Get()->ToString());
 
         switch (Kind) {
-            case TReplication::ETargetKind::Table:
-            case TReplication::ETargetKind::IndexTable:
-                return;
-            case TReplication::ETargetKind::Transfer:
-                return Error(NKikimrScheme::EStatus::StatusPathDoesNotExist, TStringBuilder() << "The target table `" << DstPath << "` does not exist");
-            }
+        case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::IndexTable:
+            return;
+        case TReplication::ETargetKind::Transfer:
+            return Error(NKikimrScheme::EStatus::StatusPathDoesNotExist,
+                TStringBuilder() << "The target table `" << DstPath << "` does not exist");
         }
+    }
 
     void Handle(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
@@ -713,8 +714,8 @@ static NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode ConvertMode(ER
 void FillReplicationConfig(
         NKikimrSchemeOp::TTableReplicationConfig& out,
         EReplicationMode mode,
-        EConsistencyLevel consistency
-) {
+        EConsistencyLevel consistency)
+{
     out.SetMode(ConvertMode(mode));
     out.SetConsistencyLevel(ConvertConsistencyLevel(consistency));
 }
@@ -723,8 +724,8 @@ bool CheckReplicationConfig(
         const NKikimrSchemeOp::TTableReplicationConfig& in,
         EReplicationMode mode,
         EConsistencyLevel consistency,
-        TString& error
-) {
+        TString& error)
+{
     if (in.GetMode() != ConvertMode(mode)) {
         error = TStringBuilder() << "Replication mode mismatch"
             << ": expected: " << ConvertMode(mode)

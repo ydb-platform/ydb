@@ -1,4 +1,36 @@
+
+* Added support for the new `setnotnull` operation in the `ydb operation` subcommands.
+
+## 2.33.0 ##
+
+* The `ydb` interactive AI mode can now search the YDB documentation.
+
+## 2.32.0 ##
+
+* Added `--no-consumer` option to `ydb topic read` command.
+* Added an AI mode to the `ydb` interactive mode. Press Ctrl+T to switch to it.
+* Added `--codec kafka-batch`, `--batch-inner-codec`, `--batch-flush-interval`, `--batch-flush-size`, and `--batch-flush-message-count` options to `ydb workload topic run write|full` commands.
+* `ydb scheme describe` now prints a human-readable description for external data sources (source type, location, auth method, database, properties and creation time) instead of empty output.
+* Added `--partition-max-inflight-bytes` option to `ydb topic workload`
+* Added `--partition-write-speed-mps` and `--partition-write-burst-messages` options to `ydb topic create` and `ydb topic alter` commands.
+* Added CPU Time statistics to benchmarks run commands.
+* `ydb sql`: add `--resource-pool` option
+* `ydb` interactive mode add `SET resource_pool` command
+* Added `ydb workload fulltext` command to make load testing and measure quality of fulltext indexes.
+
+## 2.31.0 ##
+
+* Added `--stats` option to `ydb workload * run` benchmarks to enable extended execution stats collection (e.g. `--stats profile`).
+
+## 2.30.0 ##
+
+* Added the `direct-read` option to the `ydb workload topic` command
+* Added the `ydb config completion` command to generate shell completion scripts for bash and zsh.
+* Added the `ydb export nfs` and `ydb import nfs` commands, allowing users to create and restore backups directly to/from a shared NFS directory mounted on every host in the cluster.
+* Added `--compact` option to `ydb workload tpcc import` command.
+* When a profile is explicitly specified with the `-p`/`--profile` option, the active profile is no longer used: all options are taken only from the specified profile, environment variables, and command line. This avoids confusion when the chosen profile was unexpectedly supplemented with settings from the active profile.
 * Added `--tx-mode` option to `ydb workload * run` benchmark commands, allowing to set the transaction mode (e.g. `no-tx`, `serializable-rw`, `snapshot-rw`).
+* Added support for the new compaction operation in the `ydb operation` subcommands.
 
 ## 2.29.0 ##
 

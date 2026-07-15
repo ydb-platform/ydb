@@ -151,23 +151,19 @@ opentelemetry::sdk::common::ExportResult OtlpGrpcMetricExporter::Export(
   OtlpMetricUtils::PopulateRequest(data, request);
 
   auto context = OtlpGrpcClient::MakeClientContext(options_);
-  proto::collector::metrics::v1::ExportMetricsServiceResponse *response =
-      google::protobuf::Arena::Create<proto::collector::metrics::v1::ExportMetricsServiceResponse>(
-          arena.get());
-
 #ifdef ENABLE_ASYNC_EXPORT
   if (options_.max_concurrent_requests > 1)
   {
     return client->DelegateAsyncExport(
-        options_, metrics_service_stub_.get(), std::move(context), std::move(arena),
-        std::move(*request),
+        options_, metrics_service_stub_.get(), std::move(context), std::move(arena), request,
         // Capture the metrics_service_stub_ to ensure it is not destroyed before the callback is
         // called.
         [metrics_service_stub = metrics_service_stub_](
             opentelemetry::sdk::common::ExportResult result,
-            std::unique_ptr<google::protobuf::Arena> &&,
+            std::unique_ptr<google::protobuf::Arena> &&arena,
             const proto::collector::metrics::v1::ExportMetricsServiceRequest &request,
             proto::collector::metrics::v1::ExportMetricsServiceResponse *) {
+          auto metrics_arena = std::move(arena);
           if (result != opentelemetry::sdk::common::ExportResult::kSuccess)
           {
             OTEL_INTERNAL_LOG_ERROR("[OTLP METRIC GRPC Exporter] ERROR: Export "
@@ -185,9 +181,12 @@ opentelemetry::sdk::common::ExportResult OtlpGrpcMetricExporter::Export(
   else
   {
 #endif
-    grpc::Status status =
-        OtlpGrpcClient::DelegateExport(metrics_service_stub_.get(), std::move(context),
-                                       std::move(arena), std::move(*request), response);
+    proto::collector::metrics::v1::ExportMetricsServiceResponse *response =
+        google::protobuf::Arena::Create<
+            proto::collector::metrics::v1::ExportMetricsServiceResponse>(arena.get());
+
+    grpc::Status status = OtlpGrpcClient::DelegateExport(
+        metrics_service_stub_.get(), std::move(context), std::move(arena), request, response);
 
     if (!status.ok())
     {

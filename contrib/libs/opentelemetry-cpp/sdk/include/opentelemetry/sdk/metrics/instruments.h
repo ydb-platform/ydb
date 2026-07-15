@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <functional>
 #include <string>
 
@@ -16,7 +17,7 @@ namespace sdk
 {
 namespace metrics
 {
-enum class InstrumentType
+enum class InstrumentType : std::uint8_t
 {
   kCounter,
   kHistogram,
@@ -27,13 +28,13 @@ enum class InstrumentType
   kGauge
 };
 
-enum class InstrumentClass
+enum class InstrumentClass : std::uint8_t
 {
   kSync,
   kAsync
 };
 
-enum class InstrumentValueType
+enum class InstrumentValueType : std::uint8_t
 {
   kInt,
   kLong,
@@ -41,7 +42,7 @@ enum class InstrumentValueType
   kDouble
 };
 
-enum class AggregationType
+enum class AggregationType : std::uint8_t
 {
   kDrop,
   kHistogram,
@@ -51,7 +52,7 @@ enum class AggregationType
   kBase2ExponentialHistogram
 };
 
-enum class AggregationTemporality
+enum class AggregationTemporality : std::uint8_t
 {
   kUnspecified,
   kDelta,

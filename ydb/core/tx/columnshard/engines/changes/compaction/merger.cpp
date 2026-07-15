@@ -12,6 +12,8 @@
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/library/formats/arrow/splitter/stats.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_COMPACTION
+
 namespace NKikimr::NOlap::NCompaction {
 
 class TColumnSplitInfo {
@@ -29,7 +31,8 @@ public:
         const ui32 columnId, const std::optional<NArrow::NSplitter::TSimpleSerializationStat>& stats, const NSplitter::TSplitSettings& settings)
         : ColumnId(columnId)
         , Stats(stats)
-        , Settings(settings) {
+        , Settings(settings)
+    {
     }
 
     void SetChunks(std::vector<i64>&& recordsCount) {
@@ -49,8 +52,11 @@ public:
         for (auto&& i : chunks) {
             checkRecordsCount += i->GetRecordsCountVerified();
             if (chunks.size() > 1) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("settings", Settings.DebugString())(
-                    "stats", Stats ? Stats->DebugString() : TString("no_stats"))("column_id", ColumnId)("packed", i->GetPackedSize());
+                YDB_LOG_DEBUG("",
+                    {"settings", Settings.DebugString()},
+                    {"stats", Stats ? Stats->DebugString() : TString("no_stats")},
+                    {"columnId", ColumnId},
+                    {"packed", i->GetPackedSize()});
             }
         }
         AFL_VERIFY(checkRecordsCount == ChunkRecordsCount[ChunksReady])("check", checkRecordsCount)("split", ChunkRecordsCount[ChunksReady]);
@@ -81,7 +87,8 @@ public:
 
     explicit TPortionSplitInfo(const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& remapper)
         : RecordsCount(recordsCount)
-        , MergingContext(remapper) {
+        , MergingContext(remapper)
+    {
     }
 
     TGeneralSerializedSlice BuildSlice(const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
@@ -112,7 +119,7 @@ public:
 
 class TSplittedBatch {
 private:
-    enum class ESplittingType : ui32 {
+    enum class ESplittingType: ui32 {
         Stats = 0,
         RecordsCount
     };
@@ -146,10 +153,14 @@ public:
         if (needWarnLog) {
             auto batchStats = Stats->GetStatsForColumns(ResultFiltered->GetColumnIds(), false);
             for (auto&& i : result) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("p_size", i.GetPackedSize())(
-                    "expected_size", batchStats ? batchStats->PredictPackedSize(i.GetRecordsCount()) : 0)(
-                    "s_type", SplittingType ? (ui32)*SplittingType : 999999)("settings", Settings.DebugString())("count", Portions.size())(
-                    "r_count", i.GetRecordsCount())("b_stats", batchStats ? batchStats->DebugString() : TString("NO"));
+                YDB_LOG_DEBUG("",
+                    {"pSize", i.GetPackedSize()},
+                    {"expectedSize", batchStats ? batchStats->PredictPackedSize(i.GetRecordsCount()) : 0},
+                    {"sType", SplittingType ? (ui32)*SplittingType : 999999},
+                    {"settings", Settings.DebugString()},
+                    {"count", Portions.size()},
+                    {"rCount", i.GetRecordsCount()},
+                    {"bStats", batchStats ? batchStats->DebugString() : TString("NO")});
             }
         }
         return result;
@@ -160,7 +171,8 @@ public:
         : Remapper(std::move(remapper))
         , Stats(stats)
         , ResultFiltered(resultFiltered)
-        , Settings(settings) {
+        , Settings(settings)
+    {
         AFL_VERIFY(Remapper);
         const std::vector<i64> recordsCount = [&]() {
             auto batchStatsOpt = stats->GetStatsForColumns(resultFiltered->GetColumnIds(), false);
@@ -187,8 +199,11 @@ public:
                     }
                 }
                 if (!colStatsOpt) {
-                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("event", "incorrect_case_stat")("stat", Stats->DebugString())(
-                        "column_id", c)("schema", resultFiltered->DebugString());
+                    YDB_LOG_WARN("",
+                        {"event", "incorrect_case_stat"},
+                        {"stat", Stats->DebugString()},
+                        {"columnId", c},
+                        {"schema", resultFiltered->DebugString()});
                     chunks = NArrow::NSplitter::TSimilarPacker::SplitWithExpected(p, settings.GetExpectedRecordsCountOnPage());
                 } else {
                     chunks = colStatsOpt->SplitRecords(
@@ -215,7 +230,8 @@ public:
     TSplitTopology(
         const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered)
         : Stats(stats)
-        , ResultFiltered(resultFiltered) {
+        , ResultFiltered(resultFiltered)
+    {
     }
 
     void FillRemapping(std::vector<std::shared_ptr<arrow::RecordBatch>>&& remapping, const NSplitter::TSplitSettings& settings) {
@@ -295,7 +311,8 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             continue;
         }
         const TString& columnName = resultFiltered->GetIndexInfo().GetColumnName(columnId);
-        NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("field_name", columnName));
+        YDB_LOG_CREATE_CONTEXT(
+            {"fieldName", columnName});
         auto columnInfo = stats->GetColumnInfo(columnId);
 
         TColumnMergeContext commonContext(
@@ -346,7 +363,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             const ui32 deletionsCount = IIndexInfo::CalcDeletions(b, false);
             auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(slice.GroupChunksByBlobs(groups),
                 dataWithSecondary.GetSecondaryInplaceData(), pathId, resultFiltered->GetVersion(), resultFiltered->GetSnapshot(),
-                SaverContext.GetStoragesManager(), EPortionType::Compacted);
+                SaverContext.GetStoragesManager(), EPortionType::Compacted, resultFiltered->GetIndexInfo());
 
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultFiltered->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());

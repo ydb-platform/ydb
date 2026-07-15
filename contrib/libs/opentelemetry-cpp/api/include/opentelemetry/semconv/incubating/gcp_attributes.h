@@ -180,6 +180,26 @@ static constexpr const char *kGcpGceInstanceHostname = "gcp.gce.instance.hostnam
  */
 static constexpr const char *kGcpGceInstanceName = "gcp.gce.instance.name";
 
+/**
+  The name of the Instance Group Manager (IGM) that manages this VM, if any.
+ */
+static constexpr const char *kGcpGceInstanceGroupManagerName =
+    "gcp.gce.instance_group_manager.name";
+
+/**
+  The region of a <strong>regional</strong> Instance Group Manager (e.g., @code us-central1
+  @endcode). Set this <strong>only</strong> when the IGM is regional.
+ */
+static constexpr const char *kGcpGceInstanceGroupManagerRegion =
+    "gcp.gce.instance_group_manager.region";
+
+/**
+  The zone of a <strong>zonal</strong> Instance Group Manager (e.g., @code us-central1-a @endcode).
+  Set this <strong>only</strong> when the IGM is zonal.
+ */
+static constexpr const char *kGcpGceInstanceGroupManagerZone =
+    "gcp.gce.instance_group_manager.zone";
+
 namespace GcpApphubServiceCriticalityTypeValues
 {
 /**

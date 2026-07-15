@@ -13,10 +13,12 @@ IF (NOT OS_WINDOWS)
         ydb/core/testlib/basics/default
         ydb/core/util
         ydb/core/wrappers/ut_helpers
+        ydb/library/aws_init
         yql/essentials/minikql/comp_nodes/llvm16
     )
     SRCS(
         s3_wrapper_ut.cpp
+        fs_storage_ut.cpp
     )
 ENDIF()
 

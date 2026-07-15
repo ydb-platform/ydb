@@ -1,5 +1,7 @@
 # Работа с базами данных Microsoft SQL Server
 
+{% include [!](_includes/experimental_connectors_warning.md) %}
+
 В этом разделе описана основная информация про работу с внешней базой данных [Microsoft SQL Server](https://learn.microsoft.com/ru-ru/sql/?view=sql-server-ver16).
 
 Для работы с внешней базой данных Microsoft SQL Server необходимо выполнить следующие шаги:
@@ -40,7 +42,7 @@ SELECT * FROM ms_sql_server_datasource.<table_name>
 - `ms_sql_server_datasource` - идентификатор внешнего источника данных;
 - `<table_name>` - имя таблицы внутри внешнего источника данных.
 
-## Ограничения
+## Ограничения {#limitations}
 
 При работе с кластерами Microsoft SQL Server существует ряд ограничений:
 

@@ -149,6 +149,40 @@ struct TSslHelpers {
 
         return ssl;
     }
+
+    // ALPN callback for HTTP/2 negotiation (server-side)
+    // Advertises both "h2" and "http/1.1", prefers "h2"
+    static int AlpnSelectCallback(SSL*, const unsigned char** out, unsigned char* outlen,
+                                   const unsigned char* in, unsigned int inlen, void*) {
+        // Try to select "h2" first, then "http/1.1"
+        static const unsigned char h2[] = { 2, 'h', '2' };
+        static const unsigned char h1[] = { 8, 'h', 't', 't', 'p', '/', '1', '.', '1' };
+
+        if (SSL_select_next_proto(const_cast<unsigned char**>(out), outlen,
+                                   h2, sizeof(h2), in, inlen) == OPENSSL_NPN_NEGOTIATED) {
+            return SSL_TLSEXT_ERR_OK;
+        }
+        if (SSL_select_next_proto(const_cast<unsigned char**>(out), outlen,
+                                   h1, sizeof(h1), in, inlen) == OPENSSL_NPN_NEGOTIATED) {
+            return SSL_TLSEXT_ERR_OK;
+        }
+        return SSL_TLSEXT_ERR_NOACK;
+    }
+
+    // Enable ALPN on a server SSL context for HTTP/2 support
+    static void EnableAlpn(SSL_CTX* ctx) {
+        SSL_CTX_set_alpn_select_cb(ctx, AlpnSelectCallback, nullptr);
+    }
+
+    // Set ALPN protocols for client SSL context (advertise h2 and http/1.1)
+    static void SetClientAlpn(SSL_CTX* ctx) {
+        // Wire format: length-prefixed protocol names
+        static const unsigned char protos[] = {
+            2, 'h', '2',
+            8, 'h', 't', 't', 'p', '/', '1', '.', '1'
+        };
+        SSL_CTX_set_alpn_protos(ctx, protos, sizeof(protos));
+    }
 };
 
 }

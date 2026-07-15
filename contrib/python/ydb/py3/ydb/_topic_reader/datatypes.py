@@ -15,12 +15,10 @@ from ydb._topic_reader import topic_reader_asyncio
 
 class ICommittable(abc.ABC):
     @abc.abstractmethod
-    def _commit_get_partition_session(self) -> PartitionSession:
-        ...
+    def _commit_get_partition_session(self) -> PartitionSession: ...
 
     @abc.abstractmethod
-    def _commit_get_offsets_range(self) -> OffsetsRange:
-        ...
+    def _commit_get_offsets_range(self) -> OffsetsRange: ...
 
 
 class ISessionAlive(abc.ABC):

@@ -91,10 +91,10 @@ public:
     TInternedObject();
 
     TInternedObject(const TInternedObject<T>& other) = default;
-    TInternedObject(TInternedObject<T>&& other) = default;
+    TInternedObject(TInternedObject<T>&& other) noexcept = default;
 
     TInternedObject<T>& operator=(const TInternedObject<T>& other) = default;
-    TInternedObject<T>& operator=(TInternedObject<T>&& other) = default;
+    TInternedObject<T>& operator=(TInternedObject<T>&& other) noexcept = default;
 
     explicit operator bool() const;
 

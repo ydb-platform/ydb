@@ -9,8 +9,8 @@ using namespace NSQLv1Generated;
 
 class TSqlValues: public TSqlTranslation {
 public:
-    TSqlValues(TContext& ctx, NSQLTranslation::ESqlMode mode)
-        : TSqlTranslation(ctx, mode)
+    explicit TSqlValues(const TSqlTranslation& that)
+        : TSqlTranslation(that)
     {
     }
 
@@ -28,8 +28,8 @@ private:
 
 class TSqlIntoValues: public TSqlValues {
 public:
-    TSqlIntoValues(TContext& ctx, NSQLTranslation::ESqlMode mode)
-        : TSqlValues(ctx, mode)
+    explicit TSqlIntoValues(const TSqlTranslation& that)
+        : TSqlValues(that)
     {
     }
 
@@ -38,8 +38,8 @@ public:
 
 class TSqlAsValues: public TSqlValues {
 public:
-    TSqlAsValues(TContext& ctx, NSQLTranslation::ESqlMode mode)
-        : TSqlValues(ctx, mode)
+    explicit TSqlAsValues(const TSqlTranslation& that)
+        : TSqlValues(that)
     {
     }
 

@@ -100,7 +100,7 @@ void TBlobState::AddResponseData(const TBlobStorageGroupInfo &info, const TLogoB
     Y_VERIFY_S(disk.OrderNumber == orderNumber, "AddResponseData, disk.OrderNumber != orderNumber"
         << " blobId# " << id
         << " shift# " << shift
-        << " size# " << data.size()
+        << " size# " << dataSize
         << " VDiskId# " << info.GetVDiskId(orderNumber)
         << " diskIdx# " << diskIdx
         << " disk# " << disk.ToString()
@@ -674,6 +674,14 @@ void TBlackboard::MarkSlowDisks(TBlobState& state, bool isPut, const TAccelerati
             ui32 orderNumber = worstDisks[idx].DiskIdx;
             state.Disks[orderNumber].IsSlow = true;
         }
+    }
+}
+
+void TBlackboard::MoveBlobToDone(const TLogoBlobID& id) {
+    const TLogoBlobID fullId = id.FullID();
+    if (const auto it = BlobStates.find(fullId); it != BlobStates.end()) {
+        auto result = DoneBlobStates.insert(BlobStates.extract(it));
+        Y_DEBUG_ABORT_UNLESS(result.inserted);
     }
 }
 

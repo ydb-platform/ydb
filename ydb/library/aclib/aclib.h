@@ -2,7 +2,9 @@
 #include <util/generic/vector.h>
 #include <util/generic/hash_set.h>
 #include <util/datetime/base.h>
-#include <ydb/library/aclib/protos/aclib.pb.h>
+#include <ydb/library/aclib/protos/identity/user_token.pb.h>
+#include <ydb/library/aclib/protos/acl/acl.pb.h>
+#include <ydb/library/actors/wilson/wilson_trace.h>
 
 namespace NACLib {
 
@@ -13,6 +15,13 @@ namespace NACLib {
 
 #define BUILTIN_ACL_METADATA "metadata@" BUILTIN_SYSTEM_DOMAIN
 #define BUILTIN_ACL_TMP "tmp@" BUILTIN_SYSTEM_DOMAIN
+#define BUILTIN_ACL_BASIC_OWNER "owner@" BUILTIN_SYSTEM_DOMAIN
+
+
+// This definition used to mark anonymous user sid
+#define BUILTIN_ACL_NO_USER_SID ""
+
+#define BUILTIN_ACL_CDC_TTL "ttl@" BUILTIN_SYSTEM_DOMAIN
 
 class TUserToken;
 class TSystemUsers {
@@ -122,7 +131,7 @@ public:
     TACL() = default;
     TACL(const TString& string); // proto format
     std::pair<ui32, ui32> AddAccess(EAccessType type, ui32 access, const TSID& sid, ui32 inheritance = DefaultInheritanceType);
-    std::pair<ui32, ui32> RemoveAccess(NACLib::EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = DefaultInheritanceType);
+    std::pair<ui32, ui32> RemoveAccess(EAccessType type, ui32 access, const NACLib::TSID& sid, ui32 inheritance = DefaultInheritanceType);
     std::pair<ui32, ui32> RemoveAccess(const NACLibProto::TACE& filter);
     bool HasAccess(const NACLib::TSID& sid);
     std::pair<ui32, ui32> ClearAccess();
@@ -133,9 +142,9 @@ public:
     static TString ToString(const NACLibProto::TACE& ace);
     static void FromString(NACLibProto::TACE& ace, const TString& string);
 
-protected:
     static ui32 SpecialRightsFromString(const TString& string);
 
+protected:
     void SortACL();
 };
 
@@ -176,10 +185,5 @@ public:
 protected:
     bool IsContainer;
 };
-
-
-
-
-
 
 }

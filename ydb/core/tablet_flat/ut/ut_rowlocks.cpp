@@ -11,6 +11,34 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
 
     using namespace NTest;
 
+    class TTestLockObserver : public NTable::ITransactionObserver {
+    public:
+        TVector<ui64> Skips;
+
+        TTestLockObserver() {
+        }
+
+        void OnSkipUncommitted(ui64 txId) override {
+            Skips.push_back(txId);
+        }
+
+        void OnSkipCommitted(const TRowVersion&) override {
+            Y_ENSURE(false, "unreachable");
+        }
+
+        void OnSkipCommitted(const TRowVersion&, ui64) override {
+            Y_ENSURE(false, "unreachable");
+        }
+
+        void OnApplyCommitted(const TRowVersion&) override {
+            Y_ENSURE(false, "unreachable");
+        }
+
+        void OnApplyCommitted(const TRowVersion&, ui64) override {
+            Y_ENSURE(false, "unreachable");
+        }
+    };
+
     Y_UNIT_TEST(LockSurvivesCompactions) {
         TDbExec me;
 
@@ -585,6 +613,100 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         UNIT_ASSERT(!me->HasTxData(table1, 101u));
         UNIT_ASSERT(!me->HasTxData(table1, 102u));
         UNIT_ASSERT(!me->HasTxData(table1, 103u));
+    }
+
+    Y_UNIT_TEST(UniqueIndexRowLocks) {
+        TDbExec me;
+
+        const ui32 table1 = 1;
+
+        me.ToLine().Begin();
+        me.ToLine().Apply(*TAlter()
+            .AddTable("me_1", table1)
+            .AddColumn(table1, "uniq", 1, ETypes::Uint64, false, false)
+            .AddColumn(table1, "pk",   2, ETypes::Uint64, false, false)
+            .AddColumnToKey(table1, 1)
+            .AddColumnToKey(table1, 2));
+        me.ToLine().Commit();
+
+        // Uncommitted row lock
+
+        me.ToLine().Begin();
+        me.ToLine().WriteTx(101).LockRowN(table1, ELockMode::Exclusive, 1_u64, 1_u64);
+        me.ToLine().Commit();
+
+        me.ToLine().Begin();
+        {
+            auto r = me.ToLine()->SelectRowVersionByKeyPrefix(table1, TVector<TCell>{TCell::Make(1_u64)}, nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(r.Ready, EReady::Gone);
+            UNIT_ASSERT_VALUES_EQUAL(r.LockMode, ELockMode::Exclusive);
+            UNIT_ASSERT_VALUES_EQUAL(r.LockTxId, 101u);
+        }
+        me.ToLine().Commit();
+
+        // Simple committed version
+
+        me.ToLine().Begin();
+        me.ToLine().WriteVer({1, 11}).PutN(table1, 1_u64, 1_u64).CommitTx(table1, 101u);
+        me.ToLine().Commit();
+
+        me.ToLine().Begin();
+        {
+            auto r = me.ToLine()->SelectRowVersionByKeyPrefix(table1, TVector<TCell>{TCell::Make(1_u64)}, nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(r.Ready, EReady::Data);
+            UNIT_ASSERT_VALUES_EQUAL(r.RowVersion, TRowVersion(1, 11));
+            UNIT_ASSERT_VALUES_EQUAL(r.LockMode, ELockMode::None);
+            UNIT_ASSERT_VALUES_EQUAL(r.LockTxId, 0);
+        }
+        me.ToLine().Commit();
+
+        // Delete + add row
+
+        me.ToLine().Begin();
+        me.ToLine().WriteTx(102).LockRowN(table1, ELockMode::Exclusive, 1_u64, 1_u64);
+        me.ToLine().Commit();
+
+        me.ToLine().Begin();
+        me.ToLine().WriteTx(103).EraseN(table1, 1_u64, 1_u64);
+        me.ToLine().Commit();
+
+        me.ToLine().Begin();
+        me.ToLine().WriteTx(104).PutN(table1, 1_u64, 2_u64);
+        me.ToLine().Commit();
+
+        me.ToLine().Begin();
+        me.ToLine().WriteVer({1, 12}).CommitTx(table1, 102u);
+        me.ToLine().WriteVer({1, 13}).CommitTx(table1, 103u);
+        me.ToLine().WriteVer({1, 14}).CommitTx(table1, 104u);
+        me.ToLine().Commit();
+
+        me.ToLine().Begin();
+        {
+            auto r = me.ToLine()->SelectRowVersionByKeyPrefix(table1, TVector<TCell>{TCell::Make(1_u64)}, nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(r.Ready, EReady::Data);
+            UNIT_ASSERT_VALUES_EQUAL(r.RowVersion, TRowVersion(1, 14));
+            UNIT_ASSERT_VALUES_EQUAL(r.LockMode, ELockMode::None);
+            UNIT_ASSERT_VALUES_EQUAL(r.LockTxId, 0);
+        }
+        me.ToLine().Commit();
+
+        // Uncommitted delta + observer
+
+        me.ToLine().Begin();
+        me.ToLine().WriteTx(105).EraseN(table1, 1_u64, 2_u64);
+        me.ToLine().Commit();
+
+        me.ToLine().Begin();
+        {
+            auto observer = MakeIntrusive<TTestLockObserver>();
+            auto r = me.ToLine()->SelectRowVersionByKeyPrefix(table1, TVector<TCell>{TCell::Make(1_u64)}, observer);
+            UNIT_ASSERT_VALUES_EQUAL(observer->Skips, TVector<ui64>{105});
+            UNIT_ASSERT_VALUES_EQUAL(r.Ready, EReady::Data);
+            UNIT_ASSERT_VALUES_EQUAL(r.RowVersion, TRowVersion(1, 14));
+            UNIT_ASSERT_VALUES_EQUAL(r.LockMode, ELockMode::None);
+            UNIT_ASSERT_VALUES_EQUAL(r.LockTxId, 0);
+        }
+        me.ToLine().Commit();
     }
 
 } // Y_UNIT_TEST_SUITE(DBRowLocks)

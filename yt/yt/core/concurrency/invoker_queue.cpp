@@ -4,7 +4,7 @@
 #include <yt/yt/core/actions/invoker_detail.h>
 #include <yt/yt/core/actions/current_invoker.h>
 
-#include <yt/yt/core/profiling/tscp.h>
+#include <library/cpp/yt/system/tscp.h>
 
 #include <library/cpp/yt/misc/tls.h>
 
@@ -35,7 +35,7 @@ void TMpmcQueueImpl::Enqueue(TEnqueuedAction&& action)
 
 void TMpmcQueueImpl::Enqueue(TMutableRange<TEnqueuedAction> actions)
 {
-    if (Y_UNLIKELY(actions.empty())) {
+    if (actions.empty()) [[unlikely]] {
         return;
     }
 
@@ -703,10 +703,10 @@ typename TInvokerQueue<TQueueImpl>::TCountersPtr TInvokerQueue<TQueueImpl>::Crea
     counters->CumulativeTimeCounter = profiler.TimeCounter("/time/cumulative");
     counters->TotalTimer = profiler.Timer("/time/total");
 
-    profiler.AddFuncGauge("/enqueued", MakeStrong(this), [counters = counters.get()] {
+    profiler.AddFuncCounter("/enqueued", MakeStrong(this), [counters = counters.get()] {
         return counters->EnqueuedCallbacks.load(std::memory_order::relaxed);
     });
-    profiler.AddFuncGauge("/dequeued", MakeStrong(this), [counters = counters.get()] {
+    profiler.AddFuncCounter("/dequeued", MakeStrong(this), [counters = counters.get()] {
         return counters->DequeuedCallbacks.load(std::memory_order::relaxed);
     });
     profiler.AddFuncGauge("/size", MakeStrong(this), [counters = counters.get()] {

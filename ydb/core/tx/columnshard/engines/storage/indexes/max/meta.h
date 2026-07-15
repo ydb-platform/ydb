@@ -22,6 +22,7 @@ protected:
         Y_UNUSED(newMeta);
         return TConclusionStatus::Fail("max index not modifiable");
     }
+
     virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
         TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
@@ -30,7 +31,8 @@ protected:
         AFL_VERIFY(proto.HasMaxIndex());
         auto& bFilter = proto.GetMaxIndex();
         if (!bFilter.GetColumnId()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect column id");
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"problem", "incorrect column id"});
             return false;
         };
         AddColumnId(bFilter.GetColumnId());
@@ -46,6 +48,7 @@ protected:
 
 public:
     TIndexMeta() = default;
+
     TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionStorage, const ui32& columnId)
         : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, std::make_shared<TDefaultDataExtractor>())
     {

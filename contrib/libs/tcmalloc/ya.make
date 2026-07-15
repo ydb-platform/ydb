@@ -29,6 +29,7 @@ IF (NOT DLL_FOR)
     RECURSE(
         default
         dynamic
+        internal_utils
         malloc_extension
         no_percpu_cache
         numa_256k

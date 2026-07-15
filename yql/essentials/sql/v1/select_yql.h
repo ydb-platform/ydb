@@ -5,8 +5,15 @@
 namespace NSQLTranslationV1 {
 
 struct TYqlSourceAlias {
+    enum class EKind {
+        Subquery,
+        CTE,
+    };
+
+    TPosition Position;
     TString Name;
     TVector<TString> Columns;
+    EKind Kind = EKind::Subquery;
 };
 
 struct TYqlSource {
@@ -17,6 +24,7 @@ struct TYqlSource {
 enum class EYqlJoinKind {
     Cross,
     Inner,
+    Full,
     Left,
     Right,
 };
@@ -37,18 +45,43 @@ using TProjection = std::variant<
     TVector<TNodePtr>,
     TPlainAsterisk>;
 
+struct TGroupingSets {
+    struct TRollup {
+        TVector<TNodePtr> Expressions;
+    };
+
+    struct TCube {
+        TVector<TNodePtr> Expressions;
+    };
+
+    TVector<TVector<TNodePtr>> Sets;
+};
+
 struct TGroupBy {
-    TVector<TNodePtr> Keys;
+    using TElement = std::variant<
+        /* Ordinary */ TNodePtr,
+        TGroupingSets,
+        TGroupingSets::TRollup,
+        TGroupingSets::TCube>;
+
+    TVector<TElement> Elements;
 };
 
 struct TOrderBy {
     TVector<TSortSpecificationPtr> Keys;
 };
 
+struct TWindow {
+    TString Name;
+    TVector<TNodePtr> PartitionBy;
+    TMaybe<TOrderBy> OrderBy;
+    TFrameSpecificationPtr Frame;
+};
+
 struct TYqlTableRefArgs {
     TString Service;
-    TString Cluster;
-    TString Key;
+    TDeferredAtom Cluster;
+    TDeferredAtom Key;
     bool IsAnonymous = false;
 };
 
@@ -56,22 +89,49 @@ struct TYqlValuesArgs {
     TVector<TVector<TNodePtr>> Rows;
 };
 
-struct TYqlSelectArgs {
+struct TYqlSetItemArgs {
+    TPosition Position;
+    bool Distinct = false;
     TProjection Projection;
     TMaybe<TYqlJoin> Source;
     TMaybe<TNodePtr> Where;
-    TMaybe<TNodePtr> Limit;
-    TMaybe<TNodePtr> Offset;
     TMaybe<TGroupBy> GroupBy;
     TMaybe<TNodePtr> Having;
+    TMap<TString, TWindow> Windows;
     TMaybe<TOrderBy> OrderBy;
+    TMaybe<TNodePtr> Limit;
+    TMaybe<TNodePtr> Offset;
 };
+
+enum class EYqlSetOp {
+    Push = 0,
+    Union,
+    UnionAll,
+    Except,
+    ExceptAll,
+    Intersect,
+    IntersectAll,
+};
+
+struct TYqlSelectArgs {
+    TVector<TYqlSetItemArgs> SetItems;
+    TVector<EYqlSetOp> SetOps;
+    TMaybe<TOrderBy> OrderBy;
+    TMaybe<TNodePtr> Limit;
+    TMaybe<TNodePtr> Offset;
+};
+
+EYqlSetOp AllQualified(EYqlSetOp op);
 
 TNodePtr GetYqlSource(const TNodePtr& node);
 
 TNodePtr ToTableExpression(TNodePtr source);
 
+TYqlSelectArgs DestructYqlSelect(TNodePtr node);
+
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
+
+TNodePtr BuildYqlSelf(TPosition position);
 
 TNodePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args);
 

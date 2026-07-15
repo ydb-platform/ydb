@@ -23,9 +23,17 @@ struct TCustomized
     }
 };
 
+struct TOtherCustomized
+{
+    friend int TagInvoke(TTagInvokeTag<TestCpo>, const TOtherCustomized&)
+    {
+        return 0;
+    }
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
-// 2 Cpos won't trigger static vtable
+// 2 CPOs won't trigger static vtable.
 static_assert(
     sizeof(
         TAnyRef<
@@ -35,9 +43,9 @@ static_assert(
             TOverload<
                 TestCpo,
                 void(TErasedThis&&)>>)
-    == 8 + 2 * 8);
+    == 3 * sizeof(intptr_t));
 
-// 3 Cpos trigger static vtable
+// 3 CPOs trigger static vtable.
 static_assert(
     sizeof(
         TAnyRef<
@@ -50,7 +58,7 @@ static_assert(
             TOverload<
                 TestCpo,
                 void(TErasedThis, int)>>)
-    == 8 + 8);
+    == 2 * sizeof(intptr_t));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -88,10 +96,10 @@ struct TNoCopy
 
     TNoCopy(const TNoCopy&) = delete;
 
-    TNoCopy(TNoCopy&&)
+    TNoCopy(TNoCopy&&) noexcept
     { }
 
-    TNoCopy& operator=(TNoCopy&&)
+    TNoCopy& operator=(TNoCopy&&) noexcept
     {
         return *this;
     }
@@ -116,13 +124,13 @@ struct TCustomized2
         return *this;
     }
 
-    TCustomized2(TCustomized2&& other)
+    TCustomized2(TCustomized2&& other) noexcept
         : Value(other.Value)
     {
         other.Value = -1;
     }
 
-    TCustomized2& operator=(TCustomized2&& other)
+    TCustomized2& operator=(TCustomized2&& other) noexcept
     {
         if (this == &other) {
             return *this;
@@ -251,6 +259,22 @@ TEST(TAnyObjectTest, EmptyAny)
     static_assert(!std::invocable<TTagInvokeTag<TestCpo>, decltype(any)>);
     const auto& conc = any.AnyCast<TCustomized>();
     EXPECT_EQ(conc.Value, 11);
+}
+
+TEST(TAnyObjectTest, Holds)
+{
+    using TAnyObject = TAnyObject<TOverload<TestCpo, int(const TErasedThis&)>>;
+
+    TAnyObject any{TCustomized{.Value = 42}};
+    EXPECT_TRUE(any.Holds<TCustomized>());
+    EXPECT_FALSE(any.Holds<TOtherCustomized>());
+
+    TAnyObject other{TOtherCustomized{}};
+    EXPECT_TRUE(other.Holds<TOtherCustomized>());
+    EXPECT_FALSE(other.Holds<TCustomized>());
+
+    TAnyObject empty;
+    EXPECT_FALSE(empty.Holds<TCustomized>());
 }
 
 TEST(TAnyObjectTest, CvRefCorrectness)

@@ -1,8 +1,9 @@
 #pragma once
 #include "abstract.h"
+
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NDataLocks {
 
@@ -11,6 +12,7 @@ private:
     using TBase = ILock;
     THashSet<TPortionAddress> Portions;
     THashSet<TInternalPathId> Granules;
+
 protected:
     virtual std::optional<TString> DoIsLocked(
         const TPortionInfo& portion, const ELockCategory /*category*/, const THashSet<TString>& /*excludedLocks*/) const override {
@@ -19,6 +21,7 @@ protected:
         }
         return {};
     }
+
     virtual std::optional<TString> DoIsLocked(
         const TGranuleMeta& granule, const ELockCategory /*category*/, const THashSet<TString>& /*excludedLocks*/) const override {
         if (Granules.contains(granule.GetPathId())) {
@@ -26,11 +29,14 @@ protected:
         }
         return {};
     }
+
     bool DoIsEmpty() const override {
         return Portions.empty();
     }
+
 public:
-    TListPortionsLock(const TString& lockName, const std::vector<TPortionDataAccessor>& portions, const ELockCategory category, const bool readOnly = false)
+    TListPortionsLock(
+        const TString& lockName, const std::vector<TPortionDataAccessor>& portions, const ELockCategory category, const bool readOnly = false)
         : TBase(lockName, category, readOnly)
     {
         for (auto&& p : portions) {
@@ -41,7 +47,8 @@ public:
 
     TListPortionsLock(const TString& lockName, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const ELockCategory category,
         const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& p : portions) {
             Portions.emplace(p->GetAddress());
             Granules.emplace(p->GetPathId());
@@ -50,7 +57,8 @@ public:
 
     TListPortionsLock(
         const TString& lockName, const std::vector<TPortionInfo::TConstPtr>& portions, const ELockCategory category, const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& p : portions) {
             Portions.emplace(p->GetAddress());
             Granules.emplace(p->GetPathId());
@@ -59,7 +67,8 @@ public:
 
     TListPortionsLock(
         const TString& lockName, const std::vector<TPortionInfo>& portions, const ELockCategory category, const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& p : portions) {
             Portions.emplace(p.GetAddress());
             Granules.emplace(p.GetPathId());
@@ -69,7 +78,8 @@ public:
     template <class T, class TGetter>
     TListPortionsLock(
         const TString& lockName, const std::vector<T>& portions, const TGetter& g, const ELockCategory category, const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& p : portions) {
             const auto address = g(p);
             Portions.emplace(address);
@@ -80,7 +90,8 @@ public:
     template <class T>
     TListPortionsLock(
         const TString& lockName, const THashMap<TPortionAddress, T>& portions, const ELockCategory category, const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& p : portions) {
             const auto address = p.first;
             Portions.emplace(address);
@@ -90,7 +101,8 @@ public:
 
     TListPortionsLock(
         const TString& lockName, const THashSet<TPortionAddress>& portions, const ELockCategory category, const bool readOnly = false)
-        : TBase(lockName, category, readOnly) {
+        : TBase(lockName, category, readOnly)
+    {
         for (auto&& address : portions) {
             Portions.emplace(address);
             Granules.emplace(address.GetPathId());
@@ -102,6 +114,7 @@ class TListTablesLock: public ILock {
 private:
     using TBase = ILock;
     THashSet<TInternalPathId> Tables;
+
 protected:
     virtual std::optional<TString> DoIsLocked(
         const TPortionInfo& portion, const ELockCategory /*category*/, const THashSet<TString>& /*excludedLocks*/) const override {
@@ -110,6 +123,7 @@ protected:
         }
         return {};
     }
+
     virtual std::optional<TString> DoIsLocked(
         const TGranuleMeta& granule, const ELockCategory /*category*/, const THashSet<TString>& /*excludedLocks*/) const override {
         if (Tables.contains(granule.GetPathId())) {
@@ -117,9 +131,11 @@ protected:
         }
         return {};
     }
+
     bool DoIsEmpty() const override {
         return Tables.empty();
     }
+
 public:
     TListTablesLock(const TString& lockName, const THashSet<TInternalPathId>& tables, const ELockCategory category, const bool readOnly = false)
         : TBase(lockName, category, readOnly)
@@ -128,4 +144,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NDataLocks

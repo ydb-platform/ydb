@@ -2,8 +2,8 @@
 
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
-#include <ydb/core/tx/columnshard/counters/counters_manager.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/counters/counters_manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 
 namespace NKikimr::NColumnShard {
@@ -13,22 +13,27 @@ private:
     TCountersManager& Counters;
     const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* Executor;
 
-    void FillPortionStats(::NKikimrTableStats::TTableStats& to, const NOlap::TSimplePortionsGroupInfo& from) const {
+    void FillPortionStats(
+        ::NKikimrTableStats::TTableStats& to, const NOlap::TSimplePortionsGroupInfo& from, const NOlap::TSmallBlobsStat& smallBlobs) const {
         to.SetRowCount(from.GetRecordsCount());
         to.SetDataSize(from.GetBlobBytes());
+        to.SetSmallBlobsVolumeBytes(smallBlobs.VolumeBytes);
+        to.SetSmallBlobsCount(smallBlobs.Count);
     }
 
 public:
     TTableStatsBuilder(TCountersManager& counters, const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor = nullptr)
         : Counters(counters)
-        , Executor(executor) {
+        , Executor(executor)
+    {
     }
 
     void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {
         Counters.FillTableStats(pathId, tableStats);
 
-        auto activeStats = Counters.GetPortionIndexCounters()->GetTableStats(pathId, TPortionIndexStats::TActivePortions());
-        FillPortionStats(tableStats, activeStats);
+        const auto& portionIndexCounters = Counters.GetPortionIndexCounters();
+        FillPortionStats(tableStats, portionIndexCounters->GetTableStats(pathId, TPortionIndexStats::TDiskUsedPortions()),
+            portionIndexCounters->GetTableSmallBlobs(pathId));
     }
 
     void FillTotalTableStats(::NKikimrTableStats::TTableStats& tableStats) {
@@ -39,9 +44,10 @@ public:
             tableStats.SetHasLoanedParts(Executor->HasLoanedParts());
         }
 
-        auto activeStats = Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TActivePortions());
-        FillPortionStats(tableStats, activeStats);
+        const auto& portionIndexCounters = Counters.GetPortionIndexCounters();
+        FillPortionStats(tableStats, portionIndexCounters->GetTotalStats(TPortionIndexStats::TDiskUsedPortions()),
+            portionIndexCounters->GetTotalSmallBlobs());
     }
 };
 
-} // namespace NKikimr::NColumnShard
+}   // namespace NKikimr::NColumnShard

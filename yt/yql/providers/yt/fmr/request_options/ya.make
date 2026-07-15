@@ -9,6 +9,7 @@ PEERDIR(
     library/cpp/threading/future
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
+    yt/yql/providers/yt/fmr/tvm/interface
     yql/essentials/public/issue
 )
 

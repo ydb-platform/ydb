@@ -5,6 +5,7 @@
 #include "scheduler_basic.h"
 #include "actor_bootstrapped.h"
 #include "actor_benchmark_helper.h"
+#include "subsystems/stats.h"
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/util/threadparkpad.h>
@@ -83,7 +84,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             NanoSleep(1'000'000);
             TVector<TExecutorThreadStats> executorThreadStats;
             TExecutorPoolStats poolStats;
-            actorSystem.GetPoolStats(0, poolStats, executorThreadStats);
+            GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, executorThreadStats);
 
             ui64 newCpuUs = 0;
             ui64 newElapsedUs = 0;
@@ -154,7 +155,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TVector<TExecutorThreadStats> stats;
         TVector<TExecutorThreadStats> sharedStats;
         TExecutorPoolStats poolStats;
-        actorSystem.GetPoolStats(0, poolStats, stats, sharedStats);
+        GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, stats, sharedStats);
         // Sum all per-thread counters into the 0th element
         for (auto &stat : stats) {
             aggregated.Aggregate(stat);
@@ -209,7 +210,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TVector<TExecutorThreadStats> stats;
         TVector<TExecutorThreadStats> sharedStats;
         TExecutorPoolStats poolStats;
-        actorSystem.GetPoolStats(0, poolStats, stats, sharedStats);
+        GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, stats, sharedStats);
         // Sum all per-thread counters into the 0th element
         for (auto &stat : stats) {
             aggregated.Aggregate(stat);
@@ -330,7 +331,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TVector<TExecutorThreadStats> stats;
         TVector<TExecutorThreadStats> sharedStats;
         TExecutorPoolStats poolStats;
-        actorSystem.GetPoolStats(0, poolStats, stats, sharedStats);
+        GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, stats, sharedStats);
         // Sum all per-thread counters into the 0th element
         for (auto &stat : stats) {
             aggregated.Aggregate(stat);
@@ -410,7 +411,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TVector<TExecutorThreadStats> stats;
         TVector<TExecutorThreadStats> sharedStats;
         TExecutorPoolStats poolStats;
-        actorSystem.GetPoolStats(0, poolStats, stats, sharedStats);
+        GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, stats, sharedStats);
         // Sum all per-thread counters into the 0th element
         for (auto &stat : stats) {
             aggregated.Aggregate(stat);
@@ -750,6 +751,184 @@ Y_UNIT_TEST_SUITE(TestAliases) {
         runtime.DispatchEvents(options);
 
         done.GetValueSync();
+    }
+}
+
+Y_UNIT_TEST_SUITE(TestThreadContextQueueTimestamps) {
+    using namespace NThreading;
+
+    struct TQueueTimestamps {
+        NHPTimer::STime EventEnqueuedTimestamp = 0;
+        TInstant EventEnqueuedInstant;
+        NHPTimer::STime MailboxScheduledTimestamp = 0;
+        TInstant MailboxScheduledInstant;
+        ui64 EventDeliveryTimeUs = 0;
+        ui64 ActivationTimeUs = 0;
+        NHPTimer::STime ObservedTimestamp = 0;
+        TInstant ObservedInstant;
+    };
+
+    struct TQueueTimestampActor : TActorBootstrapped<TQueueTimestampActor> {
+        TPromise<void> Ready;
+        TPromise<TQueueTimestamps> Done;
+
+        TQueueTimestampActor(TPromise<void> ready, TPromise<TQueueTimestamps> done)
+            : Ready(std::move(ready))
+            , Done(std::move(done))
+        {}
+
+        void Bootstrap() {
+            TActivationContext::SetOverwrittenEventsPerMailbox(1);
+            Ready.SetValue();
+            Become(&TThis::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvWakeup, Handle);
+            }
+        }
+
+        void Handle(TEvents::TEvWakeup::TPtr&) {
+            TQueueTimestamps timestamps;
+            timestamps.EventEnqueuedTimestamp = TActivationContext::GetCurrentEventEnqueuedTimestampTs();
+            timestamps.EventEnqueuedInstant = TActivationContext::GetCurrentEventEnqueuedTimestamp();
+            timestamps.MailboxScheduledTimestamp = TActivationContext::GetCurrentMailboxScheduledTimestampTs();
+            timestamps.MailboxScheduledInstant = TActivationContext::GetCurrentMailboxScheduledTimestamp();
+            timestamps.EventDeliveryTimeUs = TActivationContext::GetCurrentEventDeliveryTimeUs();
+            timestamps.ActivationTimeUs = TActivationContext::GetCurrentActivationTimeUs();
+            timestamps.ObservedTimestamp = GetCycleCountFast();
+            timestamps.ObservedInstant = TActivationContext::Now();
+            Done.SetValue(std::move(timestamps));
+            PassAway();
+        }
+    };
+
+    Y_UNIT_TEST(CurrentQueueTimestamps) {
+        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
+        setup->NodeId = 1;
+        setup->ExecutorsCount = 1;
+        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
+
+        ui64 ts = GetCycleCountFast();
+        std::unique_ptr<IHarmonizer> harmonizer = MakeHarmonizer(ts);
+        for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
+            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic", harmonizer.get());
+            harmonizer->AddPool(setup->Executors[i].Get());
+        }
+        setup->Scheduler = new TBasicSchedulerThread;
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TPromise<void> readyPromise = NewPromise<void>();
+        TFuture<void> ready = readyPromise.GetFuture();
+        TPromise<TQueueTimestamps> donePromise = NewPromise<TQueueTimestamps>();
+        TFuture<TQueueTimestamps> done = donePromise.GetFuture();
+
+        const TActorId actorId = actorSystem.Register(new TQueueTimestampActor(std::move(readyPromise), std::move(donePromise)));
+        ready.GetValueSync();
+        actorSystem.Send(actorId, new TEvents::TEvWakeup());
+
+        const TQueueTimestamps timestamps = done.GetValueSync();
+        actorSystem.Stop();
+
+        UNIT_ASSERT_C(timestamps.EventEnqueuedTimestamp > 0, "missing current event enqueue timestamp");
+        UNIT_ASSERT_C(timestamps.MailboxScheduledTimestamp > 0, "missing current mailbox schedule timestamp");
+        UNIT_ASSERT_C(timestamps.EventEnqueuedInstant.MicroSeconds() > 0, "missing current event enqueue instant");
+        UNIT_ASSERT_C(timestamps.MailboxScheduledInstant.MicroSeconds() > 0, "missing current mailbox schedule instant");
+        UNIT_ASSERT_C(
+            timestamps.EventDeliveryTimeUs <= static_cast<ui64>(Ts2Us(timestamps.ObservedTimestamp - timestamps.EventEnqueuedTimestamp)),
+            "event delivery time must match enqueue timestamp"
+                << ": deliveryUs=" << timestamps.EventDeliveryTimeUs
+                << " eventTs=" << timestamps.EventEnqueuedTimestamp
+                << " observedTs=" << timestamps.ObservedTimestamp);
+        UNIT_ASSERT_C(
+            timestamps.ActivationTimeUs <= static_cast<ui64>(Ts2Us(timestamps.ObservedTimestamp - timestamps.MailboxScheduledTimestamp)),
+            "activation time must match mailbox scheduled timestamp"
+                << ": activationUs=" << timestamps.ActivationTimeUs
+                << " mailboxTs=" << timestamps.MailboxScheduledTimestamp
+                << " observedTs=" << timestamps.ObservedTimestamp);
+        UNIT_ASSERT_C(
+            timestamps.ActivationTimeUs <= timestamps.EventDeliveryTimeUs,
+            "activation time must not exceed event delivery time"
+                << ": activationUs=" << timestamps.ActivationTimeUs
+                << " deliveryUs=" << timestamps.EventDeliveryTimeUs);
+        UNIT_ASSERT_C(
+            timestamps.EventEnqueuedTimestamp <= timestamps.MailboxScheduledTimestamp,
+            "event timestamp must not be after mailbox scheduling"
+                << ": event=" << timestamps.EventEnqueuedTimestamp
+                << " mailbox=" << timestamps.MailboxScheduledTimestamp);
+        UNIT_ASSERT_C(
+            timestamps.MailboxScheduledTimestamp <= timestamps.ObservedTimestamp,
+            "mailbox timestamp must not be in the future"
+                << ": mailbox=" << timestamps.MailboxScheduledTimestamp
+                << " observed=" << timestamps.ObservedTimestamp);
+        UNIT_ASSERT_C(
+            timestamps.EventEnqueuedInstant <= timestamps.MailboxScheduledInstant,
+            "event instant must not be after mailbox scheduling instant"
+                << ": event=" << timestamps.EventEnqueuedInstant
+                << " mailbox=" << timestamps.MailboxScheduledInstant);
+        UNIT_ASSERT_C(
+            timestamps.MailboxScheduledInstant <= timestamps.ObservedInstant,
+            "mailbox instant must not be in the future"
+                << ": mailbox=" << timestamps.MailboxScheduledInstant
+                << " observed=" << timestamps.ObservedInstant);
+    }
+
+    struct TTailSenderActor : TActorBootstrapped<TTailSenderActor> {
+        const TActorId Recipient;
+
+        explicit TTailSenderActor(TActorId recipient)
+            : Recipient(recipient)
+        {}
+
+        void Bootstrap() {
+            Send<ESendingType::Tail>(Recipient, new TEvents::TEvWakeup());
+
+            const ui64 deadline = GetCycleCountFast() + Us2Ts(200);
+            while (GetCycleCountFast() < deadline) {
+            }
+
+            PassAway();
+        }
+    };
+
+    Y_UNIT_TEST(TailSendHasMailboxScheduledTimestamp) {
+        THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
+        setup->NodeId = 1;
+        setup->ExecutorsCount = 1;
+        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
+
+        ui64 ts = GetCycleCountFast();
+        std::unique_ptr<IHarmonizer> harmonizer = MakeHarmonizer(ts);
+        for (ui32 i = 0; i < setup->ExecutorsCount; ++i) {
+            setup->Executors[i] = new TBasicExecutorPool(i, 1, 10, "basic", harmonizer.get());
+            harmonizer->AddPool(setup->Executors[i].Get());
+        }
+        setup->Scheduler = new TBasicSchedulerThread;
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TPromise<void> readyPromise = NewPromise<void>();
+        TFuture<void> ready = readyPromise.GetFuture();
+        TPromise<TQueueTimestamps> donePromise = NewPromise<TQueueTimestamps>();
+        TFuture<TQueueTimestamps> done = donePromise.GetFuture();
+
+        const TActorId receiverId = actorSystem.Register(new TQueueTimestampActor(std::move(readyPromise), std::move(donePromise)));
+        ready.GetValueSync();
+        actorSystem.Register(new TTailSenderActor(receiverId));
+
+        const TQueueTimestamps timestamps = done.GetValueSync();
+        actorSystem.Stop();
+
+        UNIT_ASSERT_C(timestamps.MailboxScheduledTimestamp > 0, "tail send must have mailbox scheduled timestamp");
+        UNIT_ASSERT_C(
+            timestamps.ActivationTimeUs <= timestamps.EventDeliveryTimeUs,
+            "tail-send activation time must not exceed event delivery time"
+                << ": activationUs=" << timestamps.ActivationTimeUs
+                << " deliveryUs=" << timestamps.EventDeliveryTimeUs);
     }
 }
 

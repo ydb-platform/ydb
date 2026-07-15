@@ -51,6 +51,7 @@ struct TDomainInfo {
     std::deque<double> AvgCpuUsageHistory;
     TMaybeFail<TScaleRecommendation> LastScaleRecommendation;
     TVector<std::shared_ptr<TScaleRecommenderPolicy>> ScaleRecommenderPolicies;
+    TVector<TString> ShrinkingStoragePools;
 
     TActorId HivePipeClient;
 
@@ -61,6 +62,12 @@ struct TDomainInfo {
     TActorId GetPipeToHive(THive* self);
 
     void ClosePipeToHive(const TActorId& actorId);
+
+    bool AddShrinkingPool(const TString& pool);
+
+    TString ShrinkingPoolsString() const;
+
+    void ParseShrinkingPools(const TString& str);
 };
 
 } // NHive

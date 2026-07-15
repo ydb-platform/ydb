@@ -394,14 +394,11 @@ class build_py(Command):
         # method of the "install_lib" command, except for the determination
         # of the 'prefix' string.  Hmmm.
         if self.compile:
-            byte_compile(
-                files, optimize=0, force=self.force, prefix=prefix, dry_run=self.dry_run
-            )
+            byte_compile(files, optimize=0, force=self.force, prefix=prefix)
         if self.optimize > 0:
             byte_compile(
                 files,
                 optimize=self.optimize,
                 force=self.force,
                 prefix=prefix,
-                dry_run=self.dry_run,
             )

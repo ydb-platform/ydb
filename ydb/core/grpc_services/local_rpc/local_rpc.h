@@ -608,6 +608,10 @@ TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(ty
     auto localRpcCtx = std::make_shared<TLocalRpcCtx<TRpc, TCbWrapper>>(std::move(proto), [](const typename TRpc::TResponse&) {}, database, token, requestType, internalCall);
     auto localRpcStreamCtx = MakeIntrusive<TLocalRpcStreamCtx>(std::move(localRpcCtx));
     auto localRpcRequest = std::make_unique<TRpc>(localRpcStreamCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+    // The stream wrapper drops the base request's token (unlike DoLocalRpc), so set it here — system-user stream calls like the warmup sysview fetch must pass the KqpProxy warmup gate.
+    if (token && !token->empty()) {
+        localRpcRequest->SetInternalToken(MakeIntrusive<NACLib::TUserToken>(*token));
+    }
     auto actor = TRpc::CreateRpcActor(localRpcRequest.release(), args...);
     ctx.RegisterWithSameMailbox(actor);
 

@@ -14,6 +14,8 @@
 
 #include <util/string/builder.h>
 
+#include <utility>
+
 using namespace NKikimr;
 
 namespace NPython {
@@ -252,8 +254,8 @@ struct TPySecureParam {
     PyObject_HEAD;
     TPyCastContext::TPtr CastCtx;
 
-    explicit TPySecureParam(const TPyCastContext::TPtr& castCtx)
-        : CastCtx(castCtx)
+    explicit TPySecureParam(TPyCastContext::TPtr castCtx)
+        : CastCtx(std::move(castCtx))
     {
     }
 };

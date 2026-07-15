@@ -26,11 +26,12 @@ CREATE TABLE `<table_name>` (
 ```yql
 CREATE TABLE my_table (
     a Uint64,
-    b Uint64,
+    b Bool,
     c Utf8,
     d Date,
     INDEX idx_d GLOBAL ON (d),
     INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
+    INDEX idx_uniq GLOBAL UNIQUE SYNC ON (c),
     PRIMARY KEY (a)
 )
 ```

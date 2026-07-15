@@ -3,7 +3,6 @@
 #include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
-#include <ydb/library/actors/core/event_local.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 namespace NKikimr::NPQ::NDescriber {
@@ -18,7 +17,27 @@ enum class EStatus {
     NOT_FOUND,
     NOT_TOPIC,
     UNAUTHORIZED,
+    UNAUTHORIZED_WITH_DESCRIBE_ACCESS,
     UNKNOWN_ERROR
+};
+
+
+struct TAccessRights {
+    TAccessRights() = default;
+
+    TAccessRights(ui32 access)
+        : Access(access)
+    {
+    }
+
+    TAccessRights(ui32 access, ui32 accessOr)
+        : Access(access)
+        , AccessOr(accessOr)
+    {
+    }
+
+   ui32 Access = NACLib::DescribeSchema;
+   std::optional<ui32> AccessOr;
 };
 
 struct TTopicInfo {
@@ -26,8 +45,12 @@ struct TTopicInfo {
 
     // Real topic path. If original topic path is CDC than real path is different.
     TString RealPath;
+    bool CdcStream = false;
+    TString CdcStreamName;
 
+    ui64 CreateStep = 0;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
+    TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
     TIntrusivePtr<TSecurityObject> SecurityObject;
 };
 
@@ -46,7 +69,8 @@ struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopics
 
 struct TDescribeSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    NACLib::EAccessRights AccessRights;
+    TAccessRights AccessRights;
+    bool ForceSyncVersion = false;
 };
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,
@@ -57,4 +81,4 @@ NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,
 Ydb::StatusIds::StatusCode Convert(const EStatus status);
 TString Description(const TString& topicPath, const EStatus status);
 
-}
+} // namespace NKikimr::NPQ::NDescriber

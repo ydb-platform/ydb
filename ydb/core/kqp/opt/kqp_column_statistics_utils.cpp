@@ -1,5 +1,7 @@
 #include "kqp_column_statistics_utils.h"
 
+#include <yql/essentials/core/yql_type_annotation.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -8,10 +10,11 @@ using namespace NYql::NNodes;
 // This functions is moved from kqp_op_statistics_requester to be able to use it in other transformers.
 void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColumnStatisticsResponse>>& futures, TKikimrTablesData& tables,
                     const TString& cluster, const TString& database, TTypeAnnotationContext& typesCtx, const NKikimr::NStat::EStatType type,
-                    const THashMap<TString, THashSet<TString>>& columnsByTableName, std::function<bool(const TColumnStatistics&)> alreadyHasStatistics) {
+                    const THashMap<TString, THashSet<TString>>& columnsByTableName, std::function<bool(const NYql::TColumnStatistics&)> alreadyHasStatistics) {
     struct TTableMeta {
         TString TableName;
         THashMap<ui32, TString> ColumnNameByTag;
+        THashMap<ui32, TString> ColumnTypeByTag;
     };
 
     THashMap<TPathId, TTableMeta> tableMetaByPathId;
@@ -39,12 +42,14 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
             }
 
             NKikimr::NStat::TRequest req;
-            req.ColumnTag = columnsMeta[column].Id;
+            const ui32 columnTag = columnsMeta[column].Id;
+            req.ColumnTags = columnTag;
             req.PathId = pathId;
             statRequests.push_back(req);
 
             tableMetaByPathId[pathId].TableName = table;
-            tableMetaByPathId[pathId].ColumnNameByTag[req.ColumnTag.value()] = column;
+            tableMetaByPathId[pathId].ColumnNameByTag[columnTag] = column;
+            tableMetaByPathId[pathId].ColumnTypeByTag[columnTag] = columnsMeta[column].Type;
         }
     }
 
@@ -64,12 +69,16 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
             return;
         }
 
-        THashMap<TString, TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
+        THashMap<TString, NYql::TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
 
         for (auto&& stat : response.StatResponses) {
             auto meta = tableMetaByPathId[stat.Req.PathId];
-            auto columnName = meta.ColumnNameByTag[stat.Req.ColumnTag.value()];
+            const auto singleTag = stat.Req.ColumnTags.AsSingle();
+            Y_ENSURE(singleTag, "Expected single-column stat response");
+            const ui32 columnTag = *singleTag;
+            auto columnName = meta.ColumnNameByTag[columnTag];
             auto& columnStatistics = columnStatisticsByTableName[meta.TableName].Data[columnName];
+            columnStatistics.Type = meta.ColumnTypeByTag[columnTag];
             if (stat.CountMinSketch.CountMin) {
                 columnStatistics.CountMinSketch = std::move(stat.CountMinSketch.CountMin);
             }
@@ -92,4 +101,5 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
 
     futures.push_back(promise.GetFuture());
 }
-}
+
+} // namespace NKikimr::NKqp

@@ -15,8 +15,20 @@
 
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <optional>
 
 namespace NYdb::inline Dev {
+
+namespace NMetrics {
+    class IMetricRegistry;
+} // namespace NMetrics
+
+namespace NTrace {
+    class ITraceProvider;
+} // namespace NTrace
 
 constexpr TDeadline::Duration GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY = std::chrono::seconds(10);
 constexpr TDeadline::Duration INITIAL_DEFERRED_CALL_DELAY = std::chrono::milliseconds(10); // The delay before first deferred service call
@@ -25,11 +37,53 @@ constexpr TDeadline::Duration GET_ENDPOINTS_TIMEOUT = std::chrono::seconds(10); 
 using NYdbGrpc::TCallMeta;
 using NYdbGrpc::IQueueClientContextPtr;
 using NYdbGrpc::IQueueClientContextProvider;
+using NYdbGrpc::IQueueClientCallbackGuard;
+using NYdbGrpc::TQueueClientCallbackGuardFactory;
 
 class ICredentialsProvider;
 
 // Deferred callbacks
 using TDeferredResultCb = std::function<void(google::protobuf::Any*, TPlainStatus status)>;
+
+class TDriverStopState {
+public:
+    bool TryEnterCallback() noexcept;
+    void LeaveCallback() noexcept;
+
+    void WaitCallbacksDrained();
+    void MarkStopped() noexcept;
+
+private:
+    std::mutex Mutex_;
+    std::condition_variable Drained_;
+    ui64 InFlightCallbacks_ = 0;
+    bool Stopped_ = false;
+};
+
+class TSdkCallbackGuard final : public IQueueClientCallbackGuard {
+public:
+    explicit TSdkCallbackGuard(std::shared_ptr<TDriverStopState> stopState = {});
+    ~TSdkCallbackGuard();
+
+    bool IsEntered() const noexcept override;
+
+private:
+    std::shared_ptr<TDriverStopState> StopState_;
+    bool Entered_ = false;
+};
+
+// Runs onEntered() while the driver is not stopping, otherwise onStopped().
+// The single choke point behind every SDK-level guarded callback: it decides
+// run-vs-substitute and keeps the in-flight-callback drain counter correct.
+template<class TOnEntered, class TOnStopped>
+void RunGuarded(const std::shared_ptr<TDriverStopState>& stopState, TOnEntered&& onEntered, TOnStopped&& onStopped) {
+    TSdkCallbackGuard guard(stopState);
+    if (guard.IsEntered()) {
+        std::forward<TOnEntered>(onEntered)();
+    } else {
+        std::forward<TOnStopped>(onStopped)();
+    }
+}
 
 std::string GetAuthInfo(TDbDriverStatePtr p);
 std::string CreateSDKBuildInfo();
@@ -40,11 +94,22 @@ class TGRpcConnectionsImpl
 {
     friend class TDeferredAction;
     friend class TDriver;
+    friend struct TGRpcConnectionsDeleter;
 public:
     TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> params);
     ~TGRpcConnectionsImpl();
 
+    static bool IsCurrentThreadInSdkCallback() noexcept;
+
+    // Runs action() now if the caller is on a normal thread, otherwise defers it to a
+    // fresh thread that first waits for all in-flight callbacks to drain. Used for
+    // Stop()/delete triggered from within a callback, where running inline would
+    // deadlock (self-join) or free the driver under a live callback frame.
+    static void DeferOrRunNow(std::shared_ptr<TDriverStopState> stopState, std::function<void()> action);
+
+public:
     void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
+    void PostToResponseQueue(std::function<void()>&& f) override;
 
     void ScheduleDelayedTask(TSimpleCb&& fn, TDeadline deadline);
     void ScheduleDelayedTask(TSimpleCb&& fn, TDeadline::Duration delay);
@@ -69,6 +134,7 @@ public:
         const std::optional<std::shared_ptr<ICredentialsProviderFactory>>& credentialsProviderFactory
     );
     IQueueClientContextPtr CreateContext() override;
+    TQueueClientCallbackGuardFactory GetCallbackGuardFactory() override;
     bool TryCreateContext(IQueueClientContextPtr& context);
     void WaitIdle();
     void Stop(bool wait = false);
@@ -77,6 +143,8 @@ public:
     using TServiceConnection = NYdbGrpc::TServiceConnection<TService>;
 
     static void SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDeadline::Duration& timeout, bool permitWithoutCalls);
+
+    static void SetGrpcCompressionAlgorithm(NYdbGrpc::TGRpcClientConfig& config, EGrpcCompressionAlgorithm algorithm);
 
     template<typename TService>
     std::pair<std::unique_ptr<TServiceConnection<TService>>, TEndpointKey> GetServiceConnection(
@@ -100,7 +168,9 @@ public:
             clientConfig.MaxOutboundMessageSize = MaxOutboundMessageSize_;
         }
 
-        clientConfig.LoadBalancingPolicy = "round_robin";
+        clientConfig.LoadBalancingPolicy = GRpcLoadBalancingPolicy_;
+
+        SetGrpcCompressionAlgorithm(clientConfig, GRpcCompressionAlgorithm_);
 
         if (dbState->DiscoveryMode != EDiscoveryMode::Off) {
             if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>()
@@ -143,6 +213,43 @@ public:
             typename TService::Stub,
             TRequest,
             TResponse>::TAsyncRequest;
+
+    template<typename TResponse>
+    void RunResponseCallback(
+        TResponseCb<TResponse>& callback,
+        TResponse* response,
+        TPlainStatus status,
+        const std::shared_ptr<TDriverStopState>& stopState)
+    {
+        RunGuarded(stopState,
+            [&] { callback(response, std::move(status)); },
+            [&] { callback(nullptr, MakeClientStoppedStatus()); });
+    }
+
+    template<typename TCallback, typename TProcessor>
+    void RunStreamCallback(
+        TCallback& callback,
+        TPlainStatus status,
+        TProcessor processor,
+        const std::shared_ptr<TDriverStopState>& stopState)
+    {
+        RunGuarded(stopState,
+            [&] { callback(std::move(status), std::move(processor)); },
+            [&] { callback(MakeClientStoppedStatus(), nullptr); });
+    }
+
+    template<typename TService, typename TCallback>
+    void RunServiceConnectionCallback(
+        TCallback& callback,
+        TPlainStatus status,
+        std::unique_ptr<TServiceConnection<TService>> serviceConnection,
+        TEndpointKey endpoint,
+        const std::shared_ptr<TDriverStopState>& stopState)
+    {
+        RunGuarded(stopState,
+            [&] { callback(std::move(status), std::move(serviceConnection), std::move(endpoint)); },
+            [&] { callback(MakeClientStoppedStatus(), std::unique_ptr<TServiceConnection<TService>>{nullptr}, TEndpointKey{}); });
+    }
 
     template<typename TRequest>
     class TRequestWrapper {
@@ -203,9 +310,13 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         Y_ABORT_UNLESS(dbState);
 
+        if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
+            RunResponseCallback<TResponse>(userResponseCb, nullptr, std::move(*tlsValidationStatus), StopState_);
+            return;
+        }
+
         if (!TryCreateContext(context)) {
-            TPlainStatus status(EStatus::CLIENT_CANCELLED, "Client is stopped");
-            userResponseCb(nullptr, TPlainStatus{status.Status, std::move(status.Issues)});
+            RunResponseCallback<TResponse>(userResponseCb, nullptr, MakeClientStoppedStatus(), StopState_);
             return;
         }
 
@@ -213,6 +324,7 @@ public:
             std::weak_ptr<TDbDriverState> weakState = dbState;
             const auto startTime = TInstant::Now();
             userResponseCb = std::move([cb = std::move(userResponseCb), weakState, startTime](TResponse* response, TPlainStatus status) {
+                Y_ABORT_UNLESS(!status.Ok() || response);
                 const auto resultSize = response ? response->ByteSizeLong() : 0;
                 cb(response, status);
 
@@ -226,77 +338,80 @@ public:
         WithServiceConnection<TService>(
             [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb), rpc, 
              requestSettings, context = std::move(context), dbState]
-            (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable -> void {
-                if (!status.Ok()) {
-                    userResponseCb(
-                        nullptr,
-                        std::move(status));
-                    return;
-                }
+                (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable -> void {
+                    if (!status.Ok()) {
+                        context.reset();
+                        RunResponseCallback<TResponse>(userResponseCb, nullptr, std::move(status), StopState_);
+                        return;
+                    }
 
-                TCallMeta meta;
+                    Y_ABORT_UNLESS(serviceConnection != nullptr);
 
-                try {
-                    meta = MakeCallMeta(requestSettings, dbState);
-                } catch (const TAuthenticationError& e) {
-                    userResponseCb(
-                        nullptr,
-                        TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED, e.what())
-                    );
-                    return;
-                }
+                    TCallMeta meta;
 
-                dbState->StatCollector.IncGRpcInFlight();
-                dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
+                    try {
+                        meta = MakeCallMeta(requestSettings, dbState);
+                    } catch (const TYdbException& e) {
+                        context.reset();
+                        RunResponseCallback<TResponse>(
+                            userResponseCb,
+                            nullptr,
+                            TPlainStatus(dynamic_cast<const TAuthenticationError*>(&e) ? EStatus::CLIENT_UNAUTHENTICATED : EStatus::UNAVAILABLE, e.what()),
+                            StopState_);
+                        return;
+                    }
 
-                NYdbGrpc::TAdvancedResponseCallback<TResponse> responseCbLow =
-                    [this, context, userResponseCb = std::move(userResponseCb), endpoint, dbState]
-                    (const grpc::ClientContext& ctx, TGrpcStatus&& grpcStatus, TResponse&& response) mutable -> void {
-                        dbState->StatCollector.DecGRpcInFlight();
-                        dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
+                    dbState->StatCollector.IncGRpcInFlight();
+                    dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
 
-                        if (NYdbGrpc::IsGRpcStatusGood(grpcStatus)) {
-                            std::multimap<std::string, std::string> metadata;
+                    NYdbGrpc::TAdvancedResponseCallback<TResponse> responseCbLow =
+                        [this, context, userResponseCb = std::move(userResponseCb), endpoint, dbState]
+                        (const grpc::ClientContext& ctx, TGrpcStatus&& grpcStatus, TResponse&& response) mutable -> void {
+                            dbState->StatCollector.DecGRpcInFlight();
+                            dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
 
-                            for (const auto& [name, value] : ctx.GetServerInitialMetadata()) {
-                                metadata.emplace(
-                                    std::string(name.begin(), name.end()),
-                                    std::string(value.begin(), value.end()));
+                            if (NYdbGrpc::IsGRpcStatusGood(grpcStatus)) {
+                                std::multimap<std::string, std::string> metadata;
+
+                                for (const auto& [name, value] : ctx.GetServerInitialMetadata()) {
+                                    metadata.emplace(
+                                        std::string(name.begin(), name.end()),
+                                        std::string(value.begin(), value.end()));
+                                }
+                                for (const auto& [name, value] : ctx.GetServerTrailingMetadata()) {
+                                    metadata.emplace(
+                                        std::string(name.begin(), name.end()),
+                                        std::string(value.begin(), value.end()));
+                                }
+
+                                auto resp = new TResult<TResponse>(
+                                    std::move(response),
+                                    std::move(grpcStatus),
+                                    std::move(userResponseCb),
+                                    this,
+                                    std::move(context),
+                                    endpoint.GetEndpoint(),
+                                    std::move(metadata));
+
+                                EnqueueResponse(resp);
+                            } else {
+                                dbState->StatCollector.IncReqFailDueTransportError();
+                                dbState->StatCollector.IncTransportErrorsByHost(endpoint.GetEndpoint());
+
+                                auto resp = new TGRpcErrorResponse<TResponse>(
+                                    std::move(grpcStatus),
+                                    std::move(userResponseCb),
+                                    this,
+                                    std::move(context),
+                                    endpoint.GetEndpoint());
+
+                                dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
+
+                                EnqueueResponse(resp);
                             }
-                            for (const auto& [name, value] : ctx.GetServerTrailingMetadata()) {
-                                metadata.emplace(
-                                    std::string(name.begin(), name.end()),
-                                    std::string(value.begin(), value.end()));
-                            }
+                        };
 
-                            auto resp = new TResult<TResponse>(
-                                std::move(response),
-                                std::move(grpcStatus),
-                                std::move(userResponseCb),
-                                this,
-                                std::move(context),
-                                endpoint.GetEndpoint(),
-                                std::move(metadata));
-
-                            EnqueueResponse(resp);
-                        } else {
-                            dbState->StatCollector.IncReqFailDueTransportError();
-                            dbState->StatCollector.IncTransportErrorsByHost(endpoint.GetEndpoint());
-
-                            auto resp = new TGRpcErrorResponse<TResponse>(
-                                std::move(grpcStatus),
-                                std::move(userResponseCb),
-                                this,
-                                std::move(context),
-                                endpoint.GetEndpoint());
-
-                            dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
-
-                            EnqueueResponse(resp);
-                        }
-                    };
-
-                requestWrapper.DoRequest(serviceConnection, std::move(responseCbLow), rpc, meta, context.get());
+                    requestWrapper.DoRequest(serviceConnection, std::move(responseCbLow), rpc, meta, context.get());
             }, dbState, requestSettings.PreferredEndpoint, requestSettings.EndpointPolicy);
     }
 
@@ -312,8 +427,7 @@ public:
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
         if (!TryCreateContext(context)) {
-            TPlainStatus status(EStatus::CLIENT_CANCELLED, "Client is stopped");
-            userResponseCb(nullptr, status);
+            userResponseCb(nullptr, MakeClientStoppedStatus());
             return;
         }
 
@@ -322,6 +436,7 @@ public:
         {
             if (response) {
                 Ydb::Operations::Operation* operation = response->mutable_operation();
+                Y_ABORT_UNLESS(operation);
                 if (!operation->ready() && poll) {
                     auto action = MakeIntrusive<TDeferredAction>(
                         operation->id(),
@@ -337,10 +452,12 @@ public:
                 } else {
                     NYdb::NIssue::TIssues opIssues;
                     NYdb::NIssue::IssuesFromMessage(operation->issues(), opIssues);
+                    context.reset();
                     userResponseCb(operation, TPlainStatus{static_cast<EStatus>(operation->status()), std::move(opIssues),
                         status.Endpoint, std::move(status.Metadata)});
                 }
             } else {
+                context.reset();
                 userResponseCb(nullptr, status);
             }
         };
@@ -430,33 +547,43 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
 
+        if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
+            RunStreamCallback(responseCb, std::move(*tlsValidationStatus), nullptr, StopState_);
+            return;
+        }
+
         if (!TryCreateContext(context)) {
-            responseCb(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
+            RunStreamCallback(responseCb, MakeClientStoppedStatus(), nullptr, StopState_);
             return;
         }
 
         WithServiceConnection<TService>(
             [this, request, responseCb = std::move(responseCb), rpc, requestSettings, context = std::move(context), dbState](TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
                 if (!status.Ok()) {
-                    responseCb(std::move(status), nullptr);
+                    context.reset();
+                    RunStreamCallback(responseCb, std::move(status), nullptr, StopState_);
                     return;
                 }
+
+                Y_ABORT_UNLESS(serviceConnection != nullptr);
 
                 TCallMeta meta;
                 try {
                     meta = MakeCallMeta(requestSettings, dbState);
-                } catch (const TAuthenticationError& e) {
-                    responseCb(
-                        TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED, e.what()),
-                        nullptr
-                    );
+                } catch (const TYdbException& e) {
+                    context.reset();
+                    RunStreamCallback(
+                        responseCb,
+                        TPlainStatus(dynamic_cast<const TAuthenticationError*>(&e) ? EStatus::CLIENT_UNAUTHENTICATED : EStatus::UNAVAILABLE, e.what()),
+                        nullptr,
+                        StopState_);
                     return;
                 }
 
                 dbState->StatCollector.IncGRpcInFlight();
                 dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
 
-                auto lowCallback = [responseCb = std::move(responseCb), dbState, endpoint]
+                auto lowCallback = [responseCb = std::move(responseCb), dbState, endpoint, stopState = StopState_]
                     (TGrpcStatus grpcStatus, TProcessor processor) mutable {
                         dbState->StatCollector.DecGRpcInFlight();
                         dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
@@ -470,7 +597,9 @@ public:
                             };
                             processor->AddFinishedCallback(std::move(finishedCallback));
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
-                            responseCb(std::move(status), std::move(processor));
+                            RunGuarded(stopState,
+                                [&] { responseCb(std::move(status), std::move(processor)); },
+                                [&] { responseCb(MakeClientStoppedStatus(), nullptr); });
                         } else {
                             dbState->StatCollector.IncReqFailDueTransportError();
                             dbState->StatCollector.IncTransportErrorsByHost(endpoint.GetEndpoint());
@@ -478,7 +607,9 @@ public:
                                 dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                             }
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
-                            responseCb(std::move(status), nullptr);
+                            RunGuarded(stopState,
+                                [&] { responseCb(std::move(status), nullptr); },
+                                [&] { responseCb(MakeClientStoppedStatus(), nullptr); });
                         }
                     };
 
@@ -503,69 +634,83 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
 
+        if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
+            RunStreamCallback(connectedCallback, std::move(*tlsValidationStatus), nullptr, StopState_);
+            return;
+        }
+
         if (!TryCreateContext(context)) {
-            connectedCallback(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
+            RunStreamCallback(connectedCallback, MakeClientStoppedStatus(), nullptr, StopState_);
             return;
         }
 
         WithServiceConnection<TService>(
             [this, connectedCallback = std::move(connectedCallback), rpc, requestSettings, context = std::move(context), dbState]
-            (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
-                if (!status.Ok()) {
-                    connectedCallback(std::move(status), nullptr);
-                    return;
-                }
+                (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
+                    if (!status.Ok()) {
+                        context.reset();
+                        RunStreamCallback(connectedCallback, std::move(status), nullptr, StopState_);
+                        return;
+                    }
 
-                TCallMeta meta;
-                try {
-                    meta = MakeCallMeta(requestSettings, dbState);
-                } catch (const TAuthenticationError& e) {
-                    connectedCallback(
-                        TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED, e.what()),
-                        nullptr
-                    );
-                    return;
-                }
+                    Y_ABORT_UNLESS(serviceConnection != nullptr);
 
-                dbState->StatCollector.IncGRpcInFlight();
-                dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
+                    TCallMeta meta;
+                    try {
+                        meta = MakeCallMeta(requestSettings, dbState);
+                    } catch (const TYdbException& e) {
+                        context.reset();
+                        RunStreamCallback(
+                            connectedCallback,
+                            TPlainStatus(dynamic_cast<const TAuthenticationError*>(&e) ? EStatus::CLIENT_UNAUTHENTICATED : EStatus::UNAVAILABLE, e.what()),
+                            nullptr,
+                            StopState_);
+                        return;
+                    }
 
-                auto lowCallback = [connectedCallback = std::move(connectedCallback), dbState, endpoint]
-                    (TGrpcStatus grpcStatus, TProcessor processor) {
-                        dbState->StatCollector.DecGRpcInFlight();
-                        dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
+                    dbState->StatCollector.IncGRpcInFlight();
+                    dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
 
-                        if (grpcStatus.Ok()) {
-                            Y_ABORT_UNLESS(processor);
-                            auto finishedCallback = [dbState, endpoint] (TGrpcStatus grpcStatus) {
-                                if (!grpcStatus.Ok() && grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
+                    auto lowCallback = [connectedCallback = std::move(connectedCallback), dbState, endpoint, stopState = StopState_]
+                        (TGrpcStatus grpcStatus, TProcessor processor) {
+                            dbState->StatCollector.DecGRpcInFlight();
+                            dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
+
+                            if (grpcStatus.Ok()) {
+                                Y_ABORT_UNLESS(processor);
+                                auto finishedCallback = [dbState, endpoint] (TGrpcStatus grpcStatus) {
+                                    if (!grpcStatus.Ok() && grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
+                                        dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
+                                    }
+                                };
+                                processor->AddFinishedCallback(std::move(finishedCallback));
+                                TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
+                                RunGuarded(stopState,
+                                    [&] { connectedCallback(std::move(status), std::move(processor)); },
+                                    [&] { connectedCallback(MakeClientStoppedStatus(), nullptr); });
+                            } else {
+                                dbState->StatCollector.IncReqFailDueTransportError();
+                                dbState->StatCollector.IncTransportErrorsByHost(endpoint.GetEndpoint());
+                                if (grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
                                     dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                                 }
-                            };
-                            processor->AddFinishedCallback(std::move(finishedCallback));
-                            TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
-                            connectedCallback(std::move(status), std::move(processor));
-                        } else {
-                            dbState->StatCollector.IncReqFailDueTransportError();
-                            dbState->StatCollector.IncTransportErrorsByHost(endpoint.GetEndpoint());
-                            if (grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
-                                dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
+                                TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
+                                RunGuarded(stopState,
+                                    [&] { connectedCallback(std::move(status), nullptr); },
+                                    [&] { connectedCallback(MakeClientStoppedStatus(), nullptr); });
                             }
-                            TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
-                            connectedCallback(std::move(status), nullptr);
-                        }
-                    };
+                        };
 
-                serviceConnection->template DoStreamRequest<TRequest, TResponse>(
-                    std::move(lowCallback),
-                    std::move(rpc),
-                    std::move(meta),
-                    context.get());
+                    serviceConnection->template DoStreamRequest<TRequest, TResponse>(
+                        std::move(lowCallback),
+                        std::move(rpc),
+                        std::move(meta),
+                        context.get());
             }, dbState, requestSettings.PreferredEndpoint, requestSettings.EndpointPolicy);
     }
 
     TAsyncListEndpointsResult GetEndpoints(TDbDriverStatePtr dbState) override;
-    TListEndpointsResult MutateDiscovery(TListEndpointsResult result, const TDbDriverState& dbDriverState);
+    TListEndpointsResult MutateDiscovery(TListEndpointsResult result, const TDbDriverState* dbDriverState);
 
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     void DeleteChannels(const std::vector<std::string>& endpoints) override {
@@ -581,10 +726,27 @@ public:
     ::NMonitoring::TMetricRegistry* GetMetricRegistry() override;
     void RegisterExtension(IExtension* extension);
     void RegisterExtensionApi(IExtensionApi* api);
+    std::shared_ptr<NMetrics::IMetricRegistry> GetExternalMetricRegistry() const override;
+    std::shared_ptr<NTrace::ITraceProvider> GetTraceProvider() const;
+
     void SetDiscoveryMutator(IDiscoveryMutatorApi::TMutatorCb&& cb);
     const TLog& GetLog() const override;
 
 private:
+    static std::optional<TPlainStatus> ValidateClientTlsCredentials(const TDbDriverStatePtr& dbState) {
+        Y_ABORT_UNLESS(dbState);
+        if (dbState->AreClientTlsCredentialsValid()) {
+            return std::nullopt;
+        }
+        std::string msg = "Client TLS credentials validation failed";
+        const auto& detail = dbState->GetClientTlsValidationDetail();
+        if (!detail.empty()) {
+            msg += ": ";
+            msg += detail;
+        }
+        return TPlainStatus(EStatus::TRANSPORT_UNAVAILABLE, msg);
+    }
+
     template <typename TService, typename TCallback>
     void WithServiceConnection(TCallback callback, TDbDriverStatePtr dbState,
         const TEndpointKey& preferredEndpoint, TRpcRequestSettings::TEndpointPolicy endpointPolicy)
@@ -599,11 +761,12 @@ private:
                 errString << "No endpoint for database " << dbState->Database;
                 errString << ", cluster endpoint " << dbState->DiscoveryEndpoint;
                 dbState->StatCollector.IncReqFailNoEndpoint();
-                callback(
+                RunServiceConnectionCallback<TService>(
+                    callback,
                     TPlainStatus(EStatus::UNAVAILABLE, errString.Str()),
                     TConnection{nullptr},
-                    TEndpointKey{ });
-
+                    TEndpointKey{},
+                    StopState_);
             } else if (dbState->DiscoveryMode == EDiscoveryMode::Sync) {
                 TStringStream errString;
                 errString << "Endpoint list is empty for database " << dbState->Database;
@@ -619,14 +782,16 @@ private:
                     errString << " while last discovery returned success status. Unable to continue processing.";
                     discoveryStatus = TPlainStatus(EStatus::UNAVAILABLE, errString.Str());
                 } else {
-                    errString <<".";
+                    errString << ".";
                     discoveryStatus.Issues.AddIssues({NYdb::NIssue::TIssue(errString.Str())});
                 }
                 dbState->StatCollector.IncReqFailNoEndpoint();
-                callback(
-                    discoveryStatus,
+                RunServiceConnectionCallback<TService>(
+                    callback,
+                    std::move(discoveryStatus),
                     TConnection{nullptr},
-                    TEndpointKey{ });
+                    TEndpointKey{},
+                    StopState_);
             } else {
                 int64_t newVal;
                 int64_t val;
@@ -634,48 +799,58 @@ private:
                     val = QueuedRequests_.load();
                     if (val >= MaxQueuedRequests_) {
                         dbState->StatCollector.IncReqFailQueueOverflow();
-                        callback(
+                        RunServiceConnectionCallback<TService>(
+                            callback,
                             TPlainStatus(EStatus::CLIENT_LIMITS_REACHED, "Requests queue limit reached"),
                             TConnection{nullptr},
-                            TEndpointKey{ });
+                            TEndpointKey{},
+                            StopState_);
                         return;
                     }
                     newVal = val + 1;
                 } while (!QueuedRequests_.compare_exchange_weak(val, newVal));
 
-                // UpdateAsync guarantee one update in progress for state
+                // UpdateAsync guarantees one update in progress for state.
                 auto asyncResult = dbState->EndpointPool.UpdateAsync();
                 const bool needUpdateChannels = asyncResult.second;
-                asyncResult.first.Subscribe([this, callback = std::move(callback), needUpdateChannels, dbState, preferredEndpoint, endpointPolicy]
+                auto stopState = StopState_;
+                asyncResult.first.Subscribe([this, callback = std::move(callback), needUpdateChannels, dbState, preferredEndpoint, endpointPolicy, stopState = std::move(stopState)]
                     (const NThreading::TFuture<TEndpointUpdateResult>& future) mutable {
                     --QueuedRequests_;
-                    const auto& updateResult = future.GetValue();
-                    if (needUpdateChannels) {
+                    RunGuarded(stopState,
+                        [&] {
+                            const auto& updateResult = future.GetValue();
+                            if (needUpdateChannels) {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-                        DeleteChannels(updateResult.Removed);
+                                DeleteChannels(updateResult.Removed);
 #endif
-                    }
-                    auto discoveryStatus = updateResult.DiscoveryStatus;
-                    if (discoveryStatus.Status == EStatus::SUCCESS) {
-                        WithServiceConnection<TService>(std::move(callback), dbState, preferredEndpoint, endpointPolicy);
-                    } else {
-                        callback(
-                            TPlainStatus(discoveryStatus.Status, std::move(discoveryStatus.Issues)),
-                            TConnection{nullptr},
-                            TEndpointKey{ });
-                    }
+                            }
+                            auto discoveryStatus = updateResult.DiscoveryStatus;
+                            if (discoveryStatus.Status == EStatus::SUCCESS) {
+                                WithServiceConnection<TService>(std::move(callback), dbState, preferredEndpoint, endpointPolicy);
+                            } else {
+                                callback(
+                                    TPlainStatus(discoveryStatus.Status, std::move(discoveryStatus.Issues)),
+                                    TConnection{nullptr},
+                                    TEndpointKey{});
+                            }
+                        },
+                        [&] { callback(MakeClientStoppedStatus(), TConnection{nullptr}, TEndpointKey{}); });
                 });
             }
             return;
         }
 
-        callback(
-            TPlainStatus{ },
+        RunServiceConnectionCallback<TService>(
+            callback,
+            TPlainStatus{},
             std::move(serviceConnection),
-            std::move(endpoint));
+            std::move(endpoint),
+            StopState_);
     }
 
     void EnqueueResponse(IObjectInQueue* action);
+    void StopResponseQueue();
 
 private:
     TCallMeta MakeCallMeta(const TRpcRequestSettings& requestSettings, const TDbDriverStatePtr& dbState) const;
@@ -685,6 +860,8 @@ private:
 
     const std::size_t ClientThreadsNum_;
     std::shared_ptr<IExecutor> ResponseQueue_;
+    std::once_flag ResponseQueueStopOnce_;
+    std::shared_ptr<TDriverStopState> StopState_;
 
     const std::string DefaultDiscoveryEndpoint_;
     const TSslCredentials SslCredentials_;
@@ -698,6 +875,8 @@ private:
     const TBalancingPolicy::TImpl BalancingSettings_;
     const TDeadline::Duration GRpcKeepAliveTimeout_;
     const bool GRpcKeepAlivePermitWithoutCalls_;
+    const std::string GRpcLoadBalancingPolicy_;
+    const EGrpcCompressionAlgorithm GRpcCompressionAlgorithm_;
     const std::uint64_t MemoryQuota_;
     const std::uint64_t MaxInboundMessageSize_;
     const std::uint64_t MaxOutboundMessageSize_;
@@ -715,14 +894,22 @@ private:
 
     std::vector<std::unique_ptr<IExtension>> Extensions_;
     std::vector<std::unique_ptr<IExtensionApi>> ExtensionApis_;
+    std::shared_ptr<NMetrics::IMetricRegistry> MetricRegistry_;
+    std::shared_ptr<NTrace::ITraceProvider> TraceProvider_;
 
     IDiscoveryMutatorApi::TMutatorCb DiscoveryMutatorCb;
+
+    const std::string BuildInfo_;
 
     const std::size_t NetworkThreadsNum_;
     bool UsePerChannelTcpConnection_;
     // Must be the last member (first called destructor)
     NYdbGrpc::TGRpcClientLow GRpcClientLow_;
     TLog Log;
+};
+
+struct TGRpcConnectionsDeleter {
+    void operator()(TGRpcConnectionsImpl* connections) const noexcept;
 };
 
 } // namespace NYdb

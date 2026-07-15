@@ -21,6 +21,7 @@ from ...retries import (
 from ...query.base import BaseQueryTxMode, QueryExplainResultFormat
 from ...query.base import QueryClientSettings
 from ... import convert
+from ... import issues
 from ..._grpc.grpcwrapper import common_utils
 from ..._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
@@ -49,7 +50,6 @@ class QuerySessionPool:
         self._should_stop = asyncio.Event()
         self._queue: asyncio.Queue[QuerySession] = asyncio.Queue()
         self._current_size = 0
-        self._waiters = 0
         self._loop = asyncio.get_running_loop() if loop is None else loop
         self._query_client_settings = query_client_settings
 
@@ -59,8 +59,11 @@ class QuerySessionPool:
         logger.debug(f"New session was created for pool. Session id: {session.session_id}")
         return session
 
-    async def acquire(self) -> QuerySession:
+    async def acquire(self, timeout: Optional[float] = None) -> QuerySession:
         """Acquire a session from Session Pool.
+
+        :param timeout: Seconds to wait when pool is exhausted. Overrides the pool-level acquire_timeout.
+            None falls back to the pool-level default (which is also None — wait indefinitely).
 
         :return A QuerySession object.
         """
@@ -68,6 +71,8 @@ class QuerySessionPool:
         if self._should_stop.is_set():
             logger.error("An attempt to take session from closed session pool.")
             raise RuntimeError("An attempt to take session from closed session pool.")
+
+        effective_timeout = timeout
 
         session = None
         try:
@@ -77,20 +82,36 @@ class QuerySessionPool:
 
         if session is None and self._current_size == self._size:
             queue_get = asyncio.ensure_future(self._queue.get())
-            task_stop = asyncio.ensure_future(asyncio.ensure_future(self._should_stop.wait()))
+            task_stop = asyncio.ensure_future(self._should_stop.wait())
+            task_timeout = (
+                asyncio.ensure_future(asyncio.sleep(effective_timeout)) if effective_timeout is not None else None
+            )
+            wait_tasks = [t for t in (queue_get, task_stop, task_timeout) if t is not None]
             try:
-                done, _ = await asyncio.wait((queue_get, task_stop), return_when=asyncio.FIRST_COMPLETED)
+                done, _ = await asyncio.wait(wait_tasks, return_when=asyncio.FIRST_COMPLETED)
             except asyncio.CancelledError:
                 task_stop.cancel()
+                if task_timeout is not None:
+                    task_timeout.cancel()
                 cancelled = queue_get.cancel()
                 if not cancelled and not queue_get.exception():
                     await self.release(queue_get.result())
                 raise
+
+            task_stop.cancel()
+            if task_timeout is not None:
+                task_timeout.cancel()
+
             if task_stop in done:
                 queue_get.cancel()
                 raise RuntimeError("An attempt to take session from closed session pool.")
 
-            task_stop.cancel()
+            if task_timeout is not None and task_timeout in done:
+                cancelled = queue_get.cancel()
+                if not cancelled and not queue_get.exception():
+                    await self.release(queue_get.result())
+                raise issues.SessionPoolEmpty("Timeout on acquire session")
+
             session = queue_get.result()
 
         if session is not None:
@@ -116,14 +137,16 @@ class QuerySessionPool:
 
     async def release(self, session: QuerySession) -> None:
         """Release a session back to Session Pool."""
-
         self._queue.put_nowait(session)
         logger.debug("Session returned to queue: %s", session.session_id)
 
-    def checkout(self) -> "SimpleQuerySessionCheckoutAsync":
-        """Return a Session context manager, that acquires session on enter and releases session on exit."""
+    def checkout(self, timeout: Optional[float] = None) -> "SimpleQuerySessionCheckoutAsync":
+        """Return a Session context manager, that acquires session on enter and releases session on exit.
 
-        return SimpleQuerySessionCheckoutAsync(self)
+        :param timeout: Seconds to wait when pool is exhausted. Overrides the pool-level acquire_timeout.
+        """
+
+        return SimpleQuerySessionCheckoutAsync(self, timeout)
 
     async def retry_operation_async(
         self, callee: Callable, retry_settings: Optional[RetrySettings] = None, *args, **kwargs
@@ -139,7 +162,7 @@ class QuerySessionPool:
         retry_settings = RetrySettings() if retry_settings is None else retry_settings
 
         async def wrapped_callee():
-            async with self.checkout() as session:
+            async with self.checkout(timeout=retry_settings.max_session_acquire_timeout) as session:
                 return await callee(session, *args, **kwargs)
 
         return await retry_operation_async(wrapped_callee, retry_settings)
@@ -170,7 +193,7 @@ class QuerySessionPool:
         retry_settings = RetrySettings() if retry_settings is None else retry_settings
 
         async def wrapped_callee():
-            async with self.checkout() as session:
+            async with self.checkout(timeout=retry_settings.max_session_acquire_timeout) as session:
                 async with session.transaction(tx_mode=tx_mode) as tx:
                     if tx_mode.name in ["serializable_read_write", "snapshot_read_only"]:
                         await tx.begin()
@@ -202,7 +225,7 @@ class QuerySessionPool:
         retry_settings = RetrySettings() if retry_settings is None else retry_settings
 
         async def wrapped_callee():
-            async with self.checkout() as session:
+            async with self.checkout(timeout=retry_settings.max_session_acquire_timeout) as session:
                 it = await session.execute(query, parameters, *args, **kwargs)
                 return [result_set async for result_set in it]
 
@@ -256,12 +279,13 @@ class QuerySessionPool:
 class SimpleQuerySessionCheckoutAsync:
     _session: Optional[QuerySession]
 
-    def __init__(self, pool: QuerySessionPool):
+    def __init__(self, pool: QuerySessionPool, timeout: Optional[float] = None):
         self._pool = pool
+        self._timeout = timeout
         self._session = None
 
     async def __aenter__(self) -> QuerySession:
-        self._session = await self._pool.acquire()
+        self._session = await self._pool.acquire(timeout=self._timeout)
         return self._session
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:

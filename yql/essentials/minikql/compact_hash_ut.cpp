@@ -123,7 +123,7 @@ Y_UNIT_TEST(TestListPoolLargPagesUi64) {
 }
 
 struct TItem {
-    ui8 A[256];
+    std::array<ui8, 256> A;
 };
 
 Y_UNIT_TEST(TestListPoolSmallPagesObj) {

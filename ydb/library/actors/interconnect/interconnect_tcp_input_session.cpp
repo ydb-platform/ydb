@@ -4,10 +4,9 @@
 #include "rdma/mem_pool.h"
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/library/actors/util/datetime.h>
+#include <ydb/library/uring/liburing_compat.h>
 
 #include <variant>
-
-#include <contrib/restricted/abseil-cpp-tstring/y_absl/crc/internal/non_temporal_memcpy.h>
 
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
@@ -44,11 +43,14 @@ namespace NActors {
         }
     }
 
-    void TReceiveContext::TPerChannelContext::FetchBuffers(ui16 channel, size_t numBytes,
+    int TReceiveContext::TPerChannelContext::FetchBuffers(ui16 channel, size_t numBytes,
             std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ) {
         Y_DEBUG_ABORT_UNLESS(numBytes);
         auto it = XdcBuffers.begin() + FetchIndex;
         for (;;) {
+            if (it == XdcBuffers.end()) {
+                return -1;
+            }
             Y_DEBUG_ABORT_UNLESS(it != XdcBuffers.end());
             const TMutableContiguousSpan span = it->SubSpan(FetchOffset, numBytes);
             outQ.emplace_back(channel, span);
@@ -63,22 +65,19 @@ namespace NActors {
                 break;
             }
         }
+        return 0;
     }
 
-    static bool NeedReallocateRdma(const NInterconnect::NRdma::TMemRegionSlice& region) {
-        // More complex logic here...
-
-        return !region.Empty();
+    static bool NeedReallocateRdma(const NInterconnect::NRdma::TMemRegionSlice& region, ui32 copySizeThreshold) {
+        return !region.Empty() && region.GetSize() < copySizeThreshold;
     }
 
-    static void ReallocPayload(TRope& rope) {
+    static void ReallocPayload(TRope& rope, ui32 copySizeThreshold) {
         for (TRope::TIterator it = rope.Begin(); it != rope.End(); ++it) {
             TRcBuf& chunk = it.GetChunk();
             const auto& region = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
-            if (NeedReallocateRdma(region)) {
-                auto newChunk = TRcBuf::Uninitialized(chunk.Size(), chunk.Headroom(), chunk.Tailroom());
-                y_absl::crc_internal::non_temporal_store_memcpy_avx(newChunk.GetContiguousSpanMut().data(), chunk.GetContiguousSpan().data(), chunk.Size());
-                chunk = newChunk;
+            if (NeedReallocateRdma(region, copySizeThreshold)) {
+                chunk = TRcBuf::Copy(chunk.GetContiguousSpan(), chunk.Headroom(), chunk.Tailroom());
             }
         }
     }
@@ -145,7 +144,7 @@ namespace NActors {
                 );
 
                 mrOffset += credCopy.GetSize();
-                credOffset += credCopy.GetSize(); 
+                credOffset += credCopy.GetSize();
 
                 if (mrOffset == curMemReg.GetSize()) {  // section finished
                     pendingEvent.RdmaBuffers.pop_front();
@@ -249,7 +248,17 @@ namespace NActors {
 
     void TInputSessionTCP::Bootstrap() {
         SetPrefix(Sprintf("InputSession %s [node %" PRIu32 "]", SelfId().ToString().data(), NodeId));
-        Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
+
+        // Dead-peer watchdog and session-side periodic ping are a single logical user-space liveness mechanism.
+        // They must be switched off together; otherwise one actor may still assume legacy liveness while the
+        // other already relies on kernel keepalive/user-timeout.
+        //
+        // UseKernelLivenessMode() intentionally mirrors the condition in TInterconnectSessionTCP.
+        if (UseKernelLivenessMode()) {
+            Become(&TThis::WorkingState);
+        } else {
+            Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
+        }
         if (RdmaQp) {
             LOG_DEBUG_IC_SESSION("ICRDMA", "InputSession created, rdma qp num: %d", RdmaQp->GetQpNum());
         } else {
@@ -326,6 +335,221 @@ namespace NActors {
         ReceiveData();
     }
 
+    void TInputSessionTCP::Handle(TEvUringRegisterResult::TPtr& ev) {
+        auto* msg = ev->Get();
+        UringContext = std::move(msg->Context);
+        MainRecvBufGroupId = msg->MainRecvBufGroupId;
+        XdcRecvBufGroupId = msg->XdcRecvBufGroupId;
+        StartRecvUring();
+    }
+
+    void TInputSessionTCP::StartRecvUring() {
+        if (!UringContext) {
+            return;
+        }
+        if (Socket && !MainRecvMultishotActive) {
+            if (UringContext->SubmitRecvMultishot((int)*Socket, MainRecvBufGroupId, EUringOpTag::MainRecv)) {
+                UringContext->IncrementPendingRecvs();
+                MainRecvMultishotActive = true;
+            }
+        }
+        UringContext->Flush();
+    }
+
+    void TInputSessionTCP::Handle(TEvUringRecvComplete::TPtr& ev) {
+        auto* msg = ev->Get();
+        EUringOpTag tag = static_cast<EUringOpTag>(msg->UserData & UringOpTagMask);
+
+        if (tag == EUringOpTag::XdcRecv) {
+            // Async XDC readv completion (Caveat 3).
+            UringXdcReadInFlight = false;
+            if (msg->Result > 0) {
+                if (UringXdcReadIsCatch) {
+                    ProcessXdcCatchBytesUring(msg->Result);
+                } else {
+                    ProcessXdcBytesUring(msg->Result);
+                }
+                LastReceiveTimestamp = TActivationContext::Monotonic();
+                ReceiveData();
+            } else if (msg->Result == 0) {
+                throw TExReestablishConnection{TDisconnectReason::EndOfStream()};
+            } else {
+                int err = -msg->Result;
+                if (err != ECANCELED) {
+                    throw TExReestablishConnection{TDisconnectReason::FromErrno(err)};
+                }
+            }
+            return;
+        }
+
+        // Main socket multishot recv completion.
+        if (msg->Result > 0) {
+            const size_t bytesRead = msg->Result;
+            BytesReadFromSocket += bytesRead;
+            ++UringMainRecvCompletions;
+            UringMainRecvBytes += bytesRead;
+            Metrics->AddInputChannelsIncomingTraffic(0, bytesRead);
+            IncomingData.Insert(IncomingData.End(), std::move(msg->Data));
+
+            if (!(msg->Flags & IORING_CQE_F_MORE)) {
+                MainRecvMultishotActive = false;
+                StartRecvUring();
+            }
+
+            LastReceiveTimestamp = TActivationContext::Monotonic();
+            ReceiveData();
+        } else if (msg->Result == 0) {
+            // EOF
+            MainRecvMultishotActive = false;
+            throw TExReestablishConnection{TDisconnectReason::EndOfStream()};
+        } else {
+            int err = -msg->Result;
+            MainRecvMultishotActive = false;
+            if (err == ENOBUFS) {
+                // Provided-buffer ring is momentarily exhausted. The terminal CQE has already
+                // woken the reaper, which recycles released buffers (DrainFreelist). Schedule a
+                // deferred re-arm so we retry once buffers are available rather than busy-looping.
+                TActivationContext::Schedule(TDuration::MicroSeconds(250),
+                    new IEventHandle(EvResumeReceiveData, 0, SelfId(), {}, nullptr, 0));
+            } else if (err != ECANCELED) {
+                throw TExReestablishConnection{TDisconnectReason::FromErrno(err)};
+            }
+        }
+    }
+
+    void TInputSessionTCP::DriveXdcUring() {
+        if (!UringContext || !XdcSocket) {
+            return;
+        }
+        // Apply the catch stream as soon as it is fully read (idempotent), then keep a single
+        // XDC readv in flight while there is work to do.
+        ApplyXdcCatchStream();
+        SubmitXdcRecvUring();
+    }
+
+    bool TInputSessionTCP::SubmitXdcRecvUring() {
+        if (!UringContext || !XdcSocket || UringXdcReadInFlight) {
+            return false;
+        }
+
+        // Catch stream first: read into a throwaway buffer that is later scattered per channel.
+        if (XdcCatchStream.BytesPending) {
+            if (!XdcCatchStream.Buffer) {
+                XdcCatchStream.Buffer = TRcBuf::Uninitialized(64 * 1024);
+            }
+            const size_t numBytesToRead = Min<size_t>(XdcCatchStream.BytesPending, XdcCatchStream.Buffer.size());
+            struct iovec iov{XdcCatchStream.Buffer.GetDataMut(), numBytesToRead};
+            if (UringContext->SubmitReadv((int)*XdcSocket, &iov, 1, ++UringXdcReadSeqNo, EUringOpTag::XdcRecv)) {
+                UringXdcReadInFlight = true;
+                UringXdcReadIsCatch = true;
+                UringContext->Flush();
+                return true;
+            }
+            return false;
+        }
+
+        // Normal XDC stream: scatter read directly into the destination spans (zero-copy).
+        if (!XdcCatchStream.Applied || XdcInputQ.empty()) {
+            return false;
+        }
+
+        TStackVec<struct iovec, 64> buffs;
+        size_t size = 0;
+        for (auto& [channel, span] : XdcInputQ) {
+            buffs.push_back(iovec{span.data(), span.size()});
+            size += span.size();
+            if (buffs.size() == 64 || size >= 1024 * 1024) {
+                break;
+            }
+        }
+
+        if (UringContext->SubmitReadv((int)*XdcSocket, buffs.data(), buffs.size(), ++UringXdcReadSeqNo, EUringOpTag::XdcRecv)) {
+            UringXdcReadInFlight = true;
+            UringXdcReadIsCatch = false;
+            UringContext->Flush();
+            return true;
+        }
+        return false;
+    }
+
+    void TInputSessionTCP::ProcessXdcCatchBytesUring(ssize_t recvres) {
+        HandleXdcChecksum({XdcCatchStream.Buffer.data(), static_cast<size_t>(recvres)});
+
+        XdcCatchStream.BytesPending -= recvres;
+        XdcCatchStream.BytesProcessed += recvres;
+        BytesReadFromXdcSocket += recvres;
+
+        // scatter read data into per-channel catch buffers
+        const char *in = XdcCatchStream.Buffer.data();
+        while (recvres) {
+            Y_DEBUG_ABORT_UNLESS(!XdcCatchStream.Markup.empty());
+            auto& [channel, apply, bytes] = XdcCatchStream.Markup.front();
+            size_t bytesInChannel = Min<size_t>(recvres, bytes);
+            bytes -= bytesInChannel;
+            recvres -= bytesInChannel;
+
+            if (apply) {
+                auto& context = GetPerChannelContext(channel);
+                while (bytesInChannel) {
+                    const size_t offset = context.XdcCatchBytesRead % context.XdcCatchBuffer.size();
+                    TMutableContiguousSpan out = context.XdcCatchBuffer.GetContiguousSpanMut().SubSpan(offset, bytesInChannel);
+                    memcpy(out.data(), in, out.size());
+                    context.XdcCatchBytesRead += out.size();
+                    in += out.size();
+                    bytesInChannel -= out.size();
+                }
+            } else {
+                in += bytesInChannel;
+            }
+
+            if (!bytes) {
+                XdcCatchStream.Markup.pop_front();
+            }
+        }
+
+        ApplyXdcCatchStream();
+    }
+
+    void TInputSessionTCP::ProcessXdcBytesUring(ssize_t recvres) {
+        // calculate stream checksums over the destination spans that were just filled
+        {
+            size_t bytesToChecksum = recvres;
+            for (auto& [channel, span] : XdcInputQ) {
+                const size_t n = Min<size_t>(bytesToChecksum, span.size());
+                HandleXdcChecksum({span.data(), n});
+                bytesToChecksum -= n;
+                if (!bytesToChecksum) {
+                    break;
+                }
+            }
+        }
+
+        Metrics->AddTotalBytesRead(recvres);
+        BytesReadFromXdcSocket += recvres;
+
+        // cut the XdcInputQ deque
+        for (size_t bytesToCut = recvres; bytesToCut; ) {
+            Y_ABORT_UNLESS(!XdcInputQ.empty());
+            auto& [channel, span] = XdcInputQ.front();
+            size_t n = Min(bytesToCut, span.size());
+            bytesToCut -= n;
+            if (n == span.size()) {
+                XdcInputQ.pop_front();
+            } else {
+                span = span.SubSpan(n, Max<size_t>());
+                Y_ABORT_UNLESS(!bytesToCut);
+            }
+
+            Y_DEBUG_ABORT_UNLESS(n);
+            auto& context = GetPerChannelContext(channel);
+            context.DropFront(nullptr, n);
+            ProcessEvents(context);
+        }
+
+        // drop fully processed inbound packets
+        ProcessInboundPacketQ(recvres, 0);
+    }
+
     void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev) {
         if (!ev->Get()->Event->IsSuccess()) {
             LOG_ERROR_IC_SESSION("ICRDMA", "Rdma IO failed, err source: %s, code %d",
@@ -382,13 +606,27 @@ namespace NActors {
             }
 
             // try to read more data into buffers
-            progress |= ReadMore();
-            progress |= ReadXdc(&numDataBytes);
+            if (!UringContext) {
+                progress |= ReadMore();
+                progress |= ReadXdc(&numDataBytes);
+            }
 
             if (!progress) { // no progress was made during this iteration
-                PreallocateBuffers();
+                if (!UringContext) {
+                    PreallocateBuffers();
+                }
                 break;
             }
+        }
+
+        if (UringContext) {
+            // Main recv multishot may have stopped (e.g. ENOBUFS or end of a multishot run);
+            // re-arm it now that we have drained the processable data.
+            if (Socket && !MainRecvMultishotActive) {
+                StartRecvUring();
+            }
+            // Submit/keep an XDC readv in flight if there is pending XDC target space.
+            DriveXdcUring();
         }
 
         if (enoughCpu) {
@@ -652,7 +890,7 @@ namespace NActors {
         }
     }
 
-    TRcBuf TInputSessionTCP::AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, bool isRdma) {
+    TRcBuf TInputSessionTCP::AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, ui64 alignment, bool isRdma) {
         if (isRdma) {
             Y_ABORT_UNLESS(Common->RdmaMemPool, "RdmaMemPool is not initialized");
             auto buffer = Common->RdmaMemPool->AllocRcBuf(size + headroom + tailroom, NInterconnect::NRdma::IMemPool::EMPTY);
@@ -663,6 +901,22 @@ namespace NActors {
             buffer->TrimBack(size);
             return buffer.value();
         } else {
+            if (alignment > 1) {
+                Y_DEBUG_ABORT_UNLESS((alignment & (alignment - 1)) == 0);
+                // Align the payload data pointer itself. TRopeAlignedBuffer gives us a 16-byte aligned base buffer,
+                // but headroom may still shift the visible data away from the requested alignment, so we always keep
+                // up to alignment - 1 bytes of extra slack and spend part of it as additional headroom.
+                const size_t extra = alignment - 1;
+                TRcBuf buffer = TRcBuf(TRopeAlignedBuffer::Allocate(size + headroom + tailroom + extra));
+                const uintptr_t ptr = reinterpret_cast<uintptr_t>(buffer.GetData()) + headroom;
+                const size_t misalignment = ptr & (alignment - 1);
+                const size_t shift = misalignment ? alignment - misalignment : 0;
+                tailroom += extra - shift;
+                buffer.TrimFront(size + tailroom);
+                buffer.TrimBack(size);
+                Y_DEBUG_ABORT_UNLESS(reinterpret_cast<uintptr_t>(buffer.GetData()) % alignment == 0);
+                return buffer;
+            }
             return TRcBuf::Uninitialized(size, headroom, tailroom);
         }
     }
@@ -695,7 +949,7 @@ namespace NActors {
                         if (!isInline) {
                             // allocate buffer and push it into the payload
                             const bool isRdma = cmd == EXdcCommand::DECLARE_SECTION_RDMA;
-                            auto buffer = AllocateRcBuf(size, headroom, tailroom, isRdma);
+                            auto buffer = AllocateRcBuf(size, headroom, tailroom, alignment, isRdma);
                             if (!buffer) {
                                 LOG_CRIT_IC_SESSION("ICRDMA", "Unable to allocate rcbuf for section, sz: %d, use_rdma: %d", size, isRdma);
                                 throw TExDestroySession{TDisconnectReason::FormatError()};
@@ -723,8 +977,9 @@ namespace NActors {
                     continue;
                 }
 
-                case EXdcCommand::PUSH_DATA: {
-                    const size_t cmdLen = sizeof(ui16) + (Params.Encryption ? 0 : sizeof(ui32));
+                case EXdcCommand::PUSH_DATA:
+                case EXdcCommand::PUSH_DATA_NO_CHECKSUMS: {
+                    const size_t cmdLen = sizeof(ui16) + ((Params.Encryption || (cmd == EXdcCommand::PUSH_DATA_NO_CHECKSUMS)) ? 0 : sizeof(ui32));
                     if (static_cast<size_t>(end - ptr) < cmdLen) {
                         LOG_CRIT_IC_SESSION("ICIS18", "XDC command format error");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
@@ -736,9 +991,15 @@ namespace NActors {
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
+                    // HandleXdcChecksum is noop if Params.Encryption is set
                     if (!Params.Encryption) {
-                        const ui32 checksumExpected = ReadUnaligned<ui32>(ptr + sizeof(ui16));
-                        XdcChecksumQ.emplace_back(size, checksumExpected);
+                        if (cmd == EXdcCommand::PUSH_DATA) {
+                            const ui32 checksumExpected = ReadUnaligned<ui32>(ptr + sizeof(ui16));
+                            XdcChecksumQ.emplace_back(size, checksumExpected);
+                        }
+                        else {
+                            XdcChecksumQ.emplace_back(size, std::nullopt);
+                        }
                     }
 
                     // account channel and number of bytes in XDC for this packet
@@ -754,7 +1015,10 @@ namespace NActors {
                         XdcCatchStream.Markup.emplace_back(channel, apply, size);
                     } else {
                         // find buffers and acquire data buffer pointers
-                        context.FetchBuffers(channel, size, XdcInputQ);
+                        if (context.FetchBuffers(channel, size, XdcInputQ) == -1) {
+                            LOG_CRIT_IC_SESSION("ICIS28", "FetchBuffers: end of buffers");
+                            throw TExDestroySession{TDisconnectReason::FormatError()};
+                        }
                     }
 
                     ptr += cmdLen;
@@ -762,7 +1026,8 @@ namespace NActors {
                     continue;
                 }
 
-                case NActors::EXdcCommand::RDMA_READ: {
+                case NActors::EXdcCommand::RDMA_READ:
+                case NActors::EXdcCommand::RDMA_READ_NO_CHECKSUMS: {
                     using namespace NInterconnect::NRdma;
                     if (!RdmaQp || !RdmaCq) {
                         LOG_CRIT_IC_SESSION("ICIS22", "unexpected XDC RDMA_READ command without RDMA QP");
@@ -806,11 +1071,13 @@ namespace NActors {
                     NActorsInterconnect::TRdmaCreds creds;
                     Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
                     ptr += credsSerializedSize;
-                    if (Params.ChecksumRdmaEvent) {
-                        context.PendingEvents.back().RdmaCheckSum = ReadUnaligned<ui32>(ptr);
+
+                    if (cmd == EXdcCommand::RDMA_READ && Params.ChecksumRdmaEvent) {
+                        context.PendingEvents.back().RdmaCumulativeCheckSum = ReadUnaligned<ui32>(ptr);
                     } else {
-                        context.PendingEvents.back().RdmaCheckSum = 0;
+                        context.PendingEvents.back().RdmaCumulativeCheckSum = std::nullopt;
                     }
+
                     ptr += sizeof(ui32);
                     auto err = context.ScheduleRdmaReadRequests(creds, RdmaCq, SelfId(), channel);
                     if (std::holds_alternative<ICq::TBusy>(err)) {
@@ -854,24 +1121,45 @@ namespace NActors {
             TRope payload;
             if (!pendingEvent.SerializationInfo.Sections.empty()) {
                 // unshuffle inline and external payloads into single event content
+                auto flushAccumulated = [&](TRope*& prev, size_t& accumSize) {
+                    if (accumSize) {
+                        prev->ExtractFront(accumSize, &payload);
+                        accumSize = 0;
+                    }
+                };
+
                 TRope *prev = nullptr;
                 size_t accumSize = 0;
                 for (const auto& s : pendingEvent.SerializationInfo.Sections) {
                     TRope *rope = s.IsInline
                         ? &pendingEvent.InternalPayload
                         : &pendingEvent.ExternalPayload;
-                    if (rope != prev) {
-                        if (accumSize) {
-                            prev->ExtractFront(accumSize, &payload);
+
+                    if (s.IsInline && s.Alignment > 1 && s.Size) {
+                        flushAccumulated(prev, accumSize);
+                        auto it = rope->Begin();
+                        const bool alreadyAligned = it.Valid()
+                            && it.ContiguousSize() >= s.Size
+                            && reinterpret_cast<uintptr_t>(it.ContiguousData()) % s.Alignment == 0;
+                        if (alreadyAligned) {
+                            rope->ExtractFront(s.Size, &payload);
+                        } else {
+                            // Headroom/tailroom are already handled when the section buffer is allocated; merging only
+                            // sees the serialized bytes of size s.Size and must preserve alignment for inline sections.
+                            TRcBuf buffer = AllocateRcBuf(s.Size, s.Headroom, s.Tailroom, s.Alignment, false);
+                            const bool success = rope->ExtractFrontPlain(buffer.GetDataMut(), s.Size);
+                            Y_ABORT_UNLESS(success);
+                            payload.Insert(payload.End(), TRope(std::move(buffer)));
                         }
-                        prev = rope;
-                        accumSize = 0;
+                    } else {
+                        if (rope != prev) {
+                            flushAccumulated(prev, accumSize);
+                            prev = rope;
+                        }
+                        accumSize += s.Size;
                     }
-                    accumSize += s.Size;
                 }
-                if (accumSize) {
-                    prev->ExtractFront(accumSize, &payload);
-                }
+                flushAccumulated(prev, accumSize);
 
                 if (pendingEvent.InternalPayload || pendingEvent.ExternalPayload) {
                     LOG_CRIT_IC_SESSION("ICIS19", "unprocessed payload remains after shuffling"
@@ -902,24 +1190,29 @@ namespace NActors {
                 for (const auto&& [data, size] : payload) {
                     checksum = Crc32cExtendMSanCompatible(checksum, data, size);
                 }
-            } else if (pendingEvent.RdmaCheckSum) {
+                if (checksum != descr.Checksum) {
+                    LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
+                    throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
+                }
+            }
+            if (pendingEvent.RdmaCumulativeCheckSum) {
                 XXH3_state_t state;
                 XXH3_64bits_reset(&state);
-                for (const auto&& [data, size] : payload) {
-                    XXH3_64bits_update(&state, data, size);
+                for (auto iter = payload.Begin(); iter.Valid(); ++iter) {
+                    auto memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(iter.GetChunk());
+                    if (!memRegion.Empty()) {
+                        XXH3_64bits_update(&state, memRegion.GetAddr(), memRegion.GetSize());
+                    }
                 }
                 checksum = XXH3_64bits_digest(&state);
-            }
-            ui32 expectedChecksum = descr.Checksum ?: pendingEvent.RdmaCheckSum;
-            if (expectedChecksum) {
-                if (checksum != expectedChecksum) {
-                    LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
+                if (checksum != *pendingEvent.RdmaCumulativeCheckSum) {
+                    LOG_CRIT_IC_SESSION("ICIS05", "event rdma checksum error Type# 0x%08" PRIx32, descr.Type);
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
             }
             pendingEvent.SerializationInfo.IsExtendedFormat = descr.Flags & IEventHandle::FlagExtendedFormat;
 
-            ReallocPayload(payload);
+            ReallocPayload(payload, Common->Settings.RdmaPayloadCopySizeThreshold);
 
             auto ev = std::make_unique<IEventHandle>(SessionId,
                 descr.Type,
@@ -931,12 +1224,20 @@ namespace NActors {
                 Params.PeerScopeId,
                 std::move(descr.TraceId));
             if (Common->EventFilter && !Common->EventFilter->CheckIncomingEvent(*ev, Common->LocalScopeId)) {
-                LOG_CRIT_IC_SESSION("ICIC03", "Event dropped due to scope error LocalScopeId# %s PeerScopeId# %s Type# 0x%08" PRIx32,
+                Metrics->IncScopeErrors();
+                LOG_CRIT_IC_SESSION("ICIC03", "Event dropped due to scope error PeerNodeId# %" PRIu32 " Peer# %s"
+                    " LocalScopeId# %s PeerScopeId# %s Type# 0x%08" PRIx32,
+                    NodeId, Metrics->GetHumanFriendlyPeerHostName().data(),
                     ScopeIdToString(Common->LocalScopeId).data(), ScopeIdToString(Params.PeerScopeId).data(), descr.Type);
                 ev.reset();
             }
             if (ev) {
-                TActivationContext::Send(ev.release());
+                // Give the direct-session interface a chance to consume the event via a registered
+                // receiver; otherwise fall back to normal actor-system delivery.
+                TAutoPtr<IEventHandle> evPtr(ev.release());
+                if (!Context->DirectSession->DeliverIncoming(evPtr)) {
+                    TActivationContext::Send(evPtr.Release());
+                }
             }
         }
     }
@@ -1233,21 +1534,25 @@ namespace NActors {
             Y_DEBUG_ABORT_UNLESS(!XdcChecksumQ.empty());
             auto& [size, expected] = XdcChecksumQ.front();
             const size_t n = Min<size_t>(size, span.size());
-            if (Params.UseXxhash) {
-                XXH3_64bits_update(&XxhashXdcState, span.data(), n);
-            } else {
-                XdcCurrentChecksum = Crc32cExtendMSanCompatible(XdcCurrentChecksum, span.data(), n);
+            if (expected) {
+                if (Params.UseXxhash) {
+                    XXH3_64bits_update(&XxhashXdcState, span.data(), n);
+                } else {
+                    XdcCurrentChecksum = Crc32cExtendMSanCompatible(XdcCurrentChecksum, span.data(), n);
+                }
             }
             span = span.SubSpan(n, Max<size_t>());
             size -= n;
             if (!size) {
-                if (Params.UseXxhash) {
-                    XdcCurrentChecksum = XXH3_64bits_digest(&XxhashXdcState);
-                    XXH3_64bits_reset(&XxhashXdcState);
-                }
-                if (XdcCurrentChecksum != expected) {
-                    LOG_ERROR_IC_SESSION("ICIS16", "payload checksum error");
-                    throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
+                if (expected) {
+                    if (Params.UseXxhash) {
+                        XdcCurrentChecksum = XXH3_64bits_digest(&XxhashXdcState);
+                        XXH3_64bits_reset(&XxhashXdcState);
+                    }
+                    if (XdcCurrentChecksum != *expected) {
+                        LOG_ERROR_IC_SESSION("ICIS16", "payload checksum error");
+                        throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
+                    }
                 }
                 XdcChecksumQ.pop_front();
                 XdcCurrentChecksum = 0;
@@ -1274,9 +1579,36 @@ namespace NActors {
         if (now >= LastReceiveTimestamp + DeadPeerTimeout) {
             ReceiveData();
             if (Socket && now >= LastReceiveTimestamp + DeadPeerTimeout) {
+                // Diagnostic snapshot: capture exactly why the input session believes the peer is
+                // dead. On the idle-keepalive failure this shows whether ANY recv completion ever
+                // arrived (peer truly silent / recv not armed) and whether the multishot is still
+                // active, plus the ring's submit accounting.
+                LOG_NOTICE_IC_SESSION("ICIS30", "DeadPeer snapshot uring# %d lastRecvAge# %.3fs"
+                    " bytesRead# %" PRIu64 " mainRecvCompletions# %" PRIu64 " mainRecvBytes# %" PRIu64
+                    " mainMsActive# %d pendingRecvs# %" PRIu32 " submitCalls# %" PRIu64
+                    " submitErrors# %" PRIu64 " submitPartials# %" PRIu64 " lastSubmitRet# %d sqeFull# %" PRIu64,
+                    (UringContext ? 1 : 0), (now - LastReceiveTimestamp).SecondsFloat(),
+                    BytesReadFromSocket, UringMainRecvCompletions, UringMainRecvBytes,
+                    (int)MainRecvMultishotActive,
+                    (UringContext ? UringContext->GetPendingRecvs() : 0),
+                    (UringContext ? UringContext->GetSubmitCalls() : 0),
+                    (UringContext ? UringContext->GetSubmitErrors() : 0),
+                    (UringContext ? UringContext->GetSubmitPartials() : 0),
+                    (UringContext ? UringContext->GetLastSubmitRet() : 0),
+                    (UringContext ? UringContext->GetSqeFull() : 0));
                 // nothing has changed, terminate session
                 throw TExDestroySession{TDisconnectReason::DeadPeer()};
             }
+        }
+        // Recv-side heartbeat (DEBUG): fires roughly once per DeadPeerTimeout on a healthy idle
+        // session. Paired with the output ICS42 send heartbeat to confirm keepalives are flowing.
+        if (UringContext) {
+            LOG_DEBUG_IC_SESSION("ICIS31", "uring recv hb lastRecvAge# %.3fs bytesRead# %" PRIu64
+                " mainRecvCompletions# %" PRIu64 " mainRecvBytes# %" PRIu64 " mainMsActive# %d"
+                " pendingRecvs# %" PRIu32,
+                (now - LastReceiveTimestamp).SecondsFloat(), BytesReadFromSocket,
+                UringMainRecvCompletions, UringMainRecvBytes, (int)MainRecvMultishotActive,
+                UringContext->GetPendingRecvs());
         }
         Schedule(LastReceiveTimestamp + DeadPeerTimeout, new TEvCheckDeadPeer);
     }

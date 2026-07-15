@@ -10,6 +10,7 @@ from typing_extensions import Protocol, runtime_checkable
 
 from textual import _time
 from textual._callback import invoke
+from textual._compat import cached_property
 from textual._easing import DEFAULT_EASING, EASING
 from textual._types import AnimationLevel, CallbackType
 from textual.timer import Timer
@@ -242,11 +243,16 @@ class Animator:
             callback=self,
             pause=True,
         )
+
+    @cached_property
+    def _idle_event(self) -> asyncio.Event:
         """The timer that runs the animator."""
-        self._idle_event = asyncio.Event()
+        return asyncio.Event()
+
+    @cached_property
+    def _complete_event(self) -> asyncio.Event:
         """Flag if no animations are currently taking place."""
-        self._complete_event = asyncio.Event()
-        """Flag if no animations are currently taking place and none are scheduled."""
+        return asyncio.Event()
 
     async def start(self) -> None:
         """Start the animator task."""
@@ -415,9 +421,10 @@ class Animator:
                 )
 
             start_value = getattr(obj, attribute)
-
             if start_value == value:
                 self._animations.pop(animation_key, None)
+                if on_complete is not None:
+                    self.app.call_later(on_complete)
                 return
 
             if duration is not None:
@@ -449,9 +456,9 @@ class Animator:
 
         assert animation is not None, "animation expected to be non-None"
 
-        current_animation = self._animations.get(animation_key)
-        if current_animation is not None and current_animation == animation:
-            return
+        if (current_animation := self._animations.get(animation_key)) is not None:
+            if (on_complete := current_animation.on_complete) is not None:
+                self.app.call_later(on_complete)
 
         self._animations[animation_key] = animation
         self._timer.resume()

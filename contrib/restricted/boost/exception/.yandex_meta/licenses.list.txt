@@ -65,6 +65,10 @@ Copyright (C) 2006-2021 Emil Dotchevski. Distributed under the [Boost Software L
 
 
 ====================COPYRIGHT====================
+//Copyright (c) 2006-2026 Emil Dotchevski and Reverge Studios, Inc.
+
+
+====================COPYRIGHT====================
 Copyright (c) 2006-2021 Emil Dotchevski
 
 ====================File: LICENSE_1_0.txt====================

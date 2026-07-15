@@ -614,7 +614,7 @@ class Distribution(_Distribution):
             alias = self.negative_opt.get(opt)
             if alias:
                 val = not strtobool(val)
-            elif opt in ('verbose', 'dry_run'):  # ugh!
+            elif opt == 'verbose':
                 val = strtobool(val)
 
             try:

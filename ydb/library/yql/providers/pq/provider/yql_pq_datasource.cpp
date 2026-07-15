@@ -1,19 +1,22 @@
+#include "yql_pq_datasource_constraints.h"
+#include "yql_pq_helpers.h"
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_topic_key_parser.h"
-#include "yql_pq_helpers.h"
+#include "yql_pq_settings.h"
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <yql/essentials/providers/common/config/yql_configuration_transformer.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <yql/essentials/providers/common/transform/yql_lazy_init.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/transform/yql_lazy_init.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -28,12 +31,13 @@ public:
         : State_(state)
         , Gateway_(gateway)
         , ConfigurationTransformer_([this]() {
-        return MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{ PqProviderName });
-    })
+            return MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{ PqProviderName });
+        })
         , LoadMetaDataTransformer_(CreatePqLoadTopicMetadataTransformer(State_))
         , TypeAnnotationTransformer_(CreatePqDataSourceTypeAnnotationTransformer(State_))
-        , IODiscoveryTransformer_(CreatePqIODiscoveryTransformer(State_)) {
-    }
+        , IODiscoveryTransformer_(CreatePqIODiscoveryTransformer(State_))
+        , ConstraintsTransformer_(CreatePqDataSourceConstraintTransformer(State_))
+    {}
 
     TStringBuf GetName() const override {
         return PqProviderName;
@@ -81,6 +85,11 @@ public:
         return *TypeAnnotationTransformer_;
     }
 
+    IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) override {
+        Y_UNUSED(instantOnly, subGraph);
+        return *ConstraintsTransformer_;
+    }
+
     bool EnableDqSource() const {
         return !State_->IsRtmrMode();
     }
@@ -106,10 +115,23 @@ public:
         }
 
         TVector<TCoNameValueTuple> sourceMetadata;
-        for (auto sysColumn : AllowedPqMetaSysColumns(State_->AllowTransparentSystemColumns)) {
+        if (!State_->ForbidYqlSysColumnsAndSystemMetadata) {
+            for (auto sysColumn : GetAllowedPqMetaSysColumns(
+                     State_->AddTransparentPrefixToTransparentSystemColumns,
+                     State_->EnableUserAttributesInTopicQuery))
+            {
+                sourceMetadata.push_back(Build<TCoNameValueTuple>(ctx, read.Pos())
+                    .Name().Build("system")
+                    .Value<TCoAtom>().Build(sysColumn)
+                    .Done());
+            }
+        }
+
+        // Also register __ydb_-prefixed system columns
+        for (auto ydbColumn : GetAllowedYdbSysColumns(State_->EnableUserAttributesInTopicQuery)) {
             sourceMetadata.push_back(Build<TCoNameValueTuple>(ctx, read.Pos())
                 .Name().Build("system")
-                .Value<TCoAtom>().Build(sysColumn)
+                .Value<TCoAtom>().Build(ydbColumn)
                 .Done());
         }
 
@@ -122,16 +144,20 @@ public:
             .Metadata().Add(sourceMetadata).Build()
             .Done();
 
-        TExprNode::TPtr columns;
-        if (auto columnOrder = topicKeyParser.GetColumnOrder()) {
-            columns = std::move(columnOrder);
-        } else {
-            columns = Build<TCoVoid>(ctx, read.Pos()).Done().Ptr();
-        }
+        TExprNode::TPtr columns = topicKeyParser.GetColumnOrder();
 
         auto format = topicKeyParser.GetFormat();
         if (format.empty()) {
             format = "raw";
+        }
+
+        // csv: physical field order only as explicit atom list in userschema (third argument / tail), same as S3 ColumnOrder.
+        if (format == "csv"sv) {
+            if (!columns || !columns->IsList() || columns->ChildrenSize() == 0) {
+                ctx.AddError(TIssue(ctx.GetPosition(read.Pos()),
+                    "csv format requires SCHEMA with explicitly listed column names to determine column order"));
+                return nullptr;
+            }
         }
 
         auto settings = Build<TCoNameValueTupleList>(ctx, read.Pos());
@@ -194,14 +220,6 @@ public:
             settings.Add(std::move(dateFormat));
         }
 
-        if (auto watermarkAdjustLateEvents = topicKeyParser.GetWatermarkAdjustLateEvents()) {
-            settings.Add(std::move(watermarkAdjustLateEvents));
-        }
-
-        if (auto watermarkDropLateEvents = topicKeyParser.GetWatermarkDropLateEvents()) {
-            settings.Add(std::move(watermarkDropLateEvents));
-        }
-
         if (auto watermarkGranularity = topicKeyParser.GetWatermarkGranularity()) {
             settings.Add(std::move(watermarkGranularity));
         }
@@ -212,6 +230,10 @@ public:
 
         if (auto skipJsonErrors = topicKeyParser.GetSkipJsonErrors()) {
             settings.Add(std::move(skipJsonErrors));
+        }
+
+        if (auto csvDelimiter = topicKeyParser.GetCsvDelimiter()) {
+            settings.Add(std::move(csvDelimiter));
         }
 
         if (auto streamingTopicRead = topicKeyParser.GetStreamingTopicRead()) {
@@ -225,19 +247,34 @@ public:
             settings.Add(std::move(sharedReading));
         }
 
+        TExprNode::TPtr userSchemaColumnsList;
+        if (format == "csv"sv) {
+            YQL_ENSURE(columns && columns->IsList());
+            // Own copy: Columns may later be rewritten to projection order; UserSchemaColumns must keep file order.
+            userSchemaColumnsList = ctx.NewList(read.Pos(), columns->ChildrenList());
+        } else {
+            userSchemaColumnsList = Build<TCoVoid>(ctx, read.Pos()).Done().Ptr();
+        }
+
+        TExprNode::TPtr watermarkArg;
+        if (auto watermark = topicKeyParser.GetWatermark()) {
+            watermarkArg = std::move(watermark);
+            YQL_ENSURE(TCoLambda::Match(watermarkArg.Get()));
+        } else {
+            watermarkArg = Build<TCoVoid>(ctx, read.Pos()).Done().Ptr();
+        }
+
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())
             .World(read.World())
             .DataSource(read.DataSource())
             .Topic(std::move(topicNode))
-            .Columns(std::move(columns))
+            .Columns(columns ? std::move(columns) : Build<TCoVoid>(ctx, read.Pos()).Done().Ptr())
             .Format().Value(format).Build()
             .Compression().Value(topicKeyParser.GetCompression()).Build()
             .LimitHint<TCoVoid>().Build()
-            .Settings(settings.Done());
-
-        if (auto watermark = topicKeyParser.GetWatermark()) {
-            builder.Watermark(std::move(watermark));
-        }
+            .Settings(settings.Done())
+            .Watermark(std::move(watermarkArg))
+            .UserSchemaColumns(std::move(userSchemaColumnsList));
 
         return Build<TCoRight>(ctx, read.Pos())
             .Input(builder.Done())
@@ -319,6 +356,7 @@ private:
     THolder<IGraphTransformer> LoadMetaDataTransformer_;
     THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     THolder<IGraphTransformer> IODiscoveryTransformer_;
+    const TAutoPtr<IGraphTransformer> ConstraintsTransformer_;
 };
 
 } // anonymous namespace

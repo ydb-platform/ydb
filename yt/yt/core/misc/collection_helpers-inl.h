@@ -257,15 +257,15 @@ T&& GetOrCrash(std::optional<T>&& opt)
     return *std::move(opt);
 }
 
-template <class TMap, class TKey>
-typename TMap::mapped_type GetOrDefault(
+template <class TMap, class TKey, class TReturnType>
+TReturnType GetOrDefault(
     const TMap& map,
     const TKey& key,
-    const typename TMap::mapped_type& defaultValue)
+    const std::type_identity_t<TReturnType>& defaultValue)
     requires (!TIsDefaultMap<TMap>::Value)
 {
     auto it = map.find(key);
-    return it == map.end() ? defaultValue : it->second;
+    return it == map.end() ? defaultValue : TReturnType(it->second);
 }
 
 template <class TMap, class TKey>

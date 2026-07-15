@@ -17,12 +17,12 @@ protected:
 
 class TTargetTable: public TTargetTableBase {
 public:
-    struct TTableConfig : public TConfigBase {
+    struct TTableConfig: public TConfigBase {
         using TPtr = std::shared_ptr<TTableConfig>;
 
         TTableConfig(const TString& srcPath, const TString& dstPath)
             : TConfigBase(ETargetKind::Table, srcPath, dstPath)
-        {}        
+        {}
     };
 
     explicit TTargetTable(TReplication* replication,
@@ -34,12 +34,12 @@ protected:
 
 class TTargetIndexTable: public TTargetTableBase {
 public:
-    struct TIndexTableConfig : public TConfigBase {
+    struct TIndexTableConfig: public TConfigBase {
         using TPtr = std::shared_ptr<TIndexTableConfig>;
 
         TIndexTableConfig(const TString& srcPath, const TString& dstPath)
             : TConfigBase(ETargetKind::IndexTable, srcPath, dstPath)
-        {}        
+        {}
     };
 
     explicit TTargetIndexTable(TReplication* replication,

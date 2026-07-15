@@ -11,7 +11,7 @@
 
 #include <util/stream/file.h>
 
-int RunFormat(int argc, char* argv[]) {
+int RunFormat(int argc, char** argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
     TString outFileName;
@@ -82,7 +82,7 @@ int RunFormat(int argc, char* argv[]) {
     return errors;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char** argv) {
     try {
         return RunFormat(argc, argv);
     } catch (const yexception& e) {

@@ -6,14 +6,22 @@
 #include "block_item.h"
 #include "block_type_helper.h"
 #include "dispatch_traits.h"
+#include "block_array_tree.h"
 
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 
+#include <util/generic/guid.h>
+#include <util/system/unaligned_mem.h>
+
 #include <arrow/array/array_base.h>
+#include <arrow/array/concatenate.h>
+#include <arrow/array/util.h>
+#include <arrow/chunked_array.h>
 #include <arrow/datum.h>
 #include <arrow/c/bridge.h>
+#include <arrow/type.h>
 
 #include <deque>
 
@@ -38,7 +46,7 @@ public:
 };
 
 inline const IArrayBuilder::TArrayDataItem* LookupArrayDataItem(const IArrayBuilder::TArrayDataItem* arrays, size_t arrayCount, ui64& idx) {
-    IArrayBuilder::TArrayDataItem lookup{nullptr, idx};
+    IArrayBuilder::TArrayDataItem lookup{.Data = nullptr, .StartOffset = idx};
 
     auto it = std::lower_bound(arrays, arrays + arrayCount, lookup, [](const auto& left, const auto& right) {
         return left.StartOffset < right.StartOffset;
@@ -73,12 +81,6 @@ class TArrayBuilderBase: public IArrayBuilder {
 
 public:
     using Ptr = std::unique_ptr<TArrayBuilderBase>;
-
-    struct TBlockArrayTree {
-        using Ptr = std::shared_ptr<TBlockArrayTree>;
-        std::deque<std::shared_ptr<arrow::ArrayData>> Payload;
-        std::vector<TBlockArrayTree::Ptr> Children;
-    };
 
     struct TParams {
         size_t* TotalAllocated = nullptr;
@@ -137,12 +139,12 @@ public:
     }
 
     inline void AddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) {
-        TArrayDataItem item = {&array, 0};
+        TArrayDataItem item = {.Data = &array, .StartOffset = 0};
         Self::AddMany(&item, 1, beginIndex, count);
     }
 
     inline void AddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) {
-        TArrayDataItem item = {&array, 0};
+        TArrayDataItem item = {.Data = &array, .StartOffset = 0};
         Self::AddMany(&item, 1, indexes, count);
     }
 
@@ -224,12 +226,7 @@ public:
 
     arrow::Datum Build(bool finish) final {
         auto tree = BuildTree(finish);
-        TVector<std::shared_ptr<arrow::ArrayData>> chunks;
-        while (size_t size = CalcSliceSize(*tree)) {
-            chunks.push_back(Slice(*tree, size));
-        }
-
-        return MakeArray(chunks);
+        return ToChunkedArray(*tree, Pool_);
     }
 
     TBlockArrayTree::Ptr BuildTree(bool finish) {
@@ -255,56 +252,6 @@ protected:
 
     // returns the newly allocated size in bytes
     virtual size_t DoReserve() = 0;
-
-private:
-    static size_t CalcSliceSize(const TBlockArrayTree& tree) {
-        if (tree.Payload.empty()) {
-            return 0;
-        }
-
-        if (!tree.Children.empty()) {
-            Y_ABORT_UNLESS(tree.Payload.size() == 1);
-            size_t result = std::numeric_limits<size_t>::max();
-            for (auto& child : tree.Children) {
-                size_t childSize = CalcSliceSize(*child);
-                result = std::min(result, childSize);
-            }
-            Y_ABORT_UNLESS(result <= size_t(tree.Payload.front()->length));
-            return result;
-        }
-
-        int64_t result = tree.Payload.front()->length;
-        Y_ABORT_UNLESS(result > 0);
-        return static_cast<size_t>(result);
-    }
-
-    static std::shared_ptr<arrow::ArrayData> Slice(TBlockArrayTree& tree, size_t size) {
-        Y_ABORT_UNLESS(size > 0);
-
-        Y_ABORT_UNLESS(!tree.Payload.empty());
-        auto& main = tree.Payload.front();
-        std::shared_ptr<arrow::ArrayData> sliced;
-        if (size == size_t(main->length)) {
-            sliced = main;
-            tree.Payload.pop_front();
-        } else {
-            Y_ABORT_UNLESS(size < size_t(main->length));
-            sliced = Chop(main, size);
-        }
-
-        if (!tree.Children.empty()) {
-            std::vector<std::shared_ptr<arrow::ArrayData>> children;
-            for (auto& child : tree.Children) {
-                children.push_back(Slice(*child, size));
-            }
-
-            sliced->child_data = std::move(children);
-            if (tree.Payload.empty()) {
-                tree.Children.clear();
-            }
-        }
-        return sliced;
-    }
 
 protected:
     size_t GetCurrLen() const {
@@ -589,6 +536,45 @@ public:
 };
 
 template <bool Nullable>
+class TFixedSizeArrayBuilder<TGUID, Nullable> final: public TFixedSizeArrayBuilderBase<TGUID, Nullable, TFixedSizeArrayBuilder<TGUID, Nullable>> {
+    using TSelf = TFixedSizeArrayBuilder<TGUID, Nullable>;
+    using TBase = TFixedSizeArrayBuilderBase<TGUID, Nullable, TSelf>;
+    using TParams = TArrayBuilderBase::TParams;
+
+public:
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+        : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen, params)
+    {
+    }
+
+    TFixedSizeArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+        : TBase(typeInfoHelper, type, pool, maxLen, params)
+    {
+    }
+
+    void DoAddNotNullFromStringRef(TStringBuf ref) {
+        this->PlaceItem(ReadUnaligned<TGUID>(ref.Data()));
+    }
+
+    void DoAddNotNull(TUnboxedValuePod value) {
+        DoAddNotNullFromStringRef(value.AsStringRef());
+    }
+
+    void DoAddNotNull(TBlockItem value) {
+        DoAddNotNullFromStringRef(value.AsStringRef());
+    }
+
+    void DoAddNotNull(TInputBuffer& input) {
+        this->PlaceItem(input.PopNumber<TGUID>());
+    }
+
+    void DoAddNotNull(TBlockItem value, size_t count) {
+        const TGUID uuid = ReadUnaligned<TGUID>(value.AsStringRef().Data());
+        std::fill(this->DataPtr_ + this->GetCurrLen(), this->DataPtr_ + this->GetCurrLen() + count, uuid);
+    }
+};
+
+template <bool Nullable>
 class TResourceArrayBuilder final: public TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>> {
     using TBase = TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>>;
     using TParams = TArrayBuilderBase::TParams;
@@ -792,7 +778,7 @@ public:
 
                     size_t nullOffset = i + array.offset;
                     if constexpr (Nullable) {
-                        *dstNulls++ = srcNulls ? ((srcNulls[nullOffset >> 3] >> (nullOffset & 7)) & 1) : 1u;
+                        *dstNulls++ = srcNulls ? ((srcNulls[nullOffset >> 3] >> (nullOffset & 7)) & 1) : 1U;
                     }
                     *dstOffset++ = dataLen;
 
@@ -952,7 +938,6 @@ private:
 
     void FlushChunk(bool finish) {
         const auto length = OffsetsBuilder_->Length();
-        Y_ABORT_UNLESS(length > 0);
 
         AppendCurrentOffset();
         std::shared_ptr<arrow::Buffer> nullBitmap;
@@ -1085,7 +1070,6 @@ public:
             nullBitmap = MakeDenseBitmap(nullBitmap->data(), length, Pool_);
         }
 
-        Y_ABORT_UNLESS(length);
         result->Payload.push_back(arrow::ArrayData::Make(ArrowType_, length, {nullBitmap}));
         static_cast<TDerived*>(this)->BuildChildrenTree(finish, result->Children);
 
@@ -1124,8 +1108,8 @@ public:
     }
 
     void AddToChildrenDefault() {
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            Children_[i]->AddDefault();
+        for (const auto& child : Children_) {
+            child->AddDefault();
         }
     }
 
@@ -1151,8 +1135,8 @@ public:
     }
 
     void AddToChildren(TInputBuffer& input) {
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            Children_[i]->Add(input);
+        for (const auto& child : Children_) {
+            child->Add(input);
         }
     }
 
@@ -1177,10 +1161,10 @@ public:
         }
     }
 
-    void BuildChildrenTree(bool finish, std::vector<TArrayBuilderBase::TBlockArrayTree::Ptr>& resultChildren) {
+    void BuildChildrenTree(bool finish, std::vector<TBlockArrayTree::Ptr>& resultChildren) {
         resultChildren.reserve(Children_.size());
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            resultChildren.emplace_back(Children_[i]->BuildTree(finish));
+        for (const auto& child : Children_) {
+            resultChildren.emplace_back(child->BuildTree(finish));
         }
     }
 
@@ -1241,7 +1225,7 @@ public:
         TimezoneBuilder_.AddMany(*array.child_data[1], indexes, count);
     }
 
-    void BuildChildrenTree(bool finish, std::vector<TArrayBuilderBase::TBlockArrayTree::Ptr>& resultChildren) {
+    void BuildChildrenTree(bool finish, std::vector<TBlockArrayTree::Ptr>& resultChildren) {
         resultChildren.emplace_back(DateBuilder_.BuildTree(finish));
         resultChildren.emplace_back(TimezoneBuilder_.BuildTree(finish));
     }
@@ -1345,7 +1329,6 @@ public:
         nullBitmap = NullBuilder_->Finish();
         nullBitmap = MakeDenseBitmap(nullBitmap->data(), length, Pool_);
 
-        Y_ABORT_UNLESS(length);
         result->Payload.push_back(arrow::ArrayData::Make(ArrowType_, length, {nullBitmap}));
         result->Children.emplace_back(Inner_->BuildTree(finish));
 
@@ -1418,12 +1401,152 @@ private:
     }
 };
 
+class TVariantArrayBuilder final: public TArrayBuilderBase {
+    using TBase = TArrayBuilderBase;
+    using TParams = TArrayBuilderBase::TParams;
+
+public:
+    TVariantArrayBuilder(TVector<TArrayBuilderBase::Ptr>&& children, const TType* type,
+                         const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool,
+                         size_t maxLen, const TParams& params = {})
+        : TBase(typeInfoHelper, type, pool, maxLen, params)
+        , Children_(std::move(children))
+    {
+        Y_ENSURE(!Children_.empty(), "Variant must have at least one alternative");
+        Y_ENSURE(maxLen <= std::numeric_limits<i32>::max(), "Variant array builder max length is limited to 2^31-1. "
+                                                            "Some extra chop logic required to support larger lengths.");
+        Reserve();
+    }
+
+    void DoAdd(NUdf::TUnboxedValuePod value) final {
+        const ui32 idx = value.GetVariantIndex();
+        Y_ENSURE(idx < Children_.size(), "Variant index out of range");
+        TypeCodes_->UnsafeAppend(static_cast<i8>(idx));
+        ValueOffsets_->UnsafeAppend(0);
+        auto item = value.GetVariantItem();
+        Children_[idx]->Add(item);
+    }
+
+    void DoAdd(TBlockItem value) final {
+        const ui32 idx = value.GetVariantIndex();
+        Y_ENSURE(idx < Children_.size(), "Variant index out of range");
+        TypeCodes_->UnsafeAppend(static_cast<i8>(idx));
+        ValueOffsets_->UnsafeAppend(0);
+        Children_[idx]->Add(value.GetVariantItem());
+    }
+
+    void DoAdd(TInputBuffer& input) final {
+        const auto typeCode = static_cast<ui8>(input.PopChar());
+        Y_ENSURE(typeCode < Children_.size(), "Variant type code out of range");
+        TypeCodes_->UnsafeAppend(static_cast<i8>(typeCode));
+        ValueOffsets_->UnsafeAppend(0);
+        Children_[typeCode]->Add(input);
+    }
+
+    void DoAddDefault() final {
+        // The dense union format allows the following optimization:
+        // 1. If an element of the some variant alternative already exists, we can add a default
+        //    value for that variant without modifying any of the underlying child arrays.
+        // 2. To achieve this, we append the same type code as the last element and reuse
+        //    the last value offset as well.
+        //
+        // The Arrow format does not require each offset to be exactly one greater than
+        // the previous one. It only requires the last offset to be greater than or equal
+        // to the previous one.
+        //
+        // This is not implemented yet, but we may support it in the near future.
+        TypeCodes_->UnsafeAppend(static_cast<i8>(0));
+        ValueOffsets_->UnsafeAppend(0);
+        Children_[0]->AddDefault();
+    }
+
+    void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
+        const auto* typeCodes = array.GetValues<i8>(1);
+        const auto* valueOffsets = array.GetValues<i32>(2);
+        size_t added = 0;
+        for (i64 i = 0; i < array.length && added < popCount; ++i) {
+            if (!sparseBitmap[i]) {
+                continue;
+            }
+            i8 typeCode = typeCodes[i];
+            const i32 valueOffset = valueOffsets[i];
+            TypeCodes_->UnsafeAppend(i8{typeCode});
+            ValueOffsets_->UnsafeAppend(0);
+            Children_[typeCode]->AddMany(*array.child_data[typeCode], valueOffset, 1);
+            ++added;
+        }
+    }
+
+    void DoAddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) final {
+        const auto* typeCodes = array.GetValues<i8>(1);
+        const auto* valueOffsets = array.GetValues<i32>(2);
+        for (ui64 i = beginIndex; i < beginIndex + count; ++i) {
+            i8 typeCode = typeCodes[i];
+            const i32 valueOffset = valueOffsets[i];
+            TypeCodes_->UnsafeAppend(i8{typeCode});
+            ValueOffsets_->UnsafeAppend(0);
+            Children_[typeCode]->AddMany(*array.child_data[typeCode], valueOffset, 1);
+        }
+    }
+
+    void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) final {
+        const auto* typeCodes = array.GetValues<i8>(1);
+        const auto* valueOffsets = array.GetValues<i32>(2);
+        for (size_t i = 0; i < count; ++i) {
+            const ui64 idx = indexes[i];
+            i8 typeCode = typeCodes[idx];
+            const i32 valueOffset = valueOffsets[idx];
+            TypeCodes_->UnsafeAppend(i8{typeCode});
+            ValueOffsets_->UnsafeAppend(0);
+            Children_[typeCode]->AddMany(*array.child_data[typeCode], valueOffset, 1);
+        }
+    }
+
+    TBlockArrayTree::Ptr DoBuildTree(bool finish) final {
+        const size_t length = GetCurrLen();
+        auto typeCodesBuf = TypeCodes_->Finish();
+        auto valueOffsetsBuf = ValueOffsets_->Finish();
+
+        auto arrayData = arrow::ArrayData::Make(
+            ArrowType_, static_cast<i64>(length),
+            {nullptr, typeCodesBuf, valueOffsetsBuf});
+
+        auto result = std::make_shared<TBlockArrayTree>();
+        result->Payload.push_back(std::move(arrayData));
+
+        for (const auto& child : Children_) {
+            result->Children.push_back(child->BuildTree(finish));
+        }
+
+        if (!finish) {
+            Reserve();
+        }
+
+        return result;
+    }
+
+private:
+    size_t DoReserve() final {
+        TypeCodes_ = std::make_unique<TTypedBufferBuilder<i8>>(Pool_, MinFillPercentage_);
+        TypeCodes_->Reserve(MaxLen_ + 1);
+        ValueOffsets_ = std::make_unique<TTypedBufferBuilder<i32>>(Pool_, MinFillPercentage_);
+        ValueOffsets_->Reserve(MaxLen_ + 1);
+        return TypeCodes_->Capacity() + ValueOffsets_->Capacity();
+    }
+
+private:
+    TVector<TArrayBuilderBase::Ptr> Children_;
+    std::unique_ptr<TTypedBufferBuilder<i8>> TypeCodes_;
+    std::unique_ptr<TTypedBufferBuilder<i32>> ValueOffsets_;
+};
+
 using TArrayBuilderParams = TArrayBuilderBase::TParams;
 
 struct TBuilderTraits {
     using TResult = TArrayBuilderBase;
     template <bool Nullable>
     using TTuple = TTupleArrayBuilder<Nullable>;
+    using TVariant = TVariantArrayBuilder;
     template <typename T, bool Nullable>
     using TFixedSize = TFixedSizeArrayBuilder<T, Nullable>;
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal>

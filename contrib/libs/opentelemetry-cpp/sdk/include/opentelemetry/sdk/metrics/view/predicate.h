@@ -20,7 +20,15 @@ namespace metrics
 class Predicate
 {
 public:
-  virtual ~Predicate()                                                        = default;
+  Predicate() = default;
+
+  Predicate(const Predicate &)            = delete;
+  Predicate(Predicate &&)                 = delete;
+  Predicate &operator=(const Predicate &) = delete;
+  Predicate &operator=(Predicate &&)      = delete;
+
+  virtual ~Predicate() = default;
+
   virtual bool Match(opentelemetry::nostd::string_view string) const noexcept = 0;
 };
 

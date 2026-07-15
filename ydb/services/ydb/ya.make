@@ -10,6 +10,7 @@ SRCS(
     ydb_operation.cpp
     ydb_query.cpp
     ydb_scheme.cpp
+    ydb_secret.cpp
     ydb_scripting.cpp
     ydb_table.cpp
     ydb_object_storage.cpp

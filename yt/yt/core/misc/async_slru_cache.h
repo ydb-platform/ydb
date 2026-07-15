@@ -166,7 +166,7 @@ public:
         TInsertCookie(const TInsertCookie& other) = delete;
         ~TInsertCookie();
 
-        TInsertCookie& operator=(TInsertCookie&& other);
+        TInsertCookie& operator=(TInsertCookie&& other) noexcept;
         TInsertCookie& operator=(const TInsertCookie& other) = delete;
 
         const TKey& GetKey() const;
@@ -209,7 +209,11 @@ public:
     std::vector<TValuePtr> GetAll();
 
     TValuePtr Find(const TKey& key);
+    template <class THeterogenousKey>
+    TValuePtr Find(const THeterogenousKey& key);
     TValueFuture Lookup(const TKey& key);
+    template <class THeterogenousKey>
+    TValueFuture Lookup(const THeterogenousKey& key);
     void Touch(const TValuePtr& value);
 
     TInsertCookie BeginInsert(const TKey& key, i64 cookieWeight = 0);
@@ -337,8 +341,10 @@ private:
     public:
         using TValuePtr = TIntrusivePtr<TValue>;
 
-        void Find(const TKey& key);
-        void Lookup(const TKey& key);
+        template <class THeterogenousKey>
+        void Find(const THeterogenousKey& key);
+        template <class THeterogenousKey>
+        void Lookup(const THeterogenousKey& key);
         void Touch(const TValuePtr& value);
 
         //! If BeginInsert() returns true, then it must be paired with either CancelInsert() or EndInsert()
@@ -372,7 +378,8 @@ private:
 
         THashMap<TKey, TGhostItem*, THash> ItemMap_;
 
-        bool DoLookup(const TKey& key, bool allowAsyncHits);
+        template <class THeterogenousKey>
+        bool DoLookup(const THeterogenousKey& key, bool allowAsyncHits);
         void Trim(NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>& guard);
     };
 
@@ -396,7 +403,7 @@ private:
     //! 4. Destroying. The refcount of the value reached zero. It's not present in ItemMap and the lists, but is
     //!    still present in ValueMap. It's not allowed to return such value into the cache, and its state can be
     //!    only changed to Destroyed. To distinguish between Ready for Resurrection and Destroying, one may use
-    //!    DangerousGetPtr() on the pointer from ValueMap. If it returned null, then the state is Destroying.
+    //!    Lock() on the pointer from ValueMap. If it returned null, then the state is Destroying.
     //! 5. Destroyed. The value and its corresponding item are freed and are not present anywhere.
     class TShard
         : public TAsyncSlruCacheListManager<TItem, TShard>
@@ -407,7 +414,7 @@ private:
         //! Holds pointers to values for any given key. They are stored to allow resurrection. When the value
         //! is freed, it will be removed from ValueMap. When the value is in Destroying state, the value will still
         //! reside in ValueMap, you need to be careful with it.
-        THashMap<TKey, TValue*, THash> ValueMap;
+        THashMap<TKey, TWeakPtr<TValue>, THash> ValueMap;
 
         //! Holds pointers to items in the lists for any given key.
         THashMap<TKey, TItem*, THash> ItemMap;
@@ -449,9 +456,11 @@ private:
 
     std::atomic<bool> GhostCachesEnabled_;
 
-    TShard* GetShardByKey(const TKey& key) const;
+    template <class THeterogenousKey>
+    TShard* GetShardByKey(const THeterogenousKey& key) const;
 
-    TValueFuture DoLookup(TShard* shard, const TKey& key);
+    template <class THeterogenousKey>
+    TValueFuture DoLookup(TShard* shard, const THeterogenousKey& key);
 
     void DoTryRemove(const TKey& key, const TValuePtr& value, bool forbidResurrection);
 

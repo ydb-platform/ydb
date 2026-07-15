@@ -70,7 +70,10 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(CaptureOutputs) {
     // Cout << "--[t2 logs]-----------------\n" << r2.GetLogs() << Endl;
 
     { // t1
-        TString row1Str, row2Str, row3Str, _;
+        TString row1Str;
+        TString row2Str;
+        TString row3Str;
+        TString _;
         Split(r1.GetLogs(), '\n', row1Str, row2Str, row3Str, _);
 
         ui64 threadId = 0;
@@ -99,7 +102,9 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(CaptureOutputs) {
     }
 
     { // t2
-        TString row1Str, row2Str, _;
+        TString row1Str;
+        TString row2Str;
+        TString _;
         Split(r2.GetLogs(), '\n', row1Str, row2Str, _);
 
         ui64 threadId = 0;

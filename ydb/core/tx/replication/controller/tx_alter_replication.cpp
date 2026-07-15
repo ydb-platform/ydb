@@ -90,6 +90,10 @@ public:
         Replication->SetConfig(std::move(newConfig));
         Replication->ResetCredentials(ctx);
 
+        if (record.HasLocation()) {
+            Replication->SetLocation(record.GetLocation());
+        }
+
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
             NIceDb::TUpdate<Schema::Replications::Config>(Replication->GetConfig().SerializeAsString()),

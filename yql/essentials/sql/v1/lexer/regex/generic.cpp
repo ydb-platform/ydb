@@ -114,7 +114,9 @@ TTokenMatcher Compile(TString name, const TRegexPattern& regex) {
             bodyRe = MakeAtomicShared<RE2>(regex.Body, options),
             afterRe = MakeAtomicShared<RE2>(regex.After, options),
             name = std::move(name)](TStringBuf prefix) -> TMaybe<TGenericToken> {
-        TMaybe<TStringBuf> before, body, after;
+        TMaybe<TStringBuf> before;
+        TMaybe<TStringBuf> body;
+        TMaybe<TStringBuf> after;
         if ((before = Match(prefix, *beforeRe)) &&
             (body = Match(prefix.Tail(before->size()), *bodyRe)) &&
             (after = Match(prefix.Tail(before->size() + body->size()), *afterRe))) {

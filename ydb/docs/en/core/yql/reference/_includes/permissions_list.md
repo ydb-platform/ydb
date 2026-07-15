@@ -11,7 +11,7 @@ The possible names of rights are listed in the table below.
 | `ydb.database.create`                 | `CREATE`            | The right to create new databases in the cluster                                                    |
 | `ydb.database.drop`                   | `DROP`              | The right to delete databases in the cluster                                                        |
 | **Elementary rights for database objects** |                |                                                                                                      |
-| `ydb.granular.select_row`             | `SELECT ROW`        | The right to read rows from a table (select), read messages from topics                             |
+| `ydb.granular.select_row`             | `SELECT ROW`        | The right to read rows from a table (select), read messages from topics, use secret values          |
 | `ydb.granular.update_row`             | `UPDATE ROW`        | The right to update rows in a table (insert, update, upsert, replace), write messages to topics     |
 | `ydb.granular.erase_row`              | `ERASE ROW`         | The right to delete rows from a table (delete)                                                      |
 | `ydb.granular.create_directory`       | `CREATE DIRECTORY`  | The right to create and delete directories, including existing and nested ones                      |

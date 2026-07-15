@@ -1,6 +1,8 @@
 #include "sql_group_by.h"
 #include "sql_expression.h"
 #include "source.h"
+
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
 namespace NSQLTranslationV1 {
@@ -36,6 +38,10 @@ bool TGroupByClause::Build(const TRule_group_by_clause& node) {
         if (!normalizeError.Empty()) {
             Error() << normalizeError->GetMessage();
             Ctx_.IncrementMonCounter("sql_errors", "NormalizeGroupByModeError");
+            return false;
+        }
+
+        if (!Ctx_.EnsureAvailable(Ctx_.Pos(), NYql::NFeature::AggPhases)) {
             return false;
         }
 
@@ -194,7 +200,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
             Features().Set(EGroupByFeatures::Ordinary);
             break;
         case TRule_grouping_element::kAltGroupingElement2: {
-            TGroupByClause subClause(Ctx_, Mode_, GroupSetContext_);
+            TGroupByClause subClause(*this, GroupSetContext_);
             if (!subClause.OrdinaryGroupingSetList(node.GetAlt_grouping_element2().GetRule_rollup_list1().GetRule_ordinary_grouping_set_list3(),
                                                    EGroupByFeatures::Rollup))
             {
@@ -213,7 +219,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
             break;
         }
         case TRule_grouping_element::kAltGroupingElement3: {
-            TGroupByClause subClause(Ctx_, Mode_, GroupSetContext_);
+            TGroupByClause subClause(*this, GroupSetContext_);
             if (!subClause.OrdinaryGroupingSetList(node.GetAlt_grouping_element3().GetRule_cube_list1().GetRule_ordinary_grouping_set_list3(),
                                                    EGroupByFeatures::Cube))
             {
@@ -242,7 +248,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
         }
         case TRule_grouping_element::kAltGroupingElement4: {
             auto listNode = node.GetAlt_grouping_element4().GetRule_grouping_sets_specification1().GetRule_grouping_element_list4();
-            TGroupByClause subClause(Ctx_, Mode_, GroupSetContext_);
+            TGroupByClause subClause(*this, GroupSetContext_);
             if (!subClause.ParseList(listNode, EGroupByFeatures::GroupingSet)) {
                 return false;
             }
@@ -260,7 +266,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
                         FeedCollection(elem, collection, hasEmpty);
                     }
                 } else {
-                    TVector<TNodePtr> elemList(1, std::move(elem));
+                    TVector<TNodePtr> elemList(1, elem);
                     collection.push_back(BuildListOfNamedNodes(Ctx_.Pos(), std::move(elemList)));
                 }
             }
@@ -275,7 +281,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
             break;
         }
         case TRule_grouping_element::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     return true;
 }
@@ -369,14 +375,14 @@ bool TGroupByClause::HoppingWindow(const TRule_hopping_window_specification& nod
     LegacyHoppingWindowSpec_ = new TLegacyHoppingWindowSpec;
     {
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-        TSqlExpression expr(Ctx_, Mode_);
+        TSqlExpression expr(*this);
         LegacyHoppingWindowSpec_->TimeExtractor = Unwrap(expr.Build(node.GetRule_expr3()));
         if (!LegacyHoppingWindowSpec_->TimeExtractor) {
             return false;
         }
     }
     auto processIntervalParam = [&](const TRule_expr& rule) -> TNodePtr {
-        TSqlExpression expr(Ctx_, Mode_);
+        TSqlExpression expr(*this);
         auto node = Unwrap(expr.Build(rule));
         if (!node) {
             return nullptr;

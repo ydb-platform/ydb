@@ -1,0 +1,13 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    a,
+    RowNumber() OVER (PARTITION BY c ORDER BY a)
+FROM (VALUES
+    (1, 1, 1),
+    (1, 1, 1),
+    (2, 2, 2),
+    (2, 2, 2),
+    (3, 3, 3),
+    (3, 3, 3)
+) AS x(a, b, c);

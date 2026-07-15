@@ -24,6 +24,13 @@ struct ResourceMetrics;
 class PushMetricExporter
 {
 public:
+  PushMetricExporter() = default;
+
+  PushMetricExporter(const PushMetricExporter &)            = delete;
+  PushMetricExporter(PushMetricExporter &&)                 = delete;
+  PushMetricExporter &operator=(const PushMetricExporter &) = delete;
+  PushMetricExporter &operator=(PushMetricExporter &&)      = delete;
+
   virtual ~PushMetricExporter() = default;
 
   /**

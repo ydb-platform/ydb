@@ -8,6 +8,8 @@
 #include <ydb/core/cms/cms.h>
 #include <ydb/core/base/ticket_parser.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr {
 namespace NMsgBusProxy {
 
@@ -56,8 +58,8 @@ public:
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(), pipeConfig);
         CmsPipe = ctx.RegisterWithSameMailbox(pipe);
 
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "Forwarding CMS request: %s",
-                  Request.ShortDebugString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "Forwarding CMS request",
+            {"request", Request});
 
         if (Request.HasClusterStateRequest()) {
             TAutoPtr<TEvCms::TEvClusterStateRequest> request
@@ -270,6 +272,7 @@ public:
             HFunc(TEvCms::TEvSetMarkerResponse, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            CFunc(TEvents::TSystem::PoisonPill, TBase::Cancel);
         default:
             Y_ABORT("TCmsRequestActor::MainState unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(),

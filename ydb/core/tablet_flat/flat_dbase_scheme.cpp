@@ -1,5 +1,6 @@
 #include "flat_dbase_scheme.h"
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
@@ -42,19 +43,19 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
             case NScheme::NTypeIds::Pg: {
                 NKikimrProto::TTypeInfo typeInfo;
                 NScheme::ProtoFromTypeInfo(col.PType, col.PTypeMod, typeInfo);
-                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.IsSensitive, col.Null);
+                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.IsSensitive, col.Null, col.SetNotNullInProgress);
                 break;
             }
             case NScheme::NTypeIds::Decimal: {
                 NKikimrProto::TTypeInfo typeInfo;
                 NScheme::ProtoFromTypeInfo(col.PType, {}, typeInfo);
-                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.IsSensitive, col.Null);
+                delta.AddColumnWithTypeInfo(table, col.Name, it.first, col.PType.GetTypeId(), typeInfo, col.NotNull, col.IsSensitive, col.Null, col.SetNotNullInProgress);
                 break;
             }
             default: {
-                delta.AddColumn(table, col.Name, it.first, col.PType.GetTypeId(), col.NotNull, col.IsSensitive, col.Null);
+                delta.AddColumn(table, col.Name, it.first, col.PType.GetTypeId(), col.NotNull, col.IsSensitive, col.Null, col.SetNotNullInProgress);
                 break;
-            }            
+            }
             }
 
             delta.AddColumnToFamily(table, it.first, col.Family);
@@ -71,9 +72,26 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
                 itTable.second.EraseCacheMinRows,
                 itTable.second.EraseCacheMaxBytes);
 
+        // For backward compatibility: if full-key bloom filter is enabled,
+        // also set legacy ByKeyFilter=true so older versions understand it
+        ui32 keyCount = itTable.second.KeyColumns.size();
+        bool hasFullKeyBloom = std::any_of(
+            itTable.second.ByKeyFilterPrefixes.begin(),
+            itTable.second.ByKeyFilterPrefixes.end(),
+            [keyCount](const auto& p) { return p.PrefixLength == keyCount; }
+        );
+
+        if (hasFullKeyBloom) {
+            delta.SetByKeyFilter(table, true);
+        }
+
         // N.B. must be last for compatibility with older versions :(
-        delta.SetByKeyFilter(table, itTable.second.ByKeyFilter);
+        delta.SetByKeyFilterPrefixes(table, itTable.second.ByKeyFilterPrefixes);
         delta.SetColdBorrow(table, itTable.second.ColdBorrow);
+
+        if (itTable.second.SpecialTableType != 0) {
+            delta.SetSpecialTableType(table, itTable.second.SpecialTableType);
+        }
     }
 
     delta.SetRedo(Redo.Annex);
@@ -122,14 +140,14 @@ TAlter& TAlter::DropTable(ui32 id)
     return ApplyLastRecord();
 }
 
-TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null)
+TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, bool isSensitive, TCell null, bool setNotNullInProgress)
 {
     Y_ENSURE(!NScheme::NTypeIds::IsParametrizedType(type));
-    return AddColumnWithTypeInfo(table, name, id, type, {}, notNull, isSensitive, null);
+    return AddColumnWithTypeInfo(table, name, id, type, {}, notNull, isSensitive, null, setNotNullInProgress);
 }
 
 TAlter& TAlter::AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type,
-        const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null)
+        const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, bool isSensitive, TCell null, bool setNotNullInProgress)
 {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::AddColumn);
@@ -139,6 +157,7 @@ TAlter& TAlter::AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, 
     delta.SetColumnType(type);
     delta.SetNotNull(notNull);
     delta.SetIsSensitive(isSensitive);
+    delta.SetSetNotNullInProgress(setNotNullInProgress);
 
     if (!null.IsNull())
         delta.SetDefault(null.Data(), null.Size());
@@ -351,6 +370,27 @@ TAlter& TAlter::SetByKeyFilter(ui32 tableId, bool enabled)
     return ApplyLastRecord();
 }
 
+TAlter& TAlter::SetByKeyFilterPrefixes(ui32 tableId, const TVector<TScheme::TTableInfo::TByKeyFilterPrefix>& prefixes)
+{
+    TAlterRecord &delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(tableId);
+    if (prefixes.empty()) {
+        // Sentinel: a single entry with PrefixLength=0 means "clear all prefix bloom filters"
+        auto* entry = delta.AddByKeyFilterPrefixes();
+        entry->SetPrefixLength(0);
+    } else {
+        for (const auto& p : prefixes) {
+            Y_ENSURE(p.PrefixLength > 0, "Prefix length must be positive");
+            auto* entry = delta.AddByKeyFilterPrefixes();
+            entry->SetPrefixLength(p.PrefixLength);
+            entry->SetFalsePositiveProbability(p.FalsePositiveProbability);
+        }
+    }
+
+    return ApplyLastRecord();
+}
+
 TAlter& TAlter::SetColdBorrow(ui32 tableId, bool enabled)
 {
     TAlterRecord &delta = *Log.AddDelta();
@@ -371,6 +411,16 @@ TAlter& TAlter::SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 max
         delta.SetEraseCacheMinRows(minRows);
         delta.SetEraseCacheMaxBytes(maxBytes);
     }
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::SetSpecialTableType(ui32 tableId, ui32 type)
+{
+    TAlterRecord &delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(tableId);
+    delta.SetSpecialTableType(type);
 
     return ApplyLastRecord();
 }

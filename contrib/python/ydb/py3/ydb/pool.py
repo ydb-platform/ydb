@@ -10,6 +10,7 @@ import random
 from typing import Any, Callable, ContextManager, List, Optional, Set, Tuple, TYPE_CHECKING
 
 from . import connection as connection_impl, issues, resolver, _utilities, tracing
+from .opentelemetry.tracing import SpanName, create_ydb_span
 from abc import abstractmethod
 
 from .connection import Connection, EndpointKey
@@ -232,6 +233,47 @@ class Discovery(threading.Thread):
                 if cached_endpoint.endpoint not in resolved_endpoints:
                     self._cache.make_outdated(cached_endpoint)
 
+            local_dc = resolve_details.self_location
+
+            # Detect local DC using TCP latency if enabled and preferred is meaningful
+            if self._driver_config.detect_local_dc and not self._driver_config.use_all_nodes:
+                # Use only endpoints that match the SSL requirements for detection
+                ssl_filtered_endpoints = [
+                    endpoint
+                    for endpoint in resolve_details.endpoints
+                    if (self._ssl_required and endpoint.ssl) or (not self._ssl_required and not endpoint.ssl)
+                ]
+
+                if ssl_filtered_endpoints:
+                    try:
+                        detected_location = _utilities.detect_local_dc(
+                            ssl_filtered_endpoints, max_per_location=3, timeout=self._ready_timeout
+                        )
+                        if detected_location:
+                            local_dc = detected_location
+                            self.logger.info(
+                                "Detected local DC via TCP latency: %s (server reported: %s)",
+                                local_dc,
+                                resolve_details.self_location,
+                            )
+                        else:
+                            self.logger.warning(
+                                "Failed to detect local DC via TCP latency, using server location: %s",
+                                resolve_details.self_location,
+                            )
+                    except Exception as e:
+                        self.logger.warning(
+                            "Failed to detect local DC via TCP latency, using server location: %s. Error: %s",
+                            resolve_details.self_location,
+                            e,
+                            exc_info=True,
+                        )
+                else:
+                    self.logger.warning(
+                        "No SSL-compatible endpoints for local DC detection, using server location: %s",
+                        resolve_details.self_location,
+                    )
+
             for resolved_endpoint in resolve_details.endpoints:
                 if self._ssl_required and not resolved_endpoint.ssl:
                     continue
@@ -239,7 +281,7 @@ class Discovery(threading.Thread):
                 if not self._ssl_required and resolved_endpoint.ssl:
                     continue
 
-                preferred = resolve_details.self_location == resolved_endpoint.location
+                preferred = local_dc == resolved_endpoint.location
 
                 for (
                     endpoint,
@@ -359,23 +401,41 @@ class ConnectionPool(IConnectionPool):
         self._store = ConnectionsCache(driver_config.use_all_nodes, driver_config.tracer)
         self.tracer = driver_config.tracer
         self._grpc_init = connection_impl.Connection(self._driver_config.endpoint, self._driver_config)
+        self._stopped = False
+        self._stop_guard = threading.Lock()
+        self._stop_event = threading.Event()
+        self._init_thread: Optional[threading.Thread] = None
 
         if driver_config.disable_discovery:
-            # If discovery is disabled, just add the initial endpoint to the store
-            ready_connection = connection_impl.Connection.ready_factory(
-                self._driver_config.endpoint,
-                self._driver_config,
-                ready_timeout=getattr(self._driver_config, "discovery_request_timeout", 10),
-            )
-            self._store.add(ready_connection)
+            # If discovery is disabled, establish the initial connection in a
+            # background thread, retrying until it succeeds or the pool is stopped.
+            # Doing this off the constructor keeps wait(timeout) as the blocking
+            # point and lets stop() interrupt the retry loop.
             self._discovery_thread = None
+            self._init_thread = threading.Thread(
+                name="ydb_driver_initial_connection",
+                target=self._init_connection,
+                daemon=True,
+            )
+            self._init_thread.start()
         else:
             # Start discovery thread as usual
             self._discovery_thread = Discovery(self._store, self._driver_config)
             self._discovery_thread.start()
 
-        self._stopped = False
-        self._stop_guard = threading.Lock()
+    def _init_connection(self) -> None:
+        ready_timeout = getattr(self._driver_config, "discovery_request_timeout", 10)
+        while not self._stopped:
+            ready_connection = connection_impl.Connection.ready_factory(
+                self._driver_config.endpoint,
+                self._driver_config,
+                ready_timeout=ready_timeout,
+            )
+            if self._store.add(ready_connection):
+                return
+
+            logger.debug("Initial connection attempt failed")
+            self._stop_event.wait(1)
 
     def stop(self, timeout: int = 10) -> None:
         """
@@ -389,11 +449,16 @@ class ConnectionPool(IConnectionPool):
                 return
 
             self._stopped = True
+            self._stop_event.set()
             if self._discovery_thread:
                 self._discovery_thread.stop()
         self._grpc_init.close()
         if self._discovery_thread:
             self._discovery_thread.join(timeout)
+        if self._init_thread:
+            self._init_thread.join(timeout)
+        if self._discovery_thread is None:
+            self._store.cleanup()
 
     def async_wait(self, fail_fast: bool = False) -> "futures.Future[None]":
         """
@@ -412,10 +477,11 @@ class ConnectionPool(IConnectionPool):
         :param timeout: A timeout to wait in seconds
         :return: None
         """
-        if fail_fast:
-            self._store.add_fast_fail().result(timeout)
-        else:
-            self._store.subscribe().result(timeout)
+        with create_ydb_span(SpanName.DRIVER_INITIALIZE, self._driver_config, kind="internal").attach_context():
+            if fail_fast:
+                self._store.add_fast_fail().result(timeout)
+            else:
+                self._store.subscribe().result(timeout)
 
     def _on_disconnected(self, connection: Connection) -> None:
         """

@@ -13,7 +13,7 @@ namespace NYql::NCommon {
 
 class TYqlTypeYsonSaverBase {
 public:
-    typedef NYson::TYsonConsumerBase TConsumer;
+    using TConsumer = NYson::TYsonConsumerBase;
 
     TYqlTypeYsonSaverBase(TConsumer& writer, bool extendedForm)
         : Writer_(writer)
@@ -44,7 +44,7 @@ protected:
 
 template <typename TDerived>
 class TYqlTypeYsonSaverImpl: public TYqlTypeYsonSaverBase {
-    typedef TYqlTypeYsonSaverImpl<TDerived> TSelf;
+    using TSelf = TYqlTypeYsonSaverImpl<TDerived>;
 
 public:
     TYqlTypeYsonSaverImpl(TConsumer& writer, bool extendedForm)
@@ -439,7 +439,7 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
         TVector<TString> argNames;
         TVector<ui64> argFlags;
         for (auto& item : node[3].AsList()) {
-            if (!item.IsList() || item.AsList().size() < 1 || item.AsList().size() > 3) {
+            if (!item.IsList() || item.AsList().empty() || item.AsList().size() > 3) {
                 loader.Error("Invalid callable type scheme");
                 return Nothing();
             }
@@ -503,6 +503,6 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
     return Nothing();
 }
 
-bool ParseYson(NYT::TNode& res, const TStringBuf yson, IOutputStream& err);
+bool ParseYson(NYT::TNode& res, TStringBuf yson, IOutputStream& err);
 
 } // namespace NYql::NCommon

@@ -7,6 +7,9 @@
 .. image:: https://readthedocs.org/projects/typeguard/badge/?version=latest
   :target: https://typeguard.readthedocs.io/en/latest/?badge=latest
   :alt: Documentation
+.. image:: https://tidelift.com/badges/package/pypi/typeguard
+  :target: https://tidelift.com/subscription/pkg/pypi-typeguard
+  :alt: Tidelift
 
 This library provides run-time type checking for functions defined with
 `PEP 484 <https://www.python.org/dev/peps/pep-0484/>`_ argument (and return) type
@@ -14,12 +17,16 @@ annotations, and any arbitrary objects. It can be used together with static type
 checkers as an additional layer of type safety, to catch type violations that could only
 be detected at run time.
 
-Two principal ways to do type checking are provided:
+Three principal ways to do type checking are provided, each with its pros and cons:
 
 #. The ``check_type`` function:
 
    * like ``isinstance()``, but supports arbitrary type annotations (within limits)
    * can be used as a ``cast()`` replacement, but with actual checking of the value
+#. The ``check_argument_types()`` and ``check_return_type()`` functions:
+
+   * debugger friendly (except when running with the pydev debugger with the C extension installed)
+   * does not work reliably with dynamically defined type hints (e.g. in nested functions)
 #. Code instrumentation:
 
    * entire modules, or individual functions (via ``@typechecked``) are recompiled, with

@@ -1,0 +1,14 @@
+(
+(let $1 (DataSink 'result))
+(let $2 (lambda '($6 $7) (block '(
+  (let $8 (BlockType (DataType 'String)))
+  (let $9 (TupleType (TupleType $8) (StructType) (TupleType)))
+  (let $10 '($8 '"" '"1"))
+  (let $11 (CallableType '() '($8) $10))
+  (let $12 (Udf '"String.Base32Encode_BlocksImpl" (Void) $9 '"" $11 (VoidType) '"" '('('"blocks") '('"strict"))))
+  (return (BlockAsStruct '('"encoded" (Apply $12 $6)) '('"value" $6)) $7)
+))))
+(let $3 '('('type) '('autoref) '('columns '('"value" '"encoded")) '('unordered)))
+(let $4 (ResFill! world $1 (Key) (Collect (NarrowMap (ToFlow (WideFromBlocks (WideMap (WideToBlocks (FromFlow (WideTableSource (ExpandMap (ToFlow (AsList (AsStruct '('"value" (String '"test"))) (AsStruct '('"value" (String '"TestTest"))) (AsStruct '('"value" (String '"apple"))))) (lambda '($5) (Member $5 '"value")))))) $2))) (lambda '($13) $13))) $3 '"pure"))
+(return (Commit! $4 $1))
+)

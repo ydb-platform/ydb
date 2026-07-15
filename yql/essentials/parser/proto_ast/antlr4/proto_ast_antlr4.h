@@ -11,6 +11,8 @@
 #endif
 #include <contrib/libs/antlr4_cpp_runtime/src/antlr4-runtime.h>
 
+#include <utility>
+
 namespace NProtoAST {
 using namespace NAST;
 
@@ -36,11 +38,11 @@ class TProtoASTBuilder4 {
 public:
     explicit TProtoASTBuilder4(
         TStringBuf data,
-        const TString& queryName = "query",
+        TString queryName = "query",
         google::protobuf::Arena* arena = nullptr,
         bool isAmbiguityError = false,
         bool isAmbiguityDebugging = false)
-        : QueryName_(queryName)
+        : QueryName_(std::move(queryName))
         , IsAmbiguityError_(isAmbiguityError)
         , InputStream_(data)
         , Lexer_(&InputStream_)

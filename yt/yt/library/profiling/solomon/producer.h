@@ -38,8 +38,8 @@ public:
 
     void PushTag(TTag tag) override;
     void PopTag() override;
-    void AddGauge(const std::string& name, double value) override;
-    void AddCounter(const std::string& name, i64 value) override;
+    void AddGauge(TStringBuf name, double value) override;
+    void AddCounter(TStringBuf name, i64 value) override;
 
 private:
     IRegistryPtr Registry_;
@@ -54,7 +54,7 @@ DECLARE_REFCOUNTED_STRUCT(TProducerState)
 struct TProducerState final
 {
     TProducerState(
-        const std::string& prefix,
+        TStringBuf prefix,
         const TTagSet& tags,
         TSensorOptions options,
         TWeakPtr<ISensorProducer> producer)

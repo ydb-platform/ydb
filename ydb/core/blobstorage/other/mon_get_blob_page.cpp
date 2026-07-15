@@ -78,9 +78,20 @@ namespace {
                 }
             }
 
+            bool mustRestoreFirst = false;
+            if (params.Has("mustRestoreFirst")) {
+                int value;
+                if (!TryFromString(params.Get("mustRestoreFirst"), value) || !(value >= 0 && value <= 1)) {
+                    return generateError("Failed to parse mustRestoreFirst parameter -- must be an integer in range [0, 1]");
+                } else {
+                    mustRestoreFirst = value != 0;
+                }
+            }
+
             const ui64 cookie = ++LastCookie;
-            auto query = std::make_unique<TEvBlobStorage::TEvGet>(logoBlobId, 0, 0, TInstant::Max(),
-                NKikimrBlobStorage::AsyncRead);
+            auto query = std::make_unique<TEvBlobStorage::TEvGet>(logoBlobId, 0, 0,
+                TActivationContext::Now() + TDuration::Seconds(10),
+                NKikimrBlobStorage::AsyncRead, mustRestoreFirst);
             query->CollectDebugInfo = collectDebugInfo;
             query->ReportDetailedPartMap = true;
             SendToBSProxy(SelfId(), groupId, query.release(), cookie);

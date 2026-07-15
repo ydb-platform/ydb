@@ -12,6 +12,9 @@
 
 #include <util/system/thread.h>
 
+#include <barrier>
+#include <thread>
+
 namespace NYT {
 namespace {
 
@@ -383,6 +386,49 @@ TEST_F(THazardPtrTest, SupportFork)
     }
 }
 #endif
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TVirtuallyRefCountedObject
+    : public virtual TRefCounted
+{
+    static constexpr bool EnableHazard = true;
+};
+
+// Exercises a tight race between AcquireHazard() on the reader side and
+// Store() + ReclaimHazardPointers() on the writer side, for a type that
+// inherits TRefCountedBase virtually. The hazard-pointer protocol must
+// keep the reader safe even when the writer retires and reclaims the
+// previous value in the window between the reader's load of the atomic
+// and its publish of the hazard slot.
+TEST_F(THazardPtrTest, AcquireHazardRaceWithRetireVirtuallyDerived)
+{
+    TAtomicPtr<TVirtuallyRefCountedObject, /*EnableAcquireHazard*/ true> atomicPtr(
+        New<TVirtuallyRefCountedObject>());
+
+    constexpr int Iterations = 10'000;
+
+    // Sync both threads at the start of each iteration to maximize the
+    // chance that the writer's Store + Reclaim lands inside the reader's
+    // load-to-publish window.
+    std::barrier barrier(2);
+
+    std::thread writer([&] {
+        for (int i = 0; i < Iterations; ++i) {
+            barrier.arrive_and_wait();
+            atomicPtr.Store(New<TVirtuallyRefCountedObject>());
+            ReclaimHazardPointers();
+        }
+    });
+
+    for (int i = 0; i < Iterations; ++i) {
+        barrier.arrive_and_wait();
+        auto hazard = atomicPtr.AcquireHazard();
+        Y_UNUSED(hazard);
+    }
+
+    writer.join();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -3,6 +3,8 @@
 
 #include <util/generic/map.h>
 
+#include <utility>
+
 namespace NYql {
 
 namespace {
@@ -12,8 +14,8 @@ struct TPinAttrs {
     ui32 ProviderId = 0;
     ui32 PinId = 0;
 
-    explicit TPinAttrs(const TPinInfo& info)
-        : Info(info)
+    explicit TPinAttrs(TPinInfo info)
+        : Info(std::move(info))
     {
     }
 };
@@ -362,13 +364,13 @@ public:
             auto datasource = Types_.DataSourceMap.FindPtr(dataSourceName);
             YQL_ENSURE(datasource);
             info.Provider = (*datasource).Get();
-            info.IsVisible = (*datasource)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+            info.IsVisible = (*datasource)->GetPlanFormatter().GetDependencies(*node, dependencies, /*compact=*/true);
         } else if (node->ChildrenSize() >= 2 && node->Child(1)->IsCallable("DataSink")) {
             auto dataSinkName = node->Child(1)->Child(0)->Content();
             auto datasink = Types_.DataSinkMap.FindPtr(dataSinkName);
             YQL_ENSURE(datasink);
             info.Provider = (*datasink).Get();
-            info.IsVisible = (*datasink)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+            info.IsVisible = (*datasink)->GetPlanFormatter().GetDependencies(*node, dependencies, /*compact=*/true);
         } else if (node->IsCallable("DqStage") ||
                    node->IsCallable("DqPhyStage") ||
                    node->IsCallable("DqQuery!") ||
@@ -376,12 +378,12 @@ public:
             auto provider = Types_.DataSinkMap.FindPtr(DqProviderName);
             YQL_ENSURE(provider);
             info.Provider = (*provider).Get();
-            info.IsVisible = (*provider)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+            info.IsVisible = (*provider)->GetPlanFormatter().GetDependencies(*node, dependencies, /*compact=*/true);
         } else {
             for (auto dataSource : Types_.DataSources) {
                 if (dataSource->GetPlanFormatter().HasCustomPlan(*node)) {
                     info.Provider = dataSource.Get();
-                    info.IsVisible = dataSource->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+                    info.IsVisible = dataSource->GetPlanFormatter().GetDependencies(*node, dependencies, /*compact=*/true);
                     break;
                 }
             }
@@ -390,7 +392,7 @@ public:
                 for (auto dataSink : Types_.DataSinks) {
                     if (dataSink->GetPlanFormatter().HasCustomPlan(*node)) {
                         info.Provider = dataSink.Get();
-                        info.IsVisible = dataSink->GetPlanFormatter().GetDependencies(*node, dependencies, true);
+                        info.IsVisible = dataSink->GetPlanFormatter().GetDependencies(*node, dependencies, /*compact=*/true);
                         break;
                     }
                 }
@@ -399,7 +401,7 @@ public:
             if (!info.Provider) {
                 info.IsVisible = false;
                 for (auto& child : node->Children()) {
-                    dependencies.push_back(child.Get());
+                    dependencies.emplace_back(child.Get());
                 }
             }
         }
@@ -469,7 +471,7 @@ public:
                         continue;
                     }
 
-                    auto inputKey = TPinKey{input.ProviderId, input.PinId, TBasicNode::EType::Input};
+                    auto inputKey = TPinKey{.ProviderId = input.ProviderId, .PinId = input.PinId, .Type = TBasicNode::EType::Input};
                     if (allInputs.contains(inputKey)) {
                         continue;
                     }
@@ -493,7 +495,7 @@ public:
                         continue;
                     }
 
-                    auto outputKey = TPinKey{output.ProviderId, output.PinId, TBasicNode::EType::Output};
+                    auto outputKey = TPinKey{.ProviderId = output.ProviderId, .PinId = output.PinId, .Type = TBasicNode::EType::Output};
                     if (allOutputs.contains(outputKey)) {
                         continue;
                     }
@@ -538,7 +540,7 @@ public:
             basicNodes.push_back(basicNode);
 
             for (auto& input : info.Inputs) {
-                auto inputKey = TPinKey{input.ProviderId, input.PinId, TBasicNode::EType::Input};
+                auto inputKey = TPinKey{.ProviderId = input.ProviderId, .PinId = input.PinId, .Type = TBasicNode::EType::Input};
                 auto foundInput = allInputs.FindPtr(inputKey);
                 if (foundInput) {
                     basicLinks.push_back(TBasicLink(*foundInput, info.NodeId));
@@ -546,7 +548,7 @@ public:
             }
 
             for (auto& output : info.Outputs) {
-                auto outputKey = TPinKey{output.ProviderId, output.PinId, TBasicNode::EType::Output};
+                auto outputKey = TPinKey{.ProviderId = output.ProviderId, .PinId = output.PinId, .Type = TBasicNode::EType::Output};
                 auto foundOutput = allOutputs.FindPtr(outputKey);
                 if (foundOutput) {
                     basicLinks.push_back(TBasicLink(info.NodeId, *foundOutput));

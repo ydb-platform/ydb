@@ -7,6 +7,10 @@
 
 namespace NKikimr {
 
+bool IsDomainLoginOnlyEnabled(const NKikimrProto::TAuthConfig& config) {
+    return config.GetDomainLoginOnly();
+}
+
 bool IsLdapAuthenticationEnabled(const NKikimrProto::TAuthConfig& config) {
     return config.HasLdapAuthentication();
 }
@@ -33,21 +37,6 @@ NKikimrScheme::TEvLogin CreatePlainLoginRequest(const TString& username, NLoginP
     record.MutableHashToValidate()->SetAuthMech(NLoginProto::ESaslAuthMech::Plain);
     record.MutableHashToValidate()->SetHashType(hashType);
     record.MutableHashToValidate()->SetHash(hashToValidate);
-
-    if (config.HasLoginTokenExpireTime()) {
-        record.SetExpiresAfterMs(TDuration::Parse(config.GetLoginTokenExpireTime()).MilliSeconds());
-    }
-
-    record.SetPeerName(peerName);
-    return record;
-}
-
-NKikimrScheme::TEvLogin CreatePlainLoginRequestOldFormat(const TString& username, const TString& password,
-    const TString& peerName, const NKikimrProto::TAuthConfig& config)
-{
-    NKikimrScheme::TEvLogin record;
-    record.SetUser(username);
-    record.SetPassword(password);
 
     if (config.HasLoginTokenExpireTime()) {
         record.SetExpiresAfterMs(TDuration::Parse(config.GetLoginTokenExpireTime()).MilliSeconds());

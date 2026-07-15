@@ -1,12 +1,12 @@
-#include <yql/essentials/sql/v1/complete/sql_complete.h>
-#include <yql/essentials/sql/v1/complete/name/cluster/static/discovery.h>
-#include <yql/essentials/sql/v1/complete/name/object/simple/static/schema_json.h>
-#include <yql/essentials/sql/v1/complete/name/service/ranking/frequency.h>
-#include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
-#include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
-#include <yql/essentials/sql/v1/complete/name/service/cluster/name_service.h>
-#include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
-#include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
+#include <yql/essentials/sql/v1/ide/completion/sql_complete.h>
+#include <yql/essentials/sql/v1/ide/completion/name/cluster/static/discovery.h>
+#include <yql/essentials/sql/v1/ide/completion/name/object/simple/static/schema_json.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/ranking/frequency.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/ranking/ranking.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/static/name_service.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/cluster/name_service.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/schema/name_service.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/union/name_service.h>
 
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
@@ -50,7 +50,28 @@ size_t UTF8PositionToBytes(const TStringBuf text, size_t position) {
     return substr.begin() - text.begin();
 }
 
-int Run(int argc, char* argv[]) {
+NSQLComplete::TCompletionInput MakeCompletionInput(TString& text, TMaybe<ui64> pos) {
+    size_t lengthUtf8 = GetNumberOfUTF8Chars(text);
+
+    if (!pos) {
+        if (auto count = Count(text, '#'); 1 < count) {
+            ythrow yexception() << "provided input contains " << count << " '#', expected 0 or 1";
+        }
+
+        return NSQLComplete::SharpedInput(text);
+    }
+
+    if (lengthUtf8 <= *pos) {
+        ythrow yexception() << "provided position " << *pos << " is out of range " << lengthUtf8;
+    }
+
+    return {
+        .Text = text,
+        .CursorPosition = UTF8PositionToBytes(text, *pos),
+    };
+}
+
+int Run(int argc, char** argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
     TString inFileName;
@@ -120,16 +141,7 @@ int Run(int argc, char* argv[]) {
         MakePureLexerSupplier(),
         NSQLComplete::MakeUnionNameService(std::move(services), ranking));
 
-    if (!NYql::IsUtf8(queryString)) {
-        ythrow yexception() << "provided input is not UTF encoded";
-    }
-
-    if (auto count = Count(queryString, '#'); 1 < count) {
-        ythrow yexception() << "provided input contains " << count << " '#', expected 0 or 1";
-    }
-
-    NSQLComplete::TCompletionInput input = NSQLComplete::SharpedInput(queryString);
-
+    auto input = MakeCompletionInput(queryString, pos);
     auto output = engine->CompleteAsync(input).ExtractValueSync();
     for (const auto& c : output.Candidates) {
         Cout << "[" << c.Kind << "] " << c.Content << "\n";
@@ -138,7 +150,7 @@ int Run(int argc, char* argv[]) {
     return 0;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char** argv) {
     try {
         return Run(argc, argv);
     } catch (const yexception& e) {

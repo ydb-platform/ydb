@@ -80,7 +80,8 @@ TString IFetchingStep::DebugString(const bool stats) const {
 }
 
 TFetchingScriptBuilder::TFetchingScriptBuilder(const TSpecialReadContext& context)
-    : TFetchingScriptBuilder(context.GetReadMetadata()->GetResultSchema(), context.GetMergeColumns()) {
+    : TFetchingScriptBuilder(context.GetReadMetadata()->GetResultSchema(), context.GetMergeColumns())
+{
 }
 
 void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage) {

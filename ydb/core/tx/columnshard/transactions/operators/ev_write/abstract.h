@@ -3,6 +3,8 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
 
+#include <ydb/library/actors/struct_log/log_stack.h>
+
 namespace NKikimr::NColumnShard {
 
 LWTRACE_USING(YDB_CS);
@@ -17,30 +19,39 @@ protected:
 
 private:
     virtual bool DoParseImpl(TColumnShard& owner, const NKikimrTxColumnShard::TCommitWriteTxBody& commitTxBody) = 0;
+
     virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override final {
         auto& lock = owner.GetOperationsManager().GetLockVerified(LockId);
         owner.GetOperationsManager().LinkTransactionOnExecute(lock, txc);
         return TProposeResult();
     }
+
     virtual void DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) override final {
         owner.GetOperationsManager().LinkTransactionOnComplete(LockId, GetTxId());
     }
+
     virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override final {
     }
+
     virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override final {
     }
+
     virtual bool DoCheckAllowUpdate(const TFullTxInfo& currentTxInfo) const override final {
         return (currentTxInfo.Source == GetTxInfo().Source && currentTxInfo.Cookie == GetTxInfo().Cookie);
     }
+
     virtual bool DoParse(TColumnShard& owner, const TString& data) override final {
         NKikimrTxColumnShard::TCommitWriteTxBody commitTxBody;
         if (!commitTxBody.ParseFromString(data)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("event", "cannot_parse_proto");
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+                {"event", "cannot_parse_proto"});
             return false;
         }
         LockId = commitTxBody.GetLockId();
         if (!LockId) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("event", "zero_lock_id")("proto", commitTxBody);
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+                {"event", "zero_lock_id"},
+                {"proto", commitTxBody});
             return false;
         }
         return DoParseImpl(owner, commitTxBody);
@@ -53,26 +64,32 @@ private:
     virtual void DoSendReply(TColumnShard& owner, const TActorContext& ctx) override {
         const auto& txInfo = GetTxInfo();
         std::unique_ptr<NActors::IEventBase> evResult;
-        TLogContextGuard gLogging(
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("send_reply_tx_id", GetTxId())("send_reply_lock_id", LockId));
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"sendReplyTxId", GetTxId()},
+            {"sendReplyLockId", LockId});
         if (IsFail()) {
-            LWPROBE(EvWriteResult, owner.TabletID(), TxInfo.Source.ToString(), txInfo.GetTxId(), txInfo.Cookie, "transaction operator", false, GetProposeStartInfoVerified().GetStatusMessage());
+            LWPROBE(EvWriteResult, owner.TabletID(), TxInfo.Source.ToString(), txInfo.GetTxId(), txInfo.Cookie, "transaction operator", false,
+                GetProposeStartInfoVerified().GetStatusMessage());
             evResult = NEvents::TDataEvents::TEvWriteResult::BuildError(owner.TabletID(), txInfo.GetTxId(),
                 NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, GetProposeStartInfoVerified().GetStatusMessage());
         } else {
-            LWPROBE(EvWriteResult, owner.TabletID(), TxInfo.Source.ToString(), txInfo.GetTxId(), txInfo.Cookie, "transaction operator (prepared)", true, "");
+            LWPROBE(EvWriteResult, owner.TabletID(), TxInfo.Source.ToString(), txInfo.GetTxId(), txInfo.Cookie,
+                "transaction operator (prepared)", true, "");
             evResult = NEvents::TDataEvents::TEvWriteResult::BuildPrepared(
                 owner.TabletID(), txInfo.GetTxId(), owner.GetProgressTxController().BuildCoordinatorInfo(txInfo));
         }
         ctx.Send(txInfo.Source, evResult.release(), 0, txInfo.Cookie);
     }
+
     std::optional<NOlap::TSnapshot> Version;
 
 public:
     using TBase::TBase;
+
     TBaseEvWriteTransactionOperator(const TFullTxInfo& txInfo, const ui64 lockId)
         : TBase(txInfo)
-        , LockId(lockId) {
+        , LockId(lockId)
+    {
     }
 
     virtual bool IsTxBroken() const {
@@ -86,7 +103,10 @@ public:
     virtual bool ProgressOnExecute(
         TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
         Version = version;
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("progress_tx_id", GetTxId())("lock_id", LockId)("broken", IsTxBroken());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"progressTxId", GetTxId()},
+            {"lockId", LockId},
+            {"broken", IsTxBroken()});
         if (IsTxBroken()) {
             auto& lock = owner.GetOperationsManager().GetLockVerified(GetLockId());
             lock.SetNeedsAborting();
@@ -99,11 +119,15 @@ public:
     }
 
     virtual bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("progress_tx_id", GetTxId())("lock_id", LockId)("broken", IsTxBroken());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"progressTxId", GetTxId()},
+            {"lockId", LockId},
+            {"broken", IsTxBroken()});
         AFL_VERIFY(Version);
         if (IsTxBroken()) {
             owner.GetOperationsManager().AbortTransactionOnComplete(owner, GetTxId(), GetLockId());
-            LWPROBE(EvWriteResult, owner.TabletID(), TxInfo.Source.ToString(), GetTxId(), TxInfo.Cookie, "on_complete", false, "lock invalidated");
+            LWPROBE(
+                EvWriteResult, owner.TabletID(), TxInfo.Source.ToString(), GetTxId(), TxInfo.Cookie, "on_complete", false, "lock invalidated");
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
                 owner.TabletID(), GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "lock invalidated");
             ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
@@ -120,6 +144,7 @@ public:
         owner.GetOperationsManager().AbortTransactionOnExecute(owner, GetTxId(), GetLockId(), txc);
         return true;
     }
+
     virtual bool CompleteOnAbort(TColumnShard& owner, const TActorContext& /*ctx*/) override {
         owner.GetOperationsManager().AbortTransactionOnComplete(owner, GetTxId(), GetLockId());
         return true;

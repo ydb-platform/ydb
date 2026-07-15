@@ -10,7 +10,7 @@
 
 namespace NKikimr::NOlap::NDataFetcher {
 
-enum class EFetchingStage : ui32 {
+enum class EFetchingStage: ui32 {
     Created = 0,
     AskAccessorResources,
     AskDataResources,
@@ -128,8 +128,8 @@ private:
 public:
     virtual ~IFetchCallback() = default;
 
-    virtual ui64 GetNecessaryDataMemory(
-        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& /*columnIds*/, const std::vector<std::shared_ptr<TPortionDataAccessor>>& /*acc*/) const {
+    virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& /*columnIds*/,
+        const std::vector<std::shared_ptr<TPortionDataAccessor>>& /*acc*/) const {
         return 0;
     }
 
@@ -161,7 +161,8 @@ public:
     TEnvironment(const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& accessorsManager,
         const std::shared_ptr<IStoragesManager>& storagesManager)
         : DataAccessorsManager(accessorsManager)
-        , StoragesManager(storagesManager) {
+        , StoragesManager(storagesManager)
+    {
     }
 };
 
@@ -196,7 +197,8 @@ public:
 
     TScript(std::vector<std::shared_ptr<IFetchingStep>>&& steps, const TString& className)
         : ClassName(className)
-        , Steps(std::move(steps)) {
+        , Steps(std::move(steps))
+    {
     }
 
     const std::shared_ptr<IFetchingStep>& GetStep(const ui32 index) const {
@@ -216,7 +218,8 @@ private:
 
 public:
     TScriptExecution(const std::shared_ptr<TScript>& script)
-        : Script(script) {
+        : Script(script)
+    {
         AFL_VERIFY(Script);
     }
 
@@ -246,7 +249,8 @@ private:
 public:
     TFullPortionInfo(const TPortionInfo::TConstPtr& portionInfo, const ISnapshotSchema::TPtr& schema)
         : PortionInfo(portionInfo)
-        , Schema(schema) {
+        , Schema(schema)
+    {
     }
 };
 
@@ -256,12 +260,15 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ActualSchema);
     YDB_READONLY(NBlobOperations::EConsumer, Consumer, NBlobOperations::EConsumer::UNDEFINED);
     YDB_READONLY_DEF(TString, ExternalTaskId);
+    YDB_READONLY(ui64, TabletId, 0);
     std::shared_ptr<NGroupedMemoryManager::TProcessGuard> MemoryProcessGuard;
 
 public:
     TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<const TVersionedIndex>& versions,
         const NBlobOperations::EConsumer consumer, const TString& externalTaskId,
-        const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard);
+        const std::shared_ptr<NGroupedMemoryManager::TProcessGuard>& memoryProcessGuard, const ui64 tabletId);
+
+    TString DebugString() const;
 
     std::shared_ptr<NGroupedMemoryManager::TProcessGuard> GetMemoryProcessGuardVerified() const {
         AFL_VERIFY(MemoryProcessGuard);

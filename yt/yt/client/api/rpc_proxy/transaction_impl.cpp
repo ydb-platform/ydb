@@ -13,6 +13,8 @@
 
 #include <yt/yt/client/transaction_client/helpers.h>
 
+#include <library/cpp/iterator/zip.h>
+
 namespace NYT::NApi::NRpcProxy {
 
 using namespace NConcurrency;
@@ -189,6 +191,7 @@ void TTransaction::Detach()
 
     auto req = Proxy_.DetachTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
+    SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
     // Fire-and-forget.
     YT_UNUSED_FUTURE(req->Invoke());
 }
@@ -265,11 +268,16 @@ TFuture<TTransactionFlushResult> TTransaction::Flush()
 
                 const auto& rsp = rspOrError.Value();
                 TTransactionFlushResult result{
-                    .ParticipantCellIds = FromProto<std::vector<TCellId>>(rsp->participant_cell_ids())
+                    .ParticipantCellIds = FromProto<std::vector<TCellId>>(rsp->participant_cell_ids()),
+                    .ExpectedPrepareSignatures = FromProto<std::vector<TTransactionSignature>>(rsp->expected_prepare_signatures()),
                 };
+                // COMPAT(atalmenev): old proxies don't send expected_prepare_signatures.
+                // Pad with FinalTransactionSignature so lengths match ParticipantCellIds
+                result.ExpectedPrepareSignatures.resize(result.ParticipantCellIds.size(), FinalTransactionSignature);
 
-                YT_LOG_DEBUG("Transaction flushed (ParticipantCellIds: %v)",
-                    result.ParticipantCellIds);
+                YT_LOG_DEBUG("Transaction flushed (ParticipantCellIds: %v, ExpectedPrepareSignatures: %v)",
+                    result.ParticipantCellIds,
+                    result.ExpectedPrepareSignatures);
 
                 return result;
             }));
@@ -310,8 +318,8 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                         result.ParticipantCellIds,
                         transaction->GetConnection()->GetLoggingTag());
 
-                    for (auto cellId : result.ParticipantCellIds) {
-                        AdditionalParticipantCellIds_.insert(cellId);
+                    for (auto [cellId, signature] : Zip(result.ParticipantCellIds, result.ExpectedPrepareSignatures)) {
+                        EmplaceOrCrash(AdditionalParticipantCellIds_, cellId, signature);
                     }
                 })));
     }
@@ -321,9 +329,14 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
             BIND([=, this, this_ = MakeStrong(this)] {
                 auto req = Proxy_.CommitTransaction();
                 ToProto(req->mutable_transaction_id(), GetId());
-                ToProto(req->mutable_additional_participant_cell_ids(), AdditionalParticipantCellIds_);
+                for (auto [cellId, signature] : AdditionalParticipantCellIds_) {
+                    ToProto(req->add_additional_participant_cell_ids(), cellId);
+                    req->add_expected_prepare_signatures(signature);
+                }
                 ToProto(req->mutable_prerequisite_options(), options);
+                ToProto(req->mutable_mutating_options(), options);
                 req->set_max_allowed_commit_timestamp(options.MaxAllowedCommitTimestamp);
+                SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
                 return req->Invoke();
             }))
         .Apply(
@@ -384,10 +397,13 @@ void TTransaction::ModifyRows(
 
     for (const auto& modification : modifications) {
         // TODO(sandello): handle versioned rows
-        YT_VERIFY(
-            modification.Type == ERowModificationType::Write ||
-            modification.Type == ERowModificationType::Delete ||
-            modification.Type == ERowModificationType::WriteAndLock);
+        Visit(modification,
+            [] (const NRowModifications::TWriteRow&) { },
+            [] (const NRowModifications::TDeleteRow&) { },
+            [] (const NRowModifications::TWriteAndLockRow&) { },
+            [] (const NRowModifications::TVersionedWriteRow&) {
+                YT_ABORT();
+            });
     }
 
     auto reqSequenceNumber = ModifyRowsRequestSequenceCounter_.fetch_add(1);
@@ -407,10 +423,19 @@ void TTransaction::ModifyRows(
     std::vector<TUnversionedRow> rows;
     rows.reserve(modifications.Size());
 
+    const auto& config = Connection_->GetConfig();
+
+    bool usedAnyLocks = false;
     bool usedStrongLocks = false;
     bool usedWideLocks = false;
     for (const auto& modification : modifications) {
-        auto mask = modification.Locks;
+        if (!std::holds_alternative<NRowModifications::TWriteAndLockRow>(modification)) {
+            continue;
+        }
+
+        usedAnyLocks = true;
+
+        auto mask = std::get<NRowModifications::TWriteAndLockRow>(modification).Locks;
         usedWideLocks |= mask.GetSize() > TLegacyLockMask::MaxCount;
         if (usedWideLocks) {
             break;
@@ -419,15 +444,15 @@ void TTransaction::ModifyRows(
         for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
             usedWideLocks |= mask.Get(index) > MaxOldLockType;
             usedStrongLocks |= mask.Get(index) == ELockType::SharedStrong;
+
+            // Pure locks do not set usedStrongLocks by themselves. That causes row_legacy_read_locks to be used.
+            // And with row_legacy_read_locks used rpc proxy reconstructs exclusive locks using row values from attachments.
+            // With DoNotDropPureExclusiveLocks at least row_legacy_locks will be used.
+            if (config->DoNotDropPureExclusiveLocks) {
+                usedStrongLocks |= mask.Get(index) == ELockType::Exclusive;
+            }
         }
     }
-
-    const auto& config = Connection_->GetConfig();
-
-    // Pure locks do not set usedStrongLocks by themselves. That causes row_legacy_read_locks to be used.
-    // And with row_legacy_read_locks used rpc proxy reconstructs exclusive locks using row values from attachments.
-    // With DoNotDropPureExclusiveLocks at least row_legacy_locks will be used.
-    usedStrongLocks |= config->DoNotDropPureExclusiveLocks;
 
     if (usedStrongLocks) {
         req->Header().set_protocol_version_minor(YTRpcModifyRowsStrongLocksVersion);
@@ -437,27 +462,51 @@ void TTransaction::ModifyRows(
         req->RequireServerFeature(ERpcProxyFeature::WideLocks);
     }
 
-    for (const auto& modification : modifications) {
-        rows.emplace_back(modification.Row);
-        req->add_row_modification_types(static_cast<NProto::ERowModificationType>(modification.Type));
-
+    // NB: Should be called for every modification to keep index correspondence.
+    auto fillCorrespondingLock = [&req, usedWideLocks, usedStrongLocks, usedAnyLocks] (const TLockMask& locks) {
         if (usedWideLocks) {
-            ToProto(req->add_row_locks(), modification.Locks);
+            ToProto(req->add_row_locks(), locks);
         } else if (usedStrongLocks) {
-            auto locks = modification.Locks;
             YT_VERIFY(!locks.HasNewLocks());
             req->add_row_legacy_locks(locks.ToLegacyMask().GetBitmap());
-        } else {
+        } else if (usedAnyLocks) {
             TLegacyLockBitmap bitmap = 0;
             for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
-                if (modification.Locks.Get(index) == ELockType::SharedWeak) {
+                if (locks.Get(index) == ELockType::SharedWeak) {
                     bitmap |= 1u << index;
                 }
             }
-
             req->add_row_legacy_read_locks(bitmap);
         }
+    };
+
+    for (const auto& modification : modifications) {
+        Visit(modification,
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TWriteRow& modification) {
+                rows.emplace_back(modification.Row);
+                req->add_row_modification_types(NProto::ERowModificationType::RMT_WRITE);
+                fillCorrespondingLock(TLockMask{});
+            },
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TDeleteRow& modification) {
+                rows.emplace_back(modification.Key);
+                req->add_row_modification_types(NProto::ERowModificationType::RMT_DELETE);
+                fillCorrespondingLock(TLockMask{});
+            },
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TWriteAndLockRow& writeAndLockModification) {
+                rows.emplace_back(writeAndLockModification.Row);
+                req->add_row_modification_types(NProto::ERowModificationType::RMT_MODIFY);
+                fillCorrespondingLock(writeAndLockModification.Locks);
+            },
+            [] (const NRowModifications::TVersionedWriteRow&) {
+                // NB: Checked above.
+                YT_ABORT();
+            });
     }
+
+    YT_VERIFY(modifications.size() == static_cast<size_t>(req->row_legacy_read_locks_size()) ||
+        modifications.size() == static_cast<size_t>(req->row_legacy_locks_size()) ||
+        modifications.size() == static_cast<size_t>(req->row_locks_size()) ||
+        (req->row_legacy_read_locks_size() == 0 && req->row_legacy_locks_size() == 0 && req->row_locks_size() == 0));
 
     req->Attachments() = SerializeRowset(
         nameTable,
@@ -1068,6 +1117,7 @@ TFuture<void> TTransaction::DoAbort(
 
     auto req = Proxy_.AbortTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
+    SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
 
     req->Invoke().Subscribe(
         BIND([=, this, this_ = MakeStrong(this)] (const TApiServiceProxy::TErrorOrRspAbortTransactionPtr& rspOrError) {
@@ -1123,6 +1173,7 @@ TFuture<void> TTransaction::SendPing()
     auto req = Proxy_.PingTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
     req->set_ping_ancestors(PingAncestors_);
+    SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
 
     return req->Invoke().Apply(
         BIND([=, this, this_ = MakeStrong(this)] (const TApiServiceProxy::TErrorOrRspPingTransactionPtr& rspOrError) {

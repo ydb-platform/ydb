@@ -1,20 +1,27 @@
 #include "columnshard_ut_common.h"
 #include "shard_reader.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/protos/data_events.pb.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/common/path.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/portions/schema.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/transactions/operators/backup.h>
+#include <ydb/core/tx/columnshard/transactions/operators/restore.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/tiering/tier/object.h>
 #include <ydb/core/tx/tx_processing.h>
+
+#include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -23,6 +30,35 @@ namespace NKikimr::NTxUT {
 using namespace NColumnShard;
 using namespace Tests;
 
+namespace {
+
+// The basic tablet test runtime has no LongTxService to keep a registry fresh, but cleanup that goes
+// through TRegistryScanSnapshotGuard needs a freshness marker (OldestCollectionTime) that advances
+// with the clock. This stand-in is an always-empty registry (border = Max, no snapshots) whose
+// OldestCollectionTime is the live "now", mirroring a single-node cluster where the local node's
+// collection time is always current. A frozen value (e.g. the default TInstant::Zero()) would
+// collapse the cleanup floor to 0 and nothing would ever be collected.
+class TLiveEmptySnapshotRegistry: public IImmutableSnapshotRegistry {
+public:
+    bool HasSnapshot(const NKikimr::TTableId&, const TRowVersion&) const override {
+        return false;
+    }
+
+    TSet<TRowVersion> GetActiveSnapshots(const NKikimr::TTableId&) const override {
+        return {};
+    }
+
+    TRowVersion GetBorder() const override {
+        return TRowVersion::Max();
+    }
+
+    TInstant GetOldestCollectionTime() const override {
+        return AppData()->TimeProvider->Now();
+    }
+};
+
+}   // namespace
+
 void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
     //    runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_INFO);
@@ -30,7 +66,6 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_WRITE, NActors::NLog::PRI_DEBUG);
     //    runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NLog::PRI_DEBUG);
-
 
     NOlap::TSchemaCachesManager::DropCaches();
 
@@ -50,7 +85,31 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     app.AddDomain(domain.Release());
     SetupTabletServices(runtime, &app);
 
+    // No LongTxService actor is created in this basic test runtime, so install a stand-in registry with a
+    // live OldestCollectionTime; otherwise TRegistryScanSnapshotGuard sees a frozen Zero freshness and
+    // never advances the cleanup floor. Tests that specifically test the registry path
+    // (ut_scan_snapshot_guard_integration.cpp) override these settings after calling Setup().
+    InstallTimingBasedSnapshotRegistry(runtime);
+
     runtime.UpdateCurrentTime(TInstant::Now());
+}
+
+void InstallTimingBasedSnapshotRegistry(TTestActorRuntime& runtime) {
+    // margin = LocalSnapshotPromotionTimeSeconds + MaxClockSkewMs = 1s + 12s = the old ~13s cleanup window,
+    // so TRegistryScanSnapshotGuard yields MinSnapshotForNewReads = now - 13s (see TLiveEmptySnapshotRegistry).
+    for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+        auto& appData = runtime.GetAppData(nodeIndex);
+        auto holder = CreateImmutableSnapshotRegistryHolder();
+        holder->Set(std::make_unique<TLiveEmptySnapshotRegistry>());
+        appData.SnapshotRegistryHolder = holder;
+        appData.LongTxServiceConfig.SetLocalSnapshotPromotionTimeSeconds(1);
+        appData.LongTxServiceConfig.SetMaxClockSkewMs(12000);
+        // If a real LongTxService is present (e.g. TTestEnv), it may take over this holder once its remote
+        // storage is ready. Keep its exchange/rebuild cadence short so the registry it publishes keeps a
+        // fresh OldestCollectionTime; harmless in runtimes that have no LongTxService.
+        appData.LongTxServiceConfig.SetSnapshotsExchangeIntervalSeconds(1);
+        appData.LongTxServiceConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
+    }
 }
 
 void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender) {
@@ -89,6 +148,11 @@ TPlanStep ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TS
 }
 
 void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap) {
+    PlanSchemaTxStepOnly(runtime, sender, snap);
+    WaitSchemaTxCompletion(runtime, sender, snap.GetTxId());
+}
+
+void PlanSchemaTxStepOnly(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap) {
     auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(snap.GetTxId());
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
 
@@ -99,8 +163,11 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSn
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, plan.release());
     UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(sender));
+}
+
+void WaitSchemaTxCompletion(TTestBasicRuntime& runtime, const TActorId& sender, ui64 txId) {
     auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
-    UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), snap.GetTxId());
+    UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), txId);
 }
 
 void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap, bool waitResult) {
@@ -133,12 +200,18 @@ ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>
 }
 
 bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 tableId, const ui64 writeId, const TString& data,
-    const std::shared_ptr<arrow::Schema>& schema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType, const ui64 lockId) {
+    const std::shared_ptr<arrow::Schema>& schema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType, const ui64 lockId,
+    const std::optional<TDuration>& timeout = std::nullopt) {
     const TString dedupId = ToString(writeId);
 
     auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(writeId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     if (lockId) {
         write->SetLockId(lockId, 1);
+    }
+    if (timeout) {
+        // When the shard throttles the write (e.g. small-blobs/compaction overload), it holds the request in its
+        // queue until this timeout elapses and then rejects it with OVERLOADED; set it so a blocked write fails fast.
+        write->Record.SetTimeoutSeconds(timeout->Seconds());
     }
     auto& operation = write->AddOperation(TEnumOperator<NEvWrite::EModificationType>::SerializeToWriteProto(mType), TTableId(0, tableId, 1), {},
         0, NKikimrDataEvents::FORMAT_ARROW);
@@ -156,8 +229,8 @@ bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shar
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds, const NEvWrite::EModificationType mType,
-    const ui64 lockId) {
-    return WriteDataImpl(runtime, sender, shardId, tableId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds, mType, lockId);
+    const ui64 lockId, const std::optional<TDuration>& timeout) {
+    return WriteDataImpl(runtime, sender, shardId, tableId, writeId, data, NArrow::MakeArrowSchema(ydbSchema), writeIds, mType, lockId, timeout);
 }
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, const ui64 tableId, const TString& data,
@@ -422,9 +495,10 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
             continue;
         }
         if (NOlap::NIndexes::NMax::TIndexMeta::IsAvailableType(columns[i].GetType())) {
-            *schema->AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(
-                std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(1000 + i, "MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", false, i + 1))
-                                        .SerializeToProto();
+            *schema->AddIndexes() =
+                NOlap::NIndexes::TIndexMetaContainer(std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(
+                                                         1000 + i, "MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", false, i + 1))
+                    .SerializeToProto();
         }
     }
 
@@ -440,11 +514,84 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
         schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
     }
     if (specials.GetUseForcedCompaction()) {
-        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer optimizer;
-        *schema->MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() = optimizer;
-        schema->MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName(
-            "l-buckets");   //TODO use appropriate lc-buckets configuration
+        auto* plannerConstructor = schema->MutableOptions()->MutableCompactionPlannerConstructor();
+        plannerConstructor->SetClassName("tiling++");
+        plannerConstructor->MutableTiling()->SetJson("{}");
     }
+}
+
+namespace {
+
+NKikimrMiniKQL::TResult LocalMiniKQL(TTestBasicRuntime& runtime, ui64 tabletId, const TString& query) {
+    TActorId sender = runtime.AllocateEdgeActor();
+
+    auto evTx = new TEvTablet::TEvLocalMKQL;
+    evTx->Record.MutableProgram()->MutableProgram()->SetText(query);
+    ForwardToTablet(runtime, tabletId, sender, evTx);
+
+    auto event = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(sender);
+    UNIT_ASSERT(event);
+    UNIT_ASSERT_VALUES_EQUAL_C(event->Get()->Record.GetStatus(), NKikimrProto::OK, event->Get()->Record.GetMiniKQLErrors());
+    return event->Get()->Record.GetExecutionEngineEvaluatedResponse();
+}
+
+}   // namespace
+
+ui64 CountLocalDbTableRows(
+    TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& rangeSpec, const TString& fieldsSpec) {
+    const TString query = Sprintf(R"(
+        (
+            (let range %s)
+            (let fields %s)
+            (return (AsList
+                (SetResult 'Result (SelectRange '%s range fields '()))
+            ))
+        )
+    )", rangeSpec.c_str(), fieldsSpec.c_str(), tableName.c_str());
+    const auto result = LocalMiniKQL(runtime, tabletId, query);
+    return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+ui64 CountTxInfoRows(TTestBasicRuntime& runtime, ui64 tabletId) {
+    const auto result = LocalMiniKQL(runtime, tabletId, R"(
+        (
+            (let range '(
+                '('TxId (Null) (Void))
+            ))
+            (let fields '('TxId))
+            (return (AsList
+                (SetResult 'Result (SelectRange 'TxInfo range fields '()))
+            ))
+        )
+    )");
+    return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+ui64 CountBackgroundSessionsRows(TTestBasicRuntime& runtime, ui64 tabletId) {
+    const auto result = LocalMiniKQL(runtime, tabletId, R"(
+        (
+            (let range '(
+                '('ClassName (Null) (Void))
+                '('Identifier (Null) (Void))
+            ))
+            (let fields '('ClassName))
+            (return (AsList
+                (SetResult 'Result (SelectRange 'BackgroundSessions range fields '()))
+            ))
+        )
+    )");
+    return NClient::TValue::Create(result)[0]["List"].Size();
+}
+
+void VerifyNoBackupOrRestoreArtifacts(TTestBasicRuntime& runtime, const NYDBTest::NColumnShard::TController* csController, ui64 tabletId) {
+    UNIT_ASSERT(csController);
+    UNIT_ASSERT_VALUES_EQUAL(NColumnShard::TBackupTransactionOperator::GetCounter().Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(NColumnShard::TRestoreTransactionOperator::GetCounter().Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(csController->GetBackgroundSessionsCount(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(csController->GetTxOperatorsCount(), 0);
+
+    UNIT_ASSERT_VALUES_EQUAL(CountTxInfoRows(runtime, tabletId), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(CountBackgroundSessionsRows(runtime, tabletId), 0u);
 }
 
 }   // namespace NKikimr::NTxUT

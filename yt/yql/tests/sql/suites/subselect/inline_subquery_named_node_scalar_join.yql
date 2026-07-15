@@ -1,0 +1,13 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+USE plato;
+
+$a = (SELECT Max(Input.key || Input2.subkey) FROM Input JOIN Input2 ON Input.subkey = Input2.key);
+
+$b = "1" || (SELECT Max(Input.key || Input2.subkey) FROM Input JOIN Input2 ON Input.subkey = Input2.key);
+
+$c = (SELECT Max(Input.key || Input2.subkey) FROM Input JOIN Input2 ON Input.subkey = Input2.key) || "1";
+
+$d = "1" || (SELECT Max(Input.key || Input2.subkey) FROM Input JOIN Input2 ON Input.subkey = Input2.key) || "1";
+
+SELECT $a, $b, $c, $d;

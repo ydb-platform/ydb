@@ -38,6 +38,7 @@ SRCS(
     rpc_describe_external_data_source.cpp
     rpc_describe_external_table.cpp
     rpc_describe_path.cpp
+    rpc_describe_secret.cpp
     rpc_describe_system_view.cpp
     rpc_describe_table.cpp
     rpc_describe_table_options.cpp
@@ -89,6 +90,7 @@ SRCS(
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
     rpc_test_shard.cpp
+    rpc_topic_deferred_publish.cpp
     rpc_view.cpp
     rpc_whoami.cpp
     table_settings.cpp
@@ -137,7 +139,10 @@ PEERDIR(
     ydb/core/kesus/tablet
     ydb/core/kqp/common
     ydb/core/kqp/opt
+    ydb/core/local_indexes/bloom
+    ydb/core/persqueue/deferred_publish
     ydb/core/protos
+    ydb/core/statistics
     ydb/core/scheme
     ydb/core/sys_view
     ydb/core/tx
@@ -167,10 +172,15 @@ PEERDIR(
     ydb/public/lib/fq
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/sdk/cpp/src/client/resources
-    ydb/services/ext_index/common
 )
 
-IF (OS_LINUX)
+
+DEFAULT(YDB_EMBEDDED_NBS_ENABLED yes)
+
+IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
+    CFLAGS(
+        -DYDB_EMBEDDED_NBS_ENABLED
+    )
     SRCS(
         rpc_nbs.cpp
         rpc_nbs_io.cpp
@@ -178,6 +188,7 @@ IF (OS_LINUX)
     PEERDIR(
         ydb/core/nbs/cloud/blockstore/libs/service
         ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct
+        ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy
         ydb/core/nbs/cloud/blockstore/public/api/protos
         ydb/core/nbs/cloud/storage/core/libs/common
     )
@@ -197,4 +208,5 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
     grpc_request_check_actor_ut
+    grpc_request_tracing_ut
 )

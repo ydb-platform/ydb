@@ -57,6 +57,7 @@ using TResourceNormalizedValues = std::tuple<double, double, double, double>;
 using TOwnerIdxType = NScheme::TPairUi64Ui64;
 using TSubActorId = ui64; // = LocalId part of TActorId
 using TDataCenterPriority = std::unordered_map<TDataCenterId, i32>;
+using TSegmentId = std::tuple<TSubDomainKey, TBridgePileId>;
 
 static constexpr std::size_t MAX_TABLET_CHANNELS = 256;
 
@@ -108,6 +109,11 @@ enum class EResourceToBalance {
 };
 
 EResourceToBalance ToResourceToBalance(NMetrics::EResource resource);
+
+enum class EGroupState {
+    Active,
+    Inactive,
+};
 
 struct ISubActor {
     const TInstant StartTime;
@@ -198,6 +204,12 @@ struct TSideEffects : TCompleteNotifications, TCompleteActions {
         TCompleteActions::Run(ctx);
         TCompleteNotifications::Send(ctx);
     }
+};
+
+struct IReassignCallback {
+    virtual IEventBase* MakeEvent(ui64 tabletsDone) = 0;
+
+    virtual ~IReassignCallback() = default;
 };
 
 TResourceNormalizedValues NormalizeRawValues(const TResourceRawValues& values, const TResourceRawValues& maximum);
@@ -326,7 +338,7 @@ struct TBalancerStats {
 struct TNodeFilter {
     TVector<TSubDomainKey> AllowedDomains;
     TVector<TNodeId> AllowedNodes;
-    TVector<TDataCenterId> AllowedDataCenters;
+    NKikimrHive::TDataCentersGroup AllowedDataCenters;
     TSubDomainKey ObjectDomain;
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
     bool MustBePrimaryPile = true;

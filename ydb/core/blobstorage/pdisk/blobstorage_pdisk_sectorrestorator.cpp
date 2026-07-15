@@ -8,7 +8,7 @@ namespace NPDisk {
 TSectorRestorator::TSectorRestorator(const bool isTrippleCopy, const ui32 erasureDataParts,
         const bool isErasureEncode, const TDiskFormat &format,
         const TPDiskCtx *pCtx, TPDiskMon *mon,
-        TBufferPool *bufferPool)
+        TBufferPool *bufferPool, TLogoBlobID blobId)
     : IsTrippleCopy(isTrippleCopy)
     , ErasureDataParts(erasureDataParts)
     , LastGoodIdx((ui32)-1)
@@ -21,12 +21,13 @@ TSectorRestorator::TSectorRestorator(const bool isTrippleCopy, const ui32 erasur
     , IsErasureEncode(isErasureEncode)
     , Mon(mon)
     , BufferPool(bufferPool)
+    , BlobId(blobId)
 {}
 
 TSectorRestorator::TSectorRestorator(const bool isTrippleCopy, const ui32 erasureDataParts,
-        const bool isErasureEncode, const TDiskFormat &format)
+        const bool isErasureEncode, const TDiskFormat &format, TLogoBlobID blobId)
     : TSectorRestorator(isTrippleCopy, erasureDataParts, isErasureEncode, format, nullptr, nullptr,
-            nullptr)
+            nullptr, blobId)
 {}
 
 void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic, const ui64 lastNonce,
@@ -42,20 +43,21 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
 
         ui64 sectorOffset = offset + (IsTrippleCopy ? 0 : (ui64)i * (ui64)Format.SectorSize);
         ui8 *sectorData = source + i * Format.SectorSize;
-        bool isCrcOk = hasher.CheckSectorHash(sectorOffset, magic, sectorData, Format.SectorSize, sectorFooter->Hash);
+        bool isCrcOk = hasher.CheckSectorHash(sectorOffset, magic, sectorData, Format.SectorSize, sectorFooter->Hash, BlobId);
         if (!isCrcOk) {
             if (PCtx) {
-                P_LOG(PRI_INFO, BPD01, " Bad hash",
-                    (OwnerId, owner),
-                    (IsErasureEncode, IsErasureEncode),
-                    (ErasureDataParts, ErasureDataParts),
-                    (Sector, i),
-                    (ReadHash, sectorFooter->Hash),
-                    (CalculatedOldHash, hasher.OldHashSector(sectorOffset, magic, sectorData, Format.SectorSize)),
-                    (CalculatedT1ha0NoAvxHash, hasher.T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sectorData, Format.SectorSize)),
-                    (SectorOffset, sectorOffset),
-                    (chunkIdx, sectorOffset / (ui64)Format.ChunkSize),
-                    (sectorIdx, (sectorOffset % (ui64)Format.ChunkSize) / (ui64)Format.SectorSize));
+                YDB_LOG_P_LOG(PRI_INFO, "Bad hash",
+                    {"marker", "BPD01"},
+                    {"ownerId", owner},
+                    {"isErasureEncode", IsErasureEncode},
+                    {"erasureDataParts", ErasureDataParts},
+                    {"sector", i},
+                    {"readHash", sectorFooter->Hash},
+                    {"calculatedOldHash", hasher.OldHashSector(sectorOffset, magic, sectorData, Format.SectorSize)},
+                    {"calculatedT1ha0NoAvxHash", hasher.T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sectorData, Format.SectorSize)},
+                    {"sectorOffset", sectorOffset},
+                    {"chunkIdx", sectorOffset / (ui64)Format.ChunkSize},
+                    {"sectorIdx", (sectorOffset % (ui64)Format.ChunkSize) / (ui64)Format.SectorSize});
             }
             LastBadIdx = i;
         } else if (IsTrippleCopy) {
@@ -75,15 +77,16 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
             ui64 sectorFooterNonce = i < ErasureDataParts ? sectorFooter->Nonce : paritySectorFooter->Nonce;
             if (sectorFooterNonce <= lastNonce || sectorFooterNonce <= maxNonce) {
                 if (PCtx) {
-                    P_LOG(PRI_WARN, BPD01, "Sector nonce reordering",
-                            (OwnerId, owner),
-                            (IsErasureEncode, IsErasureEncode),
-                            (ErasureDataParts, ErasureDataParts),
-                            (Sector, i),
-                            (ReadNonce, sectorFooterNonce),
-                            (LastNonce, lastNonce),
-                            (MaxNonce, maxNonce),
-                            (sectorOffset, sectorOffset));
+                    YDB_LOG_P_LOG(PRI_WARN, "Sector nonce reordering",
+                        {"marker", "BPD01"},
+                        {"ownerId", owner},
+                        {"isErasureEncode", IsErasureEncode},
+                        {"erasureDataParts", ErasureDataParts},
+                        {"sector", i},
+                        {"readNonce", sectorFooterNonce},
+                        {"lastNonce", lastNonce},
+                        {"maxNonce", maxNonce},
+                        {"sectorOffset", sectorOffset});
                 }
                 // Consider decreasing nonces to be a sign of write reordering, restore sectors
                 LastBadIdx = i;
@@ -100,11 +103,12 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
     if (IsErasureEncode) {
         if (!IsTrippleCopy && GoodSectorCount == ErasureDataParts) {
             if (PCtx) {
-                P_LOG(PRI_WARN, BPD01, "Restoring a sector",
-                        (OwnerId, owner),
-                        (ErasureDataParts, ErasureDataParts),
-                        (LastBadIdx, LastBadIdx),
-                        (SectorOffset, offset + (ui64)LastBadIdx * (ui64)Format.SectorSize));
+                YDB_LOG_P_LOG(PRI_WARN, "Restoring a sector",
+                    {"marker", "BPD01"},
+                    {"ownerId", owner},
+                    {"erasureDataParts", ErasureDataParts},
+                    {"lastBadIdx", LastBadIdx},
+                    {"sectorOffset", offset + (ui64)LastBadIdx * (ui64)Format.SectorSize});
             }
             for (ui32 i = 0; i < Format.SectorSize / sizeof(ui64) - 1; ++i) {
                 ui64 restored = 0;
@@ -125,14 +129,13 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
                 TDataSectorFooter *goodDataFooter = (TDataSectorFooter*)
                     (source + (ErasureDataParts) * Format.SectorSize - sizeof(TDataSectorFooter));
                 sectorFooter->Nonce = goodDataFooter->Nonce + 1;
-                sectorFooter->Hash = hasher.HashSector(sectorOffset, magic, sectorData, Format.SectorSize);
+                sectorFooter->Hash = hasher.HashSector(sectorOffset, magic, sectorData, Format.SectorSize, BlobId);
             } else {
                 // restoring data sector
                 TDataSectorFooter *sectorFooter = (TDataSectorFooter*)
                     (sectorData + Format.SectorSize - sizeof(TDataSectorFooter));
-                // TODO: restore the correct Version value
-                sectorFooter->Version = PDISK_DATA_VERSION;
-                sectorFooter->Hash = hasher.HashSector(sectorOffset, magic, sectorData, Format.SectorSize);
+                sectorFooter->SetVersionAndEncryption(sectorFooter->IsEncrypted());
+                sectorFooter->Hash = hasher.HashSector(sectorOffset, magic, sectorData, Format.SectorSize, BlobId);
                 // Increment here because we don't want to count initialy not written parts
                 *Mon->DeviceErasureSectorRestorations += 1;
             }
@@ -158,12 +161,13 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
                     ui64 sectorOffset = offset + (ui64)(i * Format.SectorSize);
                     ui8 *goodSector = source + LastGoodIdx * Format.SectorSize;
                     if (PCtx) {
-                        P_LOG(PRI_WARN, BPD01, "Restoring trippleCopy sector",
-                                (Sector, i),
-                                (OwnerId, owner),
-                                (GoodSectorCount, GoodSectorCount),
-                                (ReplicationFactor, ReplicationFactor),
-                                (sectorOffset, sectorOffset));
+                        YDB_LOG_P_LOG(PRI_WARN, "Restoring trippleCopy sector",
+                            {"marker", "BPD01"},
+                            {"sector", i},
+                            {"ownerId", owner},
+                            {"goodSectorCount", GoodSectorCount},
+                            {"replicationFactor", ReplicationFactor},
+                            {"sectorOffset", sectorOffset});
                     }
                     // Y_ABORT("RESTORE");
                     memcpy(badSector, goodSector, size_t(Format.SectorSize));

@@ -734,6 +734,7 @@ class scoped_allocator_adaptor
 
    //! <b>Returns</b>:
    //!   <code>allocator_traits<OuterAlloc>:: max_size(outer_allocator())</code>.
+   BOOST_CONTAINER_NODISCARD
    inline size_type max_size() const BOOST_NOEXCEPT_OR_NOTHROW
    {  return outer_traits_type::max_size(this->outer_allocator());   }
 
@@ -748,11 +749,13 @@ class scoped_allocator_adaptor
 
    //! <b>Returns</b>:
    //! <code>allocator_traits<OuterAlloc>::allocate(outer_allocator(), n)</code>.
+   BOOST_CONTAINER_NODISCARD
    inline pointer allocate(size_type n)
    {  return outer_traits_type::allocate(this->outer_allocator(), n);   }
 
    //! <b>Returns</b>:
    //! <code>allocator_traits<OuterAlloc>::allocate(outer_allocator(), n, hint)</code>.
+   BOOST_CONTAINER_NODISCARD
    inline pointer allocate(size_type n, const_void_pointer hint)
    {  return outer_traits_type::allocate(this->outer_allocator(), n, hint);   }
 
@@ -880,6 +883,7 @@ struct scoped_allocator_operator_equal<true>
 /// @endcond
 
 template <typename OuterA1, typename OuterA2, BOOST_CONTAINER_SCOPEDALLOC_ALLINNERCLASS>
+BOOST_CONTAINER_NODISCARD
 inline bool operator==(const scoped_allocator_adaptor<OuterA1, BOOST_CONTAINER_SCOPEDALLOC_ALLINNER>& a
                       ,const scoped_allocator_adaptor<OuterA2, BOOST_CONTAINER_SCOPEDALLOC_ALLINNER>& b)
 {
@@ -894,6 +898,7 @@ inline bool operator==(const scoped_allocator_adaptor<OuterA1, BOOST_CONTAINER_S
 }
 
 template <typename OuterA1, typename OuterA2, BOOST_CONTAINER_SCOPEDALLOC_ALLINNERCLASS>
+BOOST_CONTAINER_NODISCARD
 inline bool operator!=(const scoped_allocator_adaptor<OuterA1, BOOST_CONTAINER_SCOPEDALLOC_ALLINNER>& a
                       ,const scoped_allocator_adaptor<OuterA2, BOOST_CONTAINER_SCOPEDALLOC_ALLINNER>& b)
 {  return !(a == b);   }

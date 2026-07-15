@@ -46,7 +46,7 @@ THashMap<TString, TString> BuildPresetConfigs() {
             R"pb(
 partition_mode: OnePartition
 volume_config {
-    path: "kv_volume"
+    path: "kv_volume_common_channel_read"
     partition_count: 16
     channel_media: ["ssd", "ssd", "ssd"]
 }
@@ -78,7 +78,7 @@ actions {
             R"pb(
 partition_mode: OnePartition
 volume_config {
-    path: "kv_volume"
+    path: "kv_volume_inline_channel_read"
     partition_count: 16
     channel_media: ["ssd", "ssd", "ssd"]
 }
@@ -110,7 +110,7 @@ actions {
             R"pb(
 partition_mode: OnePartition
 volume_config {
-    path: "kv_volume"
+    path: "kv_volume_write_read_delete"
     partition_count: 16
     channel_media: ["ssd", "ssd", "ssd"]
 }

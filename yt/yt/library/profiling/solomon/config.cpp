@@ -6,6 +6,32 @@ namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TSolomonRegistryConfigPtr TSolomonRegistryConfig::ApplyDynamic(
+    const TSolomonRegistryDynamicConfigPtr& dynamicConfig) const
+{
+    auto result = New<TSolomonRegistryConfig>();
+    result->EnableRseq = EnableRseq;
+    NYTree::UpdateYsonStructField(result->EnableRseq, dynamicConfig->EnableRseq);
+    result->Postprocess();
+    return result;
+}
+
+void TSolomonRegistryConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("enable_rseq", &TThis::EnableRseq)
+        .Default(false);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TSolomonRegistryDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("enable_rseq", &TThis::EnableRseq)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TShardConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("filter", &TThis::Filter)
@@ -22,6 +48,9 @@ void TShardConfig::Register(TRegistrar registrar)
 
 void TSolomonExporterConfig::Register(TRegistrar registrar)
 {
+    registrar.Parameter("enable", &TThis::Enable)
+        .Default(true);
+
     registrar.Parameter("grid_step", &TThis::GridStep)
         .Default(TDuration::Seconds(5));
 
@@ -68,6 +97,8 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
     registrar.Parameter("mark_aggregates", &TThis::MarkAggregates)
         .Default(true);
     registrar.Parameter("enable_solomon_aggregates", &TThis::EnableSolomonAggregates)
+        .Default(false);
+    registrar.Parameter("export_globals_as_mem_only", &TThis::ExportGlobalsAsMemOnly)
         .Default(false);
 
     registrar.Parameter("strip_sensors_name_prefix", &TThis::StripSensorsNamePrefix)
@@ -143,7 +174,7 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
     });
 }
 
-TShardConfigPtr TSolomonExporterConfig::MatchShard(const std::string& sensorName)
+TShardConfigPtr TSolomonExporterConfig::MatchShard(TStringBuf sensorName)
 {
     TShardConfigPtr matchedShard;
     int matchSize = -1;

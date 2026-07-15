@@ -5,21 +5,22 @@ This documentation section covers the fundamental concepts and architectural pri
 The following topics provide comprehensive coverage of {{ ydb-short-name }}'s core functionality, from high-level architecture and data models to advanced features like transactions, indexing, and federated queries.
 
 - [Glossary](glossary.md)
-- [Architecture](architecture.md)
+- [Architecture](architecture/index.md)
 - [Connecting to a database](connect.md)
 - [Schema objects](datamodel/index.md)
 - [Cluster topology](topology.md)
+- [Bridge mode](bridge.md)
 - [Transactions](transactions.md)
-- [Secondary indexes](secondary_indexes.md)
-- [Vector search](vector_search.md)
+- [Secondary indexes](query_execution/secondary_indexes.md)
+- [Vector search](query_execution/vector_search.md)
 - [Change Data Capture (CDC)](cdc.md)
 - [Time to live and eviction](ttl.md)
-- [Scan queries](scan_query.md)
 - [Database limits](limits-ydb.md)
-- [Multi-Version Concurrency Control (MVCC)](mvcc.md)
+- [Multi-Version Concurrency Control (MVCC)](query_execution/mvcc.md)
 - [Asynchronous replication](async-replication.md)
-- [Query optimizer](optimizer.md)
-- [Federated queries](federated_query/index.md)
+- [Query optimizer](query_execution/optimizer.md)
+- [Federated queries](query_execution/federated_query/index.md)
+- [Streaming queries](streaming-query.md)
 
 ## See Also {#see-also}
 

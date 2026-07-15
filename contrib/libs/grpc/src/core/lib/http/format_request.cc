@@ -24,7 +24,6 @@
 #include <string.h>
 
 #include <algorithm>
-#include <initializer_list>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 #include <vector>

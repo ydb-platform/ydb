@@ -1,24 +1,23 @@
 #pragma once
 
-#include "kqp_opt.h"
+#include <util/generic/ptr.h>
 
-#include <yql/essentials/core/yql_statistics.h>
+namespace NYql {
 
-#include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/opt/logical/kqp_opt_cbo.h>
-#include <yql/essentials/core/yql_graph_transformer.h>
-#include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-#include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/opt/dq_opt_stat_transformer_base.h>
+class IGraphTransformer;
+struct TTypeAnnotationContext;
+struct TKikimrConfiguration;
 
-namespace NKikimr {
-namespace NKqp {
+} // namespace NYql
 
-using namespace NYql;
-using namespace NYql::NNodes;
-using namespace NOpt;
+namespace NKikimr::NKqp {
+
+namespace NOpt {
+
+struct TKqpOptimizeContext;
+struct TKqpProviderContext;
+
+} // namespace NOpt
 
 /***
  * Statistics transformer is a transformer that propagates statistics and costs from
@@ -26,34 +25,7 @@ using namespace NOpt;
  * but will simply stop propagation if in encounters an operator that it has no rules for.
  * One of such operators is EquiJoin, but there is a special rule to handle EquiJoin.
 */
-class TKqpStatisticsTransformer : public NYql::NDq::TDqStatisticsTransformerBase {
+TAutoPtr<NYql::IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<NOpt::TKqpOptimizeContext>& kqpCtx,
+    NYql::TTypeAnnotationContext& typeCtx, const TIntrusivePtr<NYql::TKikimrConfiguration>& config, const NOpt::TKqpProviderContext& pctx);
 
-    const TKikimrConfiguration::TPtr& Config;
-    TKqpOptimizeContext& KqpCtx;
-    TVector<TVector<std::shared_ptr<TOptimizerStatistics>>> TxStats;
-
-    THashMap<std::shared_ptr<TOptimizerStatistics>, TString, std::hash<std::shared_ptr<TOptimizerStatistics>>> TablePathByStats;
-
-    public:
-        TKqpStatisticsTransformer(
-            const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-            TTypeAnnotationContext& typeCtx,
-            const TKikimrConfiguration::TPtr& config,
-            const TKqpProviderContext& pctx
-        ) :
-            TDqStatisticsTransformerBase(&typeCtx, pctx, kqpCtx->GetOptimizerHints(), &kqpCtx->ShufflingOrderingsByJoinLabels, true),
-            Config(config),
-            KqpCtx(*kqpCtx) {}
-
-        // Main method of the transformer
-        IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
-
-    private:
-        bool BeforeLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) final;
-        bool AfterLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) final;
-};
-
-TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx);
-}
-}
+} // namespace NKikimr::NKqp

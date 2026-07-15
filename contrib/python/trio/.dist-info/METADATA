@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: trio
-Version: 0.32.0
+Version: 0.33.0
 Summary: A friendly Python library for async concurrency and I/O
 Author-email: "Nathaniel J. Smith" <njs@pobox.com>
 License-Expression: MIT OR Apache-2.0

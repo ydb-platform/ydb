@@ -32,7 +32,7 @@ ui8 GetDecimalWidth(EDataTypeFeatures features) {
 #define NO {ECastOptions::Impossible}
 #define UN {ECastOptions::Impossible | ECastOptions::Undefined}
 
-static const std::array<std::array<std::optional<TCastResultOptions>, DataSlotCount>, DataSlotCount> CastResultsTable = {{
+const std::array<std::array<std::optional<TCastResultOptions>, DataSlotCount>, DataSlotCount> CastResultsTable = {{
     // Bool, Int8 ----integrals---- Uint64   Floats, Strings, YJsons, Uuid, DateTimes, Interval, TzDateTimes, Decimal, DyNumber, JsonDocument
     {{OK, OK, OK, OK, OK, OK, OK, OK, OK, OK, OK, OK, OK, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO}}, // Bool
 
@@ -129,6 +129,7 @@ EDataSlot GetDataSlot(TStringBuf str) {
     ythrow yexception() << "Invalid data type: " << str;
 }
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 const TDataTypeInfo DataTypeInfos[DataSlotCount] = {
     UDF_TYPE_ID_MAP(UDF_TYPE_INFO)};
 

@@ -377,6 +377,8 @@ TESTCASES = [
                 ),
             ]
         ),
+        "FullscanLimit",
+        "2",
     ),
     # 7
     (
@@ -741,6 +743,8 @@ TESTCASES = [
         ),
         "MultiGet",
         "true",
+        "MaxCachedRows",
+        "0",
     ),
     # 14
     (
@@ -867,6 +871,141 @@ TESTCASES = [
         "5",
         "MaxDelayedRows",
         "100",
+        "FullscanLimit",
+        "0",
+    ),
+    # 16
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            za Int32,
+                            zd Int32
+                        )
+                    )            ;
+
+            $enriched = select a, b, c, d, f, za, zd,
+                               is_odd, is_true, is_false,
+                               opt_odd, opt_true, opt_false, opt_null,
+                               CAST(ts AS String) AS tss, CAST(tsd AS String) AS tsds
+                               /*, CAST(dur AS String) AS durs -- NOT supported by fq_connector */
+                from
+                    $input as e
+                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                on(e.za = u.a )
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"za":1,"zd":101}',
+                    '''{
+                        "a":1,"b":"2","c":3,"d":4,"f":6,"za":1,"zd":101,
+                        "is_true":true,"is_false":false,"is_odd":true,
+                        "opt_true":true,"opt_false":false,"opt_odd":true,"opt_null":null,
+                        "tsds":"1970-01-05","tss":"1970-01-03T10:11:12Z"
+                    }''',
+                ),
+                (
+                    '{"id":2,"za":7,"zd":107}',
+                    '''{
+                        "a":7,"b":"8","c":9,"d":10,"f":12,"za":7,"zd":107,
+                        "is_true":true,"is_false":false,"is_odd":true,
+                        "opt_true":true,"opt_false":false,"opt_odd":true,"opt_null":null,
+                        "tsds":"1970-01-06","tss":"1970-01-03T10:11:13Z"
+                    }''',
+                ),
+                (
+                    '{"id":3,"za":33,"zd":133}',
+                    '''{
+                        "a":null,"b":null,"c":null,"d":null,"f":null,"za":33,"zd":133,
+                        "is_true":null,"is_false":null,"is_odd":null,
+                        "opt_true":null,"opt_false":null,"opt_odd":null,"opt_null":null,
+                        "tsds":null,"tss":null
+                    }''',
+                ),
+                (
+                    '{"id":2,"za":2,"zd":102}',
+                    '''{
+                        "a":2,"b":"3","c":6,"d":null,"f":9,"za":2,"zd":102,
+                        "is_true":true,"is_false":false,"is_odd":false,
+                        "opt_true":true,"opt_false":false,"opt_odd":false,"opt_null":null,
+                        "tsds":"1970-01-07","tss":"1970-01-03T10:11:14Z"
+                    }''',
+                ),
+                (
+                    '{"id":4,"za":4,"zd":104}',
+                    '''{
+                        "a":4,"b":"5","c":4,"d":15,"f":null,"za":4,"zd":104,
+                        "is_true":true,"is_false":false,"is_odd":false,
+                        "opt_true":true,"opt_false":false,"opt_odd":false,"opt_null":null,
+                        "tsds":"1970-01-08","tss":"1970-01-03T10:11:15Z"
+                    }''',
+                ),
+            ]
+            * 1000
+        ),
+        "TTL",
+        "1",
+    ),
+    # 17
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            za Int32,
+                            zd Int32
+                        )
+                    )            ;
+
+            $enriched = select a, b, c, d, f, za, zd,
+                               is_odd, is_true, is_false,
+                               opt_odd, opt_true, opt_false, opt_null
+                from
+                    $input as e
+                left join {streamlookup} any ydb_conn_{table_name}.db as u
+                on(e.za = u.a )
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"za":1,"zd":101}',
+                    '{"a":1,"b":"2","c":3,"d":4,"f":6,"za":1,"zd":101,"is_true":true,"is_false":false,"is_odd":true,"opt_true":true,"opt_false":false,"opt_odd":true,"opt_null":null}',
+                ),
+                (
+                    '{"id":2,"za":7,"zd":107}',
+                    '{"a":7,"b":"8","c":9,"d":10,"f":12,"za":7,"zd":107,"is_true":true,"is_false":false,"is_odd":true,"opt_true":true,"opt_false":false,"opt_odd":true,"opt_null":null}',
+                ),
+                (
+                    '{"id":3,"za":33,"zd":133}',
+                    '{"a":null,"b":null,"c":null,"d":null,"f":null,"za":33,"zd":133,"is_true":null,"is_false":null,"is_odd":null,"opt_true":null,"opt_false":null,"opt_odd":null,"opt_null":null}',
+                ),
+                (
+                    '{"id":2,"za":2,"zd":102}',
+                    '{"a":2,"b":"3","c":6,"d":null,"f":9,"za":2,"zd":102,"is_true":true,"is_false":false,"is_odd":false,"opt_true":true,"opt_false":false,"opt_odd":false,"opt_null":null}',
+                ),
+                (
+                    '{"id":4,"za":4,"zd":104}',
+                    '{"a":4,"b":"5","c":4,"d":15,"f":null,"za":4,"zd":104,"is_true":true,"is_false":false,"is_odd":false,"opt_true":true,"opt_false":false,"opt_odd":false,"opt_null":null}',
+                ),
+            ]
+            * 1000
+        ),
+        "TTL",
+        "1",
+        "MaxCachedRows",
+        "4",
     ),
 ]
 
@@ -910,9 +1049,7 @@ class TestJoinStreaming(TestYdsBase):
 
             insert into myyds.`{output_topic}`
             select * from $enriched;
-            '''.format(
-            input_topic=self.input_topic, output_topic=self.output_topic, table_name=table_name
-        )
+            '''.format(input_topic=self.input_topic, output_topic=self.output_topic, table_name=table_name)
 
         query_id = fq_client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
         fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
@@ -939,19 +1076,17 @@ class TestJoinStreaming(TestYdsBase):
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
     @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG else [True])
-    @pytest.mark.parametrize("ca", ["sync", "async"])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
     def test_streamlookup(
         self,
         kikimr,
         testcase,
-        ca,
         streamlookup,
         partitions_count,
         fq_client: FederatedQueryClient,
         yq_version,
     ):
-        title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}{ca[:1]}{yq_version}"
+        title = f"slj_{partitions_count}{str(streamlookup)[:1]}{testcase}{yq_version}"
         self.init_topics(title, partitions_count=partitions_count)
         fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
 
@@ -970,7 +1105,8 @@ class TestJoinStreaming(TestYdsBase):
             table_name=table_name,
             streamlookup=Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else '',
         )
-        sql = f'PRAGMA dq.ComputeActorType = "{ca}";\n{sql}'
+
+        options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
 
         one_time_waiter.wait()
 
@@ -1007,6 +1143,11 @@ class TestJoinStreaming(TestYdsBase):
                     labels={"operation": query_id, "component": component},
                     key_label="sensor",
                 )
+                if component == "LookupSrc":
+                    if options_dict.get("FullscanLimit") == "0" or (
+                        "FullscanLimit" not in options_dict and options_dict.get("MaxCachedRows") == "0"
+                    ):
+                        assert componentSensors.get("Fullscans", 0) == 0
                 for k in componentSensors:
                     print(
                         f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}',
@@ -1029,12 +1170,10 @@ class TestJoinStreaming(TestYdsBase):
     @pytest.mark.parametrize("partitions_count", [1, 2])
     @pytest.mark.parametrize("tasks", [1, 2])
     @pytest.mark.parametrize("streamlookup", [True, False])
-    @pytest.mark.parametrize("ca", ["sync", "async"])
     @pytest.mark.parametrize("limit", [6, 7, 8, 9, None])
     def test_streamlookup_watermarks(
         self,
         kikimr,
-        ca,
         limit,
         streamlookup,
         tasks,
@@ -1042,7 +1181,7 @@ class TestJoinStreaming(TestYdsBase):
         fq_client: FederatedQueryClient,
         yq_version,
     ):
-        title = f"slj_wm_{partitions_count}{str(streamlookup)[:1]}{limit}{ca[:1]}{tasks}"
+        title = f"slj_wm_{partitions_count}{str(streamlookup)[:1]}{limit}{tasks}"
         self.init_topics(title, partitions_count=partitions_count)
         fq_client.create_yds_connection(
             "wmyds",
@@ -1063,7 +1202,6 @@ class TestJoinStreaming(TestYdsBase):
         streamlookup_hint = Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else ''
         idle_clause = R", WATERMARK_IDLE_TIMEOUT = 'PT5S'" if tasks > 1 or partitions_count > 1 else ""
         sql = Rf'''
-            PRAGMA dq.ComputeActorType = "{ca}";
             PRAGMA dq.WatermarksMode = "default";
             PRAGMA dq.MaxTasksPerStage = "{tasks}";
             PRAGMA dq.WatermarksGranularityMs = "2000";
@@ -1078,7 +1216,7 @@ class TestJoinStreaming(TestYdsBase):
                             user Int32,
                             skip Bool
                         )
-                        , WATERMARK AS ($event_time(`ts`) - Interval('PT3S'))
+                        , WATERMARK = $event_time(`ts`) - Interval('PT3S')
                         , WATERMARK_GRANULARITY = 'PT2S'
                         {idle_clause}
                     )            ;

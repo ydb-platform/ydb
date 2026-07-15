@@ -1,0 +1,134 @@
+import "ydb/core/protos/counters.proto";
+
+package NKikimr.NDataShard;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+/**
+ * The name of the tablet, which is used for looking up source counter values
+ * for all metrics defined in this file.
+ */
+option (SourceCountersTabletTypeName) = "DataShard";
+
+/**
+ * Public detailed metrics (GAUGE), mapped from DataShard low level metrics.
+ */
+enum ESimpleDetailedCounters {
+    COUNTER_DATASHARD_ROW_COUNT = 0 [(CounterOpts) = {
+        Name: "table.datashard.row_count",
+        SourceCounters: {Name: "SUM(DbUniqueRowsTotal)", Category: SCC_EXECUTOR},
+    }];
+
+    COUNTER_DATASHARD_SIZE_BYTES = 1 [(CounterOpts) = {
+        Name: "table.datashard.size_bytes",
+        SourceCounters: {Name: "SUM(DbUniqueDataBytes)", Category: SCC_EXECUTOR},
+    }];
+}
+
+/**
+ * Public detailed metrics (RATE), mapped from DataShard low level metrics.
+ */
+enum ECumulativeDetailedCounters {
+    COUNTER_DATASHARD_WRITE_ROWS = 0 [(CounterOpts) = {
+        Name: "table.datashard.write.rows",
+        SourceCounters: {Name: "DataShard/EngineHostRowUpdates", Category: SCC_TABLET},
+    }];
+
+    COUNTER_DATASHARD_WRITE_BYTES = 1 [(CounterOpts) = {
+        Name: "table.datashard.write.bytes",
+        SourceCounters: {Name: "DataShard/EngineHostRowUpdateBytes", Category: SCC_TABLET},
+    }];
+
+    COUNTER_DATASHARD_READ_ROWS = 2 [(CounterOpts) = {
+        Name: "table.datashard.read.rows",
+        SourceCounters: {Name: "DataShard/EngineHostRowReads", Category: SCC_TABLET},
+        SourceCounters: {Name: "DataShard/EngineHostRangeReadRows", Category: SCC_TABLET},
+    }];
+
+    COUNTER_DATASHARD_READ_BYTES = 3 [(CounterOpts) = {
+        Name: "table.datashard.read.bytes",
+        SourceCounters: {Name: "DataShard/EngineHostRowReadBytes", Category: SCC_TABLET},
+        SourceCounters: {Name: "DataShard/EngineHostRangeReadBytes", Category: SCC_TABLET},
+    }];
+
+    COUNTER_DATASHARD_ERASE_ROWS = 4 [(CounterOpts) = {
+        Name: "table.datashard.erase.rows",
+        SourceCounters: {Name: "DataShard/EngineHostRowErases", Category: SCC_TABLET},
+    }];
+
+    COUNTER_DATASHARD_ERASE_BYTES = 5 [(CounterOpts) = {
+        Name: "table.datashard.erase.bytes",
+        SourceCounters: {Name: "DataShard/EngineHostRowEraseBytes", Category: SCC_TABLET},
+    }];
+
+    COUNTER_DATASHARD_BULK_UPSERT_ROWS = 6 [(CounterOpts) = {
+        Name: "table.datashard.bulk_upsert.rows",
+        SourceCounters: {Name: "DataShard/UploadRows", Category: SCC_TABLET},
+    }];
+
+    COUNTER_DATASHARD_BULK_UPSERT_BYTES = 7 [(CounterOpts) = {
+        Name: "table.datashard.bulk_upsert.bytes",
+        SourceCounters: {Name: "DataShard/UploadRowsBytes", Category: SCC_TABLET},
+    }];
+
+    COUNTER_DATASHARD_SCAN_ROWS = 8 [(CounterOpts) = {
+        Name: "table.datashard.scan.rows",
+        SourceCounters: {Name: "DataShard/ScannedRows", Category: SCC_TABLET},
+    }];
+
+    COUNTER_DATASHARD_SCAN_BYTES = 9 [(CounterOpts) = {
+        Name: "table.datashard.scan.bytes",
+        SourceCounters: {Name: "DataShard/ScannedBytes", Category: SCC_TABLET},
+    }];
+
+    COUNTER_DATASHARD_CACHE_HIT_BYTES = 10 [(CounterOpts) = {
+        Name: "table.datashard.cache_hit.bytes",
+        SourceCounters: {Name: "TxCachedBytes", Category: SCC_EXECUTOR},
+    }];
+
+    COUNTER_DATASHARD_CACHE_MISS_BYTES = 11 [(CounterOpts) = {
+        Name: "table.datashard.cache_miss.bytes",
+        SourceCounters: {Name: "TxReadBytes", Category: SCC_EXECUTOR},
+    }];
+
+    COUNTER_DATASHARD_CONSUMED_CPU_MICROSECONDS = 12 [(CounterOpts) = {
+        Name: "table.datashard.consumed_cpu_us",
+        SourceCounters: {Name: "ConsumedCPU", Category: SCC_EXECUTOR},
+    }];
+}
+
+/**
+ * Public detailed metrics (HIST), mapped from DataShard low level metrics.
+ */
+enum EPercentileDetailedCounters {
+    /**
+     * @warning The number and sequence of the bucket entries here must match
+     *          the number and the sequence of the bucket entries defined
+     *          for the "HIST(ConsumedCPU)" DataShard Executor metric,
+     *          which is defined in FLAT_EXECUTOR_CONSUMED_CPU_RANGES.
+     *
+     *          The actual bucket boundaries do not need to match because the Executor
+     *          uses different units for measuring the CPU consumption. For example,
+     *          the Executor uses 500000 for the 50% CPU consumption.
+     *          To account for the difference in units, the code transfers bucket
+     *          values "as is" without any recalculation, for example, the "500000" bucket
+     *          of the "HIST(ConsumedCPU)" metric is transferred to the "50" bucket
+     *          of the "table.datashard.used_core_percents" metric. This achieves
+     *          the correct result as long as the buckets are defined in the same order.
+     */
+    COUNTER_DATASHARD_USED_CORE_PERCENTS = 0 [(CounterOpts) = {
+        Name: "table.datashard.used_core_percents",
+        Ranges: { Value: 0,   Name: "0%"   },
+        Ranges: { Value: 10,  Name: "10%"  },
+        Ranges: { Value: 20,  Name: "20%"  },
+        Ranges: { Value: 30,  Name: "30%"  },
+        Ranges: { Value: 40,  Name: "40%"  },
+        Ranges: { Value: 50,  Name: "50%"  },
+        Ranges: { Value: 60,  Name: "60%"  },
+        Ranges: { Value: 70,  Name: "70%"  },
+        Ranges: { Value: 80,  Name: "80%"  },
+        Ranges: { Value: 90,  Name: "90%"  },
+        Ranges: { Value: 100, Name: "100%" },
+        SourceCounters: {Name: "HIST(ConsumedCPU)", Category: SCC_EXECUTOR},
+    }];
+}

@@ -19,6 +19,9 @@ SET(ORIG_SOURCES
     mkql_block_decimal.cpp
     mkql_block_exists.cpp
     mkql_block_getelem.cpp
+    mkql_block_guess.cpp
+    mkql_block_variant.cpp
+    mkql_block_way.cpp
     mkql_block_if.cpp
     mkql_block_just.cpp
     mkql_block_logical.cpp
@@ -76,6 +79,7 @@ SET(ORIG_SOURCES
     mkql_length.cpp
     mkql_linear.cpp
     mkql_listfromrange.cpp
+    mkql_list_join.cpp
     mkql_logical.cpp
     mkql_lookup.cpp
     mkql_map.cpp
@@ -92,6 +96,7 @@ SET(ORIG_SOURCES
     mkql_next_value.cpp
     mkql_nop.cpp
     mkql_now.cpp
+    mkql_runtime_feature.cpp
     mkql_null.cpp
     mkql_pickle.cpp
     mkql_prepend.cpp
@@ -139,6 +144,8 @@ SET(ORIG_SOURCES
     mkql_wide_filter.cpp
     mkql_wide_map.cpp
     mkql_wide_top_sort.cpp
+    mkql_window_range_pg_caller.cpp
+    mkql_window_range_pg_caller.h
     mkql_withcontext.cpp
     mkql_zip.cpp
 )
@@ -167,6 +174,7 @@ PEERDIR(
     yql/essentials/types/binary_json
     yql/essentials/minikql
     yql/essentials/minikql/arrow
+    yql/essentials/minikql/runtime_settings
     yql/essentials/core/sql_types
     yql/essentials/public/udf/arrow
     yql/essentials/parser/pg_wrapper/interface

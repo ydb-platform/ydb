@@ -2,3 +2,22 @@ dstool -e <endpoint> --mon-port <mon_port> group take-snapshot --group-ids=0 --o
 Exit Status: 0
 ===== stderr =====
 WARNING: endpoint for http requests is not specified, grpc endpoints will be used instead with conversion to http. You can specify additional endpoints with "http" or "https" protocol.
+
+===== http_calls =====
+GET viewer/json/sysinfo?enums=1&merge=0&node_id=1%2C2%2C3%2C4%2C5%2C6%2C7%2C8
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
+GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID

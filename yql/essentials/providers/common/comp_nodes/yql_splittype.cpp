@@ -5,18 +5,20 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 template <NYql::ETypeAnnotationKind Kind>
 class TSplitTypeWrapper: public TMutableComputationNode<TSplitTypeWrapper<Kind>> {
-    typedef TMutableComputationNode<TSplitTypeWrapper<Kind>> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TSplitTypeWrapper<Kind>>;
 
 public:
     TSplitTypeWrapper(TComputationMutables& mutables, IComputationNode* handle, ui32 exprCtxMutableIndex, NYql::TPosition pos)
         : TBaseComputation(mutables)
         , Handle_(handle)
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
-        , Pos_(pos)
+        , Pos_(std::move(pos))
     {
     }
 

@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         - Create resource pool with zero CPU.
         - Enable or disable Scheduler on start.
         - Run query inside this pool.
-        - Query shouldn't timeout or should be cancelled by timeout.
+        - Query shouldn't timeout or shouldn't be cancelled by timeout.
      */
     Y_UNIT_TEST_TWIN(FeatureFlagOnStart, Enabled) {
         auto ydb = TYdbSetupSettings()

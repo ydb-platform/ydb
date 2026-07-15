@@ -3,16 +3,13 @@ RECURSE(
     common
     counters
     expr_nodes
-    global_worker_manager
     helper
     interface
-    metrics
     mkql
     opt
     planner
     provider
     runtime
-    scheduler
     task_runner
     task_runner_actor
     worker_manager

@@ -10,8 +10,16 @@
 #include <util/string/printf.h>
 
 #ifdef _linux_
-#   include <sys/ioctl.h>
-#   include <linux/fs.h>
+#include <sys/ioctl.h>
+
+#if !defined(_musl_)
+#include <linux/fs.h>
+#endif
+
+#ifndef BLKDISCARD
+#define BLKDISCARD _IO(0x12,119)
+#endif
+
 #endif
 
 namespace NKikimr {

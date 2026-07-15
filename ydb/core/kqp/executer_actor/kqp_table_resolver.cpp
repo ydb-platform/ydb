@@ -105,13 +105,26 @@ private:
                         stageMeta.TableKind = ETableKind::Olap;
                     }
 
-                    auto& stage = stageMeta.GetStage(stageId);
-                    AFL_ENSURE(stage.GetSinks().size() == 1);
-                    const auto& sink = stage.GetSinks(0);
+                    const auto& stage = stageMeta.GetStage(stageId);
+                    const NKqpProto::TKqpInternalSink* intSinkPtr = nullptr;
 
-                    AFL_ENSURE(sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                    if (stage.GetSinks().size() == 1) {
+                        AFL_ENSURE(stage.OutputTransformsSize() == 0);
+                        const auto& sink = stage.GetSinks(0);
+                        AFL_ENSURE(sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink);
+                        intSinkPtr = &sink.GetInternalSink();
+                    } else if (stage.OutputTransformsSize() == 1) {
+                        AFL_ENSURE(stage.GetSinks().size() == 0);
+                        const auto& transform = stage.GetOutputTransforms(0);
+                        AFL_ENSURE(transform.GetTypeCase() == NKqpProto::TKqpOutputTransform::kInternalSink);
+                        intSinkPtr = &transform.GetInternalSink();
+                    } else {
+                        YQL_ENSURE(false);
+                    }
+
+                    AFL_ENSURE(intSinkPtr->GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                     NKikimrKqp::TKqpTableSinkSettings settings;
-                    AFL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings));
+                    AFL_ENSURE(intSinkPtr->GetSettings().UnpackTo(&settings));
                     AFL_ENSURE(settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
                     settings.MutableTable()->SetOwnerId(entry.TableId.PathId.OwnerId);
                     settings.MutableTable()->SetTableId(entry.TableId.PathId.LocalPathId);
@@ -351,8 +364,10 @@ private:
         for (auto& pair : TasksGraph.GetStagesInfo()) {
             auto& stageInfo = pair.second;
 
-            if (!stageInfo.Meta.ShardOperations.empty()) {
-                for (const auto& operation : stageInfo.Meta.ShardOperations) {
+            if (!stageInfo.Meta.ShardOperations.empty() || !stageInfo.Meta.AccessCheckOperations.empty()) {
+                auto ops = stageInfo.Meta.ShardOperations;
+                ops.insert(stageInfo.Meta.AccessCheckOperations.begin(), stageInfo.Meta.AccessCheckOperations.end());
+                for (const auto& operation : ops) {
                     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
                     if (tableInfo) {
                         if (ResolvingNamesFinished) {
@@ -395,13 +410,13 @@ private:
                                 }
                             };
 
-                            addRequest(stageInfo.Meta.ShardKey);
+                            addRequest(std::move(stageInfo.Meta.ShardKey));
                             switch (operation) {
                                 case TKeyDesc::ERowOperation::Update:
                                 case TKeyDesc::ERowOperation::Erase:
                                     for (auto& indexMeta : stageInfo.Meta.IndexMetas) {
                                         indexMeta.ShardKey = ExtractKey(indexMeta.TableId, indexMeta.TableConstInfo->KeyColumnTypes, operation);
-                                        addRequest(indexMeta.ShardKey);
+                                        addRequest(std::move(indexMeta.ShardKey));
                                     }
                                     break;
                                 default:

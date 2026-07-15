@@ -6,6 +6,7 @@ PROTO_NAMESPACE(yt)
 
 SRCS(
     adjusted_exponential_moving_average_ut.cpp
+    absolute_normalized_path_ut.cpp
     algorithm_helpers_ut.cpp
     arithmetic_formula_ut.cpp
     async_expiring_cache_ut.cpp

@@ -870,6 +870,31 @@ BELONGS ya.make
         include/boost/math/special_functions/detail/unchecked_bernoulli.hpp [3:8]
         include/boost/math/special_functions/polygamma.hpp [3:8]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 65ff32d56aa9e80e51cb51e748a5ed78
+BELONGS ya.make
+    License text:
+        //           Copyright Maksym Zhelyeznyakov 2025-2026.
+        // Distributed under the Boost Software License, Version 1.0.
+        //      (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/math/differentiation/autodiff_reverse.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_basic_operator_expressions.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_basic_ops_et.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_basic_ops_no_et.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_comparison_operator_overloads.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_erf_overloads.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_expression_template_base.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_helper_functions.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_memory_management.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_stl_et.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_stl_expressions.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_stl_no_et.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_utilities.hpp [1:3]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 67ee71e2037ec56312f08aad00dce114
 BELONGS ya.make
     License text:
@@ -1331,19 +1356,15 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/math/differentiation/autodiff_reverse.hpp [1:3]
-        include/boost/math/differentiation/detail/reverse_mode_autodiff_basic_operator_expressions.hpp [1:3]
-        include/boost/math/differentiation/detail/reverse_mode_autodiff_basic_ops_et.hpp [1:3]
-        include/boost/math/differentiation/detail/reverse_mode_autodiff_basic_ops_no_et.hpp [1:3]
-        include/boost/math/differentiation/detail/reverse_mode_autodiff_comparison_operator_overloads.hpp [1:3]
-        include/boost/math/differentiation/detail/reverse_mode_autodiff_erf_overloads.hpp [1:3]
-        include/boost/math/differentiation/detail/reverse_mode_autodiff_expression_template_base.hpp [1:3]
-        include/boost/math/differentiation/detail/reverse_mode_autodiff_helper_functions.hpp [1:3]
-        include/boost/math/differentiation/detail/reverse_mode_autodiff_memory_management.hpp [1:3]
-        include/boost/math/differentiation/detail/reverse_mode_autodiff_stl_et.hpp [1:3]
-        include/boost/math/differentiation/detail/reverse_mode_autodiff_stl_expressions.hpp [1:3]
-        include/boost/math/differentiation/detail/reverse_mode_autodiff_stl_no_et.hpp [1:3]
-        include/boost/math/differentiation/detail/reverse_mode_autodiff_utilities.hpp [1:3]
+        include/boost/math/optimization/detail/differentiable_opt_utilties.hpp [1:3]
+        include/boost/math/optimization/detail/gradient_opt_base.hpp [1:3]
+        include/boost/math/optimization/detail/line_search_policies.hpp [1:3]
+        include/boost/math/optimization/detail/rdiff_optimization_policies.hpp [1:3]
+        include/boost/math/optimization/gradient_descent.hpp [1:3]
+        include/boost/math/optimization/gradient_optimizers.hpp [1:3]
+        include/boost/math/optimization/lbfgs.hpp [1:3]
+        include/boost/math/optimization/minimizer.hpp [1:3]
+        include/boost/math/optimization/nesterov.hpp [1:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 9d9d2bd1a142ef82341cdd0a9e7fa8ca
 BELONGS ya.make

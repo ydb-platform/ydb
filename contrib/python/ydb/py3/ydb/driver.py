@@ -6,7 +6,6 @@ from typing import Any, List, Optional, Tuple, Type, TYPE_CHECKING
 
 from . import credentials as credentials_impl, table, scheme, pool
 from . import tracing
-from . import iam
 from . import _utilities
 
 if TYPE_CHECKING:
@@ -50,6 +49,11 @@ def credentials_from_env_variables(tracer: Optional[tracing.Tracer] = None) -> "
 
             return ydb.iam.ServiceAccountCredentials.from_file(service_account_key_file)
 
+        static_login = os.getenv("YDB_USER")
+        if static_login is not None:
+            ctx.trace({"credentials.static": True})
+            return ydb.StaticCredentials.from_user_password(static_login, os.getenv("YDB_PASSWORD", ""))
+
         anonymous_credetials = os.getenv("YDB_ANONYMOUS_CREDENTIALS", "0") == "1"
         if anonymous_credetials:
             ctx.trace({"credentials.anonymous": True})
@@ -58,6 +62,7 @@ def credentials_from_env_variables(tracer: Optional[tracing.Tracer] = None) -> "
         metadata_credentials = os.getenv("YDB_METADATA_CREDENTIALS", "0") == "1"
         if metadata_credentials:
             ctx.trace({"credentials.metadata": True})
+            from . import iam
 
             return iam.MetadataUrlCredentials(tracer=tracer)
 
@@ -79,6 +84,8 @@ def credentials_from_env_variables(tracer: Optional[tracing.Tracer] = None) -> "
                 "credentials.metadata": True,
             }
         )
+        from . import iam
+
         return iam.MetadataUrlCredentials(tracer=tracer)
 
 
@@ -105,6 +112,8 @@ class DriverConfig(object):
         "discovery_request_timeout",
         "compression",
         "disable_discovery",
+        "detect_local_dc",
+        "_additional_sdk_headers",
     )
 
     def __init__(
@@ -130,6 +139,9 @@ class DriverConfig(object):
         discovery_request_timeout: int = 10,
         compression: Optional[grpc.Compression] = None,
         disable_discovery: bool = False,
+        detect_local_dc: bool = False,
+        *,
+        _additional_sdk_headers: Tuple[str, ...] = (),
     ) -> None:
         """
         A driver config to initialize a driver instance
@@ -151,6 +163,10 @@ class DriverConfig(object):
         :param grpc_lb_policy_name: A load balancing policy to be used for discovery channel construction. Default value is `round_round`
         :param discovery_request_timeout: A default timeout to complete the discovery. The default value is 10 seconds.
         :param disable_discovery: If True, endpoint discovery is disabled and only the start endpoint is used for all requests.
+        :param detect_local_dc: If True, detect nearest datacenter using TCP latency measurement instead of using\
+        server-provided self_location. **Note**: This option only affects endpoint selection when use_all_nodes=False.\
+        When use_all_nodes=True (default), all endpoints are used regardless of detected location.
+        :param _additional_sdk_headers: Reserved for SDK integrations (e.g. dbapi, sqlalchemy). Do not use in application code.
 
         """
         self.endpoint = endpoint
@@ -179,6 +195,8 @@ class DriverConfig(object):
         self.discovery_request_timeout = discovery_request_timeout
         self.compression = compression
         self.disable_discovery = disable_discovery
+        self.detect_local_dc = detect_local_dc
+        self._additional_sdk_headers = _additional_sdk_headers
 
     def set_database(self, database: str) -> "DriverConfig":
         self.database = database

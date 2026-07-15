@@ -9,6 +9,7 @@
 #include <yql/essentials/core/yql_user_data.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <utility>
 
 namespace NYql::NPureCalc {
@@ -34,6 +35,7 @@ struct TWorkerFactoryOptions {
     bool UseWorkerPool;
     TInternalProgramSettings InternalSettings;
     TString IssueReportTarget;
+    bool RemoveUnsupportedPragmas;
 
     TWorkerFactoryOptions(
         IProgramFactoryPtr Factory,
@@ -56,7 +58,8 @@ struct TWorkerFactoryOptions {
         bool useSystemColumns,
         bool useWorkerPool,
         const TInternalProgramSettings& internalSettings,
-        const TString& issueReportTarget)
+        TString issueReportTarget,
+        bool removeUnsupportedPragmas)
         : Factory(std::move(Factory))
         , InputSpec(InputSpec)
         , OutputSpec(OutputSpec)
@@ -77,7 +80,8 @@ struct TWorkerFactoryOptions {
         , UseSystemColumns(useSystemColumns)
         , UseWorkerPool(useWorkerPool)
         , InternalSettings(internalSettings)
-        , IssueReportTarget(issueReportTarget)
+        , IssueReportTarget(std::move(issueReportTarget))
+        , RemoveUnsupportedPragmas(removeUnsupportedPragmas)
     {
     }
 };
@@ -109,8 +113,10 @@ protected:
     bool UseSystemColumns_;
     bool UseWorkerPool_;
     TLangVersion LangVer_;
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
     TVector<THolder<IWorker>> WorkerPool_;
     const TString IssueReportTarget_;
+    bool RemoveUnsupportedPragmas_;
 
 public:
     TWorkerFactory(TWorkerFactoryOptions, EProcessorMode);

@@ -1,0 +1,41 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config '"SQL" '"0"))
+(let world (Configure! world config '"WindowNewPipeline"))
+
+(let optDate (OptionalType (DataType 'Date)))
+(let data (AsList
+    (AsStruct '('"a" (Just (Date '"17494"))) '('"b" (Int32 '1)) '('"count" (Uint64 '3)))
+    (AsStruct '('"a" (Just (Date '"17495"))) '('"b" (Int32 '1)) '('"count" (Uint64 '4)))
+    (AsStruct '('"a" (Just (Date '"17496"))) '('"b" (Int32 '1)) '('"count" (Uint64 '5)))
+    (AsStruct '('"a" (Just (Date '"17497"))) '('"b" (Int32 '1)) '('"count" (Uint64 '6)))
+    (AsStruct '('"a" (Nothing optDate)) '('"b" (Int32 '1)) '('"count" (Uint64 '1)))
+    (AsStruct '('"a" (Nothing optDate)) '('"b" (Int32 '1)) '('"count" (Uint64 '2)))
+))
+
+(let rowType (StructType '('"a" optDate) '('"b" (DataType 'Int32)) '('"count" (DataType 'Uint64))))
+(let sortTraits (SortTraits (ListType rowType) (Bool 'true) (lambda '(row) (Member row '"a"))))
+
+(let countTraits (WindowTraits rowType
+    (lambda '(row) (Uint64 '1))
+    (lambda '(row state) (Inc state))
+    (lambda '(row state) (Void))
+    (lambda '(state) state)
+    (Uint64 '0)
+))
+
+(let result (CalcOverWindow data '('"b") sortTraits '((WinOnRows (Void) '('Count0 countTraits)))))
+
+(let checked (Map result (lambda '(row)
+    (block '(
+        (let actual (Member row 'Count0))
+        (let expected (Member row '"count"))
+        (return (Ensure actual (== actual expected) (SafeCast actual (DataType 'String))))
+    ))
+)))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) checked '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

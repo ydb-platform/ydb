@@ -3,6 +3,9 @@
 #include <yql/essentials/public/purecalc/purecalc.h>
 
 namespace NYql::NPureCalc {
+
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 class TFakeInputSpec: public TInputSpecBase {
 public:
     TVector<NYT::TNode> Schemas = {NYT::TNode::CreateList()};
@@ -13,6 +16,8 @@ public:
     }
 };
 
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 class TFakeOutputSpec: public TOutputSpecBase {
 public:
     NYT::TNode Schema = NYT::TNode::CreateList();

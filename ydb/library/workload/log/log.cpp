@@ -78,7 +78,9 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TLogGenerator::GetSupportedWorkl
     TVector<TWorkloadType> result;
     result.emplace_back(static_cast<int>(EType::Insert), "insert", "Insert random rows into table near current ts");
     result.emplace_back(static_cast<int>(EType::Upsert), "upsert", "Upsert random rows into table near current ts");
-    result.emplace_back(static_cast<int>(EType::BulkUpsert), "bulk_upsert", "Bulk upsert random rows into table near current ts");
+    result.emplace_back(static_cast<int>(EType::BulkUpsert), "bulk-upsert", "Bulk upsert random rows into table near current ts");
+    // TODO: remove bulk_upsert alias in next major release
+    result.back().Aliases = {"bulk_upsert"};
     result.emplace_back(static_cast<int>(EType::Select), "select", "Select some agregated queries");
     result.emplace_back(static_cast<int>(EType::Delete), "delete", "Delete random rows from table near current ts");
     return result;

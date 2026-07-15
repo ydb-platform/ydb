@@ -2,6 +2,8 @@
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -11,41 +13,19 @@ Y_UNIT_TEST_LLVM(TestConcatKeyToItems) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
-    const auto tupleType = pb.NewTupleType({dataType, dataType});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TStringBuf, TStringBuf>>{
+                                                               {"key one", "very long value 1"},
+                                                               {"key two", "very long value 2"},
+                                                               {"key two", "very long value 3"},
+                                                               {"very long key one", "very long value 4"},
+                                                               {"very long key two", "very long value 5"},
+                                                               {"very long key two", "very long value 6"},
+                                                               {"very long key two", "very long value 7"},
+                                                               {"very long key two", "very long value 8"},
+                                                               {"very long key two", "very long value 9"},
+                                                           });
 
-    const auto keyOne = pb.NewDataLiteral<NUdf::EDataSlot::String>("key one");
-    const auto keyTwo = pb.NewDataLiteral<NUdf::EDataSlot::String>("key two");
-
-    const auto longKeyOne = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long key one");
-    const auto longKeyTwo = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long key two");
-
-    const auto value1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 1");
-    const auto value2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 2");
-    const auto value3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 3");
-    const auto value4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 4");
-    const auto value5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 5");
-    const auto value6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 6");
-    const auto value7 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 7");
-    const auto value8 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 8");
-    const auto value9 = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 9");
-
-    const auto data1 = pb.NewTuple(tupleType, {keyOne, value1});
-
-    const auto data2 = pb.NewTuple(tupleType, {keyTwo, value2});
-    const auto data3 = pb.NewTuple(tupleType, {keyTwo, value3});
-
-    const auto data4 = pb.NewTuple(tupleType, {longKeyOne, value4});
-
-    const auto data5 = pb.NewTuple(tupleType, {longKeyTwo, value5});
-    const auto data6 = pb.NewTuple(tupleType, {longKeyTwo, value6});
-    const auto data7 = pb.NewTuple(tupleType, {longKeyTwo, value7});
-    const auto data8 = pb.NewTuple(tupleType, {longKeyTwo, value8});
-    const auto data9 = pb.NewTuple(tupleType, {longKeyTwo, value9});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
-
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.Substring(items.front(), pb.Sub(pb.Size(items.front()), pb.NewDataLiteral<ui32>(4U)), pb.NewDataLiteral<ui32>(4U))}; },
                                                                   [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) { return pb.AggrNotEquals(keys.front(), items.front()); },
@@ -55,131 +35,66 @@ Y_UNIT_TEST_LLVM(TestConcatKeyToItems) {
                                                    [&](TRuntimeNode::TList items) { return items.front(); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "very long value 1 one");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "very long value 2 two");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "very long value 3 two");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "very long value 4 one");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "very long value 5 two");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "very long value 6 two");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "very long value 7 two");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "very long value 8 two");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "very long value 9 two");
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{
+                                                          "very long value 1 one",
+                                                          "very long value 2 two",
+                                                          "very long value 3 two",
+                                                          "very long value 4 one",
+                                                          "very long value 5 two",
+                                                          "very long value 6 two",
+                                                          "very long value 7 two",
+                                                          "very long value 8 two",
+                                                          "very long value 9 two",
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestCollectKeysOnly) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
-    const auto tupleType = pb.NewTupleType({dataType, dataType});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TStringBuf, TStringBuf>>{
+                                                               {"key one", "value 1"},
+                                                               {"key two", "value 2"},
+                                                               {"key two", "value 3"},
+                                                               {"very long key one", "value 4"},
+                                                               {"very long key two", "value 5"},
+                                                               {"very long key two", "value 6"},
+                                                               {"very long key two", "value 7"},
+                                                               {"very long key two", "value 8"},
+                                                               {"very long key two", "value 9"},
+                                                           });
 
-    const auto keyOne = pb.NewDataLiteral<NUdf::EDataSlot::String>("key one");
-    const auto keyTwo = pb.NewDataLiteral<NUdf::EDataSlot::String>("key two");
-
-    const auto longKeyOne = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long key one");
-    const auto longKeyTwo = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long key two");
-
-    const auto value1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 1");
-    const auto value2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 2");
-    const auto value3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 3");
-    const auto value4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 4");
-    const auto value5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 5");
-    const auto value6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 6");
-    const auto value7 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 7");
-    const auto value8 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 8");
-    const auto value9 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 9");
-
-    const auto data1 = pb.NewTuple(tupleType, {keyOne, value1});
-
-    const auto data2 = pb.NewTuple(tupleType, {keyTwo, value2});
-    const auto data3 = pb.NewTuple(tupleType, {keyTwo, value3});
-
-    const auto data4 = pb.NewTuple(tupleType, {longKeyOne, value4});
-
-    const auto data5 = pb.NewTuple(tupleType, {longKeyTwo, value5});
-    const auto data6 = pb.NewTuple(tupleType, {longKeyTwo, value6});
-    const auto data7 = pb.NewTuple(tupleType, {longKeyTwo, value7});
-    const auto data8 = pb.NewTuple(tupleType, {longKeyTwo, value8});
-    const auto data9 = pb.NewTuple(tupleType, {longKeyTwo, value9});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
-
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                   [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) { return pb.AggrNotEquals(keys.front(), items.front()); },
-                                                                  [&](TRuntimeNode::TList keys, TRuntimeNode) { return pb.ExpandMap(pb.ToFlow(pb.NewOptional(keys.front())), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+                                                                  [&](TRuntimeNode::TList keys, TRuntimeNode) { return pb.ExpandMap(pb.ToFlow(pb.NewOptional(keys.front()), {}), [&](TRuntimeNode item) -> TRuntimeNode::TList {
                                                                                                                     return {item};
                                                                                                                 }); }),
                                                    [&](TRuntimeNode::TList items) { return items.front(); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "key one");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "key two");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "very long key one");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "very long key two");
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{
+                                                          "key one", "key two", "very long key one", "very long key two"});
 }
 
 Y_UNIT_TEST_LLVM(TestGetPart) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
-    const auto tupleType = pb.NewTupleType({dataType, dataType});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TStringBuf, TStringBuf>>{
+                                                               {"key one", "value 1"},
+                                                               {"key two", "value 2"},
+                                                               {"key two", "value 3"},
+                                                               {"very long key one", "value 4"},
+                                                               {"very long key one", "value 5"},
+                                                               {"very long key one", "value 6"},
+                                                               {"very long key one", "value 7"},
+                                                               {"very long key one", "value 8"},
+                                                               {"very long key two", "value 9"},
+                                                           });
 
-    const auto keyOne = pb.NewDataLiteral<NUdf::EDataSlot::String>("key one");
-    const auto keyTwo = pb.NewDataLiteral<NUdf::EDataSlot::String>("key two");
-
-    const auto longKeyOne = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long key one");
-    const auto longKeyTwo = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long key two");
-
-    const auto value1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 1");
-    const auto value2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 2");
-    const auto value3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 3");
-    const auto value4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 4");
-    const auto value5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 5");
-    const auto value6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 6");
-    const auto value7 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 7");
-    const auto value8 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 8");
-    const auto value9 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 9");
-
-    const auto data1 = pb.NewTuple(tupleType, {keyOne, value1});
-
-    const auto data2 = pb.NewTuple(tupleType, {keyTwo, value2});
-    const auto data3 = pb.NewTuple(tupleType, {keyTwo, value3});
-
-    const auto data4 = pb.NewTuple(tupleType, {longKeyOne, value4});
-    const auto data5 = pb.NewTuple(tupleType, {longKeyOne, value5});
-    const auto data6 = pb.NewTuple(tupleType, {longKeyOne, value6});
-    const auto data7 = pb.NewTuple(tupleType, {longKeyOne, value7});
-    const auto data8 = pb.NewTuple(tupleType, {longKeyOne, value8});
-
-    const auto data9 = pb.NewTuple(tupleType, {longKeyTwo, value9});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
-
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                   [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) { return pb.AggrNotEquals(keys.front(), items.front()); },
@@ -187,228 +102,111 @@ Y_UNIT_TEST_LLVM(TestGetPart) {
                                                    [&](TRuntimeNode::TList items) { return items.back(); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 3");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 5");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 6");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 7");
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{
+                                                          "value 3", "value 5", "value 6", "value 7"});
 }
 
 Y_UNIT_TEST_LLVM(TestSwitchByBoolFieldAndDontUseKey) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
-    const auto boolType = pb.NewDataType(NUdf::TDataType<bool>::Id);
-    const auto tupleType = pb.NewTupleType({pb.NewOptionalType(dataType), dataType, boolType});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TMaybe<TStringBuf>, TStringBuf, bool>>{
+                                                               {{}, "value 1", true},
+                                                               {"one", "value 2", false},
+                                                               {"two", "value 3", false},
+                                                               {{}, "value 4", true},
+                                                               {"one", "value 5", false},
+                                                               {"two", "value 6", false},
+                                                               {{}, "value 7", false},
+                                                               {"one", "value 8", false},
+                                                               {"two", "value 9", true},
+                                                           });
 
-    const auto key0 = pb.NewEmptyOptional(pb.NewOptionalType(dataType));
-    const auto key1 = pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("one"));
-    const auto key2 = pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("two"));
+    const auto landmine = NTest::ConvertValueToLiteralNode(pb, TStringBuf("ACHTUNG MINEN!"));
 
-    const auto trueVal = pb.NewDataLiteral<bool>(true);
-    const auto falseVal = pb.NewDataLiteral<bool>(false);
-
-    const auto value1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 1");
-    const auto value2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 2");
-    const auto value3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 3");
-    const auto value4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 4");
-    const auto value5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 5");
-    const auto value6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 6");
-    const auto value7 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 7");
-    const auto value8 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 8");
-    const auto value9 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 9");
-
-    const auto data1 = pb.NewTuple(tupleType, {key0, value1, trueVal});
-    const auto data2 = pb.NewTuple(tupleType, {key1, value2, falseVal});
-    const auto data3 = pb.NewTuple(tupleType, {key2, value3, falseVal});
-    const auto data4 = pb.NewTuple(tupleType, {key0, value4, trueVal});
-    const auto data5 = pb.NewTuple(tupleType, {key1, value5, falseVal});
-    const auto data6 = pb.NewTuple(tupleType, {key2, value6, falseVal});
-    const auto data7 = pb.NewTuple(tupleType, {key0, value7, falseVal});
-    const auto data8 = pb.NewTuple(tupleType, {key1, value8, falseVal});
-    const auto data9 = pb.NewTuple(tupleType, {key2, value9, trueVal});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
-
-    const auto landmine = pb.NewDataLiteral<NUdf::EDataSlot::String>("ACHTUNG MINEN!");
-
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {pb.Unwrap(items.front(), landmine, __FILE__, __LINE__, 0)}; },
                                                                   [&](TRuntimeNode::TList, TRuntimeNode::TList items) { return items.back(); },
-                                                                  [&](TRuntimeNode::TList, TRuntimeNode input) { return pb.Take(input, pb.NewDataLiteral<ui64>(2ULL)); }),
+                                                                  [&](TRuntimeNode::TList, TRuntimeNode input) { return pb.Take(input, NTest::ConvertValueToLiteralNode(pb, ui64(2ULL))); }),
                                                    [&](TRuntimeNode::TList items) { return items[1U]; }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 1");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 2");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 4");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 5");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 9");
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{
+                                                          "value 1", "value 2", "value 4", "value 5", "value 9"});
 }
 
 Y_UNIT_TEST_LLVM(TestCollectKeysIfPresent) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
-    const auto boolType = pb.NewDataType(NUdf::TDataType<bool>::Id);
-    const auto tupleType = pb.NewTupleType({pb.NewOptionalType(dataType), dataType, boolType});
+    const auto dataType = NTest::ConvertToMinikqlType<TStringBuf>(pb);
 
-    const auto key0 = pb.NewEmptyOptional(pb.NewOptionalType(dataType));
-    const auto key1 = pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("one"));
-    const auto key2 = pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("two"));
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TMaybe<TStringBuf>, TStringBuf, bool>>{
+                                                               {"one", "value 1", true},
+                                                               {"one", "value 2", false},
+                                                               {"one", "value 3", false},
+                                                               {{}, "value 4", true},
+                                                               {{}, "value 5", false},
+                                                               {"two", "value 6", false},
+                                                               {{}, "value 7", false},
+                                                               {{}, "value 8", false},
+                                                               {{}, "value 9", true},
+                                                           });
 
-    const auto trueVal = pb.NewDataLiteral<bool>(true);
-    const auto falseVal = pb.NewDataLiteral<bool>(false);
-
-    const auto value1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 1");
-    const auto value2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 2");
-    const auto value3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 3");
-    const auto value4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 4");
-    const auto value5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 5");
-    const auto value6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 6");
-    const auto value7 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 7");
-    const auto value8 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 8");
-    const auto value9 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 9");
-
-    const auto data1 = pb.NewTuple(tupleType, {key1, value1, trueVal});
-    const auto data2 = pb.NewTuple(tupleType, {key1, value2, falseVal});
-    const auto data3 = pb.NewTuple(tupleType, {key1, value3, falseVal});
-    const auto data4 = pb.NewTuple(tupleType, {key0, value4, trueVal});
-    const auto data5 = pb.NewTuple(tupleType, {key0, value5, falseVal});
-    const auto data6 = pb.NewTuple(tupleType, {key2, value6, falseVal});
-    const auto data7 = pb.NewTuple(tupleType, {key0, value7, falseVal});
-    const auto data8 = pb.NewTuple(tupleType, {key0, value8, falseVal});
-    const auto data9 = pb.NewTuple(tupleType, {key0, value9, trueVal});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
-
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
                                                                   [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) { return pb.AggrNotEquals(keys.front(), items.front()); },
                                                                   [&](TRuntimeNode::TList keys, TRuntimeNode part) { return pb.IfPresent(keys,
-                                                                                                                                         [&](TRuntimeNode::TList keys) { return pb.ExpandMap(pb.ToFlow(pb.NewList(dataType, keys)), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }); },
+                                                                                                                                         [&](TRuntimeNode::TList keys) { return pb.ExpandMap(pb.ToFlow(pb.NewList(dataType, keys), {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }); },
                                                                                                                                          pb.WideMap(part, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1U]}; })); }),
                                                    [&](TRuntimeNode::TList items) { return items.front(); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "one");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 4");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 5");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "two");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 7");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 8");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 9");
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{
+                                                          "one", "value 4", "value 5", "two", "value 7", "value 8", "value 9"});
 }
 
 Y_UNIT_TEST_LLVM(TestConditionalByKeyPart) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
-    const auto boolType = pb.NewDataType(NUdf::TDataType<bool>::Id);
-    const auto tupleType = pb.NewTupleType({pb.NewOptionalType(dataType), dataType, boolType});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TMaybe<TStringBuf>, TStringBuf, bool>>{
+                                                               {"one", "value 1", true},
+                                                               {"one", "value 2", true},
+                                                               {"one", "value 3", false},
+                                                               {"one", "value 4", false},
+                                                               {"two", "value 5", false},
+                                                               {"two", "value 6", false},
+                                                               {"two", "value 7", true},
+                                                               {{}, "value 8", true},
+                                                               {{}, "value 9", false},
+                                                           });
 
-    const auto key0 = pb.NewEmptyOptional(pb.NewOptionalType(dataType));
-    const auto key1 = pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("one"));
-    const auto key2 = pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("two"));
-
-    const auto trueVal = pb.NewDataLiteral<bool>(true);
-    const auto falseVal = pb.NewDataLiteral<bool>(false);
-
-    const auto value1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 1");
-    const auto value2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 2");
-    const auto value3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 3");
-    const auto value4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 4");
-    const auto value5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 5");
-    const auto value6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 6");
-    const auto value7 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 7");
-    const auto value8 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 8");
-    const auto value9 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 9");
-
-    const auto data1 = pb.NewTuple(tupleType, {key1, value1, trueVal});
-    const auto data2 = pb.NewTuple(tupleType, {key1, value2, trueVal});
-    const auto data3 = pb.NewTuple(tupleType, {key1, value3, falseVal});
-    const auto data4 = pb.NewTuple(tupleType, {key1, value4, falseVal});
-    const auto data5 = pb.NewTuple(tupleType, {key2, value5, falseVal});
-    const auto data6 = pb.NewTuple(tupleType, {key2, value6, falseVal});
-    const auto data7 = pb.NewTuple(tupleType, {key2, value7, trueVal});
-    const auto data8 = pb.NewTuple(tupleType, {key0, value8, trueVal});
-    const auto data9 = pb.NewTuple(tupleType, {key0, value9, falseVal});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
-
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front(), items.back()}; },
                                                                   [&](TRuntimeNode::TList keys, TRuntimeNode::TList items) { return pb.Or({pb.AggrNotEquals(keys.front(), items.front()), pb.AggrNotEquals(keys.back(), items.back())}); },
                                                                   [&](TRuntimeNode::TList keys, TRuntimeNode part) { return pb.If(keys.back(),
-                                                                                                                                  pb.ExpandMap(pb.ToFlow(keys.front()), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
+                                                                                                                                  pb.ExpandMap(pb.ToFlow(keys.front(), {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
                                                                                                                                   pb.WideMap(part, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1U]}; })); }),
                                                    [&](TRuntimeNode::TList items) { return items.front(); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "one");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 3");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 4");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 5");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 6");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "two");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "value 9");
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{
+                                                          "one", "value 3", "value 4", "value 5", "value 6", "two", "value 9"});
 }
 
 Y_UNIT_TEST_LLVM(TestThinAllLambdas) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto tupleType = pb.NewTupleType({});
-
+    const auto tupleType = NTest::ConvertToMinikqlType<std::tuple<>>(pb);
     const auto data = pb.NewTuple({});
-
     const auto list = pb.NewList(tupleType, {data, data, data, data});
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChopper(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                [](TRuntimeNode) -> TRuntimeNode::TList { return {}; }),
                                                                   [](TRuntimeNode::TList items) { return items; },
                                                                   [&](TRuntimeNode::TList, TRuntimeNode::TList) { return pb.NewDataLiteral<bool>(true); },
@@ -416,14 +214,7 @@ Y_UNIT_TEST_LLVM(TestThinAllLambdas) {
                                                    [&](TRuntimeNode::TList) { return pb.NewTuple({}); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<>>{{}, {}, {}, {}});
 }
 
 class TTestProxyFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TTestProxyFlowWrapper> {
@@ -451,10 +242,7 @@ public:
         // Call GetState.
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto getStateFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TTestProxyFlowWrapper::GetState>());
-        const auto getStateType = FunctionType::get(ptrType, {self->getType(), statePtr->getType(), ctx.Ctx->getType()}, false);
-        const auto getStateFuncPtr = CastInst::Create(Instruction::IntToPtr, getStateFunc, PointerType::getUnqual(getStateType), "GetState", block);
-        const auto state = CallInst::Create(getStateType, getStateFuncPtr, {self, statePtr, ctx.Ctx}, "", block);
+        const auto state = EmitFunctionCall<&TTestProxyFlowWrapper::GetState>(ptrType, {self, statePtr, ctx.Ctx}, ctx, block);
 
         // Initialize temporary storage.
         const auto statusType = Type::getInt32Ty(context);
@@ -473,10 +261,7 @@ public:
         }
 
         // Call ProxyFetch.
-        const auto proxyFetchFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TTestProxyFlowState::ProxyFetch>());
-        const auto proxyFetchType = FunctionType::get(statusType, {state->getType(), ctx.Ctx->getType(), output->getType()}, false);
-        const auto proxyFetchFuncPtr = CastInst::Create(Instruction::IntToPtr, proxyFetchFunc, PointerType::getUnqual(proxyFetchType), "ProxyFetch", block);
-        const auto result = CallInst::Create(proxyFetchType, proxyFetchFuncPtr, {state, ctx.Ctx, output}, "", block);
+        const auto result = EmitFunctionCall<&TTestProxyFlowState::ProxyFetch>(statusType, {state, ctx.Ctx, output}, ctx, block);
 
         // Return the result.
         ICodegeneratorInlineWideNode::TGettersList getters(Width_);
@@ -555,30 +340,21 @@ Y_UNIT_TEST_LLVM(TestCodegenWithProxyFlow) {
     TSetup<LLVM> setup(GetNodeFactory());
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
-    const auto tupleType = pb.NewTupleType({dataType, dataType});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TStringBuf, TStringBuf>>{{"key one", "very long value 1"}});
 
-    const auto key = pb.NewDataLiteral<NUdf::EDataSlot::String>("key one");
-    const auto value = pb.NewDataLiteral<NUdf::EDataSlot::String>("very long value 1");
-    const auto list = pb.NewList(tupleType, {pb.NewTuple(tupleType, {key, value})});
-
-    const auto wideFlow = pb.ExpandMap(pb.ToFlow(list), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; });
+    const auto wideFlow = pb.ExpandMap(pb.ToFlow(list, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; });
     const auto wideChoppedFlow = pb.WideChopper(wideFlow,
                                                 [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return items; },
                                                 [&](TRuntimeNode::TList, TRuntimeNode::TList) { return pb.NewDataLiteral<bool>(true); },
                                                 [&](TRuntimeNode::TList keys, TRuntimeNode input) { return pb.ToFlow(pb.FromFlow(pb.WideMap(input, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
-                                                                                                        return {pb.AggrConcat(pb.AggrConcat(keys.front(), pb.NewDataLiteral<NUdf::EDataSlot::String>(": ")), items.back())};
-                                                                                                    }))); });
+                                                                                                        return {pb.AggrConcat(pb.AggrConcat(keys.front(), NTest::ConvertValueToLiteralNode(pb, TStringBuf(": "))), items.back())};
+                                                                                                    })),
+                                                                                                                     {}); });
     const auto wideProxyFlow = MakeTestProxyFlow(setup, wideChoppedFlow);
     const auto root = pb.Collect(pb.NarrowMap(wideProxyFlow, [&](TRuntimeNode::TList items) { return items.front(); }));
 
     const auto graph = setup.BuildGraph(root);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "key one: very long value 1");
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{"key one: very long value 1"});
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideChopperTest)

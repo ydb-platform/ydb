@@ -73,12 +73,6 @@ void FillOperationOptionsImpl(NYT::TOperationOptions& opOpts,
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-namespace NPrivate {
-    Y_HAS_MEMBER(SecureParams);
-    Y_HAS_MEMBER(AdditionalSecurityTags);
-    Y_HAS_MEMBER(LayersPaths);
-}
-
 template <class TOptions>
 inline void FillSpec(NYT::TNode& spec,
     const TExecContext<TOptions>& execCtx,
@@ -88,15 +82,15 @@ inline void FillSpec(NYT::TNode& spec,
     EYtOpProps opProps = 0)
 {
     TSet<TString> addSecTags = {};
-    if constexpr (NPrivate::THasAdditionalSecurityTags<TOptions>::value) {
+    if constexpr (::NYql::NPrivate::THasAdditionalSecurityTags<TOptions>::value) {
         addSecTags = execCtx.Options_.AdditionalSecurityTags();
     }
-    if constexpr (NPrivate::THasLayersPaths<TOptions>::value) {
+    if constexpr (::NYql::NPrivate::THasLayersPaths<TOptions>::value) {
         FillSpec(spec, execCtx, execCtx.Options_.Config(), entry, extraCpu, secondExtraCpu, opProps, addSecTags, execCtx.Options_.LayersPaths());
     } else {
         FillSpec(spec, execCtx, execCtx.Options_.Config(), entry, extraCpu, secondExtraCpu, opProps, addSecTags, {});
     }
-    if constexpr (NPrivate::THasSecureParams<TOptions>::value) {
+    if constexpr (::NYql::NPrivate::THasSecureParams<TOptions>::value) {
         FillSecureVault(spec, execCtx.Options_.SecureParams());
     }
 }

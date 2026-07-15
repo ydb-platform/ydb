@@ -1,6 +1,8 @@
 #include <yt/yt/core/test_framework/framework.h>
 
+#include <yt/yt/core/concurrency/pollable_detail.h>
 #include <yt/yt/core/concurrency/poller.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 #include <util/system/env.h>
@@ -15,7 +17,7 @@ namespace {
 template <class T>
 void ExpectSuccessfullySetFuture(const TFuture<T>& future)
 {
-    YT_VERIFY(future.WithTimeout(TDuration::Seconds(15)).Get().IsOK());
+    YT_VERIFY(WaitForFast(future.WithTimeout(TDuration::Seconds(15))).IsOK());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -198,6 +200,58 @@ TEST_F(TThreadPoolPollerTest, Stress)
         thread.join();
     }
 }
+
+#ifdef _unix_
+
+TEST_F(TThreadPoolPollerTest, ForgotToUnarm)
+{
+    int pipes[2];
+    EXPECT_EQ(::pipe(pipes), 0);
+
+    {
+        IPollablePtr pollable = MakeSimplePollable([] (IPollable&, EPollControl) {}, "simple");
+        EXPECT_TRUE(Poller->TryRegister(pollable));
+        Poller->Arm(pipes[0], pollable, EPollControl::Read);
+        WaitForFast(Poller->Unregister(pollable))
+            .ThrowOnError();
+    }
+
+    Sleep(TDuration::MilliSeconds(100));
+    EXPECT_EQ(1, ::write(pipes[1], "a", 1));
+    Sleep(TDuration::MilliSeconds(100));
+
+    ::close(pipes[0]);
+    ::close(pipes[1]);
+}
+
+TEST_F(TThreadPoolPollerTest, SelfRearmStress)
+{
+    int pipes[2];
+    EXPECT_EQ(::pipe(pipes), 0);
+
+    EXPECT_EQ(1, ::write(pipes[1], "a", 1));
+
+    for (int i = 0; i < 1000; ++i) {
+        IPollablePtr pollable = MakeSimplePollable([&] (IPollable& self, EPollControl) {
+            Poller->Arm(pipes[0], MakeStrong(&self), EPollControl::Read);
+        }, "simple");
+        EXPECT_TRUE(Poller->TryRegister(pollable));
+        Poller->Arm(pipes[0], pollable, EPollControl::Read);
+
+        Sleep(TDuration::MilliSeconds(10));
+
+        WaitForFast(Poller->Unregister(pollable))
+            .ThrowOnError();
+
+        Sleep(TDuration::MilliSeconds(10));
+    }
+
+    Sleep(TDuration::MilliSeconds(100));
+    ::close(pipes[0]);
+    ::close(pipes[1]);
+}
+
+#endif // _unix_
 
 ////////////////////////////////////////////////////////////////////////////////
 

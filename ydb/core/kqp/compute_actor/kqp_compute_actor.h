@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
+#include <ydb/core/kqp/runtime/kqp_vector_index_levels_cache.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_actor.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -19,33 +20,40 @@ namespace NMiniKQL {
 namespace NKqp {
 
 class TShardsScanningPolicy {
-private:
-    const NKikimrConfig::TTableServiceConfig::TShardsScanningPolicy ProtoConfig;
 public:
-    TShardsScanningPolicy(const NKikimrConfig::TTableServiceConfig::TShardsScanningPolicy& pbConfig)
-        : ProtoConfig(pbConfig)
+    TShardsScanningPolicy(ui32 aggregationGroupByLimit, ui32 aggregationNoGroupLimit, ui32 scanLimit,
+      bool isParallelScanningAvailable, ui32 shardSplitFactor, ui32 criticalTotalRetriesCount, ui32 reaskShardRetriesCount)
+        : AggregationGroupByLimit(aggregationGroupByLimit)
+        , AggregationNoGroupLimit(aggregationNoGroupLimit)
+        , ScanLimit(scanLimit)
+        , IsParallelScanningAvailable(isParallelScanningAvailable)
+        , ShardSplitFactor(shardSplitFactor)
+        , CriticalTotalRetriesCount(criticalTotalRetriesCount)
+        , ReaskShardRetriesCount(reaskShardRetriesCount)
     {
     }
 
-    ui32 GetCriticalTotalRetriesCount() const {
-        return ProtoConfig.GetCriticalTotalRetriesCount();
-    }
-
-    ui32 GetReaskShardRetriesCount() const {
-        return ProtoConfig.GetReaskShardRetriesCount();
-    }
-
-    bool IsParallelScanningAvailable() const {
-        return ProtoConfig.GetParallelScanningAvailable();
-    }
-
-    bool GetShardSplitFactor() const {
-        return ProtoConfig.GetShardSplitFactor();
+    TShardsScanningPolicy()
+        : AggregationGroupByLimit(256)
+        , AggregationNoGroupLimit(1024)
+        , ScanLimit(3)
+        , IsParallelScanningAvailable(false)
+        , ShardSplitFactor(5)
+        , CriticalTotalRetriesCount(20)
+        , ReaskShardRetriesCount(5)
+    {
     }
 
     void FillRequestScanFeatures(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta,
         ui32& maxInFlight, bool& isAggregationRequest) const;
 
+    const ui32 AggregationGroupByLimit;
+    const ui32 AggregationNoGroupLimit;
+    const ui32 ScanLimit;
+    const bool IsParallelScanningAvailable;
+    const ui32 ShardSplitFactor;
+    const ui32 CriticalTotalRetriesCount;
+    const ui32 ReaskShardRetriesCount;
 };
 
 class TCPULimits {
@@ -82,7 +90,8 @@ IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vect
 NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     TIntrusivePtr<TKqpCounters> counters,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory);
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+    TIntrusivePtr<TVectorIndexLevelsCache> vectorIndexLevelsCache);
 
 } // namespace NKqp
 } // namespace NKikimr

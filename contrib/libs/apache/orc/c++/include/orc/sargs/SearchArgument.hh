@@ -31,7 +31,7 @@ namespace orc {
    * accepted by the filter.
    *
    * This requires that the filter be normalized into conjunctive normal form
-   * (<a href="http://en.wikipedia.org/wiki/Conjunctive_normal_form">CNF</a>).
+   * (<a href="https://en.wikipedia.org/wiki/Conjunctive_normal_form">CNF</a>).
    */
   class SearchArgument {
    public:

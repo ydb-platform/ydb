@@ -23,7 +23,7 @@ namespace metrics
 class Synchronous
 {
 public:
-  Synchronous(InstrumentDescriptor instrument_descriptor,
+  Synchronous(const InstrumentDescriptor &instrument_descriptor,
               std::unique_ptr<SyncWritableMetricStorage> storage)
       : instrument_descriptor_(instrument_descriptor), storage_(std::move(storage))
   {}

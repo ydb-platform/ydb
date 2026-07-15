@@ -1,9 +1,10 @@
 #pragma once
 
-#include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
-#include <ydb/core/tx/columnshard/blob_cache.h>
-#include <ydb/core/wrappers/abstract.h>
 #include "gc_info.h"
+
+#include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
+#include <ydb/core/wrappers/abstract.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
@@ -16,6 +17,7 @@ private:
     const ui32 Generation;
     const ui32 Step;
     mutable ui32 BlobIdsCounter = 0;
+
 protected:
     virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) override;
 
@@ -24,12 +26,14 @@ protected:
     }
 
     virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) override;
+
     virtual void DoOnCompleteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/) override {
         return;
     }
 
     virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) override;
     virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) override;
+
 public:
     virtual bool NeedDraftTransaction() const override {
         return true;
@@ -46,8 +50,7 @@ public:
         , Generation(generation)
         , Step(step)
     {
-
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NTier

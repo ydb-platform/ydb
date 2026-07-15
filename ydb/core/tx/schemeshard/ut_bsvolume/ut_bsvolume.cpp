@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(TBSV) {
 
     Y_UNIT_TEST(CreateBlockStoreVolumeDirect) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
@@ -242,17 +242,17 @@ Y_UNIT_TEST_SUITE(TBSV) {
 
         // Test that schema operation is accepted and recognizes TabletVersion=3
         AsyncCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
-        
+
         // Wait for the operation to complete
         env.TestWaitNotification(runtime, txId);
-        
+
         // Verify that the schemeshard created shards for the volume
         // With TabletVersion=3 and 1 partition, we should have 2 shards:
         // - 1 BlockStorePartitionDirect shard
         // - 1 BlockStoreVolumeDirect shard
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolumeDirect"),
                            {NLs::PathExist, NLs::Finished});
-        
+
         // Also verify the partition exists and shard count
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolumeDirect", true, true, true),
                            {NLs::PathExist, NLs::ShardsInsideDomain(2)});

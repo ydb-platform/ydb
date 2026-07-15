@@ -1,257 +1,435 @@
 # LangChain
 
-Integration of {{ ydb-short-name }} with [langchain](https://python.langchain.com/docs/introduction/) enables the use of {{ ydb-short-name }} as a [vector store](https://python.langchain.com/docs/concepts/vectorstores/) for [RAG](https://python.langchain.com/docs/concepts/rag/) applications.
+Integration of {{ ydb-short-name }} with [LangChain](https://python.langchain.com/docs/introduction/) allows using {{ ydb-short-name }} as a [vector store](https://python.langchain.com/docs/concepts/vectorstores/) for [RAG](https://python.langchain.com/docs/concepts/rag/) applications.
 
-This integration allows developers to efficiently manage, query, and retrieve vectorized data, which is fundamental for modern applications involving natural language processing, search, and data analysis. By leveraging embedding models, users can create sophisticated systems that understand and retrieve information based on semantic similarity.
+This integration allows developers to efficiently manage, query, and retrieve vectorized data, which is the foundation for modern applications related to natural language processing, search, and data analysis. Using embedding models, users can create sophisticated systems capable of understanding and retrieving information based on semantic similarity.
 
-## Setup {#setup}
+The integration is available for Python and JavaScript.
 
-To use this integration, install the following software:
+## Installation {#setup}
 
-- `langchain-ydb`
+To use this integration, install a local {{ ydb-short-name }}. For more information, see [{#T}](../../quickstart.md#install).
 
-    To install `langchain-ydb`, run the following command:
+Also install the LangChain packages and an embedding model for the required language:
 
-    ```shell
-    pip install -qU langchain-ydb
-    ```
+{% list tabs group=lang %}
 
-- embedding model
+- Python
 
-    This tutorial uses `HuggingFaceEmbeddings`. To install this package, run the following command:
 
-    ```shell
-    pip install -qU langchain-huggingface
-    ```
+  ```shell
+  pip install -qU langchain-ydb
+  pip install -qU langchain-huggingface
+  ```
 
-- Local {{ ydb-short-name }}
+- JavaScript
 
-    For more information, see [{#T}](../../quickstart.md#install).
+
+  ```shell
+  npm install @ydbjs/langchain @langchain/core
+  npm install @langchain/community @huggingface/transformers
+  ```
+
+{% endlist %}
 
 ## Initialization {#initialization}
 
-Creating a {{ ydb-short-name }} vector store requires specifying an embedding model. In this instance, `HuggingFaceEmbeddings` is used:
+To create a vector store {{ ydb-short-name }}, you need to specify an embedding model and connection parameters:
 
-```python
-from langchain_huggingface import HuggingFaceEmbeddings
+{% list tabs group=lang %}
 
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
-```
+- Python
 
-Once the embedding model is created, the {{ ydb-short-name }} vector store can be initiated:
 
-```python
-from langchain_ydb.vectorstores import YDB, YDBSearchStrategy, YDBSettings
+  ```python
+  from langchain_huggingface import HuggingFaceEmbeddings
+  from langchain_ydb.vectorstores import YDB, YDBSearchStrategy, YDBSettings
 
-settings = YDBSettings(
-    host="localhost",
-    port=2136,
-    database="/local",
-    table="ydb_example",
-    strategy=YDBSearchStrategy.COSINE_SIMILARITY,
-)
-vector_store = YDB(embeddings, config=settings)
-```
+  embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
 
-## Manage Vector Store {#manage_vector_store}
+  settings = YDBSettings(
+      host="localhost",
+      port=2136,
+      database="/local",
+      table="ydb_example",
+      strategy=YDBSearchStrategy.COSINE_SIMILARITY,
+  )
+  vector_store = YDB(embeddings, config=settings)
+  ```
 
-After the vector store has been established, you can start adding and removing items from the store.
+- JavaScript
 
-### Add items to vector store {#add_items_to_vector_store}
 
-The following code prepares the documents:
+  ```javascript
+  import { HuggingFaceTransformersEmbeddings } from "@langchain/community/embeddings/huggingface_transformers";
+  import { YDBSearchStrategy, YDBVectorStore } from "@ydbjs/langchain";
 
-```python
-from uuid import uuid4
+  const embeddings = new HuggingFaceTransformersEmbeddings({
+    model: "sentence-transformers/all-mpnet-base-v2",
+  });
 
-from langchain_core.documents import Document
+  const vectorStore = new YDBVectorStore(embeddings, {
+    connectionString: "grpc://localhost:2136/local",
+    table: "ydb_example",
+    strategy: YDBSearchStrategy.CosineSimilarity,
+  });
+  ```
 
-document_1 = Document(
-    page_content="I had chocalate chip pancakes and scrambled eggs for breakfast this morning.",
-    metadata={"source": "tweet"},
-)
+{% endlist %}
 
-document_2 = Document(
-    page_content="The weather forecast for tomorrow is cloudy and overcast, with a high of 62 degrees.",
-    metadata={"source": "news"},
-)
+## Managing the Vector Store {#manage_vector_store}
 
-document_3 = Document(
-    page_content="Building an exciting new project with LangChain - come check it out!",
-    metadata={"source": "tweet"},
-)
+Once you have created a vector store, you can interact with it by adding and removing various items.
 
-document_4 = Document(
-    page_content="Robbers broke into the city bank and stole $1 million in cash.",
-    metadata={"source": "news"},
-)
+### Adding Items {#add_items_to_vector_store}
 
-document_5 = Document(
-    page_content="Wow! That was an amazing movie. I can't wait to see it again.",
-    metadata={"source": "tweet"},
-)
+Prepare the documents for processing:
 
-document_6 = Document(
-    page_content="Is the new iPhone worth the price? Read this review to find out.",
-    metadata={"source": "website"},
-)
+{% list tabs group=lang %}
 
-document_7 = Document(
-    page_content="The top 10 soccer players in the world right now.",
-    metadata={"source": "website"},
-)
+- Python
 
-document_8 = Document(
-    page_content="LangGraph is the best framework for building stateful, agentic applications!",
-    metadata={"source": "tweet"},
-)
 
-document_9 = Document(
-    page_content="The stock market is down 500 points today due to fears of a recession.",
-    metadata={"source": "news"},
-)
+  ```python
+  from uuid import uuid4
 
-document_10 = Document(
-    page_content="I have a bad feeling I am going to get deleted :(",
-    metadata={"source": "tweet"},
-)
+  from langchain_core.documents import Document
 
-documents = [
-    document_1,
-    document_2,
-    document_3,
-    document_4,
-    document_5,
-    document_6,
-    document_7,
-    document_8,
-    document_9,
-    document_10,
-]
-uuids = [str(uuid4()) for _ in range(len(documents))]
-```
+  uuids = [str(uuid4()) for _ in range(10)]
+  documents = [
+      Document(
+          page_content="I had chocolate chip pancakes and scrambled eggs for breakfast this morning.",
+          metadata={"source": "tweet"},
+          id=uuids[0],
+      ),
+      Document(
+          page_content="The weather forecast for tomorrow is cloudy and overcast, with a high of 62 degrees.",
+          metadata={"source": "news"},
+          id=uuids[1],
+      ),
+      Document(
+          page_content="Building an exciting new project with LangChain - come check it out!",
+          metadata={"source": "tweet"},
+          id=uuids[2],
+      ),
+      Document(
+          page_content="Robbers broke into the city bank and stole $1 million in cash.",
+          metadata={"source": "news"},
+          id=uuids[3],
+      ),
+      Document(
+          page_content="Wow! That was an amazing movie. I can't wait to see it again.",
+          metadata={"source": "tweet"},
+          id=uuids[4],
+      ),
+      Document(
+          page_content="Is the new iPhone worth the price? Read this review to find out.",
+          metadata={"source": "website"},
+          id=uuids[5],
+      ),
+      Document(
+          page_content="The top 10 soccer players in the world right now.",
+          metadata={"source": "website"},
+          id=uuids[6],
+      ),
+      Document(
+          page_content="LangGraph is the best framework for building stateful, agentic applications!",
+          metadata={"source": "tweet"},
+          id=uuids[7],
+      ),
+      Document(
+          page_content="The stock market is down 500 points today due to fears of a recession.",
+          metadata={"source": "news"},
+          id=uuids[8],
+      ),
+      Document(
+          page_content="I have a bad feeling I am going to get deleted :(",
+          metadata={"source": "tweet"},
+          id=uuids[9],
+      ),
+  ]
+  ```
 
-Items are added to the vector store using the `add_documents` function.
 
-```python
-vector_store.add_documents(documents=documents, ids=uuids)
-```
+  Add the documents to the vector store:
 
-Output:
 
-```shell
-Inserting data...: 100%|██████████| 10/10 [00:00<00:00, 14.67it/s]
-['947be6aa-d489-44c5-910e-62e4d58d2ffb',
- '7a62904d-9db3-412b-83b6-f01b34dd7de3',
- 'e5a49c64-c985-4ed7-ac58-5ffa31ade699',
- '99cf4104-36ab-4bd5-b0da-e210d260e512',
- '5810bcd0-b46e-443e-a663-e888c9e028d1',
- '190c193d-844e-4dbb-9a4b-b8f5f16cfae6',
- 'f8912944-f80a-4178-954e-4595bf59e341',
- '34fc7b09-6000-42c9-95f7-7d49f430b904',
- '0f6b6783-f300-4a4d-bb04-8025c4dfd409',
- '46c37ba9-7cf2-4ac8-9bd1-d84e2cb1155c']
-```
+  ```python
+  ids = vector_store.add_documents(documents=documents)
+  ```
 
-### Delete items from vector store {#delete_items_from_vector_store}
+- JavaScript
 
-To delete items from the vector store by ID, use the `delete` function:
 
-```python
-vector_store.delete(ids=[uuids[-1]])
-```
+  ```javascript
+  import { Document } from "@langchain/core/documents";
+  import { randomUUID } from "node:crypto";
 
-Output:
+  const uuids = Array.from({ length: 10 }, () => randomUUID());
+  const documents = [
+    new Document({
+      pageContent: "I had chocolate chip pancakes and scrambled eggs for breakfast this morning.",
+      metadata: { source: "tweet" },
+      id: uuids[0],
+    }),
+    new Document({
+      pageContent: "The weather forecast for tomorrow is cloudy and overcast, with a high of 62 degrees.",
+      metadata: { source: "news" },
+      id: uuids[1],
+    }),
+    new Document({
+      pageContent: "Building an exciting new project with LangChain - come check it out!",
+      metadata: { source: "tweet" },
+      id: uuids[2],
+    }),
+    new Document({
+      pageContent: "Robbers broke into the city bank and stole $1 million in cash.",
+      metadata: { source: "news" },
+      id: uuids[3],
+    }),
+    new Document({
+      pageContent: "Wow! That was an amazing movie. I can't wait to see it again.",
+      metadata: { source: "tweet" },
+      id: uuids[4],
+    }),
+    new Document({
+      pageContent: "Is the new iPhone worth the price? Read this review to find out.",
+      metadata: { source: "website" },
+      id: uuids[5],
+    }),
+    new Document({
+      pageContent: "The top 10 soccer players in the world right now.",
+      metadata: { source: "website" },
+      id: uuids[6],
+    }),
+    new Document({
+      pageContent: "LangGraph is the best framework for building stateful, agentic applications!",
+      metadata: { source: "tweet" },
+      id: uuids[7],
+    }),
+    new Document({
+      pageContent: "The stock market is down 500 points today due to fears of a recession.",
+      metadata: { source: "news" },
+      id: uuids[8],
+    }),
+    new Document({
+      pageContent: "I have a bad feeling I am going to get deleted :(",
+      metadata: { source: "tweet" },
+      id: uuids[9],
+    }),
+  ];
+  ```
 
-```shell
-True
-```
 
-## Query Vector Store {#query_vector_store}
+  Add the documents to the vector store:
 
-After establishing the vector store and adding relevant documents, you can query the store during chain or agent execution.
 
-### Query directly {#query_directly}
+  ```javascript
+  const ids = await vectorStore.addDocuments(documents);
+  ```
 
-#### Similarity search
+{% endlist %}
+
+### Deleting Items {#delete_items_from_vector_store}
+
+Items are deleted from the vector store by ID using the `delete` function:
+
+{% list tabs group=lang %}
+
+- Python
+
+
+  ```python
+  vector_store.delete(ids=[ids[-1]])
+  ```
+
+- JavaScript
+
+
+  ```javascript
+  await vectorStore.delete({ ids: [ids.at(-1)] });
+  ```
+
+{% endlist %}
+
+## Querying the Vector Store {#query_vector_store}
+
+After creating the vector store and adding the necessary documents, you can perform search queries during chain or agent execution.
+
+### Direct Query {#query_directly}
+
+#### Similarity Search
 
 A simple similarity search can be performed as follows:
 
-```python
-results = vector_store.similarity_search(
-    "LangChain provides abstractions to make working with LLMs easy", k=2
-)
-for res in results:
-    print(f"* {res.page_content} [{res.metadata}]")
-```
+{% list tabs group=lang %}
 
-Output:
+- Python
+
+
+  ```python
+  results = vector_store.similarity_search(
+      "LangChain provides abstractions to make working with LLMs easy",
+      k=2,
+  )
+  for res in results:
+      print(f"* {res.page_content} [{res.metadata}]")
+  ```
+
+- JavaScript
+
+
+  ```javascript
+  const results = await vectorStore.similaritySearch(
+    "LangChain provides abstractions to make working with LLMs easy",
+    2,
+  );
+  for (const res of results) {
+    console.log(`* ${res.pageContent} [${JSON.stringify(res.metadata)}]`);
+  }
+  ```
+
+{% endlist %}
+
+Result:
+
 
 ```shell
 * Building an exciting new project with LangChain - come check it out! [{'source': 'tweet'}]
 * LangGraph is the best framework for building stateful, agentic applications! [{'source': 'tweet'}]
 ```
 
-#### Similarity search with score
 
-To perform a similarity search with score, use the following code:
+#### Similarity Search with Score
 
-```python
-results = vector_store.similarity_search_with_score("Will it be hot tomorrow?", k=3)
-for res, score in results:
-    print(f"* [SIM={score:.3f}] {res.page_content} [{res.metadata}]")
-```
+You can also perform a search with a score:
 
-Output:
+{% list tabs group=lang %}
+
+- Python
+
+
+  ```python
+  results = vector_store.similarity_search_with_score(
+      "Will it be hot tomorrow?",
+      k=3,
+  )
+  for res, score in results:
+      print(f"* [SIM={score:.3f}] {res.page_content} [{res.metadata}]")
+  ```
+
+- JavaScript
+
+
+  ```javascript
+  const results = await vectorStore.similaritySearchWithScore(
+    "Will it be hot tomorrow?",
+    3,
+  );
+  for (const [res, score] of results) {
+    console.log(`* [SIM=${score.toFixed(3)}] ${res.pageContent} [${JSON.stringify(res.metadata)}]`);
+  }
+  ```
+
+{% endlist %}
+
+Result:
+
 
 ```shell
 * [SIM=0.595] The weather forecast for tomorrow is cloudy and overcast, with a high of 62 degrees. [{'source': 'news'}]
-* [SIM=0.212] I had chocalate chip pancakes and scrambled eggs for breakfast this morning. [{'source': 'tweet'}]
+* [SIM=0.212] I had chocolate chip pancakes and scrambled eggs for breakfast this morning. [{'source': 'tweet'}]
 * [SIM=0.118] Wow! That was an amazing movie. I can't wait to see it again. [{'source': 'tweet'}]
 ```
 
+
 ### Filtering {#filtering}
 
-Searching with filters is performed as described below:
+Search using filters is performed as follows:
 
-```python
-results = vector_store.similarity_search_with_score(
+{% list tabs group=lang %}
+
+- Python
+
+
+  ```python
+  results = vector_store.similarity_search_with_score(
+      "What did I eat for breakfast?",
+      k=4,
+      filter={"source": "tweet"},
+  )
+  for res, _ in results:
+      print(f"* {res.page_content} [{res.metadata}]")
+  ```
+
+- JavaScript
+
+
+  ```javascript
+  const results = await vectorStore.similaritySearchWithScore(
     "What did I eat for breakfast?",
-    k=4,
-    filter={"source": "tweet"},
-)
-for res, _ in results:
-    print(f"* {res.page_content} [{res.metadata}]")
-```
+    4,
+    { source: "tweet" },
+  );
+  for (const [res] of results) {
+    console.log(`* ${res.pageContent} [${JSON.stringify(res.metadata)}]`);
+  }
+  ```
 
-Output:
+{% endlist %}
+
+Result:
+
 
 ```shell
-* I had chocalate chip pancakes and scrambled eggs for breakfast this morning. [{'source': 'tweet'}]
+* I had chocolate chip pancakes and scrambled eggs for breakfast this morning. [{'source': 'tweet'}]
 * Wow! That was an amazing movie. I can't wait to see it again. [{'source': 'tweet'}]
 * Building an exciting new project with LangChain - come check it out! [{'source': 'tweet'}]
 * LangGraph is the best framework for building stateful, agentic applications! [{'source': 'tweet'}]
 ```
 
 
-### Query by turning into retriever {#query_by_turning_into_retriever}
+### Query via Retriever Transformation {#query_by_turning_into_retriever}
 
-The vector store can also be transformed into a retriever for easier use in chains.
+The vector store can be transformed into a retriever for simplified use in chains.
 
-Here's how to transform the vector store into a retriever and invoke it with a simple query and filter.
+An example is shown below:
 
-```python
-retriever = vector_store.as_retriever(
-    search_kwargs={"k": 2},
-)
-results = retriever.invoke(
-    "Stealing from the bank is a crime", filter={"source": "news"}
-)
-for res in results:
-    print(f"* {res.page_content} [{res.metadata}]")
-```
+{% list tabs group=lang %}
 
-Output:
+- Python
+
+
+  ```python
+  retriever = vector_store.as_retriever(
+      search_kwargs={
+          "k": 2,
+          "filter": {"source": "news"},
+      },
+  )
+  results = retriever.invoke("Stealing from the bank is a crime")
+  for res in results:
+      print(f"* {res.page_content} [{res.metadata}]")
+  ```
+
+- JavaScript
+
+
+  ```javascript
+  const retriever = vectorStore.asRetriever({
+    k: 2,
+    filter: { source: "news" },
+  });
+  const results = await retriever.invoke("Stealing from the bank is a crime");
+  for (const res of results) {
+    console.log(`* ${res.pageContent} [${JSON.stringify(res.metadata)}]`);
+  }
+  ```
+
+{% endlist %}
+
+Result:
+
 
 ```shell
 * Robbers broke into the city bank and stole $1 million in cash. [{'source': 'news'}]

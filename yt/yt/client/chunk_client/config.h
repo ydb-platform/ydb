@@ -241,6 +241,10 @@ struct TReplicationReaderConfig
     //! Unless null, reader will simulate failure of accessing chunk meta cache with such probability.
     std::optional<double> ChunkMetaCacheFailureProbability;
 
+    //! For testing purposes.
+    //! If true, reader will throw when node descriptor lookup fails for a replica node id.
+    bool FailOnUnresolvedNodeId;
+
     //! Use chunk prober to reduce the number of probing requests.
     bool UseChunkProber;
 
@@ -252,6 +256,10 @@ struct TReplicationReaderConfig
     //! Each pair corresponds to a number of peers and a timeout which signify that probing will be stopped
     //! beforehand if this timeout is reached and this number of peers have responded.
     std::vector<std::pair<int, TDuration>> PartialPeerProbingTimeouts;
+
+    //! Sliding window over which the job's recently consumed I/O is reported to
+    //! data nodes via the io_consumed request field.
+    TDuration IoConsumedReportWindow;
 
     REGISTER_YSON_STRUCT(TReplicationReaderConfig);
 
@@ -381,8 +389,15 @@ struct TReplicationWriterConfig
     //! Acquiring resources for putting blocks before invoking PutBlocks.
     bool UseProbePutBlocks;
 
+    //! If |false| all replicas receive blocks directly via PutBlocks.
+    bool UseSendBlocks;
+
     //! If |true| data node will preallocate disk space before writing.
     bool PreallocateDiskSpace;
+
+    //! Sliding window over which the job's recently consumed I/O is reported to
+    //! data nodes via the io_consumed request field.
+    TDuration IoConsumedReportWindow;
 
     int GetDirectUploadNodeCount();
 

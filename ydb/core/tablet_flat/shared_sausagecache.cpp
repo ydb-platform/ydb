@@ -1416,10 +1416,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         {
             auto* appData = AppData(ctx);
             NKikimrSharedCache::TSharedCacheConfig config;
-            if (record.GetConfig().HasBootstrapConfig()) {
-                if (record.GetConfig().GetBootstrapConfig().HasSharedCacheConfig()) {
-                    config.MergeFrom(record.GetConfig().GetBootstrapConfig().GetSharedCacheConfig());
-                }
+            if (record.GetConfig().HasBootstrapConfig() && record.GetConfig().GetBootstrapConfig().HasSharedCacheConfig()) {
+                config.MergeFrom(record.GetConfig().GetBootstrapConfig().GetSharedCacheConfig());
             } else if (appData->BootstrapConfig.HasSharedCacheConfig()) {
                 config.MergeFrom(appData->BootstrapConfig.GetSharedCacheConfig());
             }

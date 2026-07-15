@@ -9,6 +9,8 @@
 #include <util/string/split.h>
 #include <util/string/join.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV1 {
@@ -34,8 +36,8 @@ struct TJoinDescr {
 
     TVector<std::pair<TFullColumn, TFullColumn>> Keys;
 
-    explicit TJoinDescr(const TString& op)
-        : Op(op)
+    explicit TJoinDescr(TString op)
+        : Op(std::move(op))
     {
     }
 };
@@ -338,8 +340,8 @@ protected:
             JoinDescrs_.push_back(std::move(newDescr));
         }
 
-        JoinDescrs_.back().Keys.push_back({{leftSourceIdx, op ? op->GetArgs()[leftArg] : nullptr},
-                                           {rightSourceIdx, op ? op->GetArgs()[rightArg] : nullptr}});
+        JoinDescrs_.back().Keys.push_back({{.Source = leftSourceIdx, .Column = op ? op->GetArgs()[leftArg] : nullptr},
+                                           {.Source = rightSourceIdx, .Column = op ? op->GetArgs()[rightArg] : nullptr}});
         KeysInitializing_ = false;
         return true;
     }
@@ -428,18 +430,11 @@ bool TJoinBase::DoInit(TContext& ctx, ISource* initSrc) {
     ui32 idx = 0;
     for (auto expr : JoinExprs_) {
         if (expr) {
-            TDeque<TNodePtr> conjQueue;
-            conjQueue.push_back(expr);
-            while (!conjQueue.empty()) {
-                TNodePtr cur = conjQueue.front();
-                conjQueue.pop_front();
-                if (cur->GetOpName() == "And") {
-                    auto conj = cur->GetCallNode();
-                    YQL_ENSURE(conj, "Invalid And operation node");
-                    conjQueue.insert(conjQueue.begin(), conj->GetArgs().begin(), conj->GetArgs().end());
-                } else if (!InitKeysOrFilters(ctx, idx, cur)) {
-                    return false;
-                }
+            if (!ProcessJoinExpr(ctx, expr,
+                                 [this, idx](TContext& ctx, TNodePtr expr) {
+                                     return InitKeysOrFilters(ctx, idx, expr);
+                                 })) {
+                return false;
             }
         } else {
             if (!InitKeysOrFilters(ctx, idx, nullptr)) {
@@ -485,8 +480,8 @@ public:
                 leftAny = AnyFlags_[descr.Keys[0].first.Source];
             }
             bool rightAny = AnyFlags_[descr.Keys[0].second.Source];
-            auto leftKeys = GetColumnNames(ctx, extraColumns, descr.Keys, true);
-            auto rightKeys = GetColumnNames(ctx, extraColumns, descr.Keys, false);
+            auto leftKeys = GetColumnNames(ctx, extraColumns, descr.Keys, /*left=*/true);
+            auto rightKeys = GetColumnNames(ctx, extraColumns, descr.Keys, /*left=*/false);
             if (!leftKeys || !rightKeys) {
                 return nullptr;
             }
@@ -504,6 +499,8 @@ public:
                 linkOptions = L(linkOptions, Q(Y(Q("join_algo"), Q("MapJoin"))));
             } else if (TJoinLinkSettings::EStrategy::ForceGrace == descr.LinkSettings.Strategy) {
                 linkOptions = L(linkOptions, Q(Y(Q("join_algo"), Q("GraceJoin"))));
+            } else if (TJoinLinkSettings::EStrategy::ForceStar == descr.LinkSettings.Strategy) {
+                linkOptions = L(linkOptions, Q(Y(Q("force_star"))));
             }
             if (leftAny) {
                 linkOptions = L(linkOptions, Q(Y(Q("left"), Q("any"))));
@@ -527,8 +524,7 @@ public:
 
         TNodePtr equiJoin(Y("EquiJoin"));
         bool ordered = false;
-        for (size_t i = 0; i < Sources_.size(); ++i) {
-            auto& source = Sources_[i];
+        for (const auto& source : Sources_) {
             auto sourceNode = source->Build(ctx);
             if (!sourceNode) {
                 return nullptr;
@@ -570,7 +566,7 @@ public:
             if (extraMembers) {
                 sourceNode = Y(useOrderedForSource ? "OrderedMap" : "Map", sourceNode, BuildLambda(Pos_, Y("row"), extraMembers, "row"));
             }
-            sourceNode = Y("RemoveSystemMembers", sourceNode);
+            sourceNode = RemoveSystemColumns(sourceNode, ctx.Settings.ExtraSystemColumnPrefixes);
             equiJoin = L(equiJoin, Q(Y(sourceNode, BuildQuotedAtom(source->GetPos(), source->GetLabel()))));
         }
         TNodePtr removeMembers;

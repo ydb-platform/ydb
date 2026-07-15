@@ -780,6 +780,319 @@ CreateAsyncDoubleMetricSystemMemoryLinuxAvailable(metrics::Meter *meter)
 }
 
 /**
+  Total number of hugepages available.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricSystemMemoryLinuxHugepagesLimit =
+    "system.memory.linux.hugepages.limit";
+static constexpr const char *descrMetricSystemMemoryLinuxHugepagesLimit =
+    "Total number of hugepages available.";
+static constexpr const char *unitMetricSystemMemoryLinuxHugepagesLimit = "{page}";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricSystemMemoryLinuxHugepagesLimit(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricSystemMemoryLinuxHugepagesLimit,
+                                         descrMetricSystemMemoryLinuxHugepagesLimit,
+                                         unitMetricSystemMemoryLinuxHugepagesLimit);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricSystemMemoryLinuxHugepagesLimit(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricSystemMemoryLinuxHugepagesLimit,
+                                          descrMetricSystemMemoryLinuxHugepagesLimit,
+                                          unitMetricSystemMemoryLinuxHugepagesLimit);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricSystemMemoryLinuxHugepagesLimit(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricSystemMemoryLinuxHugepagesLimit,
+                                                   descrMetricSystemMemoryLinuxHugepagesLimit,
+                                                   unitMetricSystemMemoryLinuxHugepagesLimit);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricSystemMemoryLinuxHugepagesLimit(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricSystemMemoryLinuxHugepagesLimit,
+                                                    descrMetricSystemMemoryLinuxHugepagesLimit,
+                                                    unitMetricSystemMemoryLinuxHugepagesLimit);
+}
+
+/**
+  System hugepage size in bytes.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricSystemMemoryLinuxHugepagesPageSize =
+    "system.memory.linux.hugepages.page_size";
+static constexpr const char *descrMetricSystemMemoryLinuxHugepagesPageSize =
+    "System hugepage size in bytes.";
+static constexpr const char *unitMetricSystemMemoryLinuxHugepagesPageSize = "By";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricSystemMemoryLinuxHugepagesPageSize(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricSystemMemoryLinuxHugepagesPageSize,
+                                         descrMetricSystemMemoryLinuxHugepagesPageSize,
+                                         unitMetricSystemMemoryLinuxHugepagesPageSize);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricSystemMemoryLinuxHugepagesPageSize(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricSystemMemoryLinuxHugepagesPageSize,
+                                          descrMetricSystemMemoryLinuxHugepagesPageSize,
+                                          unitMetricSystemMemoryLinuxHugepagesPageSize);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricSystemMemoryLinuxHugepagesPageSize(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricSystemMemoryLinuxHugepagesPageSize,
+                                                   descrMetricSystemMemoryLinuxHugepagesPageSize,
+                                                   unitMetricSystemMemoryLinuxHugepagesPageSize);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricSystemMemoryLinuxHugepagesPageSize(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricSystemMemoryLinuxHugepagesPageSize,
+                                                    descrMetricSystemMemoryLinuxHugepagesPageSize,
+                                                    unitMetricSystemMemoryLinuxHugepagesPageSize);
+}
+
+/**
+  Number of reserved hugepages.
+  <p>
+  Hugepages for which a commitment to allocate has been made, but no allocation has yet been made.
+  This is reported as a separate metric rather than a @code usage @endcode state because reserved
+  pages are already counted in @code free @endcode pages. They represent a subset of free pages that
+  cannot be used for non-reserved allocations. <p> updowncounter
+ */
+static constexpr const char *kMetricSystemMemoryLinuxHugepagesReserved =
+    "system.memory.linux.hugepages.reserved";
+static constexpr const char *descrMetricSystemMemoryLinuxHugepagesReserved =
+    "Number of reserved hugepages.";
+static constexpr const char *unitMetricSystemMemoryLinuxHugepagesReserved = "{page}";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricSystemMemoryLinuxHugepagesReserved(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricSystemMemoryLinuxHugepagesReserved,
+                                         descrMetricSystemMemoryLinuxHugepagesReserved,
+                                         unitMetricSystemMemoryLinuxHugepagesReserved);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricSystemMemoryLinuxHugepagesReserved(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricSystemMemoryLinuxHugepagesReserved,
+                                          descrMetricSystemMemoryLinuxHugepagesReserved,
+                                          unitMetricSystemMemoryLinuxHugepagesReserved);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricSystemMemoryLinuxHugepagesReserved(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricSystemMemoryLinuxHugepagesReserved,
+                                                   descrMetricSystemMemoryLinuxHugepagesReserved,
+                                                   unitMetricSystemMemoryLinuxHugepagesReserved);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricSystemMemoryLinuxHugepagesReserved(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricSystemMemoryLinuxHugepagesReserved,
+                                                    descrMetricSystemMemoryLinuxHugepagesReserved,
+                                                    unitMetricSystemMemoryLinuxHugepagesReserved);
+}
+
+/**
+  Number of surplus hugepages.
+  <p>
+  Overcommitted hugepages beyond the persistent pool.
+  This is reported as a separate metric rather than a @code usage @endcode state because surplus
+  pages can be in either @code used @endcode or @code free @endcode state. Including them in @code
+  usage @endcode would break the convention that @code usage @endcode states sum to the @code limit
+  @endcode. <p> updowncounter
+ */
+static constexpr const char *kMetricSystemMemoryLinuxHugepagesSurplus =
+    "system.memory.linux.hugepages.surplus";
+static constexpr const char *descrMetricSystemMemoryLinuxHugepagesSurplus =
+    "Number of surplus hugepages.";
+static constexpr const char *unitMetricSystemMemoryLinuxHugepagesSurplus = "{page}";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricSystemMemoryLinuxHugepagesSurplus(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricSystemMemoryLinuxHugepagesSurplus,
+                                         descrMetricSystemMemoryLinuxHugepagesSurplus,
+                                         unitMetricSystemMemoryLinuxHugepagesSurplus);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricSystemMemoryLinuxHugepagesSurplus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricSystemMemoryLinuxHugepagesSurplus,
+                                          descrMetricSystemMemoryLinuxHugepagesSurplus,
+                                          unitMetricSystemMemoryLinuxHugepagesSurplus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricSystemMemoryLinuxHugepagesSurplus(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricSystemMemoryLinuxHugepagesSurplus,
+                                                   descrMetricSystemMemoryLinuxHugepagesSurplus,
+                                                   unitMetricSystemMemoryLinuxHugepagesSurplus);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricSystemMemoryLinuxHugepagesSurplus(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricSystemMemoryLinuxHugepagesSurplus,
+                                                    descrMetricSystemMemoryLinuxHugepagesSurplus,
+                                                    unitMetricSystemMemoryLinuxHugepagesSurplus);
+}
+
+/**
+  Number of hugepages in use by state.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricSystemMemoryLinuxHugepagesUsage =
+    "system.memory.linux.hugepages.usage";
+static constexpr const char *descrMetricSystemMemoryLinuxHugepagesUsage =
+    "Number of hugepages in use by state.";
+static constexpr const char *unitMetricSystemMemoryLinuxHugepagesUsage = "{page}";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricSystemMemoryLinuxHugepagesUsage(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricSystemMemoryLinuxHugepagesUsage,
+                                         descrMetricSystemMemoryLinuxHugepagesUsage,
+                                         unitMetricSystemMemoryLinuxHugepagesUsage);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricSystemMemoryLinuxHugepagesUsage(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricSystemMemoryLinuxHugepagesUsage,
+                                          descrMetricSystemMemoryLinuxHugepagesUsage,
+                                          unitMetricSystemMemoryLinuxHugepagesUsage);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricSystemMemoryLinuxHugepagesUsage(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricSystemMemoryLinuxHugepagesUsage,
+                                                   descrMetricSystemMemoryLinuxHugepagesUsage,
+                                                   unitMetricSystemMemoryLinuxHugepagesUsage);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricSystemMemoryLinuxHugepagesUsage(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricSystemMemoryLinuxHugepagesUsage,
+                                                    descrMetricSystemMemoryLinuxHugepagesUsage,
+                                                    unitMetricSystemMemoryLinuxHugepagesUsage);
+}
+
+/**
+  Percentage of hugepages in use by state.
+  <p>
+  gauge
+ */
+static constexpr const char *kMetricSystemMemoryLinuxHugepagesUtilization =
+    "system.memory.linux.hugepages.utilization";
+static constexpr const char *descrMetricSystemMemoryLinuxHugepagesUtilization =
+    "Percentage of hugepages in use by state.";
+static constexpr const char *unitMetricSystemMemoryLinuxHugepagesUtilization = "1";
+
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+
+static inline nostd::unique_ptr<metrics::Gauge<int64_t>>
+CreateSyncInt64MetricSystemMemoryLinuxHugepagesUtilization(metrics::Meter *meter)
+{
+  return meter->CreateInt64Gauge(kMetricSystemMemoryLinuxHugepagesUtilization,
+                                 descrMetricSystemMemoryLinuxHugepagesUtilization,
+                                 unitMetricSystemMemoryLinuxHugepagesUtilization);
+}
+
+static inline nostd::unique_ptr<metrics::Gauge<double>>
+CreateSyncDoubleMetricSystemMemoryLinuxHugepagesUtilization(metrics::Meter *meter)
+{
+  return meter->CreateDoubleGauge(kMetricSystemMemoryLinuxHugepagesUtilization,
+                                  descrMetricSystemMemoryLinuxHugepagesUtilization,
+                                  unitMetricSystemMemoryLinuxHugepagesUtilization);
+}
+#endif /* OPENTELEMETRY_ABI_VERSION_NO */
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricSystemMemoryLinuxHugepagesUtilization(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableGauge(kMetricSystemMemoryLinuxHugepagesUtilization,
+                                           descrMetricSystemMemoryLinuxHugepagesUtilization,
+                                           unitMetricSystemMemoryLinuxHugepagesUtilization);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricSystemMemoryLinuxHugepagesUtilization(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableGauge(kMetricSystemMemoryLinuxHugepagesUtilization,
+                                            descrMetricSystemMemoryLinuxHugepagesUtilization,
+                                            unitMetricSystemMemoryLinuxHugepagesUtilization);
+}
+
+/**
+  Shared memory used (mostly by tmpfs).
+  <p>
+  Equivalent of @code shared @endcode from <a
+  href="https://man7.org/linux/man-pages/man1/free.1.html">@code free @endcode command</a> or
+  @code Shmem @endcode from <a href="https://man7.org/linux/man-pages/man5/proc.5.html">@code
+  /proc/meminfo @endcode</a>" <p> updowncounter
+ */
+static constexpr const char *kMetricSystemMemoryLinuxShared = "system.memory.linux.shared";
+static constexpr const char *descrMetricSystemMemoryLinuxShared =
+    "Shared memory used (mostly by tmpfs).";
+static constexpr const char *unitMetricSystemMemoryLinuxShared = "By";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricSystemMemoryLinuxShared(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricSystemMemoryLinuxShared,
+                                         descrMetricSystemMemoryLinuxShared,
+                                         unitMetricSystemMemoryLinuxShared);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricSystemMemoryLinuxShared(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricSystemMemoryLinuxShared,
+                                          descrMetricSystemMemoryLinuxShared,
+                                          unitMetricSystemMemoryLinuxShared);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricSystemMemoryLinuxShared(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricSystemMemoryLinuxShared,
+                                                   descrMetricSystemMemoryLinuxShared,
+                                                   unitMetricSystemMemoryLinuxShared);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricSystemMemoryLinuxShared(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricSystemMemoryLinuxShared,
+                                                    descrMetricSystemMemoryLinuxShared,
+                                                    unitMetricSystemMemoryLinuxShared);
+}
+
+/**
   Reports the memory used by the Linux kernel for managing caches of frequently used objects.
   <p>
   The sum over the @code reclaimable @endcode and @code unreclaimable @endcode state values in @code
@@ -828,40 +1141,40 @@ CreateAsyncDoubleMetricSystemMemoryLinuxSlabUsage(metrics::Meter *meter)
 }
 
 /**
-  Shared memory used (mostly by tmpfs).
-  <p>
-  Equivalent of @code shared @endcode from <a
-  href="https://man7.org/linux/man-pages/man1/free.1.html">@code free @endcode command</a> or
-  @code Shmem @endcode from <a href="https://man7.org/linux/man-pages/man5/proc.5.html">@code
-  /proc/meminfo @endcode</a>" <p> updowncounter
- */
-static constexpr const char *kMetricSystemMemoryShared = "system.memory.shared";
-static constexpr const char *descrMetricSystemMemoryShared =
-    "Shared memory used (mostly by tmpfs).";
-static constexpr const char *unitMetricSystemMemoryShared = "By";
+  Deprecated, use @code system.memory.linux.shared @endcode instead.
 
-static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+  @deprecated
+  {"note": "Replaced by @code system.memory.linux.shared @endcode.", "reason": "renamed",
+  "renamed_to": "system.memory.linux.shared"} <p> updowncounter
+ */
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricSystemMemoryShared =
+    "system.memory.shared";
+OPENTELEMETRY_DEPRECATED static constexpr const char *descrMetricSystemMemoryShared =
+    "Deprecated, use `system.memory.linux.shared` instead.";
+OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricSystemMemoryShared = "By";
+
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricSystemMemoryShared(metrics::Meter *meter)
 {
   return meter->CreateInt64UpDownCounter(kMetricSystemMemoryShared, descrMetricSystemMemoryShared,
                                          unitMetricSystemMemoryShared);
 }
 
-static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricSystemMemoryShared(metrics::Meter *meter)
 {
   return meter->CreateDoubleUpDownCounter(kMetricSystemMemoryShared, descrMetricSystemMemoryShared,
                                           unitMetricSystemMemoryShared);
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricSystemMemoryShared(metrics::Meter *meter)
 {
   return meter->CreateInt64ObservableUpDownCounter(
       kMetricSystemMemoryShared, descrMetricSystemMemoryShared, unitMetricSystemMemoryShared);
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricSystemMemoryShared(metrics::Meter *meter)
 {
   return meter->CreateDoubleObservableUpDownCounter(

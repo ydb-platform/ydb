@@ -1,5 +1,5 @@
 #ifndef BOOST_NEW_ITERATOR_TESTS_HPP
-# define BOOST_NEW_ITERATOR_TESTS_HPP
+#define BOOST_NEW_ITERATOR_TESTS_HPP
 
 //
 // Copyright (c) David Abrahams 2001.
@@ -28,49 +28,44 @@
 // 04 Feb 2001  Added lvalue test, corrected preconditions
 //              (David Abrahams)
 
-# include <iterator>
-# include <boost/static_assert.hpp>
-# include <boost/concept_archetype.hpp> // for detail::dummy_constructor
-# include <boost/pending/iterator_tests.hpp>
-# include <boost/iterator/is_readable_iterator.hpp>
-# include <boost/iterator/is_lvalue_iterator.hpp>
-# include <boost/type_traits/is_same.hpp>
-# include <boost/mpl/bool.hpp>
-# include <boost/mpl/and.hpp>
+#include <boost/concept_archetype.hpp> // for detail::dummy_constructor
+#include <boost/iterator/is_lvalue_iterator.hpp>
+#include <boost/iterator/is_readable_iterator.hpp>
+#include <boost/pending/iterator_tests.hpp>
+#include <boost/core/lightweight_test.hpp>
+#include <boost/detail/is_incrementable.hpp>
+#include <boost/iterator/detail/type_traits/conjunction.hpp>
 
-# include <boost/iterator/detail/config_def.hpp>
-# include <boost/detail/is_incrementable.hpp>
-# include <boost/core/lightweight_test.hpp>
+#include <iterator>
+#include <type_traits>
 
 namespace boost {
-
 
 // Do separate tests for *i++ so we can treat, e.g., smart pointers,
 // as readable and/or writable iterators.
 template <class Iterator, class T>
-void readable_iterator_traversal_test(Iterator i1, T v, mpl::true_)
+void readable_iterator_traversal_test(Iterator i1, T v, std::true_type)
 {
     T v2(*i1++);
     BOOST_TEST(v == v2);
 }
 
 template <class Iterator, class T>
-void readable_iterator_traversal_test(const Iterator i1, T v, mpl::false_)
+void readable_iterator_traversal_test(const Iterator i1, T v, std::false_type)
 {}
 
 template <class Iterator, class T>
-void writable_iterator_traversal_test(Iterator i1, T v, mpl::true_)
+void writable_iterator_traversal_test(Iterator i1, T v, std::true_type)
 {
-    ++i1;  // we just wrote into that position
+    ++i1; // we just wrote into that position
     *i1++ = v;
     Iterator x(i1++);
     (void)x;
 }
 
 template <class Iterator, class T>
-void writable_iterator_traversal_test(const Iterator i1, T v, mpl::false_)
+void writable_iterator_traversal_test(const Iterator i1, T v, std::false_type)
 {}
-
 
 // Preconditions: *i == v
 template <class Iterator, class T>
@@ -85,13 +80,15 @@ void readable_iterator_test(const Iterator i1, T v)
   BOOST_TEST(v1 == v);
   BOOST_TEST(v2 == v);
 
-# if !BOOST_WORKAROUND(__MWERKS__, <= 0x2407)
-  readable_iterator_traversal_test(i1, v, detail::is_postfix_incrementable<Iterator>());
+  readable_iterator_traversal_test(
+      i1, v,
+      std::integral_constant<
+          bool, detail::is_postfix_incrementable<Iterator>::value>{});
 
   // I think we don't really need this as it checks the same things as
   // the above code.
-  BOOST_STATIC_ASSERT(is_readable_iterator<Iterator>::value);
-# endif
+  static_assert(is_readable_iterator<Iterator>::value,
+                "Iterator must be readable.");
 }
 
 template <class Iterator, class T>
@@ -100,13 +97,12 @@ void writable_iterator_test(Iterator i, T v, T v2)
   Iterator i2(i); // Copy Constructible
   *i2 = v;
 
-# if !BOOST_WORKAROUND(__MWERKS__, <= 0x2407)
   writable_iterator_traversal_test(
-      i, v2, mpl::and_<
-          detail::is_incrementable<Iterator>
-        , detail::is_postfix_incrementable<Iterator>
+      i, v2,
+      iterators::detail::conjunction<
+          std::integral_constant<bool, detail::is_incrementable<Iterator>::value>,
+          std::integral_constant<bool, detail::is_postfix_incrementable<Iterator>::value>
       >());
-# endif
 }
 
 template <class Iterator>
@@ -125,13 +121,16 @@ void constant_lvalue_iterator_test(Iterator i, T v1)
   Iterator i2(i);
   typedef typename std::iterator_traits<Iterator>::value_type value_type;
   typedef typename std::iterator_traits<Iterator>::reference reference;
-  BOOST_STATIC_ASSERT((is_same<const value_type&, reference>::value));
+  static_assert(std::is_same<const value_type&, reference>::value,
+                "reference type must be the same as const value_type& for "
+                "constant lvalue iterator.");
   const T& v2 = *i2;
   BOOST_TEST(v1 == v2);
-# ifndef BOOST_NO_LVALUE_RETURN_DETECTION
-  BOOST_STATIC_ASSERT(is_lvalue_iterator<Iterator>::value);
-  BOOST_STATIC_ASSERT(!is_non_const_lvalue_iterator<Iterator>::value);
-# endif
+#ifndef BOOST_NO_LVALUE_RETURN_DETECTION
+  static_assert(is_lvalue_iterator<Iterator>::value
+                && !is_non_const_lvalue_iterator<Iterator>::value,
+                "Iterator must be a const lvalue iterator.");
+#endif
 }
 
 template <class Iterator, class T>
@@ -140,20 +139,22 @@ void non_const_lvalue_iterator_test(Iterator i, T v1, T v2)
   Iterator i2(i);
   typedef typename std::iterator_traits<Iterator>::value_type value_type;
   typedef typename std::iterator_traits<Iterator>::reference reference;
-  BOOST_STATIC_ASSERT((is_same<value_type&, reference>::value));
+  static_assert(std::is_same<value_type&, reference>::value,
+                "reference type must be the same as value_type& for "
+                "non-constant lvalue iterator.");
   T& v3 = *i2;
   BOOST_TEST(v1 == v3);
 
-  // A non-const lvalue iterator is not neccessarily writable, but we
+  // A non-const lvalue iterator is not necessarily writable, but we
   // are assuming the value_type is assignable here
   *i = v2;
 
   T& v4 = *i2;
   BOOST_TEST(v2 == v4);
-# ifndef BOOST_NO_LVALUE_RETURN_DETECTION
-  BOOST_STATIC_ASSERT(is_lvalue_iterator<Iterator>::value);
-  BOOST_STATIC_ASSERT(is_non_const_lvalue_iterator<Iterator>::value);
-# endif
+  static_assert(is_lvalue_iterator<Iterator>::value,
+                "Iterator must be an lvalue iterator.");
+  static_assert(is_non_const_lvalue_iterator<Iterator>::value,
+                "Iterator must be non-const.");
 }
 
 template <class Iterator, class T>
@@ -226,7 +227,7 @@ void random_access_readable_iterator_test(Iterator i, int N, TrueVals vals)
   const Iterator j = i;
   int c;
 
-  for (c = 0; c < N-1; ++c)
+  for (c = 0; c < N - 1; ++c)
   {
     BOOST_TEST(i == j + c);
     BOOST_TEST(*i == vals[c]);
@@ -242,7 +243,7 @@ void random_access_readable_iterator_test(Iterator i, int N, TrueVals vals)
   }
 
   Iterator k = j + N - 1;
-  for (c = 0; c < N-1; ++c)
+  for (c = 0; c < N - 1; ++c)
   {
     BOOST_TEST(i == k - c);
     BOOST_TEST(*i == vals[N - 1 - c]);
@@ -259,7 +260,5 @@ void random_access_readable_iterator_test(Iterator i, int N, TrueVals vals)
 }
 
 } // namespace boost
-
-# include <boost/iterator/detail/config_undef.hpp>
 
 #endif // BOOST_NEW_ITERATOR_TESTS_HPP

@@ -1,6 +1,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
+#include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NDataShard;
@@ -51,14 +52,58 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
         ExecSQL(server, edgeSender, "UPSERT INTO `/Root/test_table` (key, value) VALUES (1, 100), (2, 200), (3, 300);");
 
         auto beforeResult = ReadTable(server, shards, tableId);
-        UNIT_ASSERT_VALUES_EQUAL(beforeResult, 
+        UNIT_ASSERT_VALUES_EQUAL(beforeResult,
             "key = 1, value = 100\n"
-            "key = 2, value = 200\n" 
+            "key = 2, value = 200\n"
             "key = 3, value = 300\n");
 
 
         ui64 txId = AsyncTruncateTable(server, edgeSender, "/Root", "test_table");
         WaitTxNotification(server, edgeSender, txId);
+
+        auto afterResult = ReadTable(server, shards, tableId);
+        UNIT_ASSERT_VALUES_EQUAL(afterResult, "");
+    }
+
+    Y_UNIT_TEST(TruncateTableWaitStats) {
+        auto serverHelper = TServerHelper();
+        auto [server, runtime, edgeSender] = serverHelper.GetObjects();
+
+        auto [shards, tableId] = CreateShardedTable(server, edgeSender, "/Root", "test_table", 1);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+        ui64 shard1 = shards.at(0);
+
+        ExecSQL(server, edgeSender, "UPSERT INTO `/Root/test_table` (key, value) VALUES (1, 100), (2, 200), (3, 300);");
+
+        // Here, we explicitly trigger a compaction between the UPSERT and TRUNCATE operations.
+        // The purpose is to flush the newly inserted records from the MemTable to the SST files.
+        // As a result, we ensure that the SST statistics are non-zero, while the MemTable statistics
+        //  should conversely be zero before the TRUNCATE is executed.
+        CompactTable(*runtime, shard1, tableId, false);
+
+        {
+            Cerr << "... waiting for stats after compaction" << Endl;
+            auto stats = WaitTableStats(*runtime, shard1, [](const NKikimrTableStats::TTableStats& s) {
+                return s.GetRowCount() == 3 && s.GetDataSize() != 0 && s.GetPartCount() == 1;
+            });
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3);
+            // Because DataSize is size of MemTable
+            UNIT_ASSERT_GT(stats.GetTableStats().GetDataSize(), 0u);
+        }
+
+        ui64 txId = AsyncTruncateTable(server, edgeSender, "/Root", "test_table");
+        WaitTxNotification(server, edgeSender, txId);
+
+        {
+            Cerr << "... waiting for stats after truncate" << Endl;
+            auto stats = WaitTableStats(*runtime, shard1, [](const NKikimrTableStats::TTableStats& s) {
+                return s.GetRowCount() == 0 && s.GetDataSize() == 0;
+            });
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetDataSize(), 0);
+        }
 
         auto afterResult = ReadTable(server, shards, tableId);
         UNIT_ASSERT_VALUES_EQUAL(afterResult, "");
@@ -203,8 +248,17 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
         ui64 truncateTxId = AsyncTruncateTable(server, edgeSender, "/Root", "test_table");
         WaitTxNotification(server, edgeSender, truncateTxId);
 
-        auto commitResult = KqpSimpleCommit(*runtime, sessionId, txId, Q_(R"(SELECT 1;)"));
-        UNIT_ASSERT_VALUES_EQUAL(commitResult, "ERROR: ABORTED");
+        auto commitFuture = KqpSimpleSendCommit(*runtime, sessionId, txId, Q_(R"(SELECT 1;)"));
+        auto commitResponse = AwaitResponse(*runtime, std::move(commitFuture));
+        UNIT_ASSERT_VALUES_EQUAL(commitResponse.operation().status(), Ydb::StatusIds::ABORTED);
+        {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(commitResponse.operation().issues(), issues);
+            UNIT_ASSERT_C(
+                NKqp::HasIssue(issues, NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED),
+                "Expected KIKIMR_LOCKS_INVALIDATED (TLI) issue, got: " << issues.ToString()
+            );
+        }
 
         auto afterResult = ReadTable(server, shards, tableId);
         UNIT_ASSERT_VALUES_EQUAL(afterResult, "");
@@ -240,8 +294,21 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
         ui64 truncateTxId = AsyncTruncateTable(server, edgeSender, "/Root", "test_table");
         WaitTxNotification(server, edgeSender, truncateTxId);
 
-        auto commitResult = KqpSimpleCommit(*runtime, sessionId, txId, Q_(R"(SELECT * FROM `/Root/test_table`;)"));
-        UNIT_ASSERT_VALUES_EQUAL(commitResult, "ERROR: ABORTED");
+        auto commitFuture = KqpSimpleSendCommit(*runtime, sessionId, txId, Q_(R"(SELECT * FROM `/Root/test_table`;)"));
+        auto commitResponse = AwaitResponse(*runtime, std::move(commitFuture));
+        UNIT_ASSERT_VALUES_EQUAL(commitResponse.operation().status(), Ydb::StatusIds::ABORTED);
+        {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(commitResponse.operation().issues(), issues);
+            // TRUNCATE TABLE changes the table schema version (AlterVersion+1), so a transaction
+            // that has a pending UPSERT detects a scheme mismatch (KIKIMR_SCHEME_MISMATCH) rather
+            // than a broken lock (KIKIMR_LOCKS_INVALIDATED / TLI), because the datashard rejects
+            // the write due to the schema version change before it even checks locks.
+            UNIT_ASSERT_C(
+                NKqp::HasIssue(issues, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH),
+                "Expected KIKIMR_SCHEME_MISMATCH issue, got: " << issues.ToString()
+            );
+        }
 
         auto afterResult = ReadTable(server, shards, tableId);
         UNIT_ASSERT_VALUES_EQUAL(afterResult, "");

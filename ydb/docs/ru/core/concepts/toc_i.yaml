@@ -5,8 +5,16 @@ items:
   include:
     path: analytics/toc_p.yaml
     mode: link
+- name: Потоковая обработка
+  href: streaming-query/index.md
+  include:
+    path: streaming-query/toc_p.yaml
+    mode: link
 - name: Архитектура
-  href: architecture.md
+  href: architecture/index.md
+  include:
+    path: architecture/toc_p.yaml
+    mode: link
 - name: Соединение с БД
   href: connect.md
 - name: Схемные объекты
@@ -20,9 +28,11 @@ items:
   href: query_execution/index.md
   include:
     path: query_execution/toc_p.yaml
-    mode: link  
+    mode: link
 - name: Транзакции
   href: transactions.md
+- name: Вторичные индексы
+  href: secondary_indexes.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
@@ -30,6 +40,8 @@ items:
   href: ttl.md
 - name: Ограничения базы данных
   href: limits-ydb.md
+- name: Резервное копирование и восстановление
+  href: backup.md
 - name: Асинхронная репликация
   href: async-replication.md
 - name: Режим bridge

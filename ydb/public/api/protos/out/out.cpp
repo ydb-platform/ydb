@@ -56,3 +56,7 @@ Y_DECLARE_OUT_SPEC(, Ydb::Maintenance::ActionState::ActionReason, stream, value)
 Y_DECLARE_OUT_SPEC(, Ydb::Backup::BackupProgress::Progress, stream, value) {
     stream << Ydb::Backup::BackupProgress::Progress_Name(value);
 }
+
+Y_DECLARE_OUT_SPEC(, Ydb::Table::CompactState_State, stream, value) {
+    stream << CompactState_State_Name(value);
+}

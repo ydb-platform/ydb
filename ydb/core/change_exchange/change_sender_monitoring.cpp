@@ -1,11 +1,25 @@
 #include "change_sender_monitoring.h"
 
+#include <ydb/core/base/mon_auth.h>
+
 #include <util/string/builder.h>
 #include <util/string/cast.h>
-#include <util/string/printf.h>
 #include <util/string/split.h>
 
 namespace NKikimr::NChangeExchange {
+
+namespace {
+
+TStringBuf TabletAppRelativePath(ETabletAppPath tabletAppPath) {
+    switch (tabletAppPath) {
+        case ETabletAppPath::Plain:
+            return "app";
+        case ETabletAppPath::Secure:
+            return TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH;
+    }
+}
+
+} // namespace
 
 void Panel(IOutputStream& str, std::function<void(IOutputStream&)> title, std::function<void(IOutputStream&)> body) {
     HTML(str) {
@@ -84,12 +98,14 @@ TPathId ParsePathId(TStringBuf str) {
     return TPathId(ownerId, localPathId);
 }
 
-TString TabletPath(ui64 tabletId) {
-    return Sprintf("app?TabletID=%" PRIu64, tabletId);
+TString TabletPath(ui64 tabletId, ETabletAppPath tabletAppPath) {
+    const TStringBuf tabletAppRelPath = TabletAppRelativePath(tabletAppPath);
+    return TStringBuilder() << tabletAppRelPath << "?TabletID=" << tabletId;
 }
 
-void PathLink(IOutputStream& str, const TPathId& pathId) {
-    const TString path = TStringBuilder() << "app"
+void PathLink(IOutputStream& str, const TPathId& pathId, ETabletAppPath tabletAppPath) {
+    const TStringBuf tabletAppRelPath = TabletAppRelativePath(tabletAppPath);
+    const TString path = TStringBuilder() << tabletAppRelPath
         << "?TabletID=" << pathId.OwnerId
         << "&Page=" << "PathInfo"
         << "&OwnerPathId=" << pathId.OwnerId
@@ -97,8 +113,12 @@ void PathLink(IOutputStream& str, const TPathId& pathId) {
     Link(str, path, pathId);
 }
 
-void ActorLink(IOutputStream& str, ui64 tabletId, const TPathId& pathId, const TMaybe<ui64>& partitionId) {
-    auto path = TStringBuilder() << "app"
+void ActorLink(IOutputStream& str, ui64 tabletId, const TPathId& pathId, const TMaybe<ui64>& partitionId,
+        ETabletAppPath tabletAppPath)
+{
+    const TStringBuf tabletAppRelPath = TabletAppRelativePath(tabletAppPath);
+
+    auto path = TStringBuilder() << tabletAppRelPath
         << "?TabletID=" << tabletId
         << "&page=" << "change-sender"
         << "&pathId=" << pathId.OwnerId << ":" << pathId.LocalPathId;

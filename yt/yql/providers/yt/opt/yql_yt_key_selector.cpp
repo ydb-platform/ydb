@@ -110,7 +110,7 @@ void TKeySelectorBuilder::ProcessConstraint(const TSortedConstraintNode& sortCon
                 const auto& column = path.front();
                 const auto pos = StructType->FindItem(column);
                 YQL_ENSURE(pos, "Column " << column << " is missing in struct type");
-                AddColumn(column, StructType->GetItems()[*pos]->GetItemType(), item.second, false);
+                AddColumn(column, StructType->GetItems()[*pos]->GetItemType(), item.second, column, false);
                 good = true;
                 break;
             }
@@ -123,12 +123,13 @@ void TKeySelectorBuilder::ProcessConstraint(const TSortedConstraintNode& sortCon
 void TKeySelectorBuilder::ProcessRowSpec(const TYqlRowSpecInfo& rowSpec) {
     auto& columns = rowSpec.SortMembers;
     auto& dirs = rowSpec.SortDirections;
+    auto& sortedBy = rowSpec.SortedBy;
     YQL_ENSURE(columns.size() <= dirs.size());
     YQL_ENSURE(StructType);
     for (size_t i = 0; i < columns.size(); ++i) {
         auto pos = StructType->FindItem(columns[i]);
         YQL_ENSURE(pos, "Column " << columns[i] << " is missing in struct type");
-        AddColumn(columns[i], StructType->GetItems()[*pos]->GetItemType(), dirs[i], false);
+        AddColumn(columns[i], StructType->GetItems()[*pos]->GetItemType(), dirs[i], sortedBy[i], false);
     }
 }
 
@@ -259,13 +260,17 @@ void TKeySelectorBuilder::AddColumn(const TExprNode::TPtr& rootLambda, const TEx
 }
 
 void TKeySelectorBuilder::AddColumn(const TStringBuf memberName, const TTypeAnnotationNode* columnType,
-    bool ascending, bool unordered) {
+    bool ascending, const TStringBuf sortedBy, bool unordered) {
     auto presortColumnType = columnType;
     bool needPresort = false;
     if (ascending) {
         needPresort = RemoveOptionalType(columnType)->GetKind() != ETypeAnnotationKind::Data;
     } else {
         needPresort = !UseNativeDescSort || RemoveOptionalType(columnType)->GetKind() != ETypeAnnotationKind::Data;
+    }
+
+    if (!ascending && UseNativeDescSort && memberName != sortedBy && IsSystemMember(sortedBy)) {
+        NeedMap_ = true;
     }
 
     if (needPresort) {

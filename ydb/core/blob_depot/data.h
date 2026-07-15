@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "blob_depot_tablet.h"
 #include "closed_interval_set.h"
+#include "coro_tx.h"
 
 #include <util/generic/hash_multi_map.h>
 
@@ -388,6 +389,24 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
+        enum class ETrashLoadState {
+            Complete,
+            NeedMore,
+            Loading,
+        };
+
+        static constexpr const char *TrashLoadStateToString(ETrashLoadState state) {
+            switch (state) {
+                case ETrashLoadState::Complete:
+                    return "complete";
+                case ETrashLoadState::NeedMore:
+                    return "need more";
+                case ETrashLoadState::Loading:
+                    return "loading";
+            }
+            return "unknown";
+        }
+
         enum EScanFlags : ui32 {
             INCLUDE_BEGIN = 1,
             INCLUDE_END = 2,
@@ -474,6 +493,10 @@ namespace NKikimr::NBlobDepot {
         ui64 LoadRestartTxCycles = 0;
         ui64 LoadRunSuccessorTxCycles = 0;
         ui64 LoadTotalCycles = 0;
+        ui64 LoadedTrashRecords = 0;
+
+        ETrashLoadState TrashLoadState = ETrashLoadState::Loading;
+        TString TrashLoadFrom;
 
         friend class TGroupAssimilator;
 
@@ -552,8 +575,12 @@ namespace NKikimr::NBlobDepot {
                 }
                 while (rowset.IsValid()) {
                     TKey key = TKey::FromBinaryKey(rowset.GetKey(), Data->Self->Config);
-                    STLOG(PRI_TRACE, BLOB_DEPOT, BDT46, "ScanRange.Load", (Id, Data->Self->GetLogId()), (Left, left),
-                        (Right, right), (Key, key));
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT, "ScanRange.Load",
+                        {"marker", "BDT46"},
+                        {"id", Data->Self->GetLogId()},
+                        {"left", left},
+                        {"right", right},
+                        {"key", key});
                     if (left < key && key < right) {
                         TValue* const value = Data->AddDataOnLoad(key, rowset.template GetValue<Schema::Data::Value>(),
                             rowset.template GetValueOrDefault<Schema::Data::UncertainWrite>());
@@ -585,8 +612,13 @@ namespace NKikimr::NBlobDepot {
 
         template<typename TCallback>
         bool ScanRange(TScanRange& range, NTabletFlatExecutor::TTransactionContext *txc, bool *progress, TCallback&& callback) {
-            STLOG(PRI_TRACE, BLOB_DEPOT, BDT76, "ScanRange", (Id, Self->GetLogId()), (Begin, range.Begin), (End, range.End),
-                (Flags, range.Flags), (MaxKeys, range.MaxKeys));
+            YDB_LOG_TRACE_COMP(BLOB_DEPOT, "ScanRange",
+                {"marker", "BDT76"},
+                {"id", Self->GetLogId()},
+                {"begin", range.Begin},
+                {"end", range.End},
+                {"flags", range.Flags},
+                {"maxKeys", range.MaxKeys});
 
             const bool reverse = range.Flags & EScanFlags::REVERSE;
             TLoadRangeFromDB loader{this, range, progress};
@@ -610,8 +642,14 @@ namespace NKikimr::NBlobDepot {
             const auto& from = reverse ? TKey::Min() : range.Begin;
             const auto& to = reverse ? range.End : TKey::Max();
             LoadedKeys.EnumInRange(from, to, reverse, [&](const TKey& left, const TKey& right, bool isRangeLoaded) {
-                STLOG(PRI_TRACE, BLOB_DEPOT, BDT83, "ScanRange.Step", (Id, Self->GetLogId()), (Left, left), (Right, right),
-                    (IsRangeLoaded, isRangeLoaded), (From, from), (To, to));
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT, "ScanRange.Step",
+                    {"marker", "BDT83"},
+                    {"id", Self->GetLogId()},
+                    {"left", left},
+                    {"right", right},
+                    {"isRangeLoaded", isRangeLoaded},
+                    {"from", from},
+                    {"to", to});
                 if (!isRangeLoaded) {
                     // we have to load range (left, right), not including both ends
                     Y_ABORT_UNLESS(txc && progress);
@@ -740,12 +778,22 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
+        enum class ELoadTrashResult {
+            NotReady,
+            BatchFull,
+            Complete,
+        };
+
         void StartLoad();
-        bool LoadTrash(NTabletFlatExecutor::TTransactionContext& txc, TString& from, bool& progress);
+        ELoadTrashResult LoadTrash(NTabletFlatExecutor::TTransactionContext& txc, TString& from, bool& progress);
         bool LoadTrashS3(NTabletFlatExecutor::TTransactionContext& txc, TS3Locator& from, bool& progress);
         void OnLoadComplete();
         bool IsLoaded() const { return Loaded; }
         bool IsKeyLoaded(const TKey& key) const { return Loaded || LoadedKeys[key]; }
+        bool IsTrashFullyLoaded() const;
+
+        ETrashLoadState GetTrashLoadState() const;
+        ui64 GetLoadedTrashRecords() const;
 
         bool EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, bool *progress = nullptr);
 
@@ -801,6 +849,15 @@ namespace NKikimr::NBlobDepot {
             TGenStep confirmedGenStep);
 
         void ExecuteHardGC(ui8 channel, ui32 groupId, TGenStep hardGenStep);
+
+        bool IssueLoadTrashBatch();
+        void OnLoadTrashBatchComplete(ELoadTrashResult result);
+
+        class TLoadCycleAccounting;
+
+        void FinishLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx);
+        void RestartLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx, bool progress);
+        ELoadTrashResult RunLoadTrashLoop(TCoroTx::TContextBase& tx, TLoadCycleAccounting& accounting, TString& from);
     };
 
     Y_DECLARE_OPERATORS_FOR_FLAGS(TBlobDepot::TData::TScanFlags);

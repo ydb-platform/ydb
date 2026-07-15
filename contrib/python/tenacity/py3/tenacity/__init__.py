@@ -20,6 +20,7 @@ import functools
 import sys
 import threading
 import time
+import types
 import typing as t
 import warnings
 from abc import ABC, abstractmethod
@@ -59,6 +60,7 @@ from .stop import stop_when_event_set  # noqa
 # Import all built-in wait strategies for easier usage.
 from .wait import wait_chain  # noqa
 from .wait import wait_combine  # noqa
+from .wait import wait_exception  # noqa
 from .wait import wait_exponential  # noqa
 from .wait import wait_fixed  # noqa
 from .wait import wait_incrementing  # noqa
@@ -86,8 +88,6 @@ except ImportError:
     tornado = None
 
 if t.TYPE_CHECKING:
-    import types
-
     from typing_extensions import Self
 
     from . import asyncio as tasyncio
@@ -98,14 +98,11 @@ if t.TYPE_CHECKING:
 
 WrappedFnReturnT = t.TypeVar("WrappedFnReturnT")
 WrappedFn = t.TypeVar("WrappedFn", bound=t.Callable[..., t.Any])
+P = t.ParamSpec("P")
+R = t.TypeVar("R")
 
 
-dataclass_kwargs = {}
-if sys.version_info >= (3, 10):
-    dataclass_kwargs.update({"slots": True})
-
-
-@dataclasses.dataclass(**dataclass_kwargs)
+@dataclasses.dataclass(slots=True)
 class IterState:
     actions: t.List[t.Callable[["RetryCallState"], t.Any]] = dataclasses.field(
         default_factory=list
@@ -307,19 +304,15 @@ class BaseRetrying(ABC):
                   future we may provide a way to aggregate the various
                   statistics from each thread).
         """
-        try:
-            return self._local.statistics  # type: ignore[no-any-return]
-        except AttributeError:
+        if not hasattr(self._local, "statistics"):
             self._local.statistics = t.cast(t.Dict[str, t.Any], {})
-            return self._local.statistics
+        return self._local.statistics  # type: ignore[no-any-return]
 
     @property
     def iter_state(self) -> IterState:
-        try:
-            return self._local.iter_state  # type: ignore[no-any-return]
-        except AttributeError:
+        if not hasattr(self._local, "iter_state"):
             self._local.iter_state = IterState()
-            return self._local.iter_state
+        return self._local.iter_state  # type: ignore[no-any-return]
 
     def wraps(self, f: WrappedFn) -> WrappedFn:
         """Wrap a function for retrying.
@@ -489,13 +482,7 @@ class Retrying(BaseRetrying):
                 return do  # type: ignore[no-any-return]
 
 
-if sys.version_info >= (3, 9):
-    FutureGenericT = futures.Future[t.Any]
-else:
-    FutureGenericT = futures.Future
-
-
-class Future(FutureGenericT):
+class Future(futures.Future[t.Any]):
     """Encapsulates a (future or past) attempted call to a target function."""
 
     def __init__(self, attempt_number: int) -> None:
@@ -597,13 +584,50 @@ class RetryCallState:
         return f"<{clsname} {id(self)}: attempt #{self.attempt_number}; slept for {slept}; last result: {result}>"
 
 
+class _AsyncRetryDecorator(t.Protocol):
+    @t.overload
+    def __call__(
+        self, fn: "t.Callable[P, types.CoroutineType[t.Any, t.Any, R]]"
+    ) -> "t.Callable[P, types.CoroutineType[t.Any, t.Any, R]]": ...
+    @t.overload
+    def __call__(
+        self, fn: t.Callable[P, t.Coroutine[t.Any, t.Any, R]]
+    ) -> t.Callable[P, t.Coroutine[t.Any, t.Any, R]]: ...
+    @t.overload
+    def __call__(
+        self, fn: t.Callable[P, t.Awaitable[R]]
+    ) -> t.Callable[P, t.Awaitable[R]]: ...
+    @t.overload
+    def __call__(self, fn: t.Callable[P, R]) -> t.Callable[P, t.Awaitable[R]]: ...
+
+
 @t.overload
 def retry(func: WrappedFn) -> WrappedFn: ...
 
 
 @t.overload
 def retry(
-    sleep: t.Callable[[t.Union[int, float]], t.Union[None, t.Awaitable[None]]] = sleep,
+    *,
+    sleep: t.Callable[[t.Union[int, float]], t.Awaitable[None]],
+    stop: "StopBaseT" = ...,
+    wait: "WaitBaseT" = ...,
+    retry: "t.Union[RetryBaseT, tasyncio.retry.RetryBaseT]" = ...,
+    before: t.Callable[["RetryCallState"], t.Union[None, t.Awaitable[None]]] = ...,
+    after: t.Callable[["RetryCallState"], t.Union[None, t.Awaitable[None]]] = ...,
+    before_sleep: t.Optional[
+        t.Callable[["RetryCallState"], t.Union[None, t.Awaitable[None]]]
+    ] = ...,
+    reraise: bool = ...,
+    retry_error_cls: t.Type["RetryError"] = ...,
+    retry_error_callback: t.Optional[
+        t.Callable[["RetryCallState"], t.Union[t.Any, t.Awaitable[t.Any]]]
+    ] = ...,
+) -> _AsyncRetryDecorator: ...
+
+
+@t.overload
+def retry(
+    sleep: t.Callable[[t.Union[int, float]], None] = sleep,
     stop: "StopBaseT" = stop_never,
     wait: "WaitBaseT" = wait_none(),
     retry: "t.Union[RetryBaseT, tasyncio.retry.RetryBaseT]" = retry_if_exception_type(),
@@ -642,7 +666,10 @@ def retry(*dargs: t.Any, **dkw: t.Any) -> t.Any:
                     f"this will probably hang indefinitely (did you mean retry={f.__class__.__name__}(...)?)"
                 )
             r: "BaseRetrying"
-            if _utils.is_coroutine_callable(f):
+            sleep = dkw.get("sleep")
+            if _utils.is_coroutine_callable(f) or (
+                sleep is not None and _utils.is_coroutine_callable(sleep)
+            ):
                 r = AsyncRetrying(*dargs, **dkw)
             elif (
                 tornado
@@ -690,6 +717,7 @@ __all__ = [
     "stop_when_event_set",
     "wait_chain",
     "wait_combine",
+    "wait_exception",
     "wait_exponential",
     "wait_fixed",
     "wait_incrementing",

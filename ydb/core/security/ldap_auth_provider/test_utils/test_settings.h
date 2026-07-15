@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 
 #include <util/system/tempfile.h>
 #include <util/generic/string.h>
@@ -10,7 +10,7 @@ class TLdapAuthentication;
 
 } // NKikimrProto
 
-namespace NKikimr {
+namespace NKikimr::NCertTestUtils {
 
 enum class ESecurityConnectionType {
     NON_SECURE,
@@ -60,4 +60,4 @@ void InitLdapSettingsWithListOfHosts(NKikimrProto::TLdapAuthentication* ldapSett
 void InitLdapSettingsDisableSearchNestedGroups(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, const TLdapClientOptions& ldapClientOptions);
 void InitLdapSettingsWithSaslExternalBind(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, const TLdapClientOptions& ldapClientOptions);
 
-} // NKikimr
+} // NKikimr::NCertTestUtils

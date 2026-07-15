@@ -21,6 +21,8 @@
 
 namespace NYdbGrpc {
 
+std::atomic<bool> GrpcDead = false;
+
 static void PullEvents(grpc::ServerCompletionQueue* cq, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     TThread::SetCurrentThreadName("grpc_server");
     auto okCounter = counters->GetCounter("RequestExecuted", true);
@@ -273,7 +275,7 @@ void TGRpcServer::Start() {
 }
 
 void TGRpcServer::Stop() {
-    NYdbGrpc::GrpcDead = 1;
+    NYdbGrpc::GrpcDead = true;
     for (auto& service : Services_) {
         service->StopService();
     }

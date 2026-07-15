@@ -5,13 +5,11 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
-#include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <util/system/tempfile.h>
-
-#include "ydb_keys_ut.h"
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/csv/api.h> // for WriteCSV()
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
@@ -19,6 +17,7 @@
 #include <functional>
 
 using namespace NKikimr;
+using namespace NKikimr::NCertTestUtils;
 namespace NYdb {
 
 using namespace Tests;
@@ -29,10 +28,6 @@ struct TKikimrTestSettings {
     static constexpr bool AUTH = false;
     static constexpr bool PrecreatePools = true;
 
-    static TString GetCaCrt() { return NYdbSslTestData::CaCrt; }
-    static TString GetServerCrt() { return NYdbSslTestData::ServerCrt; }
-    static TString GetServerKey() { return NYdbSslTestData::ServerKey; }
-
     static NKikimr::TCertificateAuthorizationParams GetCertAuthParams() {return {}; }
 };
 
@@ -41,10 +36,6 @@ struct TKikimrTestWithAuth : TKikimrTestSettings {
 };
 
 struct TKikimrTestWithAuthAndSsl : TKikimrTestWithAuth {
-    static constexpr bool SSL = true;
-};
-
-struct TKikimrTestWithServerCert : TKikimrTestWithAuthAndSsl {
     static constexpr bool SSL = true;
 
     static const TCertAndKey& GetCACertAndKey() {
@@ -94,7 +85,7 @@ public:
         ServerSettings->SetDynamicNodeCount(dynamicNodeCount);
         if (nodeCount > 0)
             ServerSettings->SetNodeCount(nodeCount);
-        if (TestSettings::PrecreatePools) {
+        if constexpr (TestSettings::PrecreatePools) {
             ServerSettings->AddStoragePool("ssd");
             ServerSettings->AddStoragePool("hdd");
             ServerSettings->AddStoragePool("hdd1");
@@ -110,6 +101,7 @@ public:
         ServerSettings->SetKqpSettings(kqpSettings);
         ServerSettings->SetEnableDataColumnForIndexTable(true);
         ServerSettings->SetEnableNotNullColumns(true);
+        ServerSettings->SetEnableTopicMessageLevelParallelism(true);
         ServerSettings->SetEnableParameterizedDecimal(true);
         ServerSettings->SetEnableYq(enableYq);
         ServerSettings->Formats = new TFormatFactory;
@@ -128,8 +120,10 @@ public:
             builder(*ServerSettings);;
         }
 
-        ServerCertificateFile.Write(TestSettings::GetServerCrt().data(), TestSettings::GetServerCrt().size());
-        ServerSettings->ServerCertFilePath = ServerCertificateFile.Name();
+        if constexpr (TestSettings::SSL) {
+            ServerCertificateFile.Write(TestSettings::GetServerCrt().data(), TestSettings::GetServerCrt().size());
+            ServerSettings->ServerCertFilePath = ServerCertificateFile.Name();
+        }
 
         Server_.Reset(new TServer(*ServerSettings));
         Tenants_.Reset(new Tests::TTenants(Server_));
@@ -151,15 +145,15 @@ public:
         }
 
         NYdbGrpc::TServerOptions grpcOption;
-        if (TestSettings::AUTH) {
+        if constexpr (TestSettings::AUTH) {
             grpcOption.SetUseAuth(appConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()); // In real life UseAuth is initialized with EnforceUserTokenRequirement. To avoid incorrect tests we must do the same.
         }
-        grpcOption.SetPort(grpc);
-        if (TestSettings::SSL) {
+        grpcOption.SetHost("localhost").SetPort(grpc);
+        if constexpr (TestSettings::SSL) {
             NYdbGrpc::TSslData sslData;
             sslData.Cert = TestSettings::GetServerCrt();
             sslData.Key = TestSettings::GetServerKey();
-            sslData.Root =TestSettings::GetCaCrt();
+            sslData.Root = TestSettings::GetCaCrt();
             sslData.DoRequestClientCertificate = appConfig.GetClientCertificateAuthorization().GetRequestClientCertificate();
 
             grpcOption.SetSslData(sslData);

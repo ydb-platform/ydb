@@ -52,8 +52,8 @@ class Compiler(unix.Compiler):
     dylib_lib_format = "cyg%s%s"
     exe_extension = ".exe"
 
-    def __init__(self, verbose=False, dry_run=False, force=False):
-        super().__init__(verbose, dry_run, force)
+    def __init__(self, verbose=False, force=False):
+        super().__init__(verbose, force=force)
 
         status, details = check_config_h()
         self.debug_print(f"Python's GCC status: {status} (details: {details})")
@@ -246,8 +246,8 @@ class MinGW32Compiler(Compiler):
 
     compiler_type = 'mingw32'
 
-    def __init__(self, verbose=False, dry_run=False, force=False):
-        super().__init__(verbose, dry_run, force)
+    def __init__(self, verbose=False, force=False):
+        super().__init__(verbose, force)
 
         shared_option = "-shared"
 

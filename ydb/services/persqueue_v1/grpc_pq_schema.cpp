@@ -1,113 +1,25 @@
 #include "grpc_pq_schema.h"
 
 #include "actors/schema_actors.h"
-#include "actors/commit_offset_actor.h"
-#include "actors/events.h"
+#include "actors/read_session_actor.h"
+
+#include <ydb/services/persqueue_v1/actors/schema/pqv1/actors.h>
+#include <ydb/services/persqueue_v1/actors/schema/topic/actors.h>
 
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 
 #include <algorithm>
 #include <shared_mutex>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
+
 using namespace NActors;
 using namespace NKikimrClient;
 
 using grpc::Status;
 
-namespace NKikimr::NGRpcProxy::V1 {
-
-///////////////////////////////////////////////////////////////////////////////
-
-using namespace PersQueue::V1;
-
-class TPQSchemaService : public NActors::TActorBootstrapped<TPQSchemaService>, IClustersCfgProvider {
-public:
-    TPQSchemaService(IClustersCfgProvider** p);
-
-    void Bootstrap(const TActorContext& ctx);
-
-    TIntrusiveConstPtr<TClustersCfg> GetCfg() const override;
-
-private:
-    TString AvailableLocalCluster();
-
-    STFUNC(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate, Handle);
-        }
-    }
-
-private:
-    void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev);
-
-    mutable std::shared_mutex Mtx;
-    TIntrusivePtr<TClustersCfg> ClustersCfg;
-};
-
-IActor* CreatePQSchemaService(IClustersCfgProvider** p) {
-    return new TPQSchemaService(p);
-}
-
-TPQSchemaService::TPQSchemaService(IClustersCfgProvider** p)
-    : ClustersCfg(MakeIntrusive<TClustersCfg>())
-{
-    // used from grpc handlers.
-    // GetCfg method in called in the grpc thread context
-    // We have guarantee this object is created before grpc start
-    // and the the object destroyed after grpc stop
-    *p = this;
-}
-
-void TPQSchemaService::Bootstrap(const TActorContext& ctx) {
-    if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { // ToDo[migration]: switch to haveClusters
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "TPQSchemaService: send TEvClusterTracker::TEvSubscribe");
-
-        ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(),
-                 new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
-    }
-
-    Become(&TThis::StateFunc);
-}
-
-void TPQSchemaService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev) {
-    AFL_ENSURE(ev->Get()->ClustersList);
-    AFL_ENSURE(ev->Get()->ClustersList->Clusters.size());
-
-    const auto& clusters = ev->Get()->ClustersList->Clusters;
-
-    auto cfg = MakeIntrusive<TClustersCfg>();
-
-    auto it = std::find_if(begin(clusters), end(clusters), [](const auto& cluster) { return cluster.IsLocal; });
-    if (it != end(clusters)) {
-        cfg->LocalCluster = it->Name;
-    }
-
-    cfg->Clusters.resize(clusters.size());
-    for (size_t i = 0; i < clusters.size(); ++i) {
-        cfg->Clusters[i] = clusters[i].Name;
-    }
-
-    std::unique_lock lock(Mtx);
-    ClustersCfg = cfg;
-}
-
-TIntrusiveConstPtr<TClustersCfg> TPQSchemaService::GetCfg() const {
-    std::shared_lock lock(Mtx);
-    return ClustersCfg;
-}
-
-}
-
 namespace NKikimr {
 namespace NGRpcService {
-
-void EnsureReq(const IRequestOpCtx* ctx, const TIntrusiveConstPtr<NGRpcProxy::V1::TClustersCfg>& cfg) {
-    if (Y_UNLIKELY(!ctx))
-        throw yexception() << "no req ctx after cast";
-
-    if (Y_UNLIKELY(!cfg))
-        throw yexception() << "no cluster cfg provided";
-}
 
 void EnsureReq(const IRequestOpCtx* ctx) {
     if (Y_UNLIKELY(!ctx))
@@ -119,34 +31,33 @@ void DoDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpc
 
     EnsureReq(p);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new drop topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TDropTopicActor(p));
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New drop topic request");
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateDropTopicActor(p));
 }
 
-void DoCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f,
-    TIntrusiveConstPtr<NGRpcProxy::V1::TClustersCfg> cfg)
+void DoCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f)
 {
     auto p = dynamic_cast<TEvCreateTopicRequest*>(ctx.release());
 
     EnsureReq(p);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new create topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TCreateTopicActor(p, cfg->LocalCluster, cfg->Clusters));
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New create topic request");
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateCreateTopicActor(p));
 }
 
 void DoAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f) {
     auto* p = ctx.release();
     Y_VERIFY_DEBUG(dynamic_cast<const Ydb::Topic::AlterTopicRequest*>(p->GetRequest()));
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new alter topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TAlterTopicActor(p));
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New alter topic request");
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateAlterTopicActor(p));
 }
 
 void DoDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
     auto* p = ctx.release();
     Y_VERIFY_DEBUG(dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(p->GetRequest()));
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe topic request");
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Describe topic request");
     f.RegisterActor(new NGRpcProxy::V1::TDescribeTopicActor(p));
 }
 
@@ -155,8 +66,8 @@ void DoDescribeConsumerRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr
 
     EnsureReq(p);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe consumer request");
-    f.RegisterActor(new NGRpcProxy::V1::TDescribeConsumerActor(p));
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Describe consumer request");
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateDescribeConsumerActor(p));
 }
 
 void DoDescribePartitionRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
@@ -164,17 +75,18 @@ void DoDescribePartitionRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikim
 
     EnsureReq(p);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe partition request");
-    f.RegisterActor(new NGRpcProxy::V1::TDescribePartitionActor(p));
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Describe partition request");
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateDescribePartitionActor(p));
 }
 
-void DoCommitOffsetRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
-     auto p = dynamic_cast<TEvCommitOffsetRequest*>(ctx.release());
+void DoCommitOffsetRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider&) {
+    std::unique_ptr<TEvCommitOffsetRequest> p;
+    p.reset(dynamic_cast<TEvCommitOffsetRequest*>(ctx.release()));
 
-    EnsureReq(p);
+    EnsureReq(p.get());
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Commit Offset request");
-    f.RegisterActor(new NKikimr::NGRpcProxy::V1::TCommitOffsetActor(p));
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Commit Offset request");
+    TActivationContext::Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), std::move(p));
 }
 
 void DoPQDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
@@ -182,30 +94,28 @@ void DoPQDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGR
 
     EnsureReq(p);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Drop topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TPQDropTopicActor(p));
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Drop topic request");
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateDropTopicActor(p));
 }
 
-void DoPQCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f,
-    TIntrusiveConstPtr<NGRpcProxy::V1::TClustersCfg> cfg)
+void DoPQCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f)
 {
     auto p = dynamic_cast<TEvPQCreateTopicRequest*>(ctx.release());
 
-    EnsureReq(p, cfg);
+    EnsureReq(p);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Create topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TPQCreateTopicActor(p, cfg->LocalCluster, cfg->Clusters));
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Create topic request");
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateCreateTopicActor(p));
 }
 
-void DoPQAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f,
-    TIntrusiveConstPtr<NGRpcProxy::V1::TClustersCfg> cfg)
+void DoPQAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f)
 {
     auto p = dynamic_cast<TEvPQAlterTopicRequest*>(ctx.release());
 
-    EnsureReq(p, cfg);
+    EnsureReq(p);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Alter topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TPQAlterTopicActor(p, cfg->LocalCluster));
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Alter topic request");
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateAlterTopicActor(p));
 }
 
 void DoPQDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f) {
@@ -213,7 +123,7 @@ void DoPQDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilit
 
     EnsureReq(p);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe topic request");
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Describe topic request");
     f.RegisterActor(new NGRpcProxy::V1::TPQDescribeTopicActor(p));
 }
 
@@ -222,8 +132,8 @@ void DoPQAddReadRuleRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityP
 
     EnsureReq(p);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Add read rules request");
-    f.RegisterActor(new NGRpcProxy::V1::TAddReadRuleActor(p));
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Add read rules request");
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateAddConsumerActor(p));
 }
 
 void DoPQRemoveReadRuleRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f) {
@@ -231,8 +141,8 @@ void DoPQRemoveReadRuleRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacili
 
     EnsureReq(p);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Remove read rules request");
-    f.RegisterActor(new NGRpcProxy::V1::TRemoveReadRuleActor(p));
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Remove read rules request");
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateRemoveConsumerActor(p));
 }
 
 #ifdef DECLARE_RPC
@@ -244,10 +154,18 @@ void DoPQRemoveReadRuleRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacili
     }
 
 DECLARE_RPC(DescribeTopic);
-DECLARE_RPC(DescribeConsumer);
-DECLARE_RPC(DescribePartition);
 
 #undef DECLARE_RPC
+
+template<>
+IActor* TEvDescribeConsumerRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return NGRpcProxy::V1::NTopic::CreateDescribeConsumerActor(msg);
+}
+
+template<>
+IActor* TEvDescribePartitionRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return NGRpcProxy::V1::NTopic::CreateDescribePartitionActor(msg);
+}
 
 }
 }

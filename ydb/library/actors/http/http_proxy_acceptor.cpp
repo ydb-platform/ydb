@@ -59,6 +59,7 @@ protected:
         Endpoint->Proxy = Owner;
         Endpoint->WorkerName = event->Get()->WorkerName;
         Endpoint->Secure = event->Get()->Secure;
+        Endpoint->AllowHttp2 = event->Get()->AllowHttp2;
         Endpoint->RateLimiter.Limit = event->Get()->MaxRequestsPerSecond;
         Endpoint->RateLimiter.Period = TDuration::Seconds(1);
         Endpoint->InactivityTimeout = event->Get()->InactivityTimeout;
@@ -72,6 +73,10 @@ protected:
             if (Endpoint->SecureContext == nullptr) {
                 err = -1;
                 ALOG_WARN(HttpLog, "Failed to construct server security context");
+            }
+            // Enable ALPN for HTTP/2 negotiation on secure endpoints
+            if (Endpoint->SecureContext && Endpoint->AllowHttp2) {
+                TSslHelpers::EnableAlpn(Endpoint->SecureContext.Get());
             }
         }
         if (err == 0) {

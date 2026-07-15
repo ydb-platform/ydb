@@ -79,7 +79,7 @@ int RunHighlighter(const THighlighting& highlighting) {
     return 0;
 }
 
-int Run(int argc, char* argv[]) {
+int Run(int argc, char** argv) {
     TString syntax;
     TString target;
     TString path;
@@ -132,7 +132,7 @@ int Run(int argc, char* argv[]) {
     return RunHighlighter(highlighting);
 }
 
-int main(int argc, char* argv[]) try {
+int main(int argc, char** argv) try {
     return Run(argc, argv);
 } catch (const yexception& e) {
     Cerr << "Caught exception:" << e.what() << Endl;

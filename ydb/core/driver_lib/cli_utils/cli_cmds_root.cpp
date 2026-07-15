@@ -1,13 +1,34 @@
 #include "cli.h"
 #include "cli_cmds.h"
+#include "cli_cmds_standalone.h"
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_discovery.h> // for NConsoleClient::TCommandWhoAmI
 #include <ydb/core/driver_lib/run/factories.h>
+#include <ydb/core/driver_lib/version/version.h>
+#include <library/cpp/malloc/api/malloc.h>
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
 #include <util/system/env.h>
 
 #include <filesystem>
+
+namespace {
+
+void PrintAllocatorInfoAndExit() {
+    Cout << "linked with malloc: " << NMalloc::MallocInfo().Name << Endl;
+    exit(0);
+}
+
+void PrintCompatibilityInfoAndExit() {
+    TString compatibilityInfo(NKikimr::CompatibilityInfo.PrintHumanReadable());
+    Cout << compatibilityInfo;
+    if (!compatibilityInfo.EndsWith("\n")) {
+        Cout << Endl;
+    }
+    exit(0);
+}
+
+} // anonymous namespace
 
 namespace NKikimr {
 namespace NDriverClient {
@@ -17,26 +38,145 @@ using namespace NYdb::NConsoleClient;
 extern void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories);
 
 class TClientCommandRoot : public TClientCommandRootKikimrBase {
+    // Dummy storage for hidden global opts consumed by "run" command.
+    // The actual values are re-parsed from InitialArgV inside TCommandRun::Run().
+    TString DummyClusterName;
+    ui32 DummyLogLevel = 0;
+    ui32 DummyLogSamplingLevel = 0;
+    ui32 DummyLogSamplingRate = 0;
+    TString DummyLogFormat;
+    TVector<TString> DummyUDFsPaths;
+    TString DummyUDFsDir;
+
 public:
     TClientCommandRoot(const TString& name, std::shared_ptr<TModuleFactories> factories)
         : TClientCommandRootKikimrBase(name)
     {
+        // Visible commands
+        AddClientCommandServer(*this, factories);
         AddCommand(std::make_unique<TClientCommandAdmin>());
         AddCommand(std::make_unique<TClientCommandDb>());
         AddCommand(std::make_unique<TClientCommandCms>());
         AddCommand(std::make_unique<TCommandWhoAmI>());
         AddCommand(std::make_unique<TClientCommandDiscovery>());
-        AddClientCommandServer(*this, std::move(factories));
         AddCommand(std::make_unique<TClientCommandConfig>());
+
+        // Hidden commands
+        AddHiddenCommand(NewCommandRun(std::move(factories)));
+        AddHiddenCommand(NewCommandFormatInfo());
+        AddHiddenCommand(NewCommandFormatUtil());
+        AddHiddenCommand(NewCommandNodeByHost());
+        AddHiddenCommand(NewCommandSchemeInitRoot());
+        AddHiddenCommand(NewCommandPersQueueRequest());
+        AddHiddenCommand(NewCommandPersQueueStress());
+        AddHiddenCommand(NewCommandPersQueueDiscoverClusters());
+        AddHiddenCommand(NewCommandActorsysPerfTest());
     }
 
     void Config(TConfig& config) override {
         TClientCommandOptions& opts = *config.Opts;
         HideOptions(config.Opts->GetOpts());
-        opts.AddLongOption('k', "token", "security token").RequiredArgument("TOKEN").StoreResult(&Token);
-        opts.AddLongOption('s', "server", "server address to connect")
+        // Restore --help visibility after HideOptions hid everything
+        if (auto* helpOpt = config.Opts->GetOpts().FindLongOption("help")) {
+            helpOpt->Hidden_ = false;
+        }
+        opts.AddLongOption('k', "token", "Security token").RequiredArgument("TOKEN").StoreResult(&Token);
+        opts.AddLongOption('s', "server", "Server address to connect")
             .RequiredArgument("HOST[:PORT]").StoreResult(&Address);
+
+        NLastGetopt::TOpts& nOpts = config.Opts->GetOpts();
+        nOpts.AddLongOption(0, "allocator-info", "Print the name of allocator linked to the binary and exit")
+            .NoArgument().Handler(&PrintAllocatorInfoAndExit);
+        nOpts.AddLongOption(0, "compatibility-info", "Print compatibility info of this binary and exit")
+            .NoArgument().Handler(&PrintCompatibilityInfoAndExit);
+        config.ExecutableOptions.insert("-V");
+        config.ExecutableOptions.insert("--svnrevision");
+        config.ExecutableOptions.insert("--allocator-info");
+        config.ExecutableOptions.insert("--compatibility-info");
+
+        // Hidden global opts for legacy "run" command.
+        // These must be accepted at root level for backward compatibility:
+        // "ydbd --cluster-name test run --node 1"
+        // The actual values are re-parsed from InitialArgV inside TCommandRun::Run().
+        nOpts.AddLongOption("cluster-name", "which cluster this node belongs to")
+            .DefaultValue("unknown").OptionalArgument("STR").StoreResult(&DummyClusterName).Hidden();
+        nOpts.AddLongOption("log-level", "default logging level")
+            .DefaultValue("5").OptionalArgument("1-7").StoreResult(&DummyLogLevel).Hidden();
+        nOpts.AddLongOption("log-sampling-level", "sample logs equal to or above this level")
+            .DefaultValue("7").OptionalArgument("1-7").StoreResult(&DummyLogSamplingLevel).Hidden();
+        nOpts.AddLongOption("log-sampling-rate", "log only each Nth message with priority matching sampling level; 0 turns log sampling off")
+            .DefaultValue("0").OptionalArgument("NUM").StoreResult(&DummyLogSamplingRate).Hidden();
+        nOpts.AddLongOption("log-format", "log format to use; short skips the priority and timestamp")
+            .DefaultValue("full").OptionalArgument("full|short|json").StoreResult(&DummyLogFormat).Hidden();
+        nOpts.AddLongOption("syslog", "send to syslog instead of stderr")
+            .NoArgument().Hidden();
+        nOpts.AddLongOption("tcp", "start tcp interconnect")
+            .NoArgument().Hidden();
+        nOpts.AddLongOption("udf", "Load shared library with UDF by given path")
+            .RequiredArgument("PATH").AppendTo(&DummyUDFsPaths).Hidden();
+        nOpts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory")
+            .RequiredArgument("PATH").StoreResult(&DummyUDFsDir).Hidden();
+
         TClientCommandRootKikimrBase::Config(config);
+
+        if (config.HelpCommandVerbosityLevel <= 1) {
+            for (const auto& name : {"allocator-info", "compatibility-info", "time", "progress"}) {
+                if (auto* opt = nOpts.FindLongOption(name)) {
+                    opt->Hidden_ = true;
+                }
+            }
+        }
+
+        const TString programName(config.ArgC > 0 ? config.ArgV[0] : "ydbd");
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        TStringStream stream;
+        stream << Endl << Endl
+            << colors.BoldColor() << "Quick start" << colors.OldColor() << ":" << Endl
+            << "  Start server:  " << programName << " server [server options...]" << Endl
+            << "  Manage YDB:    " << programName << " -s <host[:port]> <subcommand> [options]" << Endl
+            << Endl
+            << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
+        RenderCommandDescription(stream, config.HelpCommandVerbosityLevel > 1, colors, BEGIN, "", true);
+        stream << Endl << Endl
+            << colors.BoldColor() << "Detailed help" << colors.OldColor() << ":" << Endl
+            << "  " << colors.Green() << "-hh" << colors.OldColor()
+            << ": Print detailed help with all options and subcommands" << Endl
+            << "  " << programName << " server -h: Show server startup options" << Endl;
+        nOpts.SetCmdLineDescr(stream.Str());
+        nOpts.SetCustomUsage(programName + " [options] <subcommand> [subcommand options...]");
+    }
+
+    void RenderCommandDescription(
+        TStringStream& stream,
+        bool renderTree,
+        const NColorizer::TColors& colors,
+        RenderEntryType type,
+        TString prefix,
+        bool shortForm
+    ) override {
+        TClientCommand::RenderCommandDescription(stream, false, colors, type, prefix, shortForm);
+        if (type == BEGIN || renderTree) {
+            if (type == MIDDLE) {
+                prefix += "│  ";
+            }
+            if (type == END) {
+                prefix += "   ";
+            }
+            TVector<TClientCommand*> visibleSubCommands;
+            auto serverIt = SubCommands.find("server");
+            if (serverIt != SubCommands.end() && serverIt->second->Visible) {
+                visibleSubCommands.push_back(serverIt->second.get());
+            }
+            for (auto& [name, command] : SubCommands) {
+                if (name != "server" && command->Visible) {
+                    visibleSubCommands.push_back(command.get());
+                }
+            }
+            for (auto it = visibleSubCommands.begin(); it != visibleSubCommands.end(); ++it) {
+                bool lastCommand = (std::next(it) == visibleSubCommands.end());
+                (*it)->RenderCommandDescription(stream, renderTree, colors, lastCommand ? END : MIDDLE, prefix, shortForm);
+            }
+        }
     }
 
     void ParseAddress(TConfig& config) override {
@@ -72,19 +212,10 @@ public:
 
 int NewClient(int argc, char** argv, std::shared_ptr<TModuleFactories> factories) {
     auto commandsRoot = MakeHolder<TClientCommandRoot>(std::filesystem::path(argv[0]).stem().string(), std::move(factories));
+    commandsRoot->Opts.SetTitle("YDB client/server binary");
     TClientCommand::TConfig config(argc, argv);
     // TODO: process flags from environment KIKIMR_FLAGS before command line processing
     return commandsRoot->Process(config);
-}
-
-TString NewClientCommandsDescription(const TString& name, std::shared_ptr<TModuleFactories> factories) {
-    THolder<TClientCommandRoot> commandsRoot = MakeHolder<TClientCommandRoot>(name, std::move(factories));
-    TStringStream stream;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-    stream << " [options] <subcommand>" << Endl << Endl
-        << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    commandsRoot->RenderCommandDescription(stream, false, colors, TClientCommand::BEGIN, "", true);
-    return stream.Str();
 }
 
 }

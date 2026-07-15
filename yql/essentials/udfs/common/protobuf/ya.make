@@ -2,7 +2,7 @@ YQL_UDF_CONTRIB(protobuf_udf)
 
 YQL_ABI_VERSION(
     2
-    9
+    46
     0
 )
 

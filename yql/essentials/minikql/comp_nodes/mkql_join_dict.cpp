@@ -44,16 +44,12 @@ public:
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto joinFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TJoinDictWrapper::JoinDicts>());
         const auto joinFuncArg = ConstantInt::get(Type::getInt64Ty(context), (ui64)this);
 
         const auto one = GetNodeValue(Dict1, ctx, block);
         const auto two = GetNodeValue(Dict2, ctx, block);
 
-        const auto joinFuncType = FunctionType::get(Type::getInt128Ty(context),
-                                                    {joinFuncArg->getType(), ctx.Ctx->getType(), one->getType(), two->getType()}, false);
-        const auto joinFuncPtr = CastInst::Create(Instruction::IntToPtr, joinFunc, PointerType::getUnqual(joinFuncType), "cast", block);
-        const auto join = CallInst::Create(joinFuncType, joinFuncPtr, {joinFuncArg, ctx.Ctx, one, two}, "join", block);
+        const auto join = EmitFunctionCall<&TJoinDictWrapper::JoinDicts>(Type::getInt128Ty(context), {joinFuncArg, ctx.Ctx, one, two}, ctx, block);
         AddRefBoxed(join, ctx, block);
         new StoreInst(join, pointer, block);
     }

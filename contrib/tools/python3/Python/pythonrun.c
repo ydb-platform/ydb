@@ -1150,6 +1150,7 @@ _PyErr_Display(PyObject *file, PyObject *unused, PyObject *value, PyObject *tb)
 
     if (print_exception_fn == NULL || !PyCallable_Check(print_exception_fn)) {
         Py_DECREF(traceback_module);
+        Py_XDECREF(print_exception_fn);
         goto fallback;
     }
 
@@ -1398,11 +1399,11 @@ get_interactive_filename(PyObject *filename, Py_ssize_t count)
         if (middle == NULL) {
             return NULL;
         }
-        result = PyUnicode_FromFormat("<%U-%d>", middle, count);
+        result = PyUnicode_FromFormat("<%U-%zd>", middle, count);
         Py_DECREF(middle);
     } else {
         result = PyUnicode_FromFormat(
-            "%U-%d", filename, count);
+            "%U-%zd", filename, count);
     }
     return result;
 

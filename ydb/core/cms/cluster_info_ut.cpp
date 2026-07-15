@@ -1,7 +1,9 @@
 #include "cluster_info.h"
 #include "ut_helpers.h"
 
+#include <ydb/core/base/statestorage.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/testlib/actor_helpers.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -466,6 +468,152 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
                             "request-1", "user-1", 1,
                             "request-4", "user-4", 4);
 
+    }
+
+    Y_UNIT_TEST(ApplyStateStorageInfoWithMissingNode) {
+        // simulates the situation where the node was removed from cluster config
+        // but still referenced by state storage config
+        TActorSystemStub stub;
+
+        TClusterInfoPtr cluster(new TClusterInfo);
+        cluster->AddNode({1, "::1", "host1", "host1", 1, TNodeLocation()}, nullptr);
+        cluster->AddNode({2, "::2", "host2", "host2", 1, TNodeLocation()}, nullptr);
+        cluster->AddNode({3, "::3", "host3", "host3", 1, TNodeLocation()}, nullptr);
+
+        cluster->SetNodeState(1, NKikimrCms::UP, MakeSystemStateInfo("1"));
+        cluster->SetNodeState(2, NKikimrCms::UP, MakeSystemStateInfo("1"));
+        cluster->SetNodeState(3, NKikimrCms::UP, MakeSystemStateInfo("1"));
+
+        auto info = MakeIntrusive<TStateStorageInfo>();
+        info->RingGroups.emplace_back();
+        auto& group = info->RingGroups.back();
+        group.NToSelect = 3;
+        group.Rings.resize(3);
+        group.Rings[0].Replicas.push_back(TActorId(1, 0, 0, 0));
+        group.Rings[0].Replicas.push_back(TActorId(2, 0, 0, 0));
+
+        group.Rings[1].Replicas.push_back(TActorId(3, 0, 0, 0));
+        group.Rings[1].Replicas.push_back(TActorId(42, 0, 0, 0));
+        group.Rings[2].Replicas.push_back(TActorId(99, 0, 0, 0));
+
+        cluster->ApplyStateStorageInfo(info);
+
+        UNIT_ASSERT_VALUES_EQUAL(cluster->StateStorageRings.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->StateStorageRings[0].size(), 3);
+
+        auto& ring0 = *cluster->StateStorageRings[0][0];
+        auto& ring1 = *cluster->StateStorageRings[0][1];
+        auto& ring2 = *cluster->StateStorageRings[0][2];
+
+        UNIT_ASSERT_VALUES_EQUAL(ring0.Replicas.size(), 2);
+        UNIT_ASSERT(!ring0.IsDisabled);
+
+        UNIT_ASSERT_VALUES_EQUAL(ring1.Replicas.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(ring1.Replicas[0]->NodeId, 3);
+        UNIT_ASSERT_VALUES_EQUAL(ring1.Replicas[1]->NodeId, 42);
+        UNIT_ASSERT(!ring1.IsDisabled);
+
+        UNIT_ASSERT_VALUES_EQUAL(ring2.Replicas.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ring2.Replicas[0]->NodeId, 99);
+        UNIT_ASSERT(!ring2.IsDisabled);
+
+        const auto now = Now();
+        const auto retry = TDuration::Seconds(1);
+        const auto duration = TDuration::Minutes(1);
+        const TString requestId = "test-request";
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(ring0.CountState(now, retry, duration, requestId)),
+            static_cast<int>(TStateStorageRingInfo::Ok));
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(ring1.CountState(now, retry, duration, requestId)),
+            static_cast<int>(TStateStorageRingInfo::Restart));
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(ring2.CountState(now, retry, duration, requestId)),
+            static_cast<int>(TStateStorageRingInfo::Restart));
+
+        UNIT_ASSERT(cluster->IsStateStorageReplicaNode(1));
+        UNIT_ASSERT(cluster->IsStateStorageReplicaNode(2));
+        UNIT_ASSERT(cluster->IsStateStorageReplicaNode(3));
+        UNIT_ASSERT(!cluster->IsStateStorageReplicaNode(42));
+        UNIT_ASSERT(!cluster->IsStateStorageReplicaNode(99));
+        UNIT_ASSERT(!cluster->HasNode(42));
+        UNIT_ASSERT(!cluster->HasNode(99));
+
+        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(1), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(2), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(3), 1);
+    }
+
+    void CheckNodeRoles(TClusterInfo &cluster, ui32 nodeId,
+                        const TSet<int> &expected)
+    {
+        Ydb::Maintenance::Node out;
+        cluster.FillNodeRoles(cluster.Node(nodeId), out);
+
+        TSet<int> actual;
+        for (const auto &role : out.roles()) {
+            const int roleCase = role.role_case();
+            const bool inserted = actual.insert(roleCase).second;
+            UNIT_ASSERT_C(inserted, "node " << nodeId << " has duplicate role " << roleCase);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(actual.size(), expected.size());
+        for (int role : expected) {
+            UNIT_ASSERT_C(actual.contains(role),
+                "node " << nodeId << " is missing role " << role);
+        }
+    }
+
+    Y_UNIT_TEST(FillNodeRoles) {
+        TActorSystemStub stub;
+
+        //   node 1 -> state storage replica only;
+        //   node 2 -> static group host only;
+        //   node 3 -> system tablet host only;
+        //   node 4 -> all roles at once.
+        TClusterInfoPtr cluster(new TClusterInfo);
+        for (ui32 nodeId = 1; nodeId <= 4; ++nodeId) {
+            cluster->AddNode({nodeId, "::1", "host" + ToString(nodeId), "host" + ToString(nodeId), 1, TNodeLocation()}, nullptr);
+            cluster->SetNodeState(nodeId, NKikimrCms::UP, MakeSystemStateInfo("1", {"Storage"}));
+        }
+
+        const TVDiskID staticVDisk2(0, 1, 0, 2, 0);
+        const TVDiskID staticVDisk4(0, 1, 0, 4, 0);
+        UNIT_ASSERT(TClusterInfo::IsStaticGroupVDisk(staticVDisk2));
+        UNIT_ASSERT(TClusterInfo::IsStaticGroupVDisk(staticVDisk4));
+        cluster->AddPDisk(MakePDiskConfig(2, 2));
+        cluster->AddVDisk(MakeVSlotConfig(2, staticVDisk2, 2, 0));
+        cluster->AddPDisk(MakePDiskConfig(4, 4));
+        cluster->AddVDisk(MakeVSlotConfig(4, staticVDisk4, 4, 0));
+
+        const ui32 dynamicGroupId = TGroupID(EGroupConfigurationType::Dynamic, 1, 1).GetRaw();
+        const TVDiskID dynamicVDisk(dynamicGroupId, 1, 0, 1, 0);
+        UNIT_ASSERT(!TClusterInfo::IsStaticGroupVDisk(dynamicVDisk));
+        cluster->AddPDisk(MakePDiskConfig(1, 1));
+        cluster->AddVDisk(MakeVSlotConfig(1, dynamicVDisk, 1, 0));
+
+        cluster->NodeToTabletTypes[3].push_back(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+        cluster->NodeToTabletTypes[4].push_back(NKikimrConfig::TBootstrap::FLAT_SCHEMESHARD);
+
+        auto ssInfo = MakeIntrusive<TStateStorageInfo>();
+        ssInfo->RingGroups.emplace_back();
+        auto &ssGroup = ssInfo->RingGroups.back();
+        ssGroup.NToSelect = 2;
+        ssGroup.Rings.resize(2);
+        ssGroup.Rings[0].Replicas.push_back(TActorId(1, 0, 0, 0));
+        ssGroup.Rings[1].Replicas.push_back(TActorId(4, 0, 0, 0));
+        cluster->ApplyStateStorageInfo(ssInfo);
+        UNIT_ASSERT(cluster->IsStateStorageReplicaNode(1));
+        UNIT_ASSERT(cluster->IsStateStorageReplicaNode(4));
+
+        CheckNodeRoles(*cluster, 1, {Ydb::Maintenance::NodeRole::kStateStorage});
+        CheckNodeRoles(*cluster, 2, {Ydb::Maintenance::NodeRole::kStaticGroup});
+        CheckNodeRoles(*cluster, 3, {Ydb::Maintenance::NodeRole::kSystemTablet});
+        CheckNodeRoles(*cluster, 4, {
+            Ydb::Maintenance::NodeRole::kStateStorage,
+            Ydb::Maintenance::NodeRole::kStaticGroup,
+            Ydb::Maintenance::NodeRole::kSystemTablet,
+        });
     }
 }
 

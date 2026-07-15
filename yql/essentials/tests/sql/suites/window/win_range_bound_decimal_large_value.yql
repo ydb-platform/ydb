@@ -1,0 +1,36 @@
+PRAGMA WindowNewPipeline;
+
+$big_one = Decimal('11111111111111111111111111111111111', 35, 0);
+$big_two = Decimal('22222222222222222222222222222222222', 35, 0);
+$big_three = Decimal('33333333333333333333333333333333333', 35, 0);
+
+$big_six = $big_one + $big_two + $big_three;
+$big_five = $big_six - $big_one;
+
+$data = [
+    <|a: Decimal('-inf', 35, 0), b: 1, expected_sum: Decimal('-inf', 35, 0)|>,
+    <|a: Decimal('-inf', 35, 0), b: 1, expected_sum: Decimal('-inf', 35, 0)|>,
+    <|a: $big_one, b: 1, expected_sum: $big_three|>,
+    <|a: $big_two, b: 1, expected_sum: $big_six|>,
+    <|a: $big_three, b: 1, expected_sum: $big_five|>,
+];
+
+$win_result = (
+    SELECT
+        Sum(a) OVER w1 AS actual_sum,
+        expected_sum,
+    FROM
+        AS_TABLE($data)
+    WINDOW
+        w1 AS (
+            PARTITION COMPACT BY
+                b
+            ORDER BY
+                a ASC
+            RANGE BETWEEN $big_one PRECEDING AND $big_one FOLLOWING
+        )
+);
+
+select 
+    ENSURE(actual_sum, actual_sum IS NOT DISTINCT FROM expected_sum, "Sum differs")
+from $win_result;

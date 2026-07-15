@@ -139,23 +139,20 @@ sdk::common::ExportResult OtlpGrpcExporter::Export(
   OtlpRecordableUtils::PopulateRequest(spans, request);
 
   auto context = OtlpGrpcClient::MakeClientContext(options_);
-  proto::collector::trace::v1::ExportTraceServiceResponse *response =
-      google::protobuf::Arena::Create<proto::collector::trace::v1::ExportTraceServiceResponse>(
-          arena.get());
 
 #ifdef ENABLE_ASYNC_EXPORT
   if (options_.max_concurrent_requests > 1)
   {
     return client->DelegateAsyncExport(
-        options_, trace_service_stub_.get(), std::move(context), std::move(arena),
-        std::move(*request),
+        options_, trace_service_stub_.get(), std::move(context), std::move(arena), request,
         // Capture the trace_service_stub_ to ensure it is not destroyed before the callback is
         // called.
         [trace_service_stub = trace_service_stub_](
             opentelemetry::sdk::common::ExportResult result,
-            std::unique_ptr<google::protobuf::Arena> &&,
+            std::unique_ptr<google::protobuf::Arena> &&arena,
             const proto::collector::trace::v1::ExportTraceServiceRequest &request,
             proto::collector::trace::v1::ExportTraceServiceResponse *) {
+          auto trace_arena = std::move(arena);
           if (result != opentelemetry::sdk::common::ExportResult::kSuccess)
           {
             OTEL_INTERNAL_LOG_ERROR("[OTLP TRACE GRPC Exporter] ERROR: Export "
@@ -174,9 +171,11 @@ sdk::common::ExportResult OtlpGrpcExporter::Export(
   {
 #endif
     const auto resource_spans_size = request->resource_spans_size();
-    grpc::Status status =
-        OtlpGrpcClient::DelegateExport(trace_service_stub_.get(), std::move(context),
-                                       std::move(arena), std::move(*request), response);
+    proto::collector::trace::v1::ExportTraceServiceResponse *response =
+        google::protobuf::Arena::Create<proto::collector::trace::v1::ExportTraceServiceResponse>(
+            arena.get());
+    grpc::Status status = OtlpGrpcClient::DelegateExport(
+        trace_service_stub_.get(), std::move(context), std::move(arena), request, response);
     if (!status.ok())
     {
       OTEL_INTERNAL_LOG_ERROR("[OTLP TRACE GRPC Exporter] Export() failed with status_code: \""

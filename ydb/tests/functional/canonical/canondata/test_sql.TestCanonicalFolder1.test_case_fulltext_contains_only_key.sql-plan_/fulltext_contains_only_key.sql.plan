@@ -54,7 +54,6 @@
                                                         "Name": "ReadFullTextIndex",
                                                         "Query": "\"dogs\"",
                                                         "QueryColumns": "Text",
-                                                        "SearchTerms": "",
                                                         "Table": "/local/base_fulltext_contains_only_key_sql_plan/FullTextTable"
                                                     }
                                                 ],

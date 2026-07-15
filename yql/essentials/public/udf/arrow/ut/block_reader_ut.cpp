@@ -19,7 +19,7 @@ class TBlockReaderFixture: public NUnitTest::TBaseFixture {
         using TPtr = TIntrusivePtr<TArrayHelpers>;
 
         explicit TArrayHelpers(const NMiniKQL::TType* type, arrow::MemoryPool* const arrowPool)
-            : Builder(MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), type, *arrowPool, NMiniKQL::CalcBlockLen(CalcMaxBlockItemSize(type)), nullptr))
+            : Builder(MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), type, *arrowPool, NMiniKQL::CalcBlockLen(CalcMaxBlockItemSize(type)), /*pgBuilder=*/nullptr))
             , Reader(MakeBlockReader(NMiniKQL::TTypeInfoHelper(), type))
         {
         }
@@ -88,8 +88,8 @@ Y_UNIT_TEST_F(TestLogicalDataSize, TBlockReaderFixture) {
         const auto str = NUnitTest::RandomString(stringSize, i);
         arrayHelpers[1]->Builder->Add((i % 2) ? TBlockItem(str) : TBlockItem());
 
-        TBlockItem tuple[] = {((i / 2) % 2) ? TBlockItem(i) : TBlockItem(), TBlockItem(str)};
-        arrayHelpers[2]->Builder->Add((i % 2) ? TBlockItem(tuple) : TBlockItem());
+        auto tuple = std::to_array<TBlockItem>({((i / 2) % 2) ? TBlockItem(i) : TBlockItem(), TBlockItem(str)});
+        arrayHelpers[2]->Builder->Add((i % 2) ? TBlockItem(tuple.data()) : TBlockItem());
 
         TBlockItem tzDate(i);
         tzDate.SetTimezoneId(i % 100);
@@ -124,7 +124,7 @@ Y_UNIT_TEST_F(TestLogicalDataSize, TBlockReaderFixture) {
 
     // Test GetDataWeight after slize
     for (ui32 i = 0; i < arrayHelpers.size(); ++i) {
-        const auto slice = DeepSlice(arrays[i], offset, len);
+        const auto slice = DeepSlice(*arrays[i], offset, len);
         UNIT_ASSERT_VALUES_EQUAL_C(arrayHelpers[i]->Reader->GetDataWeight(*slice), expectedLogicalSize[i], "sliced array: " << i);
     }
 }

@@ -18,38 +18,12 @@ std::unique_ptr<TEvPersQueue::TEvRequest> MakeEvPQRead(
     read->SetClientId(consumerName);
     read->SetOffset(startOffset);
     read->SetTimeoutMs(0);
+    read->SetCanReadBatches(true);
     if (count) {
         read->SetCount(count.value());
     }
 
     return request;
-}
-
-std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
-    const TActorId& selfId,
-    const TString& consumerName,
-    ui64 startOffset,
-    ui64 count,
-    ui64 cookie,
-    ui64 nextPartNo
-) {
-    return std::make_unique<TEvPQ::TEvRead>(
-        cookie,
-        startOffset,
-        startOffset + count,
-        nextPartNo,
-        count,
-        TString{},
-        consumerName,
-        0,
-        8_MB,
-        0,
-        0,
-        "unknown",
-        false,
-        TActorId{},
-        selfId
-    );
 }
 
 std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
@@ -65,7 +39,12 @@ std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
         0, // partitionSessionId
         consumer.GetGeneration(),
         0, // step
-        TActorId{} // pipeClient
+        TActorId{}, // pipeClient
+        TEvPQ::TEvSetClientInfo::ESetClientInfoType::ESCI_OFFSET,
+        0, // readRuleGeneration
+        false, // strict
+        std::nullopt, // committedMetadata
+        true // mlpRequest
     );
 }
 
@@ -101,4 +80,9 @@ ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev) {
     return ev->Get()->Response->GetCookie();
 }
 
+}
+
+template<>
+void Out<NKikimr::NPQ::NMLP::TDLQMessage>(IOutputStream& o, const NKikimr::NPQ::NMLP::TDLQMessage& p) {
+    o << "(" << p.Offset << ", " << p.SeqNo << ")";
 }

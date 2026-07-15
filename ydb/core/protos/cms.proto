@@ -1,6 +1,7 @@
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/library/actors/protos/interconnect.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrCms;
 option java_package = "ru.yandex.kikimr.proto";
@@ -184,6 +185,9 @@ message TPermissionRequest {
   // Evit vdisks before granting permission
   optional bool EvictVDisks = 11 [default = false];
   optional int32 Priority = 12;
+  // Maximum number of permissions that may be issued by a single check of this request.
+  // Unset means "no cap", 0 means "cap is zero".
+  optional uint32 MaxPermissionCount = 13 [default = 0];
 }
 
 enum EExtensionType {
@@ -532,7 +536,7 @@ message TItems {
 message TSetMarkerRequest {
     optional EMarker Marker = 1;
     optional TItems Items = 2;
-    optional string UserToken = 10;
+    optional string UserToken = 10 [(Ydb.sensitive) = true];
 }
 
 message TSetMarkerResponse {
@@ -542,7 +546,7 @@ message TSetMarkerResponse {
 message TResetMarkerRequest {
     optional EMarker Marker = 1;
     optional TItems Items = 2;
-    optional string UserToken = 10;
+    optional string UserToken = 10 [(Ydb.sensitive) = true];
 }
 
 message TResetMarkerResponse {
@@ -611,7 +615,7 @@ message TLogRecordData {
         }
         repeated EMarker OldMarkers = 5;
         repeated EMarker NewMarkers = 6;
-        optional string UserToken = 7;
+        optional string UserToken = 7 [(Ydb.sensitive) = true];
     }
 
     optional uint32 RecordType = 1;

@@ -3,6 +3,7 @@
 #include "flat_executor_counters.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/mon_auth.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 namespace NKikimr {
@@ -59,12 +60,12 @@ void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction, const TAct
 
 void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction) {
     if (transaction)
-        static_cast<TExecutor*>(Executor())->Execute(transaction, ExecutorCtx(*TlsActivationContext));
+        Executor()->Execute(transaction, ExecutorCtx(*TlsActivationContext));
 }
 
 ui64 TTabletExecutedFlat::Enqueue(TAutoPtr<ITransaction> transaction) {
     if (transaction) {
-        return static_cast<TExecutor*>(Executor())->Enqueue(transaction);
+        return Executor()->Enqueue(transaction);
     } else {
         return 0;
     }
@@ -76,14 +77,14 @@ ui64 TTabletExecutedFlat::EnqueueExecute(TAutoPtr<ITransaction> transaction) {
 
 ui64 TTabletExecutedFlat::EnqueueLowPriority(TAutoPtr<ITransaction> transaction) {
     if (transaction) {
-        return static_cast<TExecutor*>(Executor())->EnqueueLowPriority(transaction);
+        return Executor()->EnqueueLowPriority(transaction);
     } else {
         return 0;
     }
 }
 
 const NTable::TScheme& TTabletExecutedFlat::Scheme() const {
-    return static_cast<TExecutor*>(Executor())->Scheme();
+    return Executor()->Scheme();
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
@@ -142,6 +143,12 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvFollowerGcApplied::TPtr &ev) {
 void TTabletExecutedFlat::Handle(TEvTablet::TEvUpdateConfig::TPtr &ev) {
     if (Executor())
         Executor()->UpdateConfig(ev);
+}
+
+void TTabletExecutedFlat::Handle(TEvTablet::TEvMoveData::TPtr &ev) {
+    if (Executor()) {
+        Executor()->MoveData(ev);
+    }
 }
 
 void TTabletExecutedFlat::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) {
@@ -229,6 +236,10 @@ void TTabletExecutedFlat::Detach(const TActorContext &ctx) {
     OnDetach(ctx);
 }
 
+void TTabletExecutedFlat::SetExternalExecutor(IExecutor* executor) {
+    Executor0 = executor;
+}
+
 bool TTabletExecutedFlat::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {
     if (ev) {
         TStringStream str;
@@ -244,7 +255,8 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
     auto path = ev->Get()->PathInfo();
     TString queryString = cgi.Print();
 
-    if (path == "/app") {
+    if (path == "/app" || (UsesTabletDevUiSecurePath(AppData(), TabletType())
+            && IsTabletDevUiSecurePath(path))) {
         OnRenderAppHtmlPage(ev, ctx);
         return;
     } else if (path == "/executorInternals" && Executor()) {
@@ -258,6 +270,9 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
         return;
     } else {
         const TDuration uptime = TAppData::TimeProvider->Now() - StartTime0;
+        const TStringBuf tabletMonRoot = IsTabletDevUiSecurePath(path)
+            ? TStringBuf("../../")
+            : TStringBuf();
         TStringStream str;
         HTML(str) {
             DIV_CLASS("row") {
@@ -291,28 +306,31 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
             }
 
             if (OnRenderAppHtmlPage(nullptr, ctx)) {
+                const TStringBuf tabletDevUiAppPrefix = TabletType() == TTabletTypes::DataShard && AppData()->FeatureFlags.GetEnableTabletDevUiSecurePath()
+                    ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
+                    : TStringBuf("app");
                 DIV_CLASS("row") {
-                    DIV_CLASS("col-md-12") {str << "<a href=\"tablets/app?" << queryString << "\">App</a>";}
+                    DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets/" << tabletDevUiAppPrefix << "?" << queryString << "\">App</a>";}
                 }
             }
 
             if (Executor()) {
                 DIV_CLASS("row") {
-                    DIV_CLASS("col-md-12") {str << "<a href=\"tablets/counters?" << queryString << "\">Counters</a>"; }
+                    DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets/counters?" << queryString << "\">Counters</a>"; }
                 }
                 DIV_CLASS("row") {
-                    DIV_CLASS("col-md-12") {str << "<a href=\"tablets/executorInternals?" << queryString << "\">Executor DB internals</a>";}
+                    DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets/executorInternals?" << queryString << "\">Executor DB internals</a>";}
                 }
                 DIV_CLASS("row") {
-                    DIV_CLASS("col-md-12") {str << "<a href=\"tablets?FollowerID=" << TabletID() << "\">Connect to follower</a>";}
+                    DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets?FollowerID=" << TabletID() << "\">Connect to follower</a>";}
                 }
             }
 
             DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets?SsId=" << TabletID() << "\">State Storage</a>";}
+                DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets?SsId=" << TabletID() << "\">State Storage</a>";}
             }
             DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets?RestartTabletID=" << TabletID() << "\">Restart</a>";}
+                DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets?RestartTabletID=" << TabletID() << "\">Restart</a>";}
             }
         }
 
@@ -347,6 +365,7 @@ bool TTabletExecutedFlat::HandleDefaultEvents(TAutoPtr<IEventHandle>& ev, const 
         hFunc(TEvTablet::TEvGetCounters, HandleGetCounters);
         hFunc(TEvTablet::TEvUpdateConfig, Handle);
         HFuncCtx(NMon::TEvRemoteHttpInfo, RenderHtmlPage, ctx);
+        hFunc(TEvTablet::TEvMoveData, Handle);
         IgnoreFunc(TEvTablet::TEvReady);
     default:
         return false;

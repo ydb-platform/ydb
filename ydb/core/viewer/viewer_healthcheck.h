@@ -29,28 +29,27 @@ class TJsonHealthCheck : public TViewerPipeClient {
     Ydb::Monitoring::StatusFlag::Status MinStatus = Ydb::Monitoring::StatusFlag::UNSPECIFIED;
 
 public:
-    TJsonHealthCheck(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonHealthCheck(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TViewerPipeClient(viewer, ev)
     {}
 
     THolder<NHealthCheck::TEvSelfCheckRequest> MakeSelfCheckRequest() {
-        const auto& params(Event->Get()->Request.GetParams());
         THolder<NHealthCheck::TEvSelfCheckRequest> request = MakeHolder<NHealthCheck::TEvSelfCheckRequest>();
         request->Database = Database;
-        if (params.Has("verbose")) {
-            request->Request.set_return_verbose_status(FromStringWithDefault<bool>(params.Get("verbose"), false));
+        if (Params.Has("verbose")) {
+            request->Request.set_return_verbose_status(FromStringWithDefault<bool>(Params.Get("verbose"), false));
         }
-        if (params.Has("max_level")) {
-            request->Request.set_maximum_level(FromStringWithDefault<ui32>(params.Get("max_level"), 0));
+        if (Params.Has("max_level")) {
+            request->Request.set_maximum_level(FromStringWithDefault<ui32>(Params.Get("max_level"), 0));
         }
         if (MinStatus != Ydb::Monitoring::StatusFlag::UNSPECIFIED) {
             request->Request.set_minimum_status(MinStatus);
         }
-        if (params.Has("merge_records")) {
+        if (Params.Has("merge_records")) {
             request->Request.set_merge_records(MergeRecords);
         }
-        if (params.Has("return_hints")) {
-            request->Request.set_return_hints(FromStringWithDefault<bool>(params.Get("return_hints"), false));
+        if (Params.Has("return_hints")) {
+            request->Request.set_return_hints(FromStringWithDefault<bool>(Params.Get("return_hints"), false));
         }
         SetDuration(Timeout, *request->Request.mutable_operation_params()->mutable_operation_timeout());
         return request;
@@ -58,6 +57,14 @@ public:
 
     void SendHealthCheckRequest() {
         SelfCheckResult = MakeRequest<NHealthCheck::TEvSelfCheckResult>(NHealthCheck::MakeHealthCheckID(), MakeSelfCheckRequest().Release());
+    }
+
+    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == NHealthCheck::TEvSelfCheckResult::EventType) {
+            SendHealthCheckRequest();
+        } else {
+            TBase::Undelivered(ev);
+        }
     }
 
     void Bootstrap() override {
@@ -132,10 +139,11 @@ public:
     STFUNC(StateRequestedInfo) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
-            cFunc(TEvents::TSystem::Wakeup, TBase::HandleTimeout);
             hFunc(NHealthCheck::TEvSelfCheckResultProto, Handle);
-            cFunc(TEvents::TSystem::Undelivered, SendHealthCheckRequest);
+            hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 

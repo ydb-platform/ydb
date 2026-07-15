@@ -36,7 +36,7 @@ SyncExecuteVerb(
     NLogging::ELogLevel logLevel)
 {
     return ExecuteVerb(service, request, std::move(logger), logLevel)
-        .Get()
+        .BlockingGet()
         .ValueOrThrow();
 }
 

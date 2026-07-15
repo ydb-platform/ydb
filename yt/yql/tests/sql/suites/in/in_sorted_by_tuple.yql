@@ -1,5 +1,3 @@
-/* postgres can not */
-/* syntax version 1 */
 use plato;
 
 select value, AGG_LIST_DISTINCT(tpl) as tuples

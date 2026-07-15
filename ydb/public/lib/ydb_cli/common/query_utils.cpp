@@ -21,7 +21,9 @@ TExplainGenericQuery::TExplainGenericQuery(const TDriver& driver)
 
 TExplainGenericQuery::TResult TExplainGenericQuery::Explain(const TString& query, std::optional<TDuration> timeout, bool analyze) {
     NQuery::TExecuteQuerySettings settings;
-    settings.ClientTimeout(timeout.value_or(TDuration()));
+    if (timeout) {
+        settings.ClientTimeout(*timeout);
+    }
 
     if (analyze) {
         settings.StatsMode(NQuery::EStatsMode::Full);
@@ -80,10 +82,29 @@ void TExecuteGenericQuery::OnResultPart(ui64 resultSetIndex, const TResultSet& r
 }
 
 NQuery::TAsyncExecuteQueryIterator TExecuteGenericQuery::StartQuery(const TString& query, const TSettings& execSettings) {
+    const auto& txControl = execSettings.TxControl;
+
+    if (execSettings.Session) {
+        NQuery::TSession session = *execSettings.Session;
+        if (execSettings.Parameters) {
+            return session.StreamExecuteQuery(
+                query,
+                txControl,
+                *execSettings.Parameters,
+                execSettings.Settings
+            );
+        }
+        return session.StreamExecuteQuery(
+            query,
+            txControl,
+            execSettings.Settings
+        );
+    }
+
     if (execSettings.Parameters) {
         return Client.StreamExecuteQuery(
             query,
-            NQuery::TTxControl::NoTx(),
+            txControl,
             *execSettings.Parameters,
             execSettings.Settings
         );
@@ -91,18 +112,12 @@ NQuery::TAsyncExecuteQueryIterator TExecuteGenericQuery::StartQuery(const TStrin
 
     return Client.StreamExecuteQuery(
         query,
-        NQuery::TTxControl::NoTx(),
+        txControl,
         execSettings.Settings
     );
 }
 
 int TExecuteGenericQuery::PrintResponse(NQuery::TExecuteQueryIterator& result, const TString& query, const TSettings& execSettings) {
-    Y_DEFER {
-        if (execSettings.AddIndent) {
-            Cout << Endl;
-        }
-    };
-
     std::optional<std::string> stats;
     std::optional<std::string> plan;
     std::optional<std::string> ast;

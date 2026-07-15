@@ -71,4 +71,49 @@ Y_UNIT_TEST(CantUseSelfInsideEvaluation) {
         UNIT_ASSERT_C(TString(e.GetIssues()).Contains("Inputs aren't available during evaluation"), e.GetIssues());
     }
 }
+Y_UNIT_TEST(NestedEvaluateCode) {
+    using namespace NYql::NPureCalc;
+
+    auto options = TProgramFactoryOptions();
+    auto factory = MakeProgramFactory(options);
+
+    try {
+        constexpr TStringBuf query = R"sql(
+$variant_to_struct = ($v) -> {
+    $make_visitor = ($fname) -> (
+        ($nothing_struct) -> (
+            ($i) -> (StructUnion(SpreadMembers([($fname, Just($i))], [$fname]), $nothing_struct))
+        )
+    );
+    $nothing_struct = StaticMap(
+        InstanceOf(VariantUnderlyingType(TypeOf($v))),
+        ($i) -> (Nothing(OptionalType(TypeOf($i))))
+    );
+    RETURN EvaluateCode(
+        LambdaCode(
+            ($v_code) -> (FuncCode('Visit', $v_code, ListFlatMap(
+                StructMembers(InstanceOf(VariantUnderlyingType(TypeOf($v)))),
+                ($fname) -> ([AtomCode($fname), QuoteCode($make_visitor($fname)($nothing_struct))])
+            )))
+        )
+    )($v);
+};
+$struct = $variant_to_struct(Variant(1, 'a', Variant<a: Int32>));
+SELECT Unwrap(CAST(FormatType(TypeOf(GatherMembers($struct))) AS Utf8)) AS X
+)sql";
+        auto program = factory->MakePullListProgram(
+            TProtobufInputSpec<NPureCalcProto::TStringMessage>(),
+            TProtobufOutputSpec<NPureCalcProto::TStringMessage>(),
+            TString(query),
+            ETranslationMode::SQL);
+
+        auto stream = program->Apply(EmptyStream<NPureCalcProto::TStringMessage*>());
+        NPureCalcProto::TStringMessage* message;
+        UNIT_ASSERT(message = stream->Fetch());
+        UNIT_ASSERT(!message->GetX().empty());
+        UNIT_ASSERT(!stream->Fetch());
+    } catch (const TCompileError& e) {
+        UNIT_FAIL(e.GetIssues());
+    }
+}
 } // Y_UNIT_TEST_SUITE(TestEval)

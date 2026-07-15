@@ -1,6 +1,11 @@
 #pragma once
+
 #include "context.h"
+#include "namespace.h"
+#include "select_yql.h"
+
 #include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
+
 #include <library/cpp/charset/ci_string.h>
 
 namespace NSQLTranslationV1 {
@@ -8,6 +13,19 @@ namespace NSQLTranslationV1 {
 using namespace NYql;
 using namespace NSQLv1Generated;
 
+class TSqlTranslation;
+
+struct TReadyCTE {
+    TYqlSourceAlias Alias;
+    TNodePtr Node;
+
+    [[nodiscard]] bool IsRecursiveNotReady() const {
+        return !Node;
+    }
+};
+
+// Do not use it to get a position for a SQL hint.
+// Use TContext::TokenPosition instead.
 inline TPosition GetPos(const TToken& token) {
     return TPosition(token.GetColumn(), token.GetLine());
 }
@@ -107,7 +125,9 @@ std::pair<TString, TViewDescription> TableKeyImpl(const TRule_table_key& node, T
 
 TMaybe<TCompression> ColumnCompression(const TRule_compression& node, TTranslation& ctx);
 
-TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx);
+TMaybe<TVector<TEncoding>> ColumnEncoding(const TRule_encoding& node, TTranslation& ctx);
+
+TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTranslation& ctx);
 
 /// \return optional prefix
 TString ColumnNameAsStr(TTranslation& ctx, const TRule_column_name& node, TString& id);
@@ -121,6 +141,21 @@ struct TSymbolNameWithPos {
     TPosition Pos;
 };
 
+enum class ESmartParenthesis {
+    Default,
+    GroupBy,
+    InStatement,
+    SqlLambdaParams,
+};
+
+enum class EExpr {
+    Regular,
+    GroupBy,
+    SqlLambdaParams,
+};
+
+ESmartParenthesis ToSmartParenthesis(EExpr mode);
+
 class TSqlTranslation: public TTranslation {
 protected:
     TSqlTranslation(TContext& ctx, NSQLTranslation::ESqlMode mode)
@@ -131,18 +166,23 @@ protected:
         YQL_ENSURE(ctx.Settings.Mode == mode);
     }
 
+    TSqlTranslation(const TSqlTranslation&) = default;
+
 public:
     void SetYqlSelectProduced(bool value) noexcept {
         IsYqlSelectProduced_ = value;
     }
 
-protected:
-    enum class EExpr {
-        Regular,
-        GroupBy,
-        SqlLambdaParams,
-    };
+    void SetPure(bool isPure) noexcept {
+        IsPure_ = isPure;
+    }
 
+    void ForkNamespace() {
+        YQL_ENSURE(IsYqlSelectProduced_);
+        CTEs_ = TYqlNamespace<TReadyCTE>::Fork(CTEs_);
+    }
+
+protected:
     TNodeResult NamedExpr(
         const TRule_expr& exprTree,
         const TRule_an_id_or_type* nameTree,
@@ -165,14 +205,14 @@ protected:
     TNodePtr IfStatement(const TRule_if_stmt& stmt);
     TNodePtr ForStatement(const TRule_for_stmt& stmt);
     TSQLResult<TTableArg> TableArgImpl(const TRule_table_arg& node);
-    bool TableRefImpl(const TRule_table_ref& node, TTableRef& result, bool unorderedSubquery);
+    bool TableRefImpl(const TRule_table_ref& node, TTableRef& result, bool unorderedSubquery, TTableHints& tableHints, TMaybe<TString>& keyFunc, TString* effectiveProvider = nullptr, bool* isAnonymous = nullptr);
     TMaybe<TSourcePtr> AsTableImpl(const TRule_table_ref& node);
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, TString& service, TDeferredAtom& cluster);
     bool ClusterExprOrBinding(const TRule_cluster_expr& node, TString& service, TDeferredAtom& cluster, bool& isBinding);
     bool ApplyTableBinding(const TString& binding, TTableRef& tr, TTableHints& hints);
 
     TMaybe<TColumnSchema> ColumnSchemaImpl(const TRule_column_schema& node);
-    bool CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params, const bool isCreateTableAs);
+    bool CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params, bool isCreateTableAs);
 
     bool FillFamilySettingsEntry(const TRule_family_settings_entry& settingNode, TFamilyEntry& family);
     bool FillFamilySettings(const TRule_family_settings& settingsNode, TFamilyEntry& family);
@@ -196,6 +236,7 @@ protected:
     bool ResetTableSettingsEntry(const TIdentifier& id, TTableSettings& settings, ETableType tableType);
 
     bool CreateTableIndex(const TRule_table_index& node, TVector<TIndexDescription>& indexes);
+    bool CreateTableStatistics(const TRule_table_statistics& node, TVector<TStatisticsDescription>& statistics);
     bool FillIndexSettings(const TRule_with_index_settings& settingsNode, TIndexDescription::TIndexSettings& indexSettings);
     bool AddIndexSetting(const TIdentifier& id, const TRule_index_setting_value& value, TIndexDescription::TIndexSettings& indexSettings);
     bool AddCompactSetting(const TIdentifier& id, const TRule_compact_setting_value& value, TCompactEntry& compactEntry);
@@ -242,7 +283,7 @@ protected:
     bool OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy);
     bool SortSpecificationList(const TRule_sort_specification_list& node, TVector<TSortSpecificationPtr>& sortSpecs);
 
-    bool IsDistinctOptSet(const TRule_opt_set_quantifier& node) const;
+    [[nodiscard]] bool IsDistinctOptSet(const TRule_opt_set_quantifier& node) const;
     bool IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const;
 
     bool AddObjectFeature(std::map<TString, TDeferredAtom>& result, const TRule_object_feature& feature);
@@ -251,7 +292,7 @@ protected:
     bool ParseObjectFeatures(std::map<TString, TDeferredAtom>& result, const TRule_object_features& features);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_external_data_source_action& alterActions);
-    bool ParseSecretSettings(const TPosition stmBeginPos, const TRule_with_secret_settings& settings, TSecretParameters& secretParams, const TSecretParameters::EOperationMode mode);
+    bool ParseSecretSettings(TPosition stmBeginPos, const TRule_with_secret_settings& settings, TSecretParameters& secretParams, TSecretParameters::EOperationMode mode);
     [[nodiscard]] bool ParseSecretId(const TRule_id_or_at& node, TString& objectId);
     bool ParseViewOptions(std::map<TString, TDeferredAtom>& features, const TRule_with_table_settings& options);
     bool ParseViewQuery(std::map<TString, TDeferredAtom>& features, const TRule_select_stmt& query);
@@ -294,7 +335,9 @@ protected:
     bool ParseDatabaseSettings(const TRule_database_settings& in, THashMap<TString, TNodePtr>& out);
     bool ParseDatabaseSetting(const TRule_database_setting& in, THashMap<TString, TNodePtr>& out);
 
-    TMaybe<TString> ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context);
+    TMaybe<TDeferredAtom> ParseObjectPathIgnoreAt(const TRule_object_ref& node, TObjectOperatorContext& context, bool useTablePrefix);
+    TMaybe<TDeferredAtom> ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context);
+    TMaybe<TDeferredAtom> ParseObjectPath(const TRule_simple_table_ref_core& node, TObjectOperatorContext& context);
     bool ParseStreamingQuerySetting(const TRule_streaming_query_setting& node, TStreamingQuerySettings& settings);
     bool ParseStreamingQuerySettings(const TRule_streaming_query_settings& node, TStreamingQuerySettings& settings);
     bool ParseStreamingQueryDefinition(const TRule_streaming_query_definition& node, TStreamingQuerySettings& settings);
@@ -307,9 +350,13 @@ protected:
 
     TNodePtr YqlSelectOrLegacy(
         std::function<TNodeResult()> yqlSelect,
-        std::function<TNodePtr()> legacy);
+        std::function<TNodePtr()> legacy,
+        TMaybe<TPosition> position = Nothing());
+
+    [[nodiscard]] bool WarnUnusedCTEs() const;
 
 private:
+    TMaybe<TDeferredAtom> DoParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context, bool ignoreAt, bool useTablePrefix);
     bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
     static bool IsValidFrameSettings(TContext& ctx, const TFrameSpecification& frameSpec, size_t sortSpecSize);
     static TString FrameSettingsToString(EFrameSettings settings, bool isUnbounded);
@@ -325,6 +372,8 @@ private:
 protected:
     NSQLTranslation::ESqlMode Mode_;
     bool IsYqlSelectProduced_ = false;
+    bool IsPure_ = false;
+    TYqlNamespace<TReadyCTE>::TPtr CTEs_ = TYqlNamespace<TReadyCTE>::Fork();
 };
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);

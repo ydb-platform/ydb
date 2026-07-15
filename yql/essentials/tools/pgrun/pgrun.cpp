@@ -42,7 +42,6 @@
 using namespace NYql;
 using namespace NKikimr::NMiniKQL;
 using namespace NNodes;
-using NUdf::EDataSlot;
 
 namespace NMiniKQL = NKikimr::NMiniKQL;
 
@@ -83,7 +82,7 @@ class TStatementIterator final
 
 public:
     explicit TStatementIterator(const TString&& program)
-        : Program_(std::move(program))
+        : Program_(program)
         , Cur_()
         , Pos_(0)
         , State_(EState::InOperator)
@@ -644,7 +643,7 @@ private:
                 return VarParser();
 
             default:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -673,7 +672,8 @@ private:
 TString GetFormattedStmt(const TStringBuf& stmt) {
     TString result;
     result.reserve(stmt.length());
-    size_t pos = 0, next_pos = TStringBuf::npos;
+    size_t pos = 0;
+    size_t next_pos = TStringBuf::npos;
 
     while (TStringBuf::npos != (next_pos = stmt.find('\n', pos))) {
         if (0 < next_pos - pos) {
@@ -687,11 +687,11 @@ TString GetFormattedStmt(const TStringBuf& stmt) {
         result += stmt.substr(pos);
     }
 
-    if (0 < result.length() && '\n' == result.back()) {
+    if (!result.empty() && '\n' == result.back()) {
         result.pop_back();
     }
 
-    if (0 < result.length() && '\r' == result.back()) {
+    if (!result.empty() && '\r' == result.back()) {
         result.pop_back();
     }
 
@@ -702,7 +702,7 @@ void PrintExprTo(const TProgramPtr& program, IOutputStream& out) {
     TStringStream baseSS;
 
     auto baseAst = ConvertToAst(*program->ExprRoot(), program->ExprCtx(),
-                                NYql::TExprAnnotationFlags::None, true);
+                                NYql::TExprAnnotationFlags::None, /*refAtoms=*/true);
     baseAst.Root->PrettyPrintTo(baseSS, PRETTY_FLAGS);
 
     out << baseSS.Data();
@@ -736,7 +736,7 @@ void WriteErrorToStream(const TProgramPtr program)
     program->PrintErrorsTo(Cerr);
 
     for (const auto& topIssue : program->Issues()) {
-        WalkThroughIssues(topIssue, true, [&](const TIssue& issue, ui16 /*level*/) {
+        WalkThroughIssues(topIssue, /*leafOnly=*/true, [&](const TIssue& issue, ui16 /*level*/) {
             const auto msg = GetPgErrorMessage(issue);
             Cout << msg;
             if (msg.back() != '\n') {
@@ -749,7 +749,7 @@ void WriteErrorToStream(const TProgramPtr program)
 using CellFormatter = std::function<const TString(const TString&)>;
 using TColumnType = TString;
 
-inline const TString FormatBool(const TString& value)
+inline TString FormatBool(const TString& value)
 {
     static const TString T = "t";
     static const TString F = "f";
@@ -760,20 +760,20 @@ inline const TString FormatBool(const TString& value)
                                  : ythrow yexception() << "Unexpected bool literal: " << value;
 }
 
-inline const TString FormatNumeric(const TString& value)
+inline TString FormatNumeric(const TString& value)
 {
     static const TString Zero = "0.0";
 
     return (value == "0") ? Zero : value;
 }
 
-const TString FormatFloat(const TString& value, std::function<TString(const TString&)> formatter) {
+TString FormatFloat(const TString& value, std::function<TString(const TString&)> formatter) {
     static const TString Nan = "NaN";
     static const TString Inf = "Infinity";
     static const TString Minf = "-Infinity";
 
     try {
-        return (value == "")       ? ""
+        return (value.empty())     ? ""
                : (value == "Nan")  ? Nan
                : (value == "Inf")  ? Inf
                : (value == "-Inf") ? Minf
@@ -784,19 +784,19 @@ const TString FormatFloat(const TString& value, std::function<TString(const TStr
     }
 }
 
-inline const TString FormatFloat4(const TString& value)
+inline TString FormatFloat4(const TString& value)
 {
     return FormatFloat(value,
                        [](const TString& val) { return TString(fmt::format("{:.8g}", std::stof(val))); });
 }
 
-inline const TString FormatFloat8(const TString& value)
+inline TString FormatFloat8(const TString& value)
 {
     return FormatFloat(value,
                        [](const TString& val) { return TString(fmt::format("{:.15g}", std::stod(val))); });
 }
 
-inline const TString FormatTransparent(const TString& value)
+inline TString FormatTransparent(const TString& value)
 {
     return value;
 }
@@ -992,7 +992,7 @@ void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TE
 
         columnOrder.AddColumn(TString(colName));
 
-        ysonType << fmt::format("[\"{0}\";[\"{1}\";\"{2}\";];];",
+        ysonType << fmt::format(R"(["{0}";["{1}";"{2}";];];)",
                                 colName, colTypeNode->Content(),
                                 colTypeNode->Child(0)->Content());
     }
@@ -1003,7 +1003,7 @@ void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TE
     rowSpec->SetColumnOrder(std::move(columnOrder));
 
     NYT::TNode attrs = NYT::TNode::CreateMap();
-    rowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], 0, false);
+    rowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], /*useCompactForm=*/false);
 
     NYT::TNode spec;
     rowSpec->FillCodecNode(spec[YqlRowSpecAttribute]);
@@ -1040,7 +1040,7 @@ void DeleteYtFileTable(const TFsPath& dataDir, const TString tableName, THashMap
     tablesMapping.erase(TString("yt.plato.") + tableName);
 }
 
-int SplitStatements(int argc, char* argv[]) {
+int SplitStatements(int argc, char** argv) {
     Y_UNUSED(argc);
     Y_UNUSED(argv);
 
@@ -1138,7 +1138,7 @@ void FillTablesMapping(const TFsPath& dataDir, THashMap<TString, TString>& table
     }
 }
 
-int Main(int argc, char* argv[])
+int Main(int argc, char** argv)
 {
     using namespace NLastGetopt;
     TOpts opts = TOpts::Default();
@@ -1179,8 +1179,8 @@ int Main(int argc, char* argv[])
     auto fileStorage = CreateFileStorage(*fsConfig);
     fileStorage = WithAsync(fileStorage);
 
-    auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, CreateBuiltinRegistry(), false, udfsPaths);
-    IUdfResolver::TPtr udfResolver = NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), fileStorage, true);
+    auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, CreateBuiltinRegistry(), /*allowUdfPatch=*/false, udfsPaths);
+    IUdfResolver::TPtr udfResolver = NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), fileStorage, /*useFakeMD5=*/true);
 
     bool keepTempFiles = true;
     bool emulateOutputForMultirun = false;
@@ -1198,7 +1198,7 @@ int Main(int argc, char* argv[])
     TExprContext ctx;
 
     IModuleResolver::TPtr moduleResolver;
-    if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, clusterMapping, true)) {
+    if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, clusterMapping, /*optimizeLibraries=*/true)) {
         Cerr << "Errors loading default YQL libraries:" << Endl;
         ctx.IssueManager.GetIssues().PrintTo(Cerr);
         return -1;
@@ -1206,7 +1206,7 @@ int Main(int argc, char* argv[])
 
     TExprContext::TFreezeGuard freezeGuard(ctx);
 
-    TProgramFactory factory(true, funcRegistry.Get(), ctx.NextUniqueId, dataProvidersInit, runnerName);
+    TProgramFactory factory(/*useRepeatableRandomAndTimeProviders=*/true, funcRegistry.Get(), ctx.NextUniqueId, dataProvidersInit, runnerName);
     factory.SetModules(moduleResolver);
     factory.SetUdfResolver(udfResolver);
     factory.SetGatewaysConfig(gatewaysConfig.Get());
@@ -1322,7 +1322,7 @@ int Main(int argc, char* argv[])
             }
         }
 
-        auto status = program->Run(username, nullptr, nullptr, nullptr, true);
+        auto status = program->Run(username, /*traceOut=*/nullptr, /*tracePlan=*/nullptr, /*exprOut=*/nullptr, /*withTypes=*/true);
         program->ConfigureYsonResultFormat(NYson::EYsonFormat::Text);
 
         if (status == TProgram::TStatus::Error) {
@@ -1351,7 +1351,7 @@ int Main(int argc, char* argv[])
     return 0;
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char** argv)
 {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();

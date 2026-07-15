@@ -63,8 +63,8 @@ private:
 class TEmergencyLogOutput: public IOutputStream {
 public:
     TEmergencyLogOutput()
-        : Current_(Buf_)
-        , End_(Y_ARRAY_END(Buf_))
+        : Current_(Buf_.begin())
+        , End_(Buf_.end())
     {
     }
 
@@ -72,14 +72,14 @@ public:
     }
 
 private:
-    inline size_t Avail() const noexcept {
+    [[nodiscard]] inline size_t Avail() const noexcept {
         return End_ - Current_;
     }
 
     void DoFlush() override {
-        if (Current_ != Buf_) {
-            NYql::NLog::YqlLogger().Write(TLOG_EMERG, Buf_, Current_ - Buf_);
-            Current_ = Buf_;
+        if (Current_ != Buf_.data()) {
+            NYql::NLog::YqlLogger().Write(TLOG_EMERG, Buf_.data(), Current_ - Buf_.data());
+            Current_ = Buf_.data();
         }
     }
 
@@ -93,7 +93,7 @@ private:
     }
 
 private:
-    char Buf_[1 << 20];
+    std::array<char, 1 << 20> Buf_;
     char* Current_;
     char* const End_;
 };
@@ -278,11 +278,11 @@ void WriteLocalTime(IOutputStream* out) {
     time_t seconds = static_cast<time_t>(now.tv_sec);
     localtime_r(&seconds, &tm);
 
-    char buf[sizeof("2016-01-02 03:04:05.006")];
-    int n = strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S.", &tm);
-    snprintf(buf + n, sizeof(buf) - n, "%03" PRIu32, static_cast<ui32>(now.tv_usec) / 1000);
+    std::array<char, sizeof("2016-01-02 03:04:05.006")> buf;
+    int n = strftime(buf.data(), sizeof(buf), "%Y-%m-%d %H:%M:%S.", &tm);
+    snprintf(buf.data() + n, sizeof(buf) - n, "%03" PRIu32, static_cast<ui32>(now.tv_usec) / 1000);
 
-    out->Write(buf, sizeof(buf) - 1);
+    out->Write(buf.data(), sizeof(buf) - 1);
 }
 
 TYqlLog::TYqlLog()
@@ -336,7 +336,7 @@ TAutoPtr<TLogElement> TYqlLog::CreateLogElement(
 
 void TYqlLog::Contextify(TLogElement& element, EComponent component, ELevel level, TStringBuf file, int line) const {
     const auto action = [&](std::pair<TString, TString> pair) {
-        element.With(std::move(pair.first), std::move(pair.second));
+        element.With(pair.first, std::move(pair.second));
     };
     Contextify(action, component, level, file, line);
 }
@@ -395,7 +395,7 @@ void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
 
         // Set stderr log destination if none was described in config
         if (config.LogDestSize() == 0) {
-            backends.emplace_back(CreateLogBackend("cerr", LOG_MAX_PRIORITY, false));
+            backends.emplace_back(CreateLogBackend("cerr", LOG_MAX_PRIORITY, /*threaded=*/false));
         }
 
         for (const auto& logDest : config.GetLogDest()) {
@@ -405,12 +405,12 @@ void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
                 case NProto::TLoggingConfig::STDOUT:
                 case NProto::TLoggingConfig::CONSOLE: {
                     if (!startAsDaemon) {
-                        backends.emplace_back(CreateLogBackend(ConvertDestinationType(logDest.GetType()), LOG_MAX_PRIORITY, false));
+                        backends.emplace_back(CreateLogBackend(ConvertDestinationType(logDest.GetType()), LOG_MAX_PRIORITY, /*threaded=*/false));
                     }
                     break;
                 }
                 case NProto::TLoggingConfig::FILE: {
-                    backends.emplace_back(CreateLogBackend(logDest.GetTarget(), LOG_MAX_PRIORITY, false));
+                    backends.emplace_back(CreateLogBackend(logDest.GetTarget(), LOG_MAX_PRIORITY, /*threaded=*/false));
                     break;
                 }
                 case NProto::TLoggingConfig::SYSLOG: {
@@ -455,7 +455,7 @@ void InitLogger(TAutoPtr<TLogBackend> backend, TFormatter formatter, bool isStri
             return;
         }
 
-        backend = MakeFormattingLogBackend(std::move(formatter), isStrictFormatting, std::move(backend));
+        backend = MakeFormattingLogBackend(std::move(formatter), isStrictFormatting, backend);
 
         TComponentLevels levels;
         levels.fill(ELevel::INFO);

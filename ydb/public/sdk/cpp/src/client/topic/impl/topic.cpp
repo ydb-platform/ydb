@@ -52,9 +52,12 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     , RetentionStorageMb_(Proto_.retention_storage_mb() > 0 ? std::optional<uint64_t>(Proto_.retention_storage_mb()) : std::nullopt)
     , PartitionWriteSpeedBytesPerSecond_(Proto_.partition_write_speed_bytes_per_second())
     , PartitionWriteBurstBytes_(Proto_.partition_write_burst_bytes())
+    , PartitionWriteSpeedMessagesPerSecond_(Proto_.partition_write_speed_messages_per_second())
+    , PartitionWriteBurstMessages_(Proto_.partition_write_burst_messages())
     , MeteringMode_(TProtoAccessor::FromProto(Proto_.metering_mode()))
     , TopicStats_(Proto_.topic_stats())
     , MetricsLevel_(Proto_.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(Proto_.metrics_level())) : std::optional<EMetricsLevel>())
+    , ContentBasedDeduplication_(Proto_.content_based_deduplication())
 {
     Owner_ = Proto_.self().owner();
     CreationTimestamp_ = NScheme::TVirtualTimestamp(Proto_.self().created_at());
@@ -108,6 +111,8 @@ TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
         ConsumerType_ = EConsumerType::Shared;
         KeepMessagesOrder_ = consumer.shared_consumer_type().keep_messages_order();
         DefaultProcessingTimeout_ = TDuration::Seconds(consumer.shared_consumer_type().default_processing_timeout().seconds());
+        ReceiveMessageWaitTime_ = ConvertPositiveDuration(consumer.shared_consumer_type().receive_message_wait_time());
+        ReceiveMessageDelay_ = ConvertPositiveDuration(consumer.shared_consumer_type().receive_message_delay());
     } else {
         ConsumerType_ = EConsumerType::Streaming;
     }
@@ -119,6 +124,14 @@ const std::string& TConsumer::GetConsumerName() const {
 
 EConsumerType TConsumer::GetConsumerType() const {
     return ConsumerType_;
+}
+
+TDuration TConsumer::GetReceiveMessageWaitTime() const {
+    return ReceiveMessageWaitTime_;
+}
+
+TDuration TConsumer::GetReceiveMessageDelay() const {
+    return ReceiveMessageDelay_;
 }
 
 bool TConsumer::GetImportant() const {
@@ -160,6 +173,10 @@ uint32_t TTopicDescription::GetTotalPartitionsCount() const {
     return Partitions_.size();
 }
 
+bool TTopicDescription::GetContentBasedDeduplication() const {
+    return ContentBasedDeduplication_;
+}
+
 const std::vector<TPartitionInfo>& TTopicDescription::GetPartitions() const {
     return Partitions_;
 }
@@ -194,6 +211,14 @@ uint64_t TTopicDescription::GetPartitionWriteSpeedBytesPerSecond() const {
 
 uint64_t TTopicDescription::GetPartitionWriteBurstBytes() const {
     return PartitionWriteBurstBytes_;
+}
+
+uint64_t TTopicDescription::GetPartitionWriteSpeedMessagesPerSecond() const {
+    return PartitionWriteSpeedMessagesPerSecond_;
+}
+
+uint64_t TTopicDescription::GetPartitionWriteBurstMessages() const {
+    return PartitionWriteBurstMessages_;
 }
 
 EMeteringMode TTopicDescription::GetMeteringMode() const {
@@ -591,14 +616,8 @@ std::shared_ptr<ISimpleBlockingWriteSession> TTopicClient::CreateSimpleBlockingW
     return Impl_->CreateSimpleWriteSession(settings);
 }
 
-std::shared_ptr<ISimpleBlockingKeyedWriteSession> TTopicClient::CreateSimpleBlockingKeyedWriteSession(
-    const TKeyedWriteSessionSettings& settings) {
-    return Impl_->CreateSimpleKeyedWriteSession(settings);
-}
-
-std::shared_ptr<IKeyedWriteSession> TTopicClient::CreateKeyedWriteSession(
-    const TKeyedWriteSessionSettings& settings) {
-    return Impl_->CreateKeyedWriteSession(settings);
+std::shared_ptr<IProducer> TTopicClient::CreateProducer(const TProducerSettings& settings) {
+    return Impl_->CreateProducer(settings);
 }
 
 std::shared_ptr<IWriteSession> TTopicClient::CreateWriteSession(const TWriteSessionSettings& settings) {
@@ -763,6 +782,14 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
             if (DefaultProcessingTimeout_) {
                 shared->mutable_default_processing_timeout()->set_seconds(DefaultProcessingTimeout_.value().Seconds());
             }
+            if (ReceiveMessageDelay_) {
+                shared->mutable_receive_message_delay()->set_seconds(ReceiveMessageDelay_->Seconds());
+                shared->mutable_receive_message_delay()->set_nanos(ReceiveMessageDelay_->NanoSecondsOfSecond());
+            }
+            if (ReceiveMessageWaitTime_) {
+                shared->mutable_receive_message_wait_time()->set_seconds(ReceiveMessageWaitTime_->Seconds());
+                shared->mutable_receive_message_wait_time()->set_nanos(ReceiveMessageWaitTime_->NanoSecondsOfSecond());
+            }
             if (DeadLetterPolicy_.Enabled_) {
                 shared->mutable_dead_letter_policy()->set_enabled(DeadLetterPolicy_.Enabled_.value());
             }
@@ -832,6 +859,16 @@ void TAlterConsumerSettings::SerializeTo(Ydb::Topic::AlterConsumer& proto) const
             ->set_set_max_processing_attempts(DeadLetterPolicy_.Condition_.MaxProcessingAttempts_.value());
     }
 
+    if (ReceiveMessageDelay_) {
+        proto.mutable_alter_shared_consumer_type()->mutable_set_receive_message_delay()->set_seconds(ReceiveMessageDelay_->Seconds());
+        proto.mutable_alter_shared_consumer_type()->mutable_set_receive_message_delay()->set_nanos(ReceiveMessageDelay_->NanoSecondsOfSecond());
+    }
+
+    if (ReceiveMessageWaitTime_) {
+        proto.mutable_alter_shared_consumer_type()->mutable_set_receive_message_wait_time()->set_seconds(ReceiveMessageWaitTime_->Seconds());
+        proto.mutable_alter_shared_consumer_type()->mutable_set_receive_message_wait_time()->set_nanos(ReceiveMessageWaitTime_->NanoSecondsOfSecond());
+    }
+
     if (DeadLetterPolicy_.Action_) {
         switch (DeadLetterPolicy_.Action_.value()) {
             case EDeadLetterAction::Move:
@@ -865,6 +902,8 @@ TCreateTopicSettings::TCreateTopicSettings(const Ydb::Topic::CreateTopicRequest&
     , MeteringMode_(TProtoAccessor::FromProto(proto.metering_mode()))
     , PartitionWriteSpeedBytesPerSecond_(proto.partition_write_speed_bytes_per_second())
     , PartitionWriteBurstBytes_(proto.partition_write_burst_bytes())
+    , PartitionWriteSpeedMessagesPerSecond_(proto.partition_write_speed_messages_per_second())
+    , PartitionWriteBurstMessages_(proto.partition_write_burst_messages())
     , Attributes_(DeserializeAttributes(proto.attributes()))
     , MetricsLevel_(proto.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(proto.metrics_level())) : std::nullopt)
 {
@@ -879,11 +918,14 @@ void TCreateTopicSettings::SerializeTo(Ydb::Topic::CreateTopicRequest& request) 
     request.set_metering_mode(TProtoAccessor::GetProto(MeteringMode_));
     request.set_partition_write_speed_bytes_per_second(PartitionWriteSpeedBytesPerSecond_);
     request.set_partition_write_burst_bytes(PartitionWriteBurstBytes_);
+    request.set_partition_write_speed_messages_per_second(PartitionWriteSpeedMessagesPerSecond_);
+    request.set_partition_write_burst_messages(PartitionWriteBurstMessages_);
     *request.mutable_consumers() = SerializeConsumers(Consumers_);
     *request.mutable_attributes() = SerializeAttributes(Attributes_);
     if (MetricsLevel_) {
         request.set_metrics_level(*MetricsLevel_);
     }
+    request.set_content_based_deduplication(ContentBasedDeduplication_);
 }
 
 } // namespace NYdb::NTopic

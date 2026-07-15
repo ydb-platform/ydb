@@ -4,6 +4,12 @@ import re
 import subprocess
 import six
 
+try:
+    from shutil import which
+except ImportError:
+    # Python 2.7: no shutil.which; distutils removed in Python 3.12+.
+    from distutils.spawn import find_executable as which
+
 import yaml
 import logging
 import argparse
@@ -17,6 +23,77 @@ import library.python.testing.recipe
 
 logger = logging.getLogger(__name__)
 
+# Resolved once per process: argv prefix for Compose — either ``[path/to/docker-compose]`` or ``["docker", "compose"]``.
+_docker_compose_argv_cache = None
+
+# Minimum Docker Engine API for the Compose v2 CLI plugin (``docker compose``). Below this, legacy
+# bundled docker-compose (docker-py ~API 1.30) remains compatible; newer daemons reject that client.
+_MIN_SERVER_API_FOR_COMPOSE_PLUGIN = (1, 40)
+
+# Optional override: ``legacy`` (bundled/PATH v1 only), ``modern`` (``docker compose`` only, with
+# fallback to legacy if unusable), ``auto`` (probe Server API + pick plugin vs legacy).
+_DOCKER_COMPOSE_BACKEND_ENV = "DOCKER_COMPOSE_BACKEND"
+
+# Default Unix socket for local Docker Engine. Bundled docker-compose (legacy Python + docker-py 3.x)
+# defaults to http+docker://localhost when DOCKER_HOST is unset, which breaks on modern Docker (e.g. v29+).
+_DOCKER_HOST_UNIX_FALLBACK = "unix:///var/run/docker.sock"
+
+
+def _docker_host_unix_url():
+    """
+    Return DOCKER_HOST value pointing at the local daemon Unix socket (not http+docker://localhost).
+
+    Prefer an actually present socket path so macOS (Docker Desktop / Colima) still works when
+    /var/run/docker.sock is absent.
+    """
+    if os.name == "nt":
+        return None
+    candidates = (
+        "/var/run/docker.sock",
+        os.path.expanduser("~/.docker/run/docker.sock"),
+    )
+    for path in candidates:
+        if os.path.exists(path):
+            return "unix://" + path
+    return _DOCKER_HOST_UNIX_FALLBACK
+
+
+def _ensure_docker_host_env():
+    """
+    Force docker CLI and bundled docker-compose to use the Unix socket API.
+
+    Without this, embedded docker-py falls back to http+docker://localhost and fails with
+    'Couldn't connect to Docker daemon at http+docker://localhost' even when the daemon
+    is reachable via /var/run/docker.sock.
+    """
+    url = _docker_host_unix_url()
+    if url is None:
+        return
+    os.environ["DOCKER_HOST"] = url
+    logger.debug("DOCKER_HOST set to %s for recipe subprocesses (docker / docker-compose)", url)
+
+
+def _is_docker_compose_v2_plugin(compose_argv):
+    """True if backend is ``docker compose`` (CLI plugin), not legacy ``docker-compose`` binary."""
+    return (
+        len(compose_argv) == 2
+        and compose_argv[0] == "docker"
+        and compose_argv[1] == "compose"
+    )
+
+
+def _compose_global_cli_flags(compose_argv):
+    """
+    Global options after ``-f <file>`` for ``up`` / ``ps`` / ``stop`` / ``down``.
+
+    Legacy v1 supports ``--log-level`` and ``--no-ansi``. The ``docker compose`` CLI plugin does
+    not accept ``--log-level`` as a top-level flag (unknown flag); use ``--ansi never`` only.
+    Verbose logging for v2 can be enabled via ``COMPOSE_LOG_LEVEL`` if needed.
+    """
+    if _is_docker_compose_v2_plugin(compose_argv):
+        return ["--ansi", "never"]
+    return ["--log-level", "DEBUG", "--no-ansi"]
+
 
 class DockerComposeRecipeException(Exception):
 
@@ -25,6 +102,7 @@ class DockerComposeRecipeException(Exception):
 
 
 def avoid_env_interpolation(env=None):
+    _ensure_docker_host_env()
     # For more info see
     # - https://docs.docker.com/compose/compose-file/12-interpolation
     # - https://github.com/docker/compose/issues/9704
@@ -53,7 +131,7 @@ def start(argv):
 
     env = _setup_env()
 
-    docker_compose = get_docker_compose()
+    compose_argv = get_docker_compose()
 
     recipe_config = _get_recipe_config(args)
 
@@ -69,7 +147,8 @@ def start(argv):
         yml_file = _setup_test_host(test_host_name, yml_file, env)
         library.python.testing.recipe.set_env("DONT_CREATE_TEST_PROCESS_GROUP", "1")  # XXX find out why docker-compose hangs in other case
         library.python.testing.recipe.set_env(
-            "TEST_COMMAND_WRAPPER", " ".join([docker_compose, "-f", yml_file, "exec", "-T", test_host_name])
+            "TEST_COMMAND_WRAPPER",
+            subprocess.list2cmdline(compose_argv + ["-f", yml_file, "exec", "-T", test_host_name]),
         )
 
     library.python.testing.recipe.set_env("DOCKER_COMPOSE_FILE", yml_file)
@@ -94,9 +173,22 @@ def start(argv):
 
             yatest.common.execute(net_args, cwd=cwd)
 
-    yatest.common.execute([docker_compose, "-f", yml_file, "--log-level", "DEBUG", "--no-ansi", "up", "-d", "--build",
-                           "--force-recreate"],
-                          cwd=cwd, env=env)
+    yatest.common.execute(
+        compose_argv
+        + [
+            "-f",
+            yml_file,
+        ]
+        + _compose_global_cli_flags(compose_argv)
+        + [
+            "up",
+            "-d",
+            "--build",
+            "--force-recreate",
+        ],
+        cwd=cwd,
+        env=env,
+    )
 
 
 def stop(argv):
@@ -109,7 +201,7 @@ def stop(argv):
         except KeyboardInterrupt:
             pass
 
-    docker_compose = get_docker_compose()
+    compose_argv = get_docker_compose()
     yaml, cwd = get_compose_file_and_cwd(argv)
     args = _parse_args(argv)
     recipe_config = _get_recipe_config(args)
@@ -117,7 +209,12 @@ def stop(argv):
     containers = _get_containers(yaml)
 
     try:
-        containers_ids_res = yatest.common.execute([docker_compose, "-f", yaml, "--log-level", "DEBUG", "--no-ansi", "ps", "-q"], cwd=cwd, stdout=subprocess.PIPE, text=True)
+        containers_ids_res = yatest.common.execute(
+            compose_argv + ["-f", yaml] + _compose_global_cli_flags(compose_argv) + ["ps", "-q"],
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
         if containers_ids_res.exit_code != 0:
             raise DockerComposeRecipeException("'docker-compose ps' returned {}'".format(containers_ids_res.exit_code))
 
@@ -136,13 +233,17 @@ def stop(argv):
                 continue
             failed_containers.append(container_name)
 
-        yatest.common.execute([docker_compose, "-f", yaml, "--log-level", "DEBUG", "--no-ansi", "stop"], cwd=cwd)
+        yatest.common.execute(compose_argv + ["-f", yaml] + _compose_global_cli_flags(compose_argv) + ["stop"], cwd=cwd)
 
         _dump_container_logs(containers, _get_requested_paths(yaml, recipe_config))
 
     finally:
         if not yatest.common.context.test_debug:
-            yatest.common.execute([get_docker_compose(), "-f", yaml, "--log-level", "DEBUG", "--no-ansi", "down", "--rmi", "local"], cwd=cwd)
+            _dc = get_docker_compose()
+            yatest.common.execute(
+                _dc + ["-f", yaml] + _compose_global_cli_flags(_dc) + ["down", "--rmi", "local"],
+                cwd=cwd,
+            )
 
         networks = _get_networks(recipe_config)
         if networks:
@@ -165,12 +266,294 @@ def get_compose_file_and_cwd(args):
     return yaml_file, os.path.dirname(yaml_file)
 
 
+def _subprocess_probe_zero_exit(argv):
+    """
+    Return True if ``argv`` exits with code 0.
+    Python 2/3 compatible (``subprocess.run`` / ``shutil.which`` are not available in Py2).
+    """
+    if six.PY2:
+        try:
+            proc = subprocess.Popen(
+                argv,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=os.environ,
+            )
+            proc.communicate()
+            return proc.returncode == 0
+        except OSError as e:
+            logger.debug("subprocess probe failed for %s: %s", argv, e)
+            return False
+    try:
+        proc = subprocess.run(
+            argv,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=os.environ,
+        )
+        return proc.returncode == 0
+    except OSError as e:
+        logger.debug("subprocess probe failed for %s: %s", argv, e)
+        return False
+
+
+def _probe_docker_compose_v1(argv_prefix):
+    """Return True if legacy ``docker-compose`` CLI runs (``--version``)."""
+    return _subprocess_probe_zero_exit(argv_prefix + ["--version"])
+
+
+def _probe_docker_compose_v2():
+    """Return True if ``docker compose`` plugin is available."""
+    return _subprocess_probe_zero_exit(["docker", "compose", "version"])
+
+
+def _capture_output(argv):
+    """Run argv, return stdout text on rc=0; else None. Python 2/3 compatible."""
+    try:
+        if six.PY2:
+            proc = subprocess.Popen(
+                argv,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=os.environ,
+            )
+            out, _err = proc.communicate()
+            if proc.returncode != 0:
+                return None
+            return out or ""
+        proc = subprocess.run(
+            argv,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=os.environ,
+        )
+        if proc.returncode != 0:
+            return None
+        out = proc.stdout
+        if out is None:
+            return ""
+        if isinstance(out, bytes):
+            return out.decode("utf-8", "replace")
+        return out
+    except OSError as e:
+        logger.debug("capture_output failed for %s: %s", argv, e)
+        return None
+
+
+def _parse_two_part_version(s):
+    """Parse ``1.43`` / ``1.40`` into ``(1, 43)``; return None if invalid."""
+    if not s:
+        return None
+    s = six.ensure_str(s).strip().split()[0]
+    parts = s.split(".")
+    if len(parts) < 2:
+        return None
+    try:
+        return int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+
+
+def _get_docker_server_api_version():
+    """
+    Return Docker daemon API version as ``(major, minor)``, or None if unknown.
+
+    Uses ``docker version --format '{{.Server.APIVersion}}'`` when supported, else parses
+    ``docker version`` text (``Server:`` / ``API version:``).
+    """
+    _ensure_docker_host_env()
+    raw = _capture_output(["docker", "version", "--format", "{{.Server.APIVersion}}"])
+    if raw is not None:
+        txt = six.ensure_str(raw).strip()
+        if txt:
+            v = _parse_two_part_version(txt)
+            if v:
+                return v
+    raw2 = _capture_output(["docker", "version"])
+    if raw2 is None:
+        return None
+    text = six.ensure_str(raw2)
+    if "Server:" in text:
+        tail = text.split("Server:", 1)[-1]
+    else:
+        tail = text
+    m = re.search(r"API\s+version:\s*(\d+\.\d+)", tail, re.I)
+    if m:
+        return _parse_two_part_version(m.group(1))
+    return None
+
+
+def _try_resolve_legacy_docker_compose_argv():
+    """
+    Try bundled ``docker-compose`` then PATH. Return argv prefix list or None.
+    """
+    bundled = yatest.common.build_path("library/recipes/docker_compose/bin/docker-compose")
+    if os.name == "nt" and not os.path.exists(bundled):
+        bundled_exe = bundled + ".exe"
+        if os.path.exists(bundled_exe):
+            bundled = bundled_exe
+
+    v1_candidates = []
+    seen_realpaths = set()
+
+    if os.path.exists(bundled):
+        try:
+            if os.name != "nt":
+                os.chmod(bundled, 0o755)
+        except OSError as e:
+            logger.debug("chmod bundled docker-compose: %s", e)
+        v1_candidates.append(("bundled", bundled, [bundled]))
+        seen_realpaths.add(os.path.realpath(bundled))
+
+    which_compose = which("docker-compose")
+    if which_compose:
+        rp = os.path.realpath(which_compose)
+        if rp not in seen_realpaths:
+            v1_candidates.append(("PATH", which_compose, [which_compose]))
+            seen_realpaths.add(rp)
+
+    for source, path, argv_prefix in v1_candidates:
+        if _probe_docker_compose_v1(argv_prefix):
+            if source == "bundled":
+                logger.info("Docker Compose backend=legacy: bundled binary at %s", path)
+            else:
+                logger.info("Docker Compose backend=legacy: docker-compose from PATH (%s)", path)
+            return argv_prefix
+    return None
+
+
+def _resolve_docker_compose_argv():
+    """
+    Choose between legacy ``docker-compose`` (bundled / PATH) and ``docker compose`` (CLI plugin).
+
+    * ``auto`` (default): if Server API >= 1.40 and ``docker compose version`` works → plugin;
+      else legacy. If API is new but plugin is missing → legacy. If legacy is missing → plugin
+      as last resort.
+    * ``DOCKER_COMPOSE_BACKEND=legacy``: legacy only, then last-resort plugin.
+    * ``DOCKER_COMPOSE_BACKEND=modern``: plugin first, then legacy fallback.
+    """
+    _ensure_docker_host_env()
+
+    raw_mode = (os.environ.get(_DOCKER_COMPOSE_BACKEND_ENV) or "auto").strip().lower()
+    if raw_mode not in ("legacy", "modern", "auto"):
+        logger.warning(
+            "Invalid %s=%r — using 'auto'. Valid: legacy, modern, auto",
+            _DOCKER_COMPOSE_BACKEND_ENV,
+            os.environ.get(_DOCKER_COMPOSE_BACKEND_ENV),
+        )
+        mode = "auto"
+    else:
+        mode = raw_mode
+    logger.info("%s=%s", _DOCKER_COMPOSE_BACKEND_ENV, mode)
+
+    api_ver = _get_docker_server_api_version()
+    if api_ver is not None:
+        logger.info(
+            "Docker Server API version detected: %s.%s (minimum for compose plugin path: %s.%s)",
+            api_ver[0],
+            api_ver[1],
+            _MIN_SERVER_API_FOR_COMPOSE_PLUGIN[0],
+            _MIN_SERVER_API_FOR_COMPOSE_PLUGIN[1],
+        )
+    else:
+        logger.info("Docker Server API version: unknown (could not parse `docker version`)")
+
+    want_modern_by_api = api_ver is not None and api_ver >= _MIN_SERVER_API_FOR_COMPOSE_PLUGIN
+
+    def try_modern(reason_log):
+        if not _probe_docker_compose_v2():
+            return None
+        logger.info(
+            "Docker Compose backend=modern (`docker compose` CLI plugin). %s",
+            reason_log,
+        )
+        return ["docker", "compose"]
+
+    # --- explicit modern ---
+    if mode == "modern":
+        argv = try_modern("DOCKER_COMPOSE_BACKEND=modern")
+        if argv is not None:
+            return argv
+        logger.warning(
+            "`docker compose` not available; falling back to legacy docker-compose "
+            "(DOCKER_COMPOSE_BACKEND=modern)"
+        )
+        argv = _try_resolve_legacy_docker_compose_argv()
+        if argv is not None:
+            return argv
+        raise DockerComposeRecipeException(
+            "DOCKER_COMPOSE_BACKEND=modern but neither `docker compose` nor legacy docker-compose works"
+        )
+
+    # --- explicit legacy ---
+    if mode == "legacy":
+        argv = _try_resolve_legacy_docker_compose_argv()
+        if argv is not None:
+            logger.info(
+                "DOCKER_COMPOSE_BACKEND=legacy: using legacy docker-compose only (Server API %s)",
+                ("%d.%d" % (api_ver[0], api_ver[1])) if api_ver else "unknown",
+            )
+            return argv
+        logger.warning(
+            "Legacy docker-compose not found; trying `docker compose` as last resort "
+            "(DOCKER_COMPOSE_BACKEND=legacy)"
+        )
+        argv = try_modern("last resort — no working legacy binary")
+        if argv is not None:
+            return argv
+        raise DockerComposeRecipeException(
+            "DOCKER_COMPOSE_BACKEND=legacy but no working `docker-compose` or `docker compose` found"
+        )
+
+    # --- auto ---
+    if want_modern_by_api:
+        argv = try_modern(
+            "Server API %s.%s >= %s.%s — avoids bundled client API 1.30 vs daemon mismatch"
+            % (
+                api_ver[0],
+                api_ver[1],
+                _MIN_SERVER_API_FOR_COMPOSE_PLUGIN[0],
+                _MIN_SERVER_API_FOR_COMPOSE_PLUGIN[1],
+            )
+        )
+        if argv is not None:
+            return argv
+        logger.warning(
+            "Server API >= %s.%s but `docker compose` plugin missing or broken; "
+            "falling back to legacy docker-compose",
+            _MIN_SERVER_API_FOR_COMPOSE_PLUGIN[0],
+            _MIN_SERVER_API_FOR_COMPOSE_PLUGIN[1],
+        )
+
+    argv = _try_resolve_legacy_docker_compose_argv()
+    if argv is not None:
+        return argv
+
+    argv = try_modern("last resort — no working legacy docker-compose")
+    if argv is not None:
+        logger.warning(
+            "Using `docker compose` as last resort: no legacy docker-compose passed `--version`"
+        )
+        return argv
+
+    raise DockerComposeRecipeException(
+        "Neither working `docker-compose` nor `docker compose` found: "
+        "install docker-compose v1 or Docker Compose v2 plugin"
+    )
+
+
 def get_docker_compose():
-    docker_compose = yatest.common.build_path("library/recipes/docker_compose/bin/docker-compose")
-    if not os.path.exists(docker_compose):
-        raise DockerComposeRecipeException("cannot find docker_compose by build_path '{}'".format(docker_compose))
-    os.chmod(docker_compose, 0o755)
-    return docker_compose
+    """
+    Return argv prefix for Docker Compose: ``[path/to/docker-compose]`` or ``[\"docker\", \"compose\"]``.
+
+    Resolution is cached per process. Selection uses ``DOCKER_COMPOSE_BACKEND`` (legacy / modern /
+    auto), Docker Server API version (``docker version``), and probes so that daemons with API >= 1.40
+    prefer the Compose v2 plugin and avoid legacy client API 1.30 errors on modern engines.
+    """
+    global _docker_compose_argv_cache
+    if _docker_compose_argv_cache is None:
+        _docker_compose_argv_cache = _resolve_docker_compose_argv()
+    return _docker_compose_argv_cache
 
 
 def _parse_args(argv):
@@ -205,6 +588,9 @@ def _get_docker_deprecated_context(args):
 
 def _setup_env():
     env = os.environ.copy()
+    url = _docker_host_unix_url()
+    if url is not None:
+        env["DOCKER_HOST"] = url
     env["CURRENT_USER"] = "{}:{}".format(os.getuid(),  os.getgid())
     # Setup extra env.vars. to be able to pass coverage dir to the docker
     for name in const.COVERAGE_ENV_VARS:
@@ -387,7 +773,7 @@ def _get_requested_paths(yaml_path, config):
     if config:
         for service_name, logs in six.iteritems(config.get("save", {})):
             try:
-                res = yatest.common.execute([get_docker_compose(), "-f", yaml_path, "ps", "-q", service_name])
+                res = yatest.common.execute(get_docker_compose() + ["-f", yaml_path, "ps", "-q", service_name])
                 requested_logs[six.ensure_str(res.std_out).strip()] = logs
             except yatest.common.ExecutionError:
                 logging.exception("Error while trying to find docker compose service by name: %s", service_name)
@@ -395,7 +781,7 @@ def _get_requested_paths(yaml_path, config):
 
 
 def _get_containers(yaml_path):
-    res = yatest.common.execute([get_docker_compose(), "-f", yaml_path, "ps", "-q"])
+    res = yatest.common.execute(get_docker_compose() + ["-f", yaml_path, "ps", "-q"])
     return {container_id: _get_container_name(container_id) for container_id in filter(None, six.ensure_str(res.std_out).split("\n"))}
 
 

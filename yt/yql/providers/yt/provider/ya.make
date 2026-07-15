@@ -88,6 +88,7 @@ PEERDIR(
     yql/essentials/public/langver
     yql/essentials/public/udf
     yql/essentials/sql
+    yql/essentials/sql/settings/flags
     yql/essentials/sql/v1
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
@@ -101,7 +102,8 @@ PEERDIR(
     yql/essentials/core/dqs_expr_nodes
     yql/essentials/core/expr_nodes
     yql/essentials/core/issue
-    yql/essentials/core/issue/protos
+    yql/essentials/core/langver
+    yql/essentials/public/issue/protos
     yql/essentials/core/peephole_opt
     yql/essentials/core/type_ann
     yql/essentials/core/file_storage
@@ -110,6 +112,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/config
+    yql/essentials/providers/common/config/transformer
     yql/essentials/providers/common/dq
     yql/essentials/providers/common/mkql
     yql/essentials/providers/common/proto

@@ -1,14 +1,18 @@
 #include "yql_pq_ytflow_optimize.h"
 
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+
 #include <yt/yql/providers/ytflow/expr_nodes/yql_ytflow_expr_nodes.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
+namespace {
+
 class TPqYtflowOptimization : public TEmptyYtflowOptimization {
 public:
-    TPqYtflowOptimization(const TPqState::TPtr& state)
+    explicit TPqYtflowOptimization(const TPqState::TPtr& state)
         : State_(state.Get())
     {
     }
@@ -47,6 +51,8 @@ public:
             }
         }
 
+        auto userSchemaColumnsNode = Build<TCoVoid>(ctx, read->Pos()).Done().Ptr();
+
         return Build<TPqReadTopic>(ctx, read->Pos())
             .InitFrom(maybeReadTopic.Cast())
             .Topic<TPqTopic>()
@@ -57,6 +63,7 @@ public:
             .Columns<TCoAtomList>()
                 .Add(columns)
                 .Build()
+            .UserSchemaColumns(std::move(userSchemaColumnsNode))
             .Done().Ptr();
     }
 
@@ -66,10 +73,8 @@ public:
             return read;
         }
 
-        return Build<TCoUnordered>(ctx, read->Pos())
-            .Input<TPqReadTopic>()
-                .InitFrom(maybeReadTopic.Cast())
-                .Build()
+        return Build<TPqReadTopic>(ctx, read->Pos())
+            .InitFrom(maybeReadTopic.Cast())
             .Done().Ptr();
     }
 
@@ -94,6 +99,8 @@ public:
 private:
     TPqState* State_;
 };
+
+} // anonymous namespace
 
 THolder<IYtflowOptimization> CreatePqYtflowOptimization(const TPqState::TPtr& state) {
     YQL_ENSURE(state);

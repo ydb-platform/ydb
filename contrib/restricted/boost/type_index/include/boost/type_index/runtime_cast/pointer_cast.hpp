@@ -35,7 +35,7 @@ BOOST_TYPE_INDEX_BEGIN_MODULE_EXPORT
 /// an address suitably offset from u. If no such conversion exists, returns nullptr.
 template<typename T, typename U>
 T runtime_cast(U* u) noexcept {
-    typedef typename std::remove_pointer<T>::type impl_type;
+    using impl_type = typename std::remove_pointer<T>::type;
     return detail::runtime_cast_impl<impl_type>(u, std::is_base_of<T, U>());
 }
 
@@ -46,7 +46,7 @@ T runtime_cast(U* u) noexcept {
 /// an address suitably offset from u. If no such conversion exists, returns nullptr.
 template<typename T, typename U>
 T runtime_cast(U const* u) noexcept {
-    typedef typename std::remove_pointer<T>::type impl_type;
+    using impl_type = typename std::remove_pointer<T>::type;
     return detail::runtime_cast_impl<impl_type>(u, std::is_base_of<T, U>());
 }
 

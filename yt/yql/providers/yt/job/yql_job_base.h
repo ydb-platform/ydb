@@ -79,11 +79,18 @@ public:
         LangVer = langver;
     }
 
+    void SetRuntimeSettings(TRuntimeSettings::TConstPtr runtimeSettings) {
+        RuntimeSettings = runtimeSettings;
+    }
+
     virtual void Save(IOutputStream& stream) const;
     virtual void Load(IInputStream& stream);
 
 protected:
     NKikimr::NMiniKQL::TCallableVisitFuncProvider MakeTransformProvider(THashMap<TString, NKikimr::NMiniKQL::TRuntimeNode>* extraArgs = nullptr) const;
+    virtual bool NeedWriteStats() {
+        return true;
+    }
 
     void Init();
 
@@ -98,6 +105,7 @@ protected:
     TVector<TString> TableNames;
     NUdf::ELogLevel RuntimeLogLevel = NUdf::ELogLevel::Info;
     TLangVersion LangVer = UnknownLangVersion;
+    TRuntimeSettings::TConstPtr RuntimeSettings = MakeRuntimeSettings();
     // End serializable part
 
     ui64 StartCycles = 0;

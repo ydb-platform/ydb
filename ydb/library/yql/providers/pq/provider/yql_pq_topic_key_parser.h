@@ -50,14 +50,6 @@ public:
         return DateFormat;
     }
 
-    TExprNode::TPtr GetWatermarkAdjustLateEvents() const {
-        return WatermarkAdjustLateEvents;
-    }
-
-    TExprNode::TPtr GetWatermarkDropLateEvents() const {
-        return WatermarkDropLateEvents;
-    }
-
     TExprNode::TPtr GetWatermarkGranularity() const {
         return WatermarkGranularity;
     }
@@ -72,6 +64,10 @@ public:
 
     TExprNode::TPtr GetSkipJsonErrors() const {
         return SkipJsonErrors;
+    }
+
+    TExprNode::TPtr GetCsvDelimiter() const {
+        return CsvDelimiter;
     }
 
     TExprNode::TPtr GetStreamingTopicRead() const {
@@ -101,12 +97,11 @@ private:
     TExprNode::TPtr DateFormat;
     TExprNode::TPtr UserSchema;
     TExprNode::TPtr ColumnOrder;
-    TExprNode::TPtr WatermarkAdjustLateEvents;
-    TExprNode::TPtr WatermarkDropLateEvents;
     TExprNode::TPtr WatermarkGranularity;
     TExprNode::TPtr WatermarkIdleTimeout;
     TExprNode::TPtr Watermark;
     TExprNode::TPtr SkipJsonErrors;
+    TExprNode::TPtr CsvDelimiter;
     TExprNode::TPtr StreamingTopicRead;
     TExprNode::TPtr SharedReading;
 };

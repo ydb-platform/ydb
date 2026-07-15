@@ -16,6 +16,8 @@ SRCS(
     read_session.cpp
     topic_impl.h
     topic_impl.cpp
+    producer.h
+    producer.cpp
     topic.cpp
     transaction.cpp
     write_session_impl.h
@@ -25,6 +27,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/public/sdk/cpp/src/library/grpc/client
     library/cpp/monlib/dynamic_counters
     library/cpp/threading/future/subscription

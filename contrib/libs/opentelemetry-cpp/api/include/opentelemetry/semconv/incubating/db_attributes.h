@@ -417,7 +417,10 @@ static constexpr const char *kDbQueryParameter = "db.query.parameter";
   instrumentation hooks or other means. If it is not available, instrumentations
   that support query parsing SHOULD generate a summary following
   <a href="/docs/db/database-spans.md#generating-a-summary-of-the-query">Generating query
-  summary</a> section.
+  summary</a> section. <p> For batch operations, if the individual operations are known to have the
+  same query summary then that query summary SHOULD be used prepended by @code BATCH  @endcode,
+  otherwise @code db.query.summary @endcode SHOULD be @code BATCH @endcode or some other database
+  system specific term if more applicable.
  */
 static constexpr const char *kDbQuerySummary = "db.query.summary";
 

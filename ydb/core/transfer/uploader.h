@@ -1,13 +1,18 @@
 #pragma once
 
 #include "events.h"
-#include "logging.h"
 #include "scheme.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/backoff.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NReplication::NTransfer {
+
+inline TBackoff MakeBackoff() {
+    return TBackoff(TDuration::Seconds(1), TDuration::Minutes(1));
+}
 
 template<typename TData>
 class TTableUploader : public TActorBootstrapped<TTableUploader<TData>> {
@@ -17,12 +22,16 @@ class TTableUploader : public TActorBootstrapped<TTableUploader<TData>> {
     static constexpr size_t MaxSchemeRetries = 3;
 
 public:
-    TTableUploader(const TActorId& parentActor,
-        const TString& database, const TScheme::TPtr& scheme,
+    TTableUploader(
+        const TActorId& parentActor,
+        const TString& database,
+        const TString& defaultTablePath,
+        const TScheme::TPtr& scheme,
         std::unordered_map<TString, std::shared_ptr<TData>>&& data
     )
         : ParentActor(parentActor)
         , Database(database)
+        , DefaultTablePath(defaultTablePath)
         , Scheme(scheme)
         , Data(std::move(data))
     {
@@ -36,29 +45,26 @@ public:
 private:
     void DoRequests() {
         for (const auto& [tablePath, data] : Data) {
-            DoUpload(tablePath, data);
+            DoUpload(tablePath, data, false);
         }
     }
 
     IActor* CreateUploaderInternal(const TString& database, const TString& tablePath, const std::shared_ptr<TData>& data, ui64 cookie);
 
-    void DoUpload(const TString& tablePath, const std::shared_ptr<TData>& data) {
+    void DoUpload(const TString& tablePath, const std::shared_ptr<TData>& data, bool useDefaultTablePath) {
         auto cookie = ++Cookie;
 
         auto actorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            CreateUploaderInternal(Database, tablePath, data, cookie)
+            CreateUploaderInternal(Database, useDefaultTablePath ? DefaultTablePath : tablePath, data, cookie)
         );
         CookieMapping[cookie] = {tablePath, actorId};
-    }
-
-    std::string GetLogPrefix() const {
-        return "RowTableUploader: ";
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
         auto it = CookieMapping.find(ev->Cookie);
         if (it == CookieMapping.end()) {
-            LOG_W("Processed unknown cookie " << ev->Cookie);
+            YDB_LOG_WARN_COMP(NKikimrServices::TRANSFER, "RowTableUploader: Processed unknown cookie",
+                {"cookie", ev->Cookie});
             return;
         }
 
@@ -75,18 +81,38 @@ private:
             return;
         }
 
+        auto& retry = Retries[tablePath];
+
+        if (status == Ydb::StatusIds::SCHEME_ERROR) {
+            const auto issues = ev->Get()->Issues.ToOneLineString();
+            if (issues.contains("unknown table")) {
+                if (retry.DefaultTable) {
+                    ReplyErrorAndDie(status, std::move(ev->Get()->Issues));
+                } else {
+                    retry.DefaultTable = true;
+                    TThis::Schedule(retry.Backoff.Next(), new NTransferPrivate::TEvRetryTable(tablePath, true));
+                    CookieMapping.erase(ev->Cookie);
+                }
+                return;
+            }
+            if (issues.contains("Only the OLTP table is supported") || issues.contains("Only the OLAP table is supported")) {
+                return ReplyErrorAndDie(status, std::move(ev->Get()->Issues));
+            }
+        }
+
         const auto schemeError = status == Ydb::StatusIds::SCHEME_ERROR
             || status == Ydb::StatusIds::BAD_REQUEST
             || status == Ydb::StatusIds::UNAUTHORIZED;
 
-        auto& retry = Retries[tablePath];
         auto withRetry = retry.Backoff.HasMore() && retry.SchemeCount < MaxSchemeRetries;
         if (withRetry) {
-            LOG_D("Schedule retry: table=" << tablePath
-                << ", iteration=" << retry.Backoff.GetIteration()
-                << ", error=" << status << " " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TRANSFER, "RowTableUploader: Schedule retry",
+                {"table", tablePath},
+                {"iteration", retry.Backoff.GetIteration()},
+                {"error", status},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
 
-            TThis::Schedule(retry.Backoff.Next(), new NTransferPrivate::TEvRetryTable(tablePath));
+            TThis::Schedule(retry.Backoff.Next(), new NTransferPrivate::TEvRetryTable(tablePath, retry.DefaultTable));
             if (schemeError) {
                 ++retry.SchemeCount;
             } else {
@@ -107,7 +133,7 @@ private:
             return ReplyErrorAndDie(TStringBuilder() << "Unexpected retry for table '" << tablePath << "'");
         }
 
-        DoUpload(tablePath, it->second);
+        DoUpload(tablePath, it->second, ev->Get()->DefaultTable);
     }
 
     STFUNC(StateWork) {
@@ -140,7 +166,9 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
-        LOG_E("Upload error: error=" << status << " " << issues.ToOneLineString());
+        YDB_LOG_ERROR_COMP(NKikimrServices::TRANSFER, "RowTableUploader: Upload error",
+            {"error", status},
+            {"issues", issues.ToOneLineString()});
 
         TThis::Send(ParentActor, new NTransferPrivate::TEvWriteCompleeted(status, std::move(issues)));
         TThis::PassAway();
@@ -149,6 +177,7 @@ private:
 private:
     const TActorId ParentActor;
     const TString Database;
+    const TString DefaultTablePath;
     const TScheme::TPtr Scheme;
     // Table path -> Data
     std::unordered_map<TString, std::shared_ptr<TData>> Data;
@@ -158,8 +187,9 @@ private:
     std::unordered_map<ui64, std::pair<TString, TActorId>> CookieMapping;
 
     struct Retry {
-        TBackoff Backoff = TBackoff(TDuration::Seconds(1), TDuration::Minutes(1));
+        TBackoff Backoff = MakeBackoff();
         size_t SchemeCount = 0;
+        bool DefaultTable = false;
     };
     std::unordered_map<TString, Retry> Retries;
 };

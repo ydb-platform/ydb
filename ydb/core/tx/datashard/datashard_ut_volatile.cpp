@@ -6,6 +6,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/base/statestorage_impl.h>
 
 namespace NKikimr {
 
@@ -141,15 +142,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
     }
 
-    Y_UNIT_TEST_TWIN(DistributedWriteShardRestartBeforePlan, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+    Y_UNIT_TEST(DistributedWriteShardRestartBeforePlan) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(appConfig);
+            .SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -238,15 +236,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DistributedWriteShardRestartAfterExpectation, UseSink) {
+    Y_UNIT_TEST(DistributedWriteShardRestartAfterExpectation) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(app);
+            .SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -420,15 +415,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
     }
 
-    Y_UNIT_TEST_TWIN(DistributedWriteLaterSnapshotBlockedThenCommit, UseSink) {
+    Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenCommit) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(app);
+            .SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -510,15 +502,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
     }
 
-    Y_UNIT_TEST_TWIN(DistributedWriteLaterSnapshotBlockedThenAbort, UseSink) {
+    Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenAbort) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(app);
+            .SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -1738,7 +1727,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         WaitForContent(server, sender, "/Root/table-1/Stream", {
             R"({"update":{},"newImage":{"value2":null,"value":1},"key":[1]})",
-            R"({"update":{},"newImage":{"value2":42,"value":2},"key":[2]})",
+            R"({"user":"<anonymous>","update":{},"newImage":{"value2":42,"value":2},"key":[2]})",
             R"({"update":{},"newImage":{"value2":42,"value":22},"key":[2],"oldImage":{"value2":42,"value":2}})",
         });
 
@@ -2248,17 +2237,14 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 4 } items { uint32_value: 40 } }");
     }
 
-    Y_UNIT_TEST_TWIN(TwoAppendsMustBeVolatile, UseSink) {
+    Y_UNIT_TEST(TwoAppendsMustBeVolatile) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(100)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2327,16 +2313,13 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     }
 
     // Regression test for KIKIMR-21156
-    Y_UNIT_TEST_TWIN(VolatileCommitOnBlobStorageFailure, UseSink) {
+    Y_UNIT_TEST(VolatileCommitOnBlobStorageFailure) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(1000)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2863,15 +2846,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TTestActorRuntime::TEventObserverHolder Observer;
     };
 
-    Y_UNIT_TEST_TWIN(UpsertNoLocksArbiter, UseSink) {
+    Y_UNIT_TEST(UpsertNoLocksArbiter) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2921,15 +2901,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { int32_value: 31 } items { int32_value: 311 } }");
     }
 
-    Y_UNIT_TEST_TWIN(UpsertBrokenLockArbiter, UseSink) {
+    Y_UNIT_TEST(UpsertBrokenLockArbiter) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2990,15 +2967,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "");
     }
 
-    Y_UNIT_TEST_TWIN(UpsertNoLocksArbiterRestart, UseSink) {
+    Y_UNIT_TEST(UpsertNoLocksArbiterRestart) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3065,15 +3039,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "ERROR: UNDETERMINED");
     }
 
-    Y_UNIT_TEST_TWIN(UpsertBrokenLockArbiterRestart, UseSink) {
+    Y_UNIT_TEST(UpsertBrokenLockArbiterRestart) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3141,15 +3112,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "ERROR: ABORTED");
     }
 
-    Y_UNIT_TEST_TWIN(UpsertDependenciesShardsRestart, UseSink) {
+    Y_UNIT_TEST(UpsertDependenciesShardsRestart) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3234,15 +3202,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         Cerr << "... split finished" << Endl;
     }
 
-    Y_UNIT_TEST_TWIN(DistributedUpsertRestartBeforePrepare, UseSink) {
+    Y_UNIT_TEST(DistributedUpsertRestartBeforePrepare) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3296,15 +3261,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "ERROR: UNAVAILABLE");
     }
 
-    Y_UNIT_TEST_TWIN(DistributedUpsertRestartAfterPrepare, UseSink) {
+    Y_UNIT_TEST(DistributedUpsertRestartAfterPrepare) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3392,15 +3354,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DistributedUpsertRestartAfterPlan, UseSink) {
+    Y_UNIT_TEST(DistributedUpsertRestartAfterPlan) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3491,15 +3450,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     }
 
     // Regression test for KIKIMR-22506
-    Y_UNIT_TEST_TWIN(NotCachingAbortingDeletes, UseSink) {
+    Y_UNIT_TEST(NotCachingAbortingDeletes) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -4048,6 +4004,234 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
             "{ items { uint32_value: 11 } items { uint32_value: 111 } }, "
             "{ items { uint32_value: 21 } items { uint32_value: 21 } }");
+    }
+
+    // Reproduce the scenario with a topic-table distributed transaction.
+    // With EnableDataShardWriteAlwaysVolatile=true, when the datashard receives
+    // MODE_PREPARE with SendingShards that include the topic tablet, it creates
+    // a volatile tx with the topic tablet as a participant.
+    //
+    // The test verifies that when the new datashard tablet instance starts, the old
+    // instance correctly processes the readset from the topic tablet (i.e doesn't
+    // ack it, so that the ack is re-sent to the new generation).
+    Y_UNIT_TEST(VolatileTransactionWithTopicParticipant) {
+        NKikimrPQ::TPQConfig pqConfig;
+        pqConfig.SetEnabled(true);
+        pqConfig.SetEnableProtoSourceIdInfo(true);
+        pqConfig.SetTopicsAreFirstClassCitizen(true);
+        pqConfig.SetCheckACL(false);
+        pqConfig.SetRequireCredentialsInNewProtocol(false);
+        pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134), {}, pqConfig);
+        serverSettings
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            // When MODE_PREPARE is received and GetRemainReadSets() > 0,
+            // the datashard creates a volatile tx waiting for readsets
+            .SetEnableDataShardWriteAlwaysVolatile(true);
+
+        TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        // Capture the table shard StorageInfo, so that later we can restart it
+        // manually.
+        THashMap<ui64, TIntrusivePtr<TTabletStorageInfo>> tabletToStorageInfo;
+        auto storageInfoObserver = runtime.AddObserver<TEvLocal::TEvBootTablet>(
+        [&](TEvLocal::TEvBootTablet::TPtr& ev) {
+            tabletToStorageInfo[ev->Get()->Record.GetInfo().GetTabletID()] =
+                TabletStorageInfoFromProto(ev->Get()->Record.GetInfo());
+        });
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        auto tableShards = GetTableShards(server, sender, "/Root/table-1");
+        ui64 tableShardId = tableShards.at(0);
+        auto tableShardGen1Actor = ResolveTablet(runtime, tableShardId);
+
+        storageInfoObserver.Remove();
+
+        // Create a topic with a consumer; the consumer is required for the offset-commit
+        // operation that registers the topic tablet as a transaction participant.
+        UNIT_ASSERT_VALUES_EQUAL("SUCCESS", KqpSchemeExec(runtime, R"(
+            CREATE TOPIC `/Root/topic` (CONSUMER `test-consumer`);
+        )"));
+
+        // Resolve the topic's partition-0 tablet ID directly using OpTopic.
+        // For first-class topics (TopicsAreFirstClassCitizen=true) the PersQueueGroup
+        // is at the topic path itself, so no child-navigate is needed.
+        ui64 topicTabletId = 0;
+        {
+            auto topicDesc = Navigate(runtime, sender, "/Root/topic",
+                NSchemeCache::TSchemeCacheNavigate::EOp::OpTopic);
+            const auto& topicEntry = topicDesc->ResultSet.at(0);
+            UNIT_ASSERT(topicEntry.PQGroupInfo);
+            const auto& pqDesc = topicEntry.PQGroupInfo->Description;
+            for (const auto& partition : pqDesc.GetPartitions()) {
+                if (partition.GetPartitionId() == 0) {
+                    topicTabletId = partition.GetTabletId();
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(topicTabletId != 0, "Failed to resolve topic tablet ID");
+        }
+        Cerr << "Table shard id: " << tableShardId
+            << ", topic tablet id: " << topicTabletId << Endl;
+
+        // Begin a transaction by writing to the table (note: using INSERT so that
+        // the datashard has to send out readsets too).
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL("<empty>",
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                INSERT INTO `/Root/table-1` (key, value) VALUES (1, 10);
+            )"));
+
+        TBlockReadSets blockedReadSets(runtime);
+
+        // Register the topic in the same KQP transaction via QUERY_ACTION_TOPIC.
+        // We commit consumer offsets [0, 0) with force_commit=true and provide the
+        // tablet ID directly (SetTabletId) to skip scheme-cache navigation.
+        // This causes the topic tablet to be listed in SendingShards when the buffer
+        // actor builds the prepare request, making the datashard create a volatile tx
+        // with the topic tablet as a participant.
+        {
+            auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->SetSessionId(sessionId);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_UNDEFINED);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_TOPIC);
+            ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(txId);
+
+            auto* ops = ev->Record.MutableRequest()->MutableTopicOperations();
+            ops->SetConsumer("test-consumer");
+            // Providing the tablet ID directly avoids a scheme-cache navigate round-trip
+            ops->SetTabletId(topicTabletId);
+            ops->SetTrackProducerId(false);  // no write operation → no WriteId allocation
+
+            auto* topic = ops->AddTopics();
+            topic->set_path("/Root/topic");
+            auto* partition = topic->add_partitions();
+            partition->set_partition_id(0);
+            // Commit offsets [0, 0) — a no-op range, accepted by the topic tablet
+            // because force_commit=true bypasses the gap and range checks.
+            auto* range = partition->add_partition_offsets();
+            range->set_start(0);
+            range->set_end(0);
+            partition->set_force_commit(true);
+
+            auto response = ExecRequest(runtime, sender, std::move(ev));
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetYdbStatus(),
+                Ydb::StatusIds::SUCCESS);
+        }
+
+        // Commit: the buffer actor sends MODE_PREPARE TEvWrite to the datashard with
+        // SendingShards = {tableShardId, topicTabletId}, and sends
+        // TEvProposeTransaction to the topic tablet.
+        // With EnableDataShardWriteAlwaysVolatile=true the datashard creates a volatile
+        // tx; when the topic tablet later sends its readset the datashards commit.
+        Ydb::Table::CommitTransactionRequest request;
+        request.set_session_id(sessionId);
+        request.set_tx_id(txId);
+        auto commitFuture = NRpcService::DoLocalRpc<TEvCommitTransactionRequest>(
+            std::move(request), {}, "", runtime.GetActorSystem(0));
+
+        runtime.WaitFor("ReadSets", [&] {
+            // topic tablet -> datashard and vice versa.
+            return blockedReadSets.size() >= 2;
+        });
+
+        Cerr << "Starting a new DS instance id " << tableShardId << Endl;
+
+        // Block state storage from demoting the gen1 datashard instance.
+        TBlockEvents<TEvStateStorage::TEvReplicaLeaderDemoted> blockReplicaDemoted(runtime,
+            [&](const TEvStateStorage::TEvReplicaLeaderDemoted::TPtr& ev) {
+                return ev->Get()->Record.GetTabletID() == tableShardId;
+            });
+
+        // Block Hive from trying to start another datashard instance
+        // (as we will be launching the gen2 instance by hand).
+        TBlockEvents<TEvLocal::TEvBootTablet> blockedHiveBoot(runtime,
+        [&](const TEvLocal::TEvBootTablet::TPtr& ev) {
+            return ev->Get()->Record.GetInfo().GetTabletID() == tableShardId;
+        });
+
+        // Block gen2 from dropping the gen1 lease (so that there will be a
+        // small window with gen1 still holding the lease).
+        TBlockEvents<TEvTablet::TEvDropLease> blockedDropLease(runtime);
+        UNIT_ASSERT(tabletToStorageInfo.contains(tableShardId));
+        StartTestTablet(
+            runtime,
+            tabletToStorageInfo.at(tableShardId).Release(),
+            &CreateDataShard);
+
+        runtime.WaitFor("TEvDropLease", [&] {
+            return !blockedDropLease.empty();
+        });
+
+        THashSet<TActorId> readSetRecipients;
+        auto readSetsObserver = runtime.AddObserver<TEvTxProcessing::TEvReadSet>(
+        [&](const TEvTxProcessing::TEvReadSet::TPtr& ev) {
+            if (ev->Get()->Record.GetTabletDest() == tableShardId) {
+                readSetRecipients.insert(ev->GetRecipientRewrite());
+            }
+        });
+
+        THashSet<TActorId> readSetAckSenders;
+        auto readSetAcksObserver = runtime.AddObserver<TEvTxProcessing::TEvReadSetAck>(
+        [&](const TEvTxProcessing::TEvReadSetAck::TPtr& ev) {
+            if (ev->Get()->Record.GetTabletDest() == tableShardId) {
+                readSetAckSenders.insert(ev->Sender);
+            }
+        });
+
+        THashSet<TActorId> writeResultSenders;
+        auto writeResultObserver = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>(
+        [&](const NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+            if (ev->Get()->Record.GetOrigin() == tableShardId &&
+                ev->Get()->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+                writeResultSenders.insert(ev->Sender);
+            }
+        });
+
+        blockedReadSets.Unblock();
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        auto tableShardGen2Actor = ResolveTablet(runtime, tableShardId);
+        UNIT_ASSERT(tableShardGen1Actor != tableShardGen2Actor);
+
+        // Gen2 should get a resent readset.
+        runtime.WaitFor("ReadSets for gen2", [&] {
+            return readSetRecipients.contains(tableShardGen2Actor);
+        });
+
+        // Gen1 should not send acks as it is no longer the leader.
+        runtime.WaitFor("ReadSetAcks", [&] {
+            return !readSetAckSenders.empty();
+        });
+        UNIT_ASSERT(!readSetAckSenders.contains(tableShardGen1Actor));
+
+        // Gen1 should be able to send a successful TEvWriteResult, as the transaction
+        // outcome is decided by the time the PQ readset reaches Gen1 (even though
+        // it is not the leader anymore).
+        runtime.WaitFor("TEvWriteResult", [&] {
+            return !writeResultSenders.empty();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(writeResultSenders.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(*writeResultSenders.begin(), tableShardGen1Actor);
+
+        // Verify that the user transaction was committed.
+        auto commitResponse = AwaitResponse(runtime, commitFuture);
+        UNIT_ASSERT_C(
+            commitResponse.operation().status() == Ydb::StatusIds::SUCCESS,
+            "ERROR: " << commitResponse.operation().status());
+
+        // Verify that the table write was committed.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "{ items { uint32_value: 1 } items { uint32_value: 10 } }",
+            KqpSimpleExec(runtime, "SELECT key, value FROM `/Root/table-1`;"));
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardVolatile)

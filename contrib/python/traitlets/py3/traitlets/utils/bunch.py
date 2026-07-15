@@ -23,7 +23,7 @@ class Bunch(dict):  # type:ignore[type-arg]
         self.__setitem__(key, value)
 
     def __dir__(self) -> list[str]:
-        # py2-compat: can't use super because dict doesn't have __dir__
-        names = dir({})
+        names: list[str] = []
+        names.extend(super().__dir__())
         names.extend(self.keys())
         return names

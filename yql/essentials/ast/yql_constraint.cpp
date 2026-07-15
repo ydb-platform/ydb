@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 namespace NYql {
 
@@ -97,8 +98,8 @@ const TTypeAnnotationNode* TPartOfConstraintBase::GetSubTypeByPath(const TPathTy
 
 bool TPartOfConstraintBase::HasDuplicates(const TSetOfSetsType& sets) {
     for (auto ot = sets.cbegin(); sets.cend() != ot; ++ot) {
-        for (auto it = sets.cbegin(); sets.cend() != it; ++it) {
-            if (ot->size() < it->size() && std::all_of(ot->cbegin(), ot->cend(), [it](const TPathType& path) { return it->contains(path); })) {
+        for (const auto& set : sets) {
+            if (ot->size() < set.size() && std::all_of(ot->cbegin(), ot->cend(), [&set](const TPathType& path) { return set.contains(path); })) {
                 return true;
             }
         }
@@ -130,7 +131,7 @@ NYT::TNode TPartOfConstraintBase::SetOfSetsToNode(const TPartOfConstraintBase::T
     return std::accumulate(sets.cbegin(), sets.cend(),
                            NYT::TNode::CreateList(),
                            [](NYT::TNode node, const TSetType& s) {
-                               return std::move(node).Add(TPartOfConstraintBase::SetToNode(s, true));
+                               return std::move(node).Add(TPartOfConstraintBase::SetToNode(s, /*withShortcut=*/true));
                            });
 }
 
@@ -308,7 +309,7 @@ TPartOfConstraintBase::TSetOfSetsType MakeFullSet(const TPartOfConstraintBase::T
 
 TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, TContainerType&& content)
     : TConstraintWithFieldsT(ctx, Name())
-    , Content_(std::move(content))
+    , Content_(content)
 {
     YQL_ENSURE(!Content_.empty());
     for (const auto& c : Content_) {
@@ -337,6 +338,8 @@ TSortedConstraintNode::TContainerType TSortedConstraintNode::NodeToContainer(TEx
     return sorted;
 }
 
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 TSortedConstraintNode::TSortedConstraintNode(TSortedConstraintNode&&) = default;
 
 bool TSortedConstraintNode::Equals(const TConstraintNode& node) const {
@@ -406,7 +409,7 @@ NYT::TNode TSortedConstraintNode::ToYson() const {
     return std::accumulate(Content_.cbegin(), Content_.cend(),
                            NYT::TNode::CreateList(),
                            [](NYT::TNode node, const std::pair<TSetType, bool>& pair) {
-                               return std::move(node).Add(NYT::TNode::CreateList().Add(TPartOfConstraintBase::SetToNode(pair.first, false)).Add(pair.second));
+                               return std::move(node).Add(NYT::TNode::CreateList().Add(TPartOfConstraintBase::SetToNode(pair.first, /*withShortcut=*/false)).Add(pair.second));
                            });
 }
 
@@ -473,10 +476,10 @@ const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const std::vector
     }
 
     std::optional<TContainerType> content;
-    for (size_t i = 0U; i < constraints.size(); ++i) {
-        if (constraints[i]->GetConstraint<TEmptyConstraintNode>()) {
+    for (const auto* constraint : constraints) {
+        if (constraint->GetConstraint<TEmptyConstraintNode>()) {
             ; // just ignore this input with any other constraints
-        } else if (const auto sort = constraints[i]->GetConstraint<TSortedConstraintNode>()) {
+        } else if (const auto sort = constraint->GetConstraint<TSortedConstraintNode>()) {
             const auto& nextContent = sort->GetContent();
             if (content) {
                 const auto size = std::min(content->size(), nextContent.size());
@@ -550,8 +553,8 @@ const TSortedConstraintNode* TSortedConstraintNode::CutPrefix(size_t newPrefixLe
     return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
 }
 
-const TConstraintWithFieldsNode* TSortedConstraintNode::DoFilterFields(TExprContext& ctx, const TPathFilter& filter) const {
-    if (!filter) {
+const TConstraintWithFieldsNode* TSortedConstraintNode::DoFilterFields(TExprContext& ctx, const TPathFilter& predicate) const {
+    if (!predicate) {
         return this;
     }
 
@@ -561,7 +564,7 @@ const TConstraintWithFieldsNode* TSortedConstraintNode::DoFilterFields(TExprCont
         TSetType newSet;
         newSet.reserve(item.first.size());
         for (const auto& path : item.first) {
-            if (filter(path)) {
+            if (predicate(path)) {
                 newSet.insert_unique(path);
             }
         }
@@ -683,7 +686,7 @@ TSortedConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, T
                     }
 
                     if (ssize_t(GetElementsCount(subType)) == std::distance(from, it)) {
-                        *from = std::make_pair(TPartOfConstraintBase::TSetType{std::move(prefix)}, from->second);
+                        *from = std::make_pair(TPartOfConstraintBase::TSetType{prefix}, from->second);
                         ++from;
                         it = content.erase(from, it);
                         changed = setChanged = true;
@@ -734,7 +737,7 @@ TChoppedConstraintNode::TSetOfSetsType TChoppedConstraintNode::NodeToSets(TExprC
     } catch (...) {
         YQL_ENSURE(false, "Cannot deserialize " << Name() << " constraint: " << CurrentExceptionMessage());
     }
-    Y_UNREACHABLE();
+    YQL_ENSURE(false, "Unreachable");
 }
 
 TChoppedConstraintNode::TChoppedConstraintNode(TChoppedConstraintNode&& constr) = default;
@@ -902,7 +905,7 @@ TChoppedConstraintNode::DoFilterFields(TExprContext& ctx, const TPathFilter& pre
             return nullptr;
         };
 
-        chopped.insert_unique(std::move(newSet));
+        chopped.insert_unique(newSet);
     }
     return ctx.MakeConstraint<TChoppedConstraintNode>(std::move(chopped));
 }
@@ -928,7 +931,7 @@ TChoppedConstraintNode::DoRenameFields(TExprContext& ctx, const TPathReduce& red
             return nullptr;
         }
 
-        chopped.insert_unique(std::move(newSet));
+        chopped.insert_unique(newSet);
     }
 
     return ctx.MakeConstraint<TChoppedConstraintNode>(std::move(chopped));
@@ -983,7 +986,7 @@ TChoppedConstraintNode::DoGetComplicatedForType(const TTypeAnnotationNode& type,
                 for (auto& path : paths) {
                     path.back() = fields.front();
                 }
-                it = sets.insert_unique(std::move(paths)).first;
+                it = sets.insert_unique(paths).first;
             }
         }
     }
@@ -1018,7 +1021,7 @@ TChoppedConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, 
                 }
 
                 if (ssize_t(GetElementsCount(GetSubTypeByPath(prefix, rowType))) == std::distance(from, it)) {
-                    *from++ = TPartOfConstraintBase::TSetType{std::move(prefix)};
+                    *from++ = TPartOfConstraintBase::TSetType{prefix};
                     it = sets.erase(from, it);
                     changed = setChanged = true;
                 }
@@ -1078,12 +1081,12 @@ TUniqueConstraintNodeBase<Distinct>::MakeCommonContent(const TContentType& one, 
                         set.reserve(std::min(setOne.size(), setTwo.size()));
                         std::set_intersection(setOne.cbegin(), setOne.cend(), setTwo.cbegin(), setTwo.cend(), std::back_inserter(set));
                         if (!set.empty()) {
-                            sets.insert_unique(std::move(set));
+                            sets.insert_unique(set);
                         }
                     }
                 }
                 if (sets.size() == setsOne.size()) {
-                    both.insert_unique(std::move(sets));
+                    both.insert_unique(sets);
                 }
             }
         }
@@ -1346,9 +1349,9 @@ TUniqueConstraintNodeBase<Distinct>::DoFilterFields(TExprContext& ctx, const TPa
                 TPartOfConstraintBase::TSetType newSet;
                 newSet.reserve(set.size());
                 std::copy_if(set.cbegin(), set.cend(), std::back_inserter(newSet), predicate);
-                newSets.insert_unique(std::move(newSet));
+                newSets.insert_unique(newSet);
             });
-            content.insert_unique(std::move(newSets));
+            content.insert_unique(newSets);
         }
     }
     return content.empty() ? nullptr : ctx.MakeConstraint<TUniqueConstraintNodeBase>(std::move(content));
@@ -1374,11 +1377,11 @@ TUniqueConstraintNodeBase<Distinct>::DoRenameFields(TExprContext& ctx, const TPa
                 newSet.insert_unique(newPaths.cbegin(), newPaths.cend());
             }
             if (!newSet.empty()) {
-                newSets.insert_unique(std::move(newSet));
+                newSets.insert_unique(newSet);
             }
         }
         if (sets.size() == newSets.size()) {
-            content.insert_unique(std::move(newSets));
+            content.insert_unique(newSets);
         }
     }
     return content.empty() ? nullptr : ctx.MakeConstraint<TUniqueConstraintNodeBase>(std::move(content));
@@ -1442,7 +1445,7 @@ TUniqueConstraintNodeBase<Distinct>::DoGetComplicatedForType(const TTypeAnnotati
                     for (auto& path : paths) {
                         path.back() = fields.front();
                     }
-                    it = sets.insert_unique(std::move(paths)).first;
+                    it = sets.insert_unique(paths).first;
                 }
             }
         }
@@ -1676,8 +1679,8 @@ TPartOfConstraintNode<TOriginalConstraintNode>::DoFilterFields(TExprContext& ctx
 
 template <class TOriginalConstraintNode>
 const TPartOfConstraintBase*
-TPartOfConstraintNode<TOriginalConstraintNode>::DoRenameFields(TExprContext& ctx, const TPartOfConstraintBase::TPathReduce& rename) const {
-    if (!rename) {
+TPartOfConstraintNode<TOriginalConstraintNode>::DoRenameFields(TExprContext& ctx, const TPartOfConstraintBase::TPathReduce& reduce) const {
+    if (!reduce) {
         return this;
     }
 
@@ -1687,7 +1690,7 @@ TPartOfConstraintNode<TOriginalConstraintNode>::DoRenameFields(TExprContext& ctx
         map.reserve(part.second.size());
 
         for (const auto& item : part.second) {
-            for (auto& path : rename(item.first)) {
+            for (auto& path : reduce(item.first)) {
                 map.insert_unique(std::make_pair(std::move(path), item.second));
             }
         }
@@ -1783,8 +1786,8 @@ TPartOfConstraintNode<TOriginalConstraintNode>::MakeCommon(const std::vector<con
 
     bool first = true;
     TMapType mapping;
-    for (size_t i = 0; i < constraints.size(); ++i) {
-        const auto part = constraints[i]->GetConstraint<TPartOfConstraintNode>();
+    for (const auto* constraint : constraints) {
+        const auto part = constraint->GetConstraint<TPartOfConstraintNode>();
         if (!part) {
             return nullptr;
         }
@@ -1993,9 +1996,44 @@ const TEmptyConstraintNode* TEmptyConstraintNode::MakeCommon(const std::vector<c
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TVarIndexConstraintNode::TVarIndexConstraintNode(TExprContext& ctx, const TMapType& mapping)
+TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx)
     : TConstraintNode(ctx, Name())
-    , Mapping_(mapping)
+{
+}
+
+TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx, const NYT::TNode& serialized)
+    : TConstraintNode(ctx, Name())
+{
+    YQL_ENSURE(serialized.IsEntity(), "Unexpected serialized content of " << Name() << " constraint");
+}
+
+bool TStreamingConstraintNode::Equals(const TConstraintNode& node) const {
+    if (this == &node) {
+        return true;
+    }
+    if (GetHash() != node.GetHash()) {
+        return false;
+    }
+    return GetName() == node.GetName();
+}
+
+void TStreamingConstraintNode::ToJson(NJson::TJsonWriter& out) const {
+    out.Write(true);
+}
+
+NYT::TNode TStreamingConstraintNode::ToYson() const {
+    return NYT::TNode::CreateEntity();
+}
+
+bool TStreamingConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) const {
+    return IsIn({ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind());
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TVarIndexConstraintNode::TVarIndexConstraintNode(TExprContext& ctx, TMapType mapping)
+    : TConstraintNode(ctx, Name())
+    , Mapping_(std::move(mapping))
 {
     Hash_ = MurmurHash<ui64>(Mapping_.data(), Mapping_.size() * sizeof(TMapType::value_type), Hash_);
     YQL_ENSURE(!Mapping_.empty());
@@ -2131,8 +2169,8 @@ const TVarIndexConstraintNode* TVarIndexConstraintNode::MakeCommon(const std::ve
     }
 
     TVarIndexConstraintNode::TMapType mapping;
-    for (size_t i = 0; i < constraints.size(); ++i) {
-        if (auto varIndex = constraints[i]->GetConstraint<TVarIndexConstraintNode>()) {
+    for (const auto* constraint : constraints) {
+        if (auto varIndex = constraint->GetConstraint<TVarIndexConstraintNode>()) {
             mapping.insert(varIndex->GetIndexMapping().begin(), varIndex->GetIndexMapping().end());
         }
     }
@@ -2149,7 +2187,7 @@ TMultiConstraintNode::TMultiConstraintNode(TExprContext& ctx, TMapType&& items)
     : TConstraintNode(ctx, Name())
     , Items_(std::move(items))
 {
-    YQL_ENSURE(Items_.size());
+    YQL_ENSURE(!Items_.empty());
     for (auto& item : Items_) {
         Hash_ = MurmurHash<ui64>(&item.first, sizeof(item.first), Hash_);
         for (auto c : item.second.GetAllConstraints()) {
@@ -2373,7 +2411,8 @@ const TMultiConstraintNode* TMultiConstraintNode::MakeCommon(const std::vector<c
 
 const TMultiConstraintNode* TMultiConstraintNode::FilterConstraints(TExprContext& ctx, const TConstraintSet::TPredicate& predicate) const {
     auto items = Items_;
-    bool hasContent = false, hasChanges = false;
+    bool hasContent = false;
+    bool hasChanges = false;
     for (auto& item : items) {
         hasChanges = hasChanges || item.second.FilterConstraints(predicate);
         hasContent = hasContent || item.second;
@@ -2387,12 +2426,12 @@ const TMultiConstraintNode* TMultiConstraintNode::FilterConstraints(TExprContext
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <>
-void Out<NYql::TPartOfConstraintBase::TPathType>(IOutputStream& out, const NYql::TPartOfConstraintBase::TPathType& path) {
-    if (path.empty()) {
+void Out<NYql::TPartOfConstraintBase::TPathType>(IOutputStream& out, const NYql::TPartOfConstraintBase::TPathType& value) {
+    if (value.empty()) {
         out.Write('/');
     } else {
         bool first = true;
-        for (const auto& c : path) {
+        for (const auto& c : value) {
             if (first) {
                 first = false;
             } else {
@@ -2404,10 +2443,10 @@ void Out<NYql::TPartOfConstraintBase::TPathType>(IOutputStream& out, const NYql:
 }
 
 template <>
-void Out<NYql::TPartOfConstraintBase::TSetType>(IOutputStream& out, const NYql::TPartOfConstraintBase::TSetType& c) {
+void Out<NYql::TPartOfConstraintBase::TSetType>(IOutputStream& out, const NYql::TPartOfConstraintBase::TSetType& value) {
     out.Write('{');
     bool first = true;
-    for (const auto& path : c) {
+    for (const auto& path : value) {
         if (first) {
             first = false;
         } else {
@@ -2419,10 +2458,10 @@ void Out<NYql::TPartOfConstraintBase::TSetType>(IOutputStream& out, const NYql::
 }
 
 template <>
-void Out<NYql::TPartOfConstraintBase::TSetOfSetsType>(IOutputStream& out, const NYql::TPartOfConstraintBase::TSetOfSetsType& c) {
+void Out<NYql::TPartOfConstraintBase::TSetOfSetsType>(IOutputStream& out, const NYql::TPartOfConstraintBase::TSetOfSetsType& value) {
     out.Write('{');
     bool first = true;
-    for (const auto& path : c) {
+    for (const auto& path : value) {
         if (first) {
             first = false;
         } else {
@@ -2434,66 +2473,71 @@ void Out<NYql::TPartOfConstraintBase::TSetOfSetsType>(IOutputStream& out, const 
 }
 
 template <>
-void Out<NYql::TConstraintNode>(IOutputStream& out, const NYql::TConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TConstraintNode>(IOutputStream& out, const NYql::TConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TConstraintSet>(IOutputStream& out, const NYql::TConstraintSet& s) {
-    s.Out(out);
+void Out<NYql::TConstraintSet>(IOutputStream& out, const NYql::TConstraintSet& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TSortedConstraintNode>(IOutputStream& out, const NYql::TSortedConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TSortedConstraintNode>(IOutputStream& out, const NYql::TSortedConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TChoppedConstraintNode>(IOutputStream& out, const NYql::TChoppedConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TChoppedConstraintNode>(IOutputStream& out, const NYql::TChoppedConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TUniqueConstraintNode>(IOutputStream& out, const NYql::TUniqueConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TUniqueConstraintNode>(IOutputStream& out, const NYql::TUniqueConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TDistinctConstraintNode>(IOutputStream& out, const NYql::TDistinctConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TDistinctConstraintNode>(IOutputStream& out, const NYql::TDistinctConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TPartOfSortedConstraintNode>(IOutputStream& out, const NYql::TPartOfSortedConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TPartOfSortedConstraintNode>(IOutputStream& out, const NYql::TPartOfSortedConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TPartOfChoppedConstraintNode>(IOutputStream& out, const NYql::TPartOfChoppedConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TPartOfChoppedConstraintNode>(IOutputStream& out, const NYql::TPartOfChoppedConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TPartOfUniqueConstraintNode>(IOutputStream& out, const NYql::TPartOfUniqueConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TPartOfUniqueConstraintNode>(IOutputStream& out, const NYql::TPartOfUniqueConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TPartOfDistinctConstraintNode>(IOutputStream& out, const NYql::TPartOfDistinctConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TPartOfDistinctConstraintNode>(IOutputStream& out, const NYql::TPartOfDistinctConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TEmptyConstraintNode>(IOutputStream& out, const NYql::TEmptyConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TEmptyConstraintNode>(IOutputStream& out, const NYql::TEmptyConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TVarIndexConstraintNode>(IOutputStream& out, const NYql::TVarIndexConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TVarIndexConstraintNode>(IOutputStream& out, const NYql::TVarIndexConstraintNode& value) {
+    value.Out(out);
 }
 
 template <>
-void Out<NYql::TMultiConstraintNode>(IOutputStream& out, const NYql::TMultiConstraintNode& c) {
-    c.Out(out);
+void Out<NYql::TMultiConstraintNode>(IOutputStream& out, const NYql::TMultiConstraintNode& value) {
+    value.Out(out);
+}
+
+template <>
+void Out<NYql::TStreamingConstraintNode>(IOutputStream& out, const NYql::TStreamingConstraintNode& value) {
+    value.Out(out);
 }

@@ -8,7 +8,7 @@
 
 namespace NKikimr::NOlap::NIndexes::NRequest {
 
-enum class ENodeType : ui32 {
+enum class ENodeType: ui32 {
     Aggregation,
     OriginalColumn,
     SubColumn,
@@ -31,7 +31,8 @@ public:
 
     explicit TOriginalDataAddress(const ui32 columnId, const TString& subColumnName = "")
         : ColumnId(columnId)
-        , SubColumnName(subColumnName) {
+        , SubColumnName(subColumnName)
+    {
     }
 
     bool operator<(const TOriginalDataAddress& item) const {
@@ -65,7 +66,8 @@ private:
     TNodeId(const ui32 columnId, const ui32 generationId, const ENodeType type)
         : ColumnId(columnId)
         , GenerationId(generationId)
-        , NodeType(type) {
+        , NodeType(type)
+    {
     }
 
 public:

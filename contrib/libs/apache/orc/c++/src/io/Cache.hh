@@ -94,7 +94,7 @@ namespace orc {
           memoryPool_(memoryPool),
           metrics_(metrics) {}
 
-    ~ReadRangeCache() = default;
+    ~ReadRangeCache();
 
     /// Cache the given ranges in the background.
     ///

@@ -1,26 +1,43 @@
 LIBRARY()
 
 SRCS(
-    kqp_rbo_transformer.cpp
-    kqp_operator.cpp
     kqp_expression.cpp
-    kqp_stage_graph.cpp
+    kqp_olap_expr_inspection.cpp
+    kqp_operator.cpp
+    kqp_plan_conversion_utils.cpp
+    kqp_plan_to_json.cpp
+    kqp_rbo_compute_statistics.cpp
+    kqp_rbo_context.cpp
+    kqp_rbo_statistics.cpp
+    kqp_rbo_transformer.cpp
+    kqp_rbo_type_ann.cpp
     kqp_rbo_utils.cpp
     kqp_rbo.cpp
-    kqp_plan_conversion_utils.cpp
-    kqp_rbo_type_ann.cpp
     kqp_rewrite_select.cpp
-    kqp_rbo_compute_statistics.cpp
-    kqp_rbo_statistics.cpp
+    kqp_stage_graph.cpp
+    analysis/logical_aliases.cpp
+    analysis/logical_liveness.cpp
+    analysis/logical_name_constraints.cpp
+    logical_renames.cpp
+    traces/kqp_rbo_trace_format.cpp
+    traces/kqp_rbo_trace.cpp
+    traces/kqp_rbo_trace_log.cpp
+    traces/kqp_rbo_trace_output.cpp
+    traces/kqp_rbo_rule_trace.cpp
 )
 
 PEERDIR(
+    library/cpp/containers/absl
+    library/cpp/containers/stack_vector
     ydb/core/kqp/common
+    ydb/core/kqp/opt/cbo
+    ydb/core/kqp/opt/cbo/solver
     ydb/core/kqp/opt/logical
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
+    ydb/core/kqp/opt/rbo/html_log
     ydb/core/kqp/opt/rbo/rules
-    ydb/core/kqp/opt/rbo/physical_convertion
+    ydb/core/kqp/opt/rbo/physical_conversion
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
@@ -29,6 +46,7 @@ PEERDIR(
     ydb/library/yql/utils/plan
     ydb/core/kqp/provider
     ydb/library/formats/arrow/protos
+    yql/essentials/core/extract_predicate
 )
 
 YQL_LAST_ABI_VERSION()

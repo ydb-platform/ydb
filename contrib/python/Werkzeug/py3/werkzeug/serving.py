@@ -11,9 +11,12 @@ It provides features like interactive debugging and code reloading. Use
     from myapp import create_app
     from werkzeug import run_simple
 """
+from __future__ import annotations
+
 import errno
 import io
 import os
+import selectors
 import socket
 import socketserver
 import sys
@@ -23,13 +26,13 @@ from datetime import timedelta
 from datetime import timezone
 from http.server import BaseHTTPRequestHandler
 from http.server import HTTPServer
+from urllib.parse import unquote
+from urllib.parse import urlsplit
 
 from ._internal import _log
 from ._internal import _wsgi_encoding_dance
 from .exceptions import InternalServerError
 from .urls import uri_to_iri
-from .urls import url_parse
-from .urls import url_unquote
 
 try:
     import ssl
@@ -70,11 +73,10 @@ except AttributeError:
 LISTEN_QUEUE = 128
 
 _TSSLContextArg = t.Optional[
-    t.Union["ssl.SSLContext", t.Tuple[str, t.Optional[str]], "te.Literal['adhoc']"]
+    t.Union["ssl.SSLContext", t.Tuple[str, t.Optional[str]], t.Literal["adhoc"]]
 ]
 
 if t.TYPE_CHECKING:
-    import typing_extensions as te  # noqa: F401
     from _typeshed.wsgi import WSGIApplication
     from _typeshed.wsgi import WSGIEnvironment
     from cryptography.hazmat.primitives.asymmetric.rsa import (
@@ -148,7 +150,7 @@ class DechunkedInput(io.RawIOBase):
 class WSGIRequestHandler(BaseHTTPRequestHandler):
     """A request handler that implements WSGI dispatching."""
 
-    server: "BaseWSGIServer"
+    server: BaseWSGIServer
 
     @property
     def server_version(self) -> str:  # type: ignore
@@ -156,8 +158,8 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
 
         return f"Werkzeug/{__version__}"
 
-    def make_environ(self) -> "WSGIEnvironment":
-        request_url = url_parse(self.path)
+    def make_environ(self) -> WSGIEnvironment:
+        request_url = urlsplit(self.path)
         url_scheme = "http" if self.server.ssl_context is None else "https"
 
         if not self.client_address:
@@ -173,9 +175,9 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
         else:
             path_info = request_url.path
 
-        path_info = url_unquote(path_info)
+        path_info = unquote(path_info)
 
-        environ: "WSGIEnvironment" = {
+        environ: WSGIEnvironment = {
             "wsgi.version": (1, 0),
             "wsgi.url_scheme": url_scheme,
             "wsgi.input": self.rfile,
@@ -201,6 +203,9 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
         }
 
         for key, value in self.headers.items():
+            if "_" in key:
+                continue
+
             key = key.upper().replace("-", "_")
             value = value.replace("\r\n", "")
             if key not in ("CONTENT_TYPE", "CONTENT_LENGTH"):
@@ -239,10 +244,10 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(b"HTTP/1.1 100 Continue\r\n\r\n")
 
         self.environ = environ = self.make_environ()
-        status_set: t.Optional[str] = None
-        headers_set: t.Optional[t.List[t.Tuple[str, str]]] = None
-        status_sent: t.Optional[str] = None
-        headers_sent: t.Optional[t.List[t.Tuple[str, str]]] = None
+        status_set: str | None = None
+        headers_set: list[tuple[str, str]] | None = None
+        status_sent: str | None = None
+        headers_sent: list[tuple[str, str]] | None = None
         chunk_response: bool = False
 
         def write(data: bytes) -> None:
@@ -316,7 +321,7 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
             headers_set = headers
             return write
 
-        def execute(app: "WSGIApplication") -> None:
+        def execute(app: WSGIApplication) -> None:
             application_iter = app(environ, start_response)
             try:
                 for data in application_iter:
@@ -326,6 +331,32 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
                 if chunk_response:
                     self.wfile.write(b"0\r\n\r\n")
             finally:
+                # Check for any remaining data in the read socket, and discard it. This
+                # will read past request.max_content_length, but lets the client see a
+                # 413 response instead of a connection reset failure. If we supported
+                # keep-alive connections, this naive approach would break by reading the
+                # next request line. Since we know that write (above) closes every
+                # connection we can read everything.
+                selector = selectors.DefaultSelector()
+                selector.register(self.connection, selectors.EVENT_READ)
+                total_size = 0
+                total_reads = 0
+
+                # A timeout of 0 tends to fail because a client needs a small amount of
+                # time to continue sending its data.
+                while selector.select(timeout=0.01):
+                    # Only read 10MB into memory at a time.
+                    data = self.rfile.read(10_000_000)
+                    total_size += len(data)
+                    total_reads += 1
+
+                    # Stop reading on no data, >=10GB, or 1000 reads. If a client sends
+                    # more than that, they'll get a connection reset failure.
+                    if not data or total_size >= 10_000_000_000 or total_reads > 1000:
+                        break
+
+                selector.close()
+
                 if hasattr(application_iter, "close"):
                     application_iter.close()
 
@@ -368,7 +399,7 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
                 raise
 
     def connection_dropped(
-        self, error: BaseException, environ: t.Optional["WSGIEnvironment"] = None
+        self, error: BaseException, environ: WSGIEnvironment | None = None
     ) -> None:
         """Called if the connection was closed by the client.  By default
         nothing happens.
@@ -394,9 +425,13 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
     def port_integer(self) -> int:
         return self.client_address[1]
 
-    def log_request(
-        self, code: t.Union[int, str] = "-", size: t.Union[int, str] = "-"
-    ) -> None:
+    # Escape control characters. This is defined (but private) in Python 3.12.
+    _control_char_table = str.maketrans(
+        {c: rf"\x{c:02x}" for c in [*range(0x20), *range(0x7F, 0xA0)]}
+    )
+    _control_char_table[ord("\\")] = r"\\"
+
+    def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
         try:
             path = uri_to_iri(self.path)
             msg = f"{self.command} {path} {self.request_version}"
@@ -404,6 +439,8 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
             # path isn't set if the requestline was bad
             msg = self.requestline
 
+        # Escape control characters that may be in the decoded path.
+        msg = msg.translate(self._control_char_table)
         code = str(code)
 
         if code[0] == "1":  # 1xx - Informational
@@ -457,8 +494,8 @@ def _ansi_style(value: str, *styles: str) -> str:
 
 
 def generate_adhoc_ssl_pair(
-    cn: t.Optional[str] = None,
-) -> t.Tuple["Certificate", "RSAPrivateKeyWithSerialization"]:
+    cn: str | None = None,
+) -> tuple[Certificate, RSAPrivateKeyWithSerialization]:
     try:
         from cryptography import x509
         from cryptography.x509.oid import NameOID
@@ -503,8 +540,8 @@ def generate_adhoc_ssl_pair(
 
 
 def make_ssl_devcert(
-    base_path: str, host: t.Optional[str] = None, cn: t.Optional[str] = None
-) -> t.Tuple[str, str]:
+    base_path: str, host: str | None = None, cn: str | None = None
+) -> tuple[str, str]:
     """Creates an SSL key for development.  This should be used instead of
     the ``'adhoc'`` key which generates a new cert on each server start.
     It accepts a path for where it should store the key and cert and
@@ -546,7 +583,7 @@ def make_ssl_devcert(
     return cert_file, pkey_file
 
 
-def generate_adhoc_ssl_context() -> "ssl.SSLContext":
+def generate_adhoc_ssl_context() -> ssl.SSLContext:
     """Generates an adhoc SSL context for the development server."""
     import tempfile
     import atexit
@@ -577,8 +614,8 @@ def generate_adhoc_ssl_context() -> "ssl.SSLContext":
 
 
 def load_ssl_context(
-    cert_file: str, pkey_file: t.Optional[str] = None, protocol: t.Optional[int] = None
-) -> "ssl.SSLContext":
+    cert_file: str, pkey_file: str | None = None, protocol: int | None = None
+) -> ssl.SSLContext:
     """Loads SSL context from cert/private key files and optional protocol.
     Many parameters are directly taken from the API of
     :py:class:`ssl.SSLContext`.
@@ -597,7 +634,7 @@ def load_ssl_context(
     return ctx
 
 
-def is_ssl_error(error: t.Optional[Exception] = None) -> bool:
+def is_ssl_error(error: Exception | None = None) -> bool:
     """Checks if the given error (or the current one) is an SSL error."""
     if error is None:
         error = t.cast(Exception, sys.exc_info()[1])
@@ -616,11 +653,12 @@ def select_address_family(host: str, port: int) -> socket.AddressFamily:
 
 def get_sockaddr(
     host: str, port: int, family: socket.AddressFamily
-) -> t.Union[t.Tuple[str, int], str]:
+) -> tuple[str, int] | str:
     """Return a fully qualified socket address that can be passed to
     :func:`socket.bind`."""
     if family == af_unix:
-        return host.split("://", 1)[1]
+        # Absolute path avoids IDNA encoding error when path starts with dot.
+        return os.path.abspath(host.partition("://")[2])
     try:
         res = socket.getaddrinfo(
             host, port, family, socket.SOCK_STREAM, socket.IPPROTO_TCP
@@ -663,11 +701,11 @@ class BaseWSGIServer(HTTPServer):
         self,
         host: str,
         port: int,
-        app: "WSGIApplication",
-        handler: t.Optional[t.Type[WSGIRequestHandler]] = None,
+        app: WSGIApplication,
+        handler: type[WSGIRequestHandler] | None = None,
         passthrough_errors: bool = False,
-        ssl_context: t.Optional[_TSSLContextArg] = None,
-        fd: t.Optional[int] = None,
+        ssl_context: _TSSLContextArg | None = None,
+        fd: int | None = None,
     ) -> None:
         if handler is None:
             handler = WSGIRequestHandler
@@ -754,7 +792,7 @@ class BaseWSGIServer(HTTPServer):
                 ssl_context = generate_adhoc_ssl_context()
 
             self.socket = ssl_context.wrap_socket(self.socket, server_side=True)
-            self.ssl_context: t.Optional["ssl.SSLContext"] = ssl_context
+            self.ssl_context: ssl.SSLContext | None = ssl_context
         else:
             self.ssl_context = None
 
@@ -770,7 +808,7 @@ class BaseWSGIServer(HTTPServer):
             self.server_close()
 
     def handle_error(
-        self, request: t.Any, client_address: t.Union[t.Tuple[str, int], str]
+        self, request: t.Any, client_address: tuple[str, int] | str
     ) -> None:
         if self.passthrough_errors:
             raise
@@ -836,12 +874,12 @@ class ForkingWSGIServer(ForkingMixIn, BaseWSGIServer):
         self,
         host: str,
         port: int,
-        app: "WSGIApplication",
+        app: WSGIApplication,
         processes: int = 40,
-        handler: t.Optional[t.Type[WSGIRequestHandler]] = None,
+        handler: type[WSGIRequestHandler] | None = None,
         passthrough_errors: bool = False,
-        ssl_context: t.Optional[_TSSLContextArg] = None,
-        fd: t.Optional[int] = None,
+        ssl_context: _TSSLContextArg | None = None,
+        fd: int | None = None,
     ) -> None:
         if not can_fork:
             raise ValueError("Your platform does not support forking.")
@@ -853,13 +891,13 @@ class ForkingWSGIServer(ForkingMixIn, BaseWSGIServer):
 def make_server(
     host: str,
     port: int,
-    app: "WSGIApplication",
+    app: WSGIApplication,
     threaded: bool = False,
     processes: int = 1,
-    request_handler: t.Optional[t.Type[WSGIRequestHandler]] = None,
+    request_handler: type[WSGIRequestHandler] | None = None,
     passthrough_errors: bool = False,
-    ssl_context: t.Optional[_TSSLContextArg] = None,
-    fd: t.Optional[int] = None,
+    ssl_context: _TSSLContextArg | None = None,
+    fd: int | None = None,
 ) -> BaseWSGIServer:
     """Create an appropriate WSGI server instance based on the value of
     ``threaded`` and ``processes``.
@@ -907,20 +945,20 @@ def is_running_from_reloader() -> bool:
 def run_simple(
     hostname: str,
     port: int,
-    application: "WSGIApplication",
+    application: WSGIApplication,
     use_reloader: bool = False,
     use_debugger: bool = False,
     use_evalex: bool = True,
-    extra_files: t.Optional[t.Iterable[str]] = None,
-    exclude_patterns: t.Optional[t.Iterable[str]] = None,
+    extra_files: t.Iterable[str] | None = None,
+    exclude_patterns: t.Iterable[str] | None = None,
     reloader_interval: int = 1,
     reloader_type: str = "auto",
     threaded: bool = False,
     processes: int = 1,
-    request_handler: t.Optional[t.Type[WSGIRequestHandler]] = None,
-    static_files: t.Optional[t.Dict[str, t.Union[str, t.Tuple[str, str]]]] = None,
+    request_handler: type[WSGIRequestHandler] | None = None,
+    static_files: dict[str, str | tuple[str, str]] | None = None,
     passthrough_errors: bool = False,
-    ssl_context: t.Optional[_TSSLContextArg] = None,
+    ssl_context: _TSSLContextArg | None = None,
 ) -> None:
     """Start a development server for a WSGI application. Various
     optional features can be enabled.
@@ -968,7 +1006,7 @@ def run_simple(
         serve static files from using
         :class:`~werkzeug.middleware.SharedDataMiddleware`.
     :param passthrough_errors: Don't catch unhandled exceptions at the
-        server level, let the serve crash instead. If ``use_debugger``
+        server level, let the server crash instead. If ``use_debugger``
         is enabled, the debugger will still catch such errors.
     :param ssl_context: Configure TLS to serve over HTTPS. Can be an
         :class:`ssl.SSLContext` object, a ``(cert_file, key_file)``

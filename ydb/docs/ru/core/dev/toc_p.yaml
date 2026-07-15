@@ -1,6 +1,11 @@
 items:
 - name: Начало работы
   href: getting-started.md
+- name: Потоковые запросы
+  href: streaming-query/index.md
+  include:
+    mode: link
+    path: streaming-query/toc_p.yaml
 - name: Примеры приложений
   href: example-app/index.md
   include:
@@ -22,10 +27,22 @@ items:
   href: vector-indexes.md
 - name: Векторный индекс вида vector_kmeans_tree
   href: vector-indexes-kmeans-tree-type.md
-- name: Оптимизация планов запросов
-  href: query-plans-optimization.md
-- name: Подсказки оптимизатора
-  href: query-hints.md
+- name: Полнотекстовые индексы
+  href: fulltext-indexes.md
+- name: Гибридный поиск
+  href: hybrid-search.md
+- name: JSON-индексы
+  href: json-indexes.md
+- name: Локальные индексы
+  href: local-indexes/index.md
+  include:
+    mode: link
+    path: local-indexes/toc_p.yaml
+- name: Оптимизация выполнения запросов
+  href: query-execution-optimization/index.md
+  include:
+    mode: link
+    path: query-execution-optimization/toc_p.yaml
 - name: Пакетная загрузка
   href: batch-upload.md
 - name: Постраничный вывод
@@ -36,6 +53,8 @@ items:
   href: system-views.md
 - name: Change Data Capture
   href: cdc.md
+- name: Устройство и ограничения разделяемого читателя топика
+  href: shared-consumer-internals.md
 - name: Terraform
   href: terraform.md
 - name: Пользовательские атрибуты

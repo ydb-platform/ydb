@@ -21,7 +21,8 @@ void TCommandListEndpoints::Config(TConfig& config) {
 }
 
 int TCommandListEndpoints::Run(TConfig& config) {
-    NDiscovery::TDiscoveryClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NDiscovery::TDiscoveryClient client(driver);
     NDiscovery::TListEndpointsResult result = client.ListEndpoints(
         FillSettings(NDiscovery::TListEndpointsSettings())
     ).GetValueSync();
@@ -88,7 +89,6 @@ int TCommandWhoAmI::Run(TConfig& config) {
     ).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     PrintResponse(result);
-    driver.Stop(true);
     return EXIT_SUCCESS;
 }
 
@@ -110,22 +110,26 @@ void TCommandWhoAmI::PrintResponse(NDiscovery::TWhoAmIResult& result) {
                 Cout << Endl << "User has no groups" << Endl;
             }
         }
+    }
 
-        // Show access list if --access-list or --all is specified
-        bool showAccessList = WithAccessList || WithAll;
-        if (showAccessList) {
-            bool hasAnyAccess = result.IsDatabaseAllowed() || result.IsViewerAllowed() ||
-                result.IsMonitoringAllowed() || result.IsAdministrationAllowed() ||
-                result.IsRegisterNodeAllowed() || result.IsBootstrapAllowed();
-            if (hasAnyAccess) {
-                Cout << Endl << "Access levels:" << Endl;
-                if (result.IsDatabaseAllowed()) Cout << "Database" << Endl;
-                if (result.IsViewerAllowed()) Cout << "Viewer" << Endl;
-                if (result.IsMonitoringAllowed()) Cout << "Monitoring" << Endl;
-                if (result.IsAdministrationAllowed()) Cout << "Administration" << Endl;
-                if (result.IsRegisterNodeAllowed()) Cout << "Register node" << Endl;
-                if (result.IsBootstrapAllowed()) Cout << "Bootstrap" << Endl;
+    // Show access list if --access-list or --all is specified
+    bool showAccessList = WithAccessList || WithAll;
+    if (showAccessList) {
+        bool hasAnyAccess = result.IsDatabaseAllowed() || result.IsViewerAllowed() ||
+            result.IsMonitoringAllowed() || result.IsAdministrationAllowed() ||
+            result.IsRegisterNodeAllowed() || result.IsBootstrapAllowed();
+        if (hasAnyAccess) {
+            if (!userName.empty()) {
+                Cout << Endl;
             }
+
+            Cout << "Access levels:" << Endl;
+            if (result.IsDatabaseAllowed()) Cout << "Database" << Endl;
+            if (result.IsViewerAllowed()) Cout << "Viewer" << Endl;
+            if (result.IsMonitoringAllowed()) Cout << "Monitoring" << Endl;
+            if (result.IsAdministrationAllowed()) Cout << "Administration" << Endl;
+            if (result.IsRegisterNodeAllowed()) Cout << "Register node" << Endl;
+            if (result.IsBootstrapAllowed()) Cout << "Bootstrap" << Endl;
         }
     }
 }

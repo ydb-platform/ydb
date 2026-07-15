@@ -170,10 +170,10 @@ TJobStatistics::TJobStatistics(::TIntrusivePtr<TData> data, ::TIntrusivePtr<TFil
 { }
 
 TJobStatistics::TJobStatistics(const TJobStatistics& jobStatistics) = default;
-TJobStatistics::TJobStatistics(TJobStatistics&&) = default;
+TJobStatistics::TJobStatistics(TJobStatistics&&) noexcept = default;
 
 TJobStatistics& TJobStatistics::operator=(const TJobStatistics& jobStatistics) = default;
-TJobStatistics& TJobStatistics::operator=(TJobStatistics&& jobStatistics) = default;
+TJobStatistics& TJobStatistics::operator=(TJobStatistics&& jobStatistics) noexcept = default;
 
 TJobStatistics::~TJobStatistics() = default;
 

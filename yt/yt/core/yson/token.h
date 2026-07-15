@@ -44,7 +44,7 @@ DEFINE_ENUM(ETokenType,
 
 ETokenType CharToTokenType(char ch);        // returns ETokenType::EndOfStream for non-special chars
 char TokenTypeToChar(ETokenType type);      // YT_ABORT for non-special types
-TString TokenTypeToString(ETokenType type);  // YT_ABORT for non-special types
+std::string TokenTypeToString(ETokenType type);  // YT_ABORT for non-special types
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -63,7 +63,6 @@ public:
 
     DEFINE_BYVAL_RO_PROPERTY(ETokenType, Type);
 
-    bool IsEmpty() const;
     TStringBuf GetStringValue() const;
     bool IsBinaryString() const;
     i64 GetInt64Value() const;
@@ -73,7 +72,7 @@ public:
 
     void ExpectType(ETokenType expectedType) const;
     void ExpectTypes(const std::vector<ETokenType>& expectedTypes) const;
-    void ThrowUnexpected() const;
+    [[noreturn]] void ThrowUnexpected() const;
 
     void Reset();
 

@@ -44,6 +44,9 @@ struct TYtStarJoinOption {
     TVector<TString> StarSortedKeys;
     size_t StarInputIndex = Max<size_t>();
     TString StarLabel;
+    bool Force = false;
+    THashSet<size_t> AdditionalSortIndices;
+    THashSet<size_t> RemapIndices;
 };
 
 struct TYtJoinNodeOp : TYtJoinNode {

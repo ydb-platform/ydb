@@ -20,23 +20,18 @@
 
 #include "src/core/lib/surface/init.h"
 
-#include <limits.h>
-
 #include "y_absl/base/thread_annotations.h"
 
 #include <grpc/fork.h>
 #include <grpc/grpc.h>
-#include <grpc/grpc_security.h>
+#include <grpc/impl/channel_arg_names.h>
 #include <grpc/support/log.h>
 #include <grpc/support/sync.h>
 #include <grpc/support/time.h>
 
 #include "src/core/ext/filters/client_channel/backup_poller.h"
-#include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/channel/channel_stack_builder.h"
 #include "src/core/lib/config/core_configuration.h"
 #include "src/core/lib/debug/trace.h"
-#include "src/core/lib/event_engine/forkable.h"
 #include "src/core/lib/event_engine/posix_engine/timer_manager.h"
 #include "src/core/lib/experiments/config.h"
 #include "src/core/lib/gprpp/fork.h"
@@ -69,48 +64,22 @@ static int g_initializations Y_ABSL_GUARDED_BY(g_init_mu) = []() {
 static grpc_core::CondVar* g_shutting_down_cv;
 static bool g_shutting_down Y_ABSL_GUARDED_BY(g_init_mu) = false;
 
-static bool maybe_prepend_client_auth_filter(
-    grpc_core::ChannelStackBuilder* builder) {
-  if (builder->channel_args().Contains(GRPC_ARG_SECURITY_CONNECTOR)) {
-    builder->PrependFilter(&grpc_core::ClientAuthFilter::kFilter);
-  }
-  return true;
-}
-
-static bool maybe_prepend_server_auth_filter(
-    grpc_core::ChannelStackBuilder* builder) {
-  if (builder->channel_args().Contains(GRPC_SERVER_CREDENTIALS_ARG)) {
-    builder->PrependFilter(&grpc_core::ServerAuthFilter::kFilter);
-  }
-  return true;
-}
-
-static bool maybe_prepend_grpc_server_authz_filter(
-    grpc_core::ChannelStackBuilder* builder) {
-  if (builder->channel_args().GetPointer<grpc_authorization_policy_provider>(
-          GRPC_ARG_AUTHORIZATION_POLICY_PROVIDER) != nullptr) {
-    builder->PrependFilter(&grpc_core::GrpcServerAuthzFilter::kFilterVtable);
-  }
-  return true;
-}
-
 namespace grpc_core {
 void RegisterSecurityFilters(CoreConfiguration::Builder* builder) {
-  // Register the auth client with a priority < INT_MAX to allow the authority
-  // filter -on which the auth filter depends- to be higher on the channel
-  // stack.
-  builder->channel_init()->RegisterStage(GRPC_CLIENT_SUBCHANNEL, INT_MAX - 1,
-                                         maybe_prepend_client_auth_filter);
-  builder->channel_init()->RegisterStage(GRPC_CLIENT_DIRECT_CHANNEL,
-                                         INT_MAX - 1,
-                                         maybe_prepend_client_auth_filter);
-  builder->channel_init()->RegisterStage(GRPC_SERVER_CHANNEL, INT_MAX - 1,
-                                         maybe_prepend_server_auth_filter);
-  // Register the GrpcServerAuthzFilter with a priority less than
-  // server_auth_filter to allow server_auth_filter on which the grpc filter
-  // depends on to be higher on the channel stack.
-  builder->channel_init()->RegisterStage(
-      GRPC_SERVER_CHANNEL, INT_MAX - 2, maybe_prepend_grpc_server_authz_filter);
+  builder->channel_init()
+      ->RegisterFilter(GRPC_CLIENT_SUBCHANNEL, &ClientAuthFilter::kFilter)
+      .IfHasChannelArg(GRPC_ARG_SECURITY_CONNECTOR);
+  builder->channel_init()
+      ->RegisterFilter(GRPC_CLIENT_DIRECT_CHANNEL, &ClientAuthFilter::kFilter)
+      .IfHasChannelArg(GRPC_ARG_SECURITY_CONNECTOR);
+  builder->channel_init()
+      ->RegisterFilter(GRPC_SERVER_CHANNEL, &ServerAuthFilter::kFilter)
+      .IfHasChannelArg(GRPC_SERVER_CREDENTIALS_ARG);
+  builder->channel_init()
+      ->RegisterFilter(GRPC_SERVER_CHANNEL,
+                       &GrpcServerAuthzFilter::kFilterVtable)
+      .IfHasChannelArg(GRPC_ARG_AUTHORIZATION_POLICY_PROVIDER)
+      .After({&ServerAuthFilter::kFilter});
 }
 }  // namespace grpc_core
 
@@ -155,8 +124,8 @@ void grpc_shutdown_internal_locked(void)
     grpc_core::ExecCtx exec_ctx(0);
     grpc_iomgr_shutdown_background_closure();
     grpc_timer_manager_set_threading(false);  // shutdown timer_manager thread
-    grpc_resolver_dns_ares_shutdown();
     grpc_iomgr_shutdown();
+    grpc_resolver_dns_ares_shutdown();
   }
   g_shutting_down = false;
   g_shutting_down_cv->SignalAll();

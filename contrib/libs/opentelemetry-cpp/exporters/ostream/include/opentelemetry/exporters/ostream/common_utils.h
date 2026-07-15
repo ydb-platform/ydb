@@ -31,7 +31,7 @@ void print_value(const std::vector<T> &vec, std::ostream &sout)
   sout << '[';
   size_t i  = 1;
   size_t sz = vec.size();
-  for (auto v : vec)
+  for (const auto &v : vec)
   {
     sout << v;
     if (i != sz)
@@ -47,7 +47,7 @@ void print_value(const nostd::span<T> &vec, std::ostream &sout)
   sout << '[';
   size_t i  = 1;
   size_t sz = vec.size();
-  for (auto v : vec)
+  for (const auto &v : vec)
   {
     sout << v;
     if (i != sz)

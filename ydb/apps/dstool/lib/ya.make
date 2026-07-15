@@ -19,6 +19,7 @@ PY_SRCS(
     dstool_cmd_pdisk_set.py
     dstool_cmd_pdisk_stop.py
     dstool_cmd_pdisk_move.py
+    dstool_cmd_pdisk_populate.py
 
     dstool_cmd_vdisk_evict.py
     dstool_cmd_vdisk_list.py
@@ -30,6 +31,7 @@ PY_SRCS(
     dstool_cmd_group_add.py
     dstool_cmd_group_check.py
     dstool_cmd_group_decommit.py
+    dstool_cmd_group_resize.py
     dstool_cmd_group_list.py
     dstool_cmd_group_show_blob_info.py
     dstool_cmd_group_show_storage_efficiency.py

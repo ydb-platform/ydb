@@ -22,7 +22,7 @@ from yql.essentials.providers.common.proto import gateways_config_pb2
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics
 
 from ydb.tests.tools.fq_runner.mvp_mock import MvpMockServer
-from yatest.common.network import PortManager
+import library.python.port_manager
 from multiprocessing import Process
 from concurrent.futures import TimeoutError
 
@@ -89,7 +89,7 @@ class BaseTenant(abc.ABC):
             self.config_generator.yaml_config['auth_config'] = {}
         return self.config_generator.yaml_config['auth_config']
 
-    def enable_logging(self, component, level=LogLevels.TRACE):
+    def enable_logging(self, component, level=LogLevels.DEBUG):
         log_config = self.config_generator.yaml_config['log_config']
         if not isinstance(log_config['entry'], list):
             log_config['entry'] = []
@@ -99,7 +99,7 @@ class BaseTenant(abc.ABC):
         self.enable_logging("INTERCONNECT", LogLevels.WARN)  # IC is too verbose
         self.enable_logging("FQ_QUOTA_PROXY")
         self.enable_logging("FQ_QUOTA_SERVICE")
-        self.enable_logging("KQP_COMPUTE", LogLevels.TRACE)
+        self.enable_logging("KQP_COMPUTE", LogLevels.DEBUG)
         self.enable_logging("KQP_YQL")
         self.enable_logging("STREAMS")
         self.enable_logging("STREAMS_STORAGE_SERVICE")  # TODO: rename to YQ_STORAGE_SERVICE
@@ -125,6 +125,8 @@ class BaseTenant(abc.ABC):
         self.enable_logging("PUBLIC_HTTP")
         self.enable_logging("FQ_CONTROL_PLANE_CONFIG")
         self.enable_logging("FQ_ROW_DISPATCHER", LogLevels.TRACE)
+        self.enable_logging("KQP_EXECUTER")
+        self.enable_logging("KQP_PROXY")
         # self.enable_logging("GRPC_SERVER")
 
     @abc.abstractclassmethod
@@ -149,7 +151,7 @@ class BaseTenant(abc.ABC):
         gateways['dq']['default_settings'].extend([
             {'name': "AnalyzeQuery", 'value': "true"},
             {'name': "EnableInsert", 'value': "true"},
-            {'name': "ComputeActorType", 'value': "async"},
+            {'name': "ComputeActorType", 'value': "sync"},
         ])
         gateways['yql_core'] = {}
         gateways['yql_core']['flags'] = []
@@ -181,7 +183,9 @@ class BaseTenant(abc.ABC):
             deadline = time.time() + max_waiting_time_sec
             bill_fname = self.kikimr_cluster.nodes[node_index].cwd + "/metering.bill"
             while time.time() < deadline:
-                meterings_loaded = sum(1 for _ in open(bill_fname))
+                with open(bill_fname) as bill_file:
+                    meterings_loaded = sum(1 for _ in bill_file)
+
                 if meterings_loaded >= meterings_expected:
                     break
 
@@ -388,6 +392,7 @@ class YdbTenant(BaseTenant):
             compute_services=True,
             dc_mapping={},
             extra_feature_flags=None,  # list[str]
+            disabled_feature_flags=None,  # list[str]
             extra_grpc_services=None,  # list[str]
     ):
         assert node_count == 1
@@ -395,6 +400,8 @@ class YdbTenant(BaseTenant):
         assert compute_services is True
         if extra_feature_flags is None:
             extra_feature_flags = []
+        if disabled_feature_flags is None:
+            disabled_feature_flags = []
         if extra_grpc_services is None:
             extra_grpc_services = []
 
@@ -418,6 +425,7 @@ class YdbTenant(BaseTenant):
                 enable_pqcd=False,
                 dc_mapping=dc_mapping,
                 extra_feature_flags=extra_feature_flags,
+                disabled_feature_flags=disabled_feature_flags,
                 extra_grpc_services=extra_grpc_services
             ))
 
@@ -439,10 +447,13 @@ class YqTenant(BaseTenant):
             compute_services=True,
             dc_mapping={},
             extra_feature_flags=None,  # list[str]
+            disabled_feature_flags=None,  # list[str]
             extra_grpc_services=None,  # list[str]
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
+        if disabled_feature_flags is None:
+            disabled_feature_flags = []
         if extra_grpc_services is None:
             extra_grpc_services = []
 
@@ -468,6 +479,7 @@ class YqTenant(BaseTenant):
                 dc_mapping=dc_mapping,
                 public_http_config=public_http_config,
                 extra_feature_flags=extra_feature_flags,
+                disabled_feature_flags=disabled_feature_flags,
                 extra_grpc_services=extra_grpc_services
             ))
 
@@ -563,15 +575,19 @@ class TenantConfig:
                  node_count,  # int
                  tenant_type=TenantType.YQ,  # TenantType
                  extra_feature_flags=None,  # list[str]
+                 disabled_feature_flags=None,  # list[str]
                  extra_grpc_services=None  # list[str]
                  ):
         if extra_feature_flags is None:
             extra_feature_flags = []
+        if disabled_feature_flags is None:
+            disabled_feature_flags = []
         if extra_grpc_services is None:
             extra_grpc_services = []
         self.node_count = node_count
         self.tenant_type = tenant_type
         self.extra_feature_flags = extra_feature_flags
+        self.disabled_feature_flags = disabled_feature_flags
         self.extra_grpc_services = extra_grpc_services
 
 
@@ -605,7 +621,7 @@ class StreamingOverKikimr(object):
         if configuration is None:
             configuration = StreamingOverKikimrConfig()
         self.uuid = str(uuid.uuid4())
-        self.mvp_mock_port = PortManager().get_port()
+        self.mvp_mock_port = library.python.port_manager.PortManager().get_port()
         self.mvp_mock_server = Process(target=MvpMockServer(self.mvp_mock_port,  configuration.mvp_external_ydb_endpoint).serve_forever)
         self.tenants = {}
         _tenant_mapping = configuration.tenant_mapping.copy()
@@ -624,6 +640,7 @@ class StreamingOverKikimr(object):
                                       compute_services=compute_services,
                                       dc_mapping=configuration.dc_mapping,
                                       extra_feature_flags=tenant_config.extra_feature_flags,
+                                      disabled_feature_flags=tenant_config.disabled_feature_flags,
                                       extra_grpc_services=tenant_config.extra_grpc_services)
                 else:
                     tenant = YdbTenant(tenant_name=name,
@@ -632,6 +649,7 @@ class StreamingOverKikimr(object):
                                        compute_services=compute_services,
                                        dc_mapping=configuration.dc_mapping,
                                        extra_feature_flags=tenant_config.extra_feature_flags,
+                                       disabled_feature_flags=tenant_config.disabled_feature_flags,
                                        extra_grpc_services=tenant_config.extra_grpc_services)
                 tenant.uuid = self.uuid
                 tenant.cloud_mode = configuration.cloud_mode

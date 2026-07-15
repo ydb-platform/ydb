@@ -128,11 +128,11 @@ struct OPENTELEMETRY_EXPORT OtlpHttpExporterOptions
   float retry_policy_backoff_multiplier{};
 
   /** Collection Limits. No limit by default. */
-  std::uint32_t max_attributes           = std::numeric_limits<std::uint32_t>::max();
-  std::uint32_t max_events               = std::numeric_limits<std::uint32_t>::max();
-  std::uint32_t max_links                = std::numeric_limits<std::uint32_t>::max();
-  std::uint32_t max_attributes_per_event = std::numeric_limits<std::uint32_t>::max();
-  std::uint32_t max_attributes_per_link  = std::numeric_limits<std::uint32_t>::max();
+  std::uint32_t max_attributes           = (std::numeric_limits<std::uint32_t>::max)();
+  std::uint32_t max_events               = (std::numeric_limits<std::uint32_t>::max)();
+  std::uint32_t max_links                = (std::numeric_limits<std::uint32_t>::max)();
+  std::uint32_t max_attributes_per_event = (std::numeric_limits<std::uint32_t>::max)();
+  std::uint32_t max_attributes_per_link  = (std::numeric_limits<std::uint32_t>::max)();
 };
 
 }  // namespace otlp

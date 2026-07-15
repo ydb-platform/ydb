@@ -487,12 +487,30 @@ public:
         return rec.GetResult();
     }
 
+    void CheckMaintenanceTaskDrop(
+        const TString &taskUid,
+        Ydb::StatusIds::StatusCode code)
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvDropMaintenanceTaskRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->set_task_uid(taskUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvManageMaintenanceTaskResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+    }
+
     template <typename... Ts>
     Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
             const TString &taskUid,
             Ydb::StatusIds::StatusCode code,
             Ydb::Maintenance::AvailabilityMode availabilityMode,
-            const Ts&... actionGroups) 
+            ui32 maxInflightActions,
+            const Ts&... actionGroups)
     {
         auto ev = std::make_unique<NCms::TEvCms::TEvCreateMaintenanceTaskRequest>();
         ev->Record.SetUserSID("test-user");
@@ -500,6 +518,9 @@ public:
         auto *req = ev->Record.MutableRequest();
         req->mutable_task_options()->set_task_uid(taskUid);
         req->mutable_task_options()->set_availability_mode(availabilityMode);
+        if (maxInflightActions > 0) {
+            req->mutable_task_options()->set_max_inflight_actions(maxInflightActions);
+        }
         AddActionGroups(*req, actionGroups...);
 
         SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
@@ -515,9 +536,19 @@ public:
     Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
             const TString &taskUid,
             Ydb::StatusIds::StatusCode code,
+            Ydb::Maintenance::AvailabilityMode availabilityMode,
+            const Ts&... actionGroups)
+    {
+        return CheckMaintenanceTaskCreate(taskUid, code, availabilityMode, 0u, actionGroups...);
+    }
+
+    template <typename... Ts>
+    Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
+            const TString &taskUid,
+            Ydb::StatusIds::StatusCode code,
             const Ts&... actionGroups) 
     {   
-        return CheckMaintenanceTaskCreate(taskUid, code, Ydb::Maintenance::AVAILABILITY_MODE_STRONG, actionGroups...);
+        return CheckMaintenanceTaskCreate(taskUid, code, Ydb::Maintenance::AVAILABILITY_MODE_STRONG, 0u, actionGroups...);
     }
 
     Ydb::Maintenance::ManageActionResult CheckCompleteAction(

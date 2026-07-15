@@ -36,7 +36,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                             PROPERTY("Last offset", Storage->GetLastOffset());
                             PROPERTY("Message counts", Storage->GetMessageCount());
                             PROPERTY("Keep message order", Storage->GetKeepMessageOrder() ? "Yes" : "No");
-                            PROPERTY("Locked message groups", Storage->GetLockedMessageGroupsId().size());
+                            PROPERTY("Locked message groups", Storage->GetLockedMessageGroupsIdSize());
                             PROPERTY("Free message groups", freeMessageGroups.size());
                         }
 
@@ -54,6 +54,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                             PROPERTY("Inflight unlocked count", metrics.UnprocessedMessageCount);
                             PROPERTY("Inflight locked count", metrics.LockedMessageCount);
                             PROPERTY("Inflight locked group count", metrics.LockedMessageGroupCount);
+                            PROPERTY("Inflight group count", metrics.InflightMessageGroupCount);
                             PROPERTY("Inflight delayed count", metrics.DelayedMessageCount);
                             PROPERTY("Inflight committed count", metrics.CommittedMessageCount);
                             PROPERTY("Inflight scheduled to DLQ count", metrics.DLQMessageCount);

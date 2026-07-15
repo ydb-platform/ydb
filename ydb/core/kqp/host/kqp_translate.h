@@ -100,11 +100,6 @@ public:
     NSQLTranslation::TTranslationSettings Build(NYql::TExprContext& ctx);
     TKqpTranslationSettingsBuilder& SetFromConfig(const NYql::TKikimrConfiguration& config);
 
-    TKqpTranslationSettingsBuilder& SetUsePgParser(const TMaybe<bool> value) {
-        UsePgParser = value;
-        return *this;
-    }
-
     TKqpTranslationSettingsBuilder& SetKqpTablePathPrefix(const TString& value) {
         KqpTablePathPrefix = value;
         return *this;
@@ -112,11 +107,6 @@ public:
 
     TKqpTranslationSettingsBuilder& SetIsEnableExternalDataSources(bool value) {
         IsEnableExternalDataSources = value;
-        return *this;
-    }
-
-    TKqpTranslationSettingsBuilder& SetIsEnablePgConstsToParams(bool value) {
-        IsEnablePgConstsToParams = value;
         return *this;
     }
 
@@ -140,11 +130,6 @@ public:
         return *this;
     }
 
-    TKqpTranslationSettingsBuilder& SetIsEnablePgSyntax(bool value) {
-        IsEnablePgSyntax = value;
-        return *this;
-    }
-
     TKqpTranslationSettingsBuilder& SetLangVer(ui32 langVer) {
         LangVer = langVer;
         return *this;
@@ -164,6 +149,16 @@ public:
         return IsAmbiguityError;
     }
 
+    TKqpTranslationSettingsBuilder& SetYqlSelect(TMaybe<NSQLTranslation::EYqlSelect> yqlSelect) {
+        YqlSelect = yqlSelect;
+        return *this;
+    }
+
+    TKqpTranslationSettingsBuilder& SetValidateViewStatement(bool value) {
+        ValidateViewStatement = value;
+        return *this;
+    }
+
 private:
     const NYql::EKikimrQueryType QueryType;
     ui16 KqpYqlSyntaxVersion = 1;
@@ -171,11 +166,8 @@ private:
     const TString QueryText;
     const NSQLTranslation::EBindingsMode BindingsMode;
 
-    TMaybe<bool> UsePgParser = {};
     TString KqpTablePathPrefix = {};
     bool IsEnableExternalDataSources = false;
-    bool IsEnablePgConstsToParams = false;
-    bool IsEnablePgSyntax = false;
     TMaybe<bool> SqlAutoCommit = {};
     TGUCSettings::TPtr GUCSettings;
     TMaybe<TString> ApplicationName = {};
@@ -184,6 +176,8 @@ private:
     NYql::TLangVersion LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
     bool IsAmbiguityError = false;
+    TMaybe<NSQLTranslation::EYqlSelect> YqlSelect = {};
+    bool ValidateViewStatement = true;
 };
 
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type);

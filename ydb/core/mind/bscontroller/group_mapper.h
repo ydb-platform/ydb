@@ -79,12 +79,16 @@ namespace NKikimr {
 
             struct TTargetDiskConstraints {
                 std::optional<ui32> NodeId = std::nullopt;
+                std::optional<TPDiskId> PDiskId = std::nullopt;
             };
             using TGroupConstraintsDefinition = TGroupDefinitionBase<TTargetDiskConstraints>;
 
             static void MergeTargetDiskConstraints(const TTargetDiskConstraints& from, TTargetDiskConstraints& to) {
                 if (from.NodeId.has_value()) {
                     to.NodeId = from.NodeId;
+                }
+                if (from.PDiskId.has_value()) {
+                    to.PDiskId = from.PDiskId;
                 }
             }
             template<class T>
@@ -121,6 +125,7 @@ namespace NKikimr {
                 const bool Decommitted;
                 TString WhyUnusable;
                 TBridgePileId BridgePileId;
+                std::optional<TString> DiskScope;
             };
 
         public:

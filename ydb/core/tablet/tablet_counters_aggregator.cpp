@@ -2,6 +2,7 @@
 #include "tablet_counters_app.h"
 #include "labeled_counters_merger.h"
 #include "labeled_db_counters.h"
+#include "detailed_metrics/ydb_metrics_mapper.h"
 #include "private/aggregated_counters.h"
 #include "private/labeled_db_counters.h"
 
@@ -13,7 +14,6 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/sys_view/common/events.h>
@@ -21,10 +21,13 @@
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/util/wildcard.h>
+#include <ydb/library/actors/interconnect/subscription_manager.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/monlib/dynamic_counters/encode.h>
+
+#include <optional>
 
 #include <util/generic/xrange.h>
 #include <util/string/vector.h>
@@ -87,7 +90,7 @@ public:
         , DbWatcherActorId(dbWatcherActorId)
     {
         if (!IsFollower) {
-            YdbCounters = MakeIntrusive<TYdbTabletCounters>(GetServiceCounters(counters, "ydb"));
+            YdbCounters = MakeIntrusive<TYdbTabletCounters>(GetServiceCounters(counters, "ydb"), Counters);
         }
     }
 
@@ -315,12 +318,10 @@ public:
         }
 
         if (YdbCounters) {
-            auto hasDatashard = (bool)FindCountersByTabletType(
-                TTabletTypes::DataShard, CountersByTabletType);
             auto hasSchemeshard = (bool)FindCountersByTabletType(
                 TTabletTypes::SchemeShard, CountersByTabletType);
             bool hasColumnShard = static_cast<bool>(FindCountersByTabletType(TTabletTypes::ColumnShard, CountersByTabletType));
-            YdbCounters->Initialize(Counters, hasDatashard, hasSchemeshard, hasColumnShard);
+            YdbCounters->Initialize(Counters, hasSchemeshard, hasColumnShard);
             YdbCounters->Transform();
         }
     }
@@ -529,7 +530,7 @@ private:
             void Apply(ui64 tabletId, const TTabletCountersBase* counters, TTabletTypes::EType tabletType) {
                 Y_ABORT_UNLESS(counters);
 
-                TInstant now = TInstant::Now();
+                TInstant now = NActors::TActivationContext::Now();
                 auto it = LastAggregateUpdateTime.find(tabletId);
                 TDuration diff;
                 if (it != LastAggregateUpdateTime.end()) {
@@ -781,20 +782,12 @@ private:
         using THistogramPtr = NMonitoring::THistogramPtr;
 
     private:
-        TCounterPtr WriteRowCount;
-        TCounterPtr WriteBytes;
-        TCounterPtr ReadRowCount;
-        TCounterPtr ReadBytes;
-        TCounterPtr EraseRowCount;
-        TCounterPtr EraseBytes;
-        TCounterPtr BulkUpsertRowCount;
-        TCounterPtr BulkUpsertBytes;
-        TCounterPtr ScanRowCount;
-        TCounterPtr ScanBytes;
-        TCounterPtr DatashardRowCount;
-        TCounterPtr DatashardSizeBytes;
-        TCounterPtr DatashardCacheHitBytes;
-        TCounterPtr DatashardCacheMissBytes;
+        /**
+         * The mapper from internal DataShard metrics to the corresponding
+         * public metrics (table.datashard.*).
+         */
+        TYdbMetricsMapperPtr DatashardYdbMetricsMapper;
+
         TCounterPtr ColumnShardScanRows_;
         TCounterPtr ColumnShardScanBytes_;
         TCounterPtr ColumnShardWriteRows_;
@@ -819,26 +812,6 @@ private:
         TCounterPtr ResourcesStreamReservedThroughput;
         TCounterPtr ResourcesStreamReservedStorage;
         TCounterPtr ResourcesStreamReservedStorageLimit;
-
-        THistogramPtr ShardCpuUtilization;
-
-        TCounterPtr RowUpdates;
-        TCounterPtr RowUpdateBytes;
-        TCounterPtr RowReads;
-        TCounterPtr RangeReadRows;
-        TCounterPtr RowReadBytes;
-        TCounterPtr RangeReadBytes;
-        TCounterPtr RowErases;
-        TCounterPtr RowEraseBytes;
-        TCounterPtr UploadRows;
-        TCounterPtr UploadRowsBytes;
-        TCounterPtr ScannedRows;
-        TCounterPtr ScannedBytes;
-        TCounterPtr DbUniqueRowsTotal;
-        TCounterPtr DbUniqueDataBytes;
-        THistogramPtr ConsumedCpuHistogram;
-        TCounterPtr TxCachedBytes;
-        TCounterPtr TxReadBytes;
 
         TCounterPtr ColumnShardScannedBytes_;
         TCounterPtr ColumnShardScannedRows_;
@@ -865,38 +838,18 @@ private:
 
 
     public:
-        explicit TYdbTabletCounters(const ::NMonitoring::TDynamicCounterPtr& ydbGroup) {
-            WriteRowCount = ydbGroup->GetNamedCounter("name",
-                "table.datashard.write.rows", true);
-            WriteBytes = ydbGroup->GetNamedCounter("name",
-                "table.datashard.write.bytes", true);
-            ReadRowCount = ydbGroup->GetNamedCounter("name",
-                "table.datashard.read.rows", true);
-            ReadBytes = ydbGroup->GetNamedCounter("name",
-                "table.datashard.read.bytes", true);
-            EraseRowCount = ydbGroup->GetNamedCounter("name",
-                "table.datashard.erase.rows", true);
-            EraseBytes = ydbGroup->GetNamedCounter("name",
-                "table.datashard.erase.bytes", true);
-            BulkUpsertRowCount = ydbGroup->GetNamedCounter("name",
-                "table.datashard.bulk_upsert.rows", true);
-            BulkUpsertBytes = ydbGroup->GetNamedCounter("name",
-                "table.datashard.bulk_upsert.bytes", true);
-            ScanRowCount = ydbGroup->GetNamedCounter("name",
-                "table.datashard.scan.rows", true);
-            ScanBytes = ydbGroup->GetNamedCounter("name",
-                "table.datashard.scan.bytes", true);
-
-            DatashardRowCount = ydbGroup->GetNamedCounter("name",
-                "table.datashard.row_count", false);
-            DatashardSizeBytes = ydbGroup->GetNamedCounter("name",
-                "table.datashard.size_bytes", false);
-
-            DatashardCacheHitBytes = ydbGroup->GetNamedCounter("name",
-                "table.datashard.cache_hit.bytes", true);
-            DatashardCacheMissBytes = ydbGroup->GetNamedCounter("name",
-                "table.datashard.cache_miss.bytes", true);
-
+        TYdbTabletCounters(
+            ::NMonitoring::TDynamicCounterPtr ydbGroup,
+            ::NMonitoring::TDynamicCounterPtr tabletGroup
+        )
+            : DatashardYdbMetricsMapper(
+                CreateYdbMetricsMapperByTabletType(
+                    TTabletTypes::DataShard,
+                    ydbGroup,
+                    tabletGroup
+                )
+            )
+        {
             ColumnShardScanRows_ = ydbGroup->GetNamedCounter("name",
                 "table.columnshard.scan.rows", true);
             ColumnShardScanBytes_ = ydbGroup->GetNamedCounter("name",
@@ -951,38 +904,9 @@ private:
 
             ResourcesStreamReservedStorageLimit = ydbGroup->GetNamedCounter("name",
                 "resources.stream.storage.limit_bytes", false);
-
-            ShardCpuUtilization = ydbGroup->GetNamedHistogram("name",
-                "table.datashard.used_core_percents", NMonitoring::LinearHistogram(12, 0, 10), false);
         };
 
-        void Initialize(::NMonitoring::TDynamicCounterPtr counters, bool hasDatashard, bool hasSchemeshard, bool hasColumnShard) {
-            if (hasDatashard && !RowUpdates) {
-                auto datashardGroup = counters->GetSubgroup("type", "DataShard");
-                auto appGroup = datashardGroup->GetSubgroup("category", "app");
-
-                RowUpdates = appGroup->GetCounter("DataShard/EngineHostRowUpdates");
-                RowUpdateBytes = appGroup->GetCounter("DataShard/EngineHostRowUpdateBytes");
-                RowReads = appGroup->GetCounter("DataShard/EngineHostRowReads");
-                RangeReadRows = appGroup->GetCounter("DataShard/EngineHostRangeReadRows");
-                RowReadBytes = appGroup->GetCounter("DataShard/EngineHostRowReadBytes");
-                RangeReadBytes = appGroup->GetCounter("DataShard/EngineHostRangeReadBytes");
-                RowErases = appGroup->GetCounter("DataShard/EngineHostRowErases");
-                RowEraseBytes = appGroup->GetCounter("DataShard/EngineHostRowEraseBytes");
-                UploadRows = appGroup->GetCounter("DataShard/UploadRows");
-                UploadRowsBytes = appGroup->GetCounter("DataShard/UploadRowsBytes");
-                ScannedRows = appGroup->GetCounter("DataShard/ScannedRows");
-                ScannedBytes = appGroup->GetCounter("DataShard/ScannedBytes");
-
-                auto execGroup = datashardGroup->GetSubgroup("category", "executor");
-
-                DbUniqueRowsTotal = execGroup->GetCounter("SUM(DbUniqueRowsTotal)");
-                DbUniqueDataBytes = execGroup->GetCounter("SUM(DbUniqueDataBytes)");
-                ConsumedCpuHistogram = execGroup->FindHistogram("HIST(ConsumedCPU)");
-                TxCachedBytes = execGroup->GetCounter("TxCachedBytes");
-                TxReadBytes = execGroup->GetCounter("TxReadBytes");
-            }
-
+        void Initialize(::NMonitoring::TDynamicCounterPtr counters, bool hasSchemeshard, bool hasColumnShard) {
             if (hasColumnShard && !ColumnShardScannedBytes_) {
                 auto columnshardGroup = counters->GetSubgroup("type", "ColumnShard");
                 auto appGroup = columnshardGroup->GetSubgroup("category", "app");
@@ -1018,26 +942,7 @@ private:
         }
 
         void Transform() {
-            if (RowUpdates) {
-                WriteRowCount->Set(RowUpdates->Val());
-                WriteBytes->Set(RowUpdateBytes->Val());
-                ReadRowCount->Set(RowReads->Val() + RangeReadRows->Val());
-                ReadBytes->Set(RowReadBytes->Val() + RangeReadBytes->Val());
-                EraseRowCount->Set(RowErases->Val());
-                EraseBytes->Set(RowEraseBytes->Val());
-                BulkUpsertRowCount->Set(UploadRows->Val());
-                BulkUpsertBytes->Set(UploadRowsBytes->Val());
-                ScanRowCount->Set(ScannedRows->Val());
-                ScanBytes->Set(ScannedBytes->Val());
-                DatashardRowCount->Set(DbUniqueRowsTotal->Val());
-                DatashardSizeBytes->Set(DbUniqueDataBytes->Val());
-                DatashardCacheHitBytes->Set(TxCachedBytes->Val());
-                DatashardCacheMissBytes->Set(TxReadBytes->Val());
-
-                if (ConsumedCpuHistogram) {
-                    TransferBuckets(ShardCpuUtilization, ConsumedCpuHistogram);
-                }
-            }
+            DatashardYdbMetricsMapper->TransferCounterValues();
 
             if (ColumnShardScannedBytes_) {
                 ColumnShardScanRows_->Set(ColumnShardScannedRows_->Val());
@@ -1083,18 +988,6 @@ private:
                 ResourcesStreamReservedStorageLimit->Set(StreamReservedStorageLimit->Val());
             }
         }
-
-        void TransferBuckets(THistogramPtr dst, THistogramPtr src) {
-            auto srcSnapshot = src->Snapshot();
-            auto srcCount = srcSnapshot->Count();
-            auto dstSnapshot = dst->Snapshot();
-            auto dstCount = dstSnapshot->Count();
-
-            dst->Reset();
-            for (ui32 b = 0; b < std::min(srcCount, dstCount); ++b) {
-                dst->Collect(dstSnapshot->UpperBound(b), srcSnapshot->Value(b));
-            }
-        }
     };
 
     using TYdbTabletCountersPtr = TIntrusivePtr<TYdbTabletCounters>;
@@ -1112,7 +1005,7 @@ public:
             : SolomonCounters(internalGroup)
             , ExecutorCounters(std::move(executorCounters))
         {
-            YdbCounters = MakeIntrusive<TYdbTabletCounters>(externalGroup);
+            YdbCounters = MakeIntrusive<TYdbTabletCounters>(externalGroup, internalGroup);
         }
 
         void ToProto(NKikimr::NSysView::TDbServiceCounters& counters) override {
@@ -1139,10 +1032,9 @@ public:
                 }
             }
             if (YdbCounters) {
-                auto hasDatashard = (bool)GetCounters(TTabletTypes::DataShard);
                 auto hasSchemeshard = (bool)GetCounters(TTabletTypes::SchemeShard);
                 auto hasColumnshard = static_cast<bool>(GetCounters(TTabletTypes::ColumnShard));
-                YdbCounters->Initialize(SolomonCounters, hasDatashard, hasSchemeshard, hasColumnshard);
+                YdbCounters->Initialize(SolomonCounters, hasSchemeshard, hasColumnshard);
                 YdbCounters->Transform();
             }
         }
@@ -1743,7 +1635,6 @@ void PreProcessResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse* res
     }
 }
 
-
 class TClusterLabeledCountersAggregatorActorV1 : public TActorBootstrapped<TClusterLabeledCountersAggregatorActorV1> {
 private:
     using TBase = TActorBootstrapped<TClusterLabeledCountersAggregatorActorV1>;
@@ -1751,10 +1642,10 @@ private:
     TTabletTypes::EType TabletType;
     ui32 NodesRequested;
     ui32 NodesReceived;
-    TVector<ui32> Nodes;
     THashMap<ui32, TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersResponse>> PerNodeResponse;
     ui32 NumWorkers;
     ui32 WorkerId;
+    std::optional<NActors::NInterconnect::TSubscriptionManager> SessionSubscriptions;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1777,20 +1668,18 @@ public:
         TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersRequest> request(new TEvTabletCounters::TEvTabletLabeledCountersRequest());
         request->Record.SetTabletType(TabletType);
         request->Record.SetVersion(1);
-        ctx.Send(aggregatorServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        Nodes.emplace_back(nodeId);
+        ui32 flags = IEventHandle::FlagTrackDelivery;
+        if (nodeId != ctx.SelfID.NodeId()) {
+            SessionSubscriptions->Arm(nodeId, TActivationContext::InterconnectProxy(nodeId));
+            flags |= IEventHandle::FlagSubscribeOnSession;
+        }
+        ctx.Send(aggregatorServiceId, request.Release(), flags, nodeId);
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor request to node " << nodeId << " " << ctx.SelfID);
         ++NodesRequested;
     }
 
-    void Die(const TActorContext& ctx) override {
-        for (const ui32 node : Nodes) {
-            ctx.Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe());
-        }
-        TBase::Die(ctx);
-    }
-
     void Bootstrap(const TActorContext& ctx) {
+        SessionSubscriptions.emplace(TActorIdentity(ctx.SelfID));
         if (NumWorkers > 0) {
             const TActorId nameserviceId = GetNameserviceActorId();
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
@@ -1818,6 +1707,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTabletCounters::TEvTabletLabeledCountersResponse, HandleResponse);
             HFunc(TEvents::TEvUndelivered, Undelivered);
+            HFunc(TEvInterconnect::TEvNodeConnected, Connected);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
@@ -1826,7 +1716,6 @@ public:
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
         const TEvInterconnect::TEvNodesInfo* nodesInfo = ev->Get();
         Y_ABORT_UNLESS(!nodesInfo->Nodes.empty());
-        Nodes.reserve(nodesInfo->Nodes.size());
         ui32 i = 0;
         for (const auto& ni : nodesInfo->Nodes) {
             ++i;
@@ -1844,14 +1733,22 @@ public:
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev.Get()->Cookie;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor undelivered node " << nodeId << " " << ctx.SelfID);
+        if (SessionSubscriptions->IsSubscribed(nodeId)) {
+            SessionSubscriptions->Unsubscribe(nodeId);
+        }
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
         }
     }
 
+    void Connected(TEvInterconnect::TEvNodeConnected::TPtr &ev, const TActorContext&) {
+        SessionSubscriptions->Handle(ev);
+    }
+
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev->Get()->NodeId;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor disconnected node " << nodeId << " " << ctx.SelfID);
+        SessionSubscriptions->Handle(ev);
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
         }
@@ -1860,6 +1757,9 @@ public:
     void HandleResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse::TPtr &ev, const TActorContext &ctx) {
         ui64 nodeId = ev.Get()->Cookie;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor got response node " << nodeId << " " << ctx.SelfID);
+        if (SessionSubscriptions->IsSubscribed(nodeId)) {
+            SessionSubscriptions->Unsubscribe(nodeId);
+        }
         PreProcessResponse(ev->Get());
         PerNodeResponse[nodeId] = ev->Release();
         NodeResponseReceived(ctx);
@@ -2023,11 +1923,11 @@ protected:
     TTabletTypes::EType TabletType;
     ui32 NodesRequested;
     ui32 NodesReceived;
-    TVector<ui32> Nodes;
     THashMap<ui32, THolder<TEvTabletCounters::TEvTabletLabeledCountersResponse>> PerNodeResponse;
     TString Group;
     ui32 NumWorkers;
     ui32 WorkerId;
+    std::optional<NActors::NInterconnect::TSubscriptionManager> SessionSubscriptions;
 
     TMerger Merger;
 
@@ -2059,20 +1959,18 @@ public:
             request->Record.SetGroup(Group);
         }
         // TODO: what if it's empty
-        ctx.Send(aggregatorServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        Nodes.emplace_back(nodeId);
+        ui32 flags = IEventHandle::FlagTrackDelivery;
+        if (nodeId != ctx.SelfID.NodeId()) {
+            SessionSubscriptions->Arm(nodeId, TActivationContext::InterconnectProxy(nodeId));
+            flags |= IEventHandle::FlagSubscribeOnSession;
+        }
+        ctx.Send(aggregatorServiceId, request.Release(), flags, nodeId);
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor request to node " << nodeId << " " << ctx.SelfID);
         ++NodesRequested;
     }
 
-    void Die(const TActorContext& ctx) override {
-        for (const ui32 node : Nodes) {
-            ctx.Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe());
-        }
-        TBase::Die(ctx);
-    }
-
     void Bootstrap(const TActorContext& ctx) {
+        SessionSubscriptions.emplace(TActorIdentity(ctx.SelfID));
         if (NumWorkers > 0) {
             const TActorId nameserviceId = GetNameserviceActorId();
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
@@ -2100,6 +1998,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTabletCounters::TEvTabletLabeledCountersResponse, HandleResponse);
             HFunc(TEvents::TEvUndelivered, Undelivered);
+            HFunc(TEvInterconnect::TEvNodeConnected, Connected);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
@@ -2108,7 +2007,6 @@ public:
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
         const TEvInterconnect::TEvNodesInfo* nodesInfo = ev->Get();
         Y_ABORT_UNLESS(!nodesInfo->Nodes.empty());
-        Nodes.reserve(nodesInfo->Nodes.size());
         ui32 i = 0;
         for (const auto& ni : nodesInfo->Nodes) {
             ++i;
@@ -2126,14 +2024,22 @@ public:
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev.Get()->Cookie;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor undelivered node " << nodeId << " "  << ctx.SelfID);
+        if (SessionSubscriptions->IsSubscribed(nodeId)) {
+            SessionSubscriptions->Unsubscribe(nodeId);
+        }
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
         }
     }
 
+    void Connected(TEvInterconnect::TEvNodeConnected::TPtr &ev, const TActorContext&) {
+        SessionSubscriptions->Handle(ev);
+    }
+
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev->Get()->NodeId;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor disconnected node " << nodeId << " " << ctx.SelfID);
+        SessionSubscriptions->Handle(ev);
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
         }
@@ -2143,6 +2049,9 @@ public:
         ui64 nodeId = ev.Get()->Cookie;
         LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
                    "aggregator actor got response node " << nodeId << " " << ctx.SelfID);
+        if (SessionSubscriptions->IsSubscribed(nodeId)) {
+            SessionSubscriptions->Unsubscribe(nodeId);
+        }
         PreProcessResponse(ev->Get());
 
         auto [it, emplaced] = PerNodeResponse.emplace(nodeId, ev->Release().Release());

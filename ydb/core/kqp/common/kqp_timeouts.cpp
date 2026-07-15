@@ -1,6 +1,7 @@
 #include "kqp_timeouts.h"
 
 #include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NKqp {
 
@@ -10,6 +11,8 @@ namespace {
 ui64 GetDefaultQueryTimeoutMs(NKikimrKqp::EQueryType queryType,
                               const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
                               const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
+    constexpr TDuration SCRIPT_TIMEOUT_LIMIT = TDuration::Days(365);
+
     const auto& queryLimits = tableServiceConfig.GetQueryLimits();
 
     switch (queryType) {

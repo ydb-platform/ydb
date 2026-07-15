@@ -1,34 +1,28 @@
-/* syntax version 1 */
-/* dq can not */
-
-PRAGMA dq.MaxTasksPerStage="2";
-PRAGMA dq.WatermarksMode="default";
-PRAGMA dq.ComputeActorType="async";
-
-PRAGMA pq.Consumer="test_client";
-
-$input =
+$input = (
     SELECT
         *
-    FROM pq.test_topic_input
-    WITH (
-        FORMAT=json_each_row,
-        SCHEMA(
-            t Uint64,
-            k Uint64,
-            v Uint64
+    FROM
+        pq.test_topic_input WITH (
+            FORMAT = json_each_row,
+            SCHEMA (t String, k String, v Int64),
+            STREAMING = 'TRUE'
         )
-    );
+);
 
-$output =
+$output = (
     SELECT
-        Sum(v) AS sum
-    FROM $input
-    GROUP BY
         k,
-        AsList(1, k),
-        HoppingWindow(DateTime::FromMilliseconds(t), "PT0.005S", "PT0.01S");
+        Sum(v) AS sum
+    FROM
+        $input
+    GROUP BY
+        AsList("k", k) AS k,
+        HoppingWindow(CAST(t AS Timestamp), 'PT0.005S', 'PT0.01S')
+);
 
 INSERT INTO pq.test_topic_output
-SELECT Yson::SerializeText(Yson::From(TableRow()))
-FROM $output;
+SELECT
+    Yson::SerializeText(Yson::From(TableRow()))
+FROM
+    $output
+;

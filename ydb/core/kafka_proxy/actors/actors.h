@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/raw_socket/sock_impl.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
@@ -28,7 +29,7 @@ enum class EBalancingMode {
 };
 
 struct TReadSession {
-    EBalancingMode BalancingMode = EBalancingMode::Server;
+    EBalancingMode BalancingMode = EBalancingMode::Native;
     std::optional<EBalancingMode> PendingBalancingMode;
     NActors::TActorId ProxyActorId;
 };
@@ -170,11 +171,8 @@ inline EKafkaErrors ConvertErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode code) 
     }
 }
 
-inline TString NormalizePath(const TString& database, const TString& topic) {
-    if (topic.size() > database.size() && topic.at(database.size()) == '/' && topic.StartsWith(database)) {
-        return topic;
-    }
-    return NKikimr::CanonizePath(database + "/" + topic);
+inline TString NormalizePath(const TString& database, const TString& path) {
+    return NKikimr::NormalizePath(database, path);
 }
 
 inline TString GetTopicNameWithoutDb(const TString& database, TString topic) {

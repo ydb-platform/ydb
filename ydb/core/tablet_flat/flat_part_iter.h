@@ -1120,7 +1120,7 @@ namespace NTable {
                     const auto* commitVersion = committedTransactions.Find(txId);
                     if (commitVersion) {
                         // Found a committed delta
-                        return { *commitVersion, txId };
+                        return { *commitVersion, txId, data->GetRop() };
                     }
                     // Skip an uncommitted delta
                     transactionObserver.OnSkipUncommitted(txId);
@@ -1140,11 +1140,15 @@ namespace NTable {
 
             if (!SkipEraseVersion && data->IsErased()) {
                 // Return erase version of this row
-                return data->GetMaxVersion(info);
+                return { data->GetMaxVersion(info), 0, data->GetRop() };
             }
 
             // Otherwise either row version or part version is the first committed version
-            return data->IsVersioned() ? data->GetMinVersion(info) : Part->MinRowVersion;
+            return {
+                data->IsVersioned() ? data->GetMinVersion(info) : Part->MinRowVersion,
+                0,
+                data->GetRop()
+            };
         }
 
         bool IsDelta() const noexcept

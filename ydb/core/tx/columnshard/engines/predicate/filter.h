@@ -23,6 +23,7 @@ class TPKRangesFilter {
         {
             TotalFiltersMemorySize += mem;
         }
+
         ~TMemoryTrackingGuard() {
             TotalFiltersMemorySize.Sub(Bytes);
         }
@@ -35,10 +36,12 @@ private:
     TMemoryTrackingGuard MemoryGuard;
 
     [[nodiscard]] TConclusionStatus Add(std::optional<NOlap::TPredicate> f, std::optional<NOlap::TPredicate> t);
+
     TPKRangesFilter()
         : MemoryGuard(0)
     {
     }
+
     TPKRangesFilter(const std::shared_ptr<arrow::RecordBatch>& data);
 
     static inline TPositiveControlInteger TotalFiltersMemorySize;
@@ -93,6 +96,7 @@ public:
     bool IsUsed(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& end) const {
         return GetUsageClass(start, end) != TPKRangeFilter::EUsageClass::NoUsage;
     }
+
     TPKRangeFilter::EUsageClass GetUsageClass(
         const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& end) const;
     bool CheckPoint(const NArrow::NMerger::TSortableBatchPosition& point) const;
@@ -109,8 +113,6 @@ public:
         return result;
     }
 
-    std::vector<std::string> GetSortingColumnNames() const;
-
     TString DebugString() const;
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
@@ -120,6 +122,7 @@ public:
     static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchFull(
         const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema);
     static std::shared_ptr<TPKRangesFilter> BuildFromString(const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema);
+
     static TPKRangesFilter BuildEmpty() {
         return TPKRangesFilter();
     }
@@ -130,6 +133,7 @@ public:
     size_t GetMemorySize() const {
         return NArrow::GetBatchMemorySize(Data);
     }
+
     static size_t GetFiltersTotalMemorySize() {
         return TotalFiltersMemorySize.Val();
     }
@@ -147,9 +151,11 @@ public:
     ui64 GetDeprecatedPortionId() const {
         return DoGetDeprecatedPortionId();
     }
+
     ui64 GetEntityId() const {
         return DoGetEntityId();
     }
+
     ui64 GetEntityRecordsCount() const {
         return DoGetEntityRecordsCount();
     }
@@ -237,6 +243,7 @@ protected:
 
 public:
     ISimpleScanCursor() = default;
+
     ISimpleScanCursor(const ui32 sourceIdx, const ui32 recordIndex, const std::optional<ui64>& portionId)
         : SourceIdx(sourceIdx)
         , RecordIndex(recordIndex)
@@ -279,6 +286,7 @@ protected:
 
 public:
     IDeprecatedSimpleScanCursor() = default;
+
     IDeprecatedSimpleScanCursor(const ui64 deprecatedPortionId, const ui32 recordIndex)
         : PortionId(deprecatedPortionId)
         , RecordIndex(recordIndex)

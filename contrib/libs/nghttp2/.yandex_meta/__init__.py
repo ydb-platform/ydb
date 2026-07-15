@@ -1,6 +1,5 @@
 from devtools.yamaker.project import GNUMakeNixProject
 
-
 nghttp2 = GNUMakeNixProject(
     nixattr="nghttp2",
     arcdir="contrib/libs/nghttp2",

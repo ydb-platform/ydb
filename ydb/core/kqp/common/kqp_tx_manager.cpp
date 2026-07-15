@@ -118,10 +118,18 @@ public:
             broken = lockPtr->Invalidated || lockPtr->LocksAcquireFailure;
 
             if (broken && isInvalidated) {
-                // For broken locks from shard: use effectiveVictimSpanId (from shard's determination).
-                // For comparison-based invalidation: use the original lock setter's SpanId.
-                ui64 victimSpanId = (isError && effectiveVictimSpanId != 0)
-                    ? effectiveVictimSpanId : lockPtr->VictimQuerySpanId;
+                // Prefer the lock's original VictimQuerySpanId (set when the lock was first created
+                // during the read that established it). This matches what the DataShard recorded.
+                // Only use effectiveVictimSpanId when the shard explicitly provided a deferred victim
+                // (deferredVictimQuerySpanId != 0), or as a fallback when the lock has no SpanId.
+                // Without this, commit-phase AddLock would use the write's querySpanId, breaking
+                // the linkage between SessionActor and DataShard TLI records.
+                ui64 victimSpanId = lockPtr->VictimQuerySpanId;
+                if (isError && deferredVictimQuerySpanId != 0) {
+                    victimSpanId = effectiveVictimSpanId;
+                } else if (victimSpanId == 0 && isError && effectiveVictimSpanId != 0) {
+                    victimSpanId = effectiveVictimSpanId;
+                }
                 SetVictimQuerySpanId(victimSpanId);
             }
         } else {
@@ -183,11 +191,11 @@ public:
         State = ETransactionState::ERROR;
     }
 
-    void SetPartitioning(const TTableId tableId, const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) override {
+    void SetPartitioning(const TTableId tableId, const TPartitioning::TCPtr& partitioning) override {
         TablePartitioning[tableId] = partitioning;
     }
 
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> GetPartitioning(const TTableId tableId) const override {
+    TPartitioning::TCPtr GetPartitioning(const TTableId tableId) const override {
         auto iterator = TablePartitioning.find(tableId);
         if (iterator != std::end(TablePartitioning)) {
             return iterator->second;
@@ -204,7 +212,9 @@ public:
     }
 
     void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) override {
+        AFL_ENSURE(TopicOperations.GetSize() == 0);
         TopicOperations = std::move(topicOperations);
+        TopicOperations.SetSkipConflictCheck(SkipTopicsConflictCheck);
     }
 
     const NTopic::TTopicOperations& GetTopicOperations() const override {
@@ -221,6 +231,11 @@ public:
 
     bool HasTopics() const override {
         return GetTopicOperations().GetSize() != 0;
+    }
+
+    void SetSkipTopicsConflictCheck(bool skipConflictCheck) override {
+        SkipTopicsConflictCheck = skipConflictCheck;
+        TopicOperations.SetSkipConflictCheck(SkipTopicsConflictCheck);
     }
 
     TVector<NKikimrDataEvents::TLock> GetLocks() const override {
@@ -326,6 +341,20 @@ public:
         ValidSnapshot = hasSnapshot;
     }
 
+    void SetIsolationLevel(NKqpProto::EIsolationLevel level) override {
+        IsolationLevel = level;
+    }
+
+    NKqpProto::EIsolationLevel GetIsolationLevel() const override {
+        return IsolationLevel;
+    }
+
+    bool CanUseImmediateCommit() const override {
+        return IsSingleShard() && !HasOlapTable() 
+            && GetTopicOperations().GetSize() <= 1
+            && IsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
+    }
+
     bool BrokenLocks() const override {
         return LocksIssue.has_value() && !(HasSnapshot() && IsReadOnly());
     }
@@ -414,6 +443,7 @@ public:
 
     bool NeedCommit() const override {
         AFL_ENSURE(ActionsCount != 1 || IsSingleShard()); // ActionsCount == 1 then IsSingleShard()
+        AFL_ENSURE(HasSnapshot() || IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
         const bool dontNeedCommit = IsEmpty() || (IsReadOnly() && ((ActionsCount == 1) || HasSnapshot()));
         return !dontNeedCommit;
     }
@@ -545,7 +575,7 @@ public:
 
         ShardsToWait = ShardsIds;
 
-        AFL_ENSURE(ReceivingShards.empty() || HasTopics() || !IsSingleShard() || HasOlapTable());
+        AFL_ENSURE(ReceivingShards.empty() || !CanUseImmediateCommit());
     }
 
     TCommitInfo GetCommitInfo() override {
@@ -664,12 +694,13 @@ private:
 
     THashSet<ui32> ParticipantNodes;
 
-    THashMap<TTableId, std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>> TablePartitioning;
+    THashMap<TTableId, TPartitioning::TCPtr> TablePartitioning;
 
     bool AllowVolatile = false;
     bool ReadOnly = true;
     bool ValidSnapshot = false;
     bool HasOlapTableShard = false;
+    NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
     std::optional<NYql::TIssue> LocksIssue;
     std::optional<ui64> VictimQuerySpanId_;
 
@@ -681,6 +712,7 @@ private:
     THashSet<ui64> ShardsToWait;
 
     NTopic::TTopicOperations TopicOperations;
+    bool SkipTopicsConflictCheck = false;
 
     ui64 MinStep = 0;
     ui64 MaxStep = 0;

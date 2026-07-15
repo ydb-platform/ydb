@@ -5,6 +5,12 @@
 
 namespace NKikimr::NReplication::NController {
 
+class ITargetBaseStats: public TReplication::ITargetStats {
+protected:
+    virtual bool UpdateWithSingleStatsItem(ui64 workerId, ui64 key, i64 value) = 0;
+    virtual void RemoveWorker(ui64 workerId) = 0;
+};
+
 class TTargetBase
     : public TReplication::ITarget
     , public TLagProvider
@@ -20,10 +26,12 @@ protected:
     }
 
     bool HasWorkers() const;
+    bool HasWorker(ui64 id) const;
     void RemoveWorkers(const TActorContext& ctx);
+    const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
 public:
-    struct TConfigBase : public IConfig {
+    struct TConfigBase: public IConfig {
         using TPtr = std::shared_ptr<TConfigBase>;
 
         TConfigBase(ETargetKind kind, const TString& srcPath, const TString& dstPath);
@@ -69,7 +77,7 @@ public:
     void RemoveWorker(ui64 id) override;
     TVector<ui64> GetWorkers() const override;
     void UpdateLag(ui64 workerId, TDuration lag) override;
-    const TMaybe<TDuration> GetLag() const override;
+    const std::optional<TDuration> GetLag() const override;
 
     void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
@@ -79,8 +87,8 @@ public:
 
 private:
     TReplication* const Replication;
-    const ui64 Id;
     const ETargetKind Kind;
+    const ui64 Id;
 
     EDstState DstState = EDstState::Creating;
     TPathId DstPathId;

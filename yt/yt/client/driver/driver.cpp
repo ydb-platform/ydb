@@ -99,14 +99,14 @@ void TDriverRequest::Reset()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCommandDescriptor IDriver::GetCommandDescriptor(const TString& commandName) const
+TCommandDescriptor IDriver::GetCommandDescriptor(const std::string& commandName) const
 {
     auto descriptor = FindCommandDescriptor(commandName);
     YT_VERIFY(descriptor);
     return *descriptor;
 }
 
-TCommandDescriptor IDriver::GetCommandDescriptorOrThrow(const TString& commandName) const
+TCommandDescriptor IDriver::GetCommandDescriptorOrThrow(const std::string& commandName) const
 {
     auto descriptor = FindCommandDescriptor(commandName);
     if (!descriptor) {
@@ -192,7 +192,7 @@ public:
 
         REGISTER    (TWriteTableCommand,                   "write_table",                     Tabular,    Null,       true,  true , ApiVersion3);
         REGISTER    (TWriteTableCommand,                   "write_table",                     Tabular,    Structured, true,  true , ApiVersion4);
-        REGISTER_ALL(TGetTableColumnarStatisticsCommand,   "get_table_columnar_statistics",   Null,       Structured, false, false);
+        REGISTER_ALL(TGetTableColumnarStatisticsCommand,   "get_table_columnar_statistics",   Null,       Structured, false, true);
         REGISTER_ALL(TReadTableCommand,                    "read_table",                      Null,       Tabular,    false, true );
         REGISTER_ALL(TReadBlobTableCommand,                "read_blob_table",                 Null,       Binary,     false, true );
         REGISTER_ALL(TLocateSkynetShareCommand,            "locate_skynet_share",             Null,       Structured, false, true );
@@ -337,6 +337,7 @@ public:
         REGISTER_ALL(TExecuteBatchCommand,                 "execute_batch",                   Null,       Structured, true,  false);
 
         REGISTER    (TDiscoverProxiesCommand,              "discover_proxies",                Null,       Structured, false, false, ApiVersion4);
+        REGISTER_ALL(TCheckClusterLivenessCommand,         "check_cluster_liveness",          Null,       Structured, false, false);
 
         REGISTER_ALL(TBuildSnapshotCommand,                "build_snapshot",                  Null,       Structured, true,  false);
         REGISTER_ALL(TBuildMasterSnapshotsCommand,         "build_master_snapshots",          Null,       Structured, true,  false);
@@ -438,6 +439,8 @@ public:
             REGISTER_ALL(TReferenceLeaseCommand,            "reference_lease",                        Null,       Structured, true,  false);
             REGISTER_ALL(TUnreferenceLeaseCommand,          "unreference_lease",                      Null,       Structured, true,  false);
             REGISTER_ALL(TForsakeChaosCoordinator,          "forsake_chaos_coordinator",              Null,       Null,       true,  true );
+            REGISTER_ALL(TForsakeChaosShortcut,             "forsake_chaos_shortcut",                 Null,       Null,       true,  true );
+            REGISTER_ALL(TRemoveChaosCellMailbox,           "remove_chaos_cell_mailbox",              Null,       Null,       true,  true );
             REGISTER_ALL(TGetOrderedTabletSafeTrimRowCount, "get_ordered_tablet_safe_trim_row_count", Null,       Structured, false, false);
             REGISTER_ALL(TGetConnectionOrchidValue,         "get_connection_orchid_value",            Null,       Structured, false, false);
         }
@@ -495,7 +498,7 @@ public:
             .Run();
     }
 
-    std::optional<TCommandDescriptor> FindCommandDescriptor(const TString& commandName) const override
+    std::optional<TCommandDescriptor> FindCommandDescriptor(const std::string& commandName) const override
     {
         auto it = CommandNameToEntry_.find(commandName);
         return it == CommandNameToEntry_.end() ? std::nullopt : std::make_optional(it->second.Descriptor);
@@ -575,7 +578,7 @@ private:
         TExecuteCallback Execute;
     };
 
-    THashMap<TString, TCommandEntry> CommandNameToEntry_;
+    THashMap<std::string, TCommandEntry> CommandNameToEntry_;
 
 
     template <class TCommand>
@@ -728,7 +731,7 @@ private:
             Serialize(yson, consumer.get());
 
             consumer->Flush();
-            syncOutputStream->Flush();
+            syncOutputStream->Finish();
         }
 
         void Finish()

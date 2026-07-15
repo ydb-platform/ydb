@@ -172,7 +172,7 @@ simdjson_pure simdjson_inline size_t parser::max_depth() const noexcept {
 }
 
 simdjson_inline void parser::set_max_capacity(size_t max_capacity) noexcept {
-  if(max_capacity < dom::MINIMAL_DOCUMENT_CAPACITY) {
+  if(max_capacity > dom::MINIMAL_DOCUMENT_CAPACITY) {
     _max_capacity = max_capacity;
   } else {
     _max_capacity = dom::MINIMAL_DOCUMENT_CAPACITY;
@@ -199,7 +199,7 @@ simdjson_inline simdjson_warn_unused ondemand::parser& parser::get_parser() {
   return *parser::get_parser_instance();
 }
 
-simdjson_inline bool release_parser() {
+simdjson_inline bool parser::release_parser() {
   auto &parser_instance = parser::get_threadlocal_parser_if_exists();
   if (parser_instance) {
     parser_instance.reset();

@@ -277,6 +277,7 @@ Licensing is very important to open source projects. It helps ensure the softwar
 
 ====================COPYRIGHT====================
     Copyright (c) 2017-2025 Intel Corporation
+    Copyright (c) 2026 UXL Foundation Contributors
 
 
 ====================COPYRIGHT====================
@@ -289,10 +290,12 @@ Licensing is very important to open source projects. It helps ensure the softwar
 
 ====================COPYRIGHT====================
     Copyright (c) 2019-2022 Intel Corporation
+    Copyright (c) 2026 UXL Foundation Contributors
 
 
 ====================COPYRIGHT====================
     Copyright (c) 2019-2025 Intel Corporation
+    Copyright (c) 2026 UXL Foundation Contributors
 
 
 ====================COPYRIGHT====================
@@ -318,6 +321,7 @@ Licensing is very important to open source projects. It helps ensure the softwar
 
 ====================COPYRIGHT====================
     Copyright (c) 2021-2024 Intel Corporation
+    Copyright (c) 2026 UXL Foundation Contributors
 
 
 ====================COPYRIGHT====================
@@ -338,12 +342,9 @@ Licensing is very important to open source projects. It helps ensure the softwar
 
 ====================COPYRIGHT====================
     Copyright (c) 2023-2025 Intel Corporation
+    Copyright (c) 2026 UXL Foundation Contributors
 
 
 ====================COPYRIGHT====================
     Copyright (c) 2025 Intel Corporation
     Copyright (c) 2025 UXL Foundation Contributors
-
-
-====================COPYRIGHT====================
-    Copyright (c) 2025 UXL Foundation Сontributors

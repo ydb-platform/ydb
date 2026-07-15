@@ -10,6 +10,7 @@
 
 #include <cstring>
 
+// NOLINTNEXTLINE(readability-redundant-declaration)
 extern char** environ;
 
 namespace NYql {
@@ -40,7 +41,7 @@ char* g_OriginalArgvLast = nullptr;
  *                                                     \/
  *                                         must be relocated elsewhere
  */
-void ProcTitleInit(int argc, const char* argv[])
+void ProcTitleInit(int argc, const char** argv)
 {
     Y_UNUSED(argc);
     Y_ABORT_UNLESS(!g_OriginalArgv, "ProcTitleInit() was already called");

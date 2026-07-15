@@ -41,7 +41,7 @@ IF (USE_ARCADIA_PYTHON)
         CFLAGS(
             GLOBAL -DUSE_PYTHON3
         )
-        
+
         PEERDIR(
             library/python/runtime_py3
         )
@@ -57,8 +57,8 @@ IF (USE_ARCADIA_PYTHON)
             )
         ELSE()
             PEERDIR(
-                contrib/tools/python3/lib2
                 contrib/tools/python3
+                contrib/tools/python3/Lib
             )
         ENDIF()
     ENDIF()

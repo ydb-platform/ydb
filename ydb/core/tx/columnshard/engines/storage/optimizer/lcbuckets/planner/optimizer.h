@@ -21,6 +21,21 @@ private:
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
 
+    void TryApplySkipLevelMinBlobSize(const TPortionInfo::TPtr& portion) {
+        ui32 level = portion->GetMeta().GetCompactionLevel();
+        if (level >= Levels.size()) {
+            return;
+        }
+        while (level + 1 < Levels.size()) {
+            const auto skipMin = Levels[level]->GetSkipLevelMinBlobSize();
+            if (!skipMin || portion->GetTotalBlobBytes() < *skipMin) {
+                break;
+            }
+            ++level;
+            portion->MutableMeta().ResetCompactionLevel(level);
+        }
+    }
+
     virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoForCompaction& info) const override {
         ui32 result = baseLevel;
         for (ui32 i = baseLevel; i + 1 < Levels.size(); ++i) {
@@ -58,15 +73,6 @@ private:
     }
 
 protected:
-    virtual bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {
-        for (auto&& i : Levels) {
-            if (i->IsLocked(dataLocksManager)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         std::vector<std::vector<TPortionInfo::TPtr>> removePortionsByLevel;
         removePortionsByLevel.resize(Levels.size());
@@ -85,6 +91,7 @@ protected:
             if (i->GetProduced() == NPortion::EProduced::EVICTED) {
                 continue;
             }
+            TryApplySkipLevelMinBlobSize(i);
             PortionsInfo->AddPortion(i);
             if (i->GetCompactionLevel() >= Levels.size()) {
                 problemPortions.emplace_back(i);
@@ -106,6 +113,7 @@ protected:
         }
         RefreshWeights();
     }
+
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override;
 
@@ -155,8 +163,9 @@ public:
     ~TOptimizerPlanner() = default;
 
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters, std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo,
-        std::vector<std::shared_ptr<IPortionsLevel>>&& levels, std::vector<std::shared_ptr<IPortionsSelector>>&& selectors, const std::optional<ui64>& nodePortionsCountLimit);
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters,
+        std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo, std::vector<std::shared_ptr<IPortionsLevel>>&& levels,
+        std::vector<std::shared_ptr<IPortionsSelector>>&& selectors, const std::optional<ui64>& nodePortionsCountLimit);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

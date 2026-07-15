@@ -1,7 +1,8 @@
 #include "http_service.h"
-#include "http_req.h"
-#include "events.h"
 
+#include "http_req.h"
+
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -9,13 +10,16 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/http_proxy/error/error.h>
 
-#include <ydb/core/protos/config.pb.h>
-
 #include <util/stream/file.h>
+#include <util/string/ascii.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
 
 namespace NKikimr::NHttpProxy {
 
     using namespace NActors;
+
+    TString BuildError(MimeTypes mimeType, HttpCodes httpCode, const TString& errorName, const TString& errorText);
 
     class THttpProxyActor : public NActors::TActorBootstrapped<THttpProxyActor> {
         using TBase = NActors::TActorBootstrapped<THttpProxyActor>;
@@ -44,8 +48,7 @@ namespace NKikimr::NHttpProxy {
         : Config(cfg.Config)
     {
         ServiceAccountCredentialsProvider = cfg.CredentialsProvider;
-        Processors = MakeHolder<THttpRequestProcessors>();
-        Processors->Initialize();
+        Processors = MakeHolder<THttpRequestProcessors>(Config);
         if (cfg.UseSDK) {
             auto config = NYdb::TDriverConfig().SetNetworkThreadsNum(1)
                 .SetClientThreadsNum(1)
@@ -94,22 +97,26 @@ namespace NKikimr::NHttpProxy {
                                     Driver.Get(),
                                     ServiceAccountCredentialsProvider);
 
-        LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
-                      " incoming request from [" << context.SourceAddress << "]" <<
-                      " request [" << context.MethodName << "]" <<
-                      " url [" << context.Request->URL << "]" <<
-                      " database [" << context.DatabasePath << "]" <<
-                      " requestId: " << context.RequestId);
+        YDB_LOG_INFO_CTX(ctx, "Incoming request from request url database",
+            {"logPrefix", LogPrefix()},
+            {"sourceAddress", context.SourceAddress},
+            {"methodName", context.MethodName},
+            {"url", context.Request->URL},
+            {"databasePath", context.DatabasePath},
+            {"requestId", context.RequestId});
 
+        auto contentType = context.ContentType;
         try {
             auto signature = context.GetSignature();
             auto methodName = context.MethodName;
             Processors->Execute(std::move(methodName), std::move(context), std::move(signature), ctx);
         } catch (const NKikimr::NSQS::TSQSException& e) {
-            context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;
-            context.ResponseData.ErrorText = e.what();
-            context.DoReply(ctx, static_cast<size_t>(NYds::EErrorCodes::ACCESS_DENIED));
-            return;
+            context.DoReply({
+                .HttpCode = HTTP_BAD_REQUEST,
+                .ContentType = contentType,
+                .Message = "AccessDeniedException",
+                .Body = BuildError(contentType, HTTP_BAD_REQUEST, "AccessDeniedException", e.what())
+            });
         }
     }
 
@@ -118,3 +125,4 @@ namespace NKikimr::NHttpProxy {
     }
 
 } // namespace NKikimr::NHttpProxy
+

@@ -128,6 +128,7 @@ namespace NKikimr::NStorage {
         std::optional<TString> NewStorageYaml;
         std::optional<ui64> MainYamlVersion;
         std::optional<ui64> StorageYamlVersion;
+        bool IsDryRun = false;
 
         TActorId ControllerPipeId;
 
@@ -167,6 +168,11 @@ namespace NKikimr::NStorage {
         void NotifyBridgeSuspended(const TQuery::TNotifyBridgeSuspended& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Retro trace collection
+
+        void DemandRetroTrace(const TQuery::TDemandRetroTrace& cmd);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition
 
         void AdvanceGeneration();
@@ -180,7 +186,7 @@ namespace NKikimr::NStorage {
         void RunCommonChecks(bool requireScepter = true);
 
         void Finish(TResult::EStatus status, std::optional<TStringBuf> errorReason,
-            const std::function<void(TResult*)>& callback = {});
+            const std::function<void(TResult*)>& callback = {}, bool sendResult = true);
 
         void DetachQuery();
 

@@ -1,6 +1,8 @@
 #include "datashard_user_table.h"
 
 #include <ydb/core/base/path.h>
+
+#include <util/generic/algorithm.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -280,6 +282,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         }
         column.Family = col.GetFamily();
         column.NotNull = col.GetNotNull();
+        column.SetNotNullInProgress = col.GetSetNotNullInProgress();
     }
 
     for (const auto& col : descr.GetDropColumns()) {
@@ -324,6 +327,12 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     IsBackup = descr.GetIsBackup();
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
+    if (descr.GetPartitionConfig().HasUniqueIndexKeySize()) {
+        UniqueIndexKeySize = descr.GetPartitionConfig().GetUniqueIndexKeySize();
+    }
+    if (descr.GetPartitionConfig().HasSpecialTableType()) {
+        SpecialTableType = descr.GetPartitionConfig().GetSpecialTableType();
+    }
 
     CheckSpecialColumns();
 
@@ -465,7 +474,7 @@ void TUserTable::DoApplyCreate(
         const TUserColumn& column = col.second;
 
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-        alter.AddColumnWithTypeInfo(tid, column.Name, columnId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false);
+        alter.AddColumnWithTypeInfo(tid, column.Name, columnId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false, {}, column.SetNotNullInProgress);
         alter.AddColumnToFamily(tid, columnId, column.Family);
     }
 
@@ -480,8 +489,31 @@ void TUserTable::DoApplyCreate(
         alter.SetCompactionPolicy(tid, *NLocalDb::CreateDefaultUserTablePolicy());
     }
 
-    if (partConfig.HasEnableFilterByKey()) {
-        alter.SetByKeyFilter(tid, partConfig.GetEnableFilterByKey());
+    {
+        using TPrefix = NTable::TScheme::TTableInfo::TByKeyFilterPrefix;
+        // Unify EnableFilterByKey and ByKeyFilterPrefixes into a single prefix list
+        TMap<ui32, double> prefixMap;
+        for (const auto& p : partConfig.GetByKeyFilterPrefixes()) {
+            if (p.GetPrefixLength() > 0) {
+                double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                Y_ENSURE(fpp > 0.0 && fpp < 1.0, "Bloom filter FalsePositiveProbability " << fpp << " out of range (0, 1)");
+                prefixMap[p.GetPrefixLength()] = fpp;
+            }
+        }
+        if (partConfig.HasEnableFilterByKey() && partConfig.GetEnableFilterByKey()) {
+            prefixMap.emplace(KeyColumnIds.size(), NTable::DefaultBloomFilterFpp);
+        }
+        if (!prefixMap.empty()) {
+            TVector<TPrefix> prefixes;
+            for (const auto& [len, fpp] : prefixMap) {
+                prefixes.push_back(TPrefix{len, fpp});
+            }
+            alter.SetByKeyFilterPrefixes(tid, prefixes);
+        }
+    }
+
+    if (SpecialTableType != NKikimrSchemeOp::ESpecialTableTypeNone) {
+        alter.SetSpecialTableType(tid, SpecialTableType);
     }
 
     // N.B. some settings only apply to the main table
@@ -567,10 +599,11 @@ void TUserTable::ApplyAlter(
         ui32 colId = col.first;
         const TUserColumn& column = col.second;
 
-        if (!oldTable.Columns.contains(colId)) {
+        auto it = oldTable.Columns.find(colId);
+        if (it == oldTable.Columns.end() || it->second.NotNull != column.NotNull || it->second.SetNotNullInProgress != column.SetNotNullInProgress) {
             for (ui32 tid : tids) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false);
+                alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false, {}, column.SetNotNullInProgress);
             }
         }
 
@@ -613,10 +646,44 @@ void TUserTable::ApplyAlter(
         }
     }
 
-    if (configDelta.HasEnableFilterByKey()) {
-        config.SetEnableFilterByKey(configDelta.GetEnableFilterByKey());
+    // Rebuild the prefix bloom set from the full authoritative config the schemeshard sends. The
+    // last disjunct also fires when the table had prefixes but the delta clears them all (DROP of
+    // the last prefix bloom, or KEY_BLOOM_FILTER = DISABLED), which carries no explicit bloom field.
+    if (configDelta.HasEnableFilterByKey() || configDelta.ByKeyFilterPrefixesSize() > 0 || config.ByKeyFilterPrefixesSize() > 0) {
+        using TPrefix = NTable::TScheme::TTableInfo::TByKeyFilterPrefix;
+        const ui32 keyCount = KeyColumnIds.size();
+
+        // Full-key filter is governed by EnableFilterByKey; the delta may toggle it or leave it.
+        bool enableFullKey = config.GetEnableFilterByKey();
+        if (configDelta.HasEnableFilterByKey()) {
+            enableFullKey = configDelta.GetEnableFilterByKey();
+            config.SetEnableFilterByKey(enableFullKey);
+        }
+
+        TMap<ui32, double> prefixMap;
+        for (const auto& p : configDelta.GetByKeyFilterPrefixes()) {
+            if (p.GetPrefixLength() > 0) {
+                double fpp = p.HasFalsePositiveProbability() ? p.GetFalsePositiveProbability() : NTable::DefaultBloomFilterFpp;
+                Y_ENSURE(fpp > 0.0 && fpp < 1.0, "Bloom filter FalsePositiveProbability " << fpp << " out of range (0, 1)");
+                prefixMap[p.GetPrefixLength()] = fpp;
+            }
+        }
+        // Re-add full-key entry if EnableFilterByKey is enabled.
+        if (enableFullKey) {
+            prefixMap.emplace(keyCount, NTable::DefaultBloomFilterFpp);
+        }
+
+        config.ClearByKeyFilterPrefixes();
+        TVector<TPrefix> prefixes;
+        for (const auto& [len, fpp] : prefixMap) {
+            auto* entry = config.AddByKeyFilterPrefixes();
+            entry->SetPrefixLength(len);
+            entry->SetFalsePositiveProbability(fpp);
+            prefixes.push_back(TPrefix{len, fpp});
+        }
+        // An empty list emits a clear sentinel, so the engine drops any previously-set filter.
         for (ui32 tid : tids) {
-            alter.SetByKeyFilter(tid, configDelta.GetEnableFilterByKey());
+            alter.SetByKeyFilterPrefixes(tid, prefixes);
         }
     }
 

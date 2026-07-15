@@ -79,6 +79,14 @@
 
 static int os_execute (lua_State *L) {
   const char *cmd = luaL_optstring(L, 1, NULL);
+#if defined(__IOS__)
+  /* system() is unavailable on iOS (sandbox restriction) */
+  (void)cmd;
+  if (cmd != NULL)
+    return luaL_execresult(L, -1);
+  lua_pushboolean(L, 0);  /* no shell available */
+  return 1;
+#else
   int stat = system(cmd);
   if (cmd != NULL)
     return luaL_execresult(L, stat);
@@ -86,6 +94,7 @@ static int os_execute (lua_State *L) {
     lua_pushboolean(L, stat);  /* true if there is a shell */
     return 1;
   }
+#endif
 }
 
 

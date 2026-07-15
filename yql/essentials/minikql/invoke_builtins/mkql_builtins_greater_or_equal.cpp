@@ -259,7 +259,7 @@ struct TCustomGreaterOrEqual: public TAggrGreaterOrEqual {
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen.GetContext();
-        const auto res = CallBinaryUnboxedValueFunction<&CompareCustoms<Slot>>(Type::getInt32Ty(context), left, right, ctx.Codegen, block);
+        const auto res = EmitFunctionCall<&CompareCustoms<Slot>>(Type::getInt32Ty(context), {left, right}, ctx, block);
         const auto comp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGE, res,
                                           ConstantInt::get(res->getType(), 0), "greater_or_equal", block);
         ValueCleanup(EValueRepresentation::String, left, ctx, block);
@@ -271,9 +271,7 @@ struct TCustomGreaterOrEqual: public TAggrGreaterOrEqual {
 
 struct TDecimalGreaterOrEqual {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        const auto l = left.GetInt128();
-        const auto r = right.GetInt128();
-        return NUdf::TUnboxedValuePod(NYql::NDecimal::IsComparable(l) && NYql::NDecimal::IsComparable(r) && l >= r);
+        return NUdf::TUnboxedValuePod(NYql::NDecimal::IsGreaterOrEqual(left.GetInt128(), right.GetInt128()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

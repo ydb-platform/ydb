@@ -6,8 +6,6 @@
 
 | Имя | Тип | Значение по умолчанию | Описание |
 | -- | -- | -- | -- |
-| [`POSTGRES_USER`](https://GitHub.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L240) | `string` | `postgres`  | Имя пользователя для доступа через [режим совместимости с PostgreSQL](../../postgresql/intro.md). |
-| [`POSTGRES_PASSWORD`](https://GitHub.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L240) | `string` | | Пароль пользователя для доступа через [режим совместимости с PostgreSQL](../../postgresql/intro.md). |
 | [`YDB_GRPC_ENABLE_TLS`](https://GitHub.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L258) | `0` или `1` | `1` | Включает использование TLS для gRPC соединений. |
 | [`YDB_GRPC_TLS_DATA_PATH`](https://GitHub.com/ydb-platform/ydb/blob/8fefc809c83829d8d8b886e82534d009de4c8826/ydb/public/tools/lib/cmds/__init__.py#L291) | `string` | `/ydb_data` | Путь до директории с TLS сертификатами для gRPC соединений. |
 | [`MON_PORT`](https://GitHub.com/ydb-platform/ydb/blob/8dde59cd0af86737d07a1cd8ff19811a2bd2b663/ydb/tests/library/harness/kikimr_port_allocator.py#L170) | `int` | `8765` | HTTP-порт [встроенного веб-интерфейса {{ ydb-short-name }}](../../reference/embedded-ui/index.md). |
@@ -25,3 +23,4 @@
 | [`YDB_ENABLE_COLUMN_TABLES`](https://GitHub.com/ydb-platform/ydb/blob/69a57074e4c259aea0bbb9a735c5ed821743629c/ydb/tests/library/harness/kikimr_config.py#L86) | `0` или `1` | `0` | Включает поддержку [колоночных таблиц](../../concepts/datamodel/table.md#column-oriented-tables). |
 | [`YDB_PREINITSCRIPTS_DIR`](https://github.com/ydb-platform/ydb/blob/e7065254821ac3093d8135a76145c9a09e3631e2/.github/docker/files/initialize_local_ydb#L14) | `string` | `/preinit.d` | Путь к директории [pre-init scripts](./init-scripts.md) |
 | [`YDB_INITSCRIPTS_DIR`](https://github.com/ydb-platform/ydb/blob/e7065254821ac3093d8135a76145c9a09e3631e2/.github/docker/files/initialize_local_ydb#L13) | `string` | `/init.d` | Путь к директории [init scripts](./init-scripts.md) |
+| [`YDB_CHANNEL_BUFFER_SIZE`](https://github.com/ydb-platform/ydb/blob/26.1.1.1/ydb/tests/library/harness/kikimr_config.py#L545) | `string` | `8388608` | Размер канала передачи данных между компонентами обработки запроса. Значение по умолчанию (в байтах) в промышленном окружении [равно](https://github.com/ydb-platform/ydb/blob/26.1.1.1/ydb/tests/functional/serializable/ya.make#L3) `8 МиБ`, в тестовом — `256 КиБ`. |

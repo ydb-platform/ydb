@@ -274,7 +274,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         if (enforceUserTokenCheckRequirement) {
             UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
         } else {
-            UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::UNAUTHORIZED, grpc::StatusCode::OK));
+            UNIT_ASSERT_EQUAL(reqResultWithInvalidToken, std::make_pair(Ydb::StatusIds::SUCCESS, grpc::StatusCode::OK));
         }
 
         UNIT_ASSERT_EQUAL(MakeTestRequest(clientConfig, "/blabla", "invalid token"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, grpc::StatusCode::UNAUTHENTICATED));
@@ -298,6 +298,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
         NYdbGrpc::TCallMeta meta;
+        meta.Aux.push_back({YDB_DATABASE_HEADER, "/Root"});
         meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, "root@builtin"});
         {
             using TRequest = Draft::Dummy::PingRequest;
@@ -582,7 +583,8 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
         auto connection = NYdb::TDriver(
             TDriverConfig()
                 .SetAuthToken("test_user@builtin")
-                .UseSecureConnection(NYdbSslTestData::CaCrt)
+                .UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCaCrt())
+                .SetDatabase("/Root")
                 .SetEndpoint(location));
 
         auto client = NYdb::NTable::TTableClient(connection);
@@ -1011,7 +1013,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(deferred.issues(), issues);
             TString tmp = issues.ToString();
-            TString expected = "<main>: Error: Path does not exist, code: 200200\n";
+            TString expected = "<main>: Error: Path `/Root/TheNotExistedDirectory` does not exist, code: 200200\n";
             UNIT_ASSERT_NO_DIFF(tmp, expected);
         }
     }
@@ -5721,9 +5723,8 @@ Y_UNIT_TEST_SUITE(TYqlDateTimeTests) {
 #endif
 
 Y_UNIT_TEST_SUITE(LocalityOperation) {
-Y_UNIT_TEST_TWIN(LocksFromAnotherTenants, UseSink) {
+Y_UNIT_TEST(LocksFromAnotherTenants) {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
     TKikimrWithGrpcAndRootSchema server(appConfig);
     //server.Server_->SetupLogging(
 

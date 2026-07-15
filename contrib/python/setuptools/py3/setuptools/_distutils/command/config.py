@@ -90,9 +90,7 @@ class config(Command):
         if not, make it one.
         """
         if not isinstance(self.compiler, CCompiler):
-            self.compiler = new_compiler(
-                compiler=self.compiler, dry_run=self.dry_run, force=True
-            )
+            self.compiler = new_compiler(compiler=self.compiler, force=True)
             customize_compiler(self.compiler)
             if self.include_dirs:
                 self.compiler.set_include_dirs(self.include_dirs)
@@ -156,14 +154,6 @@ class config(Command):
                 os.remove(filename)
             except OSError:
                 pass
-
-    # XXX these ignore the dry-run flag: what to do, what to do? even if
-    # you want a dry-run build, you still need some sort of configuration
-    # info.  My inclination is to make it up to the real config command to
-    # consult 'dry_run', and assume a default (minimal) configuration if
-    # true.  The problem with trying to do it here is that you'd have to
-    # return either true or false from all the 'try' methods, neither of
-    # which is correct.
 
     # XXX need access to the header search path and maybe default macros.
 

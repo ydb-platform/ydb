@@ -553,10 +553,12 @@ class Tree(Generic[TreeDataType], ScrollView, can_focus=True):
     | Key(s) | Description |
     | :- | :- |
     | enter | Select the current item. |
-    | space | Toggle the expand/collapsed space of the current item. |
+    | space | Toggle the expand/collapsed state of the current item. |
     | up | Move the cursor up. |
     | down | Move the cursor down. |
     """
+
+    ALLOW_SELECT = False
 
     COMPONENT_CLASSES: ClassVar[set[str]] = {
         "tree--cursor",
@@ -634,17 +636,18 @@ class Tree(Generic[TreeDataType], ScrollView, can_focus=True):
             }
         }
 
-        &:ansi {
-            color: ansi_default;
-            & > .tree--guides {
-                color: ansi_green;
-            }
-            &:nocolor > .tree--cursor{
-                text-style: reverse;
-            }
-        }
-    }
 
+    }
+    Tree:ansi {
+        color: ansi_default;
+        & > .tree--guides {
+            color: $ansi-background;
+        }
+        &:nocolor > .tree--cursor{
+            text-style: reverse;
+        }        
+    }
+    
     """
 
     show_root = reactive(True)

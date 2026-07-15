@@ -1,4 +1,5 @@
 #include "tx_remove.h"
+
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 
 namespace NKikimr::NOlap::NBackground {
@@ -12,4 +13,4 @@ void TTxRemoveSession::Complete(const TActorContext& /*ctx*/) {
     AFL_VERIFY(Sessions->RemoveSession(ClassName, Identifier))("class_name", ClassName)("id", Identifier);
 }
 
-}
+}   // namespace NKikimr::NOlap::NBackground

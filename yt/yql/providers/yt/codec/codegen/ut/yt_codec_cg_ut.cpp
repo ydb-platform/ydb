@@ -340,6 +340,81 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         UNIT_ASSERT_STRINGS_EQUAL(testWriter.Str().Quote(), R"("\2\0\0\0~\xFB")");
     }
 
+    Y_UNIT_TEST(TestWriteDataRowDecimal32NativeFlat) {
+        auto codegen = ICodegen::Make(ETarget::Native);
+        codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
+        auto writer = MakeYtCodecCgWriter<true>(codegen);
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+
+        writer->AddField(TDataDecimalType::Create(9, 4, env), ~0ULL);
+
+        auto func = writer->Build();
+        codegen->Verify();
+        YtCodecAddMappings(*codegen);
+        codegen->Compile();
+
+        const auto item = NUdf::TUnboxedValuePod(NDecimal::TInt128(-5));
+        typedef void(*TFunc)(const NUdf::TUnboxedValuePod*, TOutputBuf&);
+        const auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
+
+        TTestWriter testWriter;
+        TOutputBuf buf(testWriter, nullptr);
+        funcPtr(&item, buf);
+        buf.Finish();
+        UNIT_ASSERT_STRINGS_EQUAL(testWriter.Str().Quote(), R"("\xFB\xFF\xFF\xFF")");
+    }
+
+    Y_UNIT_TEST(TestWriteDataRowDecimal64NativeFlat) {
+        auto codegen = ICodegen::Make(ETarget::Native);
+        codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
+        auto writer = MakeYtCodecCgWriter<true>(codegen);
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+
+        writer->AddField(TDataDecimalType::Create(18, 4, env), ~0ULL);
+
+        auto func = writer->Build();
+        codegen->Verify();
+        YtCodecAddMappings(*codegen);
+        codegen->Compile();
+
+        const auto item = NUdf::TUnboxedValuePod(NDecimal::TInt128(-5));
+        typedef void(*TFunc)(const NUdf::TUnboxedValuePod*, TOutputBuf&);
+        const auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
+
+        TTestWriter testWriter;
+        TOutputBuf buf(testWriter, nullptr);
+        funcPtr(&item, buf);
+        buf.Finish();
+        UNIT_ASSERT_STRINGS_EQUAL(testWriter.Str().Quote(), R"("\xFB\xFF\xFF\xFF\xFF\xFF\xFF\xFF")");
+    }
+
+    Y_UNIT_TEST(TestWriteDataRowDecimal128NativeFlat) {
+        auto codegen = ICodegen::Make(ETarget::Native);
+        codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
+        auto writer = MakeYtCodecCgWriter<true>(codegen);
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+
+        writer->AddField(TDataDecimalType::Create(19, 4, env), ~0ULL);
+
+        auto func = writer->Build();
+        codegen->Verify();
+        YtCodecAddMappings(*codegen);
+        codegen->Compile();
+
+        const auto item = NUdf::TUnboxedValuePod(NDecimal::TInt128(-5));
+        typedef void(*TFunc)(const NUdf::TUnboxedValuePod*, TOutputBuf&);
+        const auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
+
+        TTestWriter testWriter;
+        TOutputBuf buf(testWriter, nullptr);
+        funcPtr(&item, buf);
+        buf.Finish();
+        UNIT_ASSERT_STRINGS_EQUAL(testWriter.Str().Quote(), R"("\xFB\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF")");
+    }
+
     Y_UNIT_TEST(TestWriteDataRowDecimalNan) {
         auto codegen = ICodegen::Make(ETarget::Native);
         codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");

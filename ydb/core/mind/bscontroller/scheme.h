@@ -47,11 +47,12 @@ struct Schema : NIceDb::Schema {
         struct MaintenanceStatus : Column<20, NScheme::NTypeIds::Uint8> { using Type = NKikimrBlobStorage::TMaintenanceStatus::E; static constexpr Type Default = NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST; };
         // struct InferPDiskSlotCountFromUnitSize : Column<21, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         // struct InferPDiskSlotCountMax : Column<22, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        struct DiskScope : Column<23, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<NodeID, PDiskID>; // order is important
         using TColumns = TableColumns<NodeID, PDiskID, Path, Category, Guid, SharedWithOs, ReadCentric, NextVSlotId,
               Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath, DecommitStatus, Mood,
-              ShredComplete, MaintenanceStatus>;
+              ShredComplete, MaintenanceStatus, DiskScope>;
     };
 
     struct Group : Table<4> {
@@ -74,22 +75,24 @@ struct Schema : NIceDb::Schema {
         struct BridgePileId : Column<17, NScheme::NTypeIds::Uint32> { using Type = TBridgePileId; static constexpr Type Default = TBridgePileId(); };
 
         // VirtualGroup management code
-        struct VirtualGroupName  : Column<112, NScheme::NTypeIds::Utf8>   {}; // unique name of the virtual group
+        struct VirtualGroupName : Column<112, NScheme::NTypeIds::Utf8> {}; // unique name of the virtual group
         struct VirtualGroupState : Column<102, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EVirtualGroupState; };
-        struct HiveId            : Column<113, NScheme::NTypeIds::Uint64> {}; // hive id for this vg
-        struct Database          : Column<120, NScheme::NTypeIds::String> {}; // database path
-        struct BlobDepotConfig   : Column<106, NScheme::NTypeIds::String> {}; // serialized blob depot config protobuf
-        struct BlobDepotId       : Column<109, NScheme::NTypeIds::Uint64> {}; // created blobdepot tablet id
-        struct ErrorReason       : Column<110, NScheme::NTypeIds::Utf8>   {}; // creation error reason
-        struct NeedAlter         : Column<111, NScheme::NTypeIds::Bool>   {}; // did the BlobDepotConfig change?
-        struct Metrics           : Column<114, NScheme::NTypeIds::String> {}; // for virtual groups only
-        struct BridgeGroupInfo   : Column<121, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TGroupInfo; }; // bridged group protobuf
+        struct HiveId : Column<113, NScheme::NTypeIds::Uint64> {}; // hive id for this vg
+        struct Database : Column<120, NScheme::NTypeIds::String> {}; // database path
+        struct BlobDepotConfig : Column<106, NScheme::NTypeIds::String> {}; // serialized blob depot config protobuf
+        struct BlobDepotId : Column<109, NScheme::NTypeIds::Uint64> {}; // created blobdepot tablet id
+        struct ErrorReason : Column<110, NScheme::NTypeIds::Utf8> {}; // creation error reason
+        struct NeedAlter : Column<111, NScheme::NTypeIds::Bool> {}; // did the BlobDepotConfig change?
+        struct AppliedGroupGeneration : Column<122, NScheme::NTypeIds::Uint32> {}; // last applied group generation
+        struct Metrics : Column<114, NScheme::NTypeIds::String> {}; // for virtual groups only
+        struct BridgeGroupInfo : Column<121, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TGroupInfo; }; // bridged group protobuf
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
               SeenOperational, DecommitStatus, GroupSizeInUnits, BridgePileId, VirtualGroupName, VirtualGroupState,
-              HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo>;
+              HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo,
+              AppliedGroupGeneration>;
     };
 
     struct State : Table<1> {
@@ -110,7 +113,7 @@ struct Schema : NIceDb::Schema {
         struct GroupReservePart : Column<15, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; }; // parts per million
         struct MaxScrubbedDisksAtOnce : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = Max<ui32>(); }; // no limit
         struct PDiskSpaceColorBorder : Column<17, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
-        struct GroupLayoutSanitizer : Column<18, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        struct GroupLayoutSanitizer : Column<18, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
         struct NextVirtualGroupId : Column<19, Group::ID::ColumnType> { static constexpr Type Default = 0; };
         struct AllowMultipleRealmsOccupation : Column<20, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
         struct CompatibilityInfo : Column<21, NScheme::NTypeIds::String> {};
@@ -148,6 +151,7 @@ struct Schema : NIceDb::Schema {
         struct LastGotReplicating : Column<13, NScheme::NTypeIds::Uint64> { using Type = TInstant; static constexpr Type Default = TInstant::Zero(); };
         struct ReplicationTime : Column<14, NScheme::NTypeIds::Uint64> { using Type = TDuration; static constexpr Type Default = TDuration::Zero(); };
         struct DDiskNumVChunksClaimed : Column<15, NScheme::NTypeIds::Uint32> {};
+        struct PersistentBufferRefs : Column<16, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<NodeID, PDiskID, VSlotID>; // order is important
         using TColumns = TableColumns<
@@ -165,7 +169,8 @@ struct Schema : NIceDb::Schema {
             LastSeenReady,
             LastGotReplicating,
             ReplicationTime,
-            DDiskNumVChunksClaimed>;
+            DDiskNumVChunksClaimed,
+            PersistentBufferRefs>;
     };
 
     struct VDiskMetrics : Table<6> {
@@ -252,9 +257,10 @@ struct Schema : NIceDb::Schema {
         struct PDiskConfig : Column<7, NScheme::NTypeIds::String> {};
         // struct InferPDiskSlotCountFromUnitSize : Column<8, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         // struct InferPDiskSlotCountMax : Column<9, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        struct DiskScope : Column<10, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<HostConfigId, Path>;
-        using TColumns = TableColumns<HostConfigId, Path, TypeCol, SharedWithOs, ReadCentric, Kind, PDiskConfig>;
+        using TColumns = TableColumns<HostConfigId, Path, TypeCol, SharedWithOs, ReadCentric, Kind, PDiskConfig, DiskScope>;
     };
 
     struct BoxHostV2 : Table<105> {

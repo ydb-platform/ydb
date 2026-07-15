@@ -60,13 +60,13 @@ public:
         TString IfModifiedSince;
     };
 
-    typedef std::function<TReply(const TRequest& request)> TRequestHandler;
+    using TRequestHandler = std::function<TReply(const TRequest& request)>;
 
 public:
     explicit TTestHttpServer(int port);
     ~TTestHttpServer();
     void Start();
-    TString GetUrl() const;
+    [[nodiscard]] TString GetUrl() const;
     void SetRequestHandler(TRequestHandler handler);
 
 private:

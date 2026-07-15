@@ -23,7 +23,7 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/ast
     yql/essentials/utils
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
 )
 
 SRCS(

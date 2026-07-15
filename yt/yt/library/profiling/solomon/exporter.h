@@ -30,8 +30,8 @@ public:
         TSolomonExporterConfigPtr config,
         TSolomonRegistryPtr registry = nullptr);
 
-    void Register(const std::string& prefix, const NYT::NHttp::IServerPtr& server);
-    void Register(const std::string& prefix, const NYT::NHttp::IRequestPathMatcherPtr& handlers);
+    void Register(TStringBuf prefix, const NYT::NHttp::IServerPtr& server);
+    void Register(TStringBuf prefix, const NYT::NHttp::IRequestPathMatcherPtr& handlers);
 
     //! Attempts to read registered sensors in JSON format.
     //! Returns null if exporter is not ready.
@@ -116,7 +116,7 @@ private:
     void DoCollect();
     void TransferSensors();
 
-    void HandleIndex(const std::string& prefix, const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
+    void HandleIndex(TStringBuf prefix, const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
     void HandleStatus(const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
 
     void HandleDebugSensors(const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
@@ -138,7 +138,7 @@ private:
 
     void CleanResponseCache();
 
-    bool FilterDefaultGrid(const std::string& sensorName);
+    bool FilterDefaultGrid(TStringBuf sensorName);
 
     static void ValidateSummaryPolicy(ESummaryPolicy policy);
 

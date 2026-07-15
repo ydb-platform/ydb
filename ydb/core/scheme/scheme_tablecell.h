@@ -848,6 +848,12 @@ public:
     TConstArrayRef<TCell> GetCells() const { return Cells; }
     const TCell& GetCell(ui32 row, ui16 column) const;
 
+    TConstArrayRef<TCell> GetRow(ui32 row) const {
+        Y_ENSURE(row < RowCount);
+        const TCell* data = Cells.data() + row * ColCount;
+        return { data, ColCount };
+    }
+
     ui32 GetRowCount() const { return RowCount; }
     ui16 GetColCount() const { return ColCount; }
 
@@ -913,6 +919,10 @@ public:
 
     size_t Size() const {
         return CellVectors.size();
+    }
+
+    size_t DataSizeEstimate() const {
+        return Pool->MemoryAllocated();
     }
 
     bool Empty() const {

@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 
 #include <memory>
 
@@ -319,6 +320,14 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
         Partition()->BlobEncoder.StartOffset = meta.GetStartOffset();
         Partition()->BlobEncoder.EndOffset = meta.GetEndOffset();
         Partition()->BlobEncoder.FirstUncompactedOffset = meta.GetFirstUncompactedOffset();
+
+        if (meta.HasStartOffset()) {
+            Partition()->CompactionBlobEncoder.StartOffset = meta.GetStartOffset();
+        }
+        if (meta.HasEndOffset()) {
+            Partition()->CompactionBlobEncoder.EndOffset = meta.GetEndOffset();
+            Partition()->CompactionBlobEncoder.Head.Offset = meta.GetEndOffset();
+        }
 
         if (Partition()->BlobEncoder.StartOffset == Partition()->BlobEncoder.EndOffset) {
            Partition()->BlobEncoder.NewHead.Offset = Partition()->BlobEncoder.Head.Offset = Partition()->BlobEncoder.EndOffset;
@@ -894,12 +903,12 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
     switch(range->GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
-            for (auto& w : *range->MutablePair()) {
+            for (auto& w : range->GetPair()) {
                 NKikimrPQ::TMessageDeduplicationIdWAL wal;
                 auto r = wal.ParseFromString(w.GetValue());
                 AFL_ENSURE(r)("key", w.key());
 
-                auto a = Partition()->MessageIdDeduplicator.ApplyWAL(std::move(*w.MutableKey()), std::move(wal));
+                auto a = Partition()->MessageIdDeduplicator.ApplyWAL(TString{w.GetKey()}, std::move(wal));
                 AFL_ENSURE(a)("key", w.key());
             }
 
@@ -1090,18 +1099,21 @@ void TPartition::Initialize(const TActorContext& ctx) {
     CreationTime = ctx.Now();
     WriteCycleStartTime = ctx.Now();
 
-    ReadQuotaTrackerActor = RegisterWithSameMailbox(CreateReadQuoter(
-        AppData(ctx)->PQConfig,
-        TopicConverter,
-        Config,
-        Partition,
-        TabletActorId,
-        SelfId(),
-        TabletId,
-        Counters
-    ));
+    if (!IsSupportive()) {
+        ReadQuotaTrackerActor = RegisterWithSameMailbox(CreateReadQuoter(
+            AppData(ctx)->PQConfig,
+            TopicConverter,
+            Config,
+            Partition,
+            TabletActorId,
+            SelfId(),
+            TabletId,
+            Counters
+        ));
+    }
 
     TotalPartitionWriteSpeed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
+    TotalPartitionWriteSpeedInMessages = Config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond();
     WriteTimestamp = ctx.Now();
     LastUsedStorageMeterTimestamp = ctx.Now();
     WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();
@@ -1120,7 +1132,8 @@ void TPartition::Initialize(const TActorContext& ctx) {
                                       DbId,
                                       Config.GetYdbDatabasePath(),
                                       IsServerless,
-                                      FolderId);
+                                      FolderId,
+                                      IsSupportive());
     TotalChannelWritesByHead.resize(NumChannels);
 
     if (!IsSupportive()) {
@@ -1406,7 +1419,7 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
 
 void TPartition::CreateCompacter() {
     if (!IsKeyCompactionEnabled()) {
-        if (!IsSupportive()) {
+        if (ReadQuotaTrackerActor) {
             Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         }
         Compacter.Reset();

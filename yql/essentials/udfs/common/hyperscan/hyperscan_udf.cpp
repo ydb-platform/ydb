@@ -388,12 +388,28 @@ public:
     }
 
     void GetAllFunctions(IFunctionsSink& sink) const final {
-        sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::NORMAL));
-        sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::NORMAL));
-        sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::BACKTRACKING));
-        sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::BACKTRACKING));
-        sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::MULTI))->SetTypeAwareness();
-        sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::MULTI))->SetTypeAwareness();
+        sink.Add(THyperscanMatch::Name(/*isGrep=*/true, THyperscanMatch::EMode::NORMAL));
+        sink.Add(THyperscanMatch::Name(/*isGrep=*/false, THyperscanMatch::EMode::NORMAL));
+        sink.Add(THyperscanMatch::Name(/*isGrep=*/true, THyperscanMatch::EMode::BACKTRACKING));
+        sink.Add(THyperscanMatch::Name(/*isGrep=*/false, THyperscanMatch::EMode::BACKTRACKING));
+        static const TStringBuf MultiPolyArgs = R"(
+            [[
+                [];
+                {
+                    type=["CallableType";[];
+                        [["UniversalType"]];
+                        [[["OptionalType";["DataType";"String"]]]]
+                    ];
+                    runConfig=["DataType";"String"]
+                }
+            ]]
+        )";
+        auto multiGrep = sink.Add(THyperscanMatch::Name(/*isGrep=*/true, THyperscanMatch::EMode::MULTI));
+        multiGrep->SetTypeAwareness();
+        multiGrep->SetPolyArgs(MultiPolyArgs);
+        auto multiMatch = sink.Add(THyperscanMatch::Name(/*isGrep=*/false, THyperscanMatch::EMode::MULTI));
+        multiMatch->SetTypeAwareness();
+        multiMatch->SetPolyArgs(MultiPolyArgs);
         sink.Add(THyperscanCapture::Name());
         sink.Add(THyperscanReplace::Name());
     }
@@ -408,12 +424,12 @@ public:
             Y_UNUSED(userType);
 
             bool typesOnly = (flags & TFlags::TypesOnly);
-            bool isMatch = (THyperscanMatch::Name(false, THyperscanMatch::EMode::NORMAL) == name);
-            bool isGrep = (THyperscanMatch::Name(true, THyperscanMatch::EMode::NORMAL) == name);
-            bool isBacktrackingMatch = (THyperscanMatch::Name(false, THyperscanMatch::EMode::BACKTRACKING) == name);
-            bool isBacktrackingGrep = (THyperscanMatch::Name(true, THyperscanMatch::EMode::BACKTRACKING) == name);
-            bool isMultiMatch = (THyperscanMatch::Name(false, THyperscanMatch::EMode::MULTI) == name);
-            bool isMultiGrep = (THyperscanMatch::Name(true, THyperscanMatch::EMode::MULTI) == name);
+            bool isMatch = (THyperscanMatch::Name(/*isGrep=*/false, THyperscanMatch::EMode::NORMAL) == name);
+            bool isGrep = (THyperscanMatch::Name(/*isGrep=*/true, THyperscanMatch::EMode::NORMAL) == name);
+            bool isBacktrackingMatch = (THyperscanMatch::Name(/*isGrep=*/false, THyperscanMatch::EMode::BACKTRACKING) == name);
+            bool isBacktrackingGrep = (THyperscanMatch::Name(/*isGrep=*/true, THyperscanMatch::EMode::BACKTRACKING) == name);
+            bool isMultiMatch = (THyperscanMatch::Name(/*isGrep=*/false, THyperscanMatch::EMode::MULTI) == name);
+            bool isMultiGrep = (THyperscanMatch::Name(/*isGrep=*/true, THyperscanMatch::EMode::MULTI) == name);
 
             if (isMatch || isGrep) {
                 builder.SimpleSignature<bool(TOptional<char*>)>()

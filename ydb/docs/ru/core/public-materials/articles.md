@@ -2,6 +2,7 @@
 
 В этом разделе собраны статьи о {{ ydb-short-name }}:
 
+- [{#T}](publications/2026.md)
 - [{#T}](publications/2025.md)
 - [{#T}](publications/2024.md)
 - [{#T}](publications/2023.md)

@@ -29,6 +29,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_metrics.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/core/util/queue_oneone_inplace.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
@@ -485,12 +486,13 @@ class TExecutor
     ui64 TransactionUniqCounter = 0;
 
     bool LogBatchFlushScheduled = false;
-    bool NeedFollowerSnapshot = false;
+    bool NeedLogSnapshot = false;
 
     mutable bool HadRejectProbabilityByTxInFly = false;
     mutable bool HadRejectProbabilityByOverload = false;
 
     THashMap<ui32, TIntrusivePtr<TBarrier>> InFlyCompactionGcBarriers;
+    THashMap<ui32, TIntrusivePtr<TBarrier>> DirectWriteBarriers;
     TDeque<THolder<TEvTablet::TFUpdateBody>> PostponedFollowerUpdates;
     THashMap<ui32, TVector<TIntrusivePtr<TBarrier>>> InFlySnapCollectionBarriers;
 
@@ -503,12 +505,17 @@ class TExecutor
     ui64 UsedTabletMemory = 0;
     ui64 TransactionPagesMemory = 0;
 
+    bool BackupSnapshotInProgress = false;
+    std::optional<TBackoff> BackupRetry;
+
     TActorContext SelfCtx() const;
     TActorContext OwnerCtx() const;
 
     TControlWrapper LogFlushDelayOverrideUsec;
     TControlWrapper MaxCommitRedoMB;
     TControlWrapper MaxTxInFly;
+
+    THashSet<TActorId> MoveDataSubscribers;
 
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
@@ -557,6 +564,9 @@ class TExecutor
     void DropPartStorePageCollections(const NTable::TPart &part);
     void DropPageCollection(const TLogoBlobID& pageCollectionId);
     void StartNewBackup();
+    void FailBackup(const TString& error);
+    void ScheduleRetryBackup();
+    TStringBuilder BackupLogPrefix() const;
 
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
@@ -584,6 +594,7 @@ class TExecutor
     void Handle(TEvPrivate::TEvLeaseExtend::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTablet::TEvConfirmLeaderResult::TPtr &ev);
     void Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTablet::TEvSnapshotConfirmed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvActivateLowExecution::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvBrokenTransaction::TPtr &ev, const TActorContext &ctx);
@@ -612,6 +623,10 @@ class TExecutor
     void Handle(TEvTablet::TEvGcForStepAckResponse::TPtr &ev);
     void Handle(NBackup::TEvSnapshotCompleted::TPtr &ev);
     void Handle(NBackup::TEvChangelogFailed::TPtr &ev);
+    void Handle(NBackup::TEvWriteChangelogAck::TPtr &ev);
+    void Handle(NBackup::TEvStartNewBackup::TPtr &ev);
+    void Handle(NBackup::TEvSnapshotStats::TPtr &ev);
+    void Handle(NBackup::TEvChangelogStats::TPtr &ev);
 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);
@@ -695,8 +710,12 @@ public:
     ui64 CompactMemTable(ui32 tableId) override;
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
+    THolder<TDirectPartWriter> BeginWritePart(ui32 tableId) override;
+    void ReleaseWritePart(ui32 step) override;
+    void MoveData(TEvTablet::TEvMoveData::TPtr &ev) override;
 
-    void StartVacuum(ui64 vacuumGeneration) override;
+    void StartVacuum(TVacuumTag tag) override;
+    void VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) override;
 
     void Handle(NMemory::TEvMemTableRegistered::TPtr &ev);
     void Handle(NMemory::TEvMemTableCompact::TPtr &ev);

@@ -24,7 +24,7 @@
 #include <boost/core/enable_if.hpp>
 #include <boost/type_traits/add_reference.hpp>
 
-#if !defined(BOOST_FUSION_DONT_USE_PREPROCESSED_FILES)
+#ifndef BOOST_FUSION_DONT_USE_PREPROCESSED_FILES
 #include <boost/fusion/algorithm/iteration/detail/preprocessed/fold.hpp>
 #else
 #if defined(__WAVE__) && defined(BOOST_FUSION_CREATE_PREPROCESSED_FILES)

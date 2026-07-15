@@ -51,7 +51,7 @@ public:
         : TBase(std::move(traceId))
     {}
 
-    TWhiteboardRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TWhiteboardRequest(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TBase(viewer, ev)
     {}
 
@@ -123,6 +123,8 @@ public:
             hFunc(TEvPrivate::TEvRetryNodeRequest, HandleRetryNode);
             hFunc(TEvWhiteboard::TEvNodeStateResponse, HandleBrowse);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 
@@ -133,6 +135,8 @@ public:
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 
@@ -207,6 +211,9 @@ public:
     }
 
     void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
+            return TBase::Undelivered(ev);
+        }
         static const TString error = "Undelivered";
         TNodeId nodeId = ev.Get()->Cookie;
         if (NodeResponses[nodeId].Error(error)) {

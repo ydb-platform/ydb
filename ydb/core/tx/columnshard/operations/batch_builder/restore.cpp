@@ -6,14 +6,20 @@
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_RESTORE
+
 namespace NKikimr::NOlap {
 
 std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBuildRequestInitiator() const {
     const auto& writeMetaData = WriteData.GetWriteMeta();
-    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(writeMetaData.GetPathId(), Context.GetApplyToSnapshot(), Context.GetLockId(), ReadOnlyConflicts);
+    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(
+        writeMetaData.GetPathId(), Context.GetApplyToSnapshot(), Context.GetLockId(), ReadOnlyConflicts);
     request->TaskIdentifier = GetTaskId();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_start")(
-        "count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0)("task_id", WriteData.GetWriteMeta().GetId());
+    request->SchemaVersion = Context.GetActualSchema()->GetVersion();
+    YDB_LOG_DEBUG("",
+        {"event", "restore_start"},
+        {"count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0},
+        {"taskId", WriteData.GetWriteMeta().GetId()});
     auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData.GetContainer(), Context.GetActualSchema()->GetPKColumnNames());
     request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData);
     for (auto&& i : Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false)) {
@@ -25,8 +31,11 @@ std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBui
 TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) {
     auto result = Merger->AddExistsDataOrdered(data);
     if (result.IsFail()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "merge_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
-            "tablet_id", GetTabletId())("message", result.GetErrorMessage());
+        YDB_LOG_WARN("",
+            {"event", "merge_data_problems"},
+            {"writeId", WriteData.GetWriteMeta().GetWriteId()},
+            {"tabletId", GetTabletId()},
+            {"message", result.GetErrorMessage()});
         SendErrorMessage(result.GetErrorMessage(), result.GetStatus() == Ydb::StatusIds::PRECONDITION_FAILED
                                                        ? NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::ConstraintViolation
                                                        : NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
@@ -36,8 +45,11 @@ TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::shared_ptr<
 }
 
 void TModificationRestoreTask::DoOnError(const TString& errorMessage) {
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
-        "tablet_id", GetTabletId())("message", errorMessage);
+    YDB_LOG_ERROR("",
+        {"event", "restore_data_problems"},
+        {"writeId", WriteData.GetWriteMeta().GetWriteId()},
+        {"tabletId", GetTabletId()},
+        {"message", errorMessage});
     SendErrorMessage(errorMessage, NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
 }
 
@@ -61,14 +73,16 @@ NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
     return TConclusionStatus::Success();
 }
 
-TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context, const bool readOnlyConflicts)
+TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
+    const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context, const bool readOnlyConflicts)
     : TBase(context.GetTabletId(), context.GetTabletActorId(),
           writeData.GetWriteMeta().GetId() + "::" + ::ToString(writeData.GetWriteMeta().GetWriteId()))
     , WriteData(std::move(writeData))
     , Merger(merger)
     , IncomingData(incomingData)
     , Context(context)
-    , ReadOnlyConflicts(readOnlyConflicts) {
+    , ReadOnlyConflicts(readOnlyConflicts)
+{
     AFL_VERIFY(context.GetApplyToSnapshot().Valid());
 }
 

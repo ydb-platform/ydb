@@ -28,7 +28,6 @@
 
 #include <library/cpp/yt/memory/blob.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
 #include <util/network/init.h>
@@ -43,11 +42,11 @@
 
 #include <atomic>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(ETcpConnectionState,
+DEFINE_ENUM(EConnectionState,
     (None)
     (Resolving)
     (Opening)
@@ -70,12 +69,12 @@ DEFINE_ENUM(ESslSessionState,
     (Aborted)
 );
 
-class TTcpConnection
+class TConnection
     : public IBus
     , public NConcurrency::TPollableBase
 {
 public:
-    TTcpConnection(
+    TConnection(
         TBusConfigPtr config,
         EConnectionType connectionType,
         TConnectionId id,
@@ -92,7 +91,7 @@ public:
         IMemoryUsageTrackerPtr memoryUsageTracker,
         bool rejectConnectionOnMemoryOvercommit);
 
-    ~TTcpConnection();
+    ~TConnection();
 
     void Start();
     void RunPeriodicCheck();
@@ -121,7 +120,7 @@ public:
     DECLARE_SIGNAL_OVERRIDE(void(const TError&), Terminated);
 
 private:
-    using EState = ETcpConnectionState;
+    using EState = EConnectionState;
 
     using ESslState = ESslSessionState;
 
@@ -137,6 +136,7 @@ private:
             , PayloadSize(GetByteSize(Message))
             , Options(options)
             , PacketId(TPacketId::Create())
+            , RequestId(options.RequestId)
         { }
 
         TPromise<void> Promise;
@@ -144,6 +144,7 @@ private:
         size_t PayloadSize;
         TSendOptions Options;
         TPacketId PacketId;
+        TRequestId RequestId;
     };
 
     struct TPacket final
@@ -177,11 +178,11 @@ private:
 
         std::atomic<EPacketState> State = EPacketState::Queued;
         TPromise<void> Promise;
-        TTcpConnectionPtr Connection;
+        TConnectionPtr Connection;
 
         bool MarkEncoded();
         void OnCancel(const TError& error);
-        void EnableCancel(TTcpConnectionPtr connection);
+        void EnableCancel(TConnectionPtr connection);
     };
 
     using TPacketPtr = TIntrusivePtr<TPacket>;
@@ -193,8 +194,8 @@ private:
     const NYTree::IAttributeDictionaryPtr EndpointAttributes_;
     const NNet::TNetworkAddress EndpointNetworkAddress_;
     const std::optional<std::string> EndpointAddress_;
-    const std::optional<TString> UnixDomainSocketPath_;
-    const std::optional<TString> AbstractUnixDomainSocketName_;
+    const std::optional<std::string> UnixDomainSocketPath_;
+    const std::optional<std::string> AbstractUnixDomainSocketName_;
     const IMessageHandlerPtr Handler_;
     const NConcurrency::IPollerPtr Poller_;
 
@@ -203,9 +204,9 @@ private:
 
     const TPromise<void> ReadyPromise_ = NewPromise<void>();
 
-    TString NetworkName_;
+    std::string NetworkName_;
     // Endpoint host name is used for peer's certificate verification.
-    TString EndpointHostName_;
+    std::string EndpointHostName_;
 
     TBusNetworkCounters BusCounters_;
     TBusNetworkCounters BusCountersDelta_;
@@ -229,7 +230,7 @@ private:
 
     EMultiplexingBand ActualMultiplexingBand_ = EMultiplexingBand::Default;
 
-    NThreading::TAtomicObject<TError> Error_;
+    TError Error_;
 
     NNet::IAsyncDialerSessionPtr DialerSession_;
 
@@ -396,8 +397,8 @@ private:
     ssize_t DoWriteFragments(const std::vector<struct iovec>& vec);
 };
 
-DEFINE_REFCOUNTED_TYPE(TTcpConnection)
+DEFINE_REFCOUNTED_TYPE(TConnection)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp

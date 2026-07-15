@@ -6,15 +6,16 @@ TEST_SRCS(
 
 SPLIT_FACTOR(10)
 
+SIZE(MEDIUM)
+
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:32 cpu:4)
-ENDIF()
-
-IF (SANITIZER_TYPE == "thread")
-    SIZE(LARGE)
-    TAG(ya:fat)
+    IF (SANITIZER_TYPE == "thread")
+        SIZE(LARGE)
+        INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    ENDIF()
 ELSE()
-    SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)

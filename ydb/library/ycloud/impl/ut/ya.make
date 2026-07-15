@@ -4,9 +4,16 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ELSE()
+    REQUIREMENTS(cpu:2)
+ENDIF()
+
 PEERDIR(
     library/cpp/retry
     ydb/core/testlib/default
+    ydb/library/testlib/service_mocks
 )
 
 YQL_LAST_ABI_VERSION()

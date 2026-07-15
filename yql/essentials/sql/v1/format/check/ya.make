@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    ast.cpp
     check_format.cpp
 )
 
@@ -9,3 +10,5 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(ut)

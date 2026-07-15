@@ -3,12 +3,15 @@
 #include "hive.h"
 #include "tablet_info.h"
 
+#include <util/generic/intrlist.h>
+
 namespace NKikimr {
 namespace NHive {
 
 struct TTabletInfo;
 
-struct TNodeInfo {
+struct TSegmentNodesTag {};
+struct TNodeInfo: public TIntrusiveListItem<TNodeInfo, TSegmentNodesTag> {
     enum class EVolatileState {
         Unknown,
         Disconnected,
@@ -289,6 +292,12 @@ public:
 
     TDataCenterId GetDataCenter() const {
         return Location.GetDataCenterId();
+    }
+
+    // For balancing, only nodes in the same "segment" are compared
+    // This function defines which parameters are used to define segments
+    TSegmentId GetSegment() const {
+        return std::forward_as_tuple(GetServicedDomain(), BridgePileId);
     }
 };
 

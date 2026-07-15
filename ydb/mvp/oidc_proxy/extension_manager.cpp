@@ -24,6 +24,10 @@ void TExtensionManager::SetExtensionTimeout(TDuration timeout) {
     Timeout = timeout;
 }
 
+void TExtensionManager::SetLogContext(const TMvpLogContext* logContext) {
+    ExtensionCtx->SetLogContext(logContext);
+}
+
 void TExtensionManager::SetRequest(NHttp::THttpIncomingRequestPtr request) {
     ExtensionCtx->Params.Request = std::move(request);
 }

@@ -1,4 +1,5 @@
 #include "mkql_decimal_div.h"
+#include <yql/essentials/utils/runtime_dispatch.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h>     // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_builder.h>
@@ -213,15 +214,7 @@ IComputationNode* WrapDecimalDiv(TCallable& callable, const TComputationNodeFact
         case NUdf::TDataType<NUdf::TDecimal>::Id:
             MKQL_ENSURE(static_cast<TDataDecimalType*>(rightType)->IsSameType(*leftType), "Operands type mismatch");
 
-            if (isOptionalLeft && isOptionalRight) {
-                return new TDecimalDivWrapper<true, true>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
-            } else if (isOptionalLeft) {
-                return new TDecimalDivWrapper<true, false>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
-            } else if (isOptionalRight) {
-                return new TDecimalDivWrapper<false, true>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
-            } else {
-                return new TDecimalDivWrapper<false, false>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
-            }
+            return YQL_RUNTIME_DISPATCH_NEW(IComputationNode*, TDecimalDivWrapper, 2, isOptionalLeft, isOptionalRight, ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
 #define MAKE_PRIMITIVE_TYPE_DIV(type)                                                            \
     case NUdf::TDataType<type>::Id:                                                              \
         if (isOptionalLeft && isOptionalRight)                                                   \

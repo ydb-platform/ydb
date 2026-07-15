@@ -74,6 +74,7 @@ public:
         ));
         auto rev = ToString(GetContentRevision(attrs));
         if (oldEtag == rev) {
+            YQL_LOG(INFO) << "YtDownload: host=" << host << ", path='" << path << "', tx=" << txId << " - same revision";
             return std::make_tuple(NYql::NFS::TDataProvider{}, TString{}, TString{});
         }
 

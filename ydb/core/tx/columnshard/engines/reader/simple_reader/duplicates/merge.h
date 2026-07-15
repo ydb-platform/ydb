@@ -22,8 +22,8 @@ private:
     YDB_READONLY_DEF(THashSet<ui64>, RequiredPortions);
 
 public:
-    TBuildFilterTaskContext(
-        TBuildFilterContext&& context, const std::shared_ptr<TBuildFilterTaskExecutor>& executor, std::vector<TIntervalInfo>&& intervals, THashSet<ui64>&& portions)
+    TBuildFilterTaskContext(TBuildFilterContext&& context, const std::shared_ptr<TBuildFilterTaskExecutor>& executor,
+        std::vector<TIntervalInfo>&& intervals, THashSet<ui64>&& portions)
         : Context(std::move(context))
         , Executor(executor)
         , Intervals(std::move(intervals))
@@ -99,6 +99,7 @@ private:
 
     THashMap<ui64, NArrow::TColumnFilter> BuildFiltersOnInterval(const TIntervalInfo& interval, NArrow::NMerger::TMergePartialStream& merger,
         const THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>>& columnData);
+
     std::vector<std::string> GetVersionColumnNames() const {
         return IIndexInfo::GetSnapshotColumnNames();
     }

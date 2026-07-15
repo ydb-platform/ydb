@@ -1,6 +1,6 @@
 # Vector index
 
-[Vector index](../../../../concepts/glossary.md#vector-index) in [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) tables is created using the same syntax as [secondary indexes](secondary_index.md), by specifying `vector_kmeans_tree` as the index type. Subset of syntax available for vector indexes:
+[Vector index](../../../../dev/vector-indexes.md) in [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) tables is created using the same syntax as [secondary indexes](secondary_index.md), by specifying `vector_kmeans_tree` as the index type. Subset of syntax available for vector indexes:
 
 ```yql
 CREATE TABLE `<table_name>` (
@@ -28,7 +28,7 @@ Where:
 
 {% note warning %}
 
-{% include [limitations](../../../../_includes/vector-index-update-limitations.md) %}
+It is recommended to create a vector index after loading data into the table, as an index created on an empty table will have only one cluster and will not speed up the search at all. For more details, see [Updating Vector Indexes](../../../../dev/vector-indexes.md#update).
 
 {% endnote %}
 
@@ -50,7 +50,8 @@ CREATE TABLE user_articles (
         vector_type="float",
         vector_dimension=512,
         clusters=128,
-        levels=2
+        levels=2,
+        overlap_clusters=3
     ),
     PRIMARY KEY (article_id)
 )

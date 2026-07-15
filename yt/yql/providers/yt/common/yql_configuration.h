@@ -16,7 +16,7 @@ constexpr size_t YQL_JOB_CODEC_BLOCK_SIZE = 1_MB;
 
 constexpr size_t YQL_JOB_CODEC_MEM = YQL_JOB_CODEC_BLOCK_COUNT * YQL_JOB_CODEC_BLOCK_SIZE + (30_MB);
 
-constexpr size_t YQL_ARROW_MEMORY_POOL_RESERVE = 640_MB;
+constexpr size_t YQL_ARROW_MEMORY_POOL_RESERVE = 1_GB;
 
 constexpr ui64 DEFAULT_TOP_SORT_LIMIT = 1000ULL;
 
@@ -54,6 +54,8 @@ constexpr bool DEFAULT_USE_NATIVE_DESC_SORT = false;
 constexpr ui64 DEFAULT_MAX_CHUNKS_FOR_DQ_READ = 500;
 
 constexpr bool DEFAULT_USE_KEY_BOUND_API = true;
+
+constexpr bool DEFAULT_PASS_SQL_FLAGS_FOR_VIEW_TRANSLATION = false;
 
 constexpr ui32 DEFAULT_MAX_OPERATION_FILES = 1000;
 
@@ -118,7 +120,7 @@ constexpr ui16 DEFAULT_MIN_COLUMN_GROUP_SIZE = 2;
 constexpr ui16 DEFAULT_MAX_COLUMN_GROUPS = 64;
 
 constexpr bool DEFAULT_DISABLE_FUSE_OPERATIONS = false;
-constexpr bool DEFAULT_ENABLE_FUSE_MAP_TO_MAPREDUCE = false;
+constexpr EFuseMapToMapReduceMode DEFAULT_FUSE_MAP_TO_MAPREDUCE = EFuseMapToMapReduceMode::Disable;
 
 constexpr bool DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS = false;
 
@@ -154,5 +156,19 @@ constexpr ui64 DEFAULT_QUERY_DUMP_TABLE_COUNT_PER_CLUSTER_LIMIT = 5;
 constexpr ui64 DEFAULT_QUERY_DUMP_FILE_COUNT_PER_OPERATION_LIMIT = 5;
 
 constexpr bool DEFAULT_KEEP_WORLD_DEP_FOR_FILL_OP = false;
+
+constexpr bool DEFAULT_ENABLE_RLS_TABLES_SUPPORT = false;
+
+constexpr ETmpSecurityMode DEFAULT_TMP_FOLDER_SECURITY = ETmpSecurityMode::Disable;
+
+constexpr bool DEFAULT_ENABLE_QL_FILTER = false;
+
+const ui64 DEFAULT_MIN_JOB_STATE_SIZE_TO_PASS_VIA_FILE = 32_KB;
+
+constexpr bool DEFAULT_QUERY_CACHE_COMBINE_CHUNKS_REPLACE = true;
+
+constexpr bool DEFAULT_PARSE_EXPRESSION_COLUMNS = false;
+
+constexpr TDuration DEFAULT_SECURE_TMP_TOKEN_USERS_ACCESS_PERIOD = TDuration::Days(10);
 
 } // NYql

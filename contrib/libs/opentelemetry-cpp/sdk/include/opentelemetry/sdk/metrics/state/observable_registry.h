@@ -34,6 +34,10 @@ public:
   // than implicitly defaulted here, so that we can have a unique_ptr to an incomplete
   // class as a member.
   ObservableRegistry();
+  ObservableRegistry(const ObservableRegistry &)            = delete;
+  ObservableRegistry(ObservableRegistry &&)                 = delete;
+  ObservableRegistry &operator=(const ObservableRegistry &) = delete;
+  ObservableRegistry &operator=(ObservableRegistry &&)      = delete;
   ~ObservableRegistry();
 
   // Add a callback of the single-instrument form

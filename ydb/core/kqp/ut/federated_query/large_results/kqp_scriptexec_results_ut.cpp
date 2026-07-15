@@ -80,7 +80,6 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
         const TString externalDataSourceName = "/Root/external_data_source";
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, appConfig, NYql::NDq::CreateS3ActorsFactory(), {});
 
         auto queryClient = kikimr->GetQueryClient();
@@ -212,7 +211,7 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToOneLineString());
         } else {
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::NOT_FOUND, status.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "No such execution");
+            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Script execution operation not found");
         }
 
         WaitRemoveScriptResults(db, resOp.Metadata().ExecutionId);

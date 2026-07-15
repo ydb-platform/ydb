@@ -1,5 +1,3 @@
 #include "common.h"
 
-namespace NKikimr::NOlap::NTiering::NCommon {
-
-}
+namespace NKikimr::NOlap::NTiering::NCommon {}

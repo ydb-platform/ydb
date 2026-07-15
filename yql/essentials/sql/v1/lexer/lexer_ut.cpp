@@ -195,7 +195,7 @@ TVector<TString> InvalidQueries() {
     return {
         /* 0: */ "\xF0\x9F\x98\x8A",
         /* 1: */ "select \"aaaa",
-        /* 2: */ "\"\\\"",
+        /* 2: */ R"("\")",
         /* 3: */ "\xF0\x9F\x98\x8A SELECT * FR",
         /* 4: */ "! SELECT *  from",
         /* 5: */ "\xF0\x9F\x98\x8Aselect ! from",

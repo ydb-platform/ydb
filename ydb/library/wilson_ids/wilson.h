@@ -78,6 +78,7 @@ namespace NKikimr {
                     ScanExecuterRunTasks = TComponentTracingLevels::TQueryProcessor::Detailed,
 
                 KqpNodeSendTasks = TComponentTracingLevels::TQueryProcessor::Basic,
+                KqpNodeCreateTasks = TComponentTracingLevels::TQueryProcessor::Basic,
 
                 ProposeTransaction = TComponentTracingLevels::TQueryProcessor::Basic,
 
@@ -88,6 +89,8 @@ namespace NKikimr {
 
                 LookupActor = TComponentTracingLevels::TQueryProcessor::Basic,
                     LookupActorShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
+
+                LockActor = TComponentTracingLevels::TQueryProcessor::Basic,
 
                 ForwardWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
                 DirectWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
@@ -114,6 +117,13 @@ namespace NKikimr {
             RequestProxy = TComponentTracingLevels::TGrpcProxy::TopLevel,
             RequestActor = TComponentTracingLevels::TGrpcProxy::TopLevel,
             RequestCheckActor = TComponentTracingLevels::TGrpcProxy::Basic,
+        };
+    };
+
+    struct TWilsonQuoter {
+        enum {
+            QuoterService = TComponentTracingLevels::TGrpcProxy::TopLevel,
+            QuoterProxy = TComponentTracingLevels::TGrpcProxy::TopLevel,
         };
     };
 

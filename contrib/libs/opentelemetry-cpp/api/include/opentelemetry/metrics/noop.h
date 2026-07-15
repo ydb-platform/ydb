@@ -61,7 +61,6 @@ public:
                     nostd::string_view /* description */,
                     nostd::string_view /* unit */) noexcept
   {}
-  ~NoopUpDownCounter() override = default;
   void Add(T /* value */) noexcept override {}
   void Add(T /* value */, const context::Context & /* context */) noexcept override {}
   void Add(T /* value */, const common::KeyValueIterable & /* attributes */) noexcept override {}
@@ -80,7 +79,6 @@ public:
             nostd::string_view /* description */,
             nostd::string_view /* unit */) noexcept
   {}
-  ~NoopGauge() override = default;
   void Record(T /* value */) noexcept override {}
   void Record(T /* value */, const context::Context & /* context */) noexcept override {}
   void Record(T /* value */, const common::KeyValueIterable & /* attributes */) noexcept override {}

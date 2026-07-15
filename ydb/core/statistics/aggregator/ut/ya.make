@@ -4,9 +4,9 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
+IF (SANITIZER_TYPE)
+    SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -26,6 +26,7 @@ PEERDIR(
 SRCS(
     ut_analyze_datashard.cpp
     ut_analyze_columnshard.cpp
+    ut_analyze_op.cpp
     ut_traverse_datashard.cpp
     ut_traverse_columnshard.cpp
 )

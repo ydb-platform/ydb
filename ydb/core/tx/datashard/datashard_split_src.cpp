@@ -58,6 +58,9 @@ public:
                 Self->PlanQueue.Progress(ctx);
             }
 
+            // Cancel any waiting lock rows requests
+            Self->CheckLockRowsRejectAll();
+
             Self->Pipeline.CleanupWaitingVolatile(ctx, Replies);
         } else {
             // Check that this is the same split request
@@ -137,6 +140,8 @@ public:
         }
 
         Y_ENSURE(Self->TxInFly() == 0, "Currently split operation shouldn't start while there are in-flight transactions");
+
+        Self->SplitStarted = true;
 
         // We need to remove all locks first, making sure persistent uncommitted
         // changes are not borrowed by new shards. Otherwise those will become

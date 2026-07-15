@@ -2,6 +2,7 @@
 
 #include "helpers.h"
 
+#include <ydb/core/base/backtrace.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -9,15 +10,18 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/test_tablet/test_tablet.h>
 
 #include <ydb/services/metadata/ds_table/service.h>
 
@@ -40,7 +44,7 @@ class TFakeBlockStoreVolume : public TActor<TFakeBlockStoreVolume>, public NTabl
 public:
     TFakeBlockStoreVolume(const TActorId& tablet, TTabletStorageInfo* info)
         : TActor(&TThis::StateInit)
-          , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
+        , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
     {}
 
     void DefaultSignalTabletActive(const TActorContext&) override {
@@ -90,7 +94,7 @@ class TFakeBlockStorePartitionDirect : public TActor<TFakeBlockStorePartitionDir
 public:
     TFakeBlockStorePartitionDirect(const TActorId& tablet, TTabletStorageInfo* info)
         : TActor(&TThis::StateInit)
-          , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
+        , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
     {}
 
     void DefaultSignalTabletActive(const TActorContext&) override {
@@ -583,14 +587,23 @@ void SetupKqpProxy(TTestActorRuntime& runtime, ui32 nodeIdx) {
     NKikimrConfig::TTableServiceConfig tableServiceConfig;
     SetupKqpResourceManager(runtime, tableServiceConfig, nodeIdx);
 
+    // Used by KqpComputeSchedulerService
+    {
+        NKikimrConfig::TAppConfig appConfig;
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        runtime.GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, appConfig);
+    }
+
     NKikimrConfig::TLogConfig logConfig;
     NKikimrConfig::TQueryServiceConfig queryServiceConfig;
     auto federatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
 
+    NKikimrConfig::TTliConfig tliConfig;
     IActor* kqpProxyService = NKqp::CreateKqpProxyService(
         logConfig,
         tableServiceConfig,
         queryServiceConfig,
+        tliConfig,
         {}, // kqp settings
         nullptr, // query replay factory
         nullptr, // kqp proxy shared resources
@@ -609,6 +622,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     , CoordinatorState(new TFakeCoordinator::TState)
     , ChannelsCount(opts.NChannels_)
 {
+    EnableYDBBacktraceFormat();
     ui64 hive = TTestTxConfig::Hive;
     ui64 schemeRoot = TTestTxConfig::SchemeShard;
     ui64 coordinator = TTestTxConfig::Coordinator;
@@ -628,15 +642,22 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
     app.FeatureFlags.SetEnableTableDatetime64(true);
     app.FeatureFlags.SetEnableAddUniqueIndex(true);
+    app.FeatureFlags.SetEnableOnlineAddUniqueIndex(true);
     app.FeatureFlags.SetEnableFulltextIndex(true);
+    app.FeatureFlags.SetEnableFulltextIndexPrefix(opts.EnableFulltextIndexPrefix_);
+    app.FeatureFlags.SetEnableFulltextIndexRowId(opts.EnableFulltextIndexRowId_);
+    app.FeatureFlags.SetEnableJsonIndex(true);
+    app.FeatureFlags.SetEnableSetColumnConstraint(true);
     app.FeatureFlags.SetEnableColumnStore(true);
+    app.FeatureFlags.SetEnableColumnStatistics(true);
     app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
+    app.FeatureFlags.SetDisableFileStoreSSDSystemSpaceAccounting(opts.DisableFileStoreSSDSystemSpaceAccounting_);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
     app.SetEnableAlterDatabaseCreateHiveFirst(opts.EnableAlterDatabaseCreateHiveFirst_);
     app.SetEnableTopicDiskSubDomainQuota(opts.EnableTopicDiskSubDomainQuota_);
-    app.SetEnableTopicSplitMerge(opts.EnableTopicSplitMerge_);
+    app.FeatureFlags.SetEnableTopicMessageLevelParallelism(opts.EnableTopicMessageLevelParallelism_.value_or(false));
     app.SetEnableChangefeedDynamoDBStreamsFormat(opts.EnableChangefeedDynamoDBStreamsFormat_);
     app.SetEnableChangefeedDebeziumJsonFormat(opts.EnableChangefeedDebeziumJsonFormat_);
     app.SetEnableTablePgTypes(opts.EnableTablePgTypes_);
@@ -646,11 +667,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableChangefeedsOnIndexTables(opts.EnableChangefeedsOnIndexTables_);
     app.SetEnableTieringInColumnShard(opts.EnableTieringInColumnShard_);
     app.SetEnableParameterizedDecimal(opts.EnableParameterizedDecimal_);
-    app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
     app.SetEnableBackupService(opts.EnableBackupService_);
     app.SetEnableChecksumsExport(opts.EnableChecksumsExport_);
     app.SetEnableReplication(opts.EnableReplication_);
-    app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
     app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
     app.SetEnableLocalDBBtreeIndex(opts.EnableLocalDBBtreeIndex_);
     app.SetEnableSystemNamesProtection(opts.EnableSystemNamesProtection_);
@@ -671,12 +690,22 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         app.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
     }
 
+    app.FeatureFlags.SetEnableDataShardSplitHistogramSorting(opts.EnableDataShardSplitHistogramSorting_);
+    app.FeatureFlags.SetEnableDataShardSplitKeySelection(opts.EnableDataShardSplitKeySelection_);
+    app.FeatureFlags.SetEnableDataShardSplitHistogramOmission(opts.EnableDataShardSplitHistogramOmission_);
+
     app.FeatureFlags.SetEnableConditionalEraseResponseBatching(opts.EnableConditionalEraseResponseBatching_);
     if (opts.CondEraseResponseBatchSize_) {
         app.SchemeShardConfig.SetCondEraseResponseBatchSize(*opts.CondEraseResponseBatchSize_);
     }
     if (opts.CondEraseResponseBatchMaxTimeMs_) {
         app.SchemeShardConfig.SetCondEraseResponseBatchMaxTimeMs(*opts.CondEraseResponseBatchMaxTimeMs_);
+    }
+    if (opts.MaxBuildIndexShardsInFlight_) {
+        app.SchemeShardConfig.SetMaxBuildIndexShardsInFlight(*opts.MaxBuildIndexShardsInFlight_);
+    }
+    if (opts.MaxStoredIndexBuilds_) {
+        app.SchemeShardConfig.SetMaxStoredIndexBuilds(*opts.MaxStoredIndexBuilds_);
     }
 
     // graph settings
@@ -1050,6 +1079,9 @@ std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStora
         return [](const TActorId& tablet, TTabletStorageInfo* info) {
             return new TFakeFileStore(tablet, info);
         };
+    case TTabletTypes::TestShard:
+        return &NKikimr::NTestShard::CreateTestShard;
+
     default:
         return nullptr;
     }
@@ -1188,6 +1220,7 @@ NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NS
     NoRebootEventTypes.insert(TEvIndexBuilder::EvGetRequest);
     NoRebootEventTypes.insert(TEvIndexBuilder::EvCancelRequest);
     NoRebootEventTypes.insert(TEvIndexBuilder::EvForgetRequest);
+    NoRebootEventTypes.insert(TEvSetColumnConstraint::EvCreateRequest);
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::Run(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
@@ -1291,7 +1324,7 @@ NSchemeShardUT_Private::TTestEnv* NSchemeShardUT_Private::TTestWithReboots::Crea
 
 
 void NSchemeShardUT_Private::TTestWithReboots::Prepare(const TString &dispatchName, std::function<void (TTestActorRuntime &)> setup, bool &outActiveZone) {
-    Cdbg << Endl << "=========== RUN: "<< dispatchName << " ===========" << Endl;
+    Cdbg << Endl << "======" << TInstant::Now() << "===== RUN: "<< dispatchName << " ===========" << Endl;
 
     outActiveZone = false;
 

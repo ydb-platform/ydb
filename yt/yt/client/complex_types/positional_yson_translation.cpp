@@ -109,7 +109,7 @@ public:
         , PositionTable_(std::invoke([&] {
             std::vector<TPositionTableEntry> result(fieldCount);
             for (const auto& fieldInfo : retainedFieldInfos) {
-                PositionTable_[fieldInfo.Position].IsNullable = fieldInfo.IsNullable;
+                result[fieldInfo.Position].IsNullable = fieldInfo.IsNullable;
             }
             return result;
         }))
@@ -571,7 +571,7 @@ TTranslationSpec BuildTranslationSpec(
 
     THROW_ERROR_EXCEPTION_UNLESS(
         sourceMetatype == targetMetatype,
-        "Cannot create translator from %Qlv at %Qv to %Qlv at %Qv: types are incomatible",
+        "Cannot create translator from %Qlv at %Qv to %Qlv at %Qv: types are incompatible",
         sourceMetatype,
         sourceDescriptor.GetDescription(),
         targetMetatype,
@@ -621,18 +621,15 @@ TTranslationSpec BuildTranslationSpec(
 
 } // namespace
 
-TPositionalYsonTranslator CreatePositionalYsonTranslator(
+std::optional<TPositionalYsonTranslator> CreatePositionalYsonTranslator(
     const TComplexTypeFieldDescriptor& sourceDescriptor,
     const TComplexTypeFieldDescriptor& targetDescriptor)
 {
-    return Visit(
-        BuildTranslationSpec(sourceDescriptor, targetDescriptor),
-        [] (TTrivialTranslationSpec&&) -> TPositionalYsonTranslator {
-            return std::identity{};
-        },
-        [] (TNonTrivialTranslationSpec&& translationSpec) {
-            return CreateUnversionedValueConverter(std::move(translationSpec).CursorConverter);
-        });
+    auto translationSpec = BuildTranslationSpec(sourceDescriptor, targetDescriptor);
+    if (auto* nonTrivialSpec = std::get_if<TNonTrivialTranslationSpec>(&translationSpec)) {
+        return CreateUnversionedValueConverter(std::move(*nonTrivialSpec).CursorConverter);
+    }
+    return std::nullopt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

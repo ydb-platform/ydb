@@ -140,6 +140,19 @@ private:
             RestoredFromSavedCheckpoint = subgroup->GetCounter("RestoredFromSavedCheckpoint", true);
             StartedFromEmptyCheckpoint = subgroup->GetCounter("StartedFromEmptyCheckpoint", true);
             RestoredStreamingOffsetsFromCheckpoint = subgroup->GetCounter("RestoredStreamingOffsetsFromCheckpoint", true);
+            AllCheckpointsSizeBytes = subgroup->GetCounter("AllCheckpointsSizeBytes");
+        }
+
+        ~TCheckpointCoordinatorMetrics() {
+            // Reset in the case of aggregated metrics (for non-aggregated - label "path" will be deleted).
+            InProgress->Set(0);
+            Pending->Set(0);
+            PendingCommit->Set(0);
+            LastCheckpointBarrierDeliveryTimeMillis->Set(0);
+            LastCheckpointDurationMillis->Set(0);
+            LastCheckpointSizeBytes->Set(0);
+            AllCheckpointsSizeBytes->Set(0);
+            // SkippedDueToInFlightLimit resets in PassAway
         }
 
         ::NMonitoring::TDynamicCounters::TCounterPtr InProgress;
@@ -158,6 +171,7 @@ private:
         ::NMonitoring::TDynamicCounters::TCounterPtr RestoredFromSavedCheckpoint;
         ::NMonitoring::TDynamicCounters::TCounterPtr StartedFromEmptyCheckpoint;
         ::NMonitoring::TDynamicCounters::TCounterPtr RestoredStreamingOffsetsFromCheckpoint;
+        ::NMonitoring::TDynamicCounters::TCounterPtr AllCheckpointsSizeBytes;
         NMonitoring::THistogramPtr CheckpointBarrierDeliveryTimeMillis;
         NMonitoring::THistogramPtr CheckpointDurationMillis;
         NMonitoring::THistogramPtr CheckpointSizeBytes;

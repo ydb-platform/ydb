@@ -249,7 +249,7 @@ struct TPrepareResponseResultType : TPrepareResponseResultTypeImpl<ResponseEvent
 
 class TDbRequester {
 protected:
-    explicit TDbRequester(TDbPool::TPtr pool = nullptr, TYdbConnectionPtr ydbConnection = nullptr)
+    explicit TDbRequester(TDbPoolPtr pool = nullptr, TYdbConnectionPtr ydbConnection = nullptr)
         : DbPool(std::move(pool))
         , YdbConnection(std::move(ydbConnection))
     {
@@ -282,7 +282,7 @@ protected:
         bool retryTli = true);
 
     static TAsyncStatus ReadModifyWrite(
-        TDbPool::TPtr dbPool,
+        TDbPoolPtr dbPool,
         const TString& readQuery,
         const NYdb::TParams& readParams,
         const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
@@ -305,7 +305,7 @@ protected:
     }
 
 protected:
-    TDbPool::TPtr DbPool;
+    TDbPoolPtr DbPool;
     TYdbConnectionPtr YdbConnection;
 };
 
@@ -788,7 +788,10 @@ protected:
             const auto& request = ev->Get()->Request;
             size_t responseByteSize = 0;
             if (issues) {
-                CPS_LOG_AS_W(*actorSystem, name << ": {" << TrimForLogs(SecureDebugString(request)) << "} ERROR: " << internalIssues.ToOneLineString());
+                YDB_LOG_WARN_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "",
+                    {"name", name},
+                    {"request", TrimForLogs(SecureDebugString(request))},
+                    {"ERROR", internalIssues.ToOneLineString()});
                 auto event = std::make_unique<ResponseEvent>(issues);
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
@@ -801,7 +804,9 @@ protected:
                     });
                 }
             } else {
-                CPS_LOG_AS_T(*actorSystem, name << ": {" << TrimForLogs(SecureDebugString(result)) << "} SUCCESS");
+                YDB_LOG_TRACE_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "SUCCESS",
+                    {"name", name},
+                    {"result", TrimForLogs(SecureDebugString(result))});
                 std::unique_ptr<ResponseEvent> event;
                 if constexpr (ResponseEvent::Auditable) {
                     event = std::make_unique<ResponseEvent>(result, auditDetails);
@@ -1026,7 +1031,9 @@ private:
 
             size_t responseByteSize = 0;
             if (issues) {
-                CPS_LOG_AS_W(*actorSystem, name << " ERROR: " << internalIssues.ToOneLineString());
+                YDB_LOG_WARN_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "",
+                    {"name", name},
+                    {"ERROR", internalIssues.ToOneLineString()});
                 std::unique_ptr<ResponseEvent> event(new ResponseEvent(issues));
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
@@ -1039,7 +1046,8 @@ private:
                     });
                 }
             } else {
-                CPS_LOG_AS_T(*actorSystem, name << ": SUCCESS");
+                YDB_LOG_TRACE_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "SUCCESS",
+                    {"name", name});
                 std::unique_ptr<ResponseEvent> event(new ResponseEvent(std::make_from_tuple<ResponseEvent>(result)));
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
@@ -1063,7 +1071,7 @@ private:
     };
 
     static NThreading::TFuture<void> PickTask(
-        TDbPool::TPtr dbPool,
+        TDbPoolPtr dbPool,
         const TPickTaskParams& taskParams,
         const TRequestCounters& requestCounters,
         TDebugInfoPtr debugInfo,

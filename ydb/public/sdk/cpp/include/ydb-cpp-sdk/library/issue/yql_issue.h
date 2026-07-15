@@ -21,6 +21,9 @@ using TIssueCode = uint32_t;
 constexpr TIssueCode DEFAULT_ERROR = 0;
 constexpr TIssueCode UNEXPECTED_ERROR = 1;
 
+//! NYql.TIssuesIds.KIKIMR_CONSTRAINT_VIOLATION — primary key / unique index conflicts and other constraint failures.
+constexpr TIssueCode CONSTRAINT_VIOLATION = 2012;
+
 enum class ESeverity : uint32_t {
     Fatal = 0,
     Error = 1,
@@ -200,6 +203,10 @@ public:
 };
 
 void WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<void(const TIssue&, uint16_t level)> fn, std::function<void(const TIssue&, uint16_t level)> afterChildrenFn = {});
+
+//! Same as WalkThroughIssues, but @p fn returns bool: return false to stop iteration early, true to continue.
+//! Returns false if iteration was stopped early, true if all issues were visited.
+bool WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<bool(const TIssue&, uint16_t level)> fn);
 
 ///////////////////////////////////////////////////////////////////////////////
 // TIssues

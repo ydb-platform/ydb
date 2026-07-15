@@ -4,15 +4,21 @@
 #include <ydb/core/tx/columnshard/engines/portions/index_chunk.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NIndexes {
 
 bool IIndexMeta::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
     if (!proto.GetId()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse secondary data builder")("reason", "incorrect id - 0");
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse secondary data builder"},
+            {"reason", "incorrect id - 0"});
         return false;
     }
     if (!proto.GetName()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse secondary data builder")("reason", "incorrect name - empty string");
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse secondary data builder"},
+            {"reason", "incorrect name - empty string"});
         return false;
     }
     IndexId = proto.GetId();
@@ -34,19 +40,14 @@ void IIndexMeta::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto)
     return DoSerializeToProto(proto);
 }
 
-NJson::TJsonValue IIndexMeta::SerializeDataToJson(const TIndexChunk& iChunk, const TIndexInfo& indexInfo) const {
+NJson::TJsonValue IIndexMeta::SerializeDataToJson(const TString& iChunk, const TIndexInfo& indexInfo) const {
     NJson::TJsonValue result = NJson::JSON_MAP;
-    result.InsertValue("entity_id", iChunk.GetEntityId());
-    result.InsertValue("chunk_idx", iChunk.GetChunkIdx());
-    if (iChunk.HasBlobData()) {
-        result.InsertValue("data", DoSerializeDataToJson(iChunk.GetBlobDataVerified(), indexInfo));
-    }
+    result.InsertValue("data", DoSerializeDataToJson(iChunk, indexInfo));
     return result;
 }
 
-std::shared_ptr<NReader::NCommon::IKernelFetchLogic> IIndexMeta::DoBuildFetchTask(
-    const THashSet<NRequest::TOriginalDataAddress>& dataAddresses, const std::shared_ptr<IIndexMeta>& selfPtr,
-    const std::shared_ptr<IStoragesManager>& storagesManager) const {
+std::shared_ptr<NReader::NCommon::IKernelFetchLogic> IIndexMeta::DoBuildFetchTask(const THashSet<NRequest::TOriginalDataAddress>& dataAddresses,
+    const std::shared_ptr<IIndexMeta>& selfPtr, const std::shared_ptr<IStoragesManager>& storagesManager) const {
     return std::make_shared<TIndexFetcherLogic>(dataAddresses, selfPtr, storagesManager);
 }
 

@@ -1,22 +1,27 @@
 #include "kqp_opt_log_rules.h"
 #include "kqp_opt_cbo.h"
 
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join.h>
+#include <ydb/library/yql/dq/opt/dq_opt_log.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 #include <yql/essentials/core/yql_opt_match_recognize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/opt/dq_opt_join.h>
-#include <ydb/library/yql/dq/opt/dq_opt_log.h>
-#include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
-#include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
-#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp::NOpt {
+
+namespace {
 
 using namespace NYql;
 using namespace NYql::NCommon;
@@ -33,6 +38,7 @@ public:
         , Config(config)
     {
 #define HNDL(name) "KqpLogical-"#name, Hndl(&TKqpLogicalOptTransformer::name)
+        AddHandler(0, &TCoTopBase::Match, HNDL(RewriteHybridRankTopSort));
         AddHandler(0, &TCoTop::Match, HNDL(TopSortSelectIndex));
         AddHandler(0, &TCoTopSort::Match, HNDL(TopSortSelectIndex));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushExtractedPredicateToReadTable));
@@ -53,7 +59,6 @@ public:
         AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
         AddHandler(0, &TCoTake::Match, HNDL(DropTakeOverLookupTable));
         AddHandler(0, &TCoTopBase::Match, HNDL(PushLimitOverFullText));
-        AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverFullTextMatch));
 
         AddHandler(0, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
         AddHandler(0, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
@@ -64,6 +69,7 @@ public:
         AddHandler(0, &TCoTopSort::Match, HNDL(TopSortOverExtend));
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(UnorderedOverDqReadWrap));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqReadWrap));
+        AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToDqJoin));
         AddHandler(0, &TCoCountBase::Match, HNDL(TakeOrSkipOverDqReadWrap));
         AddHandler(0, &TCoExtendBase::Match, HNDL(ExtendOverDqReadWrap));
         AddHandler(0, &TCoNarrowMap::Match, HNDL(DqReadWideWrapFieldSubset));
@@ -72,29 +78,34 @@ public:
         AddHandler(0, &TCoWideMap::Match, HNDL(DqReadWideWrapFieldSubset));
         AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
 
+        AddHandler(1, &TCoFlatMapBase::Match, HNDL(SelectJsonIndex));
+        AddHandler(1, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverFullTextMatch));
+        AddHandler(1, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverJsonRead));
         AddHandler(1, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(1, &TCoTopSort::Match, HNDL(RewriteTopSortOverIndexRead));
         AddHandler(1, &TCoTake::Match, HNDL(RewriteTakeOverIndexRead));
         AddHandler(1, &TDqReadWrapBase::Match, HNDL(DqReadWrapByProvider));
 
-        AddHandler(2, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
-        AddHandler(2, &TKqlStreamLookupIndex::Match, HNDL(RewriteStreamLookupIndex));
-        AddHandler(2, &TKqlReadTableIndexRanges::Match, HNDL(RewriteIndexRead));
-        AddHandler(2, &TDqReadWrap::Match, HNDL(ExtractMembersOverDqReadWrapMultiUsage));
-        AddHandler(2, &TDqReadWrapBase::Match, HNDL(UnorderedOverDqReadWrapMultiUsage));
+        AddHandler(2, &TCoFlatMap::Match, HNDL(RewriteFlatMapOverIndexRead));
 
-        AddHandler(3, &TKqlLookupTableBase::Match, HNDL(RewriteLookupTable));
+        AddHandler(3, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
+        AddHandler(3, &TKqlStreamLookupIndex::Match, HNDL(RewriteStreamLookupIndex));
+        AddHandler(3, &TKqlReadTableIndexRanges::Match, HNDL(RewriteIndexRead));
+        AddHandler(3, &TDqReadWrap::Match, HNDL(ExtractMembersOverDqReadWrapMultiUsage));
+        AddHandler(3, &TDqReadWrapBase::Match, HNDL(UnorderedOverDqReadWrapMultiUsage));
 
-        AddHandler(4, &TKqlReadTableFullTextIndex::Match, HNDL(ApplyExtractMembersToReadTable<true>));
-        AddHandler(4, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
-        AddHandler(4, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
-        AddHandler(4, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
-        AddHandler(4, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
-        AddHandler(5, TOptimizeTransformerBase::Any(), HNDL(InspectErroneousIndexAccess));
+        AddHandler(4, &TKqlLookupTableBase::Match, HNDL(RewriteLookupTable));
+
+        AddHandler(5, &TKqlReadTableFullTextIndex::Match, HNDL(ApplyExtractMembersToReadTable<true>));
+        AddHandler(5, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
+        AddHandler(5, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
+        AddHandler(5, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
+        AddHandler(5, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
+        AddHandler(6, TOptimizeTransformerBase::Any(), HNDL(InspectErroneousIndexAccess));
 
 #undef HNDL
 
-        SetGlobal(4u);
+        SetGlobal(5u);
     }
 
 public:
@@ -146,7 +157,7 @@ protected:
         return node;
     }
 
-    TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
+    TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TMaybeNode<TExprBase> output;
         auto aggregate = node.Cast<TCoAggregateBase>();
         auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
@@ -155,13 +166,23 @@ protected:
             if (!input) {
                 return node;
             }
+
+            TMaybe<NHoppingWindow::EPolicy> defaultLatePolicy;
+            if (KqpCtx.UserRequestContext && KqpCtx.UserRequestContext->WatermarkLateEventsPolicy) {
+                const auto policy = to_lower(KqpCtx.UserRequestContext->WatermarkLateEventsPolicy);
+                defaultLatePolicy = TryFromString<NHoppingWindow::EPolicy>(policy).GetOrElse(NHoppingWindow::EPolicy::Drop);
+            }
+
             output = NHopping::RewriteAsHoppingWindow(
                 node,
                 ctx,
+                getParents,
                 input.Cast(),
                 false,
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
-                KqpCtx.Config->GetEnableWatermarks());
+                KqpCtx.Config->GetEnableWatermarks(),
+                defaultLatePolicy
+            );
         } else {
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
             output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey(), spillingSettings.IsAggregationSpillingEnabled());
@@ -191,6 +212,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
+        // First step of stream lookup join with DQ external sources (not kqp tables)
         TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx);
         DumpAppliedRule("KqpRewriteStreamEquiJoinWithLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -198,24 +220,27 @@ protected:
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
         TCBOSettings settings{
-            .MaxDPhypDPTableSize = Config->MaxDPHypDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPHypDPTableSize),
+            .CBOTimeout = Config->CBOTimeout.Get().GetOrElse(NKikimr::NKqp::TCBOSettings{}.CBOTimeout),
+            .CBOHardTimeout = Config->CBOHardTimeout.Get().GetOrElse(NKikimr::NKqp::TCBOSettings{}.CBOHardTimeout),
             .ShuffleEliminationJoinNumCutoff = Config->ShuffleEliminationJoinNumCutoff.Get().GetOrElse(TDqSettings::TDefault::ShuffleEliminationJoinNumCutoff)
         };
 
         auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
+        bool useBlockJoin = Config->UseBlockHashJoin.Get().GetOrElse(false);
         bool enableShuffleElimination = KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination());
-        auto providerCtx = TKqpProviderContext(KqpCtx, optLevel);
-        auto stats = TypesCtx.GetStats(node.Raw());
+        auto providerCtx = TKqpProviderContext(KqpCtx, optLevel, useBlockJoin, Config);
+        auto stats = KqpCtx.KqpStats.GetStats(node.Raw());
         TTableAliasMap* tableAliases = stats? stats->TableAliases.Get(): nullptr;
-        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx, enableShuffleElimination, TypesCtx.OrderingsFSM, tableAliases));
-        TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, optLevel,
+        auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx, enableShuffleElimination, KqpCtx.KqpStats.ShufflingsFSM, tableAliases));
+        TExprBase output = KqpOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, KqpCtx.KqpStats, optLevel,
             *opt, [](auto& rels, auto label, auto node, auto stat) {
                 rels.emplace_back(std::make_shared<TKqpRelOptimizerNode>(TString(label), *stat, node));
             },
             KqpCtx.EquiJoinsCount,
             KqpCtx.GetOptimizerHints(),
             enableShuffleElimination,
-            &KqpCtx.ShufflingOrderingsByJoinLabels
+            &KqpCtx.ShufflingOrderingsByJoinLabels,
+            &KqpCtx.CBOStats
         );
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -223,8 +248,10 @@ protected:
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
         bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel()) >= 2;
-        TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
-        DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Ptr(), ctx);
+        TMaybeNode<TExprBase> output = NKikimr::NKqp::KqpRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.KqpStats, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
+        if (output) {
+            DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
         return output;
     }
 
@@ -267,9 +294,45 @@ protected:
         return output;
     }
 
+    TMaybeNode<TExprBase> SelectJsonIndex(TExprBase node, TExprContext& ctx) {
+        auto output = KqpSelectJsonIndex(node, ctx, KqpCtx);
+        if (!output.IsValid()) {
+            return {};
+        }
+
+        DumpAppliedRule("SelectJsonIndex", node.Ptr(), output.Cast().Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteFlatMapOverJsonRead(TExprBase node, TExprContext& ctx) {
+        auto output = KqpRewriteFlatMapOverJsonRead(node, ctx, KqpCtx);
+        if (!output.IsValid()) {
+            return {};
+        }
+
+        DumpAppliedRule("RewriteFlatMapOverJsonRead", node.Ptr(), output.Cast().Ptr(), ctx);
+        return output;
+    }
+
     TMaybeNode<TExprBase> RewriteTopSortOverIndexRead(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        TExprBase output = KqpRewriteTopSortOverIndexRead(node, ctx, KqpCtx, *getParents());
+        TExprBase output = KqpRewriteTopSortOverIndexRead(node, ctx, TypesCtx, KqpCtx, *getParents());
         DumpAppliedRule("RewriteTopSortOverIndexRead", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteHybridRankTopSort(TExprBase node, TExprContext& ctx) {
+        auto output = KqpRewriteHybridRankTopSort(node, ctx, KqpCtx);
+        if (!output.IsValid()) {
+            return {};
+        }
+
+        DumpAppliedRule("RewriteHybridRankTopSort", node.Ptr(), output.Cast().Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteFlatMapOverIndexRead(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = KqpRewriteFlatMapOverIndexRead(node, ctx, KqpCtx, *getParents());
+        DumpAppliedRule("RewriteFlatMapOverIndexRead", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -345,6 +408,14 @@ protected:
         auto output = NDq::ExtractMembersOverDqReadWrap(node, ctx, getParents, true, TypesCtx);
         if (output) {
             DumpAppliedRule("ExtractMembersOverDqReadWrap", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
+        return output;
+    }
+
+    TMaybeNode<TExprBase> PushExtractMembersToDqJoin(TExprBase node, TExprContext& ctx) {
+        auto output = NDq::DqPushExtractMembersToDqJoin(node, ctx);
+        if (output) {
+            DumpAppliedRule("PushExtractMembersToDqJoin", node.Ptr(), output.Cast().Ptr(), ctx);
         }
         return output;
     }
@@ -428,6 +499,8 @@ private:
     TKqpOptimizeContext& KqpCtx;
     const TKikimrConfiguration::TPtr& Config;
 };
+
+} // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpLogOptTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
     TTypeAnnotationContext& typesCtx, const TKikimrConfiguration::TPtr& config)

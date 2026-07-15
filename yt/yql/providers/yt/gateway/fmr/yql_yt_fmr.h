@@ -9,6 +9,7 @@
 #include <yt/yql/providers/yt/fmr/file/metadata/interface/yql_yt_file_metadata_interface.h>
 #include <yt/yql/providers/yt/fmr/file/upload/interface/yql_yt_file_upload_interface.h>
 #include <yt/yql/providers/yt/fmr/job_preparer/interface/yql_yt_job_preparer_interface.h>
+#include <yt/yql/providers/yt/fmr/vanilla/coordinator_client/yql_yt_vanilla_coordinator_client.h>
 
 namespace NYql::NFmr {
 
@@ -22,16 +23,28 @@ enum class ETablePresenceStatus {
 struct TFmrServices: public TYtBaseServices {
     using TPtr = TIntrusivePtr<TFmrServices>;
 
+    TFmrServices() {
+        CheckSpecDoesntUseNativeYtTypes = false;
+    }
+
     TString CoordinatorServerUrl;
+    TMaybe<TString> VanillaRemoteId; // "cluster/operationId" for progress RemoteId, set when using vanilla coordinator client
+    TMaybe<TVanillaFmrCoordinatorClientSettings> VanillaCoordinatorClientSettings;
+    TMaybe<TString> YtServerForUpload;
+    TString FmrJobBinaryPath;
+    TString FmrJobBinaryMd5;
     TString TableDataServiceDiscoveryFilePath;
     IYtJobService::TPtr YtJobService;
     IYtCoordinatorService::TPtr YtCoordinatorService;
     TFmrUserJobLauncher::TPtr JobLauncher;
     bool DisableLocalFmrWorker = false;
     TString FmrOperationSpecFilePath;
+    TString CoordinatorYsonPath;
+    TString WorkerYsonPath;
     IFileMetadataService::TPtr FileMetadataService;
     IFileUploadService::TPtr FileUploadService;
     IFmrJobPreparer::TPtr JobPreparer;
+    TMaybe<TFmrTvmGatewaySettings> TvmSettings;
 };
 
 struct TFmrYtGatewaySettings {
@@ -39,6 +52,11 @@ struct TFmrYtGatewaySettings {
     TIntrusivePtr<ITimeProvider> TimeProvider = CreateDefaultTimeProvider();
     TDuration TimeToSleepBetweenGetOperationRequests = TDuration::Seconds(1);
     TDuration CoordinatorPingInterval = TDuration::Seconds(5);
+    ui64 MaxDirectPullBytes = 100 * 1024; // 100 KB
+    ui64 MaxDirectPullRows = 1000;
+    // True when FMR runs fully in-process (embedded mode, no real YT cluster).
+    // In this mode user files are passed directly as local paths rather than uploaded to YT.
+    bool Local = false;
 };
 
 IYtGateway::TPtr CreateYtFmrGateway(

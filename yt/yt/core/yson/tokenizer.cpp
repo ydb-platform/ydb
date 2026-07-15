@@ -14,7 +14,33 @@ bool TTokenizer::ParseNext()
     Token_.Reset();
     Parsed_ = Lexer_.ParseToken(Input_, &Token_);
     Position_ += Parsed_;
-    return !CurrentToken().IsEmpty();
+    return GetCurrentType() != ETokenType::EndOfStream;
+}
+
+void TTokenizer::SkipAttributes()
+{
+    int depth = 0;
+    while (true) {
+        ParseNext();
+        const auto& token = CurrentToken();
+        switch (token.GetType()) {
+            case ETokenType::LeftBrace:
+            case ETokenType::LeftAngle:
+                ++depth;
+                break;
+
+            case ETokenType::RightBrace:
+            case ETokenType::RightAngle:
+                --depth;
+                break;
+
+            default:
+                if (depth == 0) {
+                    return;
+                }
+                break;
+        }
+    }
 }
 
 const TToken& TTokenizer::CurrentToken() const

@@ -1,8 +1,8 @@
 #pragma once
 #include "abstract/abstract.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
@@ -17,7 +17,8 @@ private:
 public:
     TPortionToMerge(const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter)
         : Batch(batch)
-        , Filter(filter) {
+        , Filter(filter)
+    {
     }
 };
 
@@ -35,15 +36,19 @@ protected:
 
 public:
     ISubsetToMerge(const std::shared_ptr<TGranuleMeta>& granule)
-        : GranuleMeta(granule) {
+        : GranuleMeta(granule)
+    {
         AFL_VERIFY(GranuleMeta);
     }
+
     virtual ~ISubsetToMerge() = default;
+
     std::vector<TPortionToMerge> BuildPortionsToMerge(const TConstructionContext& context, const std::set<ui32>& seqDataColumnIds,
         const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const THashSet<ui64>& usedPortionIds,
         const bool useDeletionFilter) const {
         return DoBuildPortionsToMerge(context, seqDataColumnIds, resultFiltered, usedPortionIds, useDeletionFilter);
     }
+
     virtual ui64 GetColumnMaxChunkMemory() const = 0;
 };
 
@@ -59,7 +64,8 @@ private:
 public:
     TReadPortionToMerge(TReadPortionInfoWithBlobs&& rPortion, const std::shared_ptr<TGranuleMeta>& granuleMeta)
         : TBase(granuleMeta)
-        , ReadPortion(std::move(rPortion)) {
+        , ReadPortion(std::move(rPortion))
+    {
     }
 
     virtual ui64 GetColumnMaxChunkMemory() const override {

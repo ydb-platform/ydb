@@ -31,7 +31,9 @@ namespace NYdb {
             ui32 PartitionSeed;
             bool Direct;
             ui32 Codec = 0;
+            TMaybe<ui32> BatchInnerCodec;
             bool UseTransactions = false;
+            bool TrackProducerIdInTx = true;
             bool UseAutoPartitioning = false;
             bool UseTableSelect = false;
             bool UseTableUpsert = false;
@@ -42,6 +44,9 @@ namespace NYdb {
             ui32 KeyCount = 0;
             ui32 KeySeed = 0;
             std::optional<size_t> MaxMemoryUsageBytes = 15_MB;
+            TDuration BatchFlushInterval = TDuration::Seconds(1);
+            std::optional<ui64> BatchFlushSizeBytes;
+            ui32 BatchFlushMessageCount = 1;
         };
 
         struct TTopicWorkloadConfiguratorParams;
@@ -70,7 +75,8 @@ namespace NYdb {
             void Close();
             void CloseProducers();
 
-            std::shared_ptr<TTopicWorkloadWriterProducer> CreateProducer(ui64 partitionId);
+            std::shared_ptr<TTopicWorkloadWriterProducer> CreateProducer(ui64 partitionId,
+                                                                         NTopic::TTopicClient& topicClient);
 
             void WaitTillNextMessageExpectedCreateTimeAndContinuationToken(std::shared_ptr<TTopicWorkloadWriterProducer> producer);
 

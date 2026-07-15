@@ -130,7 +130,7 @@ void TKqpComputeActor::DoBootstrap() {
 
     if (ScanData) {
         ScanData->TaskId = GetTask().GetId();
-        ScanData->TableReader = CreateKqpTableReader(*ScanData, *ComputeCtx.StartTs, *ComputeCtx.InputConsumed);
+        ScanData->TableReader = CreateKqpTableReader(*ScanData, *ComputeCtx.StartTs, *ComputeCtx.InputsConsumed);
 
         TMaybe<NKikimrSysView::TSysViewDescription> SysViewInfo;
         if (Meta->GetTable().HasSysViewDescription()) {

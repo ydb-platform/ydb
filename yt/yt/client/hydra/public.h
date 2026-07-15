@@ -23,19 +23,20 @@ DEFINE_ENUM(EPeerState,
 );
 
 YT_DEFINE_ERROR_ENUM(
-    ((NoSuchSnapshot)              (600))
-    ((NoSuchChangelog)             (601))
-    ((InvalidEpoch)                (602))
-    ((InvalidVersion)              (603))
-    ((OutOfOrderMutations)         (609))
-    ((InvalidSnapshotVersion)      (610))
-    ((ReadOnlySnapshotBuilt)       (611))
-    ((ReadOnlySnapshotBuildFailed) (612))
-    ((BrokenChangelog)             (613))
-    ((ChangelogIOError)            (614))
-    ((InvalidChangelogState)       (615))
-    ((ReadOnly)                    (616))
-    ((RestartAfterRecovery)        (617))
+    ((NoSuchSnapshot)                       (600))
+    ((NoSuchChangelog)                      (601))
+    ((InvalidEpoch)                         (602))
+    ((InvalidVersion)                       (603))
+    ((OutOfOrderMutations)                  (609))
+    ((InvalidSnapshotVersion)               (610))
+    ((ReadOnlySnapshotBuilt)                (611))
+    ((ReadOnlySnapshotBuildFailed)          (612))
+    ((BrokenChangelog)                      (613))
+    ((ChangelogIOError)                     (614))
+    ((InvalidChangelogState)                (615))
+    ((ReadOnly)                             (616))
+    ((RestartAfterRecovery)                 (617))
+    ((ExpectedMutationHandlerException)     (618))
 );
 
 DEFINE_ENUM(EPeerKind,

@@ -267,7 +267,7 @@ inline std::vector<TSharedRef> UnpackRefs(const TSharedRef& packedRef)
 
 Y_FORCE_INLINE void TSaveContextStream::Write(const void* buf, size_t len)
 {
-    if (Y_LIKELY(BufferRemaining_ >= len)) {
+    if (BufferRemaining_ >= len) [[likely]] {
         ::memcpy(BufferPtr_, buf, len);
         BufferPtr_ += len;
         BufferRemaining_ -= len;
@@ -292,7 +292,7 @@ Y_FORCE_INLINE int TStreamSaveContext::GetVersion() const
 
 Y_FORCE_INLINE size_t TLoadContextStream::Load(void* buf, size_t len)
 {
-    if (Y_LIKELY(BufferRemaining_ >= len)) {
+    if (BufferRemaining_ >= len) [[likely]] {
         ::memcpy(buf, BufferPtr_, len);
         BufferPtr_ += len;
         BufferRemaining_ -= len;
@@ -1116,6 +1116,12 @@ struct TSorterSelector<TCompactSet<T, N, Q>, C, TSortedTag>
     using TSorter = TNoopSorter<TCompactSet<T, N, Q>, C>;
 };
 
+template <class C, class T, size_t N>
+struct TSorterSelector<TCompactFlatSet<T, N>, C, TSortedTag>
+{
+    using TSorter = TNoopSorter<TCompactFlatSet<T, N>, C>;
+};
+
 template <class C, class... T>
 struct TSorterSelector<std::unordered_multiset<T...>, C, TSortedTag>
 {
@@ -1736,6 +1742,24 @@ struct TUniquePtrSerializer
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TUnderlyingSerializer = TDefaultSerializer>
+struct TDerefSerializer
+{
+    template <class T, class C>
+    static void Save(C& context, const T& obj)
+    {
+        TUnderlyingSerializer::Save(context, *obj);
+    }
+
+    template <class T, class C>
+    static void Load(C& context, T& obj)
+    {
+        TUnderlyingSerializer::Load(context, *obj);
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TUnderlyingSerializer = TDefaultSerializer>
 struct TNonNullableIntrusivePtrSerializer
 {
     template <class T, class C>
@@ -1923,6 +1947,12 @@ struct TSerializerTraits<TCompactSet<T, N, Q>, C, void>
     using TSerializer = TSetSerializer<>;
 };
 
+template <class T, size_t N, class C>
+struct TSerializerTraits<TCompactFlatSet<T, N>, C, void>
+{
+    using TSerializer = TSetSerializer<NYT::TDefaultSerializer, NYT::TSortedTag>;
+};
+
 template <class T, class C>
 struct TSerializerTraits<THashMultiSet<T>, C, void>
 {
@@ -2046,6 +2076,26 @@ struct TSerializerTraits<TMaybeInf<T>, C, void>
         static void Load(C& context, TMaybeInf<T>& value)
         {
             value.UnsafeAssign(NYT::Load<T>(context));
+        }
+    };
+};
+
+template <class T, class C>
+struct TSerializerTraits<NThreading::TAtomicObject<T>, C, void>
+{
+    struct TSerializer
+    {
+        static void Save(C& context, const NThreading::TAtomicObject<T>& object)
+        {
+            object.Read([&] (const T& value) {
+                TDefaultSerializer::Save(context, value);
+            });
+        }
+        static void Load(C& context, NThreading::TAtomicObject<T>& object)
+        {
+            object.Transform([&] (T& value) {
+                TDefaultSerializer::Load(context, value);
+            });
         }
     };
 };

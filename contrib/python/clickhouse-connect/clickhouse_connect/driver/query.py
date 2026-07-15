@@ -1,61 +1,78 @@
 import logging
 import re
-import pytz
-
+from collections.abc import Generator, Sequence
+from datetime import timezone, tzinfo
 from io import IOBase
-from typing import Any, Tuple, Dict, Sequence, Optional, Union, Generator, BinaryIO
-from datetime import tzinfo
-
-from pytz.exceptions import UnknownTimeZoneError
+from typing import TYPE_CHECKING, Any, BinaryIO, Literal
+from zoneinfo import ZoneInfoNotFoundError
 
 from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.binding import bind_query
-from clickhouse_connect.driver.common import dict_copy, empty_gen, StreamContext, get_rename_method
-from clickhouse_connect.driver.external import ExternalData
-from clickhouse_connect.driver.types import Matrix, Closable
-from clickhouse_connect.driver.exceptions import StreamClosedError, ProgrammingError
-from clickhouse_connect.driver.options import check_arrow, pd_extended_dtypes
+from clickhouse_connect.driver.common import StreamContext, dict_copy, empty_gen, get_rename_method
 from clickhouse_connect.driver.context import BaseQueryContext
+from clickhouse_connect.driver.exceptions import ProgrammingError, StreamClosedError
+from clickhouse_connect.driver.external import ExternalData
+from clickhouse_connect.driver.options import check_arrow
+from clickhouse_connect.driver.types import Closable, Matrix
+
+if TYPE_CHECKING:
+    from clickhouse_connect.datatypes.base import ClickHouseType
 
 logger = logging.getLogger(__name__)
-commands = 'CREATE|ALTER|SYSTEM|GRANT|REVOKE|CHECK|DETACH|ATTACH|DROP|DELETE|KILL|' + \
-           'OPTIMIZE|SET|RENAME|TRUNCATE|USE'
 
-limit_re = re.compile(r'\s+LIMIT($|\s)', re.IGNORECASE)
-select_re = re.compile(r'(^|\s)SELECT\s', re.IGNORECASE)
-insert_re = re.compile(r'(^|\s)INSERT\s*INTO', re.IGNORECASE)
-command_re = re.compile(r'(^\s*)(' + commands + r')\s', re.IGNORECASE)
+TzMode = Literal["naive_utc", "aware", "schema"]
+TzSource = Literal["auto", "server", "local"]
+
+_VALID_TZ_MODES = {"naive_utc", "aware", "schema"}
+
+_VALID_TZ_SOURCES = {"auto", "server", "local"}
 
 
-# pylint: disable=too-many-instance-attributes
+commands = "CREATE|ALTER|SYSTEM|GRANT|REVOKE|CHECK|DETACH|ATTACH|DROP|DELETE|KILL|OPTIMIZE|SET|RENAME|TRUNCATE|USE|UPDATE"
+
+limit_re = re.compile(r"\s+LIMIT($|\s)", re.IGNORECASE)
+select_re = re.compile(r"(^|\s)SELECT\s", re.IGNORECASE)
+insert_re = re.compile(r"(^|\s)INSERT\s*INTO", re.IGNORECASE)
+command_re = re.compile(r"(^\s*)(" + commands + r")\s", re.IGNORECASE)
+row_policy_show_re = re.compile(r"^\s*SHOW\s+(ROW\s+)?POLICIES\b", re.IGNORECASE)
+bare_row_policy_show_re = re.compile(r"^\s*SHOW\s+(ROW\s+)?POLICIES\s*$", re.IGNORECASE)
+
+
+def returns_empty_string_on_empty_body(cmd: str | bytes) -> bool:
+    if not isinstance(cmd, str):
+        return False
+    return row_policy_show_re.search(remove_sql_comments(cmd)) is not None
+
+
 class QueryContext(BaseQueryContext):
     """
     Argument/parameter object for queries.  This context is used to set thread/query specific formats
     """
 
-    # pylint: disable=duplicate-code,too-many-arguments,too-many-positional-arguments,too-many-locals
-    def __init__(self,
-                 query: Union[str, bytes] = '',
-                 parameters: Optional[Dict[str, Any]] = None,
-                 settings: Optional[Dict[str, Any]] = None,
-                 query_formats: Optional[Dict[str, str]] = None,
-                 column_formats: Optional[Dict[str, Union[str, Dict[str, str]]]] = None,
-                 encoding: Optional[str] = None,
-                 server_tz: tzinfo = pytz.UTC,
-                 use_none: Optional[bool] = None,
-                 column_oriented: Optional[bool] = None,
-                 use_numpy: Optional[bool] = None,
-                 max_str_len: Optional[int] = 0,
-                 query_tz: Optional[Union[str, tzinfo]] = None,
-                 column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                 utc_tz_aware: bool = False,
-                 use_extended_dtypes: Optional[bool] = None,
-                 as_pandas: bool = False,
-                 streaming: bool = False,
-                 apply_server_tz: bool = False,
-                 external_data: Optional[ExternalData] = None,
-                 transport_settings: Optional[Dict[str, str]] = None,
-                 rename_response_column: Optional[str] = None):
+    def __init__(
+        self,
+        query: str | bytes = "",
+        parameters: dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        query_formats: dict[str, str] | None = None,
+        column_formats: dict[str, str | dict[str, str]] | None = None,
+        encoding: str | None = None,
+        server_tz: tzinfo = timezone.utc,
+        use_none: bool | None = None,
+        column_oriented: bool | None = None,
+        use_numpy: bool | None = None,
+        max_str_len: int | None = 0,
+        query_tz: str | tzinfo | None = None,
+        column_tzs: dict[str, str | tzinfo] | None = None,
+        use_extended_dtypes: bool | None = None,
+        as_pandas: bool = False,
+        streaming: bool = False,
+        apply_server_tz: bool = False,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+        rename_response_column: str | None = None,
+        tz_mode: TzMode | None = None,
+    ):
         """
         Initializes various configuration settings for the query context
 
@@ -77,21 +94,25 @@ class QueryContext(BaseQueryContext):
         :param max_str_len Limit returned ClickHouse String values to this length, which allows a Numpy
           structured array even with ClickHouse variable length String columns.  If 0, Numpy arrays for
           String columns will always be object arrays
-        :param query_tz  Either a string or a pytz tzinfo object.  (Strings will be converted to tzinfo objects).
+        :param query_tz  Either a string IANA timezone name or a tzinfo object (strings are resolved via zoneinfo).
           Values for any DateTime or DateTime64 column in the query will be converted to Python datetime.datetime
           objects with the selected timezone
         :param column_tzs A dictionary of column names to tzinfo objects (or strings that will be converted to
           tzinfo objects).  The timezone will be applied to datetime objects returned in the query
-        :param utc_tz_aware Force timezone-aware Python datetime objects even when the active timezone is UTC.
-          Defaults to False to preserve the legacy behavior of returning naive UTC timestamps.
+        :param tz_mode Controls timezone-aware behavior for UTC DateTime columns. "naive_utc" (default) returns
+          naive UTC timestamps. "aware" forces timezone-aware UTC datetimes. "schema" returns datetimes that
+          match the server's column definition which means timezone-aware when the column schema defines a timezone
+          (e.g. DateTime('UTC')) and naive for bare DateTime columns.
         """
-        super().__init__(settings,
-                         query_formats,
-                         column_formats,
-                         encoding,
-                         use_extended_dtypes if use_extended_dtypes is not None else False,
-                         use_numpy if use_numpy is not None else False,
-                         transport_settings=transport_settings)
+        super().__init__(
+            settings,
+            query_formats,
+            column_formats,
+            encoding,
+            use_extended_dtypes if use_extended_dtypes is not None else False,
+            use_numpy if use_numpy is not None else False,
+            transport_settings=transport_settings,
+        )
         self.query = query
         self.parameters = parameters or {}
         self.use_none = True if use_none is None else use_none
@@ -101,38 +122,42 @@ class QueryContext(BaseQueryContext):
         self.server_tz = server_tz
         self.apply_server_tz = apply_server_tz
         self.external_data = external_data
-        self.utc_tz_aware = utc_tz_aware
+        self.tz_mode = tz_mode if tz_mode is not None else "naive_utc"
+        if self.tz_mode not in _VALID_TZ_MODES:
+            raise ProgrammingError(f'tz_mode must be "naive_utc", "aware", or "schema", got "{self.tz_mode}"')
         if isinstance(query_tz, str):
             try:
-                query_tz = pytz.timezone(query_tz)
-            except UnknownTimeZoneError as ex:
-                raise ProgrammingError(f'query_tz {query_tz} is not recognized') from ex
+                query_tz = tzutil.resolve_zone(query_tz)
+            except ZoneInfoNotFoundError as ex:
+                raise ProgrammingError(f"query_tz {query_tz} is not recognized; {tzutil.TZDATA_HINT}") from ex
         self.query_tz = query_tz
         if column_tzs is not None:
-            for col_name, timezone in column_tzs.items():
-                if isinstance(timezone, str):
+            resolved_column_tzs = {}
+            for col_name, col_tz in column_tzs.items():
+                if isinstance(col_tz, str):
                     try:
-                        timezone = pytz.timezone(timezone)
-                        column_tzs[col_name] = timezone
-                    except UnknownTimeZoneError as ex:
-                        raise ProgrammingError(f'column_tz {timezone} is not recognized') from ex
+                        resolved_column_tzs[col_name] = tzutil.resolve_zone(col_tz)
+                    except ZoneInfoNotFoundError as ex:
+                        raise ProgrammingError(f"column_tz {col_tz} is not recognized; {tzutil.TZDATA_HINT}") from ex
+                else:
+                    resolved_column_tzs[col_name] = col_tz
+            column_tzs = resolved_column_tzs
         self.column_tzs = column_tzs
         self.column_tz = None
         self.response_tz = None
         self.block_info = False
         self.as_pandas = as_pandas
-        self.use_pandas_na = as_pandas and pd_extended_dtypes
         self.streaming = streaming
-        self._rename_response_column: Optional[str] = rename_response_column
+        self._rename_response_column: str | None = rename_response_column
         self.column_renamer = get_rename_method(rename_response_column)
         self._update_query()
 
     @property
-    def rename_response_column(self) -> Optional[str]:
+    def rename_response_column(self) -> str | None:
         return self._rename_response_column
 
     @rename_response_column.setter
-    def rename_response_column(self, method: Optional[str]):
+    def rename_response_column(self, method: str | None):
         self._rename_response_column = method
         self.column_renamer = get_rename_method(method)
 
@@ -150,9 +175,9 @@ class QueryContext(BaseQueryContext):
 
     @property
     def is_command(self) -> bool:
-        return command_re.search(self.uncommented_query) is not None
+        return command_re.search(self.uncommented_query) is not None or bare_row_policy_show_re.search(self.uncommented_query) is not None
 
-    def set_parameters(self, parameters: Dict[str, Any]):
+    def set_parameters(self, parameters: dict[str, Any]):
         self.parameters = parameters
         self._update_query()
 
@@ -172,7 +197,9 @@ class QueryContext(BaseQueryContext):
         else:
             self.column_tz = None
 
-    def active_tz(self, datatype_tz: Optional[tzinfo]):
+    def active_tz(self, datatype_tz: tzinfo | None):
+        if self.tz_mode == "schema":
+            return self.column_tz or datatype_tz
         if self.column_tz:
             active_tz = self.column_tz
         elif datatype_tz:
@@ -185,56 +212,60 @@ class QueryContext(BaseQueryContext):
             active_tz = self.server_tz
         else:
             active_tz = tzutil.local_tz
-        if active_tz == pytz.UTC and not self.utc_tz_aware:
+        if tzutil.is_utc_timezone(active_tz) and self.tz_mode == "naive_utc":
             return None
         return active_tz
 
-    # pylint disable=too-many-positional-arguments
-    def updated_copy(self,
-                     query: Optional[Union[str, bytes]] = None,
-                     parameters: Optional[Dict[str, Any]] = None,
-                     settings: Optional[Dict[str, Any]] = None,
-                     query_formats: Optional[Dict[str, str]] = None,
-                     column_formats: Optional[Dict[str, Union[str, Dict[str, str]]]] = None,
-                     encoding: Optional[str] = None,
-                     server_tz: Optional[tzinfo] = None,
-                     use_none: Optional[bool] = None,
-                     column_oriented: Optional[bool] = None,
-                     use_numpy: Optional[bool] = None,
-                     max_str_len: Optional[int] = None,
-                     query_tz: Optional[Union[str, tzinfo]] = None,
-                     column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
-                     utc_tz_aware: Optional[bool] = None,
-                     use_extended_dtypes: Optional[bool] = None,
-                     as_pandas: bool = False,
-                     streaming: bool = False,
-                     external_data: Optional[ExternalData] = None,
-                     transport_settings: Optional[Dict[str, str]] = None,
-                     rename_response_column: Optional[str] = None) -> 'QueryContext':
+    def updated_copy(
+        self,
+        query: str | bytes | None = None,
+        parameters: dict[str, Any] | None = None,
+        settings: dict[str, Any] | None = None,
+        query_formats: dict[str, str] | None = None,
+        column_formats: dict[str, str | dict[str, str]] | None = None,
+        encoding: str | None = None,
+        server_tz: tzinfo | None = None,
+        use_none: bool | None = None,
+        column_oriented: bool | None = None,
+        use_numpy: bool | None = None,
+        max_str_len: int | None = None,
+        query_tz: str | tzinfo | None = None,
+        column_tzs: dict[str, str | tzinfo] | None = None,
+        use_extended_dtypes: bool | None = None,
+        as_pandas: bool = False,
+        streaming: bool = False,
+        external_data: ExternalData | None = None,
+        transport_settings: dict[str, str] | None = None,
+        rename_response_column: str | None = None,
+        tz_mode: TzMode | None = None,
+    ) -> "QueryContext":
         """
         Creates Query context copy with parameters overridden/updated as appropriate.
         """
-        return QueryContext(query or self.query,
-                            dict_copy(self.parameters, parameters),
-                            dict_copy(self.settings, settings),
-                            dict_copy(self.query_formats, query_formats),
-                            dict_copy(self.column_formats, column_formats),
-                            encoding if encoding else self.encoding,
-                            server_tz if server_tz else self.server_tz,
-                            self.use_none if use_none is None else use_none,
-                            self.column_oriented if column_oriented is None else column_oriented,
-                            self.use_numpy if use_numpy is None else use_numpy,
-                            self.max_str_len if max_str_len is None else max_str_len,
-                            self.query_tz if query_tz is None else query_tz,
-                            self.column_tzs if column_tzs is None else column_tzs,
-                            self.utc_tz_aware if utc_tz_aware is None else utc_tz_aware,
-                            self.use_extended_dtypes if use_extended_dtypes is None else use_extended_dtypes,
-                            as_pandas,
-                            streaming,
-                            self.apply_server_tz,
-                            self.external_data if external_data is None else external_data,
-                            self.transport_settings if transport_settings is None else transport_settings,
-                            self.rename_response_column if rename_response_column is None else rename_response_column)
+        resolved_tz_mode = tz_mode if tz_mode is not None else self.tz_mode
+        return QueryContext(
+            query=query or self.query,
+            parameters=dict_copy(self.parameters, parameters),
+            settings=dict_copy(self.settings, settings),
+            query_formats=dict_copy(self.query_formats, query_formats),
+            column_formats=dict_copy(self.column_formats, column_formats),
+            encoding=encoding if encoding else self.encoding,
+            server_tz=server_tz if server_tz else self.server_tz,
+            use_none=self.use_none if use_none is None else use_none,
+            column_oriented=self.column_oriented if column_oriented is None else column_oriented,
+            use_numpy=self.use_numpy if use_numpy is None else use_numpy,
+            max_str_len=self.max_str_len if max_str_len is None else max_str_len,
+            query_tz=self.query_tz if query_tz is None else query_tz,
+            column_tzs=self.column_tzs if column_tzs is None else column_tzs,
+            tz_mode=resolved_tz_mode,
+            use_extended_dtypes=self.use_extended_dtypes if use_extended_dtypes is None else use_extended_dtypes,
+            as_pandas=as_pandas,
+            streaming=streaming,
+            apply_server_tz=self.apply_server_tz,
+            external_data=self.external_data if external_data is None else external_data,
+            transport_settings=self.transport_settings if transport_settings is None else transport_settings,
+            rename_response_column=self.rename_response_column if rename_response_column is None else rename_response_column,
+        )
 
     def _update_query(self):
         self.final_query, self.bind_params = bind_query(self.query, self.parameters, self.server_tz)
@@ -250,16 +281,17 @@ class QueryResult(Closable):
     Wrapper class for query return values and metadata
     """
 
-    # pylint: disable=too-many-arguments
-    def __init__(self,
-                 result_set: Matrix = None,
-                 block_gen: Generator[Matrix, None, None] = None,
-                 column_names: Tuple = (),
-                 column_types: Tuple = (),
-                 column_oriented: bool = False,
-                 source: Closable = None,
-                 query_id: str = None,
-                 summary: Dict[str, Any] = None):
+    def __init__(
+        self,
+        result_set: Matrix = None,
+        block_gen: Generator[Matrix, None, None] = None,
+        column_names: tuple[str, ...] = (),
+        column_types: tuple["ClickHouseType", ...] = (),
+        column_oriented: bool = False,
+        source: Closable = None,
+        query_id: str = None,
+        summary: dict[str, Any] = None,
+    ):
         self._result_rows = result_set
         self._result_columns = None
         self._block_gen = block_gen or empty_gen()
@@ -280,12 +312,20 @@ class QueryResult(Closable):
     @property
     def result_columns(self) -> Matrix:
         if self._result_columns is None:
-            result = [[] for _ in range(len(self.column_names))]
-            with self.column_block_stream as stream:
-                for block in stream:
-                    for base, added in zip(result, block):
-                        base.extend(added)
-            self._result_columns = result
+            # If rows are already materialized and stream is closed, transpose from rows
+            # This happens when async client eagerly materializes result_rows
+            if self._result_rows is not None and self._block_gen is None:
+                if self._result_rows:
+                    self._result_columns = list(map(list, zip(*self._result_rows)))
+                else:
+                    self._result_columns = [[] for _ in range(len(self.column_names))]
+            else:
+                result = [[] for _ in range(len(self.column_names))]
+                with self.column_block_stream as stream:
+                    for block in stream:
+                        for base, added in zip(result, block):
+                            base.extend(added)
+                self._result_columns = result
         return self._result_columns
 
     @property
@@ -300,7 +340,7 @@ class QueryResult(Closable):
 
     @property
     def query_id(self) -> str:
-        query_id = self.summary.get('query_id')
+        query_id = self.summary.get("query_id")
         if query_id:
             return query_id
         return self._query_id
@@ -321,7 +361,7 @@ class QueryResult(Closable):
         return StreamContext(self, self._column_block_stream())
 
     @property
-    def row_block_stream(self):
+    def row_block_stream(self) -> StreamContext:
         return StreamContext(self, self._row_block_stream())
 
     @property
@@ -343,18 +383,18 @@ class QueryResult(Closable):
         return len(self.result_set)
 
     @property
-    def first_item(self):
+    def first_item(self) -> dict[str, Any]:
         if self.column_oriented:
             return {name: col[0] for name, col in zip(self.column_names, self.result_set)}
         return dict(zip(self.column_names, self.result_set[0]))
 
     @property
-    def first_row(self):
+    def first_row(self) -> Sequence[Any]:
         if self.column_oriented:
             return [col[0] for col in self.result_set]
         return self.result_set[0]
 
-    def close(self):
+    def close(self) -> None:
         if self.source:
             self.source.close()
             self.source = None
@@ -363,7 +403,7 @@ class QueryResult(Closable):
             self._block_gen = None
 
 
-comment_re = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|(--\s)[^\n]*$)", re.MULTILINE | re.DOTALL)
+comment_re = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|(--)[^\n]*$)", re.MULTILINE | re.DOTALL)
 
 
 def remove_sql_comments(sql: str) -> str:
@@ -379,7 +419,7 @@ def remove_sql_comments(sql: str) -> str:
         # if the 2nd group (capturing comments) is not None, it means we have captured a
         # non-quoted, actual comment string, so return nothing to remove the comment
         if match.group(2):
-            return ''
+            return ""
         # Otherwise we've actually captured a quoted string, so return it
         return match.group(1)
 
@@ -398,12 +438,12 @@ def to_arrow_batches(buffer: IOBase) -> StreamContext:
     return StreamContext(buffer, reader)
 
 
-def arrow_buffer(table, compression: Optional[str] = None) -> Tuple[Sequence[str], Union[bytes, BinaryIO]]:
+def arrow_buffer(table, compression: str | None = None) -> tuple[Sequence[str], bytes | BinaryIO]:
     pyarrow = check_arrow()
-    options = None
-    if compression in ('zstd', 'lz4'):
-        options = pyarrow.ipc.IpcWriteOptions(compression=pyarrow.Codec(compression=compression))
+    write_options = None
+    if compression in ("zstd", "lz4"):
+        write_options = pyarrow.ipc.IpcWriteOptions(compression=pyarrow.Codec(compression=compression))
     sink = pyarrow.BufferOutputStream()
-    with pyarrow.RecordBatchFileWriter(sink, table.schema, options=options) as writer:
+    with pyarrow.RecordBatchFileWriter(sink, table.schema, options=write_options) as writer:
         writer.write(table)
     return table.schema.names, sink.getvalue()

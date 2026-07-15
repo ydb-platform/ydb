@@ -38,6 +38,7 @@
 #include <util/string/split.h>
 #include <util/system/hp_timer.h>
 #include <util/system/info.h>
+#include <util/thread/pool.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -221,6 +222,16 @@ TStatus CreateTopic(TTopicClient& client, const TString& dbPath, const Ydb::Topi
         return client.CreateTopic(dbPath, settings).ExtractValueSync();
     });
     return result;
+}
+
+std::vector<TConsumer> ExtractConsumers(Ydb::Topic::CreateTopicRequest& request) {
+    std::vector<TConsumer> consumers;
+    consumers.reserve(request.consumers_size());
+    for (const auto& consumer : request.consumers()) {
+        consumers.emplace_back(consumer);
+    }
+    request.clear_consumers();
+    return consumers;
 }
 
 TStatus CreateCoordinationNode(
@@ -471,6 +482,8 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         ExistingEntries.emplace(TString{entry.Name}, entry.Type);
     }
 
+    PendingConsumersRestores.clear();
+
     // restore
     auto restoreResult = Result<TRestoreResult>();
     if (settings.Replace_) {
@@ -479,6 +492,9 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
         restoreResult = RestoreFolder(fsPath, dbPath, settings);
     }
     if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
+        restoreResult = result;
+    }
+    if (auto result = RestorePendingConsumers(); !result.IsSuccess()) {
         restoreResult = result;
     }
 
@@ -606,7 +622,7 @@ TRestoreResult TRestoreClient::WaitForAvailableNodes(const TString& database, TD
     TDuration retrySleep = TDuration::MilliSeconds(1000);
     while (true) {
         auto result = client.ListEndpoints().GetValueSync();
-        if (result.GetStatus() == EStatus::UNAVAILABLE) {
+        if (result.GetStatus() == EStatus::UNAVAILABLE || (result.IsSuccess() && result.GetEndpointsInfo().empty())) {
             auto timeSpent = TDuration::Seconds(timer.Passed());
             if (timeSpent > waitDuration) {
                 auto error = TStringBuilder()
@@ -755,6 +771,8 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
         return *error;
     }
 
+    PendingConsumersRestores.clear();
+
     auto dbDesc = ReadDatabaseDescription(fsPath, Log.get());
 
     TString dbPath;
@@ -808,8 +826,13 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
 
     if (settings.WithContent_) {
         ExistingEntries.emplace(dbPath, ESchemeEntryType::SubDomain);
-        auto restoreResult = RestoreFolder(fsPath, dbPath, {});
+        TRestoreSettings restoreSettings;
+        restoreSettings.ReplaceSysACL(true);
+        auto restoreResult = RestoreFolder(fsPath, dbPath, restoreSettings);
         if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
+            restoreResult = result;
+        }
+        if (auto result = RestorePendingConsumers(); !result.IsSuccess()) {
             restoreResult = result;
         }
         return restoreResult;
@@ -1446,10 +1469,12 @@ TRestoreResult TRestoreClient::RestoreTopic(
         return CheckExistenceAndType(dbPath, ESchemeEntryType::Topic);
     }
 
-    const auto request = ReadTopicCreationRequest(fsPath, Log.get());
+    auto request = ReadTopicCreationRequest(fsPath, Log.get());
+    auto consumers = ExtractConsumers(request);
     auto result = CreateTopic(TopicClient, dbPath, request);
     if (result.IsSuccess()) {
         LOG_D("Created " << dbPath.Quote());
+        ScheduleConsumersRestore(dbPath, std::move(consumers));
         return RestorePermissions(fsPath, dbPath, settings, ExistingEntries.contains(dbPath), false);
     }
 
@@ -2180,20 +2205,92 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const T
         return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
     }
 
-    return RestoreConsumers(Join("/", dbPath, fsPath.GetName()), topicDesc.GetConsumers());;
+    const auto topicPath = Join("/", dbPath, fsPath.GetName());
+    ScheduleConsumersRestore(topicPath, topicDesc.GetConsumers());
+    return Result<TRestoreResult>();
+}
+
+void TRestoreClient::ScheduleConsumersRestore(const TString& topicPath, std::vector<TConsumer> consumers) {
+    if (consumers.empty()) {
+        return;
+    }
+    PendingConsumersRestores.emplace_back(TPendingConsumersRestore{
+        .TopicPath = topicPath,
+        .Consumers = std::move(consumers),
+    });
+}
+
+TRestoreResult TRestoreClient::RestorePendingConsumers() {
+    auto pending = std::exchange(PendingConsumersRestores, {});
+    for (const auto& entry : pending) {
+        if (auto result = RestoreConsumers(entry.TopicPath, entry.Consumers); !result.IsSuccess()) {
+            return result;
+        }
+    }
+    return Result<TRestoreResult>();
 }
 
 TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const std::vector<TConsumer>& consumers) {
     for (const auto& consumer : consumers) {
-        auto result = TopicClient.AlterTopic(topicPath,
-            TAlterTopicSettings()
-                .BeginAddConsumer()
-                    .ConsumerName(consumer.GetConsumerName())
-                    .Important(consumer.GetImportant())
-                    .AvailabilityPeriod(consumer.GetAvailabilityPeriod())
-                    .Attributes(consumer.GetAttributes())
-                .EndAddConsumer()
-        ).GetValueSync();
+        const auto& dlp = consumer.GetDeadLetterPolicy();
+        TAlterTopicSettings settings;
+        auto& addConsumer = settings.BeginAddConsumer(consumer.GetConsumerType());
+        addConsumer.ConsumerName(consumer.GetConsumerName())
+            .Important(consumer.GetImportant())
+            .AvailabilityPeriod(consumer.GetAvailabilityPeriod())
+            .Attributes(consumer.GetAttributes())
+            .KeepMessagesOrder(consumer.GetKeepMessagesOrder())
+            .DefaultProcessingTimeout(consumer.GetDefaultProcessingTimeout())
+            .ReceiveMessageDelay(consumer.GetReceiveMessageDelay())
+            .ReceiveMessageWaitTime(consumer.GetReceiveMessageWaitTime())
+            .ReadFrom(consumer.GetReadFrom());
+
+        for (const auto& codec : consumer.GetSupportedCodecs()) {
+            addConsumer.AppendSupportedCodecs(codec);
+        }
+
+        auto result = [&]() {
+            if (!dlp.GetEnabled()) {
+                return TopicClient.AlterTopic(
+                    topicPath,
+                    addConsumer.EndAddConsumer()
+                ).ExtractValueSync();
+            }
+
+            auto deadLetterPolicy = addConsumer
+                .BeginDeadLetterPolicy()
+                    .Enabled(dlp.GetEnabled());
+
+            switch (dlp.GetAction()) {
+                case EDeadLetterAction::Move:
+                    deadLetterPolicy
+                        .BeginCondition()
+                            .MaxProcessingAttempts(dlp.GetCondition().GetMaxProcessingAttempts())
+                        .EndCondition()
+                        .MoveAction(dlp.GetDeadLetterQueue());
+                    return TopicClient.AlterTopic(
+                        topicPath,
+                        deadLetterPolicy.EndDeadLetterPolicy().EndAddConsumer()
+                    ).ExtractValueSync();
+
+                case EDeadLetterAction::Delete:
+                    deadLetterPolicy
+                        .BeginCondition()
+                            .MaxProcessingAttempts(dlp.GetCondition().GetMaxProcessingAttempts())
+                        .EndCondition()
+                        .DeleteAction();
+                    return TopicClient.AlterTopic(
+                        topicPath,
+                        deadLetterPolicy.EndDeadLetterPolicy().EndAddConsumer()
+                    ).ExtractValueSync();
+
+                case EDeadLetterAction::Unspecified:
+                    return TopicClient.AlterTopic(
+                        topicPath,
+                        addConsumer.EndAddConsumer()
+                    ).ExtractValueSync();
+            }
+        }();
         if (result.IsSuccess()) {
             LOG_D("Created consumer " << TString{consumer.GetConsumerName()}.Quote() << " for " << topicPath.Quote());
         } else {

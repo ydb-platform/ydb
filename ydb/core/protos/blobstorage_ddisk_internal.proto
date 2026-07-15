@@ -33,4 +33,5 @@ message TChunkMapLogRecord {
 
 message TPersistentBufferChunkMapLogRecord {
     repeated uint32 ChunkIdxs = 1;
+    optional uint64 UniqueId = 2;
 }

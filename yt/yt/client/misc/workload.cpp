@@ -28,7 +28,7 @@ TWorkloadDescriptor::TWorkloadDescriptor(
     EWorkloadCategory category,
     int band,
     TInstant instant,
-    std::vector<TString> annotations,
+    std::vector<std::string> annotations,
     std::optional<NConcurrency::TFairShareThreadPoolTag> compressionFairShareTag)
     : Category(category)
     , Band(band)

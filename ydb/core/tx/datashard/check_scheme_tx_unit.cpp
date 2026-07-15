@@ -32,6 +32,7 @@ private:
     bool CheckCreatePersistentSnapshot(TActiveTransaction *activeTx);
     bool CheckDropPersistentSnapshot(TActiveTransaction *activeTx);
     bool CheckInitiateBuildIndex(TActiveTransaction *activeTx);
+    bool CheckPrepareIndexValidation(TActiveTransaction *activeTx);
     bool CheckFinalizeBuildIndex(TActiveTransaction *activeTx);
     bool CheckDropIndexNotice(TActiveTransaction *activeTx);
     bool CheckMoveTable(TActiveTransaction *activeTx);
@@ -40,7 +41,6 @@ private:
     bool CheckAlterCdcStream(TActiveTransaction *activeTx);
     bool CheckDropCdcStream(TActiveTransaction *activeTx);
     bool CheckRotateCdcStream(TActiveTransaction *activeTx);
-    bool CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx);
     bool CheckCreateIncrementalBackupSrc(TActiveTransaction *activeTx);
     bool CheckTruncate(TActiveTransaction *activeTx);
 
@@ -358,6 +358,9 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
     case TSchemaOperation::ETypeCreatePersistentSnapshot:
         res = CheckCreatePersistentSnapshot(activeTx);
         break;
+    case TSchemaOperation::ETypePrepareIndexValidation:
+        res = CheckPrepareIndexValidation(activeTx);
+        break;
     case TSchemaOperation::ETypeDropPersistentSnapshot:
         res = CheckDropPersistentSnapshot(activeTx);
         break;
@@ -387,9 +390,6 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
         break;
     case TSchemaOperation::ETypeRotateCdcStream:
         res = CheckRotateCdcStream(activeTx);
-        break;
-    case TSchemaOperation::ETypeCreateIncrementalRestoreSrc:
-        res = CheckCreateIncrementalRestoreSrc(activeTx);
         break;
     case TSchemaOperation::ETypeCreateIncrementalBackupSrc:
         res = CheckCreateIncrementalBackupSrc(activeTx);
@@ -629,6 +629,18 @@ bool TCheckSchemeTxUnit::CheckCreatePersistentSnapshot(TActiveTransaction *activ
     return true;
 }
 
+bool TCheckSchemeTxUnit::CheckPrepareIndexValidation(TActiveTransaction *activeTx) {
+    const auto& tx = activeTx->GetSchemeTx();
+
+    if (HasDuplicate(activeTx, "PrepareIndexValidation", &TPipeline::HasPrepareIndexValidation)) {
+        return false;
+    }
+
+    Y_UNUSED(tx);
+
+    return true;
+}
+
 bool TCheckSchemeTxUnit::CheckDropPersistentSnapshot(TActiveTransaction *activeTx) {
     const auto& tx = activeTx->GetSchemeTx();
 
@@ -772,16 +784,6 @@ bool TCheckSchemeTxUnit::CheckRotateCdcStream(TActiveTransaction *activeTx) {
     }
 
     return CheckSchemaVersion(activeTx, notice);
-}
-
-bool TCheckSchemeTxUnit::CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx) {
-    if (HasDuplicate(activeTx, "CreateIncrementalRestoreSrc", &TPipeline::HasCreateIncrementalRestoreSrc)) {
-        return false;
-    }
-
-    // TODO: add additional checks
-
-    return true;
 }
 
 bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *activeTx) {

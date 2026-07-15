@@ -1,10 +1,15 @@
 #include "datashard_user_db.h"
 
 #include "datashard_impl.h"
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/io_formats/cell_maker/cell_maker.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr::NDataShard {
+
+using NTableIndex::NFulltext::TGen;
 
 TDataShardUserDb::TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, ui64 globalTxId, const TRowVersion& mvccVersion, NMiniKQL::TEngineHostCounters& counters, TInstant now)
     : Self(self)
@@ -58,7 +63,7 @@ NTable::EReady TDataShardUserDb::SelectRow(
         GetReadTxMap(tableId),
         GetReadTxObserver(tableId));
 
-    if (LockMode != ELockMode::OptimisticSnapshotIsolation && stats.InvisibleRowSkips > 0) {
+    if (LockMode == ELockMode::Optimistic && stats.InvisibleRowSkips > 0) {
         if (LockTxId) {
             Self.SysLocksTable().BreakSetLocks();
         }
@@ -83,6 +88,13 @@ ui64 CalculateKeyBytes(const TArrayRef<const TRawTypeValue> key) {
     ui64 bytes = 0ull;
     for (const TRawTypeValue& value : key)
         bytes += value.IsEmpty() ? 1ull : value.Size();
+    return bytes;
+};
+
+ui64 CalculateKeyBytes(const TArrayRef<const TCell> key) {
+    ui64 bytes = 0ull;
+    for (const TCell& value : key)
+        bytes += value.IsNull() ? 1ull : value.Size();
     return bytes;
 };
 
@@ -117,7 +129,8 @@ void TDataShardUserDb::UpsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    const ui32 DefaultFilledColumnCount
+    const ui32 DefaultFilledColumnCount,
+    TIntrusivePtr<NACLib::TUserContext> userCtx
 )
 {
     auto localTableId = Self.GetLocalTableId(tableId);
@@ -125,13 +138,14 @@ void TDataShardUserDb::UpsertRow(
 
     auto opsWithoutNoNeedDefault = RemoveDefaultColumnsIfNeeded(tableId, key, ops, DefaultFilledColumnCount);
 
-    UpsertRow(tableId, key, opsWithoutNoNeedDefault);
+    UpsertRow(tableId, key, opsWithoutNoNeedDefault, userCtx);
 }
 
 void TDataShardUserDb::UpsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    TIntrusivePtr<NACLib::TUserContext> userCtx
 )
 {
     auto localTableId = Self.GetLocalTableId(tableId);
@@ -175,10 +189,10 @@ void TDataShardUserDb::UpsertRow(
         if (specUpdates.ColIdUpdateNo != Max<ui32>()) {
             addExtendedOp(specUpdates.ColIdUpdateNo, specUpdates.UpdateNo);
         }
-        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, extendedOps);
+        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, extendedOps, userCtx);
         IncreaseUpdateCounters(key, extendedOps);
     } else {
-        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
+        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, userCtx);
         IncreaseUpdateCounters(key, ops);
     }
 }
@@ -186,12 +200,13 @@ void TDataShardUserDb::UpsertRow(
 void TDataShardUserDb::ReplaceRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops)
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected ReplaceRow for an unknown table");
 
-    UpsertRowInt(NTable::ERowOp::Reset, tableId, localTableId, key, ops);
+    UpsertRowInt(NTable::ERowOp::Reset, tableId, localTableId, key, ops, userCtx);
 
     IncreaseUpdateCounters(key, ops);
 }
@@ -199,7 +214,8 @@ void TDataShardUserDb::ReplaceRow(
 void TDataShardUserDb::InsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops)
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected InsertRow for an unknown table");
@@ -211,7 +227,7 @@ void TDataShardUserDb::InsertRow(
         throw TUniqueConstrainException();
     }
 
-    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
+    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, userCtx);
 
     IncreaseUpdateCounters(key, ops);
 }
@@ -219,13 +235,14 @@ void TDataShardUserDb::InsertRow(
 void TDataShardUserDb::UpdateRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops)
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
     if (!RowExists(tableId, key)) {
-        if (LockTxId && LockMode != ELockMode::OptimisticSnapshotIsolation) {
+        if (LockTxId && LockMode == ELockMode::Optimistic) {
             // We don't perform an update, but this key may be modified later
             // by a different transaction. Make sure we set the read lock to
             // guard against that.
@@ -237,7 +254,7 @@ void TDataShardUserDb::UpdateRow(
         return;
     }
 
-    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
+    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, userCtx);
 
     IncreaseSelectCounters(key);
     IncreaseUpdateCounters(key, ops);
@@ -247,7 +264,8 @@ void TDataShardUserDb::IncrementRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    bool insertMissing)
+    bool insertMissing,
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected incrementRow for an unknown table");
@@ -262,7 +280,7 @@ void TDataShardUserDb::IncrementRow(
 
     if (currentRow.Size() == 0) {
         if (insertMissing) {
-            UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
+            UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, userCtx);
             IncreaseUpdateCounters(key, ops);
         }
         return;
@@ -288,14 +306,15 @@ void TDataShardUserDb::IncrementRow(
         newOps[i] = NIceDb::TUpdateOp(ops[i].Tag, ops[i].Op, rawTypeValue);
     }
 
-    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, newOps);
+    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, newOps, userCtx);
 
     IncreaseUpdateCounters(key, ops);
 }
 
 void TDataShardUserDb::EraseRow(
     const TTableId& tableId,
-    const TArrayRef<const TRawTypeValue> key)
+    const TArrayRef<const TRawTypeValue> key,
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
@@ -309,7 +328,7 @@ void TDataShardUserDb::EraseRow(
         }
     }
 
-    UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, key, {});
+    UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, key, {}, userCtx);
 
     ui64 keyBytes = CalculateKeyBytes(key);
 
@@ -339,7 +358,17 @@ void TDataShardUserDb::IncreaseUpdateCounters(
 }
 
 void TDataShardUserDb::IncreaseSelectCounters(
-    const TArrayRef<const TRawTypeValue> key) 
+    const TArrayRef<const TRawTypeValue> key)
+{
+    ui64 keyBytes = CalculateKeyBytes(key);
+
+    Counters.NSelectRow++;
+    Counters.SelectRowRows++;
+    Counters.SelectRowBytes += keyBytes;
+}
+
+void TDataShardUserDb::IncreaseSelectCounters(
+    const TArrayRef<const TCell> key)
 {
     ui64 keyBytes = CalculateKeyBytes(key);
 
@@ -353,16 +382,20 @@ void TDataShardUserDb::UpsertRowInt(
     const TTableId& tableId,
     ui64 localTableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops)
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
     TSmallVec<TCell> keyCells = ConvertTableKeys(key);
 
-    CheckWriteConflicts(tableId, keyCells);
+    const TUserTable& tableInfo = *Self.GetUserTables().at(tableId.PathId.LocalPathId);
+    TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(keyCells, tableInfo.UniqueIndexKeySize);
+
+    CheckWriteConflicts(tableId, uniqueKey);
 
     if (LockTxId) {
-        Self.SysLocksTable().SetWriteLock(tableId, keyCells);
+        Self.SysLocksTable().SetWriteLock(tableId, uniqueKey);
     } else {
-        Self.SysLocksTable().BreakLocks(tableId, keyCells);
+        Self.SysLocksTable().BreakLocks(tableId, uniqueKey);
     }
     Self.SetTableUpdateTime(tableId, Now);
 
@@ -370,12 +403,12 @@ void TDataShardUserDb::UpsertRowInt(
 
     const ui64 writeTxId = GetWriteTxId(tableId);
     if (writeTxId == 0) {
-        if (collector && !collector->OnUpdate(tableId, localTableId, rowOp, key, ops, MvccVersion))
+        if (collector && !collector->OnUpdate(tableId, localTableId, rowOp, key, ops, MvccVersion, userCtx))
             throw TNotReadyTabletException();
 
         Db.Update(localTableId, rowOp, key, ops, MvccVersion);
     } else {
-        if (collector && !collector->OnUpdateTx(tableId, localTableId, rowOp, key, ops, writeTxId))
+        if (collector && !collector->OnUpdateTx(tableId, localTableId, rowOp, key, ops, writeTxId, userCtx))
             throw TNotReadyTabletException();
 
         Db.UpdateTx(localTableId, rowOp, key, ops, writeTxId);
@@ -564,11 +597,13 @@ public:
     }
 
     void OnSkipCommitted(const TRowVersion&) override {
-        // We already use InvisibleRowSkips for these
+        // Select uses stats.InvisibleRowSkips for these, IterateRange uses our InvisibleRowSkips
+        ConflictChecker.AddInvisibleRowSkip();
     }
 
     void OnSkipCommitted(const TRowVersion&, ui64) override {
-        // We already use InvisibleRowSkips for these
+        // Select uses stats.InvisibleRowSkips for these, IterateRange uses our InvisibleRowSkips
+        ConflictChecker.AddInvisibleRowSkip();
     }
 
     void OnApplyCommitted(const TRowVersion& rowVersion) override {
@@ -597,11 +632,13 @@ public:
     }
 
     void OnSkipCommitted(const TRowVersion&) override {
-        // We already use InvisibleRowSkips for these
+        // Select uses stats.InvisibleRowSkips for these, IterateRange uses our InvisibleRowSkips
+        ConflictChecker.AddInvisibleRowSkip();
     }
 
     void OnSkipCommitted(const TRowVersion&, ui64) override {
-        // We already use InvisibleRowSkips for these
+        // Select uses stats.InvisibleRowSkips for these, IterateRange uses our InvisibleRowSkips
+        ConflictChecker.AddInvisibleRowSkip();
     }
 
     void OnApplyCommitted(const TRowVersion& rowVersion) override {
@@ -725,7 +762,7 @@ private:
     bool SelfFound = false;
 };
 
-void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) {
+void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TConstArrayRef<const TCell> keyCells) {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected CheckWriteConflicts for an unknown table");
 
@@ -788,10 +825,7 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
 
     // We are not actually interested in the row version, we only need to
     // detect uncommitted transaction skips on the path to that version.
-    auto res = Db.SelectRowVersion(
-        localTableId, keyCells, /* readFlags */ 0,
-        nullptr, txObserver
-    );
+    auto res = Db.SelectRowVersionByKeyPrefix(localTableId, keyCells, txObserver);
 
     if (res.Ready == NTable::EReady::Page) {
         if (mustFindConflicts || LockTxId) {
@@ -830,6 +864,14 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
             throw TLockedWriteLimitException();
         }
     }
+
+    if (res.LockTxId != 0) {
+        if (LockTxId) {
+            AddWriteConflict(res.LockTxId);
+        } else {
+            BreakWriteConflict(res.LockTxId);
+        }
+    }
 }
 
 void TDataShardUserDb::AddWriteConflict(ui64 txId) {
@@ -853,6 +895,8 @@ void TDataShardUserDb::AddWriteConflict(ui64 txId) {
         if (info->State != EVolatileTxState::Aborting) {
             Self.SysLocksTable().AddVolatileDependency(info->TxId);
         }
+    } else if (auto* entry = Self.GetMultiTxIdManager().FindMultiTxId(txId)) {
+        Self.GetMultiTxIdManager().AddWriteConflict(entry);
     } else {
         Self.SysLocksTable().AddWriteConflict(txId);
         if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
@@ -913,6 +957,8 @@ bool TDataShardUserDb::BreakWriteConflict(ui64 txId) {
             EnsureVolatileTxId();
             VolatileDependencies.insert(info->TxId);
         }
+    } else if (auto* entry = Self.GetMultiTxIdManager().FindMultiTxId(txId)) {
+        Self.GetMultiTxIdManager().BreakMultiTxId(entry);
     } else {
         // Break uncommitted locks from other transactions
         Self.SysLocksTable().BreakLock(txId);
@@ -1025,6 +1071,10 @@ NTable::ITransactionObserverPtr TDataShardUserDb::GetReadTxObserver(const TTable
     return ptr;
 }
 
+void TDataShardUserDb::AddInvisibleRowSkip() {
+    InvisibleRowSkips++;
+}
+
 void TDataShardUserDb::AddReadConflict(ui64 txId) {
     Y_ENSURE(LockTxId);
 
@@ -1046,7 +1096,7 @@ void TDataShardUserDb::CheckReadConflict(const TRowVersion& rowVersion) {
             Self.SysLocksTable().BreakSetLocks();
         }
         MvccReadConflict = true;
-    } else if (rowVersion > SnapshotVersion) {
+    } else if (rowVersion > SnapshotVersion && LockMode == ELockMode::OptimisticSnapshotIsolation) {
         // During commit we read at the current mvcc version, however we may
         // notice there have been changes between the snapshot and current
         // commit version. This is not necessarily an error, but indicates

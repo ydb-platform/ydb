@@ -41,6 +41,7 @@ extern const char* MainTableForOverlap;
 extern const char* MainTableForOverlapWithPrefix;
 extern const char* BuildTableWithOverlapIn;
 extern const char* BuildToBuildWithOverlapOut;
+extern const char* BuildToBuildWithOverlapOutReshuffle;
 
 void CreateMainTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options);
 void CreateBuildTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options, const char* name);
@@ -50,5 +51,7 @@ void CreateLevelTable(Tests::TServer::TPtr server, TActorId sender, TShardedTabl
 void CreatePostingTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options);
 void CreatePrefixTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options);
 void CreateBuildPrefixTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options, const char* name);
+
+void CreateFulltextCompactTable(Tests::TServer::TPtr server, TActorId sender, const char* name, const char* keyType = "Uint64");
 
 } // namespace NKikimr

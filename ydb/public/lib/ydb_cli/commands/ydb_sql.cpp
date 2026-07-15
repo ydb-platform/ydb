@@ -30,7 +30,15 @@ void TCommandSql::Config(TConfig& config) {
             "Important note: The query is actually executed, so any changes will be applied to the database.")
         .StoreTrue(&ExecSettings.ExplainAnalyzeMode);
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
-        .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
+        .RequiredArgument("[String]")
+        .CompletionArgHelp("Execution statistics collection mode")
+        .ChoicesWithCompletion({
+            { "none", "None" },
+            { "basic", "Basic" },
+            { "full", "Full" },
+            { "profile", "Profile" },
+        })
+        .StoreResult(&CollectStatsMode);
 
     NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     TStringStream description;
@@ -45,7 +53,17 @@ void TCommandSql::Config(TConfig& config) {
         .RequiredArgument("[String]").Hidden().DefaultValue("none").StoreResult(&Progress);
     config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
         .RequiredArgument("[String]").StoreResult(&ExecSettings.DiagnosticsFile);
-    config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
+    if (config.HelpCommandVerbosityLevel >= 2) {
+        config.Opts->AddLongOption("resource-pool", "Explicit resource pool for workload manager")
+            .RequiredArgument("[String]")
+            .StoreResult(&ResourcePool);
+    } else {
+        config.Opts->AddLongOption("resource-pool")
+            .RequiredArgument("[String]")
+            .Hidden()
+            .StoreResult(&ResourcePool);
+    }
+    config.Opts->AddLongOption("syntax", "Query syntax [yql]")
         .RequiredArgument("[String]")
         .Hidden()
         .GetOpt().Handler1T<TString>("yql", [this](const TString& arg) {
@@ -79,8 +97,8 @@ void TCommandSql::Parse(TConfig& config) {
     ParseInputFormats();
     ParseOutputFormats();
     if (Query && QueryFile) {
-        throw TMisuseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "
-            << "and \"Path to file with query text\" (\"--file\", \"-f\") were provided.";
+        throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
+            << "and \"Path to file with script text\" (\"--file\", \"-f\") were provided.";
     }
     if (ExecSettings.ExplainMode && ExecSettings.ExplainAnalyzeMode) {
         throw TMisuseException() << "Both mutually exclusive options \"Explain mode\" (\"--explain\") "
@@ -135,7 +153,7 @@ int TCommandSql::Run(TConfig& config) {
 }
 
 int TCommandSql::RunCommand(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     TExecuteGenericQuery executor(driver);
     SetInterruptHandlers();
 
@@ -161,6 +179,10 @@ int TCommandSql::RunCommand(TConfig& config) {
     }
 
     ExecSettings.Settings.Syntax(SyntaxType);
+
+    if (!ResourcePool.empty()) {
+        ExecSettings.Settings.ResourcePool(std::string(ResourcePool));
+    }
 
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters
@@ -190,8 +212,6 @@ void TCommandSql::SetCollectStatsMode(TString&& collectStatsMode) {
 void TCommandSql::SetSyntax(const TString& syntax) {
     if (syntax == "yql") {
         SyntaxType = NYdb::NQuery::ESyntax::YqlV1;
-    } else if (syntax == "pg") {
-        SyntaxType = NYdb::NQuery::ESyntax::Pg;
     } else {
         throw TMisuseException() << "Unknown syntax option \"" << syntax << "\"";
     }

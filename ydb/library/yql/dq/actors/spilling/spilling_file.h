@@ -10,14 +10,16 @@
 #include <util/folder/path.h>
 #include <util/generic/guid.h>
 
+#include <limits>
+
 namespace NYql::NDq {
 
 struct TFileSpillingServiceConfig {
     TString Root;
     TString SpillingSessionId = CreateGuidAsString();
     ui64 MaxTotalSize = 0;
-    ui64 MaxFileSize = 0;
-    ui64 MaxFilePartSize = 0;
+    ui64 MaxFileSize = std::numeric_limits<ui64>::max();
+    ui64 MaxFilePartSize = std::numeric_limits<ui64>::max();
 
     ui32 IoThreadPoolWorkersCount = 2;
     ui32 IoThreadPoolQueueSize = 1000;
@@ -31,7 +33,7 @@ inline NActors::TActorId MakeDqLocalFileSpillingServiceID(ui32 nodeId) {
 
 TFsPath GetTmpSpillingRootForCurrentUser();
 
-NActors::IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const NActors::TActorId& client, bool removeBlobsAfterRead);
+NActors::IActor* CreateDqLocalFileSpillingActor(TTxId txId, const TString& details, const NActors::TActorId& client, bool removeBlobsAfterRead, ESpillingType spillingType);
 
 NActors::IActor* CreateDqLocalFileSpillingService(const TFileSpillingServiceConfig& config, TIntrusivePtr<TSpillingCounters> counters);
 

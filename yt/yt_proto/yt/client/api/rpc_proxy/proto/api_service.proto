@@ -12,6 +12,7 @@ import "yt_proto/yt/core/misc/proto/hyperloglog.proto";
 import "yt_proto/yt/core/rpc/proto/rpc.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
+import "yt_proto/yt/client/api/common/proto/schema.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
 import "yt_proto/yt/client/chaos_client/proto/replication_card.proto";
 import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
@@ -19,6 +20,7 @@ import "yt_proto/yt/client/node_tracker_client/proto/node.proto";
 import "yt_proto/yt/client/scheduler/proto/spec_patch.proto";
 import "yt_proto/yt/client/table_client/proto/versioned_io_options.proto";
 import "yt_proto/yt/client/tablet_client/proto/lock_mask.proto";
+import "yt_proto/yt/client/tablet_client/proto/secondary_index.proto";
 import "yt_proto/yt/client/table_chunk_format/proto/chunk_meta.proto";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -490,6 +492,7 @@ message TReqCommitTransaction
     required NYT.NProto.TGuid transaction_id = 1;
     reserved 6;
     repeated NYT.NProto.TGuid additional_participant_cell_ids = 7;
+    repeated uint32 expected_prepare_signatures = 9;
     optional uint64 max_allowed_commit_timestamp = 8;
 
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -512,6 +515,7 @@ message TReqFlushTransaction
 message TRspFlushTransaction
 {
     repeated NYT.NProto.TGuid participant_cell_ids = 1;
+    repeated uint32 expected_prepare_signatures = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -543,6 +547,8 @@ message TReqLookupRows
 
     optional bool enable_partial_result = 7 [default = false];
     optional bool use_lookup_cache = 9 [default = false];
+
+    optional bool allow_missing_key_columns = 14 [default = false];
 
     optional TTabletReadOptions tablet_read_options = 106;
     optional EReplicaConsistency replica_consistency = 11;
@@ -590,6 +596,8 @@ message TReqVersionedLookupRows
     optional bool enable_partial_result = 7 [default = false];
     optional bool use_lookup_cache = 9 [default = false];
 
+    optional bool allow_missing_key_columns = 12 [default = false];
+
     optional TTabletReadOptions tablet_read_options = 106;
     optional EReplicaConsistency replica_consistency = 10;
 
@@ -621,6 +629,8 @@ message TReqMultiLookup
 
         optional bool enable_partial_result = 4 [default = false];
         optional bool use_lookup_cache = 5 [default = false];
+
+        optional bool allow_missing_key_columns = 10 [default = false];
 
         required TRowsetDescriptor rowset_descriptor = 6;
 
@@ -737,6 +747,7 @@ message TReqSelectRows
     optional int32 statistics_aggregation = 33; // EStatisticsAggregation
     optional int32 optimization_level = 35; // EOptimizationLevel
     optional int32 hyper_log_log_precision = 36;
+    optional bool enable_parallelize_unordered_group_by = 37;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 
@@ -1077,17 +1088,19 @@ message TReqModifyRows
     required NYT.NProto.TGuid transaction_id = 1;
     required bytes path = 2; // YPath
     repeated ERowModificationType row_modification_types = 3;
-    // COMPAT(lukyan): Remove after RPC protocol version update
+
+    // COMPAT(lukyan): Remove after RPC protocol version update.
+    // NB: Cannot represent pure exclusive locks.
     repeated uint32 row_legacy_read_locks = 7;
-    // COMPAT(ponasenko-rs): Remove after RPC protocol version update
+    // COMPAT(ponasenko-rs): Remove after RPC protocol version update.
+    // NB: Cannot represent lock types beyond None, SharedWeak, SharedStrong and Exclusive.
     repeated uint64 row_legacy_locks = 8;
+    repeated NYT.NTabletClient.NProto.TLockMask row_locks = 11;
 
     optional bool require_sync_replica = 4;
     optional NYT.NProto.TGuid upstream_replica_id = 5;
 
     optional bool allow_missing_key_columns = 10;
-
-    repeated NYT.NTabletClient.NProto.TLockMask row_locks = 11;
 
     required TRowsetDescriptor rowset_descriptor = 200;
 }
@@ -1505,38 +1518,6 @@ message TRspCreateObject
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TColumnSchema
-{
-    required string name = 1;
-    optional string stable_name = 12;
-
-    optional int32 type = 2;
-    optional int32 logical_type = 3;
-    optional bytes type_v3 = 11; // YSON representation of type_v3
-
-    optional string lock = 4;
-    optional string expression = 5;
-    optional bool materialized = 13;
-    optional string aggregate = 6;
-    optional int32 sort_order = 7;
-    optional string group = 8;
-    optional bool required = 9 [default = false];
-    optional int64 max_inline_hunk_size = 10;
-}
-
-message TDeletedColumn
-{
-    required string stable_name = 1;
-}
-
-message TTableSchema
-{
-    repeated TColumnSchema columns = 1;
-    optional bool strict = 2 [default = true];
-    optional bool unique_keys = 3 [default = false];
-    repeated TDeletedColumn deleted_columns = 5;
-}
-
 message TTabletInfo
 {
     required NYT.NProto.TGuid tablet_id = 1;
@@ -1555,23 +1536,6 @@ message TReplicaInfo
     required int32 mode = 4; // ETableReplicaMode
 }
 
-message TUnfoldedColumns
-{
-    required string table_column = 1;
-    required string index_column = 2;
-}
-
-message TIndexInfo
-{
-    required NYT.NProto.TGuid index_table_id = 1;
-    required int32 index_kind = 2; // NTableClient::ESecondaryIndexKind
-    optional string predicate = 3;
-    optional string unfolded_column = 4;
-    optional int32 index_correspondence = 6; // NTableClient::ESecondaryIndexState
-    optional TTableSchema evaluated_columns_schema = 7;
-    optional TUnfoldedColumns unfolded_columns = 8;
-}
-
 message TReqGetTableMountInfo
 {
     required bytes path = 1; // RichYPath
@@ -1586,7 +1550,7 @@ message TRspGetTableMountInfo
     required NYT.NProto.TGuid upstream_replica_id = 5;
     repeated TReplicaInfo replicas = 6;
     optional bytes physical_path = 7; // YPath
-    repeated TIndexInfo indices = 8;
+    repeated NYT.NTabletClient.NProto.TIndexInfo indices = 8;
     optional int32 tablet_count = 9;
 }
 
@@ -2144,6 +2108,11 @@ message TReqAlterReplicationCard
     optional bool enable_replicated_table_tracker = 3;
     optional NYT.NProto.TGuid replication_card_collocation_id = 4;
     optional bytes collocation_options = 5; // NTabletClient::TReplicationCollocationOptions
+    oneof secondary_index {
+        bytes create_secondary_index = 6;
+        NYT.NProto.TGuid destroy_secondary_index = 7;
+        bytes progress_secondary_index_correspondence = 8;
+    }
 
     optional TMutatingOptions mutating_options = 100;
 }
@@ -2216,7 +2185,7 @@ message TColumnarStatistics
     // Per-column hyperloglog digest to approximate number of unique values
     repeated NYT.NProto.THyperLogLogDigest column_hyperloglog_digests = 14;
 
-    optional int64 read_size_estimation = 15;
+    optional int64 read_size_estimate = 15;
 }
 
 message TRspGetColumnarStatistics
@@ -2280,12 +2249,14 @@ message TReqPartitionTables
     optional TFetcherConfig fetcher_config = 3;
     optional TChunkSliceFetcherConfig chunk_slice_fetcher_config = 4;
     required EPartitionTablesMode partition_mode = 5;
-    required int64 data_weight_per_partition = 6;
+    optional int64 data_weight_per_partition = 6;
+    optional int64 compressed_data_size_per_partition = 14;
     optional int32 max_partition_count = 7;
     optional bool enable_key_guarantee = 8;
     optional bool adjust_data_weight_per_partition = 9;
 
     optional bool enable_cookies = 10;
+    optional bool fetch_cookie_node_descriptors = 15;
 
     optional bool omit_inaccessible_rows = 13;
 
@@ -3922,6 +3893,14 @@ message TReqStartShuffle
     required NYT.NProto.TGuid parent_transaction_id = 3;
     optional string medium = 4;
     optional int32 replication_factor = 5;
+    optional bool use_push_based_shuffle = 6 [default = false];
+
+    // Currently this field is required only when use_push_based_shuffle is set.
+    // COMPAT(apollo1321): Make this field required for both push and pull shuffle modes in 26.3.
+    optional TTableSchema schema = 7;
+
+    // YSON-serialized TPushShuffleConfig; push-based only.
+    optional bytes push_config = 8;
 }
 
 message TRspStartShuffle

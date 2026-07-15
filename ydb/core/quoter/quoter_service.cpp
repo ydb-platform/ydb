@@ -6,19 +6,12 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <cmath>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
-#error log macro definition clash
-#endif
-
-#define BLOG_T(stream) LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
-#define BLOG_D(stream) LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
-#define BLOG_I(stream) LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
-#define BLOG_WARN(stream) LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::QUOTER_SERVICE
 
 LWTRACE_USING(QUOTER_SERVICE_PROVIDER);
 
@@ -124,6 +117,8 @@ void TReqState::Free(TRequestId idx) {
 
     x.Source = TActorId();
     x.Orbit.Reset();
+    x.RequestSpan = {};
+    x.WaitSpan = {};
 
     Unused.push_back(idx);
 }
@@ -232,10 +227,12 @@ TDuration TResource::Charge(TRequest& request, TResourceLeaf& leaf, TInstant now
 }
 
 void TResource::ChargeUsedAmount(double amount, TInstant now) {
-    BLOG_T("ChargeUsedAmount \"" << Resource << "\" for " << amount
-           << ". Balance: " << Balance
-           << ". FreeBalance: " << FreeBalance
-           << ". Now: " << now);
+    YDB_LOG_TRACE("ChargeUsedAmount",
+        {"resource", Resource},
+        {"amount", amount},
+        {"balance", Balance},
+        {"freeBalance", FreeBalance},
+        {"now", now});
     LastAllocated = now;
     FreeBalance -= amount;
     Balance -= amount;
@@ -265,14 +262,16 @@ TDuration TResource::Charge(double amount, TInstant now) {
     // TODO: calculate time for many requests (not for one). Now errors can be accumulated when big rates are used.
     const TInstant timeToFullfill = LastAllocated + TDuration::MicroSeconds(lround(durationToFullfillInUs));
 
-    BLOG_T("Charge \"" << Resource << "\" for " << amount
-           << ". Balance: " << Balance
-           << ". FreeBalance: " << FreeBalance
-           << ". TicksToFullfill: " << ticksToFullfill
-           << ". DurationToFullfillInUs: " << durationToFullfillInUs
-           << ". TimeToFullfill: " << timeToFullfill
-           << ". Now: " << now
-           << ". LastAllocated: " << LastAllocated);
+    YDB_LOG_TRACE("Charge",
+        {"resource", Resource},
+        {"amount", amount},
+        {"balance", Balance},
+        {"freeBalance", FreeBalance},
+        {"ticksToFullfill", ticksToFullfill},
+        {"durationToFullfillInUs", durationToFullfillInUs},
+        {"timeToFullfill", timeToFullfill},
+        {"now", now},
+        {"lastAllocated", LastAllocated});
 
     if (Balance >= 0.0) {
         if (timeToFullfill <= now) {
@@ -343,7 +342,10 @@ void TQuoterService::ScheduleNextTick(TInstant requested, TResource &quores) {
     const TInstant selected = Max(next, last, LastProcessed);
     quores.NextTick = selected;
     quores.LastTick = selected;
-    BLOG_T("Schedule next tick for \"" << quores.Resource << "\". Tick size: " << quores.TickSize << ". Time: " << quores.NextTick);
+    YDB_LOG_TRACE("Schedule next tick",
+        {"resource", quores.Resource},
+        {"size", quores.TickSize},
+        {"time", quores.NextTick});
     ScheduleFeed[quores.NextTick].emplace(&quores);
 }
 
@@ -382,6 +384,7 @@ void TQuoterService::Bootstrap() {
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(QUOTER_SERVICE_PROVIDER));
 
     Become(&TThis::StateFunc);
+    ScheduleNextCleanupPass();
 }
 
 void TQuoterService::TryTickSchedule(TInstant now) {
@@ -394,6 +397,8 @@ void TQuoterService::TryTickSchedule(TInstant now) {
 
 void TQuoterService::ReplyRequest(TRequest &request, TRequestId reqIdx, TEvQuota::TEvClearance::EResult resultCode) {
     LWTRACK(RequestDone, request.Orbit, resultCode, request.EventCookie);
+    request.EndWaitSpan(ToString(resultCode), resultCode == TEvQuota::TEvClearance::EResult::Success);
+    request.EndRequestSpan(resultCode);
     Send(request.Source, new TEvQuota::TEvClearance(resultCode), 0, request.EventCookie);
 
     ForgetRequest(request, reqIdx);
@@ -405,6 +410,12 @@ void TQuoterService::ForgetRequest(TRequest &request, TRequestId reqIdx) {
     // so only correct entry points are from ReplyRequest or from CancelRequest
 
     // cleanup from resource wait queue
+    // (no-op when reached via ReplyRequest, which already ended these spans)
+    request.EndWaitSpan("Cancelled", false);
+    if (request.RequestSpan) {
+        request.RequestSpan.EndError("Cancelled");
+    }
+
     for (TResourceLeafId leafIdx = request.ResourceLeaf; leafIdx != TResourceLeafId{}; ) {
         TResourceLeaf &leaf = ResState.Get(leafIdx);
 
@@ -552,12 +563,15 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
         if (qIndxIt == QuotersIndex.end()) {
             TVector<TString> path = NKikimr::SplitPath(leaf.Quoter);
             if (path.empty()) {
-                BLOG_WARN("Empty path to quoter is provided: \"" << leaf.Quoter << "\"");
+                YDB_LOG_WARN("Empty path to quoter is provided",
+                    {"quoter", leaf.Quoter});
                 return EInitLeafStatus::GenericError;
             }
 
             if (CanonizePath(path) != leaf.Quoter) {
-                BLOG_WARN("Not canonized path to quoter is provided. Provided: \"" << leaf.Quoter << "\", but canonized is \"" << CanonizePath(path) << "\"");
+                YDB_LOG_WARN("Not canonized path to quoter is provided",
+                    {"quoter", leaf.Quoter},
+                    {"canonizedPath", CanonizePath(path)});
                 return EInitLeafStatus::GenericError;
             }
 
@@ -575,7 +589,8 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
             req->ResultSet.back().Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(req), IEventHandle::FlagTrackDelivery, 0);
 
-            BLOG_I("resolve new quoter " << leaf.Quoter);
+            YDB_LOG_INFO("Resolve new quoter",
+                {"quoter", leaf.Quoter});
         } else {
             // ok, got quoterId, proceed
             quoterId = qIndxIt->second;
@@ -600,12 +615,13 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
         request.ResourceLeaf = resLeafIdx;
 
         resLeaf.State = EResourceState::ResolveQuoter;
+        request.StartWaitSpan(resLeaf, "QuoterService.ResolveQuoter");
 
         return EInitLeafStatus::Wait;
     }
 
     ui64 resourceId = leaf.ResourceId;
-    THolder<TResource> *resHolder = leaf.ResourceId ? quoter->Resources.FindPtr(resourceId) : nullptr;
+    THolder<TResource> *resHolder = resourceId ? quoter->Resources.FindPtr(resourceId) : nullptr;
     if (resHolder == nullptr) {
         if (!leaf.Resource)
             return EInitLeafStatus::GenericError;
@@ -631,10 +647,13 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
             request.ResourceLeaf = resLeafIdx;
 
             resLeaf.State = EResourceState::ResolveResource;
+            request.StartWaitSpan(resLeaf, "QuoterService.ResolveResource");
 
             if (rIndxIt.second) { // new resource, create resource session
-                BLOG_I("resolve resource " << resLeaf.ResourceName << " on quoter " << quoter->QuoterName);
-                Send(quoter->ProxyId, new TEvQuota::TEvProxyRequest(resLeaf.ResourceName));
+                YDB_LOG_INFO("Resolve resource on quoter",
+                    {"resourceName", resLeaf.ResourceName},
+                    {"quoterName", quoter->QuoterName});
+                Send(quoter->ProxyId, new TEvQuota::TEvProxyRequest(resLeaf.ResourceName), 0, 0, request.WaitSpan.GetTraceId());
             }
 
             return EInitLeafStatus::Wait;
@@ -732,6 +751,7 @@ TQuoterService::EInitLeafStatus TQuoterService::TryCharge(TResource& quores, ui6
     resLeaf.QuoterName = leaf.Quoter;
     resLeaf.ResourceId = resourceId;
     resLeaf.ResourceName = leaf.Resource;
+    request.StartWaitSpan(resLeaf, "QuoterService.WaitResourceQuota");
 
     if (quores.QueueTail == Max<ui32>()) {
         quores.QueueTail = resLeafIdx;
@@ -856,12 +876,24 @@ void TQuoterService::Handle(NMon::TEvHttpInfo::TPtr &ev) {
             PRE() {
                 str << "LastProcessed: " << LastProcessed << "\n"
                     << "Quoters:\n";
+                bool firstQuoter = true;
                 for (auto& [quoterId, quoterState] : Quoters) {
+                    if (firstQuoter) {
+                        firstQuoter = false;
+                    } else {
+                        str << "\n";
+                    }
                     str << "  Name: " << quoterState.QuoterName << "\n"
                         << "  Id: " << quoterId << "\n"
                         << "  ProxyId: " << quoterState.ProxyId << "\n"
                         << "  Resources:\n";
+                    bool firstRes = true;
                     for (auto& [resId, resPtr] : quoterState.Resources) {
+                        if (firstRes) {
+                            firstRes = false;
+                        } else {
+                            str << "\n";
+                        }
                         str << "    Id: " << resId << "\n";
                         if (resPtr) {
                             str << "    Name: " << resPtr->Resource << "\n"
@@ -904,7 +936,8 @@ void TQuoterService::Handle(NMon::TEvHttpInfo::TPtr &ev) {
 }
 
 void TQuoterService::Handle(TEvQuota::TEvRequest::TPtr &ev) {
-    BLOG_T("Request(" << PrintEvent(ev) << ")");
+    YDB_LOG_TRACE("Request",
+        {"ev", PrintEvent(ev)});
 
     Counters.RequestsInFly->Inc();
     Counters.Requests->Inc();
@@ -912,6 +945,7 @@ void TQuoterService::Handle(TEvQuota::TEvRequest::TPtr &ev) {
     TEvQuota::TEvRequest *msg = ev->Get();
     const TRequestId reqIdx = ReqState.Allocate(ev->Sender, ev->Cookie);
     TRequest &request = ReqState.Get(reqIdx);
+    request.StartRequestSpan(NWilson::TTraceId(ev->TraceId), msg->Deadline);
     LWTRACK(StartRequest, request.Orbit, msg->Operator, msg->Deadline, ev->Cookie);
 
     if (msg->Reqs.empty()) // request nothing? most probably is error so decline
@@ -991,13 +1025,17 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
 
     const bool isError = msg->Result != msg->Success;
     if (isError) {
-        BLOG_I("resource sesson failed: " << quoter.QuoterName << ":" << resourceName);
+        YDB_LOG_INFO("Resource session failed",
+            {"quoterName", quoter.QuoterName},
+            {"resourceName", resourceName});
 
         for (TRequestId reqIdx : waitingRequests) {
+            TRequest &req = ReqState.Get(reqIdx);
+            req.EndWaitSpan(ToString(msg->Result), false);
             if (msg->Result == TEvQuota::TEvProxySession::UnknownResource) {
-                DeclineRequest(ReqState.Get(reqIdx), reqIdx);
+                DeclineRequest(req, reqIdx);
             } else {
-                FailRequest(ReqState.Get(reqIdx), reqIdx);
+                FailRequest(req, reqIdx);
             }
         }
 
@@ -1006,7 +1044,10 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
 
     const ui64 resourceId = msg->ResourceId;
 
-    BLOG_I("resource session established: " << quoter.QuoterName << ":" << resourceName << " as " << resourceId);
+    YDB_LOG_INFO("Resource session established",
+        {"quoterName", quoter.QuoterName},
+        {"resourceName", resourceName},
+        {"resourceId", resourceId});
 
     // success, create resource
     auto resPairIt = quoter.Resources.emplace(resourceId, new TResource(quoterId, resourceId, quoter.QuoterName, resourceName, Config, quoter.Counters.QuoterCounters));
@@ -1023,6 +1064,8 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
     // move requests to 'wait resource' state
     for (TRequestId reqId : waitingRequests) {
         TRequest &req = ReqState.Get(reqId);
+        // session is established: close the ResolveResource phase and open WaitQuota
+        req.EndWaitSpan("SessionEstablished", true);
         TResourceLeafId resIdx = req.ResourceLeaf;
         while (resIdx != TResourceLeafId{}) {
             TResourceLeaf &leaf = ResState.Get(resIdx);
@@ -1034,6 +1077,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
                 leaf.Resource = &quores;
                 leaf.State = EResourceState::Wait;
                 leaf.ResourceId = resourceId;
+                req.StartWaitSpan(leaf, "QuoterService.WaitResourceQuota");
 
                 quores.QueueSize += 1;
                 quores.QueueWeight += leaf.Amount;
@@ -1080,11 +1124,13 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
         return;
 
     if (msg->QuoterState == EUpdateState::Broken || (msg->QuoterState == EUpdateState::Evict && quoter.Empty())) {
-        BLOG_I("closing quoter on ProxyUpdate " << quoter.QuoterName);
+        YDB_LOG_INFO("Closing quoter on ProxyUpdate",
+            {"quoterName", quoter.QuoterName});
         return BreakQuoter(quoterIt);
     }
 
-    BLOG_D("ProxyUpdate for quoter " << quoter.QuoterName);
+    YDB_LOG_DEBUG("ProxyUpdate for quoter",
+        {"quoterName", quoter.QuoterName});
 
     for (auto &resUpdate : msg->Resources) {
         auto resourceIt = quoter.Resources.find(resUpdate.ResourceId);
@@ -1096,12 +1142,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
         if (resUpdate.ResourceState == EUpdateState::Broken
             || (resUpdate.ResourceState == EUpdateState::Evict && quores.QueueHead == Max<ui32>()))
         {
-            BLOG_I("closing resource on ProxyUpdate " << quoter.QuoterName << ":" << quores.Resource);
-            Send(quoter.ProxyId, new TEvQuota::TEvProxyCloseSession(quores.Resource, quores.ResourceId));
-
-            ForbidResource(quores);
-            quoter.ResourcesIndex.erase(quores.Resource);
-            quoter.Resources.erase(resourceIt);
+            EvictResource(quoter, resUpdate.ResourceId, "ProxyUpdate");
             continue;
         }
 
@@ -1120,15 +1161,117 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
         }
     }
 
-    if (quoter.Empty()) {
-        BLOG_I("closing quoter on ProxyUpdate as no activity left " << quoter.QuoterName);
-        return BreakQuoter(quoterIt);
-    }
+    CloseQuoterIfEmpty(quoterIt, "ProxyUpdate");
 }
 
 void TQuoterService::Handle(TEvQuota::TEvRpcTimeout::TPtr &ev) {
     Y_UNUSED(ev);
     Counters.ResultRpcDeadline->Inc();
+}
+
+void TQuoterService::StartCleanupPass() {
+    CleanupQuoters = {};
+
+    for (const auto& [quoterId, _] : Quoters) {
+        Y_UNUSED(_);
+        CleanupQuoters.push(quoterId);
+    }
+}
+
+void TQuoterService::ScheduleNextCleanupPass() {
+    Schedule(CleanupPeriod, new TEvents::TEvWakeup(WakeupTagCleanup));
+}
+
+void TQuoterService::HandleCleanup() {
+    if (CleanupQuoters.empty()) {
+        StartCleanupPass();
+    }
+
+    const TInstant now = TActivationContext::Now();
+    size_t resourcesProcessed = 0;
+    while (!CleanupQuoters.empty() && resourcesProcessed < CleanupBatchLimit) {
+        const ui64 quoterId = CleanupQuoters.front();
+        CleanupQuoters.pop();
+
+        auto quoterIt = Quoters.find(quoterId);
+        if (quoterIt == Quoters.end()) {
+            continue;
+        }
+
+        TVector<ui64> resourcesToEvict;
+        for (const auto& [resourceId, resHolder] : quoterIt->second.Resources) {
+            ++resourcesProcessed;
+
+            const TResource& quores = *resHolder.Get();
+            if (quores.Activation == TInstant::Zero()
+                && quores.NextTick == TInstant::Zero()
+                && quores.QueueHead == Max<ui32>()
+                && now - quores.LastTick >= CleanupResourceIdlePeriod
+                && now - quores.LastAllocated >= CleanupResourceIdlePeriod)
+            {
+                resourcesToEvict.push_back(resourceId);
+            }
+        }
+
+        for (ui64 resourceId : resourcesToEvict) {
+            EvictResource(quoterIt->second, resourceId, "Cleanup");
+        }
+
+        CloseQuoterIfEmpty(quoterIt, "Cleanup");
+    }
+
+    if (!CleanupQuoters.empty()) {
+        // Allow external requests to be processed
+        Send(SelfId(), new TEvents::TEvWakeup(WakeupTagCleanup));
+        return;
+    }
+
+    ScheduleNextCleanupPass();
+}
+
+void TQuoterService::EvictResource(TQuoterState& quoter, ui64 resourceId, TStringBuf reason) {
+    auto resourceIt = quoter.Resources.find(resourceId);
+    if (resourceIt == quoter.Resources.end()) {
+        return;
+    }
+
+    TResource &quores = *resourceIt->second;
+    YDB_LOG_INFO("Closing resource",
+        {"reason", reason},
+        {"quoterName", quoter.QuoterName},
+        {"resource", quores.Resource});
+    Send(quoter.ProxyId, new TEvQuota::TEvProxyCloseSession(quores.Resource, quores.ResourceId));
+
+    ForbidResource(quores);
+    quoter.ResourcesIndex.erase(quores.Resource);
+    quoter.Resources.erase(resourceIt);
+}
+
+bool TQuoterService::CloseQuoterIfEmpty(decltype(Quoters)::iterator quoterIt, TStringBuf reason) {
+    if (!quoterIt->second.Empty()) {
+        return false;
+    }
+
+    YDB_LOG_INFO("Closing quoter as no activity left",
+        {"reason", reason},
+        {"quoterName", quoterIt->second.QuoterName});
+    BreakQuoter(quoterIt);
+    return true;
+}
+
+void TQuoterService::Handle(TEvents::TEvWakeup::TPtr &ev) {
+    switch (ev->Get()->Tag) {
+    case WakeupTagTick:
+        HandleTick();
+        return;
+    case WakeupTagCleanup:
+        HandleCleanup();
+        return;
+    default:
+        YDB_LOG_WARN("Unknown TEvWakeup",
+            {"tag", ev->Get()->Tag});
+        return;
+    }
 }
 
 void TQuoterService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {
@@ -1149,11 +1292,13 @@ void TQuoterService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr
 
     switch (navEntry.Kind) {
     case NSchemeCache::TSchemeCacheNavigate::KindKesus:
-        BLOG_I("path resolved as Kesus " << path);
+        YDB_LOG_INFO("Path resolved as Kesus",
+            {"path", path});
         return CreateKesusQuoter(navEntry, quotersIndexIt, quoterIt);
     default:
-        BLOG_I("path not resolved as known entity " << path);
-        return BreakQuoter(quotersIndexIt, quoterIt);
+        YDB_LOG_INFO("Path not resolved as known entity",
+            {"path", path});
+        return BreakQuoter(quotersIndexIt, quoterIt, "NoQuoter");
     }
 }
 
@@ -1171,32 +1316,37 @@ void TQuoterService::CreateKesusQuoter(NSchemeCache::TSchemeCacheNavigate::TEntr
     TSet<TRequestId> waitingQueueResolve(std::move(quoter.WaitingQueueResolve));
     for (TRequestId reqIdx : waitingQueueResolve) {
         TRequest &req = ReqState.Get(reqIdx);
+        // quoter is resolved: close the ResolveQuoter phase and open ResolveResource
+        req.EndWaitSpan("QuoterResolved", true);
         for (TResourceLeafId resLeafIdx = req.ResourceLeaf; resLeafIdx != Max<ui32>(); ) {
             TResourceLeaf &leaf = ResState.Get(resLeafIdx);
             if (leaf.QuoterId == quoterId) {
                 Y_ABORT_UNLESS(leaf.State == EResourceState::ResolveQuoter);
                 Y_ABORT_UNLESS(leaf.ResourceName);
 
+                leaf.State = EResourceState::ResolveResource;
+                req.StartWaitSpan(leaf, "QuoterService.ResolveResource");
+
                 auto itpair = quoter.WaitingResource.emplace(leaf.ResourceName, TSet<TRequestId>());
                 itpair.first->second.emplace(reqIdx);
 
                 if (itpair.second) { // new resolve entry, request
-                    BLOG_I("resolve resource " << leaf.ResourceName << " on quoter " << quoter.QuoterName);
-                    Send(quoter.ProxyId, new TEvQuota::TEvProxyRequest(leaf.ResourceName));
+                    YDB_LOG_INFO("Resolve resource on quoter",
+                        {"resourceName", leaf.ResourceName},
+                        {"quoterName", quoter.QuoterName});
+                    Send(quoter.ProxyId, new TEvQuota::TEvProxyRequest(leaf.ResourceName), 0, 0, req.WaitSpan.GetTraceId());
                 }
-
-                leaf.State = EResourceState::ResolveResource;
             }
             resLeafIdx = leaf.NextResourceLeaf;
         }
     }
 }
 
-void TQuoterService::BreakQuoter(decltype(Quoters)::iterator quoterIt) {
-    return BreakQuoter(QuotersIndex.find(quoterIt->second.QuoterName), quoterIt);
+void TQuoterService::BreakQuoter(decltype(Quoters)::iterator quoterIt, const TString& waitStatus) {
+    return BreakQuoter(QuotersIndex.find(quoterIt->second.QuoterName), quoterIt, waitStatus);
 }
 
-void TQuoterService::BreakQuoter(decltype(QuotersIndex)::iterator indexIt, decltype(Quoters)::iterator quoterIt) {
+void TQuoterService::BreakQuoter(decltype(QuotersIndex)::iterator indexIt, decltype(Quoters)::iterator quoterIt, const TString& waitStatus) {
     // quoter is broken, fail everything and cleanup
     TQuoterState &quoter = quoterIt->second;
 
@@ -1207,13 +1357,18 @@ void TQuoterService::BreakQuoter(decltype(QuotersIndex)::iterator indexIt, declt
 
     TSet<TRequestId> waitingQueueResolve(std::move(quoter.WaitingQueueResolve));
     for (TRequestId reqIdx : waitingQueueResolve) {
-        DeclineRequest(ReqState.Get(reqIdx), reqIdx);
+        auto& req = ReqState.Get(reqIdx);
+        req.EndWaitSpan(waitStatus, false);
+        DeclineRequest(req, reqIdx);
     }
 
     TMap<TString, TSet<TRequestId>> waitingResource(std::move(quoter.WaitingResource));
     for (auto &xpair : waitingResource) {
-        for (TRequestId reqIdx : xpair.second)
-            DeclineRequest(ReqState.Get(reqIdx), reqIdx);
+        for (TRequestId reqIdx : xpair.second) {
+            auto& req = ReqState.Get(reqIdx);
+            req.EndWaitSpan(waitStatus, false);
+            DeclineRequest(req, reqIdx);
+        }
     }
 
     for (auto &xpair : quoter.Resources) {
@@ -1300,7 +1455,10 @@ void TQuoterService::FeedResource(TResource &quores) {
         }
     }
 
-    BLOG_T("Feed resource \"" << quores.Resource << "\". Balance: " << quores.Balance << ". FreeBalance: " << quores.FreeBalance);
+    YDB_LOG_TRACE("Feed resource",
+        {"resource", quores.Resource},
+        {"balance", quores.Balance},
+        {"freeBalance", quores.FreeBalance});
     LWPROBE(FeedResource,
             quores.Quoter,
             quores.Resource,
@@ -1335,7 +1493,8 @@ void TQuoterService::FeedResource(TResource &quores) {
 }
 
 void TQuoterService::AllocateResource(TResource &quores) {
-    BLOG_T("Allocate resource \"" << quores.Resource << "\"");
+    YDB_LOG_TRACE("Allocate resource",
+        {"resource", quores.Resource});
     const TInstant now = TActivationContext::Now();
     ui64 requestsProcessed = 0;
     const double prevAmountConsumed = quores.AmountConsumed;
@@ -1479,6 +1638,48 @@ TString TQuoterService::PrintEvent(const TEvQuota::TEvRequest::TPtr& ev) {
     }
     ret << " ] }";
     return std::move(ret);
+}
+
+void TRequest::StartRequestSpan(NWilson::TTraceId traceId, TDuration deadline) {
+    if (RequestSpan = NWilson::TSpan(TWilsonQuoter::QuoterService, std::move(traceId), "QuoterService.Request")) {
+        RequestSpan.Attribute("deadline_ms", static_cast<i64>(deadline.MilliSeconds()));
+    }
+}
+
+void TRequest::EndRequestSpan(TEvQuota::TEvClearance::EResult resultCode) {
+    if (RequestSpan) {
+        const TString& resultName = ToString(resultCode);
+        RequestSpan.Attribute("quota_status", static_cast<int>(resultCode));
+        RequestSpan.Attribute("quota_status_name", resultName);
+        if (resultCode == TEvQuota::TEvClearance::EResult::Success) {
+            RequestSpan.EndOk();
+        } else {
+            RequestSpan.EndError(resultName);
+        }
+    }
+}
+
+void TRequest::StartWaitSpan(TResourceLeaf& leaf, const char* spanName) {
+    if (WaitSpan) {
+        return;
+    }
+    if (WaitSpan = RequestSpan.CreateChild(TWilsonQuoter::QuoterService, spanName)) {
+        WaitSpan.Attribute("quoter", leaf.QuoterName);
+        WaitSpan.Attribute("resource", leaf.ResourceName);
+        WaitSpan.Attribute("amount", static_cast<i64>(leaf.Amount));
+        WaitSpan.Attribute("is_used_amount", leaf.IsUsedAmount);
+    }
+}
+
+void TRequest::EndWaitSpan(const TString& result, bool success) {
+    if (WaitSpan) {
+        WaitSpan.Attribute("wait_result", result);
+        if (success) {
+            WaitSpan.EndOk();
+        } else {
+            WaitSpan.EndError(result);
+        }
+    }
 }
 
 } // namespace NQuoter

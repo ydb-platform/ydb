@@ -56,6 +56,8 @@ def load_plugins(conf, plugins):
 
 def main():
     args, clang_cmd = parse_args()
+    if '-gz=zstd' in clang_cmd:
+        clang_cmd.remove('-gz=zstd')
 
     # Try to find config file and parse them
     config_file = find_config(args.config_file)

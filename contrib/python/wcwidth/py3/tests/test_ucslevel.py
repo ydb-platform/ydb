@@ -1,4 +1,5 @@
 """Unicode version level tests for wcwidth."""
+
 # local
 import wcwidth
 

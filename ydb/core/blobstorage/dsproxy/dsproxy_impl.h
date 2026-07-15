@@ -46,10 +46,13 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     struct TPutBatchedBucket {
         NKikimrBlobStorage::EPutHandleClass HandleClass;
         TEvBlobStorage::TEvPut::ETactic Tactic;
+        bool ReduceInterpileTraffic;
 
-        TPutBatchedBucket(NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic)
+        TPutBatchedBucket(NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic,
+                bool reduceInterpileTraffic)
             : HandleClass(handleClass)
             , Tactic(tactic)
+            , ReduceInterpileTraffic(reduceInterpileTraffic)
         {
             Y_ABORT_UNLESS(NKikimrBlobStorage::EPutHandleClass_MIN <= handleClass &&
                     NKikimrBlobStorage::EPutHandleClass_MAX >= handleClass, "incorrect PutHandleClass");
@@ -97,9 +100,9 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     static constexpr ui64 PutTacticCount = TEvBlobStorage::TEvPut::TacticCount;
     static_assert(PutTacticCount <= 10);
 
-    TBatchedPutQueue BatchedPuts[PutHandleClassCount][PutTacticCount];
-    static constexpr ui64 PutBatchecBucketCount = PutHandleClassCount * PutTacticCount;
-    TStackVec<TPutBatchedBucket, PutBatchecBucketCount> PutBatchedBucketQueue;
+    TBatchedPutQueue BatchedPuts[PutHandleClassCount][PutTacticCount][2];
+    static constexpr ui64 PutBatchedBucketCount = PutHandleClassCount * PutTacticCount * 2;
+    TStackVec<TPutBatchedBucket, PutBatchedBucketCount> PutBatchedBucketQueue;
     THashSet<TLogoBlobID> BatchedPutIds;
 
     TEvStopBatchingGetRequests::TPtr StopGetBatchingEvent;
@@ -215,8 +218,10 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
 
     template<typename TEvent>
     void HandleEnqueue(TAutoPtr<TEventHandle<TEvent>> ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-                << " HandleEnqueue# " << ev->Get()->Print(false) << " Marker# DSP17");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PROXY, "Dump group, handleEnqueue, marker",
+            {"group", GroupId},
+            {"handleEnqueue", ev->Get()->Print(false)},
+            {"marker", "DSP17"});
         if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvGet>) {
             LWTRACK(DSProxyGetEnqueue, ev->Get()->Orbit);
         } else if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut>) {
@@ -225,9 +230,12 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
         UnconfiguredBufferSize += ev->Get()->CalculateSize();
         InitQueue.emplace_back(ev.Release());
         if (UnconfiguredBufferSize > UnconfiguredBufferSizeLimit && InitQueue.size() > 1) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-                << " UnconfiguredBufferSize# " << UnconfiguredBufferSize << " > " << UnconfiguredBufferSizeLimit
-                << ", dropping the queue (" << (ui64)InitQueue.size() << ")" << " Marker# DSP08");
+            YDB_LOG_ERROR_COMP(NKikimrServices::BS_PROXY, ">, dropping the queue",
+                {"group", GroupId},
+                {"unconfiguredBufferSize", UnconfiguredBufferSize},
+                {"unconfiguredBufferSizeLimit", UnconfiguredBufferSizeLimit},
+                {"size", (ui64)InitQueue.size()},
+                {"marker", "DSP08"});
             if (CurrentStateFunc() == &TThis::StateUnconfigured) {
                 ErrorDescription = TStringBuilder() << "Too many requests while waiting for configuration (DSPE2)."
                         << " GroupId# " << GroupId
@@ -274,7 +282,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     }
 
     void ProcessBatchedPutRequests(TBatchedPutQueue &batchedPuts, NKikimrBlobStorage::EPutHandleClass handleClass,
-        TEvBlobStorage::TEvPut::ETactic tactic);
+        TEvBlobStorage::TEvPut::ETactic tactic, bool reduceInterpileTraffic);
     void Handle(TEvStopBatchingPutRequests::TPtr& ev);
     void Handle(TEvStopBatchingGetRequests::TPtr& ev);
 
@@ -323,10 +331,12 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
         auto response = ev->Get()->MakeErrorResponse(status, ErrorDescription, GroupId);
         SetExecutionRelay(*response, std::move(ev->Get()->ExecutionRelay));
         NActors::NLog::EPriority priority = CheckPriorityForErrorState();
-        LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::BS_PROXY, ExtraLogInfo << "Group# " << GroupId
-                << " HandleError ev# " << ev->Get()->Print(false)
-                << " Response# " << response->Print(false)
-                << " Marker# DSP31");
+        YDB_LOG_COMP(priority, NKikimrServices::BS_PROXY, "HandleError",
+            {"extraLogInfo", ExtraLogInfo},
+            {"group", GroupId},
+            {"ev", ev->Get()->Print(false)},
+            {"response", response->Print(false)},
+            {"marker", "DSP31"});
         Send(ev->Sender, response.release(), 0, ev->Cookie);
     }
 

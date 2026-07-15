@@ -4,12 +4,16 @@
 
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 #include <library/cpp/charset/ci_string.h>
 
 #include <util/digest/fnv.h>
+#include <util/generic/string.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+
+#include <utility>
 
 using namespace NYql;
 
@@ -23,15 +27,35 @@ bool ValidateView(TPosition pos, TContext& ctx, TStringBuf service, TViewDescrip
     return true;
 }
 
+namespace {
+
+bool ValidateColumnIsDefined(TContext& ctx, const TIdentifier& column, const THashSet<TString>& definedColumns, bool allowUndefinedColumns) {
+    if (!allowUndefinedColumns && !definedColumns.contains(column.Name)) {
+        ctx.Error(column.Pos) << "Undefined column: " << column.Name;
+        return false;
+    }
+    return true;
+}
+
+bool ValidateNameIsUnique(TContext& ctx, THashSet<TString>& seenNames, const TIdentifier& name, TStringBuf entityKind) {
+    if (!seenNames.insert(name.Name).second) {
+        ctx.Error(name.Pos) << entityKind << " " << name.Name << " must be defined once";
+        return false;
+    }
+    return true;
+}
+
+} // anonymous namespace
+
 class TUniqueTableKey: public ITableKeys {
 public:
-    TUniqueTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster,
-                    const TDeferredAtom& name, const TViewDescription& view)
+    TUniqueTableKey(TPosition pos, TString service, TDeferredAtom cluster,
+                    const TDeferredAtom& name, TViewDescription view)
         : ITableKeys(pos)
-        , Service_(service)
-        , Cluster_(cluster)
+        , Service_(std::move(service))
+        , Cluster_(std::move(cluster))
         , Name_(name)
-        , View_(view)
+        , View_(std::move(view))
         , Full_(name.GetRepr())
     {
         if (!View_.ViewName.empty()) {
@@ -42,7 +66,7 @@ public:
     bool SetPrimaryView(TContext& ctx, TPosition pos) override {
         Y_UNUSED(ctx);
         Y_UNUSED(pos);
-        View_ = {"", true};
+        View_ = {.ViewName = "", .PrimaryFlag = true};
         return true;
     }
 
@@ -50,7 +74,7 @@ public:
         Y_UNUSED(ctx);
         Y_UNUSED(pos);
         Full_ = Name_.GetRepr();
-        View_ = {view};
+        View_ = {.ViewName = view};
         if (!View_.empty()) {
             Full_ = ":" + View_.ViewName;
         }
@@ -63,7 +87,7 @@ public:
     }
 
     TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode mode) override {
-        if (View_ == TViewDescription{"@"}) {
+        if (View_ == TViewDescription{.ViewName = "@"}) {
             auto key = Y("TempTable", Name_.Build());
             return key;
         }
@@ -107,9 +131,9 @@ TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAto
 
 class TTopicKey: public ITableKeys {
 public:
-    TTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDeferredAtom& name)
+    TTopicKey(TPosition pos, TDeferredAtom cluster, const TDeferredAtom& name)
         : ITableKeys(pos)
-        , Cluster_(cluster)
+        , Cluster_(std::move(cluster))
         , Name_(name)
         , Full_(name.GetRepr())
     {
@@ -156,10 +180,14 @@ INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
             return node.Q("globalFulltextPlain");
         case TIndexDescription::EType::GlobalFulltextRelevance:
             return node.Q("globalFulltextRelevance");
+        case TIndexDescription::EType::GlobalJson:
+            return node.Q("globalJson");
         case TIndexDescription::EType::LocalBloomFilter:
             return node.Q("localBloomFilter");
         case TIndexDescription::EType::LocalBloomNgramFilter:
             return node.Q("localBloomNgramFilter");
+        case TIndexDescription::EType::LocalMinMax:
+            return node.Q("localMinMax");
     }
 }
 
@@ -351,12 +379,39 @@ INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSettingsParsin
 
 INode::TPtr CreateAlterIndex(const TIndexDescription& index, const INode& node) {
     const auto& indexName = node.Y(node.Q("indexName"), BuildQuotedAtom(index.Name.Pos, index.Name.Name));
-    const auto& tableSettings = node.Y(
-        node.Q("tableSettings"),
-        node.Q(CreateTableSettings(index.TableSettings, ETableSettingsParsingMode::Alter, node)));
-    return node.Y(
-        node.Q(indexName),
-        node.Q(tableSettings));
+    auto alterIndexNode = node.Y(node.Q(indexName));
+    if (index.TableSettings.IsSet()) {
+        const auto& tableSettings = node.Y(
+            node.Q("tableSettings"),
+            node.Q(CreateTableSettings(index.TableSettings, ETableSettingsParsingMode::Alter, node)));
+        alterIndexNode = node.L(alterIndexNode, node.Q(tableSettings));
+    }
+
+    if (index.IndexSettings) {
+        const auto& indexSettings = node.Y(
+            node.Q("indexSettings"),
+            node.Q(CreateIndexSettings(index.IndexSettings, node)));
+        alterIndexNode = node.L(alterIndexNode, node.Q(indexSettings));
+    }
+
+    return alterIndexNode;
+}
+
+INode::TPtr CreateStatisticsDesc(const TStatisticsDescription& statistics, const INode& node) {
+    auto statisticsColumns = node.Y();
+    for (const auto& col : statistics.Columns) {
+        statisticsColumns = node.L(statisticsColumns, BuildQuotedAtom(col.Pos, col.Name));
+    }
+    auto statisticsTypes = node.Y();
+    for (const auto& type : statistics.Types) {
+        statisticsTypes = node.L(statisticsTypes, BuildQuotedAtom(type.Pos, type.Name));
+    }
+    const auto& statisticsName = node.Y(node.Q("statisticsName"), BuildQuotedAtom(statistics.Name.Pos, statistics.Name.Name));
+    auto statisticsNode = node.Y(
+        node.Q(statisticsName),
+        node.Q(node.Y(node.Q("statisticsColumns"), node.Q(statisticsColumns))),
+        node.Q(node.Y(node.Q("statisticsTypes"), node.Q(statisticsTypes))));
+    return statisticsNode;
 }
 
 INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode& node) {
@@ -372,6 +427,9 @@ INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode
     }
     if (desc.Settings.UserSIDs) {
         settings = node.L(settings, node.Q(node.Y(node.Q("user_sids"), desc.Settings.UserSIDs)));
+    }
+    if (desc.Settings.TraceIds) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("trace_ids"), desc.Settings.TraceIds)));
     }
     if (desc.Settings.VirtualTimestamps) {
         settings = node.L(settings, node.Q(node.Y(node.Q("virtual_timestamps"), desc.Settings.VirtualTimestamps)));
@@ -418,16 +476,30 @@ INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode
         node.Q(node.Y(node.Q("state"), node.Q(state))));
 }
 
+INode::TPtr CreateEncodingsListSettings(const TVector<TEncoding>& columnEncoding, const INode& node) {
+    auto encodingsList = node.Y();
+    for (const auto& encoding : columnEncoding) {
+        auto encodingParamsList = node.Y();
+        encodingParamsList = node.L(encodingParamsList, node.Q(node.Y(node.Q("name"), node.Q(to_lower(encoding.Name)))));
+        for (const auto& [key, value] : encoding.Entries) {
+            encodingParamsList = node.L(encodingParamsList, node.Q(node.Y(node.Q(key), value)));
+        }
+        encodingsList = node.L(encodingsList, node.Q(encodingParamsList));
+    }
+
+    return encodingsList;
+}
+
 } // namespace
 
 class TPrepTableKeys: public ITableKeys {
 public:
-    TPrepTableKeys(TPosition pos, const TString& service, const TDeferredAtom& cluster,
-                   const TString& func, const TVector<TTableArg>& args)
+    TPrepTableKeys(TPosition pos, TString service, TDeferredAtom cluster,
+                   TString func, const TVector<TTableArg>& args)
         : ITableKeys(pos)
-        , Service_(service)
-        , Cluster_(cluster)
-        , Func_(func)
+        , Service_(std::move(service))
+        , Cluster_(std::move(cluster))
+        , Func_(std::move(func))
         , Args_(args)
     {
     }
@@ -669,8 +741,7 @@ public:
                 return nullptr;
             }
 
-            for (ui32 index = 0; index < Args_.size(); ++index) {
-                auto& arg = Args_[index];
+            for (auto& arg : Args_) {
                 if (arg.HasAt) {
                     ctx.Error(Pos_) << "Temporary tables are not supported here";
                     return nullptr;
@@ -796,6 +867,11 @@ public:
             return Y("MrWalkFolders", initPath, rootAttributes, pickledInitState, initStateType,
                      preHandler, resolveHandler, diveHandler, postHandler);
         } else if (func == "tables") {
+            if (!ctx.Settings.AllowTablesFunction) {
+                ctx.Error(Pos_) << Func_ << " is not allowed in this context";
+                return nullptr;
+            }
+
             if (!Args_.empty()) {
                 ctx.Error(Pos_) << Func_ << " doesn't accept arguments";
                 return nullptr;
@@ -808,8 +884,7 @@ public:
             auto settings = Y();
             // TVector<TNodePtr> settings;
             size_t argc = 0;
-            for (ui32 index = 0; index < Args_.size(); ++index) {
-                auto& arg = Args_[index];
+            for (auto& arg : Args_) {
                 if (arg.HasAt) {
                     ctx.Error(arg.Expr->GetPos()) << "Temporary tables are not supported here";
                     return nullptr;
@@ -837,11 +912,7 @@ public:
             result = L(result, Q(settings));
             return result;
         } else if (func == "partitionlist" || func == "partitionliststrict") {
-            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
-                    Pos_,
-                    "PARTITION_LIST table function",
-                    MakeLangVersion(2025, 4)))
-            {
+            if (!ctx.EnsureAvailable(Pos_, NYql::NFeature::PartitionListTableFunction)) {
                 return nullptr;
             }
 
@@ -876,11 +947,7 @@ public:
             }
             return partitionList;
         } else if (func == "partitions" || func == "partitionsstrict") {
-            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(
-                    Pos_,
-                    "PARTITIONS table function",
-                    MakeLangVersion(2025, 4)))
-            {
+            if (!ctx.EnsureAvailable(Pos_, NYql::NFeature::PartitionsTableFunction)) {
                 return nullptr;
             }
 
@@ -945,9 +1012,9 @@ TNodePtr BuildTableKeys(TPosition pos, const TString& service, const TDeferredAt
 
 class TInputOptions final: public TAstListNode {
 public:
-    TInputOptions(TPosition pos, const TTableHints& hints)
+    TInputOptions(TPosition pos, TTableHints hints)
         : TAstListNode(pos)
-        , Hints_(hints)
+        , Hints_(std::move(hints))
     {
     }
 
@@ -1006,10 +1073,10 @@ TNodePtr BuildInputOptions(TPosition pos, const TTableHints& hints) {
 
 class TIntoTableOptions: public TAstListNode {
 public:
-    TIntoTableOptions(TPosition pos, const TVector<TString>& columns, const TTableHints& hints)
+    TIntoTableOptions(TPosition pos, const TVector<TString>& columns, TTableHints hints)
         : TAstListNode(pos)
         , Columns_(columns)
-        , Hints_(hints)
+        , Hints_(std::move(hints))
     {
     }
 
@@ -1061,11 +1128,11 @@ TNodePtr BuildIntoTableOptions(TPosition pos, const TVector<TString>& eraseColum
 
 class TInputTablesNode final: public TAstListNode {
 public:
-    TInputTablesNode(TPosition pos, const TTableList& tables, bool inSubquery, TScopedStatePtr scoped)
+    TInputTablesNode(TPosition pos, TTableList tables, bool inSubquery, TScopedStatePtr scoped)
         : TAstListNode(pos)
-        , Tables_(tables)
+        , Tables_(std::move(tables))
         , InSubquery_(inSubquery)
-        , Scoped_(scoped)
+        , Scoped_(std::move(scoped))
     {
     }
 
@@ -1117,10 +1184,10 @@ TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubque
 
 class TCreateTableNode final: public TAstListNode {
 public:
-    TCreateTableNode(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr values, TScopedStatePtr scoped)
+    TCreateTableNode(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, TCreateTableParameters params, TSourcePtr values, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Table_(tr)
-        , Params_(params)
+        , Params_(std::move(params))
         , ExistingOk_(existingOk)
         , ReplaceIfExists_(replaceIfExists)
         , Values_(std::move(values))
@@ -1135,7 +1202,7 @@ public:
             return false;
         }
 
-        if (!Params_.PkColumns.empty() || !Params_.PartitionByColumns.empty() || !Params_.OrderByColumns.empty() || !Params_.Indexes.empty() || !Params_.Changefeeds.empty())
+        if (!Params_.PkColumns.empty() || !Params_.PartitionByColumns.empty() || !Params_.OrderByColumns.empty() || !Params_.Indexes.empty() || !Params_.Statistics.empty() || !Params_.Changefeeds.empty())
         {
             THashSet<TString> columnsSet;
             for (auto& col : Params_.Columns) {
@@ -1146,8 +1213,7 @@ public:
 
             THashSet<TString> pkColumns;
             for (auto& keyColumn : Params_.PkColumns) {
-                if (!allowUndefinedColumns && !columnsSet.contains(keyColumn.Name)) {
-                    ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
+                if (!ValidateColumnIsDefined(ctx, keyColumn, columnsSet, allowUndefinedColumns)) {
                     return false;
                 }
                 if (!pkColumns.insert(keyColumn.Name).second) {
@@ -1156,35 +1222,30 @@ public:
                 }
             }
             for (auto& keyColumn : Params_.PartitionByColumns) {
-                if (!allowUndefinedColumns && !columnsSet.contains(keyColumn.Name)) {
-                    ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
+                if (!ValidateColumnIsDefined(ctx, keyColumn, columnsSet, allowUndefinedColumns)) {
                     return false;
                 }
             }
             for (auto& keyColumn : Params_.OrderByColumns) {
-                if (!allowUndefinedColumns && !columnsSet.contains(keyColumn.first.Name)) {
-                    ctx.Error(keyColumn.first.Pos) << "Undefined column: " << keyColumn.first.Name;
+                if (!ValidateColumnIsDefined(ctx, keyColumn.first, columnsSet, allowUndefinedColumns)) {
                     return false;
                 }
             }
 
             THashSet<TString> indexNames;
             for (const auto& index : Params_.Indexes) {
-                if (!indexNames.insert(index.Name.Name).second) {
-                    ctx.Error(index.Name.Pos) << "Index " << index.Name.Name << " must be defined once";
+                if (!ValidateNameIsUnique(ctx, indexNames, index.Name, "Index")) {
                     return false;
                 }
 
                 for (const auto& indexColumn : index.IndexColumns) {
-                    if (!allowUndefinedColumns && !columnsSet.contains(indexColumn.Name)) {
-                        ctx.Error(indexColumn.Pos) << "Undefined column: " << indexColumn.Name;
+                    if (!ValidateColumnIsDefined(ctx, indexColumn, columnsSet, allowUndefinedColumns)) {
                         return false;
                     }
                 }
 
                 for (const auto& dataColumn : index.DataColumns) {
-                    if (!allowUndefinedColumns && !columnsSet.contains(dataColumn.Name)) {
-                        ctx.Error(dataColumn.Pos) << "Undefined column: " << dataColumn.Name;
+                    if (!ValidateColumnIsDefined(ctx, dataColumn, columnsSet, allowUndefinedColumns)) {
                         return false;
                     }
                 }
@@ -1192,10 +1253,29 @@ public:
 
             THashSet<TString> cfNames;
             for (const auto& cf : Params_.Changefeeds) {
-                if (!cfNames.insert(cf.Name.Name).second) {
-                    ctx.Error(cf.Name.Pos) << "Changefeed " << cf.Name.Name << " must be defined once";
+                if (!ValidateNameIsUnique(ctx, cfNames, cf.Name, "Changefeed")) {
                     return false;
                 }
+            }
+
+            THashSet<TString> statisticsNames;
+            for (const auto& statistics : Params_.Statistics) {
+                if (!ValidateNameIsUnique(ctx, statisticsNames, statistics.Name, "Statistics")) {
+                    return false;
+                }
+
+                if (statistics.Columns.empty()) {
+                    ctx.Error(statistics.Name.Pos) << "Statistics " << statistics.Name.Name << " must have at least one column";
+                    return false;
+                }
+
+                for (const auto& statisticsColumn : statistics.Columns) {
+                    if (!ValidateColumnIsDefined(ctx, statisticsColumn, columnsSet, allowUndefinedColumns)) {
+                        return false;
+                    }
+                }
+
+                // statistics.Types may be empty: WITH is optional and its omission means "all supported statistic types"
             }
         }
 
@@ -1300,6 +1380,10 @@ public:
                 }
 
                 columnDesc = L(columnDesc, Q(familiesDesc));
+
+                if (col.ColumnEncoding) {
+                    columnDesc = L(columnDesc, Q(Y(Q("columnEncoding"), Q(CreateEncodingsListSettings(*col.ColumnEncoding, *this)))));
+                }
             }
 
             columns = L(columns, Q(columnDesc));
@@ -1365,6 +1449,11 @@ public:
             opts = L(opts, Q(Y(Q("index"), Q(desc))));
         }
 
+        for (const auto& statistics : Params_.Statistics) {
+            const auto& desc = CreateStatisticsDesc(statistics, *this);
+            opts = L(opts, Q(Y(Q("statistics"), Q(desc))));
+        }
+
         for (const auto& cf : Params_.Changefeeds) {
             const auto& desc = CreateChangefeedDesc(cf, *this);
             opts = L(opts, Q(Y(Q("changefeed"), Q(desc))));
@@ -1392,7 +1481,7 @@ public:
 
         TNodePtr node = nullptr;
         if (Values_) {
-            if (!Values_->Init(ctx, nullptr)) {
+            if (!Values_->Init(ctx, /*src=*/nullptr)) {
                 return false;
             }
             TTableList tableList;
@@ -1403,7 +1492,7 @@ public:
                 return false;
             }
 
-            TNodePtr inputTables(BuildInputTables(Pos_, tableList, false, Scoped_));
+            TNodePtr inputTables(BuildInputTables(Pos_, tableList, /*inSubquery=*/false, Scoped_));
             if (!inputTables->Init(ctx, valuesSource)) {
                 return false;
             }
@@ -1440,9 +1529,9 @@ private:
     TScopedStatePtr Scoped_;
 };
 
-TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr values, TScopedStatePtr scoped)
+TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr source, TScopedStatePtr scoped)
 {
-    return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, std::move(values), scoped);
+    return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, std::move(source), scoped);
 }
 
 namespace {
@@ -1464,10 +1553,10 @@ public:
         TPosition pos,
         const TString& service,
         const TDeferredAtom& cluster,
-        const TAlterDatabaseParameters& params,
+        TAlterDatabaseParameters params,
         TScopedStatePtr scoped)
         : TAstListNode(pos)
-        , Params_(params)
+        , Params_(std::move(params))
         , Scoped_(scoped)
         , Cluster_(cluster)
         , Service_(service)
@@ -1581,10 +1670,10 @@ TNodePtr BuildTruncateTable(
 
 class TAlterTableNode final: public TAstListNode {
 public:
-    TAlterTableNode(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped)
+    TAlterTableNode(TPosition pos, const TTableRef& tr, TAlterTableParameters params, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Table_(tr)
-        , Params_(params)
+        , Params_(std::move(params))
         , Scoped_(scoped)
     {
         scoped->UseCluster(Table_.Service, Table_.Cluster);
@@ -1628,11 +1717,23 @@ public:
 
                 columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
 
+                if (col.Compression) {
+                    auto columnCompression = Y();
+                    for (const auto& [key, value] : col.Compression->Entries) {
+                        columnCompression = L(columnCompression, Q(Y(Q(key), value)));
+                    }
+                    columnDesc = L(columnDesc, Q(Y(Q("columnCompression"), Q(columnCompression))));
+                }
+
                 auto familiesDesc = Y();
                 for (const auto& family : col.Families) {
                     familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
                 }
                 columnDesc = L(columnDesc, Q(familiesDesc));
+
+                if (col.ColumnEncoding) {
+                    columnDesc = L(columnDesc, Q(Y(Q("columnEncoding"), Q(CreateEncodingsListSettings(*col.ColumnEncoding, *this)))));
+                }
 
                 columns = L(columns, Q(columnDesc));
             }
@@ -1693,6 +1794,44 @@ public:
                         }
 
                         columnDesc = L(columnDesc, Q(Y(Q("changeCompression"), Q(columnCompression))));
+                        columns = L(columns, Q(columnDesc));
+
+                        break;
+                    }
+                    case TColumnSchema::ETypeOfChange::SetDefault: {
+                        auto columnDesc = Y();
+                        columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
+
+                        YQL_ENSURE(col.DefaultExpr);
+                        if (!col.DefaultExpr->Init(ctx, src)) {
+                            return false;
+                        }
+
+                        columnDesc = L(columnDesc, Q(Y(Q("setDefaultValue"), col.DefaultExpr)));
+                        columns = L(columns, Q(columnDesc));
+
+                        break;
+                    }
+                    case TColumnSchema::ETypeOfChange::DropDefault: {
+                        auto columnDesc = Y();
+                        columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
+
+                        columnDesc = L(columnDesc, Q(Y(Q("dropDefault"))));
+                        columns = L(columns, Q(columnDesc));
+
+                        break;
+                    }
+                    case TColumnSchema::ETypeOfChange::SetEncoding: {
+                        auto columnDesc = Y();
+                        columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
+
+                        TPtr encodingsList;
+                        if (col.ColumnEncoding) {
+                            encodingsList = CreateEncodingsListSettings(*col.ColumnEncoding, *this);
+                        } else {
+                            encodingsList = Y();
+                        }
+                        columnDesc = L(columnDesc, Q(Y(Q("changeEncoding"), Q(encodingsList))));
                         columns = L(columns, Q(columnDesc));
 
                         break;
@@ -1772,6 +1911,30 @@ public:
             actions = L(actions, Q(Y(Q("dropIndex"), indexName)));
         }
 
+        {
+            THashSet<TString> statisticsNames;
+            for (const auto& statistics : Params_.AddStatistics) {
+                if (!ValidateNameIsUnique(ctx, statisticsNames, statistics.Name, "Statistics")) {
+                    return false;
+                }
+
+                if (statistics.Columns.empty()) {
+                    ctx.Error(statistics.Name.Pos) << "Statistics " << statistics.Name.Name << " must have at least one column";
+                    return false;
+                }
+
+                // statistics.Types may be empty: WITH is optional and its omission means "all supported statistic types"
+
+                const auto& desc = CreateStatisticsDesc(statistics, *this);
+                actions = L(actions, Q(Y(Q("addStatistics"), Q(desc))));
+            }
+        }
+
+        for (const auto& id : Params_.DropStatistics) {
+            auto statisticsName = BuildQuotedAtom(id.Pos, id.Name);
+            actions = L(actions, Q(Y(Q("dropStatistics"), statisticsName)));
+        }
+
         if (Params_.RenameIndexTo) {
             auto src = BuildQuotedAtom(Params_.RenameIndexTo->first.Pos, Params_.RenameIndexTo->first.Name);
             auto dst = BuildQuotedAtom(Params_.RenameIndexTo->second.Pos, Params_.RenameIndexTo->second.Name);
@@ -1810,8 +1973,8 @@ public:
             if (Params_.Compact->Cascade) {
                 settings = L(settings, Q(Y(Q("cascade"), Params_.Compact->Cascade)));
             }
-            if (Params_.Compact->MaxShardsInFlight) {
-                settings = L(settings, Q(Y(Q("maxShardsInFlight"), Params_.Compact->MaxShardsInFlight)));
+            if (Params_.Compact->Parallel) {
+                settings = L(settings, Q(Y(Q("parallel"), Params_.Compact->Parallel)));
             }
             actions = L(actions, Q(Y(Q("compact"), Q(Y(Q(Y(Q("settings"), Q(settings))))))));
         }
@@ -1909,8 +2072,8 @@ private:
     const bool MissingOk_;
 };
 
-TNodePtr BuildDropTable(TPosition pos, const TTableRef& tr, bool missingOk, ETableType tableType, TScopedStatePtr scoped) {
-    return new TDropTableNode(pos, tr, missingOk, tableType, scoped);
+TNodePtr BuildDropTable(TPosition pos, const TTableRef& table, bool missingOk, ETableType tableType, TScopedStatePtr scoped) {
+    return new TDropTableNode(pos, table, missingOk, tableType, scoped);
 }
 
 namespace {
@@ -1957,6 +2120,8 @@ TNullable<TNodePtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescri
     settings = setValue(settings, desc.Settings.MaxProcessingAttempts, "max_processing_attempts");
     settings = setValue(settings, desc.Settings.DeadLetterPolicy, "dead_letter_policy");
     settings = setValue(settings, desc.Settings.DeadLetterQueue, "dead_letter_queue");
+    settings = setValue(settings, desc.Settings.ReceiveMessageWaitTime, "receive_message_wait_time");
+    settings = setValue(settings, desc.Settings.ReceiveMessageDelay, "receive_message_delay");
 
     return node.Y(
         node.Q(node.Y(node.Q("name"), BuildQuotedAtom(desc.Name.Pos, desc.Name.Name))),
@@ -1967,10 +2132,10 @@ TNullable<TNodePtr> CreateConsumerDesc(TContext& ctx, const TTopicConsumerDescri
 
 class TCreateTopicNode final: public TAstListNode {
 public:
-    TCreateTopicNode(TPosition pos, const TTopicRef& tr, const TCreateTopicParameters& params, TScopedStatePtr scoped)
+    TCreateTopicNode(TPosition pos, const TTopicRef& tr, TCreateTopicParameters params, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Topic_(tr)
-        , Params_(params)
+        , Params_(std::move(params))
         , Scoped_(scoped)
     {
         scoped->UseCluster(TString(KikimrProviderName), Topic_.Cluster);
@@ -1998,7 +2163,7 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params_.Consumers) {
-            const auto desc = CreateConsumerDesc(ctx, consumer, *this, false);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, /*alter=*/false);
             if (!desc) {
                 return false;
             }
@@ -2020,6 +2185,7 @@ public:
             INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
+            INSERT_TOPIC_SETTING(RetentionStorage)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
@@ -2061,10 +2227,10 @@ TNodePtr BuildCreateTopic(
 
 class TAlterTopicNode final: public TAstListNode {
 public:
-    TAlterTopicNode(TPosition pos, const TTopicRef& tr, const TAlterTopicParameters& params, TScopedStatePtr scoped)
+    TAlterTopicNode(TPosition pos, const TTopicRef& tr, TAlterTopicParameters params, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Topic_(tr)
-        , Params_(params)
+        , Params_(std::move(params))
         , Scoped_(scoped)
     {
         scoped->UseCluster(TString(KikimrProviderName), Topic_.Cluster);
@@ -2112,7 +2278,7 @@ public:
         opts = L(opts, Q(Y(Q("mode"), Q(mode))));
 
         for (const auto& consumer : Params_.AddConsumers) {
-            const auto desc = CreateConsumerDesc(ctx, consumer, *this, false);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, /*alter=*/false);
             if (!desc) {
                 return false;
             }
@@ -2120,7 +2286,7 @@ public:
         }
 
         for (const auto& [_, consumer] : Params_.AlterConsumers) {
-            const auto desc = CreateConsumerDesc(ctx, consumer, *this, true);
+            const auto desc = CreateConsumerDesc(ctx, consumer, *this, /*alter=*/true);
             if (!desc) {
                 return false;
             }
@@ -2147,6 +2313,7 @@ public:
             INSERT_TOPIC_SETTING(MaxPartitions)
             INSERT_TOPIC_SETTING(MinPartitions)
             INSERT_TOPIC_SETTING(RetentionPeriod)
+            INSERT_TOPIC_SETTING(RetentionStorage)
             INSERT_TOPIC_SETTING(SupportedCodecs)
             INSERT_TOPIC_SETTING(PartitionWriteSpeed)
             INSERT_TOPIC_SETTING(PartitionWriteBurstSpeed)
@@ -2229,17 +2396,17 @@ private:
     TSourcePtr FakeSource_;
 };
 
-TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& tr, const TDropTopicParameters& params, TScopedStatePtr scoped) {
-    return new TDropTopicNode(pos, tr, params, scoped);
+TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params, TScopedStatePtr scoped) {
+    return new TDropTopicNode(pos, topic, params, scoped);
 }
 
 class TControlUser final: public TAstListNode {
 public:
-    TControlUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TUserParameters>& params, TScopedStatePtr scoped, bool IsCreateUser)
+    TControlUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, TDeferredAtom name, const TMaybe<TUserParameters>& params, TScopedStatePtr scoped, bool IsCreateUser)
         : TAstListNode(pos)
         , Service_(service)
         , Cluster_(cluster)
-        , Name_(name)
+        , Name_(std::move(name))
         , Params_(params)
         , Scoped_(scoped)
         , IsCreateUser_(IsCreateUser)
@@ -2338,11 +2505,11 @@ TNodePtr BuildControlUser(TPosition pos,
 
 class TCreateGroup final: public TAstListNode {
 public:
-    TCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TCreateGroupParameters>& params, TScopedStatePtr scoped)
+    TCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, TDeferredAtom name, const TMaybe<TCreateGroupParameters>& params, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Service_(service)
         , Cluster_(cluster)
-        , Name_(name)
+        , Name_(std::move(name))
         , Params_(params)
         , Scoped_(scoped)
     {
@@ -2394,12 +2561,12 @@ TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferred
 
 class TAlterSequence final: public TAstListNode {
 public:
-    TAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& id, const TSequenceParameters& params, TScopedStatePtr scoped)
+    TAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, TString id, TSequenceParameters params, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Service_(service)
         , Cluster_(cluster)
-        , Id_(id)
-        , Params_(params)
+        , Id_(std::move(id))
+        , Params_(std::move(params))
         , Scoped_(scoped)
     {
         FakeSource_ = BuildFakeSource(pos);
@@ -2498,13 +2665,13 @@ TNodePtr BuildAlterSequence(TPosition pos, const TString& service, const TDeferr
 
 class TRenameRole final: public TAstListNode {
 public:
-    TRenameRole(TPosition pos, bool isUser, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped)
+    TRenameRole(TPosition pos, bool isUser, const TString& service, const TDeferredAtom& cluster, TDeferredAtom name, TDeferredAtom newName, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , IsUser_(isUser)
         , Service_(service)
         , Cluster_(cluster)
-        , Name_(name)
-        , NewName_(newName)
+        , Name_(std::move(name))
+        , NewName_(std::move(newName))
         , Scoped_(scoped)
     {
         FakeSource_ = BuildFakeSource(pos);
@@ -2561,11 +2728,11 @@ TNodePtr BuildRenameGroup(TPosition pos, const TString& service, const TDeferred
 
 class TAlterGroup final: public TAstListNode {
 public:
-    TAlterGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TVector<TDeferredAtom>& toChange, bool isDrop, TScopedStatePtr scoped)
+    TAlterGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, TDeferredAtom name, const TVector<TDeferredAtom>& toChange, bool isDrop, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Service_(service)
         , Cluster_(cluster)
-        , Name_(name)
+        , Name_(std::move(name))
         , ToChange_(toChange)
         , IsDrop_(isDrop)
         , Scoped_(scoped)
@@ -2680,24 +2847,24 @@ private:
     TSourcePtr FakeSource_;
 };
 
-TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
+TNodePtr BuildUpsertObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                     TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
     return new TUpsertObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features));
 }
 
-TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
+TNodePtr BuildCreateObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                     bool existingOk, bool replaceIfExists, TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
     return new TCreateObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features), existingOk, replaceIfExists);
 }
 
-TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
+TNodePtr BuildAlterObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                    bool missingOk, TObjectFeatureNodePtr features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context) {
-    return new TAlterObject(pos, secretId, typeId, context, TObjectFeatureNode::SkipEmpty(features), std::move(featuresToReset), missingOk);
+    return new TAlterObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features), std::move(featuresToReset), missingOk);
 }
 
-TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
+TNodePtr BuildDropObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                   bool missingOk, TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
-    return new TDropObject(pos, secretId, typeId, context, TObjectFeatureNode::SkipEmpty(features), missingOk);
+    return new TDropObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features), missingOk);
 }
 
 TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped) {
@@ -2713,11 +2880,11 @@ public:
         TVector<TDeferredAtom> RoleNames;
     };
 
-    TPermissionsAction(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TPermissionParameters& parameters, TScopedStatePtr scoped)
+    TPermissionsAction(TPosition pos, const TString& service, const TDeferredAtom& cluster, TPermissionParameters parameters, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Service_(service)
         , Cluster_(cluster)
-        , Parameters_(parameters)
+        , Parameters_(std::move(parameters))
         , Scoped_(scoped)
     {
         FakeSource_ = BuildFakeSource(pos);
@@ -2814,11 +2981,11 @@ protected:
     virtual INode::TPtr FillOptions(INode::TPtr options) const = 0;
 
 public:
-    explicit TAsyncReplication(TPosition pos, const TString& id, const TString& mode, const TObjectOperatorContext& context)
+    explicit TAsyncReplication(TPosition pos, TString id, TString mode, const TObjectOperatorContext& context)
         : TAstListNode(pos)
         , TObjectOperatorContext(context)
-        , Id_(id)
-        , Mode_(mode)
+        , Id_(std::move(id))
+        , Mode_(std::move(mode))
     {
     }
 
@@ -2964,11 +3131,11 @@ protected:
     virtual INode::TPtr FillOptions(INode::TPtr options) const = 0;
 
 public:
-    explicit TTransfer(TPosition pos, const TString& id, const TString& mode, const TObjectOperatorContext& context)
+    explicit TTransfer(TPosition pos, TString id, TString mode, const TObjectOperatorContext& context)
         : TAstListNode(pos)
         , TObjectOperatorContext(context)
-        , Id_(id)
-        , Mode_(mode)
+        , Id_(std::move(id))
+        , Mode_(std::move(mode))
     {
     }
 
@@ -2998,11 +3165,11 @@ private:
 
 class TCreateTransfer final: public TTransfer {
 public:
-    explicit TCreateTransfer(TPosition pos, const TString& id, const TString&& source, const TString&& target,
-                             const TString&& transformLambda,
+    explicit TCreateTransfer(TPosition pos, TString id, TString source, TString target,
+                             TString transformLambda,
                              std::map<TString, TNodePtr>&& settings,
                              const TObjectOperatorContext& context)
-        : TTransfer(pos, id, "create", context)
+        : TTransfer(std::move(pos), std::move(id), "create", context)
         , Source_(std::move(source))
         , Target_(std::move(target))
         , TransformLambda_(std::move(transformLambda))
@@ -3039,12 +3206,12 @@ private:
 
 }; // TCreateTransfer
 
-TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString&& source, const TString&& target,
-                             const TString&& transformLambda,
+TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString& source, const TString& target,
+                             const TString& transformLambda,
                              std::map<TString, TNodePtr>&& settings,
                              const TObjectOperatorContext& context)
 {
-    return new TCreateTransfer(pos, id, std::move(source), std::move(target), std::move(transformLambda), std::move(settings), context);
+    return new TCreateTransfer(pos, id, source, target, transformLambda, std::move(settings), context);
 }
 
 class TDropTransfer final: public TTransfer {
@@ -3133,13 +3300,13 @@ static const TMap<EWriteColumnMode, TString> columnModeToStrMapKikimr{
 
 class TWriteTableNode final: public TAstListNode {
 public:
-    TWriteTableNode(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode,
+    TWriteTableNode(TPosition pos, TString label, const TTableRef& table, EWriteColumnMode mode,
                     TNodePtr options, TScopedStatePtr scoped)
         : TAstListNode(pos)
-        , Label_(label)
+        , Label_(std::move(label))
         , Table_(table)
         , Mode_(mode)
-        , Options_(options)
+        , Options_(std::move(options))
         , Scoped_(scoped)
     {
         scoped->UseCluster(Table_.Service, Table_.Cluster);
@@ -3265,10 +3432,10 @@ TNodePtr BuildRollbackClusters(TPosition pos) {
 
 class TWriteResultNode final: public TAstListNode {
 public:
-    TWriteResultNode(TPosition pos, const TString& label, TNodePtr settings)
+    TWriteResultNode(TPosition pos, TString label, TNodePtr settings)
         : TAstListNode(pos)
-        , Label_(label)
-        , Settings_(settings)
+        , Label_(std::move(label))
+        , Settings_(std::move(settings))
         , CommitClusters_(BuildCommitClusters(Pos_))
     {
     }
@@ -3306,7 +3473,7 @@ public:
         : TAstListNode(pos)
         , Blocks_(blocks)
         , TopLevel_(topLevel)
-        , Scoped_(scoped)
+        , Scoped_(std::move(scoped))
         , UseSeq_(useSeq)
     {
     }
@@ -3552,9 +3719,9 @@ public:
                                             BuildQuotedAtom(Pos_, "DebugPositions"))));
                 }
 
-                if (ctx.WindowNewPipeline) {
+                if (!ctx.WindowNewPipeline) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
-                                            BuildQuotedAtom(Pos_, "WindowNewPipeline"))));
+                                            BuildQuotedAtom(Pos_, "DisableWindowNewPipeline"))));
                 }
 
                 if (ctx.DirectRowDependsOn.Defined()) {
@@ -3568,7 +3735,7 @@ public:
             if (block->SubqueryAlias()) {
                 continue;
             }
-            if (!block->Init(ctx, nullptr)) {
+            if (!block->Init(ctx, /*src=*/nullptr)) {
                 hasError = true;
                 continue;
             }
@@ -3578,7 +3745,7 @@ public:
             auto& data = Scoped_->Local.ExprClustersMap[x.Get()];
             auto& node = data.second;
 
-            if (!node->Init(ctx, nullptr)) {
+            if (!node->Init(ctx, /*src=*/nullptr)) {
                 hasError = true;
                 continue;
             }
@@ -3601,8 +3768,8 @@ public:
                     const auto& ref = block->GetLabel();
                     YQL_ENSURE(!ref.empty());
                     Add(block);
-                    currentWorlds->Add(Y("let", "world", Y("Nth", *subqueryAliasPtr, Q("0"))));
-                    Add(Y("let", ref, Y("Nth", *subqueryAliasPtr, Q("1"))));
+                    currentWorlds->Add(Y("let", "world", Y("Left!", *subqueryAliasPtr)));
+                    Add(Y("let", ref, Y("Right!", *subqueryAliasPtr)));
                 }
             } else {
                 const auto& ref = block->GetLabel();
@@ -3675,10 +3842,10 @@ TNodePtr BuildQuery(TPosition pos, const TVector<TNodePtr>& blocks, bool topLeve
 
 class TPragmaNode final: public INode {
 public:
-    TPragmaNode(TPosition pos, const TString& prefix, const TString& name, const TVector<TDeferredAtom>& values, bool valueDefault)
+    TPragmaNode(TPosition pos, TString prefix, TString name, const TVector<TDeferredAtom>& values, bool valueDefault)
         : INode(pos)
-        , Prefix_(prefix)
-        , Name_(name)
+        , Prefix_(std::move(prefix))
+        , Name_(std::move(name))
         , Values_(values)
         , ValueDefault_(valueDefault)
     {
@@ -3707,13 +3874,13 @@ public:
         Node_ = L(Node_, datasource);
 
         if (Name_ == TStringBuf("flags")) {
-            for (ui32 i = 0; i < Values_.size(); ++i) {
-                Node_ = L(Node_, Values_[i].Build());
+            for (const auto& value : Values_) {
+                Node_ = L(Node_, value.Build());
             }
         } else if (Name_ == TStringBuf("AddFileByUrl") || Name_ == TStringBuf("SetFileOption") || Name_ == TStringBuf("AddFolderByUrl") || Name_ == TStringBuf("ImportUdfs") || Name_ == TStringBuf("SetPackageVersion") || Name_ == TStringBuf("Layer")) {
             Node_ = L(Node_, BuildQuotedAtom(Pos_, Name_));
-            for (ui32 i = 0; i < Values_.size(); ++i) {
-                Node_ = L(Node_, Values_[i].Build());
+            for (const auto& value : Values_) {
+                Node_ = L(Node_, value.Build());
             }
         } else if (Name_ == TStringBuf("auth")) {
             Node_ = L(Node_, BuildQuotedAtom(Pos_, "Auth"));
@@ -3811,9 +3978,9 @@ class TWorldIf final: public TAstListNode {
 public:
     TWorldIf(TPosition pos, TNodePtr predicate, TNodePtr thenNode, TNodePtr elseNode, bool isEvaluate)
         : TAstListNode(pos)
-        , Predicate_(predicate)
-        , ThenNode_(thenNode)
-        , ElseNode_(elseNode)
+        , Predicate_(std::move(predicate))
+        , ThenNode_(std::move(thenNode))
+        , ElseNode_(std::move(elseNode))
         , IsEvaluate_(isEvaluate)
     {
         FakeSource_ = BuildFakeSource(pos);
@@ -3864,9 +4031,9 @@ class TWorldFor final: public TAstListNode {
 public:
     TWorldFor(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate, bool isParallel)
         : TAstListNode(pos)
-        , List_(list)
-        , BodyNode_(bodyNode)
-        , ElseNode_(elseNode)
+        , List_(std::move(list))
+        , BodyNode_(std::move(bodyNode))
+        , ElseNode_(std::move(elseNode))
         , IsEvaluate_(isEvaluate)
         , IsParallel_(isParallel)
     {
@@ -3915,11 +4082,11 @@ TNodePtr BuildWorldForNode(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNod
 
 class TAnalyzeNode final: public TAstListNode {
 public:
-    TAnalyzeNode(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAnalyzeParams& params, TScopedStatePtr scoped)
+    TAnalyzeNode(TPosition pos, TString service, TDeferredAtom cluster, TAnalyzeParams params, TScopedStatePtr scoped)
         : TAstListNode(pos)
-        , Service_(service)
-        , Cluster_(cluster)
-        , Params_(params)
+        , Service_(std::move(service))
+        , Cluster_(std::move(cluster))
+        , Params_(std::move(params))
         , Scoped_(scoped)
     {
         FakeSource_ = BuildFakeSource(pos);
@@ -3969,11 +4136,11 @@ TNodePtr BuildAnalyze(TPosition pos, const TString& service, const TDeferredAtom
 
 class TShowCreateNode final: public TAstListNode {
 public:
-    TShowCreateNode(TPosition pos, const TTableRef& tr, const TString& type, TScopedStatePtr scoped)
+    TShowCreateNode(TPosition pos, const TTableRef& tr, TString type, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Table_(tr)
-        , Type_(type)
-        , Scoped_(scoped)
+        , Type_(std::move(type))
+        , Scoped_(std::move(scoped))
         , FakeSource_(BuildFakeSource(pos))
     {
         Scoped_->UseCluster(Table_.Service, Table_.Cluster);
@@ -4003,7 +4170,7 @@ public:
             settings = L(settings, Q(Y(Q("autoref"))));
         }
 
-        TNodePtr node(BuildInputTables(Pos_, {Table_}, false, Scoped_));
+        TNodePtr node(BuildInputTables(Pos_, {Table_}, /*inSubquery=*/false, Scoped_));
         if (!node->Init(ctx, src)) {
             return false;
         }
@@ -4041,8 +4208,8 @@ private:
     TSourcePtr FakeSource_;
 };
 
-TNodePtr BuildShowCreate(TPosition pos, const TTableRef& tr, const TString& type, TScopedStatePtr scoped) {
-    return new TShowCreateNode(pos, tr, type, scoped);
+TNodePtr BuildShowCreate(TPosition pos, const TTableRef& table, const TString& type, TScopedStatePtr scoped) {
+    return new TShowCreateNode(pos, table, type, scoped);
 }
 
 class TBaseBackupCollectionNode
@@ -4053,13 +4220,13 @@ class TBaseBackupCollectionNode
 public:
     TBaseBackupCollectionNode(
         TPosition pos,
-        const TString& prefix,
-        const TString& objectId,
+        TString prefix,
+        TString objectId,
         const TObjectOperatorContext& context)
         : TBase(pos)
         , TObjectOperatorContext(context)
-        , Prefix_(prefix)
-        , Id_(objectId)
+        , Prefix_(std::move(prefix))
+        , Id_(std::move(objectId))
     {
     }
 
@@ -4092,10 +4259,10 @@ public:
         TPosition pos,
         const TString& prefix,
         const TString& objectId,
-        const TCreateBackupCollectionParameters& params,
+        TCreateBackupCollectionParameters params,
         const TObjectOperatorContext& context)
         : TBase(pos, prefix, objectId, context)
-        , Params_(params)
+        , Params_(std::move(params))
     {
     }
 
@@ -4138,10 +4305,10 @@ public:
         TPosition pos,
         const TString& prefix,
         const TString& objectId,
-        const TAlterBackupCollectionParameters& params,
+        TAlterBackupCollectionParameters params,
         const TObjectOperatorContext& context)
         : TBase(pos, prefix, objectId, context)
-        , Params_(params)
+        , Params_(std::move(params))
     {
     }
 
@@ -4250,14 +4417,14 @@ class TBackupNode final
 public:
     TBackupNode(
         TPosition pos,
-        const TString& prefix,
-        const TString& id,
+        TString prefix,
+        TString id,
         const TBackupParameters& params,
         const TObjectOperatorContext& context)
         : TBase(pos)
         , TObjectOperatorContext(context)
-        , Prefix_(prefix)
-        , Id_(id)
+        , Prefix_(std::move(prefix))
+        , Id_(std::move(id))
         , Params_(params)
     {
         Y_UNUSED(Params_);
@@ -4311,15 +4478,15 @@ class TRestoreNode final
 public:
     TRestoreNode(
         TPosition pos,
-        const TString& prefix,
-        const TString& id,
-        const TRestoreParameters& params,
+        TString prefix,
+        TString id,
+        TRestoreParameters params,
         const TObjectOperatorContext& context)
         : TBase(pos)
         , TObjectOperatorContext(context)
-        , Prefix_(prefix)
-        , Id_(id)
-        , Params_(params)
+        , Prefix_(std::move(prefix))
+        , Id_(std::move(id))
+        , Params_(std::move(params))
     {
         Y_UNUSED(Params_);
     }
@@ -4369,16 +4536,16 @@ class TSecretNode: public TAstListNode {
 public:
     TSecretNode(
         TPosition pos,
-        const TString& objectId,
-        const TSecretParameters& params,
+        TString objectId,
+        TSecretParameters params,
         const TObjectOperatorContext& context,
         TScopedStatePtr scoped)
         : TBase(pos)
         , Pos_(pos)
-        , ObjectId_(objectId)
-        , Params_(params)
+        , ObjectId_(std::move(objectId))
+        , Params_(std::move(params))
         , Context_(context)
-        , Scoped_(scoped)
+        , Scoped_(std::move(scoped))
     {
     }
 
@@ -4403,12 +4570,20 @@ private:
         auto options = Y();
         options = L(options, Q(Y(Q("mode"), Q(GetMode()))));
         if (Params_.Value) {
-            if (Params_.Value->HasNode()) {
-                options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"), Params_.Value->Build())));
-            } else {
-                options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"))));
-            }
+            std::visit([&](const auto& value) {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, TDeferredAtom>) {
+                    if (value.HasNode()) {
+                        options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"), value.Build())));
+                    } else {
+                        options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"))));
+                    }
+                } else if constexpr (std::is_same_v<T, TNodePtr>) {
+                    options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value_expr"), Y("EvaluateExpr", value))));
+                }
+            }, *Params_.Value);
         }
+
         if (Params_.InheritPermissions) {
             if (Params_.InheritPermissions->HasNode()) {
                 options = L(options, Q(Y(BuildQuotedAtom(Pos_, "inherit_permissions"), Params_.InheritPermissions->Build())));

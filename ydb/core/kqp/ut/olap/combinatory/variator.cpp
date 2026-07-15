@@ -1,8 +1,10 @@
 #include "actualization.h"
 #include "bulk_upsert.h"
+#include "check_counter.h"
 #include "compaction.h"
 #include "execute.h"
 #include "select.h"
+#include "wait_background_processes.h"
 #include "variator.h"
 
 namespace NKikimr::NKqp::Variator {
@@ -21,7 +23,9 @@ namespace {
         {"FAST_PORTIONS_CLEANUP", []() { return std::make_shared<TFastPortionsCleanupCommand>(); }},
         {"ONE_COMPACTION", []() { return std::make_shared<TOneCompactionCommand>(); }},
         {"ONE_ACTUALIZATION", []() { return std::make_shared<TOneActualizationCommand>(); }},
-        {"RESTART_TABLETS", []() { return std::make_shared<TRestartTabletsCommand>(); }}
+        {"CHECK_COUNTER", []() { return std::make_shared<TCheckCounterCommand>(); }},
+        {"RESTART_TABLETS", []() { return std::make_shared<TRestartTabletsCommand>(); }},
+        {"WAIT_BACKGROUND_PROCESSES", []() { return std::make_shared<TWaitBackgroundProcessesCommand>(); }}
     };
 
     std::pair<TString, TString> ParseCommandString(const TString& command) {

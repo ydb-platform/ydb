@@ -12,7 +12,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/library/aclib/aclib.h>
-
+#include <ydb/library/yql/public/ydb_issue/ydb_issue_message.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -31,12 +31,14 @@ using namespace NYql;
 
 struct TKqpCompileSettings {
     TKqpCompileSettings(bool keepInCache, bool isQueryActionPrepare, bool perStatementResult,
-        const TInstant& deadline, ECompileActorAction action = ECompileActorAction::COMPILE)
+        const TInstant& deadline, ECompileActorAction action = ECompileActorAction::COMPILE,
+        bool isWarmupCompilation = false)
         : KeepInCache(keepInCache)
         , IsQueryActionPrepare(isQueryActionPrepare)
         , PerStatementResult(perStatementResult)
         , Deadline(deadline)
         , Action(action)
+        , IsWarmupCompilation(isWarmupCompilation)
     {}
 
     bool KeepInCache;
@@ -44,6 +46,7 @@ struct TKqpCompileSettings {
     bool PerStatementResult;
     TInstant Deadline;
     ECompileActorAction Action;
+    bool IsWarmupCompilation = false;
 };
 
 struct TKqpCompileRequest {
@@ -54,7 +57,8 @@ struct TKqpCompileRequest {
         TKqpTempTablesState::TConstPtr tempTablesState = {},
         TMaybe<TQueryAst> queryAst = {},
         std::shared_ptr<NYql::TExprContext> splitCtx = nullptr,
-        NYql::TExprNode::TPtr splitExpr = nullptr)
+        NYql::TExprNode::TPtr splitExpr = nullptr,
+        bool usePessimisticLocks = false)
         : Sender(sender)
         , Query(std::move(query))
         , Uid(uid)
@@ -73,6 +77,7 @@ struct TKqpCompileRequest {
         , QueryAst(std::move(queryAst))
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
+        , UsePessimisticLocks(usePessimisticLocks)
     {}
 
     TActorId Sender;
@@ -96,6 +101,8 @@ struct TKqpCompileRequest {
 
     std::shared_ptr<NYql::TExprContext> SplitCtx;
     NYql::TExprNode::TPtr SplitExpr;
+
+    bool UsePessimisticLocks;
 
     bool FindInCache = true;
 
@@ -300,8 +307,23 @@ private:
             "Got query compile cache request, snapshot has " << snapshot.size() << " entries");
         const auto& tenant = ev->Get()->Record.GetTenantName();
         auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
-        if (AppData()->TenantName != tenant or snapshot.empty()) {
+
+        // Check for tenant mismatch (serverless scenario)
+        if (AppData()->TenantName != tenant) {
+            response->Record.SetNodeId(SelfId().NodeId());
+            response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+
+            NYql::TIssues issues;
+            issues.AddIssue(NYql::TIssue("Compile cache is not available for this database"));
+            NYql::IssuesToMessage(issues, response->Record.MutableIssues());
+
+            Send(ev->Sender, response.release());
+            return;
+        }
+
+        if (snapshot.empty()) {
             response->Record.SetFinished(true);
+            response->Record.SetNodeId(SelfId().NodeId());
             Send(ev->Sender, response.release());
             return;
         }
@@ -355,6 +377,7 @@ private:
         if (!finished) {
             record.SetContinuationToken(currentIt->CompileResult->Uid);
         }
+        record.SetNodeId(SelfId().NodeId());
         Send(ev->Sender, response.release());
     }
 
@@ -436,7 +459,8 @@ private:
             Counters,
             dbCounters,
             ev->Sender,
-            ctx);
+            ctx,
+            request.IsWarmupCompilation ? EWarmupAttributionMode::Warmup : EWarmupAttributionMode::Client);
 
         if (request.Uid) {
             if (compileResult) {
@@ -493,14 +517,15 @@ private:
                 ? ECompileActorAction::SPLIT
                 : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
                     ? ECompileActorAction::PARSE
-                    : ECompileActorAction::COMPILE);
+                    : ECompileActorAction::COMPILE,
+            request.IsWarmupCompilation);
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
-            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, request.SplitExpr);
+            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
-            return CompileByAst(*request.QueryAst, compileRequest, ctx);
+            return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
         }
 
         auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
@@ -561,7 +586,7 @@ private:
                 request.Deadline,
                 ev->Get()->Split
                     ? ECompileActorAction::SPLIT
-                    : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
+                : (TableServiceConfig.GetEnableAstCache() && !request.QueryAst)
                         ? ECompileActorAction::PARSE
                         : ECompileActorAction::COMPILE);
             auto query = request.Query ? *request.Query : *compileResult->Query;
@@ -579,11 +604,11 @@ private:
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
                 ev->Get()->UserRequestContext,
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
-                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState));
+                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState), Nothing(), nullptr, nullptr, request.UsePessimisticLocks);
                 compileRequest.FindInCache = false;
 
-            if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
-                return CompileByAst(*request.QueryAst, compileRequest, ctx);
+        if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
+                return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
             }
 
             auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
@@ -652,7 +677,7 @@ private:
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 if (!hasTempTablesNameClashes) {
-                    UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution);
+                    UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution, compileRequest.CompileSettings.IsWarmupCompilation);
                 }
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
@@ -721,9 +746,13 @@ private:
         StartCheckQueriesTtlTimer();
     }
 
-    void UpdateQueryCache(const TActorContext& ctx, TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare, bool isPerStatementExecution) {
+    void UpdateQueryCache(const TActorContext& ctx, TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare, bool isPerStatementExecution, bool isWarmupCompilation) {
         if (QueryCache->FindByUid(compileResult->Uid, false)) {
             QueryCache->Replace(compileResult);
+            // Warmup re-validated an already-cached entry: keep client hit attribution.
+            if (isWarmupCompilation) {
+                QueryCache->MarkWarmupInsert(compileResult->Uid);
+            }
         } else if (keepInCache) {
             if (compileResult->Query) {
                 LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Insert query into compile cache, queryId: " << compileResult->Query->SerializeToString());
@@ -734,23 +763,33 @@ private:
             if (QueryCache->Insert(compileResult, TableServiceConfig.GetEnableAstCache(), isPerStatementExecution)) {
                 Counters->CompileQueryCacheEvicted->Inc();
             }
-            if (compileResult->Query && isQueryActionPrepare) {
+            if (compileResult->Query && isQueryActionPrepare && !isWarmupCompilation) {
                 if (InsertPreparingQuery(ctx, compileResult, true, isPerStatementExecution)) {
                     Counters->CompileQueryCacheEvicted->Inc();
                 };
             }
+            if (isWarmupCompilation) {
+                QueryCache->MarkWarmupInsert(compileResult->Uid);
+            }
         }
     }
 
-    void CompileByAst(const TQueryAst& queryAst, TKqpCompileRequest& compileRequest, const TActorContext& ctx) {
+    void CompileByAst(const TQueryAst& queryAst, TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
         YQL_ENSURE(queryAst.Ast);
         YQL_ENSURE(queryAst.Ast->IsOk());
         YQL_ENSURE(queryAst.Ast->Root);
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Try to find query by ast, queryId: " << compileRequest.Query.SerializeToString()
             << ", ast: " << queryAst.Ast->Root->ToString());
-        auto compileResult = QueryCache->FindByAst(compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache);
 
-        if (!compileRequest.FindInCache || HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState)) {
+        auto compileResult = QueryCache->FindByAst(
+            compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache,
+            compileRequest.CompileSettings.IsWarmupCompilation
+                ? EWarmupAttributionMode::Warmup
+                : EWarmupAttributionMode::Client,
+            Counters,
+            compileRequest.TempTablesState);
+
+        if (!compileRequest.FindInCache) {
             compileResult = nullptr;
         }
 
@@ -808,7 +847,7 @@ private:
         }
 
         compileRequest.CompileSettings.Action = ECompileActorAction::COMPILE;
-        CompileByAst(astStatements.front(), compileRequest, ctx);
+        CompileByAst(astStatements.front(), std::move(compileRequest), ctx);
     }
 
     void Handle(TEvKqp::TEvSplitResponse::TPtr& ev, const TActorContext& ctx) {
@@ -837,7 +876,9 @@ private:
         if (QueryCache->FindByQuery(query, keepInCache)) {
             return false;
         }
-        if (compileResult->GetAst() && QueryCache->FindByAst(query, *compileResult->GetAst(), keepInCache)) {
+        if (compileResult->GetAst() && QueryCache->FindByAst(
+                query, *compileResult->GetAst(), keepInCache,
+                EWarmupAttributionMode::None, /*counters=*/nullptr)) {
             return false;
         }
         auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, compileResult->CompilationDuration ,std::move(query), compileResult->QueryAst,
@@ -879,7 +920,7 @@ private:
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
-            request.CompileSettings.PerStatementResult, request.SplitCtx, request.SplitExpr);
+            request.CompileSettings.PerStatementResult, request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 
@@ -1198,6 +1239,68 @@ void TKqpQueryCache::Replace(const TKqpCompileResult::TConstPtr& compileResult) 
     }
 }
 
+// Must be called under Lock, only after SID / TempTables rejection checks passed.
+namespace {
+
+// Drops entry on temp-table clash; returns whether an entry existed before the
+// drop so callers can distinguish a rejected hit from a true miss.
+bool RejectOnTempTableClash(
+    TKqpCompileResult::TConstPtr& compileResult,
+    const TKqpTempTablesState::TConstPtr& tempTablesState)
+{
+    const bool hadEntry = static_cast<bool>(compileResult);
+    if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
+        compileResult = nullptr;
+    }
+    return hadEntry;
+}
+
+} // anonymous namespace
+
+void TKqpQueryCache::AccountWarmupHitImpl(
+    const TKqpCompileResult::TConstPtr& compileResult,
+    EWarmupAttributionMode mode,
+    const TIntrusivePtr<TKqpCounters>& counters)
+{
+    switch (mode) {
+        case EWarmupAttributionMode::None:
+            return;
+        case EWarmupAttributionMode::Warmup:
+            // Warmup raced a client that already cached this uid -- still
+            // mark so a later client hit is attributed.
+            if (!AtomicGet(WarmupWindowClosedAtomic)) {
+                WarmupPendingHitUids.insert(compileResult->Uid);
+                AtomicSet(WarmupHasPendingAtomic, 1);
+            }
+            return;
+        case EWarmupAttributionMode::Client: {
+            if (WarmupAccountingIsNoopFast()) {
+                return;
+            }
+            if (TryConsumeWarmupHitImpl(compileResult->Uid)) {
+                Y_ABORT_UNLESS(counters, "Client warmup attribution requires counters");
+                counters->WarmupHitsInWindow->Inc();
+                counters->WarmupSavedCompileMs->Add(compileResult->CompilationDuration.MilliSeconds());
+            }
+            return;
+        }
+    }
+}
+
+// Must be called under Lock. For true misses only (rejected hits filter out earlier).
+void TKqpQueryCache::AccountWarmupMissImpl(
+    EWarmupAttributionMode mode,
+    const TIntrusivePtr<TKqpCounters>& counters)
+{
+    if (mode != EWarmupAttributionMode::Client || WarmupAccountingIsNoopFast()) {
+        return;
+    }
+    if (ShouldCountWarmupMissImpl()) {
+        Y_ABORT_UNLESS(counters, "Client warmup attribution requires counters");
+        counters->WarmupMissesInWindow->Inc();
+    }
+}
+
 // find by either uid or query
 TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     const TMaybe<TString>& uid,
@@ -1208,7 +1311,8 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     TIntrusivePtr<TKqpCounters> counters,
     TKqpDbCountersPtr& dbCounters,
     const TActorId& sender,
-    const TActorContext& ctx)
+    const TActorContext& ctx,
+    EWarmupAttributionMode warmupAttribution)
 {
     TGuard<TAdaptiveLock> guard(Lock);
 
@@ -1219,9 +1323,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
         counters->ReportCompileRequestGet(dbCounters);
 
         auto compileResult = FindByUidImpl(*uid, promote);
-        if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
-            compileResult = nullptr;
-        }
+        const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
 
         if (compileResult) {
             Y_ENSURE(compileResult->Query);
@@ -1232,6 +1334,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
                     << ", sender: " << sender
                     << ", queryUid: " << *uid);
 
+                AccountWarmupHitImpl(compileResult, warmupAttribution, counters);
                 return compileResult;
             } else {
                 LOG_NOTICE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Non-matching user sid for query"
@@ -1242,6 +1345,10 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
             }
         }
 
+        // hadEntry => uid was present but rejected (SID / TempTables) -- not a true miss.
+        if (!hadEntry) {
+            AccountWarmupMissImpl(warmupAttribution, counters);
+        }
         return nullptr;
     }
 
@@ -1256,9 +1363,7 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Try to find query by queryId, queryId: "
         << query->SerializeToString());
     auto compileResult = FindByQueryImpl(*query, promote);
-    if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
-        return nullptr;
-    }
+    const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
 
     if (compileResult) {
         counters->ReportQueryCacheHit(dbCounters, true);
@@ -1266,7 +1371,12 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
             << ", sender: " << sender
             << ", queryUid: " << compileResult->Uid);
 
+        AccountWarmupHitImpl(compileResult, warmupAttribution, counters);
         return compileResult;
+    }
+
+    if (!hadEntry) {
+        AccountWarmupMissImpl(warmupAttribution, counters);
     }
 
     // note, we don't report cache miss, because it's up to caller to decide what to do:
@@ -1278,7 +1388,10 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
 TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
     const TKqpQueryId& query,
     const NYql::TAstParseResult& ast,
-    bool promote)
+    bool promote,
+    EWarmupAttributionMode warmupAttribution,
+    TIntrusivePtr<TKqpCounters> counters,
+    TKqpTempTablesState::TConstPtr tempTablesState)
 {
     TGuard<TAdaptiveLock> guard(Lock);
 
@@ -1287,7 +1400,13 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
         return nullptr;
     }
 
-    return FindByUidImpl(*uid, promote);
+    auto compileResult = FindByUidImpl(*uid, promote);
+    RejectOnTempTableClash(compileResult, tempTablesState);
+
+    if (compileResult) {
+        AccountWarmupHitImpl(compileResult, warmupAttribution, counters);
+    }
+    return compileResult;
 }
 
 TVector<TKqpQueryCacheSnapshot::TEntry> TKqpQueryCache::GetSnapshot() const {
@@ -1318,6 +1437,44 @@ void TKqpQueryCache::Clear() {
     AstIndex.clear();
     ByteSize = 0;
     Snapshot.Clear();
+    WarmupPendingHitUids.clear();
+    WarmupWindowStart = TInstant::Zero();
+    WarmupWindowOpened = false;
+    AtomicSet(WarmupWindowClosedAtomic, 0);
+    AtomicSet(WarmupHasPendingAtomic, 0);
+}
+
+void TKqpQueryCache::MarkWarmupInsert(const TString& uid) {
+    if (AtomicGet(WarmupWindowClosedAtomic)) {
+        return;
+    }
+    TGuard<TAdaptiveLock> guard(Lock);
+    if (AtomicGet(WarmupWindowClosedAtomic)) {
+        return;
+    }
+    WarmupPendingHitUids.insert(uid);
+    AtomicSet(WarmupHasPendingAtomic, 1);
+}
+
+bool TKqpQueryCache::RefreshWarmupWindowStateImpl() {
+    if (AtomicGet(WarmupWindowClosedAtomic)) {
+        return false;
+    }
+    if (!WarmupWindowOpened) {
+        if (WarmupPendingHitUids.empty()) {
+            return false;
+        }
+        WarmupWindowOpened = true;
+        WarmupWindowStart = TAppData::TimeProvider->Now();
+        return true;
+    }
+    if (TAppData::TimeProvider->Now() - WarmupWindowStart >= WarmupObservationWindow) {
+        WarmupWindowOpened = false;
+        AtomicSet(WarmupWindowClosedAtomic, 1);
+        WarmupPendingHitUids.clear();
+        return false;
+    }
+    return true;
 }
 
 void TKqpQueryCache::InsertQuery(const TKqpCompileResult::TConstPtr& compileResult) {
@@ -1351,7 +1508,7 @@ TKqpQueryId TKqpQueryCache::GetQueryIdWithAst(const TKqpQueryId& query, const NY
             }
         }
     }
-    return TKqpQueryId{query.Cluster, query.Database, query.DatabaseId, ast.Root->ToString(), query.Settings, astPgParams, query.GUCSettings};
+    return TKqpQueryId{query.Cluster, query.Database, query.DatabaseId, query.UserSid, ast.Root->ToString(), query.Settings, astPgParams, query.GUCSettings};
 }
 
 //

@@ -142,7 +142,7 @@ struct StringViewEqual
  */
 
 template <typename MapType>
-inline auto find_heterogeneous(MapType &&map, opentelemetry::nostd::string_view key)
+inline auto find_heterogeneous(const MapType &map, opentelemetry::nostd::string_view key)
 {
 #if defined(_LIBCPP_VERSION) || \
     (!defined(OPENTELEMETRY_STL_VERSION) || OPENTELEMETRY_STL_VERSION < 2020)

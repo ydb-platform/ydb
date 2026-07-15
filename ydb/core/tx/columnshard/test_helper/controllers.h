@@ -1,8 +1,8 @@
 #pragma once
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/columnshard/blobs_action/bs/address.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/tiering/manager.h>
-#include <ydb/core/tx/columnshard/blobs_action/bs/address.h>
 
 namespace NKikimr::NOlap {
 
@@ -21,27 +21,35 @@ private:
 
 protected:
     virtual void OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) override;
+
     virtual void OnExportFinished() override {
         ExportsFinishedCount.Inc();
     }
+
     virtual void OnImportFinished() override {
         ImportsFinishedCount.Inc();
     }
+
     virtual bool NeedForceCompactionBacketsConstruction() const override {
         return true;
     }
+
     virtual ui64 DoGetSmallPortionSizeDetector(const ui64 /*def*/) const override {
         return SmallSizeDetector.value_or(0);
     }
+
     virtual TDuration DoGetOptimizerFreshnessCheckDuration(const TDuration /*defaultValue*/) const override {
         return TDuration::Zero();
     }
+
     virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }
+
     virtual TDuration DoGetCompactionActualizationLag(const TDuration /*def*/) const override {
         return TDuration::Zero();
     }
+
 public:
     virtual bool CheckPortionForEvict(const TPortionInfo& portion) const override {
         if (SkipSpecialCheckForEvict) {
@@ -51,7 +59,6 @@ public:
         }
     }
 
-
     TWaitCompactionController() {
         SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
     }
@@ -59,7 +66,7 @@ public:
     ui32 GetFinishedExportsCount() const {
         return ExportsFinishedCount.Val();
     }
-    
+
     ui32 GetFinishedImportsCount() const {
         return ImportsFinishedCount.Val();
     }
@@ -67,12 +74,15 @@ public:
     virtual void OnTieringMetadataActualized() override {
         TieringMetadataActualizationCount.Inc();
     }
+
     virtual void OnStatisticsUsage(const NKikimr::NOlap::NIndexes::TIndexMetaContainer& /*statOperator*/) override {
         StatisticsUsageCount.Inc();
     }
+
     virtual void OnMaxValueUsage() override {
         MaxValueUsageCount.Inc();
     }
+
     void OverrideTierConfigs(
         TTestBasicRuntime& runtime, const TActorId& tabletActorId, THashMap<TString, NColumnShard::NTiers::TTierConfig> tiers);
 
@@ -99,4 +109,4 @@ private:
     size_t FailsCount = 0;
 };
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

@@ -56,7 +56,7 @@ using EPermissionSet = EPermission;
 
 const EPermissionSet NonePermissions = EPermissionSet(0x0000);
 
-std::vector<TString> FormatPermissions(EPermissionSet permissions);
+std::vector<std::string> FormatPermissions(EPermissionSet permissions);
 
 ////////////////////////////////////////////////////////////////////////////////
 

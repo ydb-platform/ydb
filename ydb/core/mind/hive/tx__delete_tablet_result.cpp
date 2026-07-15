@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -23,14 +25,21 @@ public:
         SideEffects.Reset(Self->SelfId());
         Success = true;
         TEvTabletBase::TEvDeleteTabletResult* msg = Result->Get();
-        BLOG_D("THive::TTxDeleteTabletResult::Execute(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
+        YDB_LOG_DEBUG("THive::TTxDeleteTabletResult::Execute processing delete tablet result",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId},
+            {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet != nullptr) {
             if (msg->Status == NKikimrProto::OK) {
                 NIceDb::TNiceDb db(txc.DB);
                 db.Table<Schema::Metrics>().Key(tablet->Id, 0).Delete();
                 for (const TTabletChannelInfo& channelInfo : tablet->TabletStorageInfo->Channels) {
+                    auto& pool = Self->GetStoragePool(channelInfo.StoragePool);
                     for (const TTabletChannelInfo::THistoryEntry& historyInfo : channelInfo.History) {
+                        if (pool.RemainingHistory.erase({TabletId, channelInfo.Channel, historyInfo.FromGeneration})) {
+                            Self->CheckRemainingHistory(pool);
+                        }
                         db.Table<Schema::TabletChannelGen>().Key(tablet->Id, channelInfo.Channel, historyInfo.FromGeneration).Delete();
                     }
                     db.Table<Schema::TabletChannel>().Key(tablet->Id, channelInfo.Channel).Delete();
@@ -60,8 +69,15 @@ public:
                 Self->DeleteTablet(tablet->Id);
             } else {
                 Success = false;
-                BLOG_W("THive::TTxDeleteTabletResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status));
-                Y_ENSURE_LOG(tablet->IsDeleting(), " tablet " << tablet->Id);
+                YDB_LOG_WARN("THive::TTxDeleteTabletResult::Execute retrying delete storage",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tabletId", TabletId},
+                    {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});
+                if (!(tablet->IsDeleting())) {
+                    YDB_LOG_ERROR("THive::TTxDeleteTabletResult::Execute tablet is not in Deleting state",
+                        {"logPrefix", GetLogPrefix()},
+                        {"tabletId", tablet->Id});
+                }
                 SideEffects.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
             }
         }
@@ -69,7 +85,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxDeleteTabletResult(" << TabletId << ")::Complete SideEffects " << SideEffects);
+        YDB_LOG_DEBUG("THive::TTxDeleteTabletResult::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId},
+            {"sideEffects", SideEffects});
         if (Success) {
             --Self->DeleteTabletInProgress;
             while (!Self->DeleteTabletQueue.empty() && Self->DeleteTabletInProgress < Self->GetMaxDeleteTabletInProgress()) {

@@ -1,8 +1,8 @@
 #pragma once
+#include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/adapter.h>
 #include <ydb/core/tx/columnshard/bg_tasks/session/session.h>
-#include <ydb/core/protos/counters_columnshard.pb.h>
 
 namespace NKikimr::NOlap::NBackground {
 class TTxGeneral: public NTabletFlatExecutor::ITransaction {
@@ -11,6 +11,7 @@ private:
     const std::optional<TActorId> ProgressActorId;
     const ui64 TxInternalId;
     virtual void DoComplete(const TActorContext& ctx) = 0;
+
 public:
     TTxGeneral(const std::optional<NActors::TActorId> progressActorId, const ui64 txInternalId)
         : ProgressActorId(progressActorId)
@@ -21,4 +22,4 @@ public:
     void Complete(const TActorContext& ctx) override final;
 };
 
-}
+}   // namespace NKikimr::NOlap::NBackground

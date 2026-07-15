@@ -3,7 +3,7 @@
 #include "secret_resolver.h"
 
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/services/scheme_secret/resolver.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -43,17 +43,23 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
             return Reply(false, "Empty security object");
         }
 
-        SecretId = NMetadata::NSecret::TSecretId(entry.SecurityObject->GetOwnerSID(), SecretName);
-        if (NKqp::UseSchemaSecrets(AppData()->FeatureFlags, SecretId.GetSecretId())) {
+        const auto& userSID = entry.SecurityObject->GetOwnerSID();
+        SecretId = NMetadata::NSecret::TSecretId(userSID, SecretName);
+
+        if (NSecret::UseSchemaSecrets(AppData()->FeatureFlags, SecretId.GetSecretId())) {
             const TVector<TString> secretNames{SecretId.GetSecretId()};
-            auto userToken = MakeIntrusiveConst<NACLib::TUserToken>(entry.SecurityObject->GetOwnerSID(), TVector<TString>());
+            auto userToken = MakeIntrusiveConst<NACLib::TUserToken>(userSID, TVector<TString>());
             const auto actorSystem = ActorContext().ActorSystem();
             const auto replyActorId = SelfId();
-            auto future = NKqp::DescribeSecret(secretNames, userToken, Database, actorSystem);
+            auto future = NSecret::DescribeSecret(
+                secretNames,
+                userToken,
+                Database,
+                actorSystem,
+                {.RetryPolicy = NSecret::MakeLongRetryPolicy()});
             future.Subscribe([actorSystem, replyActorId](const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
                 actorSystem->Send(replyActorId, new NKqp::TEvDescribeSecretsResponse(result.GetValue()));
             });
-            return;
         } else {
             Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
                 new NMetadata::NProvider::TEvAskSnapshot(SnapshotFetcher()));
@@ -91,7 +97,13 @@ public:
         return NKikimrServices::TActivity::REPLICATION_CONTROLLER_SECRET_RESOLVER;
     }
 
-    explicit TSecretResolver(const TActorId& parent, ui64 rid, const TPathId& pathId, const TString& secretName, const ui64 cookie, const TString& database)
+    explicit TSecretResolver(
+            const TActorId& parent,
+            ui64 rid,
+            const TPathId& pathId,
+            const TString& secretName,
+            const ui64 cookie,
+            const TString& database)
         : Parent(parent)
         , ReplicationId(rid)
         , PathId(pathId)
@@ -144,7 +156,9 @@ private:
 
 }; // TSecretResolver
 
-IActor* CreateSecretResolver(const TActorId& parent, ui64 rid, const TPathId& pathId, const TString& secretName, const ui64 cookie, const TString& database) {
+IActor* CreateSecretResolver(const TActorId& parent, ui64 rid,
+        const TPathId& pathId, const TString& secretName, const ui64 cookie, const TString& database)
+{
     return new TSecretResolver(parent, rid, pathId, secretName, cookie, database);
 }
 

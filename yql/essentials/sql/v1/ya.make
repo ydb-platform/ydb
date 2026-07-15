@@ -9,7 +9,8 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/sql/settings
     yql/essentials/core/issue
-    yql/essentials/core/issue/protos
+    yql/essentials/core/langver
+    yql/essentials/public/issue/protos
     yql/essentials/core/sql_types
     yql/essentials/parser/lexer_common
     yql/essentials/parser/proto_ast/collect_issues
@@ -29,11 +30,13 @@ SRCS(
     insert.cpp
     list_builtin.cpp
     match_recognize.cpp
+    namespace.cpp
     node.cpp
     result.cpp
     secret_settings.cpp
     select_yql.cpp
     select_yql_aggregation.cpp
+    select_yql_window.cpp
     select.cpp
     source.cpp
     sql.cpp
@@ -43,6 +46,7 @@ SRCS(
     sql_match_recognize.cpp
     sql_into_tables.cpp
     sql_query.cpp
+    sql_select_window.cpp
     sql_select_yql.cpp
     sql_select.cpp
     sql_translation.cpp
@@ -60,9 +64,9 @@ GENERATE_ENUM_SERIALIZATION(sql_call_param.h)
 END()
 
 RECURSE(
-    complete
     format
     highlight
+    ide
     lexer
     perf
     proto_parser

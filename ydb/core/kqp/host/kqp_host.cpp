@@ -5,41 +5,44 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cbo_factory.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
-
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_settings.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
-#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
-#include <yql/essentials/providers/result/provider/yql_result_provider.h>
-#include <yql/essentials/providers/config/yql_config_provider.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
-#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
-#include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
-#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
-#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <yql/essentials/providers/config/yql_config_provider.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider_impl.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
+#include <yql/essentials/providers/result/provider/yql_result_provider.h>
+
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <yt/yql/providers/yt/provider/yql_yt_provider.h>
-#include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NCommon;
@@ -340,7 +343,7 @@ public:
         for (auto id : SessionCtx->Query().ExecutionOrder) {
             auto result = SessionCtx->Query().Results.FindPtr(id);
             if (result) {
-                queryPlans.push_back(SerializeAnalyzePlan(result->QueryStats));
+                queryPlans.push_back(SerializeAnalyzePlan(result->QueryStats, SessionCtx->Config().GetEnableNewRBO()));
                 AddQueryStats(queryResult.QueryStats, std::move(result->QueryStats));
             }
         }
@@ -690,6 +693,113 @@ const TTypedUnboxedValue* ValidateParameter(const TString& name, const TTypeAnno
 
     return parameter;
 }
+
+// EvaluateExpr nodes containing parameter references cannot be evaluated at compile time
+// because parameter values are not available in the evaluation context for DDL queries.
+// However, secret values can be set in SQL statements with parameters.
+// This transformer unwraps the first EvaluateExpr node, if it's presented, before expression evaluation
+// so the existing parameter-at-execution-time flow could handle them.
+class TSecretValueExprTransformer {
+public:
+    TSecretValueExprTransformer(TIntrusivePtr<TKikimrQueryContext> queryCtx)
+        : QueryCtx(queryCtx) {}
+
+    IGraphTransformer::TStatus operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        TOptimizeExprSettings optSettings(nullptr);
+        optSettings.VisitChanges = false;
+
+        auto& queryCtx = QueryCtx;
+        return OptimizeExpr(input, output,
+            [&queryCtx](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                if (!IsSecretStatement(*node)) {
+                    return node;
+                }
+
+                const auto& settings = *node->Child(WriteSettingsChildIndex);
+                const auto [evaluateExprNode, evaluateExprNodeIdx] = FindFirstEvaluateExprInValueExpr(settings);
+                if (!evaluateExprNode) {
+                    return node;
+                }
+
+                if (!evaluateExprNode->Head().IsCallable("Parameter")) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(evaluateExprNode->Pos()),
+                        TIssuesIds::KIKIMR_BAD_REQUEST,
+                        "Only string or single string parameter is supported as secret value"));
+                    return {};
+                }
+
+                const TString paramName(evaluateExprNode->Head().Child(0)->Content());
+                RegisterParameterIfNeeded(queryCtx, paramName);
+
+                return UnwrapEvaluateExpr(*node, settings, *evaluateExprNode, evaluateExprNodeIdx, ctx);
+            }, ctx, optSettings);
+    }
+
+    static TAutoPtr<IGraphTransformer> Sync(TIntrusivePtr<TKikimrQueryContext> queryCtx) {
+        return CreateFunctorTransformer(TSecretValueExprTransformer(queryCtx));
+    }
+
+private:
+    static bool IsSecretStatement(const TExprNode& node) {
+        if (!node.IsCallable("Write!") || node.ChildrenSize() <= WriteSettingsChildIndex) {
+            return false;
+        }
+        const auto& key = *node.Child(2);
+        return key.ChildrenSize() > 0 &&
+               key.Child(0)->ChildrenSize() > 0 &&
+               key.Child(0)->Child(0)->Content() == "secret";
+    }
+
+    static std::pair<const TExprNode*, ui32> FindFirstEvaluateExprInValueExpr(const TExprNode& settings) {
+        for (ui32 i = 0; i < settings.ChildrenSize(); ++i) {
+            const auto& node = *settings.Child(i);
+            if (node.ChildrenSize() < 2 || node.Child(0)->Content() != "value_expr") {
+                continue;
+            }
+            const auto* expr = node.Child(1);
+            if (expr->IsCallable("EvaluateExpr") && expr->ChildrenSize() == 1) {
+                return {expr, i};
+            }
+
+            break; // We need only the first EvaluateExpr
+        }
+        return {nullptr, 0};
+    }
+
+    static void RegisterParameterIfNeeded(
+        TIntrusivePtr<TKikimrQueryContext>& queryCtx,
+        const TString& paramName)
+    {
+        if (!queryCtx->PrepareOnly || !queryCtx->PreparingQuery) {
+            return;
+        }
+        for (const auto& param : queryCtx->PreparingQuery->GetParameters()) {
+            if (param.GetName() == paramName) {
+                return;
+            }
+        }
+        auto& paramDesc = *queryCtx->PreparingQuery->AddParameters();
+        paramDesc.SetName(paramName);
+        auto guard = queryCtx->QueryData->TypeEnv().BindAllocator();
+        auto* utf8Type = NKikimr::NMiniKQL::TDataType::Create(
+            NYql::NUdf::TDataType<NYql::NUdf::TUtf8>::Id,
+            queryCtx->QueryData->TypeEnv());
+        NKikimr::NMiniKQL::ExportTypeToProto(utf8Type, *paramDesc.MutableType());
+    }
+
+    static TExprNode::TPtr UnwrapEvaluateExpr(
+        const TExprNode& writeNode, const TExprNode& settings, const TExprNode& evaluateExprNode,
+        const ui32 evaluateExprNodeIdx, TExprContext& ctx)
+    {
+        auto newTuple = ctx.ChangeChild(*settings.Child(evaluateExprNodeIdx), 1, evaluateExprNode.HeadPtr());
+        auto newSettings = ctx.ChangeChild(settings, evaluateExprNodeIdx, std::move(newTuple));
+        return ctx.ChangeChild(writeNode, WriteSettingsChildIndex, std::move(newSettings));
+    }
+
+private:
+    static constexpr ui32 WriteSettingsChildIndex = 4;
+    TIntrusivePtr<TKikimrQueryContext> QueryCtx;
+};
 
 class TCollectParametersTransformer {
 public:
@@ -1092,7 +1202,8 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges, bool isInternalCall,
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr, NActors::TActorSystem* actorSystem = nullptr,
         NYql::TExprContext* ctx = nullptr, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig(),
-        const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr)
+        const TIntrusivePtr<TUserRequestContext>& userRequestContext = nullptr,
+        bool usePessimisticLocks = false)
         : Gateway(gateway)
         , Cluster(cluster)
         , GUCSettings(gUCSettings)
@@ -1110,6 +1221,7 @@ public:
         , ExecuteCtx(MakeIntrusive<TExecuteContext>())
         , ActorSystem(actorSystem ? actorSystem : NActors::TActivationContext::ActorSystem())
         , QueryServiceConfig(queryServiceConfig)
+        , UsePessimisticLocks(usePessimisticLocks)
     {
         if (funcRegistry) {
             FuncRegistry = funcRegistry;
@@ -1268,10 +1380,10 @@ public:
             });
     }
 
-    IAsyncQueryResultPtr PrepareScanQuery(const TKqpQueryRef& query, bool isSql, const TPrepareSettings& /*settings*/) override {
+    IAsyncQueryResultPtr PrepareScanQuery(const TKqpQueryRef& query, bool isSql, const TPrepareSettings& settings) override {
         return CheckedProcessQuery(*ExprCtx,
-            [this, &query, isSql] (TExprContext& ctx) mutable {
-                return PrepareScanQueryInternal(query, isSql, ctx);
+            [this, &query, isSql, settings] (TExprContext& ctx) mutable {
+                return PrepareScanQueryInternal(query, isSql, ctx, settings);
             });
     }
 
@@ -1298,10 +1410,8 @@ private:
         if (!query.AstResult) {
             settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())
                 .SetIsEnableExternalDataSources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
-                .SetIsEnablePgConstsToParams(SessionCtx->Config().GetEnablePgConstsToParams())
                 .SetQueryParameters(query.ParameterTypes)
                 .SetApplicationName(ApplicationName)
-                .SetIsEnablePgSyntax(SessionCtx->Config().FeatureFlags.GetEnablePgSyntax())
                 .SetFromConfig(SessionCtx->Config());
             NSQLTranslation::TTranslationSettings effectiveSettings;
             auto astRes = ParseQuery(
@@ -1415,7 +1525,6 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
 
         auto compileResult = CompileYqlQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
@@ -1457,7 +1566,7 @@ private:
     }
 
     IAsyncQueryResultPtr ExplainScanQueryInternal(const TKqpQueryRef& query, bool isSql, TExprContext& ctx) {
-        return PrepareScanQueryInternal(query, isSql, ctx);
+        return PrepareScanQueryInternal(query, isSql, ctx, {});
     }
 
     IAsyncQueryResultPtr PrepareDataQueryInternal(const TKqpQueryRef& query, const TPrepareSettings& settings,
@@ -1484,20 +1593,16 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
-            .SetFromConfig(SessionCtx->Config());
+            .SetFromConfig(SessionCtx->Config())
+            .SetYqlSelect(settings.YqlSelect);
         auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
         if (!compileResult.QueryExpr) {
             return nullptr;
         }
 
-        if (SessionCtx->Config().GetEnableNewRBO()) {
-            return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformerNewRBO, SessionCtx->QueryPtr(),
-                query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
-        }
-        else {
-            return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
-                query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
-        }
+        auto& yqlTransformer = SessionCtx->Config().GetEnableNewRBO() ? *YqlTransformerNewRBO : *YqlTransformer;
+        return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, yqlTransformer, SessionCtx->QueryPtr(),
+            query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
     IAsyncQueryResultPtr PrepareDataQueryAstInternal(const TKqpQueryRef& queryAst, const TPrepareSettings& settings,
@@ -1550,6 +1655,7 @@ private:
             YQL_ENSURE(*settings.ConcurrentResults || queryType == EKikimrQueryType::Query);
             SessionCtx->Query().ConcurrentResults = *settings.ConcurrentResults;
         }
+        SessionCtx->Query().IsolateEffects = settings.UsePessimisticLocks;
         if (settings.RuntimeParameterSizeLimitSatisfied) {
             SessionCtx->Query().RuntimeParameterSizeLimitSatisfied = settings.RuntimeParameterSizeLimitSatisfied;
         }
@@ -1575,8 +1681,9 @@ private:
         if (!expr) {
             TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
             settingsBuilder.SetSqlAutoCommit(false)
-                .SetUsePgParser(settings.UsePgParser)
-                .SetFromConfig(SessionCtx->Config());
+                .SetFromConfig(SessionCtx->Config())
+                .SetValidateViewStatement(!settings.IsInternalCall.GetOrElse(false))
+                .SetYqlSelect(settings.YqlSelect);
             auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
 
             if (compileResult.NeedToSplit) {
@@ -1585,7 +1692,8 @@ private:
                 if (!compileResult.QueryExpr) {
                     return nullptr;
                 }
-                return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+                auto& yqlTransformer = SessionCtx->Config().GetEnableNewRBO() ? *YqlTransformerNewRBO : *YqlTransformer;
+                return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, yqlTransformer, SessionCtx->QueryPtr(),
                     query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
             }
         } else {
@@ -1601,7 +1709,6 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder
             .SetSqlAutoCommit(false)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
         auto compileResult = CompileQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(compileResult.NeedToSplit);
@@ -1635,15 +1742,14 @@ private:
             DataProvidersFinalizer);
     }
 
-    IAsyncQueryResultPtr PrepareScanQueryInternal(const TKqpQueryRef& query, bool isSql, TExprContext& ctx,
-        EKikimrStatsMode statsMode = EKikimrStatsMode::None)
-    {
+    IAsyncQueryResultPtr PrepareScanQueryInternal(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, const TPrepareSettings& prepareSettings,
+                                                  EKikimrStatsMode statsMode = EKikimrStatsMode::None) {
         return isSql
-            ? PrepareScanQueryInternal(query, ctx, statsMode)
-            : PrepareScanQueryAstInternal(query, ctx);
+            ? PrepareScanQueryInternal(query, ctx, prepareSettings, statsMode)
+            : PrepareScanQueryAstInternal(query, ctx, prepareSettings);
     }
 
-    IAsyncQueryResultPtr PrepareScanQueryInternal(const TKqpQueryRef& query, TExprContext& ctx,
+    IAsyncQueryResultPtr PrepareScanQueryInternal(const TKqpQueryRef& query, TExprContext& ctx, const TPrepareSettings& prepareSettings,
         EKikimrStatsMode statsMode = EKikimrStatsMode::None)
     {
         SetupYqlTransformer(EKikimrQueryType::Scan);
@@ -1655,7 +1761,8 @@ private:
         TMaybe<TSqlVersion> sqlVersion = 1;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
-            .SetFromConfig(SessionCtx->Config());
+            .SetFromConfig(SessionCtx->Config())
+            .SetYqlSelect(prepareSettings.YqlSelect);
         auto compileResult = CompileYqlQuery(query, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
         if (!compileResult.QueryExpr) {
@@ -1666,7 +1773,7 @@ private:
             query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
-    IAsyncQueryResultPtr PrepareScanQueryAstInternal(const TKqpQueryRef& queryAst, TExprContext& ctx) {
+    IAsyncQueryResultPtr PrepareScanQueryAstInternal(const TKqpQueryRef& queryAst, TExprContext& ctx, const TPrepareSettings& prepareSettings) {
         IKikimrQueryExecutor::TExecuteSettings settings;
         SetupDataQueryAstTransformer(settings, EKikimrQueryType::Scan);
 
@@ -1676,7 +1783,8 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, queryAst.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
-            .SetFromConfig(SessionCtx->Config());
+            .SetFromConfig(SessionCtx->Config())
+            .SetYqlSelect(prepareSettings.YqlSelect);
         auto compileResult = CompileYqlQuery(queryAst, false, ctx, sqlVersion, settingsBuilder);
 
         YQL_ENSURE(!sqlVersion);
@@ -1703,7 +1811,6 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, script.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(true)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
@@ -1733,7 +1840,6 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, script.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(true)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
@@ -1769,6 +1875,7 @@ private:
         auto transformer = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()
             .AddPreTypeAnnotation()
+            .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
             .AddIOAnnotation()
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
@@ -1821,9 +1928,10 @@ private:
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         state->Gateway = FederatedQuerySetup->HttpGateway;
-        state->GatewayRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
+        state->GatewayRetryPolicy = NYql::GetFqHTTPRetryPolicy();
         state->ExecutorPoolId = AppData()->UserPoolId;
         state->ActorSystem = ActorSystem;
+        state->EnableS3ConstraintsTransformer = Config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false);
 
         auto dataSource = NYql::CreateS3DataSource(state);
         auto dataSink = NYql::CreateS3DataSink(state);
@@ -1865,7 +1973,7 @@ private:
         }
 
         TString sessionId = CreateGuidAsString();
-        auto [ytState, statWriter] = CreateYtNativeState(FederatedQuerySetup->YtGateway, userName, sessionId, &FederatedQuerySetup->YtGatewayConfig, TypesCtx, NDq::MakeCBOOptimizerFactory(), MakeDqHelper());
+        auto [ytState, statWriter] = CreateYtNativeState(FederatedQuerySetup->YtGateway, userName, sessionId, &FederatedQuerySetup->YtGatewayConfig, TypesCtx, NYql::NDq::MakeCBOOptimizerFactory(), MakeDqHelper());
 
         ytState->PassiveExecution = true;
         ytState->Gateway->OpenSession(
@@ -1903,7 +2011,7 @@ private:
         solomonState->SupportRtmrMode = false;
         solomonState->WriteThroughDqIntegration = true;
         solomonState->Types = TypesCtx.Get();
-        solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
+        solomonState->Gateway = NYql::CreateSolomonGateway(FederatedQuerySetup->SolomonGatewayConfig);
         solomonState->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         solomonState->DqIntegration = NYql::CreateSolomonDqIntegration(solomonState);
         solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
@@ -1921,13 +2029,17 @@ private:
         TString sessionId = CreateGuidAsString();
         auto state = MakeIntrusive<TPqState>(sessionId);
         state->SupportRtmrMode = false;
-        state->AllowTransparentSystemColumns = false;
+        state->AddTransparentPrefixToTransparentSystemColumns = false;
+        state->EnableUserAttributesInTopicQuery = Config->FeatureFlags.GetEnableUserAttributesInTopicQuery();
         state->StreamingTopicsReadByDefault = false;
+        state->EnableTopicsPredicatePushdown = Config->FeatureFlags.GetEnableTopicsPredicatePushdown();
+        state->ForbidYqlSysColumnsAndSystemMetadata = QueryServiceConfig.GetStreamingQueries().GetForbidYqlSysColumnsAndSystemMetadata();
+        state->EnablePqConstraintsTransformer = Config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false);
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
         state->Configuration->Init(FederatedQuerySetup->PqGatewayConfig, TypesCtx, state->DbResolver, state->DatabaseIds);
-        state->Gateway = FederatedQuerySetup->PqGateway;
+        state->Gateway = FederatedQuerySetup->PqGatewayFactory->CreatePqGateway();
         state->DqIntegration = NYql::CreatePqDqIntegration(state);
         state->Gateway->OpenSession(sessionId, "username");
 
@@ -1937,19 +2049,20 @@ private:
             if (const auto disposition = requestContext->StreamingDisposition) {
                 state->Disposition = *disposition;
             }
+            state->WatermarkLateEventsPolicy = requestContext->WatermarkLateEventsPolicy;
         }
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
         TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
 
-        finalizers.emplace_back([pqGateway = FederatedQuerySetup->PqGateway, sessionId]() {
+        finalizers.emplace_back([pqGateway = state->Gateway, sessionId]() {
             return pqGateway->CloseSession(sessionId);
         });
     }
 
     void Init(EKikimrQueryType queryType) {
         TransformCtx = MakeIntrusive<TKqlTransformContext>(Config, SessionCtx->QueryPtr(), SessionCtx->TablesPtr());
-        KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry, ActorSystem);
+        KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry, ActorSystem, UsePessimisticLocks);
 
         ExprCtx->NodesAllocationLimit = SessionCtx->Config()._KqpExprNodesAllocationLimit.Get().GetRef();
         ExprCtx->StringsAllocationLimit = SessionCtx->Config()._KqpExprStringsAllocationLimit.Get().GetRef();
@@ -1982,6 +2095,7 @@ private:
             TypesCtx->OptimizerFlags.insert("filterpushdownoverjoinoptionalsideignoreonlykeys");
         }
         TypesCtx->OptimizerFlags.insert("disablenormalizeequalityfilteroverjoin");
+        TypesCtx->OptimizerFlags.insert("rewriteswitchoverextractmembers");
 
         TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->GetEnableNewRBO();
 
@@ -1990,15 +2104,13 @@ private:
         if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();
+            InitSolomonProvider();
 
             TVector<std::function<TFuture<void>()>> finalizers;
             if (FederatedQuerySetup->YtGateway) {
                 InitYtProvider(finalizers);
             }
-            if (FederatedQuerySetup->SolomonGateway) {
-                InitSolomonProvider();
-            }
-            if (FederatedQuerySetup->PqGateway) {
+            if (FederatedQuerySetup->PqGatewayFactory) {
                 InitPqProvider(finalizers);
             }
 
@@ -2011,7 +2123,7 @@ private:
                     return WaitAll(futures);
                 };
             }
-            TypesCtx->StreamLookupJoin = true;
+            TypesCtx->StreamLookupJoin = Config->GetEnableDqSourceStreamLookupJoin();
         }
 
         InitPgProvider();
@@ -2064,6 +2176,7 @@ private:
             .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransform")
             .AddPreTypeAnnotation()
+            .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)
@@ -2125,6 +2238,7 @@ private:
             .Add(TLogExprTransformer::Sync("YqlTransformerNewRBO", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransformNewRBO")
             .AddPreTypeAnnotation()
+            .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)
@@ -2222,9 +2336,10 @@ private:
     TKqpTempTablesState::TConstPtr TempTablesState;
     NActors::TActorSystem* ActorSystem = nullptr;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    bool UsePessimisticLocks = false;
 };
 
-} // namespace
+} // anonymous namespace
 
 Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode statsMode) {
     switch (statsMode) {
@@ -2243,11 +2358,11 @@ TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway, const 
     const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TGUCSettings::TPtr& gUCSettings,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TMaybe<TString>& applicationName, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
-    bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem, NYql::TExprContext* ctx, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
+    bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState, NActors::TActorSystem* actorSystem, NYql::TExprContext* ctx, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+    bool usePessimisticLocks)
 {
     return MakeIntrusive<TKqpHost>(gateway, cluster, database, gUCSettings, applicationName, config, moduleResolver, federatedQuerySetup, userToken, funcRegistry,
-                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem, ctx, queryServiceConfig, userRequestContext);
+                                   keepConfigChanges, isInternalCall, std::move(tempTablesState), actorSystem, ctx, queryServiceConfig, userRequestContext, usePessimisticLocks);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

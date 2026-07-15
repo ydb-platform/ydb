@@ -213,6 +213,12 @@ public:
                     }
 
                     cluster = TString(node.Child(1)->Content());
+                    if (to_lower(*cluster) == "default") {
+                        cluster = State_->Gateway->GetDefaultClusterName();
+                        node.ChildRef(1) = ctx.NewAtom(node.Pos(), *cluster);
+                        return true;
+                    }
+
                     const bool validate = State_->Configuration->ValidateClusters.Get().GetOrElse(DEFAULT_VALIDATE_CLUSTERS);
                     if (validate && *cluster != "$all" && *cluster != YtUnspecifiedCluster && !State_->Gateway->GetClusterServer(*cluster)) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() << "Unknown cluster: " << *cluster));
@@ -250,6 +256,17 @@ public:
     }
 
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
+        if (auto leftMaterialize = TMaybeNode<TCoLeft>(node).Input().Maybe<TCoMaterialize>()) {
+            return Build<TCoLeft>(ctx, node->Pos())
+                .Input(ctx.RenameNode(leftMaterialize.Ref(), TYtMaterialize::CallableName()))
+                .Done().Ptr();
+        }
+        if (auto rightMaterialize = TMaybeNode<TCoRight>(node).Input().Maybe<TCoMaterialize>()) {
+            return Build<TCoRight>(ctx, node->Pos())
+                .Input(ctx.RenameNode(rightMaterialize.Ref(), TYtMaterialize::CallableName()))
+                .Done().Ptr();
+        }
+
         YQL_ENSURE(TMaybeNode<TYtWrite>(node).DataSink());
         std::optional<EYtWriteMode> mode;
         if (const auto m = NYql::GetSetting(*node->Child(4), EYtSettingType::Mode)) {

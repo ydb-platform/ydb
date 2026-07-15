@@ -1,6 +1,9 @@
 RECURSE(
     blobsan
     cfg
+    disk_obliterator
+    mnc
+    include_sanitizer
     partcheck
     query_replay
     query_replay_yt

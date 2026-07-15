@@ -3,7 +3,7 @@ import os
 from devtools.yamaker.project import CMakeNinjaNixProject
 
 
-def apache_orc_post_install(self):
+def post_install(self):
     with self.yamakes["."] as orc:
         proto_wrapper_source = "c++/src/wrap/orc-proto-wrapper.cc"
         os.remove(f"{self.dstdir}/{proto_wrapper_source}")
@@ -11,7 +11,6 @@ def apache_orc_post_install(self):
 
         orc.PEERDIR.add("contrib/libs/apache/orc-format")
         orc.SRCS.remove("orc-format_ep-prefix/src/orc-format_ep/src/main/proto/orc/proto/orc_proto.proto")
-        orc.CFLAGS.remove("-DPROTOBUF_USE_DLLS")
 
 
 apache_orc = CMakeNinjaNixProject(
@@ -31,5 +30,6 @@ apache_orc = CMakeNinjaNixProject(
     unbundle_from={
         "orc_format": "orc-format_ep-prefix",
     },
-    post_install=apache_orc_post_install,
+    write_public_incs=False,
+    post_install=post_install,
 )

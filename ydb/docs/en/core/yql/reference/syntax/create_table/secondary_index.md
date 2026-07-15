@@ -33,7 +33,7 @@ CREATE TABLE my_table (
     d Date,
     INDEX idx_d GLOBAL ON (d),
     INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
-    INDEX idx_bc GLOBAL UNIQUE SYNC ON (b, c),
+    INDEX idx_uniq GLOBAL UNIQUE SYNC ON (c),
     PRIMARY KEY (a)
 )
 ```

@@ -1,99 +1,99 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import boto3
-import botocore
-
-import random
 import logging
+import urllib.parse
 import requests
 import time
-import uuid
+import xmltodict
+
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
+from botocore.credentials import Credentials
 
 import pytest
-import yatest
 
 import ydb
 from hamcrest import assert_that, equal_to, not_none, has_item, has_items, is_not, contains_string
 from hamcrest import raises, greater_than, not_, less_than
-from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_tenant_installation
 from ydb.tests.library.sqs.test_base import IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
+from ydb.tests.library.sqs.cloud_test_base import YandexCloudSqsTestBase
+from ydb.tests.library.sqs.test_base import get_test_with_sqs_tenant_installation
+from ydb.tests.library.sqs.requests_client import REQUEST_TIMEOUT
+from ydb.tests.library.harness.util import LogLevels
 
 
-ANOTHER_TABLES_FORMAT_PARAMS = {
-    'argnames': 'another_tables_format',
-    'argvalues': [0, 1],
-    'ids': ['tables_format_v0', 'tables_format_v1'],
-}
+SQS_API_VERSION = '2012-11-05'
+SQS_REGION = 'ru-central1'
 
 
-class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
+class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSqsTestBase)):
     @classmethod
     def _setup_config_generator(cls):
         config_generator = super(TestSqsYandexCloudMode, cls)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['yandex_cloud_mode'] = True
-        config_generator.yaml_config['sqs_config']['enable_queue_master'] = True
-        config_generator.yaml_config['sqs_config']['enable_dead_letter_queues'] = True
-        config_generator.yaml_config['sqs_config']['account_settings_defaults'] = {'max_queues_count': 40}
-        config_generator.yaml_config['sqs_config']['background_metrics_update_time_ms'] = 1000
+        config_generator.yaml_config['domains_config']['security_config']['enforce_user_token_check_requirement'] = True
 
-        cls.event_output_file = yatest.common.output_path("events-%s.txt" % random.randint(1, 10000000))
-        config_generator.yaml_config['sqs_config']['yc_search_events_config'] = {
-            'enable_yc_search': True,
-            'output_file_name': cls.event_output_file,
-        }
-        temp_token_file = yatest.common.work_path("tokenfile")
-        with open(temp_token_file, "w") as fl:
-            fl.write("root@builtin")
+        for component in ('PQ_MLP_DLQ_MOVER', 'PQ_MLP_CONSUMER'):
+            config_generator.yaml_config['log_config']['entry'].append({
+                'component': component,
+                'level': int(LogLevels.DEBUG),
+            })
 
-        config_generator.yaml_config['sqs_config']['auth_config'] = {'oauth_token': {'token_file': temp_token_file}}
         return config_generator
-
-    def _before_test_start(self):
-        self.cloud_account = f'acc_{uuid.uuid1()}'
-        self.iam_token = f'usr_{self.cloud_account}'
-        self.folder_id = f'folder_{self.cloud_account}'
-        self.cloud_id = f'CLOUD_FOR_{self.folder_id}'
-
-        self._username = self.cloud_id
-
-        logging.info(f'run test with cloud_id={self.cloud_id} folder_id={self.folder_id}')
-
-    def _setup_user(self, _username, retries_count=3):
-        pass  # account should be created automatically
-
-    @classmethod
-    def create_metauser(cls, cluster, config_generator):
-        pass
-
-    def teardown_method(self, method=None):
-        self.check_all_users_queues_tables_consistency()
-        super(TestSqsYandexCloudMode, self).teardown_method(method)
-
-    def _read_single_message_no_wait(self, queue_url):
-        read_result = self._read_messages_and_assert(
-            queue_url, messages_count=1, visibility_timeout=0, wait_timeout=0,
-            matcher=None
-        )
-        return read_result
 
     def _get_queue_arn(self, queue_url):
         return self._sqs_api.get_queue_attributes(queue_url, ['QueueArn'])['QueueArn']
-
-    def _make_boto_client(self, access_key_id, secret_access_key, url):
-        session = boto3.session.Session()
-        return session.client(
-            service_name='sqs',
-            aws_access_key_id=access_key_id,  # service account
-            aws_secret_access_key=secret_access_key,
-            aws_session_token='unused',
-            endpoint_url=url,
-            region_name='ru-central1'
-        )
 
     def _make_server_url(self):
         host = self.cluster.nodes[1].host
         port = self.cluster_nodes[0].sqs_port
         return 'http://{}:{}'.format(host, port)
+
+    def _signed_sqs_request(self, access_key_id, secret_access_key, action, **params):
+        url = self._make_server_url()
+        body_params = {'Action': action, 'Version': SQS_API_VERSION}
+        body_params.update(params)
+        data = urllib.parse.urlencode(body_params)
+
+        request = AWSRequest(
+            method='POST',
+            url=url,
+            data=data,
+            headers={'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8'},
+        )
+        credentials = Credentials(access_key_id, secret_access_key, token='unused')
+        SigV4Auth(credentials, 'sqs', SQS_REGION).add_auth(request)
+        prepared = request.prepare()
+        return requests.post(
+            prepared.url,
+            data=prepared.body,
+            headers=dict(prepared.headers),
+            timeout=REQUEST_TIMEOUT,
+        )
+
+    def _signed_sqs_request_or_raise(self, access_key_id, secret_access_key, action, **params):
+        response = self._signed_sqs_request(access_key_id, secret_access_key, action, **params)
+        if response.status_code != 200:
+            raise RuntimeError(
+                "Action {} failed with status {} and text {}".format(
+                    action, response.status_code, response.text
+                )
+            )
+        return response
+
+    @staticmethod
+    def _extract_queue_url(response):
+        result = xmltodict.parse(response.text)
+        return result['CreateQueueResponse']['CreateQueueResult']['QueueUrl']
+
+    @staticmethod
+    def _extract_queue_urls(response):
+        result = xmltodict.parse(response.text)
+        urls = result['ListQueuesResponse']['ListQueuesResult'].get('QueueUrl')
+        if urls is None:
+            return []
+        if isinstance(urls, list):
+            return urls
+        return [urls]
 
     def test_empty_auth_header(self):
         url = self._make_server_url()
@@ -103,53 +103,54 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_retryable_iam_error(self, tables_format):
         self._init_with_params(tables_format=tables_format)
-        url = self._make_server_url()
-
-        boto_client = self._make_boto_client('TEST_ID_FOR_RETRYIES', 'SECRET', url)
 
         def list_queues():
-            boto_client.list_queues()
+            self._signed_sqs_request_or_raise('TEST_ID_FOR_RETRYIES', 'SECRET', 'ListQueues')
 
         assert_that(
             list_queues,
             raises(
-                botocore.exceptions.ClientError,
-                pattern='ServiceUnavailable.+IAM authorization error'
+                RuntimeError,
+                pattern='IAM authorization error'
             )
         )
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_empty_access_key_id(self, tables_format):
         self._init_with_params(tables_format=tables_format)
-        url = self._make_server_url()
-
-        boto_client = self._make_boto_client('sa_' + self._username, 'SECRET', url)
+        access_key_id = 'sa_' + self._username
 
         # basic sanity check
-        queue_url = boto_client.create_queue(QueueName=self.queue_name)['QueueUrl']
-        assert_that(boto_client.list_queues()['QueueUrls'], has_item(queue_url))
-        boto_client.send_message(QueueUrl=queue_url, MessageBody='awesome')
-
-        unknown_boto_client = self._make_boto_client('', 'SECRET', url)
+        create_response = self._signed_sqs_request_or_raise(
+            access_key_id, 'SECRET', 'CreateQueue', QueueName=self.queue_name
+        )
+        queue_url = self._extract_queue_url(create_response)
+        list_response = self._signed_sqs_request_or_raise(access_key_id, 'SECRET', 'ListQueues')
+        assert_that(self._extract_queue_urls(list_response), has_item(queue_url))
+        self._signed_sqs_request_or_raise(
+            access_key_id, 'SECRET', 'SendMessage', QueueUrl=queue_url, MessageBody='awesome'
+        )
 
         def list_queues_for_empty_access_key_id():
-            unknown_boto_client.list_queues()
+            self._signed_sqs_request_or_raise('', 'SECRET', 'ListQueues')
 
         assert_that(
             list_queues_for_empty_access_key_id,
             raises(
-                botocore.exceptions.ClientError,
+                RuntimeError,
                 pattern='InvalidClientTokenId'
             )
         )
 
         def send_message_for_empty_access_key_id():
-            unknown_boto_client.send_message(QueueUrl=queue_url, MessageBody='psst, wanna some weed?')
+            self._signed_sqs_request_or_raise(
+                '', 'SECRET', 'SendMessage', QueueUrl=queue_url, MessageBody='psst, wanna some weed?'
+            )
 
         assert_that(
             send_message_for_empty_access_key_id,
             raises(
-                botocore.exceptions.ClientError,
+                RuntimeError,
                 pattern='AccessDenied'
             )
         )
@@ -246,10 +247,7 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
         self._sqs_api.delete_message(queue_url, receipt_handle)
 
         # check dlq contents
-        read_result = self._read_messages_and_assert(
-            dlq_url, messages_count=len(groups), visibility_timeout=0, wait_timeout=0,
-            matcher=None
-        )
+        read_result = self._wait_for_messages_in_dlq(dlq_url, len(groups))
         assert_that(len(read_result), equal_to(len(groups)))
         for i in range(len(groups)):
             assert_that(read_result[i]['Body'], equal_to('john doe'))
@@ -290,23 +288,10 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
 
         seq_no = 0
 
-        def get_dlq_message_count():
-            return int(self._sqs_api.get_queue_attributes(dlq_url)['ApproximateNumberOfMessages'])
-
         expected_dlq_message_count = 0
 
         def wait_for_dlq_message_count(expected_message_count):
-            retries = 20
-            while retries > 0:
-                message_count = get_dlq_message_count()
-                if message_count == expected_message_count:
-                    return
-
-                time.sleep(0.5)
-                retries -= 1
-                if retries == 0:
-                    # fails the test
-                    assert_that(message_count, equal_to(expected_message_count))
+            self._wait_for_dlq_message_count(dlq_url, expected_message_count)
 
         for msg_body in 'test messages famous quartet'.split(' '):
             wait_for_dlq_message_count(expected_dlq_message_count)
@@ -363,7 +348,7 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
             return check_counter({"name": "queue.messages.sent_count_per_second", "queue": q_name}, expected)
 
         def try_check_total_count(expected):
-            retry_count = 3
+            retry_count = self._retry_attempts(3, 10)
             while retry_count > 0:
                 try:
                     check_total_count(expected)
@@ -373,6 +358,12 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
                 else:
                     return
             check_total_count(expected)
+
+        def wait_check_messages_sent(q_name, expected):
+            def assert_fn(counters):
+                check_messages_sent(q_name, expected)
+
+            self._wait_for_ymq_counters(assert_fn, self.cloud_id, self.folder_id)
 
         self._sqs_api = self._create_api_for_user(
             self._username, raise_on_error=True, force_private=False,
@@ -389,23 +380,23 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
 
         self._send_message_and_assert(queue_url1, "test1")
 
-        check_messages_sent(cloud_q_name, 1)
+        wait_check_messages_sent(cloud_q_name, 1)
         self._sqs_api.delete_queue(queue_url1)
         try_check_total_count(1)
         self._sqs_api.delete_queue(queue_url2)
         try_check_total_count(0)
-        check_messages_sent(cloud_q_name, 0)
+        wait_check_messages_sent(cloud_q_name, 0)
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
-    @pytest.mark.parametrize(**ANOTHER_TABLES_FORMAT_PARAMS)
-    def test_dlq_mechanics_in_cloud(self, is_fifo, tables_format, another_tables_format):
+    def test_dlq_mechanics_in_cloud(self, is_fifo):
+        tables_format = 1
+
         self._init_with_params(is_fifo, tables_format)
 
         self._sqs_api = self._create_api_for_user('ignored', raise_on_error=True, force_private=True, iam_token=self.iam_token, folder_id=self.folder_id)
         queue1_url = self._sqs_api.create_queue(self.queue_name, is_fifo=is_fifo)
 
-        self._init_with_params(is_fifo, another_tables_format)
+        self._init_with_params(is_fifo, tables_format)
         queue2_name = 'second_' + self.queue_name
         queue2_url = self._sqs_api.create_queue(queue2_name, is_fifo=is_fifo)
 
@@ -465,11 +456,12 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
                 # message is moved to DLQ during the call, so we get nothing in response
                 assert_that(len(self._read_single_message_no_wait(q1)), equal_to(0))
 
-                messages_count_after = get_messages_count(q1)
-                assert_that(messages_count_after, equal_to(messages_count_before - 1))
-
-                # this is our msg
-                msg_from_dlq = self._read_single_message_no_wait(q2)[0]
+                if self._is_topic_migration_stage():
+                    msg_from_dlq = self._wait_for_message_body_in_dlq(q2, msg_body)
+                else:
+                    messages_count_after = get_messages_count(q1)
+                    assert_that(messages_count_after, equal_to(messages_count_before - 1))
+                    msg_from_dlq = self._read_single_message_no_wait(q2)[0]
                 assert_that(msg_from_dlq['Body'], equal_to(msg_body))
 
                 receipt_handle = msg_from_dlq['ReceiptHandle']
@@ -479,21 +471,26 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
         msg_body = 'not gonna leave the source queue'
         self._send_message_and_assert(queue1_url, msg_body, seq_no=str(seq_no) if is_fifo else None, group_id='group' if is_fifo else None)
 
-        for i in range(max_receive_count):
-            assert_that(self._read_single_message_no_wait(queue1_url)[0]['Body'], equal_to(msg_body))
+        if self._is_topic_migration_stage():
+            # On topic path DLQ move completes quickly after the last redrive-triggering
+            # receive. Delete DLQ before that receive so move fails and the message
+            # stays in (or returns to) the source queue.
+            for i in range(max_receive_count - 1):
+                assert_that(self._read_single_message_no_wait(queue1_url)[0]['Body'], equal_to(msg_body))
 
-        delete_result = self._sqs_api.delete_queue(queue2_url)
-        assert_that(
-            delete_result, not_none()
-        )
+            delete_result = self._sqs_api.delete_queue(queue2_url)
+            assert_that(delete_result, not_none())
+
+            assert_that(self._read_single_message_no_wait(queue1_url)[0]['Body'], equal_to(msg_body))
+        else:
+            for i in range(max_receive_count):
+                assert_that(self._read_single_message_no_wait(queue1_url)[0]['Body'], equal_to(msg_body))
+
+            delete_result = self._sqs_api.delete_queue(queue2_url)
+            assert_that(delete_result, not_none())
 
         # waiting until the message appears in queue1 again
-        result_list = self._read_while_not_empty(
-            queue_url=queue1_url,
-            messages_count=1,
-            visibility_timeout=0,
-            wait_timeout=10
-        )
+        result_list = self._wait_for_message_body_in_queue(queue1_url, msg_body)
         assert_that(result_list[0]['Body'], equal_to(msg_body))
 
         # getting the message until it's moved to dlq
@@ -785,27 +782,19 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
 
         self._sqs_api.send_message(queue_url, 'data')
 
-        def get_queue_resource_id(queue_url, cloud_id, queue_name):
-            # queue url == http://<host:port>/<cloud_id>/<resource_id>/<queue_name>
-            folder_index = queue_url.find(cloud_id)
-            assert folder_index != -1
-            resource_id_start_index = folder_index + len(cloud_id) + 1
-            resource_id_end_index = len(queue_url) - len(queue_name) - 1
-            return queue_url[resource_id_start_index:resource_id_end_index]
+        queue_resource_id = self._get_queue_resource_id(queue_url, queue_name)
 
-        counters = self._get_sqs_counters()
-        labels = {
-            'subsystem': 'core',
-            'user': self.cloud_id,
-            'folder': self.folder_id,
-            'queue': get_queue_resource_id(queue_url, self.cloud_id, queue_name),
-            'sensor': 'SendMessage_Count',
-        }
-        assert_that(self._get_counter_value(counters, labels), equal_to(1))
+        def assert_send_counter(ymq_counters):
+            value = self._get_counter_value(ymq_counters, {
+                'queue': queue_resource_id,
+                'name': 'queue.messages.sent_count_per_second',
+            })
+            assert_that(value, equal_to(1))
 
-    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
-    def test_yc_events_processor(self, tables_format):
-        self._init_with_params(tables_format=tables_format)
+        self._wait_for_ymq_counters(assert_send_counter, self.cloud_id, self.folder_id)
+
+    def test_yc_events_processor(self):
+        self._init_with_params(tables_format=1)
         queue_name1 = 'queue1'
         queue_name2 = 'queue2'
         self._sqs_api = self._create_api_for_user(self._username, raise_on_error=True, force_private=True, iam_token=self.iam_token, folder_id=self.folder_id)

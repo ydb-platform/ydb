@@ -71,7 +71,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTestReboots) {
                     "index1", NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance, indexColumns, {"data"}, {}
                 });
                 auto& fulltext = *request->Record.MutableSettings()->mutable_index()->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings();
-                fulltext.set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);  // Layout is required for internal processing
                 auto& analyzers = *fulltext.add_columns()->mutable_analyzers();
                 fulltext.mutable_columns()->at(0).set_column("text");
                 analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);

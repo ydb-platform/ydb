@@ -30,7 +30,7 @@ class TJsonDescribe : public TViewerPipeClient {
     EAskSchemeCache AskSchemeCache = EAskSchemeCache::Second;
 
 public:
-    TJsonDescribe(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonDescribe(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TViewerPipeClient(viewer, ev)
     {}
 
@@ -178,8 +178,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            hFunc(TEvTabletPipe::TEvClientConnected, TBase::Handle);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 
@@ -261,6 +261,8 @@ public:
                 return NKikimrSchemeOp::EPathTypeSecret;
             case TNavigate::KindStreamingQuery:
                 return NKikimrSchemeOp::EPathTypeStreamingQuery;
+            case TNavigate::KindTestShardSet:
+                return NKikimrSchemeOp::EPathTypeTestShardSet;
             case TNavigate::KindIndex:
                 return NKikimrSchemeOp::EPathTypeTableIndex;
             case TNavigate::KindUnknown:
@@ -432,7 +434,10 @@ public:
                 json["PathDescription"]["ExternalTableDescription"]["Content"][key] = array;
             }
         } catch (...) {
-            BLOG_CRIT("Сan't unpack content for external table: " << sourceType << ", error: " << CurrentExceptionMessage());
+            YDB_LOG_CRIT_COMP(NKikimrServices::VIEWER, "Сan't unpack content for external table",
+                {"logPrefix", GetLogPrefix()},
+                {"sourceType", sourceType},
+                {"error", CurrentExceptionMessage()});
         }
     }
 

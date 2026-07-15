@@ -109,6 +109,26 @@ NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams)
 
 TMapTaskParams MapTaskParamsFromProto(const NProto::TMapTaskParams& protoMapTaskParams);
 
+NProto::TReduceOperationSpec ReduceOperationSpecToProto(const TReduceOperationSpec& reduceOperationSpec);
+
+TReduceOperationSpec ReduceOperationSpecFromProto (const NProto::TReduceOperationSpec& protoReduceOperationSpec);
+
+NProto::TReduceOperationParams ReduceOperationParamsToProto(const TReduceOperationParams& reduceOperationParams);
+
+TReduceOperationParams ReduceOperationParamsFromProto(const NProto::TReduceOperationParams& protoReduceOperationParams);
+
+NProto::TReduceTaskParams ReduceTaskParamsToProto(const TReduceTaskParams& reduceTaskParams);
+
+TReduceTaskParams ReduceTaskParamsFromProto(const NProto::TReduceTaskParams& protoReduceTaskParams);
+
+NProto::TSortOperationParams SortOperationParamsToProto(const TSortOperationParams& sortOperationParams);
+
+TSortOperationParams SortOperationParamsFromProto(const NProto::TSortOperationParams& protoSortOperationParams);
+
+NProto::TLocalSortTaskParams LocalSortTaskParamsToProto(const TLocalSortTaskParams& localSortTaskParams);
+
+TLocalSortTaskParams LocalSortTaskParamsFromProto(const NProto::TLocalSortTaskParams& protoLocalSortTaskParams);
+
 NProto::TOperationParams OperationParamsToProto(const TOperationParams& operationParams);
 
 TOperationParams OperationParamsFromProto(const NProto::TOperationParams& protoOperationParams);
@@ -160,6 +180,34 @@ TTaskMapResult TaskMapResultFromProto(const NProto::TTaskMapResult& protoTaskMap
 NProto::TTaskSortedUploadResult TaskSortedUploadResultToProto(const TTaskSortedUploadResult& taskSortedUploadResult);
 
 TTaskSortedUploadResult TaskSortedUploadResultFromProto(const NProto::TTaskSortedUploadResult& protoTaskSortedUploadResult);
+
+NProto::TPullOperationParams PullOperationParamsToProto(const TPullOperationParams& pullOperationParams);
+
+TPullOperationParams PullOperationParamsFromProto(const NProto::TPullOperationParams& protoPullOperationParams);
+
+NProto::TPullTaskParams PullTaskParamsToProto(const TPullTaskParams& pullTaskParams);
+
+TPullTaskParams PullTaskParamsFromProto(const NProto::TPullTaskParams& protoPullTaskParams);
+
+NProto::TTaskPullResult TaskPullResultToProto(const TTaskPullResult& taskPullResult);
+
+TTaskPullResult TaskPullResultFromProto(const NProto::TTaskPullResult& protoTaskPullResult);
+
+NProto::TFillOperationParams FillOperationParamsToProto(const TFillOperationParams& fillOperationParams);
+
+TFillOperationParams FillOperationParamsFromProto(const NProto::TFillOperationParams& protoFillOperationParams);
+
+NProto::TFillTaskParams FillTaskParamsToProto(const TFillTaskParams& fillTaskParams);
+
+TFillTaskParams FillTaskParamsFromProto(const NProto::TFillTaskParams& protoFillTaskParams);
+
+NProto::TMapReduceOperationParams MapReduceOperationParamsToProto(const TMapReduceOperationParams& mapReduceOperationParams);
+
+TMapReduceOperationParams MapReduceOperationParamsFromProto(const NProto::TMapReduceOperationParams& protoMapReduceOperationParams);
+
+NProto::TMapReduceMapTaskParams MapReduceMapTaskParamsToProto(const TMapReduceMapTaskParams& mapReduceMapTaskParams);
+
+TMapReduceMapTaskParams MapReduceMapTaskParamsFromProto(const NProto::TMapReduceMapTaskParams& protoMapReduceMapTaskParams);
 
 NProto::TTaskResult TaskResultToProto(const TTaskResult& taskResult);
 

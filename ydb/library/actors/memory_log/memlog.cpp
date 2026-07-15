@@ -85,7 +85,7 @@ unsigned TMemoryLog::GetSelfCpu() noexcept {
     int acpiID = (b >> 24);
     return acpiID;
 
-#elif defined(__CNUC__)
+#elif defined(_linux_)
     return sched_getcpu();
 #else
     return 0;

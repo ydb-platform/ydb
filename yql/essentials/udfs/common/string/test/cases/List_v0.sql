@@ -1,5 +1,13 @@
-/* syntax version 1 */
 -- use SplitToList settings which are used as defaults in v0 syntax 
+$input = AsList(
+    <|value:"a@b@c"|>,
+    <|value:"@a@b@c"|>,
+    <|value:"@@@a@a"|>,
+    <|value:"d#e#f"|>,
+    <|value:"d"|>,
+    <|value:""|>
+);
+
 SELECT
     value,
     IF (
@@ -24,4 +32,4 @@ SELECT
         value
     ) AS equals_to_original,
     String::SplitToList(value, "@#", true AS SkipEmpty, false AS DelimeterString) AS multichar
-FROM Input;
+FROM AS_TABLE($input);

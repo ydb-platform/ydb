@@ -3,6 +3,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_transaction.pb.h>
 
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
@@ -47,7 +48,7 @@ public:
                       bool onlyCheckCommitedToFinish = false,
                       const TString& readSessionId = {});
     void AddKafkaApiOffsetCommit(const TString& consumer, ui64 offset);
-    
+
     bool IsKafkaApiOperation() const;
 
     void Merge(const TConsumerOperations& rhs);
@@ -92,10 +93,15 @@ public:
     void AddOperation(const TString& topic, ui32 partition,
                       TMaybe<ui32> supportivePartition);
     void AddKafkaApiWriteOperation(const TString& topic, ui32 partition, const NKafka::TProducerInstanceId& producerInstanceId);
-    
+
     void AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset);
 
-    void BuildTopicTxs(TTopicOperationTransactions &txs);
+    void AddDeferredPublicationOperation(const TString& topic,
+                                         ui32 partition,
+                                         ui64 tabletId,
+                                         NKikimrKqp::TTopicDeferredPublicationRequest::EOp op);
+
+    void BuildTopicTxs(TTopicOperationTransactions &txs, bool skipConflictCheck);
 
     void Merge(const TTopicPartitionOperations& rhs);
 
@@ -107,12 +113,14 @@ public:
 
     bool HasReadOperations() const;
     bool HasWriteOperations() const;
+    bool HasDeferredPublicationOperations() const;
 
 private:
     TMaybe<TString> Topic_;
     TMaybe<ui32> Partition_;
     THashMap<TString, TConsumerOperations> Operations_;
     bool HasWriteOperations_ = false;
+    TMaybe<NKikimrKqp::TTopicDeferredPublicationRequest::EOp> DeferredPublicationOp_;
     TMaybe<ui64> TabletId_;
     TMaybe<ui32> SupportivePartition_;
     TMaybe<NKafka::TProducerInstanceId> KafkaProducerInstanceId_;
@@ -139,10 +147,13 @@ public:
     bool HasReadOperations() const;
     bool HasWriteOperations() const;
     bool HasKafkaOperations() const;
+    bool HasDeferredPublicationOperations() const;
     bool HasWriteId() const;
     ui64 GetWriteId() const;
     void SetWriteId(NLongTxService::TLockHandle handle);
     NKafka::TProducerInstanceId GetKafkaProducerInstanceId() const;
+    ui64 GetDeferredPublicationIntId() const;
+    const TString& GetDeferredPublicationExtId() const;
 
     bool TabletHasReadOperations(ui64 tabletId) const;
 
@@ -155,10 +166,17 @@ public:
                       const TString& readSessionId);
     void AddOperation(const TString& topic, ui32 partition,
                       TMaybe<ui32> supportivePartition);
-                      
+
     void AddKafkaApiWriteOperation(const TString& topic, ui32 partition, const NKafka::TProducerInstanceId& producerInstanceId);
-    
+
     void AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset);
+
+    void AddDeferredPublicationOperation(const TString& topic,
+                                         ui32 partition,
+                                         ui64 tabletId,
+                                         NKikimrKqp::TTopicDeferredPublicationRequest::EOp op,
+                                         ui64 intPublicationId,
+                                         const TString& extPublicationId);
 
     void FillSchemeCacheNavigate(NSchemeCache::TSchemeCacheNavigate& navigate,
                                  TMaybe<TString> consumer);
@@ -183,7 +201,22 @@ public:
     void SetTabletId(const TString& topic, ui32 partition,
                      ui64 tabletId);
 
+    void SetSkipConflictCheck(bool skipConflictCheck);
+    void SetTrackProducerId(bool trackProducerId);
+
+    // Returns true when KQP may omit other PQ tablets of this transaction from
+    // TDataTransaction SendingShards/ReceivingShards (so PQ does not run a distributed
+    // predicate / ReadSet exchange only between topic peers). Preconditions:
+    // CalcSkipConflictCheck() is true (!TrackProducerId_ && SkipConflictCheck_) and
+    // there are no topic read operations (no consumer / offset-commit reads).
+    bool ShouldOmitPeerTopicTabletsForPredicateExchange() const;
+
 private:
+    void MergeSkipConflictCheck(bool rhs);
+    void MergeTrackProducerId(bool rhs);
+
+    bool CalcSkipConflictCheck() const;
+
     THashMap<TTopicPartition, TTopicPartitionOperations, TTopicPartition::THash> Operations_;
     bool HasReadOperations_ = false;
     bool HasWriteOperations_ = false;
@@ -192,8 +225,14 @@ private:
     TMaybe<TString> Consumer_;
     NLongTxService::TLockHandle WriteId_;
     TMaybe<NKafka::TProducerInstanceId> KafkaProducerInstanceId_;
+    TMaybe<ui64> DeferredPublicationIntId_;
+    TMaybe<TString> DeferredPublicationExtId_;
 
     THashMap<TString, NSchemeCache::TSchemeCacheNavigate::TEntry> CachedNavigateResult_;
+    bool SkipConflictCheck_ = true;
+    bool TrackProducerId_ = false;
 };
+
+void ValidateDeferredPublicationRequest(const NKikimrKqp::TTopicDeferredPublicationRequest& request);
 
 }

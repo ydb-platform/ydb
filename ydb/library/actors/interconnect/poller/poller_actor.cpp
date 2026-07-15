@@ -8,7 +8,10 @@
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/util/funnel_queue.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <util/generic/intrlist.h>
+#include <util/system/hp_timer.h>
 #include <util/system/thread.h>
 #include <util/system/event.h>
 #include <util/system/pipe.h>
@@ -79,10 +82,12 @@ namespace NActors {
         TActorSystem *ActorSystem;
         TPipeHandle ReadEnd, WriteEnd; // pipe for sync event processor
         TFunnelQueue<TPollerSyncOperationWrapper*> SyncOperationsQ; // operation queue
+        NMonitoring::THistogramPtr SyncOperationTimeHistogram;
 
     public:
-        TPollerThreadBase(TActorSystem *actorSystem)
+        TPollerThreadBase(TActorSystem *actorSystem, NMonitoring::THistogramPtr syncOperationTimeHistogram)
             : ActorSystem(actorSystem)
+            , SyncOperationTimeHistogram(std::move(syncOperationTimeHistogram))
         {
             // create a pipe for notifications
             try {
@@ -122,6 +127,8 @@ namespace NActors {
         }
 
         void ExecuteSyncOperation(TPollerSyncOperation&& op) {
+            const bool collectTiming = SyncOperationTimeHistogram && !std::holds_alternative<TPollerExitThread>(op);
+            const ui64 start = collectTiming ? GetCycleCountFast() : 0;
             TPollerSyncOperationWrapper wrapper(std::move(op));
             if (SyncOperationsQ.Push(&wrapper)) {
                 // this was the first entry, so we push notification through the pipe
@@ -143,6 +150,9 @@ namespace NActors {
             }
             // wait for operation to complete
             wrapper.Wait();
+            if (collectTiming) {
+                SyncOperationTimeHistogram->Collect(NHPTimer::GetSeconds(GetCycleCountFast() - start) * 1000000.0);
+            }
         }
 
         void DrainReadEnd() {
@@ -259,14 +269,23 @@ namespace NActors {
     class TPollerActor: public TActorBootstrapped<TPollerActor> {
         // poller thread
         std::shared_ptr<TPollerThread> PollerThread;
+        NMonitoring::THistogramPtr SyncOperationTimeHistogram;
 
     public:
+        TPollerActor(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+            if (counters) {
+                SyncOperationTimeHistogram = counters->GetHistogram(
+                    "PollerSyncOperationTimeUs", NMonitoring::ExponentialHistogram(16, 2, 4));
+            }
+        }
+
         static constexpr IActor::EActivityType ActorActivityType() {
             return IActor::EActivityType::INTERCONNECT_POLLER;
         }
 
         void Bootstrap() {
-            PollerThread = std::make_shared<TPollerThread>(TActivationContext::ActorSystem());
+            PollerThread = std::make_shared<TPollerThread>(
+                TActivationContext::ActorSystem(), SyncOperationTimeHistogram);
             Become(&TPollerActor::StateFunc);
         }
 
@@ -310,8 +329,8 @@ namespace NActors {
         return Impl->RequestWriteNotificationAfterWouldBlock();
     }
 
-    IActor* CreatePollerActor() {
-        return new TPollerActor();
+    IActor* CreatePollerActor(TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+        return new TPollerActor(std::move(counters));
     }
 
 }

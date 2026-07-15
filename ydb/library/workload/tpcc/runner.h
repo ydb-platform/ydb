@@ -58,6 +58,12 @@ struct TRunConfig {
     EFormat Format = EFormat::Pretty;
     NQuery::TTxSettings TxMode = NQuery::TTxSettings::SerializableRW();
 
+    // mixed tx mode weights (used when MixedTxMode is true)
+    bool MixedTxMode = false;
+    double TxModeWeightSerializable = 0.0;
+    double TxModeWeightSnapshot = 0.0;
+    double TxModeWeightReadCommitted = 0.0;
+
     TString JsonResultPath;
 
     // advanced settings (normally, used by developer only)
@@ -70,6 +76,7 @@ struct TRunConfig {
     bool HighResHistogram = false;
     bool ExtendedStats = false;
     bool NoTui = false;
+    bool Compact = false;
     EDisplayMode DisplayMode = EDisplayMode::None;
 
     // instead of actual transaction just async sleep and return SUCCESS

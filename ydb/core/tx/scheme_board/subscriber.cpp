@@ -328,7 +328,7 @@ namespace {
 
                 reason = "Path was updated to new version";
                 return true;
-            } else  if (DomainId < other.DomainId) {
+            } else if (PathIdLessThan(DomainId, other.DomainId)) {
                 reason = "New domain is detected, it is newer path then we know";
                 return true;
             } else {

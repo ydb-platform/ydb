@@ -239,14 +239,14 @@ ALTER TABLE Groups
 
 ### Индексы YDB: как задать параметры
 
-Через атрибут [Index] вы задаёте имя, колонки и уникальность индекса. Провайдер создаёт вторичный индекс как GLOBAL.
+Через атрибут [Index] вы задаёте имя и колонки для индекса. Провайдер создаёт вторичный индекс как GLOBAL.
 Параметры ASYNC/SYNC и COVER(...) через атрибут не задаются — их добавляют отдельной DDL-командой после создания таблицы.
 
-#### Вариант A — через атрибут (имя + Unique)
+#### Вариант A — через атрибут (имя индекса)
 
 ```csharp
 [Table(Name = "Groups", IsColumnAttributeRequired = false)]
-[Index("GroupName", Name = "group_name_index", Unique = true)]
+[Index("GroupName", Name = "group_name_index")]
 public class Group
 {
     [PrimaryKey, Column("GroupId")] public int Id { get; set; }
@@ -256,7 +256,7 @@ public class Group
     [Column] public string? Department { get; set; }
 }
 
-// При db.CreateTable<Group>() будет создан GLOBAL UNIQUE индекс по GroupName.
+// При db.CreateTable<Group>() будет создан GLOBAL индекс по GroupName.
 ```
 
 Сгенерированный DDL будет эквивалентен
@@ -270,7 +270,7 @@ CREATE TABLE Groups (
 );
 
 ALTER TABLE Groups
-  ADD INDEX group_name_index GLOBAL UNIQUE
+  ADD INDEX group_name_index GLOBAL
        ON (GroupName);
 ```
 

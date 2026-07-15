@@ -925,7 +925,7 @@ TDynamicChannelPool::TDynamicChannelPool(
     IPeerDiscoveryPtr peerDiscovery,
     IPeerPriorityProviderPtr peerPriorityProvider)
     : Impl_(New<TImpl>(
-        std::move(config),
+        config,
         std::move(channelFactory),
         endpointDescription,
         std::move(endpointAttributes),

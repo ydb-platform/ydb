@@ -1252,10 +1252,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideCommonJoinCoreWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        EmitFunctionCall<&TWideCommonJoinCoreWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
@@ -1270,10 +1267,7 @@ public:
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TValue::FetchValues>());
-        const auto funcType = FunctionType::get(Type::getInt32Ty(context), {statePtrType, ctx.Ctx->getType(), fields->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
-        const auto result = CallInst::Create(funcType, funcPtr, {stateArg, ctx.Ctx, fields}, "fetch", block);
+        const auto result = EmitFunctionCall<&TValue::FetchValues>(Type::getInt32Ty(context), {stateArg, ctx.Ctx, fields}, ctx, block);
 
         for (ui32 i = 0U; i < OutputRepresentations.size(); ++i) {
             ValueRelease(OutputRepresentations[i], pointers[i], ctx, block);

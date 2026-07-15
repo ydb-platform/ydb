@@ -1,5 +1,6 @@
 #include <yt/yt/core/test_framework/framework.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
 #include <yt/yt/core/concurrency/thread_pool.h>
 
 #include <yt/yt/core/actions/invoker.h>
@@ -30,8 +31,7 @@ TEST(TThreadPoolTest, Configure)
         }
     }
 
-    AllSucceeded(std::move(futures))
-        .Get();
+    WaitUntilSet(AllSucceeded(std::move(futures)));
 
     // Thread pool doesn't contain less than one thread whatever you configured.
     threadPool->SetThreadCount(0);
@@ -43,6 +43,24 @@ TEST(TThreadPoolTest, Configure)
 
     threadPool->Shutdown();
     EXPECT_EQ(N, counter->load());
+}
+
+TEST(TThreadPoolTest, CurrentInvoker)
+{
+    auto threadPool = CreateThreadPool(1, "Test");
+    auto invoker = threadPool->GetInvoker();
+
+    auto future = BIND([&] {
+        EXPECT_EQ(invoker.Get(), GetCurrentInvoker());
+        // The invoker must remain current across a context switch.
+        Yield();
+        EXPECT_EQ(invoker.Get(), GetCurrentInvoker());
+    })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitUntilSet(future);
+    threadPool->Shutdown();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

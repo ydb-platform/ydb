@@ -6,7 +6,7 @@
 
 using namespace NYql;
 
-int Main(int argc, const char* argv[])
+int Main(int argc, const char** argv)
 {
     Y_UNUSED(argc);
     Y_UNUSED(argv);
@@ -19,7 +19,7 @@ int Main(int argc, const char* argv[])
         json.WriteKey("kind");
         json.WriteString(kind);
         json.EndObject();
-    }, true);
+    }, /*flexibleTypesEnabled=*/true);
     TVector<TString> pgNames;
     NPg::EnumTypes([&](ui32, const NPg::TTypeDesc& desc) {
         pgNames.push_back(desc.Name);
@@ -45,7 +45,7 @@ int Main(int argc, const char* argv[])
     return 0;
 }
 
-int main(int argc, const char* argv[]) {
+int main(int argc, const char** argv) {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
 

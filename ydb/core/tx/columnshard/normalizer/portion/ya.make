@@ -10,6 +10,7 @@ SRCS(
     GLOBAL clean_deprecated_snapshot.cpp
     GLOBAL clean_empty.cpp
     GLOBAL clean_index_columns.cpp
+    GLOBAL clean_index_columns_v1.cpp
     GLOBAL clean_inserted_portions.cpp
     GLOBAL clean_sub_columns_portions.cpp
     GLOBAL clean_ttl_preset_setting_info.cpp

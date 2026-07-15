@@ -119,7 +119,7 @@ public:
   // that the pointer is going to be aligned properly at runtime because that is a (checked) precondition
   // of atomic_ref's constructor.
   static constexpr bool is_always_lock_free =
-      __atomic_always_lock_free(sizeof(_Tp), &__get_aligner_instance<required_alignment>::__instance);
+      __atomic_always_lock_free(sizeof(_Tp), std::addressof(__get_aligner_instance<required_alignment>::__instance));
 
   _LIBCPP_HIDE_FROM_ABI bool is_lock_free() const noexcept { return __atomic_is_lock_free(sizeof(_Tp), __ptr_); }
 
@@ -261,7 +261,7 @@ template <class _Tp>
 struct atomic_ref<_Tp> : public __atomic_ref_base<_Tp> {
   using __base _LIBCPP_NODEBUG = __atomic_ref_base<_Tp>;
 
-  using difference_type = typename __base::value_type;
+  using difference_type = __base::value_type;
 
   _LIBCPP_HIDE_FROM_ABI explicit atomic_ref(_Tp& __obj) : __base(__obj) {
     _LIBCPP_ASSERT_ARGUMENT_WITHIN_DOMAIN(
@@ -307,7 +307,7 @@ template <class _Tp>
 struct atomic_ref<_Tp> : public __atomic_ref_base<_Tp> {
   using __base _LIBCPP_NODEBUG = __atomic_ref_base<_Tp>;
 
-  using difference_type = typename __base::value_type;
+  using difference_type = __base::value_type;
 
   _LIBCPP_HIDE_FROM_ABI explicit atomic_ref(_Tp& __obj) : __base(__obj) {
     _LIBCPP_ASSERT_ARGUMENT_WITHIN_DOMAIN(

@@ -7,17 +7,6 @@
 
 namespace NYql::NFmr {
 
-TFmrTableDataServiceWriter::TFmrTableDataServiceWriter(
-    const TString& tableId,
-    const TString& partId,
-    ITableDataService::TPtr tableDataService,
-    const TString& columnGroupSpec,
-    const TFmrWriterSettings& settings
-)
-    : TFmrTableDataServiceBaseWriter(tableId, partId, tableDataService, columnGroupSpec, settings)
-{
-}
-
 void TFmrTableDataServiceWriter::PutRows() {
     if (TableContent_.Size() == 0) {
         return;

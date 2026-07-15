@@ -39,7 +39,7 @@ public:
         std::optional<TInstant> lastSeenTime = {});
 
     TNodeDescriptor& operator=(const TNodeDescriptor& other) = default;
-    TNodeDescriptor& operator=(TNodeDescriptor&& other) = default;
+    TNodeDescriptor& operator=(TNodeDescriptor&& other) noexcept = default;
 
     bool IsNull() const;
 

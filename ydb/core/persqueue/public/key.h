@@ -2,7 +2,6 @@
 
 #include <util/generic/hash.h>
 
-
 namespace NKikimr::NPQ {
 
 struct TReadSessionKey {
@@ -22,7 +21,7 @@ struct TDirectReadKey {
     }
 };
 
-}
+} // namespace NKikimr::NPQ
 
 
 template <>

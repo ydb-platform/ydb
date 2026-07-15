@@ -8,7 +8,7 @@
 namespace NKikimr::NMiniKQL {
 
 class TSerializeTypeHandleWrapper: public TMutableComputationNode<TSerializeTypeHandleWrapper> {
-    typedef TMutableComputationNode<TSerializeTypeHandleWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TSerializeTypeHandleWrapper>;
 
 public:
     TSerializeTypeHandleWrapper(TComputationMutables& mutables, IComputationNode* handle)

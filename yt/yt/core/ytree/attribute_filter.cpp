@@ -164,7 +164,7 @@ std::unique_ptr<IHeterogenousFilterConsumer> CreateFilteringConsumerImpl(
                     THROW_ERROR_EXCEPTION("Unexpected unset future in synchronous attribute filtering");
                 }
 
-                auto&& filteredYsonOrError = asyncFilteredYson.Get();
+                auto&& filteredYsonOrError = asyncFilteredYson.GetOrCrash();
                 filteredYsonOrError.ThrowOnError();
 
                 auto filteredYson = std::move(filteredYsonOrError.Value());
@@ -202,7 +202,7 @@ TAttributeFilter::TAttributeFilter(std::vector<IAttributeDictionary::TKey> keys,
     , Universal_(false)
 { }
 
-TAttributeFilter::TAttributeFilter(std::initializer_list<TString> keys)
+TAttributeFilter::TAttributeFilter(std::initializer_list<std::string> keys)
     : Keys_({keys.begin(), keys.end()})
     , Universal_(false)
 { }
@@ -283,7 +283,7 @@ TAttributeFilter::TKeyToFilter TAttributeFilter::Normalize() const
     // Finally, group remaining paths by the first token in path.
 
     //! Split a path into a first key value and a remaining suffix.
-    auto splitPath = [] (const TYPath& path) -> std::pair<TString, TYPath> {
+    auto splitPath = [] (const TYPath& path) -> std::pair<std::string, TYPath> {
         NYPath::TTokenizer tokenizer(path);
         tokenizer.Expect(NYPath::ETokenType::StartOfStream);
         tokenizer.Advance();
@@ -297,7 +297,7 @@ TAttributeFilter::TKeyToFilter TAttributeFilter::Normalize() const
 
     TKeyToFilter result;
 
-    TString firstKey;
+    std::string firstKey;
     TYPath firstSuffix;
     std::tie(firstKey, firstSuffix) = splitPath(paths.front());
     std::vector<TYPath> subpaths = {std::move(firstSuffix)};

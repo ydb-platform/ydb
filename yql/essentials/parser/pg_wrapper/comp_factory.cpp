@@ -1,69 +1,10 @@
-#include "pg_compat.h"
-
-#define TypeName PG_TypeName
-#define SortBy PG_SortBy
-#define Sort PG_Sort
-#define Unique PG_Unique
-#undef SIZEOF_SIZE_T
-extern "C" {
-#include "postgres.h"
-#include "access/xact.h"
-#include "catalog/pg_am_d.h"
-#include "catalog/pg_collation_d.h"
-#include "catalog/pg_conversion_d.h"
-#include "catalog/pg_database_d.h"
-#include "catalog/pg_operator_d.h"
-#include "catalog/pg_proc_d.h"
-#include "catalog/pg_namespace_d.h"
-#include "catalog/pg_tablespace_d.h"
-#include "catalog/pg_type_d.h"
-#include "datatype/timestamp.h"
-#include "utils/builtins.h"
-#include "utils/memutils.h"
-#include "utils/array.h"
-#include "utils/arrayaccess.h"
-#include "utils/datum.h"
-#include "utils/lsyscache.h"
-#include "utils/datetime.h"
-#include "utils/numeric.h"
-#include "utils/typcache.h"
-#include "utils/memutils_internal.h"
-#include "mb/pg_wchar.h"
-#include "nodes/execnodes.h"
-#include "executor/executor.h"
-#include "lib/stringinfo.h"
-#include "miscadmin.h"
-#include "funcapi.h"
-#include "thread_inits.h"
-
-#undef Abs
-#undef Min
-#undef Max
-#undef TypeName
-#undef SortBy
-#undef Sort
-#undef Unique
-#undef LOG
-#undef INFO
-#undef NOTICE
-#undef WARNING
-//#undef ERROR
-#undef FATAL
-#undef PANIC
-#undef open
-#undef fopen
-#undef bind
-#undef locale_t
-constexpr auto PG_DAY = DAY;
-constexpr auto PG_SECOND = SECOND;
-constexpr auto PG_ERROR = ERROR;
-#undef DAY
-#undef SECOND
-#undef ERROR
-}
+#include "pg_include.h"
+#include "pg_ops.h"
 
 #include <yql/essentials/core/pg_settings/guc_settings.h>
+#include <yql/essentials/parser/pg_wrapper/comp_factory_utils.h>
 #include <yql/essentials/parser/pg_wrapper/interface/interface.h>
+#include <yql/essentials/parser/pg_wrapper/interface/sign.h>
 #include <yql/essentials/parser/pg_wrapper/memory_context.h>
 #include <yql/essentials/parser/pg_wrapper/pg_catalog_consts.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
@@ -78,8 +19,10 @@ constexpr auto PG_ERROR = ERROR;
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 #include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/types/uuid/uuid.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/block_builder.cpp>
@@ -88,9 +31,11 @@ constexpr auto PG_ERROR = ERROR;
 #include <yql/essentials/public/result_format/yql_codec_results.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/utils/fp_bits.h>
+#include <yql/essentials/utils/parse_double.h>
 #include <library/cpp/yson/detail.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/string/split.h>
+#include <util/generic/guid.h>
 #include <util/system/getpid.h>
 
 #include "arrow.h"
@@ -228,51 +173,21 @@ Datum MakeArrayOfText(const TVector<TString>& arr) {
     return (Datum)ret;
 }
 
-class TPgConst : public TMutableComputationNode<TPgConst> {
-    typedef TMutableComputationNode<TPgConst> TBaseComputation;
+class TPgConstNode : public TPgConst, public TMutableComputationNode<TPgConstNode> {
+    typedef TMutableComputationNode<TPgConstNode> TBaseComputation;
 public:
-    TPgConst(TComputationMutables& mutables, ui32 typeId, const std::string_view& value, IComputationNode* typeMod)
-        : TBaseComputation(mutables)
-        , TypeId(typeId)
-        , Value(value)
-        , TypeMod(typeMod)
-        , TypeDesc(NPg::LookupType(TypeId))
-    {
-        Zero(FInfo);
-        ui32 inFuncId = TypeDesc.InFuncId;
-        if (TypeDesc.TypeId == TypeDesc.ArrayTypeId) {
-            inFuncId = NPg::LookupProc("array_in", { 0,0,0 }).ProcId;
-        }
+    TPgConstNode(TComputationMutables& mutables, ui32 typeId, const std::string_view& value, IComputationNode* typeMod)
+        : TPgConst(typeId, value)
+        , TBaseComputation(mutables)
+        , TypeMod(typeMod) {}
 
-        Y_ENSURE(inFuncId);
-        GetPgFuncAddr(inFuncId, FInfo);
-        Y_ENSURE(!FInfo.fn_retset);
-        Y_ENSURE(FInfo.fn_addr);
-        Y_ENSURE(FInfo.fn_nargs >=1 && FInfo.fn_nargs <= 3);
-        TypeIOParam = MakeTypeIOParam(TypeDesc);
-    }
-
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+    NUdf::TUnboxedValue DoCalculate(TComputationContext& compCtx) const {
         i32 typeMod = -1;
         if (TypeMod) {
             typeMod = DatumGetInt32(ScalarDatumFromPod(TypeMod->GetValue(compCtx)));
         }
 
-        LOCAL_FCINFO(callInfo, 3);
-        Zero(*callInfo);
-        FmgrInfo copyFmgrInfo = FInfo;
-        callInfo->flinfo = &copyFmgrInfo;
-        callInfo->nargs = 3;
-        callInfo->fncollation = DEFAULT_COLLATION_OID;
-        callInfo->isnull = false;
-        callInfo->args[0] = { (Datum)Value.c_str(), false };
-        callInfo->args[1] = { ObjectIdGetDatum(TypeIOParam), false };
-        callInfo->args[2] = { Int32GetDatum(typeMod), false };
-
-        TPAllocScope call;
-        auto ret = FInfo.fn_addr(callInfo);
-        Y_ENSURE(!callInfo->isnull);
-        return AnyDatumToPod(ret, TypeDesc.PassByValue);
+        return ExtractConst(typeMod);
     }
 
 private:
@@ -282,12 +197,7 @@ private:
         }
     }
 
-    const ui32 TypeId;
-    const TString Value;
     IComputationNode* const TypeMod;
-    const NPg::TTypeDesc TypeDesc;
-    FmgrInfo FInfo;
-    ui32 TypeIOParam;
 };
 
 class TPgInternal0 : public TMutableComputationNode<TPgInternal0> {
@@ -553,6 +463,21 @@ public:
                 };
 
                 ApplyFillers(AllPgExtensionFillers, Y_ARRAY_SIZE(AllPgExtensionFillers), PgExtensionFillers_);
+            } else if (Table_ == "pg_collation") {
+                static const std::pair<const char*, TPgCollationFiller> AllPgCollationFillers[] = {
+                    {"oid", [](const NPg::TCollationDesc& desc) { return ScalarDatumToPod(ObjectIdGetDatum(desc.Oid)); }},
+                    {"collname", [](const NPg::TCollationDesc& desc) { return PointerDatumToPod((Datum)MakeFixedString(desc.Name, NAMEDATALEN)); }},
+                    {"collnamespace", [](const NPg::TCollationDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(PG_CATALOG_NAMESPACE)); }},
+                    {"collowner", [](const NPg::TCollationDesc&) { return ScalarDatumToPod(ObjectIdGetDatum(1)); }},
+                    {"collprovider", [](const NPg::TCollationDesc& desc) { return ScalarDatumToPod(CharGetDatum((char)desc.Provider)); }},
+                    {"collisdeterministic", [](const NPg::TCollationDesc&) { return ScalarDatumToPod(BoolGetDatum(true)); }},
+                    {"collencoding", [](const NPg::TCollationDesc& desc) { return ScalarDatumToPod(Int32GetDatum(desc.Encoding)); }},
+                    {"collcollate", [](const NPg::TCollationDesc& desc) { return desc.Collate.empty() ? NUdf::TUnboxedValuePod() : PointerDatumToPod((Datum)MakeVar(desc.Collate)); }},
+                    {"collctype", [](const NPg::TCollationDesc& desc) { return desc.Ctype.empty() ? NUdf::TUnboxedValuePod() : PointerDatumToPod((Datum)MakeVar(desc.Ctype)); }},
+                    {"colliculocale", [](const NPg::TCollationDesc& desc) { return desc.IcuLocale.empty() ? NUdf::TUnboxedValuePod() : PointerDatumToPod((Datum)MakeVar(desc.IcuLocale)); }},
+                };
+
+                ApplyFillers(AllPgCollationFillers, Y_ARRAY_SIZE(AllPgCollationFillers), PgCollationFillers_);
             }
         } else {
             if (Table_ == "tables") {
@@ -954,6 +879,19 @@ public:
                     sysFiller.Fill(items);
                     rows.emplace_back(row);
                 });
+            } else if (Table_ == "pg_collation") {
+                NPg::EnumCollation([&](ui32, const NPg::TCollationDesc& desc) {
+                    NUdf::TUnboxedValue* items;
+                    auto row = compCtx.HolderFactory.CreateDirectArrayHolder(PgCollationFillers_.size(), items);
+                    for (ui32 i = 0; i < PgCollationFillers_.size(); ++i) {
+                        if (PgCollationFillers_[i]) {
+                            items[i] = PgCollationFillers_[i](desc);
+                        }
+                    }
+
+                    sysFiller.Fill(items);
+                    rows.emplace_back(row);
+                });
             }
         } else {
             if (Table_ == "tables") {
@@ -1042,6 +980,9 @@ private:
     using TPgProcFiller = NUdf::TUnboxedValuePod(*)(const NPg::TProcDesc&);
     TVector<TPgProcFiller> PgProcFillers_;
 
+    using TPgCollationFiller = NUdf::TUnboxedValuePod(*)(const NPg::TCollationDesc&);
+    TVector<TPgCollationFiller> PgCollationFillers_;
+
     using TPgAggregateFiller = NUdf::TUnboxedValuePod(*)(const NPg::TAggregateDesc&);
     TVector<TPgAggregateFiller> PgAggregateFillers_;
 
@@ -1053,46 +994,6 @@ private:
 
     using TPgExtensionFiller = NUdf::TUnboxedValuePod(*)(ui32,const NPg::TExtensionDesc&);
     TVector<TPgExtensionFiller> PgExtensionFillers_;
-};
-
-class TFunctionCallInfo {
-public:
-    TFunctionCallInfo(ui32 numArgs, const FmgrInfo* finfo)
-        : NumArgs(numArgs)
-        , CopyFmgrInfo(*finfo)
-    {
-        if (!finfo->fn_addr) {
-            return;
-        }
-
-        MemSize = SizeForFunctionCallInfo(numArgs);
-        Ptr = TWithDefaultMiniKQLAlloc::AllocWithSize(MemSize);
-        auto& callInfo = Ref();
-        Zero(callInfo);
-        callInfo.flinfo = &CopyFmgrInfo; // client may mutate fn_extra
-        callInfo.nargs = NumArgs;
-        callInfo.fncollation = DEFAULT_COLLATION_OID;
-    }
-
-    FunctionCallInfoBaseData& Ref() {
-        Y_ENSURE(Ptr);
-        return *(FunctionCallInfoBaseData*)Ptr;
-    }
-
-    ~TFunctionCallInfo() {
-        if (Ptr) {
-            TWithDefaultMiniKQLAlloc::FreeWithSize(Ptr, MemSize);
-        }
-    }
-
-    TFunctionCallInfo(const TFunctionCallInfo&) = delete;
-    void operator=(const TFunctionCallInfo&) = delete;
-
-private:
-    const ui32 NumArgs = 0;
-    ui32 MemSize = 0;
-    void* Ptr = nullptr;
-    FmgrInfo CopyFmgrInfo;
 };
 
 class TReturnSetInfo {
@@ -1162,102 +1063,31 @@ private:
     ExprContext* Ptr;
 };
 
-class TPgArgsExprBuilder {
-public:
-    TPgArgsExprBuilder()
-        : PgFuncArgsList(nullptr, &free)
-    {}
-
-    void Add(ui32 argOid)
-    {
-        PgArgNodes.emplace_back();
-        auto& p = PgArgNodes.back();
-        Zero(p);
-        p.xpr.type = T_Param;
-        p.paramkind = PARAM_EXTERN;
-        p.paramtype = argOid;
-        p.paramcollid = DEFAULT_COLLATION_OID;
-        p.paramtypmod = -1;
-        p.paramid = PgArgNodes.size();
-    }
-
-    Node* Build(const NPg::TProcDesc& procDesc) {
-        PgFuncArgsList.reset((List*)malloc(offsetof(List, initial_elements) + PgArgNodes.size() * sizeof(ListCell)));
-        PgFuncArgsList->type = T_List;
-        PgFuncArgsList->elements = PgFuncArgsList->initial_elements;
-        PgFuncArgsList->length = PgFuncArgsList->max_length = PgArgNodes.size();
-        for (size_t i = 0; i < PgArgNodes.size(); ++i) {
-            PgFuncArgsList->elements[i].ptr_value = &PgArgNodes[i];
-        }
-
-        Zero(PgFuncNode);
-        PgFuncNode.xpr.type = T_FuncExpr;
-        PgFuncNode.funcid = procDesc.ProcId;
-        PgFuncNode.funcresulttype = procDesc.ResultType;
-        PgFuncNode.funcretset = procDesc.ReturnSet;
-        PgFuncNode.funcvariadic = procDesc.VariadicArgType && procDesc.VariadicArgType != procDesc.VariadicType;
-        PgFuncNode.args = PgFuncArgsList.get();
-        return (Node*)&PgFuncNode;
-    }
-
-private:
-    TVector<Param> PgArgNodes;
-    std::unique_ptr<List, decltype(&free)> PgFuncArgsList;
-    FuncExpr PgFuncNode;
+struct TPgResolvedCallNodeState : public TPgResolvedCallState, public TComputationValue<TPgResolvedCallNodeState> {
+    TPgResolvedCallNodeState(TMemoryUsageInfo* memInfo, ui32 numArgs, const FmgrInfo* finfo, ui32 collationOid)
+        : TPgResolvedCallState(numArgs, finfo, collationOid)
+        , TComputationValue(memInfo) {}
 };
 
-template <typename TDerived>
-class TPgResolvedCallBase : public TMutableComputationNode<TDerived> {
-    typedef TMutableComputationNode<TDerived> TBaseComputation;
+template <bool UseContext>
+class TPgResolvedCallNode : public TPgResolvedCall<UseContext>, public TMutableComputationNode<TPgResolvedCallNode<UseContext>> {
+    typedef TMutableComputationNode<TPgResolvedCallNode<UseContext>> TBaseComputation;
 public:
-    TPgResolvedCallBase(TComputationMutables& mutables, const std::string_view& name, ui32 id,
-        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, TType* returnType,
-        bool isList, const TStructType* structType)
-        : TBaseComputation(mutables)
-        , Name(name)
-        , Id(id)
-        , ProcDesc(NPg::LookupProc(id))
-        , RetTypeDesc(NPg::LookupType(returnType->IsStruct() ? RECORDOID : AS_TYPE(TPgType, returnType)->GetTypeId()))
+    TPgResolvedCallNode(TComputationMutables& mutables, const std::string_view& name, ui32 id,
+        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, TType* returnType, ui32 collationOid)
+        : TPgResolvedCall<UseContext>(name, id, std::move(argTypes), returnType)
+        , TBaseComputation(mutables)
         , ArgNodes(std::move(argNodes))
-        , ArgTypes(std::move(argTypes))
-        , StructType(structType)
+        , CollationOid(collationOid)
+        , StateIndex(mutables.CurValueIndex++)
     {
-        Zero(FInfo);
-        Y_ENSURE(Id);
-        GetPgFuncAddr(Id, FInfo);
-        Y_ENSURE(FInfo.fn_retset == isList);
-        Y_ENSURE(FInfo.fn_addr);
-        Y_ENSURE(ArgNodes.size() <= FUNC_MAX_ARGS);
-        ArgDesc.reserve(ArgTypes.size());
-        for (ui32 i = 0; i < ArgTypes.size(); ++i) {
-            ui32 type;
-            // extract real type from input args
-            auto argType = ArgTypes[i];
-            if (argType->IsPg()) {
-                type = static_cast<TPgType*>(argType)->GetTypeId();
-            } else {
-                // keep original description for nulls
-                type = ProcDesc.ArgTypes[i];
-            }
+        Y_ENSURE(ArgNodes.size() == this->ArgDesc.size());
+        Y_ENSURE(argTypes.size() == this->ArgDesc.size());
+    }
 
-            ArgDesc.emplace_back(NPg::LookupType(type));
-        }
-
-        Y_ENSURE(ArgDesc.size() == ArgNodes.size());
-        for (size_t i = 0; i < ArgDesc.size(); ++i) {
-            ArgsExprBuilder.Add(ArgDesc[i].TypeId);
-        }
-
-        FInfo.fn_expr = ArgsExprBuilder.Build(ProcDesc);
-
-        if (StructType) {
-            StructTypeDesc.reserve(StructType->GetMembersCount());
-            for (ui32 i = 0; i < StructType->GetMembersCount(); ++i) {
-                auto itemType = StructType->GetMemberType(i);
-                auto type = AS_TYPE(TPgType, itemType)->GetTypeId();
-                StructTypeDesc.emplace_back(NPg::LookupType(type));
-            }
-        }
+    NUdf::TUnboxedValue DoCalculate(TComputationContext& compCtx) const {
+        auto& state = this->GetState(compCtx);
+        return this->CallFunction(state, [&](size_t index) { return ArgNodes[index]->GetValue(compCtx); });
     }
 
 private:
@@ -1267,117 +1097,22 @@ private:
         }
     }
 
-protected:
-    const std::string_view Name;
-    const ui32 Id;
-    FmgrInfo FInfo;
-    const NPg::TProcDesc ProcDesc;
-    const NPg::TTypeDesc RetTypeDesc;
-    const TComputationNodePtrVector ArgNodes;
-    const TVector<TType*> ArgTypes;
-    const TStructType* StructType;
-    TVector<NPg::TTypeDesc> ArgDesc;
-    TVector<NPg::TTypeDesc> StructTypeDesc;
-
-    TPgArgsExprBuilder ArgsExprBuilder;
-};
-
-struct TPgResolvedCallState : public TComputationValue<TPgResolvedCallState> {
-    TPgResolvedCallState(TMemoryUsageInfo* memInfo, ui32 numArgs, const FmgrInfo* finfo)
-        : TComputationValue(memInfo)
-        , CallInfo(numArgs, finfo)
-        , Args(numArgs)
-    {
-    }
-
-    TFunctionCallInfo CallInfo;
-    TUnboxedValueVector Args;
-};
-
-template <bool UseContext>
-class TPgResolvedCall : public TPgResolvedCallBase<TPgResolvedCall<UseContext>> {
-    typedef TPgResolvedCallBase<TPgResolvedCall<UseContext>> TBaseComputation;
-public:
-    TPgResolvedCall(TComputationMutables& mutables, const std::string_view& name, ui32 id,
-        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, TType* returnType)
-        : TBaseComputation(mutables, name, id, std::move(argNodes), std::move(argTypes), returnType, false, nullptr)
-        , StateIndex(mutables.CurValueIndex++)
-    {
-    }
-
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        auto& state = this->GetState(compCtx);
-        auto& callInfo = state.CallInfo.Ref();
-        auto& args = state.Args;
-        if constexpr (UseContext) {
-            callInfo.context = (Node*)TlsAllocState->CurrentContext;
-        }
-
-        callInfo.isnull = false;
-        for (ui32 i = 0; i < this->ArgNodes.size(); ++i) {
-            args[i] = std::move(this->ArgNodes[i]->GetValue(compCtx));
-            auto& value = args[i];
-            NullableDatum argDatum = { 0, false };
-            if (!value) {
-                if (this->FInfo.fn_strict) {
-                    return NUdf::TUnboxedValuePod();
-                }
-
-                argDatum.isnull = true;
-            } else {
-                argDatum.value = this->ArgDesc[i].PassByValue ?
-                    ScalarDatumFromPod(value) :
-                    PointerDatumFromPod(value);
-            }
-
-            callInfo.args[i] = argDatum;
-        }
-
-        const bool needToFree = PrepareVariadicArray(callInfo, this->ProcDesc);
-        NUdf::TUnboxedValuePod res;
-        if constexpr (!UseContext) {
-            TPAllocScope call;
-            Y_DEFER {
-                // This ensures that there is no dangling pointers references to freed
-                // |TPAllocScope| pages that can be allocated and stored inside |callInfo.flinfo->fn_extra|.
-                callInfo.flinfo->fn_extra = nullptr;
-            };
-            res = this->DoCall(callInfo);
-        } else {
-            res = this->DoCall(callInfo);
-        }
-
-        if (needToFree) {
-            FreeVariadicArray(callInfo, this->ArgNodes.size());
-        }
-
-        return res;
-    }
-
-private:
-    NUdf::TUnboxedValuePod DoCall(FunctionCallInfoBaseData& callInfo) const {
-        auto ret = this->FInfo.fn_addr(&callInfo);
-        if (callInfo.isnull) {
-            return NUdf::TUnboxedValuePod();
-        }
-
-        return AnyDatumToPod(ret, this->RetTypeDesc.PassByValue);
-    }
-
-    TPgResolvedCallState& GetState(TComputationContext& compCtx) const {
+    TPgResolvedCallNodeState& GetState(TComputationContext& compCtx) const {
         auto& result = compCtx.MutableValues[this->StateIndex];
         if (!result.HasValue()) {
-            result = compCtx.HolderFactory.Create<TPgResolvedCallState>(this->ArgNodes.size(), &this->FInfo);
+            result = compCtx.HolderFactory.Create<TPgResolvedCallNodeState>(this->ArgNodes.size(), &this->FInfo, CollationOid);
         }
 
-        return *static_cast<TPgResolvedCallState*>(result.AsBoxed().Get());
+        return *static_cast<TPgResolvedCallNodeState*>(result.AsBoxed().Get());
     }
 
+    const TComputationNodePtrVector ArgNodes;
+    const ui32 CollationOid;
     const ui32 StateIndex;
 };
 
-class TPgResolvedMultiCall : public TPgResolvedCallBase<TPgResolvedMultiCall> {
-    typedef TPgResolvedCallBase<TPgResolvedMultiCall> TBaseComputation;
+class TPgResolvedMultiCall : public TPgResolvedCallBase, public TMutableComputationNode<TPgResolvedMultiCall> {
+    typedef TMutableComputationNode<TPgResolvedMultiCall> TBaseComputation;
 private:
     class TListValue : public TCustomListValue {
     public:
@@ -1385,14 +1120,14 @@ private:
         public:
             TIterator(TMemoryUsageInfo* memInfo, const std::string_view& name, const TUnboxedValueVector& args,
                 const TVector<NPg::TTypeDesc>& argDesc, const NPg::TTypeDesc& retTypeDesc, const NPg::TProcDesc& procDesc,
-                const FmgrInfo* fInfo, const TStructType* structType, const TVector<NPg::TTypeDesc>& structTypeDesc, const THolderFactory& holderFactory)
+                const FmgrInfo* fInfo, ui32 collationOid, const TStructType* structType, const TVector<NPg::TTypeDesc>& structTypeDesc, const THolderFactory& holderFactory)
                 : TComputationValue<TIterator>(memInfo)
                 , Name(name)
                 , Args(args)
                 , ArgDesc(argDesc)
                 , RetTypeDesc(retTypeDesc)
                 , ProcDesc(procDesc)
-                , CallInfo(argDesc.size(), fInfo)
+                , CallInfo(argDesc.size(), fInfo, collationOid)
                 , StructType(structType)
                 , StructTypeDesc(structTypeDesc)
                 , HolderFactory(holderFactory)
@@ -1600,7 +1335,7 @@ private:
 
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx,
             const std::string_view& name, TUnboxedValueVector&& args, const TVector<NPg::TTypeDesc>& argDesc,
-            const NPg::TTypeDesc& retTypeDesc, const NPg::TProcDesc& procDesc, const FmgrInfo* fInfo,
+            const NPg::TTypeDesc& retTypeDesc, const NPg::TProcDesc& procDesc, const FmgrInfo* fInfo, ui32 collationOid,
             const TStructType* structType, const TVector<NPg::TTypeDesc>& structTypeDesc, const THolderFactory& /*holderFactory*/)
             : TCustomListValue(memInfo)
             , CompCtx(compCtx)
@@ -1610,6 +1345,7 @@ private:
             , RetTypeDesc(retTypeDesc)
             , ProcDesc(procDesc)
             , FInfo(fInfo)
+            , CollationOid(collationOid)
             , StructType(structType)
             , StructTypeDesc(structTypeDesc)
         {
@@ -1617,7 +1353,7 @@ private:
 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
-            return CompCtx.HolderFactory.Create<TIterator>(Name, Args, ArgDesc, RetTypeDesc, ProcDesc, FInfo, StructType, StructTypeDesc, CompCtx.HolderFactory);
+            return CompCtx.HolderFactory.Create<TIterator>(Name, Args, ArgDesc, RetTypeDesc, ProcDesc, FInfo, CollationOid, StructType, StructTypeDesc, CompCtx.HolderFactory);
         }
 
         TComputationContext& CompCtx;
@@ -1627,15 +1363,21 @@ private:
         const NPg::TTypeDesc& RetTypeDesc;
         const NPg::TProcDesc& ProcDesc;
         const FmgrInfo* FInfo;
+        const ui32 CollationOid;
         const TStructType* StructType;
         const TVector<NPg::TTypeDesc>& StructTypeDesc;
     };
 
 public:
     TPgResolvedMultiCall(TComputationMutables& mutables, const std::string_view& name, ui32 id,
-        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, TType* returnType, const TStructType* structType)
-        : TBaseComputation(mutables, name, id, std::move(argNodes), std::move(argTypes), returnType, true, structType)
+        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, TType* returnType, const TStructType* structType, ui32 collationOid)
+        : TPgResolvedCallBase(name, id, std::move(argTypes), returnType, true, structType)
+        , TBaseComputation(mutables)
+        , ArgNodes(std::move(argNodes))
+        , CollationOid(collationOid)
+        , StructType(structType)
     {
+        Y_ENSURE(ArgNodes.size() == ArgDesc.size());
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
@@ -1646,8 +1388,18 @@ public:
             args.push_back(value);
         }
 
-        return compCtx.HolderFactory.Create<TListValue>(compCtx, Name, std::move(args), ArgDesc, RetTypeDesc, ProcDesc, &FInfo, StructType, StructTypeDesc, compCtx.HolderFactory);
+        return compCtx.HolderFactory.Create<TListValue>(compCtx, Name, std::move(args), ArgDesc, RetTypeDesc, ProcDesc, &FInfo, CollationOid, StructType, StructTypeDesc, compCtx.HolderFactory);
     }
+
+private:
+    void RegisterDependencies() const final {
+        for (const auto& node : ArgNodes) {
+            this->DependsOn(node);
+        }
+    }
+    const TComputationNodePtrVector ArgNodes;
+    const ui32 CollationOid;
+    const TStructType* StructType;
 };
 
 class TPgToRecord : public TMutableComputationNode<TPgToRecord> {
@@ -1765,187 +1517,22 @@ private:
     TVector<const NPg::TTypeDesc*> FieldTypes;
 };
 
-class TPgCast : public TMutableComputationNode<TPgCast> {
-    typedef TMutableComputationNode<TPgCast> TBaseComputation;
+class TPgCastNode : public TPgCast, public TMutableComputationNode<TPgCastNode> {
+    typedef TMutableComputationNode<TPgCastNode> TBaseComputation;
 public:
-    TPgCast(TComputationMutables& mutables, ui32 sourceId, ui32 targetId, IComputationNode* arg, IComputationNode* typeMod)
-        : TBaseComputation(mutables)
+    TPgCastNode(TComputationMutables& mutables, ui32 sourceId, ui32 targetId, IComputationNode* arg, IComputationNode* typeMod)
+        : TPgCast(sourceId, targetId, typeMod != nullptr)
+        , TBaseComputation(mutables)
         , StateIndex(mutables.CurValueIndex++)
-        , SourceId(sourceId)
-        , TargetId(targetId)
         , Arg(arg)
-        , TypeMod(typeMod)
-        , SourceTypeDesc(SourceId ? NPg::LookupType(SourceId) : NPg::TTypeDesc())
-        , TargetTypeDesc(NPg::LookupType(targetId))
-        , IsSourceArray(SourceId && SourceTypeDesc.TypeId == SourceTypeDesc.ArrayTypeId)
-        , IsTargetArray(TargetTypeDesc.TypeId == TargetTypeDesc.ArrayTypeId)
-        , SourceElemDesc(SourceId ? NPg::LookupType(IsSourceArray ? SourceTypeDesc.ElementTypeId : SourceTypeDesc.TypeId) : NPg::TTypeDesc())
-        , TargetElemDesc(NPg::LookupType(IsTargetArray ? TargetTypeDesc.ElementTypeId : TargetTypeDesc.TypeId))
-    {
-        TypeIOParam = MakeTypeIOParam(TargetTypeDesc);
-
-        Zero(FInfo1);
-        Zero(FInfo2);
-        if (TypeMod && SourceId == TargetId && NPg::HasCast(TargetElemDesc.TypeId, TargetElemDesc.TypeId)) {
-            const auto& cast = NPg::LookupCast(TargetElemDesc.TypeId, TargetElemDesc.TypeId);
-
-            Y_ENSURE(cast.FunctionId);
-            GetPgFuncAddr(cast.FunctionId, FInfo1);
-            Y_ENSURE(!FInfo1.fn_retset);
-            Y_ENSURE(FInfo1.fn_addr);
-            Y_ENSURE(FInfo1.fn_nargs >= 2 && FInfo1.fn_nargs <= 3);
-            ConvertLength = true;
-            ArrayCast = IsSourceArray;
-            return;
-        }
-
-        if (SourceId == 0 || SourceId == TargetId) {
-            return;
-        }
-
-        ui32 funcId;
-        ui32 funcId2 = 0;
-        if (!NPg::HasCast(SourceElemDesc.TypeId, TargetElemDesc.TypeId) || (IsSourceArray != IsTargetArray)) {
-            ArrayCast = IsSourceArray && IsTargetArray;
-            if (IsSourceArray && !IsTargetArray) {
-                Y_ENSURE(TargetTypeDesc.Category == 'S' || TargetId == UNKNOWNOID);
-                funcId = NPg::LookupProc("array_out", { 0 }).ProcId;
-            } else if (IsTargetArray && !IsSourceArray) {
-                Y_ENSURE(SourceElemDesc.Category == 'S' || SourceId == UNKNOWNOID);
-                funcId = NPg::LookupProc("array_in", { 0,0,0 }).ProcId;
-            } else if (SourceElemDesc.Category == 'S' || SourceId == UNKNOWNOID) {
-                funcId = TargetElemDesc.InFuncId;
-            } else {
-                Y_ENSURE(TargetTypeDesc.Category == 'S' || TargetId == UNKNOWNOID);
-                funcId = SourceElemDesc.OutFuncId;
-            }
-        } else {
-            Y_ENSURE(IsSourceArray == IsTargetArray);
-            ArrayCast = IsSourceArray;
-
-            const auto& cast = NPg::LookupCast(SourceElemDesc.TypeId, TargetElemDesc.TypeId);
-            switch (cast.Method) {
-                case NPg::ECastMethod::Binary:
-                    return;
-                case NPg::ECastMethod::Function: {
-                    Y_ENSURE(cast.FunctionId);
-                    funcId = cast.FunctionId;
-                    break;
-                }
-                case NPg::ECastMethod::InOut: {
-                    funcId = SourceElemDesc.OutFuncId;
-                    funcId2 = TargetElemDesc.InFuncId;
-                    break;
-                }
-            }
-        }
-
-        Y_ENSURE(funcId);
-        GetPgFuncAddr(funcId, FInfo1);
-        Y_ENSURE(!FInfo1.fn_retset);
-        Y_ENSURE(FInfo1.fn_addr);
-        Y_ENSURE(FInfo1.fn_nargs >= 1 && FInfo1.fn_nargs <= 3);
-        Func1Lookup = NPg::LookupProc(funcId);
-        Y_ENSURE(Func1Lookup.ArgTypes.size() >= 1 && Func1Lookup.ArgTypes.size() <= 3);
-        if (NPg::LookupType(Func1Lookup.ArgTypes[0]).TypeLen == -2 && SourceElemDesc.Category == 'S') {
-            ConvertArgToCString = true;
-        }
-
-        if (funcId2) {
-            Y_ENSURE(funcId2);
-            GetPgFuncAddr(funcId2, FInfo2);
-            Y_ENSURE(!FInfo2.fn_retset);
-            Y_ENSURE(FInfo2.fn_addr);
-            Y_ENSURE(FInfo2.fn_nargs == 1);
-            Func2Lookup = NPg::LookupProc(funcId2);
-            Y_ENSURE(Func2Lookup.ArgTypes.size() == 1);
-        }
-
-        if (!funcId2) {
-            if (NPg::LookupType(Func1Lookup.ResultType).TypeLen == -2 && TargetElemDesc.Category == 'S') {
-                ConvertResFromCString = true;
-            }
-        } else {
-            const auto& Func2ArgType = NPg::LookupType(Func2Lookup.ArgTypes[0]);
-            if (NPg::LookupType(Func1Lookup.ResultType).TypeLen == -2 && Func2ArgType.Category == 'S') {
-                ConvertResFromCString = true;
-            }
-
-            if (NPg::LookupType(Func2Lookup.ResultType).TypeLen == -2 && TargetElemDesc.Category == 'S') {
-                ConvertResFromCString2 = true;
-            }
-        }
+        , TypeMod(typeMod) {
+        Y_ENSURE(Arg != nullptr);
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+    NUdf::TUnboxedValue DoCalculate(TComputationContext& compCtx) const {
         auto value = Arg->GetValue(compCtx);
-        if (!value) {
-            return value.Release();
-        }
-
-        i32 typeMod = -1;
-        if (TypeMod) {
-            typeMod = DatumGetInt32(ScalarDatumFromPod(TypeMod->GetValue(compCtx)));
-        }
-
-        if (!FInfo1.fn_addr) {
-            // binary compatible
-            if (!ArrayCast) {
-                return value.Release();
-            } else {
-                // clone array with new target type in the header
-                auto datum = PointerDatumFromPod(value);
-                ArrayType* arr = DatumGetArrayTypePCopy(datum);
-                ARR_ELEMTYPE(arr) = TargetElemDesc.TypeId;
-                return PointerDatumToPod(PointerGetDatum(arr));
-            }
-        }
-
-        TPAllocScope call;
-        auto& state = GetState(compCtx);
-        if (ArrayCast) {
-            auto arr = (ArrayType*)DatumGetPointer(PointerDatumFromPod(value));
-            auto ndim = ARR_NDIM(arr);
-            auto dims = ARR_DIMS(arr);
-            auto lb = ARR_LBOUND(arr);
-            auto nitems = ArrayGetNItems(ndim, dims);
-
-            Datum* elems = (Datum*)TWithDefaultMiniKQLAlloc::AllocWithSize(nitems * sizeof(Datum));
-            Y_DEFER {
-                TWithDefaultMiniKQLAlloc::FreeWithSize(elems, nitems * sizeof(Datum));
-            };
-
-            bool* nulls = (bool*)TWithDefaultMiniKQLAlloc::AllocWithSize(nitems);
-            Y_DEFER {
-                TWithDefaultMiniKQLAlloc::FreeWithSize(nulls, nitems);
-            };
-
-            array_iter iter;
-            array_iter_setup(&iter, (AnyArrayType*)arr);
-            for (ui32 i = 0; i < nitems; ++i) {
-                bool isNull;
-                auto datum = array_iter_next(&iter, &isNull, i, SourceElemDesc.TypeLen,
-                    SourceElemDesc.PassByValue, SourceElemDesc.TypeAlign);
-                if (isNull) {
-                    nulls[i] = true;
-                    continue;
-                } else {
-                    nulls[i] = false;
-                    elems[i] = ConvertDatum(datum, state, typeMod);
-                }
-            }
-
-            auto ret = construct_md_array(elems, nulls, ndim, dims, lb, TargetElemDesc.TypeId,
-                TargetElemDesc.TypeLen, TargetElemDesc.PassByValue, TargetElemDesc.TypeAlign);
-
-            return PointerDatumToPod(PointerGetDatum(ret));
-        } else {
-            auto datum = SourceTypeDesc.PassByValue ?
-                ScalarDatumFromPod(value) :
-                PointerDatumFromPod(value);
-            auto ret = ConvertDatum(datum, state, typeMod);
-            return AnyDatumToPod(ret, TargetTypeDesc.PassByValue);
-        }
+        auto typeMod = TypeMod ? DatumGetInt32(ScalarDatumFromPod(TypeMod->GetValue(compCtx))) : -1;
+        return Calculate(value, typeMod, GetState(compCtx));
     }
 
 private:
@@ -1956,15 +1543,9 @@ private:
         }
     }
 
-    struct TState : public TComputationValue<TState> {
+    struct TState : public TPgCastState, public TComputationValue<TState> {
         TState(TMemoryUsageInfo* memInfo, const FmgrInfo* finfo1, const FmgrInfo* finfo2)
-            : TComputationValue(memInfo)
-            , CallInfo1(3, finfo1)
-            , CallInfo2(1, finfo2)
-        {
-        }
-
-        TFunctionCallInfo CallInfo1, CallInfo2;
+            :  TPgCastState(finfo1, finfo2), TComputationValue(memInfo){}
     };
 
     TState& GetState(TComputationContext& compCtx) const {
@@ -1972,101 +1553,13 @@ private:
         if (!result.HasValue()) {
             result = compCtx.HolderFactory.Create<TState>(&FInfo1, &FInfo2);
         }
-
         return *static_cast<TState*>(result.AsBoxed().Get());
     }
 
-    Datum ConvertDatum(Datum datum, TState& state, i32 typeMod) const {
-        auto& callInfo1 = state.CallInfo1.Ref();
-        callInfo1.isnull = false;
-        NullableDatum argDatum = { datum, false };
-        void* freeCString = nullptr;
-        Y_DEFER {
-            if (freeCString) {
-                pfree(freeCString);
-            }
-        };
-
-        if (ConvertArgToCString) {
-            argDatum.value = (Datum)MakeCString(GetVarBuf((const text*)argDatum.value));
-            freeCString = (void*)argDatum.value;
-        }
-
-        callInfo1.args[0] = argDatum;
-        if (ConvertLength) {
-            callInfo1.args[1] = { Int32GetDatum(typeMod), false };
-            callInfo1.args[2] = { BoolGetDatum(true), false };
-        } else {
-            if (FInfo1.fn_nargs == 2) {
-                callInfo1.args[1] = { Int32GetDatum(typeMod), false };
-            } else {
-                callInfo1.args[1] = { ObjectIdGetDatum(TypeIOParam), false };
-                callInfo1.args[2] = { Int32GetDatum(typeMod), false };
-            }
-        }
-
-        void* freeMem = nullptr;
-        void* freeMem2 = nullptr;
-        Y_DEFER {
-            if (freeMem) {
-                pfree(freeMem);
-            }
-
-            if (freeMem2) {
-                pfree(freeMem2);
-            }
-        };
-
-        {
-            auto ret = FInfo1.fn_addr(&callInfo1);
-            Y_ENSURE(!callInfo1.isnull);
-
-            if (ConvertResFromCString) {
-                freeMem = (void*)ret;
-                ret = (Datum)MakeVar((const char*)ret);
-            }
-
-            if (FInfo2.fn_addr) {
-                auto& callInfo2 = state.CallInfo1.Ref();
-                callInfo2.isnull = false;
-                NullableDatum argDatum2 = { ret, false };
-                callInfo2.args[0] = argDatum2;
-
-                auto ret2 = FInfo2.fn_addr(&callInfo2);
-                pfree((void*)ret);
-
-                Y_ENSURE(!callInfo2.isnull);
-                ret = ret2;
-            }
-
-            if (ConvertResFromCString2) {
-                freeMem2 = (void*)ret;
-                ret = (Datum)MakeVar((const char*)ret);
-            }
-
-            return ret;
-        }
-    }
 
     const ui32 StateIndex;
-    const ui32 SourceId;
-    const ui32 TargetId;
     IComputationNode* const Arg;
     IComputationNode* const TypeMod;
-    const NPg::TTypeDesc SourceTypeDesc;
-    const NPg::TTypeDesc TargetTypeDesc;
-    const bool IsSourceArray;
-    const bool IsTargetArray;
-    const NPg::TTypeDesc SourceElemDesc;
-    const NPg::TTypeDesc TargetElemDesc;
-    FmgrInfo FInfo1, FInfo2;
-    NPg::TProcDesc Func1Lookup, Func2Lookup;
-    bool ConvertArgToCString = false;
-    bool ConvertResFromCString = false;
-    bool ConvertResFromCString2 = false;
-    ui32 TypeIOParam = 0;
-    bool ArrayCast = false;
-    bool ConvertLength = false;
 };
 
 const i32 PgDateShift = UNIX_EPOCH_JDATE - POSTGRES_EPOCH_JDATE;
@@ -2171,12 +1664,7 @@ NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUd
         return PointerDatumToPod(PointerGetDatum(res));
     }
     case NUdf::EDataSlot::Uuid: {
-        TString str;
-        str.reserve(36);
-        ui16 dw[8];
-        std::memcpy(dw, value.AsStringRef().Data(), sizeof(dw));
-        TStringOutput out(str);
-        NKikimr::NUuid::UuidToString(dw, out);
+        auto str = NKikimr::NUuid::UuidBytesToString(value.AsStringRef());
         auto res = DirectFunctionCall1Coll(uuid_in, DEFAULT_COLLATION_OID, PointerGetDatum(str.c_str()));
         return PointerDatumToPod(PointerGetDatum((void*)res));
     }
@@ -2882,9 +2370,39 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeFromPgKernel(TType* inputType,
     return kernel;
 }
 
+namespace {
+
+template <typename TTzDate, NUdf::EDataSlot Slot>
+arrow::Status ConvertTzDateBlockToPg(const arrow::ArrayData& array, size_t length, arrow::compute::KernelContext* ctx, arrow::Datum* res) {
+    using TLayout = typename NUdf::TDataType<TTzDate>::TLayout;
+    NUdf::TTzDateBlockReader<TTzDate, true> reader;
+    NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(
+        NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+    for (size_t i = 0; i < length; ++i) {
+        auto item = reader.GetItem(array, i);
+        if (!item) {
+            builder.Add(NUdf::TBlockItem());
+            continue;
+        }
+
+        NUdf::TUnboxedValuePod value{item.template Get<TLayout>()};
+        value.SetTimezoneId(item.GetTimezoneId());
+        NUdf::TUnboxedValue str = ValueToString(Slot, value);
+        const auto ref = str.AsStringRef();
+        auto ptr = builder.AddPgItem<false, VARHDRSZ>(ref);
+        UpdateCleanVarSize((text*)(ptr + sizeof(void*)), ref.Size());
+    }
+
+    *res = builder.Build(true);
+    return arrow::Status::OK();
+}
+
+} // namespace
+
 struct TToPgExec {
-    TToPgExec(NUdf::EDataSlot sourceDataSlot)
+    TToPgExec(NUdf::EDataSlot sourceDataSlot, TType* itemType)
         : SourceDataSlot(sourceDataSlot)
+        , ItemType(itemType)
     {}
 
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
@@ -3128,6 +2646,84 @@ struct TToPgExec {
             *res = builder.Build(true);
             break;
         }
+        case NUdf::EDataSlot::Uuid: {
+            NUdf::TFixedSizeBlockReader<TGUID, true> reader;
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                auto str = NKikimr::NUuid::UuidBytesToString(item.AsStringRef());
+                auto pgDatum = DirectFunctionCall1Coll(uuid_in, DEFAULT_COLLATION_OID, PointerGetDatum(str.c_str()));
+                const char* pgUuid = static_cast<const char*>(DatumGetPointer(pgDatum));
+                auto ref = NUdf::TStringRef(pgUuid, 16);
+                builder.AddPgItem<false, 0>(ref);
+                pfree(const_cast<char*>(pgUuid));
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
+        case NUdf::EDataSlot::Decimal: {
+            NUdf::TFixedSizeBlockReader<NYql::NDecimal::TInt128, true> reader;
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                NUdf::TUnboxedValuePod value(item.GetInt128());
+                auto decimalType = static_cast<TDataDecimalType*>(ItemType);
+                auto pgRes = DecimalToPgNumeric(value, decimalType->GetParams().first, decimalType->GetParams().second);
+                auto ref = NUdf::TStringRef((const char*)pgRes, GetFullVarSize((const text*)pgRes));
+                auto ptr = builder.AddPgItem<false, 0>(ref);
+                UpdateCleanVarSize((text*)(ptr + sizeof(void*)), GetCleanVarSize((const text*)pgRes));
+                pfree(pgRes);
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
+        case NUdf::EDataSlot::DyNumber: {
+            NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            for (size_t i = 0; i < length; ++i) {
+                auto item = reader.GetItem(array, i);
+                if (!item) {
+                    builder.Add(NUdf::TBlockItem());
+                    continue;
+                }
+
+                auto str = NKikimr::NDyNumber::DyNumberToString(item.AsStringRef());
+                Y_ENSURE(str);
+                auto pgRes = (Numeric)DirectFunctionCall3Coll(numeric_in, DEFAULT_COLLATION_OID,
+                    PointerGetDatum(str->c_str()), Int32GetDatum(0), Int32GetDatum(-1));
+                auto ref = NUdf::TStringRef((const char*)pgRes, GetFullVarSize((const text*)pgRes));
+                auto ptr = builder.AddPgItem<false, 0>(ref);
+                UpdateCleanVarSize((text*)(ptr + sizeof(void*)), GetCleanVarSize((const text*)pgRes));
+                pfree(pgRes);
+            }
+
+            *res = builder.Build(true);
+            break;
+        }
+        case NUdf::EDataSlot::TzDate:
+            return ConvertTzDateBlockToPg<NUdf::TTzDate, NUdf::EDataSlot::TzDate>(array, length, ctx, res);
+        case NUdf::EDataSlot::TzDatetime:
+            return ConvertTzDateBlockToPg<NUdf::TTzDatetime, NUdf::EDataSlot::TzDatetime>(array, length, ctx, res);
+        case NUdf::EDataSlot::TzTimestamp:
+            return ConvertTzDateBlockToPg<NUdf::TTzTimestamp, NUdf::EDataSlot::TzTimestamp>(array, length, ctx, res);
+        case NUdf::EDataSlot::TzDate32:
+            return ConvertTzDateBlockToPg<NUdf::TTzDate32, NUdf::EDataSlot::TzDate32>(array, length, ctx, res);
+        case NUdf::EDataSlot::TzDatetime64:
+            return ConvertTzDateBlockToPg<NUdf::TTzDatetime64, NUdf::EDataSlot::TzDatetime64>(array, length, ctx, res);
+        case NUdf::EDataSlot::TzTimestamp64:
+            return ConvertTzDateBlockToPg<NUdf::TTzTimestamp64, NUdf::EDataSlot::TzTimestamp64>(array, length, ctx, res);
         default:
             ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(SourceDataSlot).Name;
         }
@@ -3135,6 +2731,7 @@ struct TToPgExec {
     }
 
     const NUdf::EDataSlot SourceDataSlot;
+    TType* const ItemType;
 };
 
 std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, TType* resultType, NUdf::EDataSlot dataSlot) {
@@ -3142,7 +2739,12 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
 
     std::shared_ptr<arrow::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
-    auto exec = std::make_shared<TToPgExec>(dataSlot);
+    std::shared_ptr<TToPgExec> exec;
+    auto itemType = AS_TYPE(TBlockType, inputType)->GetItemType();
+    if (itemType->IsOptional()) {
+        itemType = AS_TYPE(TOptionalType, itemType)->GetItemType();
+    }
+    exec = std::make_shared<TToPgExec>(dataSlot, itemType);
     auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
         [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         return exec->Exec(ctx, batch, res);
@@ -3174,6 +2776,15 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
     case NUdf::EDataSlot::Yson:
     case NUdf::EDataSlot::Json:
     case NUdf::EDataSlot::JsonDocument:
+    case NUdf::EDataSlot::Uuid:
+    case NUdf::EDataSlot::DyNumber:
+    case NUdf::EDataSlot::Decimal:
+    case NUdf::EDataSlot::TzDate:
+    case NUdf::EDataSlot::TzDatetime:
+    case NUdf::EDataSlot::TzTimestamp:
+    case NUdf::EDataSlot::TzDate32:
+    case NUdf::EDataSlot::TzDatetime64:
+    case NUdf::EDataSlot::TzTimestamp64:
         kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
         break;
     default:
@@ -3183,7 +2794,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
     return kernel;
 }
 
-std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTypes, TType* resultType, TExecFunc execFunc, ui32 procId) {
+std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTypes, TType* resultType, TExecFunc execFunc, ui32 procId, ui32 collationOid) {
     std::shared_ptr<arrow::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
     auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
@@ -3204,14 +2815,14 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTy
     }
 
     kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
-    kernel->init = [procId, pgArgTypes](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
+    kernel->init = [procId, pgArgTypes, collationOid](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
         auto state = std::make_unique<TPgKernelState>();
         Zero(state->flinfo);
         GetPgFuncAddr(procId, state->flinfo);
         YQL_ENSURE(state->flinfo.fn_addr);
         state->resultinfo = nullptr;
         state->context = nullptr;
-        state->fncollation = DEFAULT_COLLATION_OID;
+        state->fncollation = collationOid ? collationOid : DEFAULT_COLLATION_OID;
         const auto& procDesc = NPg::LookupProc(procId);
         const auto& retTypeDesc = NPg::LookupType(procDesc.ResultType);
         state->Name = procDesc.Name;
@@ -3247,7 +2858,7 @@ TComputationNodeFactory GetPgFactory() {
                     typeMod = LocateNode(ctx.NodeLocator, callable, 2);
                 }
 
-                return new TPgConst(ctx.Mutables, typeId, value, typeMod);
+                return new TPgConstNode(ctx.Mutables, typeId, value, typeMod);
             }
 
             if (name == "PgInternal0") {
@@ -3281,7 +2892,8 @@ TComputationNodeFactory GetPgFactory() {
                 return new TPgToRecord(ctx.Mutables, input, structType, std::move(members));
             }
 
-            if (name == "PgResolvedCall") {
+            if (name == "PgResolvedCall" || name == "PgResolvedCall2") {
+                const bool hasCollation = (name == "PgResolvedCall2");
                 const auto useContextData = AS_VALUE(TDataLiteral, callable.GetInput(0));
                 const auto rangeFunctionData = AS_VALUE(TDataLiteral, callable.GetInput(1));
                 const auto nameData = AS_VALUE(TDataLiteral, callable.GetInput(2));
@@ -3290,9 +2902,18 @@ TComputationNodeFactory GetPgFactory() {
                 auto rangeFunction = rangeFunctionData->AsValue().Get<bool>();
                 auto name = nameData->AsValue().AsStringRef();
                 auto id = idData->AsValue().Get<ui32>();
+
+                ui32 collationOid = 0;
+                ui32 argsStart = 4;
+                if (hasCollation) {
+                    const auto collationOidData = AS_VALUE(TDataLiteral, callable.GetInput(4));
+                    collationOid = collationOidData->AsValue().Get<ui32>();
+                    argsStart = 5;
+                }
+
                 TComputationNodePtrVector argNodes;
                 TVector<TType*> argTypes;
-                for (ui32 i = 4; i < callable.GetInputsCount(); ++i) {
+                for (ui32 i = argsStart; i < callable.GetInputsCount(); ++i) {
                     argNodes.emplace_back(LocateNode(ctx.NodeLocator, callable, i));
                     argTypes.emplace_back(callable.GetInput(i).GetStaticType());
                 }
@@ -3309,25 +2930,35 @@ TComputationNodeFactory GetPgFactory() {
 
                 if (isList) {
                     YQL_ENSURE(!useContext);
-                    return new TPgResolvedMultiCall(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), itemType, structType);
+                    return new TPgResolvedMultiCall(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), itemType, structType, collationOid);
                 } else {
                     YQL_ENSURE(!structType);
                     if (useContext) {
-                        return new TPgResolvedCall<true>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), returnType);
+                        return new TPgResolvedCallNode<true>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), returnType, collationOid);
                     } else {
-                        return new TPgResolvedCall<false>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), returnType);
+                        return new TPgResolvedCallNode<false>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), returnType, collationOid);
                     }
                 }
             }
 
-            if (name == "BlockPgResolvedCall") {
+            if (name == "BlockPgResolvedCall" || name == "BlockPgResolvedCall2") {
+                const bool hasCollation = (name == "BlockPgResolvedCall2");
                 const auto nameData = AS_VALUE(TDataLiteral, callable.GetInput(0));
                 const auto idData = AS_VALUE(TDataLiteral, callable.GetInput(1));
                 auto name = nameData->AsValue().AsStringRef();
                 auto id = idData->AsValue().Get<ui32>();
+
+                ui32 collationOid = 0;
+                ui32 argsStart = 2;
+                if (hasCollation) {
+                    const auto collationOidData = AS_VALUE(TDataLiteral, callable.GetInput(2));
+                    collationOid = collationOidData->AsValue().Get<ui32>();
+                    argsStart = 3;
+                }
+
                 TComputationNodePtrVector argNodes;
                 TVector<TType*> argTypes;
-                for (ui32 i = 2; i < callable.GetInputsCount(); ++i) {
+                for (ui32 i = argsStart; i < callable.GetInputsCount(); ++i) {
                     argNodes.emplace_back(LocateNode(ctx.NodeLocator, callable, i));
                     argTypes.emplace_back(callable.GetInput(i).GetStaticType());
                 }
@@ -3335,8 +2966,8 @@ TComputationNodeFactory GetPgFactory() {
                 auto returnType = callable.GetType()->GetReturnType();
                 auto execFunc = FindExec(id);
                 YQL_ENSURE(execFunc);
-                auto kernel = MakePgKernel(argTypes, returnType, execFunc, id);
-                return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), callable.GetType()->GetName(), std::move(argNodes), argTypes, returnType, *kernel, kernel);
+                auto kernel = MakePgKernel(argTypes, returnType, execFunc, id, collationOid);
+                return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), callable.GetType()->GetName(), std::move(argNodes), argTypes, returnType, *kernel, kernel);
             }
 
             if (name == "PgCast") {
@@ -3354,7 +2985,7 @@ TComputationNodeFactory GetPgFactory() {
                     typeMod = LocateNode(ctx.NodeLocator, callable, 1);
                 }
 
-                return new TPgCast(ctx.Mutables, sourceId, targetId, arg, typeMod);
+                return new TPgCastNode(ctx.Mutables, sourceId, targetId, arg, typeMod);
             }
 
             if (name == "FromPg") {
@@ -3398,7 +3029,7 @@ TComputationNodeFactory GetPgFactory() {
                 auto returnType = callable.GetType()->GetReturnType();
                 ui32 sourceId = AS_TYPE(TPgType, AS_TYPE(TBlockType, inputType)->GetItemType())->GetTypeId();
                 auto kernel = MakeFromPgKernel(inputType, returnType, sourceId);
-                return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), callable.GetType()->GetName(), { arg }, { inputType }, returnType, *kernel, kernel);
+                return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), callable.GetType()->GetName(), { arg }, { inputType }, returnType, *kernel, kernel);
             }
 
             if (name == "ToPg") {
@@ -3495,7 +3126,7 @@ TComputationNodeFactory GetPgFactory() {
                 auto returnType = callable.GetType()->GetReturnType();
                 auto targetId = AS_TYPE(TPgType, AS_TYPE(TBlockType, returnType)->GetItemType())->GetTypeId();
                 auto kernel = MakeToPgKernel(inputType, returnType, *sourceDataSlot);
-                return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), callable.GetType()->GetName(), {arg}, {inputType}, returnType, *kernel, kernel);
+                return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), callable.GetType()->GetName(), {arg}, {inputType}, returnType, *kernel, kernel);
             }
 
             if (name == "PgArray") {
@@ -3902,38 +3533,38 @@ NUdf::TUnboxedValue PgValueFromNativeText(const TStringBuf text, ui32 pgTypeId) 
     }
 }
 
-NUdf::TUnboxedValue PgValueFromString(const TStringBuf s, ui32 pgTypeId) {
+NUdf::TUnboxedValue PgValueFromString(const TStringBuf text, ui32 pgTypeId) {
     switch (pgTypeId) {
     case BOOLOID: {
-        return ScalarDatumToPod(BoolGetDatum(FromString<bool>(s)));
+        return ScalarDatumToPod(BoolGetDatum(FromString<bool>(text)));
     }
     case INT2OID: {
-        return ScalarDatumToPod(Int16GetDatum(FromString<i16>(s)));
+        return ScalarDatumToPod(Int16GetDatum(FromString<i16>(text)));
     }
     case INT4OID: {
-        return ScalarDatumToPod(Int32GetDatum(FromString<i32>(s)));
+        return ScalarDatumToPod(Int32GetDatum(FromString<i32>(text)));
     }
     case INT8OID: {
-        return ScalarDatumToPod(Int64GetDatum(FromString<i64>(s)));
+        return ScalarDatumToPod(Int64GetDatum(FromString<i64>(text)));
     }
     case FLOAT4OID: {
-        return ScalarDatumToPod(Float4GetDatum(FromString<float>(s)));
+        return ScalarDatumToPod(Float4GetDatum(FloatFromString(text)));
     }
     case FLOAT8OID: {
-        return ScalarDatumToPod(Float8GetDatum(FromString<double>(s)));
+        return ScalarDatumToPod(Float8GetDatum(DoubleFromString(text)));
     }
     case BYTEAOID:
     case VARCHAROID:
     case TEXTOID: {
-        auto ret = MakeVar(s);
+        auto ret = MakeVar(text);
         return PointerDatumToPod((Datum)ret);
     }
     case CSTRINGOID: {
-        auto ret = MakeCString(s);
+        auto ret = MakeCString(text);
         return PointerDatumToPod((Datum)ret);
     }
     default:
-        return PgValueFromNativeText(s, pgTypeId);
+        return PgValueFromNativeText(text, pgTypeId);
     }
 }
 

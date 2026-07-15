@@ -5,6 +5,8 @@
 #include <util/generic/overloaded.h>
 #include <util/generic/guid.h>
 
+#include <string>
+
 namespace NYdb::NConsoleClient {
 
 TTopicWorkloadKeyedWriterWorker::TTopicWorkloadKeyedWriterWorker(const TTopicWorkloadKeyedWriterParams& params)
@@ -77,8 +79,8 @@ void TTopicWorkloadKeyedWriterWorker::Process(TInstant endTime)
         TxSupport,
         WaitForCommitTx,
         endTime,
-        [](const std::shared_ptr<TTopicWorkloadKeyedWriterProducer>& producer) {
-            return producer->HasContinuationTokens();
+        [](const std::shared_ptr<TTopicWorkloadKeyedWriterProducer>&) {
+            return true;
         },
         [this]() {
             return GetCreateTimestampForNextMessage();
@@ -122,15 +124,23 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
     auto autoPartitioningStrategy = describeResult.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy();
     auto isAutoPartitioningEnabled = autoPartitioningStrategy != NTopic::EAutoPartitioningStrategy::Unspecified && autoPartitioningStrategy != NTopic::EAutoPartitioningStrategy::Disabled;
 
-    NYdb::NTopic::TKeyedWriteSessionSettings settings;
+    NYdb::NTopic::TProducerSettings settings;
     settings.Codec((NYdb::NTopic::ECodec)Params.Codec);
+    if (Params.BatchInnerCodec.Defined()) {
+        settings.BatchInnerCodec((NYdb::NTopic::ECodec)*Params.BatchInnerCodec);
+    }
     settings.Path(Params.TopicName);
-    settings.SessionId(SessionId);
     settings.ProducerIdPrefix(producerId);
+    settings.MaxBlockTimeout(TDuration::Max());
+    settings.BatchFlushInterval(Params.BatchFlushInterval);
+    if (Params.BatchFlushSizeBytes.has_value()) {
+        settings.BatchFlushSizeBytes(Params.BatchFlushSizeBytes.value());
+    }
+    settings.BatchFlushMessageCount(Params.BatchFlushMessageCount);
     settings.PartitionChooserStrategy(
         isAutoPartitioningEnabled ?
-        NYdb::NTopic::TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound :
-        NYdb::NTopic::TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::Bound :
+        NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::KafkaHash);
     if (Params.MaxMemoryUsageBytes.has_value()) {
         settings.MaxMemoryUsage(Params.MaxMemoryUsageBytes.value());
     }
@@ -140,13 +150,15 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
         std::bind(&TTopicWorkloadKeyedWriterProducer::HandleAckEvent, producer, std::placeholders::_1));
     eventHandlers.SessionClosedHandler(
         std::bind(&TTopicWorkloadKeyedWriterProducer::HandleSessionClosed, producer, std::placeholders::_1));
-    eventHandlers.ReadyToAcceptHandler(
-        std::bind(&TTopicWorkloadKeyedWriterProducer::HandleReadyToAcceptEvent, producer, std::placeholders::_1));
     settings.EventHandlers(eventHandlers);
 
     settings.DirectWriteToPartition(Params.Direct);
 
-    producer->SetWriteSession(topicClient.CreateKeyedWriteSession(settings));
+    if (Params.UseTransactions) {
+        settings.SetTrackProducerIdInTx(Params.TrackProducerIdInTx);
+    }
+
+    producer->SetProducer(topicClient.CreateProducer(settings));
     return producer;
 }
 

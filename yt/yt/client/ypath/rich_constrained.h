@@ -39,9 +39,9 @@ public:
     TConstrainedRichYPath& operator=(TConstrainedRichYPath&& other) noexcept = default;
 
     template <class... TOtherValidators>
-    TConstrainedRichYPath(const TConstrainedRichYPath<TOtherValidators...>& other);
+    explicit TConstrainedRichYPath(const TConstrainedRichYPath<TOtherValidators...>& other);
     template <class... TOtherValidators>
-    TConstrainedRichYPath(TConstrainedRichYPath<TOtherValidators...>&& other);
+    explicit TConstrainedRichYPath(TConstrainedRichYPath<TOtherValidators...>&& other);
 
     template <class... TOtherValidators>
     TConstrainedRichYPath& operator=(const TConstrainedRichYPath<TOtherValidators...>& other);
@@ -117,7 +117,7 @@ public:
     bool HasNontrivialRanges() const;
 
     // "file_name"
-    std::optional<TString> GetFileName() const;
+    std::optional<std::string> GetFileName() const;
 
     // "executable"
     std::optional<bool> GetExecutable() const;
@@ -201,10 +201,14 @@ public:
     NTableClient::TVersionedWriteOptions GetVersionedWriteOptions() const;
 
     // "access_method"
-    std::optional<TString> GetAccessMethod() const;
+    std::optional<std::string> GetAccessMethod() const;
 
     // "input_query"
-    std::optional<TString> GetInputQuery() const;
+    std::optional<std::string> GetInputQuery() const;
+
+    // "queue_consumer_name"
+    std::optional<std::string> GetQueueConsumerName() const;
+    void SetQueueConsumerName(const std::string& value);
 
     bool operator==(const TConstrainedRichYPath& other) const;
 
@@ -250,7 +254,7 @@ void FromProto(TConstrainedRichYPath<TValidator...>* path, const std::string& pr
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const std::vector<TString>& GetWellKnownRichYPathAttributes();
+const std::vector<std::string>& GetWellKnownRichYPathAttributes();
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -14,7 +14,7 @@ TWithTagGuard::TWithTagGuard(ISensorWriter* writer)
     YT_VERIFY(Writer_);
 }
 
-TWithTagGuard::TWithTagGuard(ISensorWriter* writer, const std::string& tagKey, const std::string& tagValue)
+TWithTagGuard::TWithTagGuard(ISensorWriter* writer, TStringBuf tagKey, TStringBuf tagValue)
     : TWithTagGuard(writer)
 {
     AddTag(tagKey, tagValue);
@@ -26,9 +26,9 @@ void TWithTagGuard::AddTag(TTag tag)
     ++AddedTagCount_;
 }
 
-void TWithTagGuard::AddTag(const std::string& tagKey, const std::string& tagValue)
+void TWithTagGuard::AddTag(TStringBuf tagKey, TStringBuf tagValue)
 {
-    AddTag({tagKey, tagValue});
+    AddTag({std::string(tagKey), std::string(tagValue)});
 }
 
 TWithTagGuard::~TWithTagGuard()
@@ -50,12 +50,12 @@ void TSensorBuffer::PopTag()
     Tags_.pop_back();
 }
 
-void TSensorBuffer::AddGauge(const std::string& name, double value)
+void TSensorBuffer::AddGauge(TStringBuf name, double value)
 {
     Gauges_.emplace_back(name, Tags_, value);
 }
 
-void TSensorBuffer::AddCounter(const std::string& name, i64 value)
+void TSensorBuffer::AddCounter(TStringBuf name, i64 value)
 {
     Counters_.emplace_back(name, Tags_, value);
 }

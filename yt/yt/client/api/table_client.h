@@ -8,6 +8,8 @@
 #include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/constrained_schema.h>
 
+#include <yt/yt/client/tablet_client/index_info.h>
+
 #include <yt/yt/client/chaos_client/replication_card.h>
 
 namespace NYT::NApi {
@@ -284,6 +286,40 @@ struct TUpdateChaosTableReplicaProgressOptions
     bool Force;
 };
 
+DECLARE_REFCOUNTED_STRUCT(TCreateSecondaryIndex);
+
+struct TCreateSecondaryIndex
+    : public NYTree::TYsonStruct
+{
+    NTabletClient::ESecondaryIndexKind Kind;
+    NChaosClient::TReplicationCardId IndexReplicationCardId;
+    NTabletClient::ETableToIndexCorrespondence Correspondence;
+    std::optional<std::string> Predicate;
+    std::optional<NTabletClient::TUnfoldedColumns> UnfoldedColumns;
+    NTableClient::TTableSchemaPtr EvaluatedColumnsSchema;
+
+    REGISTER_YSON_STRUCT(TCreateSecondaryIndex);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TCreateSecondaryIndex)
+
+DECLARE_REFCOUNTED_STRUCT(TProgressSecondaryIndexCorrespondence);
+
+struct TProgressSecondaryIndexCorrespondence
+    : public NYTree::TYsonStruct
+{
+    NChaosClient::TReplicationCardId IndexReplicationCardId;
+    NTabletClient::ETableToIndexCorrespondence NewCorrespondence;
+
+    REGISTER_YSON_STRUCT(TProgressSecondaryIndexCorrespondence);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TProgressSecondaryIndexCorrespondence)
+
 struct TAlterReplicationCardOptions
     : public TTimeoutOptions
     , public TMutatingOptions
@@ -292,6 +328,9 @@ struct TAlterReplicationCardOptions
     std::optional<bool> EnableReplicatedTableTracker;
     std::optional<NChaosClient::TReplicationCardCollocationId> ReplicationCardCollocationId;
     NTabletClient::TReplicationCollocationOptionsPtr CollocationOptions;
+    TCreateSecondaryIndexPtr CreateSecondaryIndex;
+    NChaosClient::TReplicationCardId DestroySecondaryIndex;
+    TProgressSecondaryIndexCorrespondencePtr ProgressSecondaryIndexCorrespondence;
 };
 
 struct TGetReplicationCardOptions
@@ -320,13 +359,17 @@ struct TPartitionTablesOptions
     NChunkClient::TFetcherConfigPtr FetcherConfig;
     NChunkClient::TChunkSliceFetcherConfigPtr ChunkSliceFetcherConfig;
     NTableClient::ETablePartitionMode PartitionMode = NTableClient::ETablePartitionMode::Unordered;
-    i64 DataWeightPerPartition;
+    std::optional<i64> DataWeightPerPartition;
+    std::optional<i64> CompressedDataSizePerPartition;
     std::optional<int> MaxPartitionCount;
     bool AdjustDataWeightPerPartition = true;
     bool EnableKeyGuarantee = false;
 
     //! Whether to return cookies that can be fed to CreateTablePartitionReader.
     bool EnableCookies = false;
+    //! Whether to include node descriptors in the cookie (effective only when EnableCookies is true).
+    //! Increases cookie size but likely reduces read latency with ReadTablePartition.
+    bool FetchCookieNodeDescriptors = false;
 
     bool OmitInaccessibleRows = false;
 };

@@ -1,6 +1,6 @@
 #include "partition_key_range_sequence.h"
+
 #include <library/cpp/testing/unittest/registar.h>
-#include <span>
 
 using namespace NKikimr::NPQ;
 

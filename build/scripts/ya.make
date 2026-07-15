@@ -16,7 +16,6 @@ IF (PYTHON2)
         fetch_from_sandbox.py
         gen_java_codenav_entry.py
         gen_py3_reg.py
-        go_tool.py
         ios_wrapper.py
         mangle_typeinfo_names.py
         pack_ios.py
@@ -85,7 +84,9 @@ ELSEIF (PYTHON3)
         generate_mf.py
         generate_pom.py
         generate_win_vfs.py
+        go.py
         go_proto_wrapper.py
+        go_tool.py
         iwyu.py
         iwyu_arch.py
         java_command_file.py

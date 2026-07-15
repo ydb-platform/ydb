@@ -32,7 +32,7 @@ inline void GetHash(size_t &seed, const T &arg)
 template <class T>
 inline void GetHash(size_t &seed, const std::vector<T> &arg)
 {
-  for (auto v : arg)
+  for (const auto &v : arg)
   {
     GetHash<T>(seed, v);
   }
@@ -55,7 +55,7 @@ struct GetHashForAttributeValueVisitor
   {
     GetHash(seed_, v);
   }
-  size_t &seed_;
+  std::reference_wrapper<size_t> seed_;
 };
 
 // Calculate hash of keys and values of attribute map

@@ -3,7 +3,6 @@
 
 #include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 
-
 namespace NKikimr::NKqp {
 
 namespace {
@@ -385,6 +384,64 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
     Y_UNIT_TEST(TestDiskIsFullRunOverQueryLimit) {
         TestWhenDiskSpaceIsExhausted(1, "delayed_requests");
     }
+
+    //
+    // Verifies that resource pools function correctly after tenant recreation.
+    // Even if the DatabaseId (path) remains the same, a recreated tenant receives
+    // a new internal PathId. The workload service uses DatabaseId as a key for
+    // a cache.
+    //
+    // The workload service must detect this lifecycle change, invalidate any
+    // cached state tied to the same DatabaseId but a different PathId,
+    // and re-resolve metadata to avoid "PathId mismatch" or "Pool not found"
+    // errors in the new database.
+    //
+    Y_UNIT_TEST(TestResourcePoolAfterTenantRecreation) {
+        auto unitKind = "test-recreated-db";
+        auto dbName = "/Root/test-recreated-db";
+        auto tweakFnc = [&](Tests::TServerSettings& serverSettings) -> void {
+            serverSettings.SetDynamicNodeCount(1).AddStoragePool(
+                unitKind,
+                TStringBuilder() << dbName << ":" << unitKind
+            );
+        };
+
+        auto ydb = TYdbSetupSettings()
+            .NodeCount(1)
+            .CreateSampleTenants(false)
+            .EnableResourcePools(true)
+            // turn off to reduce "noise" in a log
+            .EnableStreamingQueries(false)
+            .CreateSamplePool(false)
+            .Create(tweakFnc);
+
+        auto myPoolId = "my_pool";
+        auto defPool = TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID).Database(dbName);
+        auto myPool = TQueryRunnerSettings().PoolId(myPoolId).Database(dbName);
+
+        Cerr << "------ Creating Tenant" << Endl;
+        ydb->CreateDedicatedTenant(dbName, unitKind);
+        ydb->CreateResourcePool(dbName, myPoolId, NResourcePool::TPoolSettings());
+
+        TSampleQueries::TSelect42::CheckResult(
+            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, myPool));
+
+        TSampleQueries::TSelect42::CheckResult(
+            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, defPool));
+
+        Cerr << "------ Droping Tenant" << Endl;
+        ydb->DropDedicatedTenant(dbName);
+
+        Cerr << "------ Creating Tenant" << Endl;
+        ydb->CreateDedicatedTenant(dbName, unitKind);
+
+        // The custom pool is still alive, is it a bug or feature?
+        TSampleQueries::TSelect42::CheckResult(
+            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, myPool));
+
+        TSampleQueries::TSelect42::CheckResult(
+            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, defPool));
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpWorkloadServiceDistributed) {
@@ -699,7 +756,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         config.SetQueueSize(0);
         config.SetDatabaseLoadCpuThreshold(-1);
         config.SetQueryCpuLimitPercentPerNode(-1);
-        config.SetQueryMemoryLimitPercentPerNode(-1);
+        config.SetTotalMemoryLimitPercentPerNode(-1);
         config.SetTotalCpuLimitPercentPerNode(-1);
         auto ydb = TYdbSetupSettings()
             .CreateSampleTenants(true)
@@ -819,21 +876,11 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
     }
 
     void WaitForFail(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings, const TString& poolId) {
-        ydb->WaitFor(TDuration::Seconds(10), "Resource pool classifier fail", [ydb, settings, poolId](TString& errorString) {
-            auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
-
-            errorString = result.GetIssues().ToOneLineString();
-            return result.GetStatus() == EStatus::PRECONDITION_FAILED && errorString.Contains(TStringBuilder() << "Resource pool " << poolId << " was disabled due to zero concurrent query limit");
-        });
+        NWorkload::WaitForClassifierFail(ydb, settings, poolId);
     }
 
     void WaitForSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings) {
-        ydb->WaitFor(TDuration::Seconds(30), "Resource pool classifier success", [ydb, settings](TString& errorString) {
-            auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
-
-            errorString = result.GetIssues().ToOneLineString();
-            return result.GetStatus() == EStatus::SUCCESS;
-        });
+        NWorkload::WaitForClassifierSuccess(ydb, settings);
     }
 
     Y_UNIT_TEST(TestCreateResourcePoolClassifier) {
@@ -992,6 +1039,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
         WaitForSuccess(ydb, settings.GroupSIDs({firstSID, secondSID}));
     }
+
 }
 
 Y_UNIT_TEST_SUITE(ResourcePoolClassifiersSysView) {
@@ -1356,6 +1404,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            auto totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
@@ -1375,6 +1425,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
@@ -1394,6 +1446,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -1423,6 +1477,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            auto totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
 
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
@@ -1443,6 +1499,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
@@ -1462,6 +1520,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
     }
@@ -1519,6 +1579,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            auto totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
@@ -1538,6 +1600,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
@@ -1557,6 +1621,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
@@ -1575,6 +1641,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -1604,6 +1672,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            auto totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
@@ -1622,6 +1692,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
@@ -1641,6 +1713,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
@@ -1660,6 +1734,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -1689,6 +1765,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            auto totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -1718,6 +1796,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            auto totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -1767,6 +1847,8 @@ Y_UNIT_TEST_SUITE(DefaultPoolSettings) {
             UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
             auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
             UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            auto totalMemoryLimitPercentPerNode = resultSet.ColumnParser("TotalMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }

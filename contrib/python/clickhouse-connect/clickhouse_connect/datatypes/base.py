@@ -1,18 +1,19 @@
 import array
 import logging
-
 from abc import ABC
+from collections.abc import Collection, MutableSequence, Sequence
 from math import log
-from typing import NamedTuple, Dict, Type, Any, Sequence, MutableSequence, Union, Collection
+from typing import Any, NamedTuple
 
-from clickhouse_connect.driver.common import array_type, int_size, write_array, write_uint64, low_card_version
+from clickhouse_connect.driver import ctypes as driver_ctypes
+from clickhouse_connect.driver import options
+from clickhouse_connect.driver.common import array_type, int_size, low_card_version, write_array, write_uint64
 from clickhouse_connect.driver.context import BaseQueryContext
-from clickhouse_connect.driver.ctypes import numpy_conv, data_conv
+from clickhouse_connect.driver.ctypes import data_conv
 from clickhouse_connect.driver.exceptions import NotSupportedError
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.query import QueryContext
 from clickhouse_connect.driver.types import ByteSource
-from clickhouse_connect.driver.options import np, pd
 
 logger = logging.getLogger(__name__)
 ch_read_formats = {}
@@ -23,30 +24,40 @@ class TypeDef(NamedTuple):
     """
     Immutable tuple that contains all additional information needed to construct a particular ClickHouseType
     """
+
     wrappers: tuple = ()
     keys: tuple = ()
     values: tuple = ()
 
     @property
     def arg_str(self):
-        return f"({', '.join(str(v) for v in self.values)})" if self.values else ''
+        return f"({', '.join(str(v) for v in self.values)})" if self.values else ""
 
 
-class ClickHouseType(ABC):
+class ClickHouseType(ABC):  # noqa: B024
     """
     Base class for all ClickHouseType objects.
     """
-    __slots__ = 'nullable', 'low_card', 'wrappers', 'type_def', '__dict__'
-    _name_suffix = ''
-    encoding = 'utf8'
-    np_type = 'O'  # Default to Numpy Object type
+
+    __slots__ = "nullable", "low_card", "wrappers", "type_def", "__dict__"
+    _name_suffix = ""
+    encoding = "utf8"
+    np_type = "O"  # Default to Numpy Object type
     nano_divisor = 0  # Only relevant for date like objects
-    pd_datetime_res = "ns"  # Default date-like resolution for pd
     byte_size = 0
-    valid_formats = 'native'
+    valid_formats = "native"
 
     python_type = None
     base_type = None
+
+    @property
+    def _null_time_unit(self):
+        """Extract the time unit from np_type, e.g. 'datetime64[s]' -> 's'."""
+        start = self.np_type.find("[")
+        end = self.np_type.find("]")
+        if start != -1 and end != -1:
+            return self.np_type[start + 1 : end]
+        return "ns"
 
     def __init_subclass__(cls, registered: bool = True):
         if registered:
@@ -54,15 +65,15 @@ class ClickHouseType(ABC):
             type_map[cls.base_type] = cls
 
     @classmethod
-    def build(cls: Type['ClickHouseType'], type_def: TypeDef):
+    def build(cls: type["ClickHouseType"], type_def: TypeDef):
         return cls(type_def)
 
     @classmethod
-    def _active_format(cls, fmt_map: Dict[Type['ClickHouseType'], str], ctx: BaseQueryContext):
+    def _active_format(cls, fmt_map: dict[type["ClickHouseType"], str], ctx: BaseQueryContext):
         ctx_fmt = ctx.active_fmt(cls.base_type)
         if ctx_fmt:
             return ctx_fmt
-        return fmt_map.get(cls, 'native')
+        return fmt_map.get(cls, "native")
 
     @classmethod
     def read_format(cls, ctx: BaseQueryContext):
@@ -79,8 +90,8 @@ class ClickHouseType(ABC):
         """
         self.type_def = type_def
         self.wrappers = type_def.wrappers
-        self.low_card = 'LowCardinality' in self.wrappers
-        self.nullable = 'Nullable' in self.wrappers
+        self.low_card = "LowCardinality" in self.wrappers
+        self.nullable = "Nullable" in self.wrappers
 
     def __eq__(self, other):
         return other.__class__ == self.__class__ and self.type_def == other.type_def
@@ -90,9 +101,9 @@ class ClickHouseType(ABC):
 
     @property
     def name(self):
-        name = f'{self.base_type}{self._name_suffix}'
+        name = f"{self.base_type}{self._name_suffix}"
         for wrapper in reversed(self.wrappers):
-            name = f'{wrapper}({name})'
+            name = f"{wrapper}({name})"
         return name
 
     @property
@@ -137,7 +148,7 @@ class ClickHouseType(ABC):
         if self.low_card:
             v = source.read_uint64()
             if v != low_card_version:
-                logger.warning('Unexpected low cardinality version %d reading type %s', v, self.name)
+                logger.warning("Unexpected low cardinality version %d reading type %s", v, self.name)
             return v
         return None
 
@@ -179,11 +190,13 @@ class ClickHouseType(ABC):
     # The binary methods are really abstract, but they aren't implemented for container classes which
     # delegate binary operations to their elements
 
-    # pylint: disable=no-self-use
-    def _read_column_binary(self,
-                            _source: ByteSource,
-                            _num_rows: int, _ctx: QueryContext,
-                            _read_state: Any) -> Union[Sequence, MutableSequence]:
+    def _read_column_binary(
+        self,
+        _source: ByteSource,
+        _num_rows: int,
+        _ctx: QueryContext,
+        _read_state: Any,
+    ) -> Sequence | MutableSequence:
         """
         Lowest level read method for ClickHouseType native data columns
         :param _source: Native protocol binary read buffer
@@ -195,7 +208,7 @@ class ClickHouseType(ABC):
     def _finalize_column(self, column: Sequence, _ctx: QueryContext) -> Sequence:
         return column
 
-    def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
+    def _write_column_binary(self, column: Sequence | MutableSequence, dest: bytearray, ctx: InsertContext):  # noqa: B027
         """
         Lowest level write method for ClickHouseType data columns
         :param column: Python data column
@@ -229,12 +242,11 @@ class ClickHouseType(ABC):
                 dest += bytes([1 if x is None else 0 for x in column])
             self._write_column_binary(column, dest, ctx)
 
-    # pylint: disable=no-member
     def _read_low_card_column(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state: Any):
         if num_rows == 0:
             return []
         key_data = source.read_uint64()
-        key_sz = 2 ** (key_data & 0xff)
+        key_sz = 2 ** (key_data & 0xFF)
         index_cnt = source.read_uint64()
         index = self._read_column_binary(source, index_cnt, ctx, read_state)
         key_cnt = source.read_uint64()
@@ -294,9 +306,9 @@ class ClickHouseType(ABC):
 
 
 EMPTY_TYPE_DEF = TypeDef()
-NULLABLE_TYPE_DEF = TypeDef(wrappers=('Nullable',))
-LC_TYPE_DEF = TypeDef(wrappers=('LowCardinality',))
-type_map: Dict[str, Type[ClickHouseType]] = {}
+NULLABLE_TYPE_DEF = TypeDef(wrappers=("Nullable",))
+LC_TYPE_DEF = TypeDef(wrappers=("LowCardinality",))
+type_map: dict[str, type[ClickHouseType]] = {}
 
 
 class ArrayType(ClickHouseType, ABC, registered=False):
@@ -305,23 +317,24 @@ class ArrayType(ClickHouseType, ABC, registered=False):
     arrays can only be used for ClickHouse types that can be translated into UInt64 (and smaller) integers
     or Float32/64
     """
+
     _signed = True
     _array_type = None
     _struct_type = None
-    valid_formats = 'string', 'native'
+    valid_formats = "string", "native"
     python_type = int
 
     def __init_subclass__(cls, registered: bool = True):
         super().__init_subclass__(registered)
-        if cls._array_type in ('i', 'I') and int_size == 2:
-            cls._array_type = 'L' if cls._array_type.isupper() else 'l'
+        if cls._array_type in ("i", "I") and int_size == 2:
+            cls._array_type = "L" if cls._array_type.isupper() else "l"
         if isinstance(cls._array_type, str) and cls._array_type:
-            cls._struct_type = '<' + cls._array_type
+            cls._struct_type = "<" + cls._array_type
             cls.byte_size = array.array(cls._array_type).itemsize
 
     def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         if ctx.use_numpy:
-            return numpy_conv.read_numpy_array(source, self.np_type, num_rows)
+            return driver_ctypes.numpy_conv.read_numpy_array(source, self.np_type, num_rows)
         return source.read_array(self._array_type, num_rows)
 
     def _read_nullable_column(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any) -> Sequence:
@@ -329,26 +342,26 @@ class ArrayType(ClickHouseType, ABC, registered=False):
 
     def _build_lc_column(self, index: Sequence, keys: array.array, ctx: QueryContext):
         if ctx.use_numpy:
-            return np.fromiter((index[key] for key in keys), dtype=index.dtype, count=len(index))
+            return options.np.fromiter((index[key] for key in keys), dtype=index.dtype, count=len(index))
         return super()._build_lc_column(index, keys, ctx)
 
     def _finalize_column(self, column: Sequence, ctx: QueryContext) -> Sequence:
-        if self.read_format(ctx) == 'string':
+        if self.read_format(ctx) == "string":
             return [str(x) for x in column]
         if ctx.use_extended_dtypes and self.nullable:
-            return pd.array(column, dtype=self.base_type)
+            return options.pd.array(column, dtype=self.base_type)
         if ctx.use_numpy and self.nullable and (not ctx.use_none):
-            return np.array(column, dtype=self.np_type)
+            return options.np.array(column, dtype=self.np_type)
         return column
 
-    def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
+    def _write_column_binary(self, column: Sequence | MutableSequence, dest: bytearray, ctx: InsertContext):
         if len(column) and self.nullable:
             column = [0 if x is None else x for x in column]
         write_array(self._array_type, column, dest, ctx.column_name)
 
     def _active_null(self, ctx: QueryContext):
         if ctx.as_pandas and ctx.use_extended_dtypes:
-            return pd.NA
+            return options.pd.NA
         if ctx.use_none:
             return None
         return 0
@@ -359,12 +372,13 @@ class UnsupportedType(ClickHouseType, ABC, registered=False):
     Base class for ClickHouse types that can't be serialized/deserialized into Python types.
     Mostly useful just for DDL statements
     """
+
     def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
         self._name_suffix = type_def.arg_str
 
     def _read_column_binary(self, source: Sequence, num_rows: int, ctx: QueryContext, read_state: Any):
-        raise NotSupportedError(f'{self.name} deserialization not supported')
+        raise NotSupportedError(f"{self.name} deserialization not supported")
 
-    def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
-        raise NotSupportedError(f'{self.name} serialization  not supported')
+    def _write_column_binary(self, column: Sequence | MutableSequence, dest: bytearray, ctx: InsertContext):
+        raise NotSupportedError(f"{self.name} serialization  not supported")

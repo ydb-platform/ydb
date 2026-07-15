@@ -44,7 +44,7 @@ namespace NYql {
 
 namespace {
 
-constexpr char ComponentName[] = "file_storage";
+constexpr const char* ComponentName = "file_storage";
 
 class TFileLockGuard {
 public:
@@ -64,7 +64,7 @@ private:
 class TFileStorageImpl: public IFileStorage {
 public:
     explicit TFileStorageImpl(const TFileStorageConfig& params, const std::vector<NFS::IDownloaderPtr>& downloaders)
-        : Storage_(params.GetMaxFiles(), ui64(params.GetMaxSizeMb()) << 20ull, params.GetPath())
+        : Storage_(params.GetMaxFiles(), ui64(params.GetMaxSizeMb()) << 20ULL, params.GetPath())
         , Config_(params)
         , UseFakeChecksums_(GetEnv("YQL_LOCAL") == "1")
     {

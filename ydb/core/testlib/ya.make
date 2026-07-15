@@ -24,6 +24,7 @@ SRCS(
 
 PEERDIR(
     ydb/apps/version
+    ydb/core/audit/audit_config
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/public/sdk/cpp/src/library/grpc/client
@@ -52,9 +53,10 @@ PEERDIR(
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
+    ydb/core/test_tablet
     ydb/core/kqp
     ydb/core/kqp/federated_query
-    ydb/core/kqp/federated_query/actors
+    ydb/services/scheme_secret
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/proxy_service
     ydb/core/metering
@@ -64,6 +66,7 @@ PEERDIR(
     ydb/core/mind/hive
     ydb/core/node_whiteboard
     ydb/core/persqueue
+    ydb/core/persqueue/deferred_publish
     ydb/core/protos
     ydb/core/security
     ydb/core/security/ldap_auth_provider
@@ -88,6 +91,7 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/security
     yql/essentials/minikql/comp_nodes/llvm16
+    ydb/library/yql/providers/pq/gateway/dummy
     ydb/library/yql/providers/s3/actors_factory
     yt/yql/providers/yt/codec/codegen
     yt/yql/providers/yt/comp_nodes/llvm16
@@ -104,7 +108,6 @@ PEERDIR(
     ydb/services/cms
     ydb/services/datastreams
     ydb/services/discovery
-    ydb/services/ext_index/service
     ydb/services/ymq
     ydb/core/tx/conveyor/service
     ydb/core/tx/priorities/service
@@ -137,5 +140,6 @@ RECURSE(
     actors
     basics
     default
+    grpc_request
     pg
 )

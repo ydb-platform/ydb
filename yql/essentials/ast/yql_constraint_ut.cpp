@@ -77,8 +77,8 @@ Y_UNIT_TEST(SerializeEmpty) {
 Y_UNIT_TEST(SerializeVarIndex) {
     TExprContext ctx;
     auto c = ctx.MakeConstraint<TVarIndexConstraintNode>(TVarIndexConstraintNode::TMapType{
-        std::pair{1u, 3u},
-        std::pair{0u, 1u},
+        std::pair{1U, 3U},
+        std::pair{0U, 1U},
     });
     auto yson = c->ToYson();
     UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), R"([[0u;1u];[1u;3u]])");
@@ -110,13 +110,13 @@ Y_UNIT_TEST(SerializeMulti) {
         }));
     s2.AddConstraint(
         ctx.MakeConstraint<TVarIndexConstraintNode>(TVarIndexConstraintNode::TMapType{
-            std::pair{0u, 1u},
-            std::pair{1u, 2u},
+            std::pair{0U, 1U},
+            std::pair{1U, 2U},
         }));
 
     auto c = ctx.MakeConstraint<TMultiConstraintNode>(TMultiConstraintNode::TMapType{
-        std::pair{0u, s1},
-        std::pair{1u, s2},
+        std::pair{0U, s1},
+        std::pair{1U, s2},
     });
     auto yson = c->ToYson();
     UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(yson), R"([[0u;{"Empty"=#;"Sorted"=[[["a"];%true];[["b"];%false]]}];[1u;{"Unique"=[["a";"b"];["c";["d";"e"]]];"VarIndex"=[[0u;1u];[1u;2u]]}]])");
@@ -146,20 +146,20 @@ Y_UNIT_TEST(SerializeConstrainSet) {
         }));
     s.AddConstraint(
         ctx.MakeConstraint<TVarIndexConstraintNode>(TVarIndexConstraintNode::TMapType{
-            std::pair{0u, 1u},
-            std::pair{1u, 2u},
+            std::pair{0U, 1U},
+            std::pair{1U, 2U},
         }));
     s.AddConstraint(
         ctx.MakeConstraint<TVarIndexConstraintNode>(TVarIndexConstraintNode::TMapType{
-            std::pair{0u, 1u},
-            std::pair{1u, 2u},
+            std::pair{0U, 1U},
+            std::pair{1U, 2U},
         }));
 
     TConstraintSet inner;
     inner.AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
     s.AddConstraint(
         ctx.MakeConstraint<TMultiConstraintNode>(TMultiConstraintNode::TMapType{
-            std::pair{0u, inner},
+            std::pair{0U, inner},
         }));
 
     auto yson = s.ToYson();

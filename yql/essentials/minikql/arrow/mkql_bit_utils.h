@@ -14,7 +14,7 @@ inline ui64 SaturationSub(ui64 x, ui64 y) {
 
 inline ui8 LoadByteUnaligned(const ui8* bitmap, size_t bitmapOffset) {
     size_t byteOffset = bitmapOffset >> 3;
-    ui8 bit = ui8(bitmapOffset & 7u);
+    ui8 bit = ui8(bitmapOffset & 7U);
 
     ui8 first = bitmap[byteOffset];
     // extend to ui32 to avoid left UB in case of left shift of byte by 8 bit
@@ -42,7 +42,10 @@ inline ui8 CompressByte(ui8 x, ui8 m) {
     // MASKED VALUES:    --10--1-
     // RESULT:           00000101
     // TODO: should be replaced by PEXT instruction from BMI2 instruction set
-    ui8 mk, mp, mv, t;
+    ui8 mk;
+    ui8 mp;
+    ui8 mv;
+    ui8 t;
     x = x & m;    // Clear irrelevant bits.
     mk = ~m << 1; // We will count 0's to right.
     for (ui8 i = 0; i < 3; i++) {
@@ -59,7 +62,8 @@ inline ui8 CompressByte(ui8 x, ui8 m) {
 }
 
 inline ui8 PopCountByte(ui8 value) {
-    static constexpr uint8_t BytePopCounts[] = {
+    // clang-format off
+    static constexpr auto BytePopCounts = std::to_array<uint8_t>({
         0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3,
         4, 4, 5, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4,
         4, 5, 4, 5, 5, 6, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 2, 3, 3, 4, 3, 4, 4,
@@ -68,7 +72,8 @@ inline ui8 PopCountByte(ui8 value) {
         3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4, 5, 4, 5,
         5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 2, 3, 3, 4, 3, 4, 4, 5, 3, 4, 4,
         5, 4, 5, 5, 6, 3, 4, 4, 5, 4, 5, 5, 6, 4, 5, 5, 6, 5, 6, 6, 7, 3, 4, 4, 5, 4, 5, 5, 6,
-        4, 5, 5, 6, 5, 6, 6, 7, 4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8};
+        4, 5, 5, 6, 5, 6, 6, 7, 4, 5, 5, 6, 5, 6, 6, 7, 5, 6, 6, 7, 6, 7, 7, 8});
+    // clang-format on
     return BytePopCounts[value];
 }
 
@@ -121,14 +126,14 @@ inline size_t CompressBitmap(const ui8* src, size_t srcOffset,
     //       2) 64 bit processing (instead of 8)
     ui8* target = dst + (dstOffset >> 3);
     ui8 state = *target;
-    ui8 stateBits = dstOffset & 7u;
-    state &= (ui32(1) << stateBits) - 1u;
+    ui8 stateBits = dstOffset & 7U;
+    state &= (ui32(1) << stateBits) - 1U;
     while (count) {
         ui8 srcByte = LoadByteUnaligned(src, srcOffset);
         ui8 bitmapByte = LoadByteUnaligned(bitmap, bitmapOffset);
 
         // zero all bits outside of input range
-        bitmapByte &= ui8(0xff) >> ui8(SaturationSub(8u, count));
+        bitmapByte &= ui8(0xff) >> ui8(SaturationSub(8U, count));
 
         ui8 compressed = CompressByte(srcByte, bitmapByte);
         ui8 compressedBits = PopCountByte(bitmapByte);
@@ -147,7 +152,7 @@ inline size_t CompressBitmap(const ui8* src, size_t srcOffset,
         dstOffset += compressedBits;
         srcOffset += 8;
         bitmapOffset += 8;
-        count = SaturationSub(count, 8u);
+        count = SaturationSub(count, 8U);
     }
     *target = state;
     return dstOffset;

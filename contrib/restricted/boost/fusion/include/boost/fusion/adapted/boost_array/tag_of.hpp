@@ -5,7 +5,7 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying 
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#if !defined(FUSION_SEQUENCE_TAG_OF_27122005_1030)
+#ifndef FUSION_SEQUENCE_TAG_OF_27122005_1030
 #define FUSION_SEQUENCE_TAG_OF_27122005_1030
 
 #include <boost/fusion/support/config.hpp>

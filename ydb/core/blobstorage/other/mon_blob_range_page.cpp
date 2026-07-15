@@ -79,7 +79,8 @@ namespace {
             }
 
             const ui64 cookie = ++LastCookie;
-            auto query = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to, mustRestoreFirst, TInstant::Max(), true);
+            auto query = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to, mustRestoreFirst,
+                TActivationContext::Now() + TDuration::Seconds(10), true);
             SendToBSProxy(SelfId(), groupId, query.release(), cookie);
             RequestsInFlight[cookie] = {ev->Sender, ev->Cookie, ev->Get()->SubRequestId, json};
         }

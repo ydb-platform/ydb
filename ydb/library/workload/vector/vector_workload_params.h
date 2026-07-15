@@ -30,12 +30,23 @@ public:
     void ConfigureIndexOpts(NLastGetopt::TOpts& opts);
 
     TVector<TString> GetColumns() const;
+    TString GetDistanceDDL() const;
 
     NVector::TTableOpts TableOpts;
     NVector::TTablePartitioningOpts TablePartitioningOpts;
     NVector::TVectorOpts VectorOpts;
 
     TString IndexName = "index";
+
+    TString IndexType = "KmeansTree";
+    bool KmeansTreeCovering = false;
+    bool KmeansTreePrefixed = false;
+
+    size_t UpsertBulkSize = 100;
+    bool UpsertPrefixed = false;
+    size_t UpsertPrefixCount = 1000;
+
+    int RunWorkloadType = -1;
 
     TString QueryTableName;
     std::vector<std::string> KeyColumns;

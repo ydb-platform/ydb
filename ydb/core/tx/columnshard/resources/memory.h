@@ -1,8 +1,9 @@
 #pragma once
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/library/signals/object_counter.h>
 #include <ydb/library/signals/owner.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/library/actors/core/log.h>
+
 #include <util/system/mutex.h>
 
 namespace NKikimr::NOlap {
@@ -13,9 +14,11 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr DeriviativeAddInFlightBytes;
     NMonitoring::TDynamicCounters::TCounterPtr DeriviativeRemoveInFlightBytes;
     std::shared_ptr<NColumnShard::TValueAggregationClient> InFlightBytes;
+
 public:
     TMemoryAggregation(const TString& moduleId, const TString& signalId)
-        : TBase(moduleId) {
+        : TBase(moduleId)
+    {
         DeriviativeAddInFlightBytes = TBase::GetDeriviative(signalId + "/Add/Bytes");
         DeriviativeRemoveInFlightBytes = TBase::GetDeriviative(signalId + "/Remove/Bytes");
         InFlightBytes = TBase::GetValueAutoAggregationsClient(signalId + "/Bytes");
@@ -43,6 +46,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr DeriviativeWaitingStart;
     NMonitoring::TDynamicCounters::TCounterPtr DeriviativeWaitingFinish;
     NMonitoring::TDynamicCounters::TCounterPtr CurrentInWaiting;
+
 public:
     TScanMemoryCounter(const TString& limitName, const ui64 memoryLimit);
 
@@ -76,25 +80,32 @@ public:
     const TString LimiterName;
     const i64 AvailableMemoryLimit;
     class IMemoryAccessor;
+
     class TGuard: TNonCopyable {
     private:
         TAtomicCounter Value = 0;
         std::shared_ptr<IMemoryAccessor> MemoryAccessor;
         std::shared_ptr<TMemoryAggregation> MemorySignals;
+
     public:
         TGuard(std::shared_ptr<IMemoryAccessor> accesor, std::shared_ptr<TMemoryAggregation> memorySignals = nullptr)
             : MemoryAccessor(accesor)
-            , MemorySignals(memorySignals) {
+            , MemorySignals(memorySignals)
+        {
         }
+
         ~TGuard() {
             FreeAll();
         }
+
         i64 GetValue() const {
             return Value.Val();
         }
+
         void FreeAll();
         void Free(const ui64 size);
         void Take(const ui64 size);
+
         std::shared_ptr<TGuard> MakeSame() const {
             return std::make_shared<TGuard>(MemoryAccessor, MemorySignals);
         }
@@ -105,18 +116,21 @@ public:
         TAtomicCounter InWaitingFlag = 0;
         std::shared_ptr<TScanMemoryLimiter> Owner;
         friend class TScanMemoryLimiter;
+
         void StartWaiting() {
             Y_ABORT_UNLESS(InWaitingFlag.Val() == 0);
             InWaitingFlag = 1;
         }
+
     protected:
         virtual void DoOnBufferReady() = 0;
+
     public:
         using TPtr = std::shared_ptr<IMemoryAccessor>;
+
         IMemoryAccessor(std::shared_ptr<TScanMemoryLimiter> owner)
             : Owner(owner)
         {
-
         }
 
         bool HasBuffer() {
@@ -128,6 +142,7 @@ public:
         }
 
         virtual ~IMemoryAccessor() = default;
+
         void Take(const ui64 size) const {
             Owner->Take(size);
         }
@@ -158,6 +173,7 @@ private:
 
     void Free(const ui64 size);
     void Take(const ui64 size);
+
 public:
     TScanMemoryLimiter(const TString& limiterName, const ui64 memoryLimit)
         : LimiterName(limiterName)
@@ -165,8 +181,8 @@ public:
         , AvailableMemory(memoryLimit)
         , Counters("MemoryLimiters/" + limiterName, memoryLimit)
     {
-
     }
+
     bool HasBufferOrSubscribe(std::shared_ptr<IMemoryAccessor> accessor);
 };
 
@@ -176,6 +192,7 @@ private:
     // limiter by limit name
     THashMap<TString, std::shared_ptr<TScanMemoryLimiter>> Limiters;
     static const inline ui64 StandartLimit = (ui64)1 * 1024 * 1024 * 1024;
+
     std::shared_ptr<TScanMemoryLimiter> GetLimiterImpl(const TString& name) {
         TReadGuard rg(Mutex);
         auto it = Limiters.find(name);
@@ -192,11 +209,11 @@ private:
             return it->second;
         }
     }
+
 public:
     static std::shared_ptr<TScanMemoryLimiter> GetLimiter(const TString& name) {
         return Singleton<TMemoryLimitersController>()->GetLimiterImpl(name);
     }
-
 };
 
-}
+}   // namespace NKikimr::NOlap

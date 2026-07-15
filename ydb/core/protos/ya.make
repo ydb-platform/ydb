@@ -15,6 +15,7 @@ SRCS(
     backup.proto
     base.proto
     bind_channel_storage_pool.proto
+    blob_checker.proto
     blob_depot.proto
     blob_depot_config.proto
     blobstorage.proto
@@ -54,6 +55,7 @@ SRCS(
     counters_columnshard.proto
     counters_coordinator.proto
     counters_datashard.proto
+    counters_detailed_datashard.proto
     counters_hive.proto
     counters_info.proto
     counters_kesus.proto
@@ -70,6 +72,7 @@ SRCS(
     counters_tx_allocator.proto
     counters_tx_proxy.proto
     data_events.proto
+    data_format_settings.proto
     data_integrity_trails.proto
     database_basic_sausage_metainfo.proto
     datashard_backup.proto
@@ -82,6 +85,7 @@ SRCS(
     feature_flags.proto
     filestore_config.proto
     flat_scheme_op.proto
+    analyze_operation.proto
     flat_tx_scheme.proto
     follower_group.proto
     forced_compaction.proto
@@ -105,11 +109,13 @@ SRCS(
     labeled_counters.proto
     load_test.proto
     local.proto
+    long_tx_service_config.proto
     long_tx_service.proto
     maintenance.proto
     memory_controller_config.proto
     memory_stats.proto
     metrics.proto
+    metrics_config.proto
     minikql_engine.proto
     mon.proto
     msgbus.proto
@@ -122,6 +128,10 @@ SRCS(
     node_whiteboard.proto
     pdiskfit.proto
     pqconfig.proto
+    pqdata_deferred_publish_destination.proto
+    pqdata_mlp.proto
+    pqdata_transaction.proto
+    pqevents_global.proto
     profiler.proto
     query_stats.proto
     recoveryshard_config.proto
@@ -135,6 +145,7 @@ SRCS(
     scheme_type_operation.proto
     schemeshard_config.proto
     serverless_proxy_config.proto
+    set_column_constraint.proto
     shared_cache.proto
     sqs.proto
     statestorage.proto
@@ -155,6 +166,7 @@ SRCS(
     tenant_pool.proto
     tenant_slot_broker.proto
     test_shard.proto
+    test_shard_control.proto
     tracing.proto
     tx.proto
     tx_columnshard.proto
@@ -179,11 +191,11 @@ PEERDIR(
     ydb/core/config/protos
     ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos
     ydb/core/fq/libs/config/protos
+    ydb/core/nbs/cloud/blockstore/config/protos
     ydb/core/protos/nbs
     ydb/core/protos/schemeshard
     ydb/core/scheme/protos
     ydb/core/tx/columnshard/common/protos
-    ydb/core/tx/columnshard/engines/protos
     ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/library/actors/protos
     ydb/library/formats/arrow/protos
@@ -196,7 +208,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/api/protos/annotations
     yql/essentials/core/file_storage/proto
-    yql/essentials/core/issue/protos
+    yql/essentials/public/issue/protos
     yql/essentials/providers/common/proto
     yql/essentials/public/issue/protos
     yql/essentials/public/types

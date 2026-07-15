@@ -33,7 +33,8 @@ public:
     TFormatResult Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TTableDescription& tableDesc, bool temporary,
         const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues,
         const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences);
-    TFormatResult Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TColumnTableDescription& tableDesc, bool temporary);
+    TFormatResult Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TColumnTableDescription& tableDesc, bool temporary,
+        bool enableLocalIndexAsSchemeObject = false);
 
 private:
     void Format(const NKikimrSchemeOp::TColumnDescription& columnDesc);
@@ -46,6 +47,8 @@ private:
     void FormatIndexImplTable(const TString& tablePath, const TString& indexName, const NKikimrSchemeOp::TTableDescription& indexImplDesc);
 
     void Format(const Ydb::Table::TableIndex& index);
+    void Format(const Ydb::Table::TableMultiColumnStatistics& statistics);
+    void Format(const NKikimrSchemeOp::TMultiColumnStatisticsDescription& statistics);
     bool Format(const Ydb::Table::ExplicitPartitions& explicitPartitions, TString& del, bool needWith);
     bool Format(const Ydb::Table::ReadReplicasSettings& readReplicasSettings, TString& del, bool needWith);
     bool Format(const Ydb::Table::TtlSettings& ttlSettings, TString& del, bool needWith);
@@ -57,9 +60,19 @@ private:
     void Format(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings);
 
     void FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc);
-    void FormatUpsertIndex(const TString& fullPath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
-        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
+    void FormatUpsertIndex(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns, bool enableLocalIndexAsSchemeObject = false);
     void FormatUpsertOptions(const TString& fullPath, const NKikimrSchemeOp::TColumnTableSchemeOptions& options);
+    void FormatLocalBloomFilterIndex(const TString& tablePath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
+    void FormatLocalBloomNgramFilterIndex(const TString& tablePath, const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
+    void FormatLocalBloomFilterIndexInline(const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
+    void FormatLocalBloomNgramFilterIndexInline(const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
+    void FormatLocalMinMaxIndexInline(const NKikimrSchemeOp::TOlapIndexDescription& indexDesc,
+        const std::map<ui32, const NKikimrSchemeOp::TOlapColumnDescription*>& columns);
 
     void Format(const Ydb::TypedValue& value, bool isPartition = false);
     void FormatValue(NYdb::TValueParser& parser, bool isPartition = false, TString del = "");

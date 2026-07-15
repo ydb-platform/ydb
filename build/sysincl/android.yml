@@ -11,6 +11,8 @@
   - android/native_window_jni.h
   - android/ndk-version.h
   - android/set_abort_message.h
+  - android/sharedmem.h
+  - android/sharedmem_jni.h
   - cpu-features.h: contrib/libs/android_cpufeatures/cpu-features.h
   - jni.h
   - EGL/egl.h
@@ -19,8 +21,10 @@
   - GLES/glext.h
   - GLES2/gl2.h
   - GLES2/gl2ext.h
+  - GLES3/gl3.h
   - GLES3/gl31.h
   - GLES3/gl32.h
+  - GLES3/gl3ext.h
   - SLES/OpenSLES.h
   - SLES/OpenSLES_Android.h
   - SLES/OpenSLES_AndroidConfiguration.h

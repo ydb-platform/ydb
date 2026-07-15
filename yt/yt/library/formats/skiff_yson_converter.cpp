@@ -13,6 +13,8 @@
 #include <library/cpp/skiff/skiff.h>
 #include <library/cpp/skiff/skiff_schema.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/zerocopy.h>
 #include <util/stream/mem.h>
 
@@ -76,7 +78,7 @@ std::shared_ptr<TSkiffSchema> GetOptionalChild(const std::shared_ptr<TSkiffSchem
 
 struct TSkiffStructField
 {
-    TString Name;
+    std::string Name;
     std::shared_ptr<TSkiffSchema> Type;
 };
 
@@ -151,7 +153,7 @@ template <typename... TArgs>
     const std::vector<EYsonItemType>& expected,
     const EYsonItemType actual)
 {
-    TStringStream expectationString;
+    TStdStringStream expectationString;
     if (expected.size() > 1) {
         expectationString << "one of ";
         bool first = true;
@@ -316,7 +318,7 @@ std::vector<std::optional<TTypePair>> MatchStructTypes(
             ThrowBadWireType(EWireType::Tuple, skiffSchema->GetWireType());
         }
 
-        THashMap<TString, int> skiffNameToIndex;
+        THashMap<std::string, int> skiffNameToIndex;
         std::vector<TSkiffStructField> skiffFields;
         {
             const auto& children = skiffSchema->GetChildren();
@@ -555,7 +557,7 @@ public:
         if constexpr (wireType == EWireType::Yson32) {
             TmpString_.clear();
             {
-                TStringOutput output(TmpString_);
+                TStdStringOutput output(TmpString_);
                 TBufferedBinaryYsonWriter ysonWriter(&output);
                 cursor->TransferComplexValue(&ysonWriter);
                 ysonWriter.Flush();
@@ -617,7 +619,7 @@ public:
 
 private:
     TComplexTypeFieldDescriptor Descriptor_;
-    TString TmpString_;
+    std::string TmpString_;
 };
 
 template <EYsonItemType ExpectedTokenType, typename TFunction>
@@ -2036,7 +2038,7 @@ void CheckTzType(const std::shared_ptr<TSkiffSchema>& skiffSchema, ESimpleLogica
         THROW_ERROR_EXCEPTION("Tuple is expected to have two fields for the TzType representation");
     }
     const auto innerTimeType = children[0]->GetWireType();
-    const auto innerTimezoneType = children[1]->GetWireType() ;
+    const auto innerTimezoneType = children[1]->GetWireType();
     if (innerTimezoneType != EWireType::Uint16) {
         THROW_ERROR_EXCEPTION("The second field in the tuple is expected to be \"uint16\"");
     }

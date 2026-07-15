@@ -17,6 +17,8 @@
 
 #include <yt/yt/core/yson/async_writer.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 namespace NYT::NDriver {
 
 using namespace NYPath;
@@ -112,7 +114,7 @@ void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
     }
     auto features = meta.Features;
     for (auto staticFeature : StaticFeatures) {
-        features->AddChild(TString(staticFeature.first), BuildYsonNodeFluently().Value(staticFeature.second));
+        features->AddChild(staticFeature.first, BuildYsonNodeFluently().Value(staticFeature.second));
     }
     features->AddChild(
         "flow_pipelines",
@@ -409,8 +411,8 @@ private:
     TStringInput SyncInput_;
     IAsyncZeroCopyInputStreamPtr AsyncInput_;
 
-    TString Output_;
-    TStringOutput SyncOutput_;
+    std::string Output_;
+    TStdStringOutput SyncOutput_;
     IFlushableAsyncOutputStreamPtr AsyncOutput_;
 
     TYsonString OnResponse(const TError& error)
@@ -540,6 +542,33 @@ void TBalanceTabletCellsCommand::DoExecute(ICommandContextPtr context)
     auto tabletActions = WaitFor(asyncResult)
         .ValueOrThrow();
     context->ProduceOutputValue(BuildYsonStringFluently().List(tabletActions));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TCheckClusterLivenessCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("check_cypress_root", &TThis::CheckCypressRoot)
+        .Default(false);
+    registrar.Parameter("check_secondary_master_cells", &TThis::CheckSecondaryMasterCells)
+        .Default(false);
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "check_tablet_cell_bundle",
+        [] (TThis* command) -> auto& {
+            return command->Options.CheckTabletCellBundle;
+        })
+        .Optional(/*init*/ false);
+}
+
+void TCheckClusterLivenessCommand::DoExecute(ICommandContextPtr context)
+{
+    Options.CheckCypressRoot = CheckCypressRoot;
+    Options.CheckSecondaryMasterCells = CheckSecondaryMasterCells;
+
+    WaitFor(context->GetClient()->CheckClusterLiveness(Options))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

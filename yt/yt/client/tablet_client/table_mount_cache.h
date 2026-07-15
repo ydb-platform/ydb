@@ -1,6 +1,7 @@
 #pragma once
 
 #include "public.h"
+#include "index_info.h"
 
 #include <yt/yt/client/hive/public.h>
 
@@ -34,6 +35,9 @@ struct TTabletInfo final
 {
     TTabletId TabletId;
     NHydra::TRevision MountRevision = NHydra::NullRevision;
+    // Unchanged logical mount revision guarantees that other important fields
+    // of the tablet (e.g. schema) did not change. Still, cell id could change.
+    NHydra::TRevision LogicalMountRevision = NHydra::NullRevision;
     ETabletState State;
     EInMemoryMode InMemoryMode;
     NTableClient::TLegacyOwningKey PivotKey;
@@ -59,26 +63,6 @@ struct TTableReplicaInfo final
 };
 
 DEFINE_REFCOUNTED_TYPE(TTableReplicaInfo)
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TUnfoldedColumns
-{
-    std::string TableColumn;
-    std::string IndexColumn;
-
-    void Persist(const TStreamPersistenceContext& context);
-};
-
-struct TIndexInfo
-{
-    NObjectClient::TObjectId TableId;
-    ESecondaryIndexKind Kind;
-    std::optional<std::string> Predicate;
-    std::optional<TUnfoldedColumns> UnfoldedColumns;
-    ETableToIndexCorrespondence Correspondence;
-    NTableClient::TTableSchemaPtr EvaluatedColumnsSchema;
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -155,14 +139,15 @@ struct TTableMountInfo final
     bool IsChaosReplica() const;
     bool IsHunkStorage() const;
 
-    TTabletInfoPtr GetTabletByIndexOrThrow(int tabletIndex) const;
+    TTabletInfoPtr GetTabletByIndexOrThrow(i64 tabletIndex) const;
     int GetTabletIndexForKey(NTableClient::TUnversionedValueRange key) const;
     int GetTabletIndexForKey(NTableClient::TLegacyKey key) const;
     TTabletInfoPtr GetTabletForKey(NTableClient::TUnversionedValueRange key) const;
     TTabletInfoPtr GetTabletForRow(NTableClient::TUnversionedRow row) const;
     TTabletInfoPtr GetTabletForRow(NTableClient::TVersionedRow row) const;
-    int GetRandomMountedTabletIndex() const;
-    TTabletInfoPtr GetRandomMountedTablet() const;
+    //! Returns error in case no mounted tablets are present. It may be used for cache invalidation.
+    TErrorOr<TTabletInfoPtr> GetRandomMountedTablet() const;
+    TTabletInfoPtr FindTabletById(TTabletId id) const;
 
     void ValidateTabletOwner() const;
     void ValidateDynamic() const;
@@ -231,6 +216,7 @@ struct TTabletRedirectionHint
 struct ITableMountCache
     : public virtual TRefCounted
 {
+    //! May throw if another client requested this entry first and the result is not ready yet.
     virtual TFuture<TTableMountInfoPtr> GetTableInfo(const NYPath::TYPath& path) = 0;
 
     //! Invalidates cached table info for all table infos owning this tablet.
@@ -254,7 +240,8 @@ struct ITableMountCache
     //! case |TableInfoUpdatedFromError| flag will be set.
     virtual TInvalidationResult InvalidateOnError(
         const TError& error,
-        bool forceRetry) = 0;
+        bool forceRetry,
+        TTabletId tabletIdHint = {}) = 0;
 
     virtual void Clear() = 0;
 

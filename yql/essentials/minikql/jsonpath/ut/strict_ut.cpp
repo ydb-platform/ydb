@@ -16,56 +16,64 @@ public:
 
     void TestRuntimeErrors() {
         const TVector<TRuntimeErrorTestCase> testCases = {
-            {R"([
+            {.Json = R"([
                 {"key": 1},
                 {"key": 2}
             ])",
-             "$.key", C(TIssuesIds::JSONPATH_EXPECTED_OBJECT)},
-            {R"([
+             .JsonPath = "$.key",
+             .Error = C(TIssuesIds::JSONPATH_EXPECTED_OBJECT)},
+            {.Json = R"([
                 {"key": 1},
                 {"key": 2}
             ])",
-             "$.*", C(TIssuesIds::JSONPATH_EXPECTED_OBJECT)},
-            {R"({
+             .JsonPath = "$.*",
+             .Error = C(TIssuesIds::JSONPATH_EXPECTED_OBJECT)},
+            {.Json = R"({
                 "first": {"key": 1},
                 "second": []
             })",
-             "$.*.key", C(TIssuesIds::JSONPATH_EXPECTED_OBJECT)},
-            {R"({
+             .JsonPath = "$.*.key",
+             .Error = C(TIssuesIds::JSONPATH_EXPECTED_OBJECT)},
+            {.Json = R"({
                 "first": {"key": 1},
                 "second": []
             })",
-             "$.*.*", C(TIssuesIds::JSONPATH_EXPECTED_OBJECT)},
-            {R"({"another_key": 123})", "$.key", C(TIssuesIds::JSONPATH_MEMBER_NOT_FOUND)},
-            {R"([1, 2])", "$[*][0]", C(TIssuesIds::JSONPATH_EXPECTED_ARRAY)},
-            {R"([[1], 2, [3]])", "$[*][0]", C(TIssuesIds::JSONPATH_EXPECTED_ARRAY)},
-            {R"({
+             .JsonPath = "$.*.*",
+             .Error = C(TIssuesIds::JSONPATH_EXPECTED_OBJECT)},
+            {.Json = R"({"another_key": 123})", .JsonPath = "$.key", .Error = C(TIssuesIds::JSONPATH_MEMBER_NOT_FOUND)},
+            {.Json = R"([1, 2])", .JsonPath = "$[*][0]", .Error = C(TIssuesIds::JSONPATH_EXPECTED_ARRAY)},
+            {.Json = R"([[1], 2, [3]])", .JsonPath = "$[*][0]", .Error = C(TIssuesIds::JSONPATH_EXPECTED_ARRAY)},
+            {.Json = R"({
                 "idx": -1,
                 "array": [1, 2, 3]
             })",
-             "$.array[$.idx]", C(TIssuesIds::JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS)},
-            {R"({
+             .JsonPath = "$.array[$.idx]",
+             .Error = C(TIssuesIds::JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS)},
+            {.Json = R"({
                 "from": -1,
                 "to": 3,
                 "array": [1, 2, 3]
             })",
-             "$.array[$.from to $.to]", C(TIssuesIds::JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS)},
-            {R"({
+             .JsonPath = "$.array[$.from to $.to]",
+             .Error = C(TIssuesIds::JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS)},
+            {.Json = R"({
                 "from": 0,
                 "to": -1,
                 "array": [1, 2, 3]
             })",
-             "$.array[$.from to $.to]", C(TIssuesIds::JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS)},
-            {R"({
+             .JsonPath = "$.array[$.from to $.to]",
+             .Error = C(TIssuesIds::JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS)},
+            {.Json = R"({
                 "from": -20,
                 "to": -10,
                 "array": [1, 2, 3]
             })",
-             "$.array[$.from to $.to]", C(TIssuesIds::JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS)},
-            {R"([1, 2, 3, 4, 5])", "$[3 to 0]", C(TIssuesIds::JSONPATH_INVALID_ARRAY_INDEX_RANGE)},
-            {R"([[1, 2], [3, 4, 5], []])", "$[*][2]", C(TIssuesIds::JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS)},
-            {"[]", "$[last]", C(TIssuesIds::JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS)},
-            {"[]", "$[last to 0]", C(TIssuesIds::JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS)},
+             .JsonPath = "$.array[$.from to $.to]",
+             .Error = C(TIssuesIds::JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS)},
+            {.Json = R"([1, 2, 3, 4, 5])", .JsonPath = "$[3 to 0]", .Error = C(TIssuesIds::JSONPATH_INVALID_ARRAY_INDEX_RANGE)},
+            {.Json = R"([[1, 2], [3, 4, 5], []])", .JsonPath = "$[*][2]", .Error = C(TIssuesIds::JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS)},
+            {.Json = "[]", .JsonPath = "$[last]", .Error = C(TIssuesIds::JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS)},
+            {.Json = "[]", .JsonPath = "$[last to 0]", .Error = C(TIssuesIds::JSONPATH_ARRAY_INDEX_OUT_OF_BOUNDS)},
         };
 
         for (const auto& testCase : testCases) {
@@ -77,18 +85,18 @@ public:
 
     void TestIncomparableTypes() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {R"({
+            {.Json = R"({
                 "left": [1, 2, "string"],
                 "right": [4, 5, 6]
             })",
-             "$.left < $.right",
-             {"null"}},
-            {R"({
+             .JsonPath = "$.left < $.right",
+             .Result = {"null"}},
+            {.Json = R"({
                 "left": ["string", 2, 3],
                 "right": [4, 5, 6]
             })",
-             "$.left < $.right",
-             {"null"}},
+             .JsonPath = "$.left < $.right",
+             .Result = {"null"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -100,8 +108,8 @@ public:
 
     void TestLikeRegexPredicate() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {R"(["123", 123])", R"($[*] like_regex "[0-9]+")", {"null"}},
-            {R"([123, "123"])", R"($[*] like_regex "[0-9]+")", {"null"}},
+            {.Json = R"(["123", 123])", .JsonPath = R"($[*] like_regex "[0-9]+")", .Result = {"null"}},
+            {.Json = R"([123, "123"])", .JsonPath = R"($[*] like_regex "[0-9]+")", .Result = {"null"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -113,10 +121,10 @@ public:
 
     void TestStartsWithPredicate() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {R"(["a", "b", "c"])", R"("abcd" starts with $[*])", {"true"}},
-            {R"(["a", 1.45, 50])", R"("abcd" starts with $[*])", {"null"}},
-            {R"([1.45, 50, "a"])", R"("abcd" starts with $[*])", {"null"}},
-            {R"(["b", "c"])", R"("abcd" starts with $[*])", {"false"}},
+            {.Json = R"(["a", "b", "c"])", .JsonPath = R"("abcd" starts with $[*])", .Result = {"true"}},
+            {.Json = R"(["a", 1.45, 50])", .JsonPath = R"("abcd" starts with $[*])", .Result = {"null"}},
+            {.Json = R"([1.45, 50, "a"])", .JsonPath = R"("abcd" starts with $[*])", .Result = {"null"}},
+            {.Json = R"(["b", "c"])", .JsonPath = R"("abcd" starts with $[*])", .Result = {"false"}},
         };
 
         for (const auto& testCase : testCases) {

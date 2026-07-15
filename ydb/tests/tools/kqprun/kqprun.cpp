@@ -8,7 +8,9 @@
 #include <util/system/env.h>
 
 #include <ydb/core/blob_depot/mon_main.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.h>
 #include <ydb/tests/tools/kqprun/runlib/application.h>
@@ -18,6 +20,8 @@
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
 #include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
+
+#include <ydb/apps/ydbd/export/export.h>
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
@@ -1037,6 +1041,25 @@ protected:
         }
         queryService.SetProgressStatsPeriodMs(PingPeriod.MilliSeconds());
 
+        if (appConfig.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable()) {
+            auto& kqpConfig = *appConfig.MutableKQPConfig();
+
+            bool hasSpillingSetting = false;
+            constexpr char spillingSettings[] = "_KqpEnableSpilling";
+            for (const auto& setting : kqpConfig.GetSettings()) {
+                if (setting.GetName() == spillingSettings) {
+                    hasSpillingSetting = true;
+                    break;
+                }
+            }
+
+            if (!hasSpillingSetting) {
+                auto& setting = *kqpConfig.AddSettings();
+                setting.SetName(spillingSettings);
+                setting.SetValue("true");
+            }
+        }
+
         if (!DefaultLogPriority) {
             DefaultLogPriority = DefaultLogPriorityFromVerbosity(RunnerOptions.YdbSettings.VerbosityLevel);
         }
@@ -1051,6 +1074,8 @@ protected:
             RunnerOptions.YdbSettings.YtGateway = NYql::CreateYtFileGateway(ytFileServices);
             RunnerOptions.YdbSettings.ComputationFactory = NYql::NFile::GetYtFileFactory(ytFileServices);
         }
+
+        RunnerOptions.YdbSettings.DataShardExportFactory = std::make_shared<TDataShardExportFactory>();
 
         if (!PqFilesMapping.empty()) {
             const auto fileGateway = MakeIntrusive<NYql::TDummyPqGateway>(true);
@@ -1118,7 +1143,7 @@ private:
 }  // namespace NKqpRun
 
 int main(int argc, const char* argv[]) {
-    SetupSignalActions();
+    NTestUtils::SetupSignalHandlers();
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     NMonitoring::TDynamicCounterPtr memoryProfilingCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();

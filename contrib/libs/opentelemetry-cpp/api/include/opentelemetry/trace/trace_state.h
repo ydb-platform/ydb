@@ -64,7 +64,7 @@ public:
     }
 
     nostd::shared_ptr<TraceState> ts(new TraceState(cnt));
-    bool kv_valid;
+    bool kv_valid{false};
     nostd::string_view key, value;
     while (kv_str_tokenizer.next(kv_valid, key, value) && ts->kv_properties_->Size() < cnt)
     {

@@ -1,5 +1,6 @@
 #include "single_thread_ic_mock.h"
 #include "testactorsys.h"
+#include <ydb/library/actors/interconnect/events_local.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
@@ -7,6 +8,8 @@
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/domain.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::INTERCONNECT_SESSION
 
 using namespace NActors;
 using namespace NKikimr;
@@ -87,6 +90,7 @@ public:
 
     TActorId CreateSession();
     void ForwardToSession(TAutoPtr<IEventHandle> ev);
+    void ForwardToSession(TEvForwardSubscribeSession::TPtr ev);
 
     void DropSessionEvent(std::unique_ptr<IEventHandle> ev);
     void HandleDropPendingEvents(TAutoPtr<IEventHandle> ev);
@@ -98,6 +102,7 @@ public:
     STRICT_STFUNC(StateFunc,
         fFunc(EvDropPendingEvents, HandleDropPendingEvents);
         fFunc(TEvInterconnect::EvForward, ForwardToSession);
+        hFunc(TEvForwardSubscribeSession, ForwardToSession);
         fFunc(TEvInterconnect::EvConnectNode, ForwardToSession);
         fFunc(TEvents::TSystem::Subscribe, ForwardToSession);
         fFunc(TEvents::TSystem::Unsubscribe, ForwardToSession);
@@ -155,7 +160,10 @@ public:
             return;
         }
 
-        STLOG(PRI_DEBUG, INTERCONNECT_SESSION, STIM01, Prefix << "ShutdownSession", (SelfId, SelfId()));
+        YDB_LOG_DEBUG("ShutdownSession",
+            {"marker", "STIM01"},
+            {"prefix", Prefix},
+            {"selfId", SelfId()});
 
         // notify all subscribers
         for (const auto& [actorId, cookie] : Subscribers) {
@@ -199,9 +207,16 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void HandleForward(TAutoPtr<IEventHandle> ev) {
-        STLOG(PRI_DEBUG, INTERCONNECT_SESSION, STIM02, Prefix << "HandleForward", (SelfId, SelfId()),
-            (Type, ev->Type), (TypeName, Proxy->Mock->TestActorSystem->GetEventName(ev->Type)),
-            (Sender, ev->Sender), (Recipient, ev->Recipient), (Flags, ev->Flags), (Cookie, ev->Cookie));
+        YDB_LOG_DEBUG("HandleForward",
+            {"marker", "STIM02"},
+            {"prefix", Prefix},
+            {"selfId", SelfId()},
+            {"type", ev->Type},
+            {"typeName", Proxy->Mock->TestActorSystem->GetEventName(ev->Type)},
+            {"sender", ev->Sender},
+            {"recipient", ev->Recipient},
+            {"flags", ev->Flags},
+            {"cookie", ev->Cookie});
 
         if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
             Subscribe(ev->Sender, ev->Cookie);
@@ -215,11 +230,44 @@ public:
         }
     }
 
+    void HandleForwardWithSubscribe(TEvForwardSubscribeSession::TPtr ev) {
+        auto *msg = ev->Get();
+        Y_ABORT_UNLESS(msg->Event);
+
+        YDB_LOG_DEBUG("HandleForwardWithSubscribe",
+            {"marker", "STIM05"},
+            {"prefix", Prefix},
+            {"selfId", SelfId()},
+            {"type", msg->Event->Type},
+            {"typeName", Proxy->Mock->TestActorSystem->GetEventName(msg->Event->Type)},
+            {"sender", msg->Event->Sender},
+            {"recipient", msg->Event->Recipient},
+            {"flags", msg->Event->Flags},
+            {"cookie", msg->Event->Cookie});
+
+        Subscribe(msg->Event->Sender, msg->Event->Cookie);
+
+        TAutoPtr<IEventHandle> forwarded(msg->Event.Release());
+        if (SendPending) {
+            const ui16 ch = forwarded->GetChannel();
+            Outbox[ch].emplace_back(forwarded.Release());
+        } else {
+            ScheduleSendEvent(forwarded);
+            HandleSend(forwarded);
+        }
+    }
+
     void HandleSend(TAutoPtr<IEventHandle> ev) {
         while (ev) {
-            STLOG(PRI_TRACE, INTERCONNECT_SESSION, STIM03, Prefix << "HandleSend", (SelfId, SelfId()),
-                (Type, ev->Type), (Sender, ev->Sender), (Recipient, ev->Recipient), (Flags, ev->Flags),
-                (Cookie, ev->Cookie));
+            YDB_LOG_TRACE("HandleSend",
+                {"marker", "STIM03"},
+                {"prefix", Prefix},
+                {"selfId", SelfId()},
+                {"type", ev->Type},
+                {"sender", ev->Sender},
+                {"recipient", ev->Recipient},
+                {"flags", ev->Flags},
+                {"cookie", ev->Cookie});
 
             const TInstant now = TActivationContext::Now();
             Y_ABORT_UNLESS(now == NextSendTimestamp);
@@ -274,7 +322,7 @@ public:
             auto fw = std::make_unique<IEventHandle>(
                 SelfId(),
                 ev->Type,
-                ev->Flags & ~IEventHandle::FlagForwardOnNondelivery,
+                ev->Flags & ~(IEventHandle::FlagForwardOnNondelivery | IEventHandle::FlagSubscribeOnSession),
                 ev->Recipient,
                 ev->Sender,
                 ev->ReleaseChainBuffer(),
@@ -283,9 +331,15 @@ public:
                 std::move(ev->TraceId)
             );
 
-            STLOG(PRI_TRACE, INTERCONNECT_SESSION, STIM04, Prefix << "HandleReceive", (SelfId, SelfId()),
-                (Type, fw->Type), (Sender, fw->Sender), (Recipient, fw->Recipient), (Flags, fw->Flags),
-                (Cookie, ev->Cookie));
+            YDB_LOG_TRACE("HandleReceive",
+                {"marker", "STIM04"},
+                {"prefix", Prefix},
+                {"selfId", SelfId()},
+                {"type", fw->Type},
+                {"sender", fw->Sender},
+                {"recipient", fw->Recipient},
+                {"flags", fw->Flags},
+                {"cookie", ev->Cookie});
 
             auto& common = Proxy->Common;
             if (!common->EventFilter || common->EventFilter->CheckIncomingEvent(*fw, common->LocalScopeId)) {
@@ -338,6 +392,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         fFunc(TEvInterconnect::EvForward, HandleForward);
+        hFunc(TEvForwardSubscribeSession, HandleForwardWithSubscribe);
         fFunc(EvSend, HandleSend);
         fFunc(EvReceive, HandleReceive);
         hFunc(TEvInterconnect::TEvConnectNode, Handle);
@@ -385,6 +440,11 @@ void TMock::TProxyActor::ForwardToSession(TAutoPtr<IEventHandle> ev) {
     }
 }
 
+void TMock::TProxyActor::ForwardToSession(TEvForwardSubscribeSession::TPtr ev) {
+    TAutoPtr<IEventHandle> forwarded(ev.Release());
+    ForwardToSession(forwarded);
+}
+
 void TMock::TProxyActor::DropSessionEvent(std::unique_ptr<IEventHandle> ev) {
     switch (ev->GetTypeRewrite()) {
         case TEvInterconnect::EvForward:
@@ -393,6 +453,16 @@ void TMock::TProxyActor::DropSessionEvent(std::unique_ptr<IEventHandle> ev) {
             }
             TActivationContext::Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::Disconnected));
             break;
+
+        case TEvForwardSubscribeSession::EventType: {
+            auto msg = ev->Release<TEvForwardSubscribeSession>();
+            if (msg->Event) {
+                Send(msg->Event->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, msg->Event->Cookie);
+                TActivationContext::Send(IEventHandle::ForwardOnNondelivery(std::unique_ptr<IEventHandle>(msg->Event.Release()),
+                    TEvents::TEvUndelivered::Disconnected));
+            }
+            break;
+        }
 
         case TEvInterconnect::EvConnectNode:
         case TEvents::TSystem::Subscribe:

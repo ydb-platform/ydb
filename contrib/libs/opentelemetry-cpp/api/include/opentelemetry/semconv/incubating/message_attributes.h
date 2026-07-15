@@ -20,39 +20,35 @@ namespace message
 {
 
 /**
-  Deprecated, use @code rpc.message.compressed_size @endcode instead.
+  Deprecated, no replacement at this time.
 
   @deprecated
-  {"note": "Replaced by @code rpc.message.compressed_size @endcode.", "reason": "renamed",
-  "renamed_to": "rpc.message.compressed_size"}
+  {"note": "Deprecated, no replacement at this time.", "reason": "obsoleted"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMessageCompressedSize =
     "message.compressed_size";
 
 /**
-  Deprecated, use @code rpc.message.id @endcode instead.
+  Deprecated, no replacement at this time.
 
   @deprecated
-  {"note": "Replaced by @code rpc.message.id @endcode.", "reason": "renamed", "renamed_to":
-  "rpc.message.id"}
+  {"note": "Deprecated, no replacement at this time.", "reason": "obsoleted"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMessageId = "message.id";
 
 /**
-  Deprecated, use @code rpc.message.type @endcode instead.
+  Deprecated, no replacement at this time.
 
   @deprecated
-  {"note": "Replaced by @code rpc.message.type @endcode.", "reason": "renamed", "renamed_to":
-  "rpc.message.type"}
+  {"note": "Deprecated, no replacement at this time.", "reason": "obsoleted"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMessageType = "message.type";
 
 /**
-  Deprecated, use @code rpc.message.uncompressed_size @endcode instead.
+  Deprecated, no replacement at this time.
 
   @deprecated
-  {"note": "Replaced by @code rpc.message.uncompressed_size @endcode.", "reason": "renamed",
-  "renamed_to": "rpc.message.uncompressed_size"}
+  {"note": "Deprecated, no replacement at this time.", "reason": "obsoleted"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMessageUncompressedSize =
     "message.uncompressed_size";

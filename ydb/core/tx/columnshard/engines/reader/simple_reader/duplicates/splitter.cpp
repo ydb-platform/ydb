@@ -1,3 +1,3 @@
 #include "splitter.h"
 
-namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {}
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {}

@@ -196,6 +196,7 @@ namespace NWilson {
         static constexpr size_t GetSpanIdSize() { return sizeof(ui64); }
 
         TString GetHexTraceId() const;
+        TString GetHexTraceIdLowerCase() const;
         TString GetHexFullTraceId() const;
 
         void Validate() const {

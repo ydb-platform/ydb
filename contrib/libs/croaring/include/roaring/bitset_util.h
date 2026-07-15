@@ -1,3 +1,16 @@
+/*
+ * bitset_util.h
+ *
+ * This header collects low-level utility functions for operating on raw
+ * bitsets represented as arrays of 64-bit words. It includes helpers for
+ * setting, clearing, flipping, counting, extracting, and combining bit ranges,
+ * along with architecture-specific SIMD implementations for performance-
+ * critical routines.
+ *
+ * In particular, this file contains accelerated extraction and population-
+ * count code paths for x64 targets using AVX2 and, when supported by the
+ * compiler and hardware, AVX-512.
+ */
 #ifndef CROARING_BITSET_UTIL_H
 #define CROARING_BITSET_UTIL_H
 

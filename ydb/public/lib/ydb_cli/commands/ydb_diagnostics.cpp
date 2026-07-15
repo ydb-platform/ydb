@@ -23,7 +23,9 @@ TCommandClusterDiagnosticsCollect::TCommandClusterDiagnosticsCollect()
         "Fetch aggregated cluster node state and metrics over a time period.\n"
         "Sends a cluster-wide request to collect state as a set of metrics from all nodes.\n"
         "One of the nodes gathers metrics from all others over the specified duration, then returns an aggregated result.")
-{}
+{
+    CompletionDescription = "Fetch aggregated cluster metrics over a time period";
+}
 
 void TCommandClusterDiagnosticsCollect::Config(TConfig& config) {
     TYdbReadOnlyCommand::Config(config);
@@ -113,7 +115,8 @@ TString ReplaceCountersIdx(TString& name, ui32 index) {
 }
 
 void TCommandClusterDiagnosticsCollect::ProcessState(TConfig& config, TFileOutput& out, ui32 index) {
-    NMonitoring::TMonitoringClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NMonitoring::TMonitoringClient client(driver);
     NMonitoring::TClusterStateSettings settings;
     settings.DurationSeconds(PeriodSeconds ? PeriodSeconds : DurationSeconds);
     settings.NoSanitize(NoSanitize);

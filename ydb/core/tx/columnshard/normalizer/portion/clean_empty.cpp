@@ -2,7 +2,10 @@
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+
 #include <util/string/join.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap::NSyncChunksWithPortions {
 
@@ -17,17 +20,21 @@ class TRemoveV0: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
     std::vector<TColumnChunkLoadContext> Chunks;
+
     virtual TString GetId() const override {
         return "V0";
     }
 
     virtual void Apply(NIceDb::TNiceDb& db) override {
         for (auto&& i : Chunks) {
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v0")("path_id", PortionAddress.GetPathId())(
-                "portion_id", PortionAddress.GetPortionId())("chunk", i.GetAddress().DebugString());
+            YDB_LOG_CRIT("",
+                {"event", "remove_portion_v0"},
+                {"pathId", PortionAddress.GetPathId()},
+                {"portionId", PortionAddress.GetPortionId()},
+                {"chunk", i.GetAddress().DebugString()});
             db.Table<NColumnShard::Schema::IndexColumns>()
-                .Key(0, 0, i.GetAddress().GetColumnId(), i.GetMinSnapshotDeprecated().GetPlanStep(),
-                    i.GetMinSnapshotDeprecated().GetTxId(), PortionAddress.GetPortionId(), i.GetAddress().GetChunkIdx())
+                .Key(0, 0, i.GetAddress().GetColumnId(), i.GetMinSnapshotDeprecated().GetPlanStep(), i.GetMinSnapshotDeprecated().GetTxId(),
+                    PortionAddress.GetPortionId(), i.GetAddress().GetChunkIdx())
                 .Delete();
         }
     }
@@ -35,7 +42,8 @@ private:
 public:
     TRemoveV0(const TPortionAddress& portionAddress, const std::vector<TColumnChunkLoadContext>& chunks)
         : PortionAddress(portionAddress)
-        , Chunks(chunks) {
+        , Chunks(chunks)
+    {
     }
 };
 
@@ -43,14 +51,18 @@ class TRemoveV1: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
     std::vector<TChunkAddress> Chunks;
+
     virtual TString GetId() const override {
         return "V1";
     }
 
     virtual void Apply(NIceDb::TNiceDb& db) override {
         for (auto&& i : Chunks) {
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v1")("path_id", PortionAddress.GetPathId())(
-                "portion_id", PortionAddress.GetPortionId())("chunk", i.DebugString());
+            YDB_LOG_CRIT("",
+                {"event", "remove_portion_v1"},
+                {"pathId", PortionAddress.GetPathId()},
+                {"portionId", PortionAddress.GetPortionId()},
+                {"chunk", i.DebugString()});
             db.Table<NColumnShard::Schema::IndexColumnsV1>()
                 .Key(PortionAddress.GetPathId().GetRawValue(), PortionAddress.GetPortionId(), i.GetColumnId(), i.GetChunkIdx())
                 .Delete();
@@ -60,7 +72,8 @@ private:
 public:
     TRemoveV1(const TPortionAddress& portionAddress, const std::vector<TChunkAddress>& chunks)
         : PortionAddress(portionAddress)
-        , Chunks(chunks) {
+        , Chunks(chunks)
+    {
     }
 };
 
@@ -68,19 +81,23 @@ class TRemoveV2: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
     std::vector<TChunkAddress> Chunks;
+
     virtual TString GetId() const override {
         return "V2";
     }
 
     virtual void Apply(NIceDb::TNiceDb& db) override {
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v2")("path_id", PortionAddress.GetPathId())(
-            "portion_id", PortionAddress.GetPortionId());
+        YDB_LOG_CRIT("",
+            {"event", "remove_portion_v2"},
+            {"pathId", PortionAddress.GetPathId()},
+            {"portionId", PortionAddress.GetPortionId()});
         db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(PortionAddress.GetPathId().GetRawValue(), PortionAddress.GetPortionId()).Delete();
     }
 
 public:
     TRemoveV2(const TPortionAddress& portionAddress)
-        : PortionAddress(portionAddress) {
+        : PortionAddress(portionAddress)
+    {
     }
 };
 
@@ -89,13 +106,16 @@ private:
     const TPortionAddress PortionAddress;
     const ui64 PlanStep = 0;
     std::vector<TChunkAddress> Chunks;
+
     virtual TString GetId() const override {
         return TString("P::") + (PlanStep ? "DEL" : "EXIST");
     }
 
     virtual void Apply(NIceDb::TNiceDb& db) override {
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion")("path_id", PortionAddress.GetPathId())(
-            "portion_id", PortionAddress.GetPortionId());
+        YDB_LOG_CRIT("",
+            {"event", "remove_portion"},
+            {"pathId", PortionAddress.GetPathId()},
+            {"portionId", PortionAddress.GetPortionId()});
         db.Table<NColumnShard::Schema::IndexPortions>().Key(PortionAddress.GetPathId().GetRawValue(), PortionAddress.GetPortionId()).Delete();
     }
 
@@ -147,14 +167,14 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
     }
     {
         std::map<TPortionAddress, std::vector<TChunkAddress>> usedPortions;
-        auto rowset = db.Table<Schema::IndexColumnsV1>()
-                          .Select<Schema::IndexColumnsV1::PathId, Schema::IndexColumnsV1::PortionId, Schema::IndexColumnsV1::SSColumnId,
-                              Schema::IndexColumnsV1::ChunkIdx>();
+        auto rowset = db.Table<Schema::IndexColumnsV1>().Select<Schema::IndexColumnsV1::PathId, Schema::IndexColumnsV1::PortionId,
+            Schema::IndexColumnsV1::SSColumnId, Schema::IndexColumnsV1::ChunkIdx>();
         if (!rowset.IsReady()) {
             return false;
         }
         while (!rowset.EndOfSet()) {
-            TPortionAddress address(TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexColumnsV1::PathId>()), rowset.GetValue<Schema::IndexColumnsV1::PortionId>());
+            TPortionAddress address(TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexColumnsV1::PathId>()),
+                rowset.GetValue<Schema::IndexColumnsV1::PortionId>());
             TChunkAddress cAddress(rowset.GetValue<Schema::IndexColumnsV1::SSColumnId>(), rowset.GetValue<Schema::IndexColumnsV1::ChunkIdx>());
             usedPortions[address].emplace_back(cAddress);
             if (!rowset.Next()) {
@@ -174,8 +194,8 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
             return false;
         }
         while (!rowset.EndOfSet()) {
-            TPortionAddress portionAddress(
-                TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexColumnsV2::PathId>()), rowset.GetValue<Schema::IndexColumnsV2::PortionId>());
+            TPortionAddress portionAddress(TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexColumnsV2::PathId>()),
+                rowset.GetValue<Schema::IndexColumnsV2::PortionId>());
             usedPortions.emplace(portionAddress, std::make_shared<TRemoveV2>(portionAddress));
             if (!rowset.Next()) {
                 return false;
@@ -191,8 +211,8 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
             return false;
         }
         while (!rowset.EndOfSet()) {
-            TPortionAddress portionAddress(
-                TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexPortions::PathId>()), rowset.GetValue<Schema::IndexPortions::PortionId>());
+            TPortionAddress portionAddress(TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexPortions::PathId>()),
+                rowset.GetValue<Schema::IndexPortions::PortionId>());
             usedPortions.emplace(portionAddress,
                 std::make_shared<TRemovePortion>(portionAddress,
                     rowset.HaveValue<Schema::IndexPortions::XPlanStep>() ? rowset.GetValue<Schema::IndexPortions::XPlanStep>() : 0));
@@ -216,8 +236,10 @@ private:
 public:
     TIterator(std::map<TPortionAddress, std::shared_ptr<IDBModifier>>& source)
         : Current(source.begin())
-        , End(source.end()) {
+        , End(source.end())
+    {
     }
+
     bool Next() {
         AFL_VERIFY(IsValid());
         ++Current;
@@ -320,7 +342,9 @@ std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortion
             countPortionsForRemove += modificationsPack.size();
             result.emplace_back(std::move(modificationsPack));
         }
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("tasks_for_remove", countPortionsForRemove)("distribution", sb);
+        YDB_LOG_CRIT("",
+            {"tasksForRemove", countPortionsForRemove},
+            {"distribution", sb});
     }
     return result;
 }
@@ -328,15 +352,19 @@ std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortion
 class TChanges: public INormalizerChanges {
 public:
     TChanges(std::vector<std::shared_ptr<IDBModifier>>&& modifications)
-        : Modifications(std::move(modifications)) {
+        : Modifications(std::move(modifications))
+    {
     }
+
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         for (const auto& m : Modifications) {
             m->Apply(db);
         }
-        ACFL_WARN("normalizer", "TCleanEmptyPortionsNormalizer")("message", TStringBuilder() << GetSize() << " portions deleted");
+        YDB_LOG_WARN_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+            {"normalizer", "TCleanEmptyPortionsNormalizer"},
+            {"message", TStringBuilder() << GetSize() << " portions deleted"});
         return true;
     }
 

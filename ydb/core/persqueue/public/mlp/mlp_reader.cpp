@@ -3,8 +3,11 @@
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT Service
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -20,7 +23,8 @@ void TReaderActor::Bootstrap() {
 }
 
 void TReaderActor::DoDescribe() {
-    LOG_D("Start describe");
+    YDB_LOG_DEBUG("Start describe",
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TReaderActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -31,7 +35,8 @@ void TReaderActor::DoDescribe() {
 }
 
 void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-    LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+    YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     ChildActorId = {};
 
@@ -64,13 +69,16 @@ STFUNC(TReaderActor::DescribeState) {
 }
 
 void TReaderActor::DoSelectPartition() {
-    LOG_D("Start select partition");
+    YDB_LOG_DEBUG("Start select partition",
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TReaderActor::SelectPartitionState);
-    SendToTablet(Info->Description.GetBalancerTabletID(), new TEvPQ::TEvMLPGetPartitionRequest(Settings.TopicName, Settings.Consumer));
+    SendToTablet(Info->Description.GetBalancerTabletID(), new TEvPQ::TEvMLPGetPartitionRequest(Settings.TopicName, Settings.Consumer, Settings.ReceiveAttemptId));
 }
 
 void TReaderActor::Handle(TEvPQ::TEvMLPGetPartitionResponse::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPGetPartitionResponse " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPGetPartitionResponse",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", ev->Get()->Record.ShortDebugString()});
     auto* result = ev->Get();
     switch (result->GetStatus()) {
         case Ydb::StatusIds::SUCCESS: {
@@ -87,7 +95,8 @@ void TReaderActor::HandleOnSelectPartition(TEvPipeCache::TEvDeliveryProblem::TPt
     if (ev->Cookie != Cookie) {
         return;
     }
-    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
+    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
+        {"logPrefix", NPQ_LOG_PREFIX});
     if (Backoff.HasMore()) {
         Backoff.Next();
         return DoSelectPartition();
@@ -105,7 +114,8 @@ STFUNC(TReaderActor::SelectPartitionState) {
 }
 
 void TReaderActor::DoRead() {
-    LOG_D("Start read");
+    YDB_LOG_DEBUG("Start read",
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TReaderActor::ReadState);
 
     auto* request = new TEvPQ::TEvMLPReadRequest(
@@ -114,52 +124,58 @@ void TReaderActor::DoRead() {
         PartitionId,
         Settings.WaitTime ? Settings.WaitTime->ToDeadLine() : TDuration::MilliSeconds(ConsumerConfig->GetDefaultReceiveMessageWaitTimeMs()).ToDeadLine(),
         Settings.ProcessingTimeout ? Settings.ProcessingTimeout.value() : TDuration::Seconds(ConsumerConfig->GetDefaultProcessingTimeoutSeconds()),
-        Settings.MaxNumberOfMessage
+        Settings.MaxNumberOfMessage,
+        Settings.SkipMessageGroups,
+        Settings.ReceiveAttemptId
     );
     SendToTablet(PQTabletId, request);
 }
 
 void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPReadResponse");
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPReadResponse",
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     auto response = std::make_unique<TEvReadResponse>();
+    response->BalancerTabletId = Info->Description.GetBalancerTabletID();
     for (auto& message : *ev->Get()->Record.MutableMessage()) {
         NKikimrPQClient::TDataChunk proto;
         bool res = proto.ParseFromString(message.GetData());
         if (!res) {
-            LOG_W("Error parsing data. Offset " << message.GetId().GetOffset());
+            YDB_LOG_WARN("Error parsing data. Offset",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"messageIdOffset", message.GetId().GetOffset()});
             // Skip message
             continue;
         }
 
-        TString data;
-        Ydb::Topic::Codec codec;
-        if (Settings.UncompressMessages && proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1) {
-            const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
-            data = codecImpl->Decompress(proto.GetData());
-            codec = static_cast<Ydb::Topic::Codec>(proto.codec() + 1);
-        } else {
-            data = std::move(*proto.MutableData());
-            codec = Ydb::Topic::CODEC_RAW;
-        }
-
-        THashMap<TString, TString> messageMetaAttr(proto.messagemeta_size());
-        for (const auto& meta : proto.messagemeta()) {
-            messageMetaAttr.try_emplace(meta.key(), meta.value());
-        }
-
         TString messageGroupId;
-        auto it = messageMetaAttr.find(MESSAGE_ATTRIBUTE_KEY);
-        if (it != messageMetaAttr.end()) {
-            messageGroupId = std::move(it->second);
+        TString messageDeduplicationId;
+
+        std::unordered_multimap<TString, TString> attributes(proto.GetMessageMeta().size());
+        for (auto& meta : *proto.MutableMessageMeta()) {
+            if (meta.key() == MESSAGE_ATTRIBUTE_KEY) {
+                messageGroupId = std::move(*meta.mutable_value());
+            } else if (meta.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
+                messageDeduplicationId = std::move(*meta.mutable_value());
+            } else {
+                attributes.emplace(std::move(*meta.mutable_key()), std::move(*meta.mutable_value()));
+            }
         }
+
         response->Messages.push_back(TEvReadResponse::TMessage{
             .MessageId = {PartitionId, message.GetId().GetOffset()},
-            .Codec = codec,
-            .Data = std::move(data),
-            .MessageMetaAttributes = std::move(messageMetaAttr),
-            .SentTimestamp = TInstant::MilliSeconds(message.messagemeta().senttimestampmilliseconds()),
+            .Codec = proto.has_codec() ? static_cast<Ydb::Topic::Codec>(proto.codec() + 1) : Ydb::Topic::CODEC_RAW,
+            .Data = std::move(*proto.MutableData()),
+            .SentTimestamp = TInstant::MilliSeconds(message.GetMessageMeta().GetSentTimestampMilliseconds()),
             .MessageGroupId = messageGroupId,
+            .MessageDeduplicationId = messageDeduplicationId,
+            .ApproximateReceiveCount = message.GetMessageMeta().HasApproximateReceiveCount()
+                ? std::make_optional(message.GetMessageMeta().GetApproximateReceiveCount())
+                : std::nullopt,
+            .ApproximateFirstReceiveTimestamp = message.GetMessageMeta().HasApproximateFirstReceiveTimestampMilliseconds()
+                ? std::make_optional(TInstant::MilliSeconds(message.GetMessageMeta().GetApproximateFirstReceiveTimestampMilliseconds()))
+                : std::nullopt,
+            .Attributes = std::move(attributes),
         });
     }
 
@@ -169,7 +185,9 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
 
 void TReaderActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
     // TODO MLP Retry
-    LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
+    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPErrorResponse",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"ev", ev->Get()->Record.ShortDebugString()});
     ReplyErrorAndDie(ev->Get()->GetStatus(), std::move(ev->Get()->GetErrorMessage()));
 }
 
@@ -177,7 +195,8 @@ void TReaderActor::HandleOnRead(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     if (ev->Cookie != Cookie) {
         return;
     }
-    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
+    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
+        {"logPrefix", NPQ_LOG_PREFIX});
     if (Backoff.HasMore()) {
         Backoff.Next();
         return DoRead();
@@ -201,7 +220,9 @@ void TReaderActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 }
 
 void TReaderActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-    LOG_I("Reply error " << Ydb::StatusIds::StatusCode_Name(errorCode));
+    YDB_LOG_INFO("Reply error",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)});
     Send(ParentId, new TEvReadResponse(errorCode, std::move(errorMessage)));
     PassAway();
 }

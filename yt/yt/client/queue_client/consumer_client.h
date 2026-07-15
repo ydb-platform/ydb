@@ -95,14 +95,26 @@ DEFINE_REFCOUNTED_TYPE(IConsumerClient)
 //! Creates a native YT multi-queue consumer client.
 IConsumerClientPtr CreateConsumerClient(
     const NApi::IClientPtr& consumerClusterClient,
-    const NYPath::TYPath& consumerPath,
+    NYPath::TYPath consumerPath,
     const NTableClient::TTableSchema& consumerSchema);
 
 //! Uses the table mount cache to fetch the consumer's schema and
 //! make sure the consumer actually has YT consumer schema.
 IConsumerClientPtr CreateConsumerClient(
     const NApi::IClientPtr& clusterClient,
-    const NYPath::TYPath& consumerPath);
+    NYPath::TYPath consumerPath);
+
+//! Creates a native YT multi-queue consumer client.
+IConsumerClientPtr CreateConsumerClient(
+    const NApi::IClientPtr& consumerClusterClient,
+    const NYPath::TRichYPath& consumerPath,
+    const NTableClient::TTableSchema& consumerSchema);
+
+//! Uses the table mount cache to fetch the consumer's schema and
+//! make sure the consumer actually has YT consumer schema.
+IConsumerClientPtr CreateConsumerClient(
+    const NApi::IClientPtr& clusterClient,
+    const NYPath::TRichYPath& consumerPath);
 
 //! Uses the table mount cache to fetch the consumer's schema and
 //! make sure the consumer actually has YT consumer schema.
@@ -111,10 +123,21 @@ IConsumerClientPtr CreateConsumerClient(
 ISubConsumerClientPtr CreateSubConsumerClient(
     const NApi::IClientPtr& consumerClusterClient,
     const NApi::IClientPtr& queueClusterClient,
-    const NYPath::TYPath& consumerPath,
-    NYPath::TRichYPath queuePath);
+    NYPath::TYPath consumerPath,
+    const NYPath::TRichYPath& queuePath);
+
+//! Uses the table mount cache to fetch the consumer's schema and
+//! make sure the consumer actually has YT consumer schema.
+//! Uses the given queue path to fetch the corresponding subconsumer.
+//! If no cluster is set for queue, it is inferred from the given client.
+ISubConsumerClientPtr CreateSubConsumerClient(
+    const NApi::IClientPtr& consumerClusterClient,
+    const NApi::IClientPtr& queueClusterClient,
+    const NYPath::TRichYPath& consumerPath,
+    const NYPath::TRichYPath& queuePath);
 
 const NTableClient::TTableSchemaPtr& GetConsumerSchema();
+const NTableClient::TTableSchemaPtr& GetMultiConsumerSchema();
 
 ////////////////////////////////////////////////////////////////////////////////
 

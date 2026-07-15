@@ -56,6 +56,7 @@ namespace NLs {
 
     TCheckFunc PathsInsideDomain(ui64 count);
     TCheckFunc PQPartitionsInsideDomain(ui64 count);
+    TCheckFunc PQGroupsInsideDomain(ui64 count);
     TCheckFunc TopicReservedStorage(ui64 expected);
     TCheckFunc TopicAccountSize(ui64 expected);
     TCheckFunc TopicAccountSizeGE(ui64 expected);
@@ -110,6 +111,7 @@ namespace NLs {
 
 
     void IsTable(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsColumnTable(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsExternalTable(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsExternalDataSource(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record);
@@ -121,6 +123,7 @@ namespace NLs {
     void IsDirectory(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsReplication(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsTransfer(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsTestShardSet(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void CheckPathType(const NKikimrScheme::TEvDescribeSchemeResult& record, const NKikimrSchemeOp::EPathType pathType);
     TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount = false);
     TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
@@ -167,6 +170,7 @@ namespace NLs {
     TCheckFunc CheckPartCount(const TString& name, ui32 partCount, ui32 maxParts, ui32 tabletCount, ui32 groupCount,
                               NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
     TCheckFunc CheckPQAlterVersion (const TString& name, ui64 alterVersion);
+    TCheckFunc ColumnTableIndexesCount(ui32 count);
     TCheckFunc IndexesCount(ui32 count);
     TCheckFunc CheckPathState(NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
 
@@ -196,6 +200,8 @@ namespace NLs {
     TCheckFunc StreamFormat(NKikimrSchemeOp::ECdcStreamFormat format);
     TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state);
     TCheckFunc StreamVirtualTimestamps(bool value);
+    TCheckFunc StreamUserSIDs(bool value);
+    TCheckFunc StreamTraceIds(bool value);
     TCheckFunc StreamResolvedTimestamps(const TDuration& value);
     TCheckFunc StreamSchemaChanges(bool value);
     TCheckFunc StreamAwsRegion(const TString& value);
@@ -222,6 +228,9 @@ namespace NLs {
     TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode);
 
     TCheckFunc IncrementalBackup(bool flag);
+
+    TCheckFunc CheckMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types);
+    TCheckFunc CheckColumnTableMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types);
 
     struct TInverseTag {
         bool Value = false;

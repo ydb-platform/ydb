@@ -9,6 +9,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/threading/local_executor
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
 )

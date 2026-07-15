@@ -51,12 +51,12 @@ public:
         const TString ProcessId;
         std::shared_ptr<TAtomicCounter> StopFlag;
         bool Released = false;
+
     public:
         TGuard(const TString& processId, const std::shared_ptr<TAtomicCounter>& stopFlag)
             : ProcessId(processId)
             , StopFlag(stopFlag)
         {
-
         }
 
         void AbortLock();
@@ -67,17 +67,18 @@ public:
     };
 
     [[nodiscard]] std::shared_ptr<TGuard> RegisterLock(const std::shared_ptr<ILock>& lock);
-    template <class TLock, class ...Args>
+
+    template <class TLock, class... Args>
     [[nodiscard]] std::shared_ptr<TGuard> RegisterLock(Args&&... args) {
         return RegisterLock(std::make_shared<TLock>(args...));
     }
+
     std::optional<TString> IsLocked(
         const TPortionInfo& portion, const ELockCategory lockCategory, const THashSet<TString>& excludedLocks = {}) const;
     std::optional<TString> IsLocked(
         const std::shared_ptr<const TPortionInfo>& portion, const ELockCategory lockCategory, const THashSet<TString>& excludedLocks = {}) const;
     std::optional<TString> IsLocked(
         const TGranuleMeta& granule, const ELockCategory lockCategory, const THashSet<TString>& excludedLocks = {}) const;
-
 };
 
-}
+}   // namespace NKikimr::NOlap::NDataLocks

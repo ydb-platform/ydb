@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
 #include <ydb/library/actors/core/event.h>
@@ -37,18 +38,16 @@ struct TRequestEvent
 
     TRequestEvent() = default;
 
-    template <typename ...Args>
-    TRequestEvent(TCallContextPtr callContext, Args&& ...args)
+    template <typename... Args>
+    TRequestEvent(TCallContextPtr callContext, Args&&... args)
         : TArgs(std::forward<Args>(args)...)
         , CallContext(std::move(callContext))
-    {
-    }
+    {}
 
-    template <typename ...Args>
-    TRequestEvent(Args&& ...args)
+    template <typename... Args>
+    TRequestEvent(Args&&... args)
         : TArgs(std::forward<Args>(args)...)
-    {
-    }
+    {}
 
     static TString Name()
     {
@@ -109,7 +108,8 @@ struct TResponseEvent
 
 template <typename TArgs, ui32 EventId>
 struct TProtoRequestEvent
-    : public NActors::TEventPB<TProtoRequestEvent<TArgs, EventId>, TArgs, EventId>
+    : public NActors::
+          TEventPB<TProtoRequestEvent<TArgs, EventId>, TArgs, EventId>
 {
     TCallContextPtr CallContext = MakeIntrusive<TCallContext>();
 
@@ -117,8 +117,7 @@ struct TProtoRequestEvent
 
     TProtoRequestEvent(TCallContextPtr callContext)
         : CallContext(std::move(callContext))
-    {
-    }
+    {}
 
     template <typename T>
     TProtoRequestEvent(TCallContextPtr callContext, T&& proto)
@@ -137,11 +136,15 @@ struct TProtoRequestEvent
 
 template <typename TArgs, ui32 EventId>
 struct TProtoResponseEvent
-    : public NActors::TEventPB<TProtoResponseEvent<TArgs, EventId>, TArgs, EventId>
+    : public NActors::
+          TEventPB<TProtoResponseEvent<TArgs, EventId>, TArgs, EventId>
 {
     TProtoResponseEvent() = default;
 
-    template <typename T, typename = std::enable_if_t<!std::is_convertible<T, NProto::TError>::value>>
+    template <
+        typename T,
+        typename =
+            std::enable_if_t<!std::is_convertible<T, NProto::TError>::value>>
     TProtoResponseEvent(T&& proto)
     {
         TProtoResponseEvent::Record = std::forward<T>(proto);
@@ -177,47 +180,37 @@ struct TProtoResponseEvent
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define BLOCKSTORE_DECLARE_EVENT_IDS(name, ...)                                \
-        Ev##name##Request,                                                     \
-        Ev##name##Response,                                                    \
-// BLOCKSTORE_DECLARE_EVENT_IDS
+#define BLOCKSTORE_DECLARE_EVENT_IDS(name, ...) \
+    Ev##name##Request, Ev##name##Response,   // BLOCKSTORE_DECLARE_EVENT_IDS
 
-#define BLOCKSTORE_DECLARE_REQUEST(name, ...)                                  \
-    struct T##name##Method                                                     \
-    {                                                                          \
-        static constexpr const char* Name = #name;                             \
-                                                                               \
-        using TRequest = TEv##name##Request;                                   \
-        using TResponse = TEv##name##Response;                                 \
-    };                                                                         \
-// BLOCKSTORE_DECLARE_REQUEST
+#define BLOCKSTORE_DECLARE_REQUEST(name, ...)      \
+    struct T##name##Method                         \
+    {                                              \
+        static constexpr const char* Name = #name; \
+                                                   \
+        using TRequest = TEv##name##Request;       \
+        using TResponse = TEv##name##Response;     \
+    };                                             \
+    // BLOCKSTORE_DECLARE_REQUEST
 
-#define BLOCKSTORE_DECLARE_EVENTS(name, ...)                                   \
-    using TEv##name##Request = TRequestEvent<                                  \
-        T##name##Request,                                                      \
-        Ev##name##Request                                                      \
-    >;                                                                         \
-                                                                               \
-    using TEv##name##Response = TResponseEvent<                                \
-        T##name##Response,                                                     \
-        Ev##name##Response                                                     \
-    >;                                                                         \
-                                                                               \
-    BLOCKSTORE_DECLARE_REQUEST(name, __VA_ARGS__)                              \
-// BLOCKSTORE_DECLARE_EVENTS
+#define BLOCKSTORE_DECLARE_EVENTS(name, ...)                                \
+    using TEv##name##Request =                                              \
+        NBlockStore::TRequestEvent<T##name##Request, Ev##name##Request>;    \
+                                                                            \
+    using TEv##name##Response =                                             \
+        NBlockStore::TResponseEvent<T##name##Response, Ev##name##Response>; \
+                                                                            \
+    BLOCKSTORE_DECLARE_REQUEST(name, __VA_ARGS__)                           \
+    // BLOCKSTORE_DECLARE_EVENTS
 
-#define BLOCKSTORE_DECLARE_PROTO_EVENTS(name, ...)                             \
-    using TEv##name##Request = TProtoRequestEvent<                             \
-        NProto::T##name##Request,                                              \
-        Ev##name##Request                                                      \
-    >;                                                                         \
-                                                                               \
-    using TEv##name##Response = TProtoResponseEvent<                           \
-        NProto::T##name##Response,                                             \
-        Ev##name##Response                                                     \
-    >;                                                                         \
-                                                                               \
-    BLOCKSTORE_DECLARE_REQUEST(name, __VA_ARGS__)                              \
-// BLOCKSTORE_DECLARE_PROTO_EVENTS
+#define BLOCKSTORE_DECLARE_PROTO_EVENTS(name, ...)                          \
+    using TEv##name##Request =                                              \
+        TProtoRequestEvent<NProto::T##name##Request, Ev##name##Request>;    \
+                                                                            \
+    using TEv##name##Response =                                             \
+        TProtoResponseEvent<NProto::T##name##Response, Ev##name##Response>; \
+                                                                            \
+    BLOCKSTORE_DECLARE_REQUEST(name, __VA_ARGS__)                           \
+    // BLOCKSTORE_DECLARE_PROTO_EVENTS
 
 }   // namespace NYdb::NBS::NBlockStore

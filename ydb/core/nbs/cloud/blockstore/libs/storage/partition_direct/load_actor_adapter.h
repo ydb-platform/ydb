@@ -33,7 +33,7 @@ private:
         const NActors::TActorContext& ctx);
 };
 
-TActorId CreateLoadActorAdapter(
+NActors::TActorId CreateLoadActorAdapter(
     const NActors::TActorId& owner,
     std::shared_ptr<TFastPathService> fastPathService);
 

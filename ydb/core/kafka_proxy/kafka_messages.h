@@ -4,7 +4,9 @@
 
 #pragma once
 
-#include "kafka_messages_int.h"
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
+#include <ydb/core/kafka_proxy/kafka_log_impl.h>
+#include "kafka_consumer_protocol.h"
 
 namespace NKafka {
 
@@ -213,8 +215,8 @@ public:
             IndexMeta::Type Index;
 
             struct RecordsMeta {
-                using Type = TKafkaRecords;
-                using TypeDesc = NPrivate::TKafkaRecordsDesc;
+                using Type = TKafkaBytes;
+                using TypeDesc = NPrivate::TKafkaBytesDesc;
 
                 static constexpr const char* Name = "records";
                 static constexpr const char* About = "The record data to be produced.";
@@ -1405,8 +1407,8 @@ public:
             PreferredReadReplicaMeta::Type PreferredReadReplica;
 
             struct RecordsMeta {
-                using Type = TKafkaRecords;
-                using TypeDesc = NPrivate::TKafkaRecordsDesc;
+                using Type = TKafkaBytesHolder;
+                using TypeDesc = NPrivate::TKafkaBytesDesc;
 
                 static constexpr const char* Name = "records";
                 static constexpr const char* About = "The record data.";

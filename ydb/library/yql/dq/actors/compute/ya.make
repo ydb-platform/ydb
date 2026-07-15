@@ -8,31 +8,30 @@ SRCS(
     dq_compute_actor_checkpoints.cpp
     dq_compute_actor_metrics.cpp
     dq_compute_actor_stats.cpp
-    dq_compute_actor_watermarks.cpp
     dq_compute_actor.cpp
     dq_compute_issues_buffer.cpp
-    dq_info_aggregation_actor.cpp
     dq_request_context.h
     dq_request_context.cpp
 )
 
 PEERDIR(
-    library/cpp/protobuf/interop
     ydb/library/actors/core
     ydb/library/actors/wilson/protos
     ydb/library/services
     ydb/library/ydb_issue/proto
     ydb/library/yql/dq/actors/common
+    ydb/library/yql/dq/actors/compute/events
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime
+    ydb/library/yql/dq/runtime/streaming
     ydb/library/yql/dq/tasks
-    ydb/library/yverify_stream
     yql/essentials/minikql
     yql/essentials/minikql/comp_nodes
     yql/essentials/public/issue
     ydb/core/quoter/public
+    library/cpp/html/escape
 )
 
 YQL_LAST_ABI_VERSION()

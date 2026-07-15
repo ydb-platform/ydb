@@ -1,13 +1,8 @@
 UNITTEST_FOR(ydb/core/util)
 
 FORK_SUBTESTS()
-IF (WITH_VALGRIND)
-    SPLIT_FACTOR(30)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+REQUIREMENTS(cpu:4)
+SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/getopt
@@ -22,6 +17,7 @@ SRCS(
     btree_ut.cpp
     cache_ut.cpp
     circular_queue_ut.cpp
+    circular_sparse_queue_ut.cpp
     concurrent_rw_hash_ut.cpp
     event_priority_queue_ut.cpp
     fast_lookup_unique_list_ut.cpp
@@ -44,6 +40,7 @@ SRCS(
     queue_inplace_ut.cpp
     queue_oneone_inplace_ut.cpp
     simple_cache_ut.cpp
+    spsc_circular_queue_ut.cpp
     stlog_ut.cpp
     token_bucket_ut.cpp
     ui64id_ut.cpp

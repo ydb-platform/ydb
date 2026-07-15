@@ -187,6 +187,21 @@ Y_UNIT_TEST(ParseCallableWithNamedArgs) {
            ")");
 }
 
+// regression test for a use-after-free: parsing an escaped argument name must
+// keep its own copy, since parsing the (possibly nested-escaped-identifier)
+// argument type that follows reuses the same scratch buffer as the name
+Y_UNIT_TEST(ParseCallableWithEscapedNamedArgAndResourceType) {
+    TestOk("('aaa':Resource<'bbb'>)->String",
+           "(CallableType '() '((DataType 'String)) "
+           "'((ResourceType 'bbb) '\"aaa\")"
+           ")");
+    TestOk("('aaa':Resource<'bbb'>,'ccc':Resource<'ddd'>)->String",
+           "(CallableType '() '((DataType 'String)) "
+           "'((ResourceType 'bbb) '\"aaa\") "
+           "'((ResourceType 'ddd) '\"ccc\")"
+           ")");
+}
+
 Y_UNIT_TEST(ParseCallableWithArgFlags) {
     TestOk("(Int32{Flags:AutoMap})->Double",
            "(CallableType '() '((DataType 'Double)) "
@@ -520,7 +535,7 @@ Y_UNIT_TEST(ParseEmptyStruct) {
 }
 
 Y_UNIT_TEST(ParseErrorType) {
-    TestOk("Error<'<main>':1:2:'message'>", "(ErrorType '1 '2 '\"<main>\" '\"message\")");
+    TestOk("Error<'<main>':1:2:'message'>", R"((ErrorType '1 '2 '"<main>" '"message"))");
 }
 
 void TestFormat(const TString& yql, const TString& expectedTypeStr) {
@@ -678,14 +693,14 @@ Y_UNIT_TEST(FormatCallableWithPayload) {
 Y_UNIT_TEST(FormatResource) {
     TestFormat("((Resource aaa))", "Resource<'aaa'>");
     TestFormat("((Resource \"a b\"))", "Resource<'a b'>");
-    TestFormat("((Resource \"a\\t\\n\\x01b\"))", "Resource<'a\\t\\n\\x01b'>");
+    TestFormat(R"(((Resource "a\t\n\x01b")))", R"(Resource<'a\t\n\x01b'>)");
     TestFormat("((Optional (Resource aaa)))", "Optional<Resource<'aaa'>>");
 }
 
 Y_UNIT_TEST(FormatTagged) {
     TestFormat("((Tagged (Data String) aaa))", "Tagged<String,'aaa'>");
     TestFormat("((Tagged (Data String) \"a b\"))", "Tagged<String,'a b'>");
-    TestFormat("((Tagged (Data String) \"a\\t\\n\\x01b\"))", "Tagged<String,'a\\t\\n\\x01b'>");
+    TestFormat(R"(((Tagged (Data String) "a\t\n\x01b")))", R"(Tagged<String,'a\t\n\x01b'>)");
 }
 
 Y_UNIT_TEST(FormatPg) {

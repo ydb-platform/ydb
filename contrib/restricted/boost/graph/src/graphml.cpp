@@ -11,7 +11,6 @@
 //           Tiago de Paula Peixoto
 
 #define BOOST_GRAPH_SOURCE
-#include <boost/foreach.hpp>
 #include <boost/optional.hpp>
 #include <boost/throw_exception.hpp>
 #include <boost/graph/graphml.hpp>
@@ -44,7 +43,7 @@ public:
         using boost::property_tree::ptree;
         size_t current_idx = 0;
         bool is_first = is_root;
-        BOOST_FOREACH (const ptree::value_type& n, top)
+        for (const ptree::value_type& n : top)
         {
             if (n.first == "graph")
             {
@@ -54,7 +53,7 @@ public:
                     if (is_first)
                     {
                         is_first = false;
-                        BOOST_FOREACH (const ptree::value_type& attr, n.second)
+                        for (const ptree::value_type& attr : n.second)
                         {
                             if (attr.first != "data")
                                 continue;
@@ -83,7 +82,7 @@ public:
                 | boost::property_tree::xml_parser::trim_whitespace);
         ptree gml = pt.get_child(path("graphml"));
         // Search for attributes
-        BOOST_FOREACH (const ptree::value_type& child, gml)
+        for (const ptree::value_type& child : gml)
         {
             if (child.first != "key")
                 continue;
@@ -127,17 +126,17 @@ public:
         std::vector< const ptree* > graphs;
         handle_graph();
         get_graphs(gml, desired_idx, true, graphs);
-        BOOST_FOREACH (const ptree* gr, graphs)
+        for (const ptree* gr : graphs)
         {
             // Search for nodes
-            BOOST_FOREACH (const ptree::value_type& node, *gr)
+            for (const ptree::value_type& node : *gr)
             {
                 if (node.first != "node")
                     continue;
                 std::string id
                     = node.second.get< std::string >(path("<xmlattr>/id"));
                 handle_vertex(id);
-                BOOST_FOREACH (const ptree::value_type& attr, node.second)
+                for (const ptree::value_type& attr : node.second)
                 {
                     if (attr.first != "data")
                         continue;
@@ -148,13 +147,13 @@ public:
                 }
             }
         }
-        BOOST_FOREACH (const ptree* gr, graphs)
+        for (const ptree* gr : graphs)
         {
             bool default_directed
                 = gr->get< std::string >(path("<xmlattr>/edgedefault"))
                 == "directed";
             // Search for edges
-            BOOST_FOREACH (const ptree::value_type& edge, *gr)
+            for (const ptree::value_type& edge : *gr)
             {
                 if (edge.first != "edge")
                     continue;
@@ -180,7 +179,7 @@ public:
                 }
                 size_t old_edges_size = m_edge.size();
                 handle_edge(source, target);
-                BOOST_FOREACH (const ptree::value_type& attr, edge.second)
+                for (const ptree::value_type& attr : edge.second)
                 {
                     if (attr.first != "data")
                         continue;

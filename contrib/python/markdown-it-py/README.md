@@ -101,11 +101,12 @@ Render markdown to HTML with markdown-it-py from the
 command-line:
 
 ```console
-usage: markdown-it [-h] [-v] [filenames [filenames ...]]
+usage: markdown-it [-h] [-v] [--stdin|filenames [filenames ...]]
 
 Parse one or more markdown files, convert each to HTML, and print to stdout
 
 positional arguments:
+  --stdin        read source Markdown file from standard input
   filenames      specify an optional list of files to convert
 
 optional arguments:

@@ -57,7 +57,9 @@ private:
     TUnboxedValue Run(
         const IValueBuilder* valueBuilder,
         const TUnboxedValuePod* args) const override {
-        TUnboxedValue name, surname, age;
+        TUnboxedValue name;
+        TUnboxedValue surname;
+        TUnboxedValue age;
         if (Info_.RemapKSV) {
             name = args->GetElement(Info_.Key);
             surname = args->GetElement(Info_.Subkey);

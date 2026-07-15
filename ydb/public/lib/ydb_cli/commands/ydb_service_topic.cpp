@@ -10,6 +10,8 @@
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
+#include <library/cpp/getopt/small/completer.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_write.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -32,6 +34,7 @@ namespace NYdb::NConsoleClient {
             {NYdb::NTopic::ECodec::GZIP, "GZIP codec. Data is compressed with GZIP compression algorithm."},
             {NYdb::NTopic::ECodec::LZOP, "LZOP codec. Data is compressed with LZOP compression algorithm."},
             {NYdb::NTopic::ECodec::ZSTD, "ZSTD codec. Data is compressed with ZSTD compression algorithm."},
+            {NYdb::NTopic::ECodec::KAFKA_BATCH, "Kafka batch codec. Messages are packed into Kafka record batches."},
         };
 
         THashMap<TString, NYdb::NTopic::ECodec> ExistingCodecs = {
@@ -39,6 +42,7 @@ namespace NYdb::NConsoleClient {
             std::pair<TString, NYdb::NTopic::ECodec>("gzip", NYdb::NTopic::ECodec::GZIP),
             std::pair<TString, NYdb::NTopic::ECodec>("lzop", NYdb::NTopic::ECodec::LZOP),
             std::pair<TString, NYdb::NTopic::ECodec>("zstd", NYdb::NTopic::ECodec::ZSTD),
+            std::pair<TString, NYdb::NTopic::ECodec>("kafka-batch", NYdb::NTopic::ECodec::KAFKA_BATCH),
         };
 
         TVector<ui32> ExistingMetricsLevels = {2, 3};
@@ -156,6 +160,15 @@ namespace NYdb::NConsoleClient {
         return description.Str();
     }
 
+    ui32 ParsePartitionPerTabletValue(TStringBuf s)
+    {
+        auto v = FromString<ui32>(s);
+        if ((v < 1) || (v > 20)) {
+            throw TMisuseException() << "Incorrect number of partitions in PQ tablet (" << v << "). Expected value from 1 to 20";
+        }
+        return v;
+    }
+
     namespace {
         NTopic::ECodec ParseCodec(const TString& codecStr, const TVector<NTopic::ECodec>& allowedCodecs) {
             auto exists = ExistingCodecs.find(to_lower(codecStr));
@@ -173,9 +186,17 @@ namespace NYdb::NConsoleClient {
 
     void TCommandWithSupportedCodecs::AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NYdb::NTopic::ECodec>& supportedCodecs) {
         TString description = PrepareAllowedCodecsDescription("Comma-separated list of supported codecs", supportedCodecs);
+        TVector<NLastGetopt::NComp::TChoice> choices;
+        for (const auto& [name, codec] : ExistingCodecs) {
+            if (std::find(supportedCodecs.begin(), supportedCodecs.end(), codec) != supportedCodecs.end()) {
+                auto it = CodecsDescriptions.find(codec);
+                choices.emplace_back(name, it != CodecsDescriptions.end() ? it->second : "");
+            }
+        }
         config.Opts->AddLongOption("supported-codecs", description)
             .RequiredArgument("STRING")
-            .StoreResult(&SupportedCodecsStr_);
+            .StoreResult(&SupportedCodecsStr_)
+            .Completer(NLastGetopt::NComp::Choice(std::move(choices)));
         AllowedCodecs_ = supportedCodecs;
     }
 
@@ -193,9 +214,15 @@ namespace NYdb::NConsoleClient {
                 description << colors.CyanColor() << " (default)" << colors.OldColor();
             }
         }
+        TVector<NLastGetopt::NComp::TChoice> choices;
+        for (const auto& level : ExistingMetricsLevels) {
+            auto it = MetricsLevelsDescriptions.find(level);
+            choices.emplace_back(ToString(level), it != MetricsLevelsDescriptions.end() ? it->second : "");
+        }
         config.Opts->AddLongOption("metrics-level", description.Str())
             .Optional()
-            .StoreResult(&MetricsLevel_);
+            .StoreResult(&MetricsLevel_)
+            .Completer(NLastGetopt::NComp::Choice(std::move(choices)));
     }
 
     TMaybe<NTopic::EMetricsLevel> TCommandWithMetricsLevel::GetMetricsLevel() const {
@@ -228,9 +255,15 @@ namespace NYdb::NConsoleClient {
                 description << colors.CyanColor() << " (default)" << colors.OldColor();
             }
         }
+        TVector<NLastGetopt::NComp::TChoice> choices;
+        for (const auto& [name, mode] : ExistingMeteringModes) {
+            auto it = MeteringModesDescriptions.find(mode);
+            choices.emplace_back(name, it != MeteringModesDescriptions.end() ? it->second : "");
+        }
         config.Opts->AddLongOption("metering-mode", description.Str())
             .Optional()
-            .StoreResult(&MeteringModeStr_);
+            .StoreResult(&MeteringModeStr_)
+            .Completer(NLastGetopt::NComp::Choice(std::move(choices)));
     }
 
     void TCommandWithMeteringMode::ParseMeteringMode() {
@@ -267,10 +300,18 @@ namespace NYdb::NConsoleClient {
                         << "\n    " << findResult->second;
         }
 
+        TVector<NLastGetopt::NComp::TChoice> choices;
+        for (const auto& [name, strategy] : AutoPartitioningStrategies) {
+            auto it = AutoscaleStrategiesDescriptions.find(strategy);
+            choices.emplace_back(name, it != AutoscaleStrategiesDescriptions.end() ? it->second : "");
+        }
+        auto strategyCompleter = NLastGetopt::NComp::Choice(std::move(choices));
+
         if (isAlter) {
             config.Opts->AddLongOption("auto-partitioning-strategy", description.Str())
                 .Optional()
-                .StoreResult(&AutoPartitioningStrategyStr_);
+                .StoreResult(&AutoPartitioningStrategyStr_)
+                .Completer(strategyCompleter);
             config.Opts->AddLongOption("auto-partitioning-stabilization-window-seconds", "Duration in seconds of high or low load before automatically scale the number of partitions")
                 .Optional()
                 .StoreResult(&ScaleThresholdTime_);
@@ -284,7 +325,8 @@ namespace NYdb::NConsoleClient {
             config.Opts->AddLongOption("auto-partitioning-strategy", description.Str())
                 .Optional()
                 .DefaultValue("disabled")
-                .StoreResult(&AutoPartitioningStrategyStr_);
+                .StoreResult(&AutoPartitioningStrategyStr_)
+                .Completer(strategyCompleter);
             config.Opts->AddLongOption("auto-partitioning-stabilization-window-seconds", "Duration in seconds of high or low load before automatically scale the number of partitions")
                 .Optional()
                 .DefaultValue(300)
@@ -366,12 +408,19 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(1024)
             .Optional()
             .StoreResult(&PartitionWriteSpeedKbps_);
+        config.Opts->AddLongOption("partition-write-speed-mps", "Partition write speed in messages per second")
+            .Optional()
+            .StoreResult(&PartitionWriteSpeedMessagesPerSecond_);
+        config.Opts->AddLongOption("partition-write-burst-messages", "Partition write burst in messages")
+            .Optional()
+            .StoreResult(&PartitionWriteBurstMessages_);
         config.Opts->AddLongOption("retention-storage-mb", "Storage retention in megabytes")
             .DefaultValue(0)
             .Optional()
             .StoreResult(&RetentionStorageMb_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
         AddMetricsLevels(config);
@@ -384,7 +433,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partitions-per-tablet", "Partitions per PQ tablet")
             .Optional()
             .Hidden()
-            .StoreResult(&PartitionsPerTablet_);
+            .StoreMappedResult(&PartitionsPerTablet_, ParsePartitionPerTabletValue);
 
         config.Opts->MutuallyExclusive("retention-period-hours", "retention-period");
     }
@@ -398,7 +447,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TCommandTopicCreate::Run(TConfig& config) {
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto settings = NYdb::NTopic::TCreateTopicSettings();
@@ -416,6 +465,12 @@ namespace NYdb::NConsoleClient {
         settings.PartitioningSettings(MinActivePartitions_, finalMaxActivePartitions, autoscaleSettings);
         settings.PartitionWriteBurstBytes(PartitionWriteSpeedKbps_ * 1_KB);
         settings.PartitionWriteSpeedBytesPerSecond(PartitionWriteSpeedKbps_ * 1_KB);
+        if (PartitionWriteSpeedMessagesPerSecond_.Defined()) {
+            settings.PartitionWriteSpeedMessagesPerSecond(*PartitionWriteSpeedMessagesPerSecond_);
+        }
+        if (PartitionWriteBurstMessages_.Defined()) {
+            settings.PartitionWriteBurstMessages(*PartitionWriteBurstMessages_);
+        }
 
         auto codecs = GetCodecs();
         if (!codecs.empty()) {
@@ -462,11 +517,22 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partition-write-speed-kbps", "Partition write speed in kilobytes per second")
             .Optional()
             .StoreResult(&PartitionWriteSpeedKbps_);
+        config.Opts->AddLongOption("partition-write-speed-mps", "Partition write speed in messages per second")
+            .Optional()
+            .StoreResult(&PartitionWriteSpeedMessagesPerSecond_);
+        config.Opts->AddLongOption("partition-write-burst-messages", "Partition write burst in messages")
+            .Optional()
+            .StoreResult(&PartitionWriteBurstMessages_);
         config.Opts->AddLongOption("retention-storage-mb", "Storage retention in megabytes")
             .Optional()
             .StoreResult(&RetentionStorageMb_);
+        config.Opts->AddLongOption("content-based-deduplication", "Content based deduplication for topic")
+            .Optional()
+            .Hidden()
+            .StoreTrue(&ContentBasedDeduplication_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
         AddMetricsLevels(config);
@@ -529,9 +595,23 @@ namespace NYdb::NConsoleClient {
             settings.SetRetentionPeriod(*RetentionPeriod_);
         }
 
+        if (ContentBasedDeduplication_ && describeResult.GetTopicDescription().GetContentBasedDeduplication() != ContentBasedDeduplication_) {
+            settings.SetContentBasedDeduplication(ContentBasedDeduplication_);
+        }
+
         if (PartitionWriteSpeedKbps_.Defined() && describeResult.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond() / 1_KB != *PartitionWriteSpeedKbps_) {
             settings.SetPartitionWriteSpeedBytesPerSecond(*PartitionWriteSpeedKbps_ * 1_KB);
             settings.SetPartitionWriteBurstBytes(*PartitionWriteSpeedKbps_ * 1_KB);
+        }
+
+        const auto& topicDescription = describeResult.GetTopicDescription();
+        if (PartitionWriteSpeedMessagesPerSecond_.Defined()
+            && topicDescription.GetPartitionWriteSpeedMessagesPerSecond() != *PartitionWriteSpeedMessagesPerSecond_) {
+            settings.SetPartitionWriteSpeedMessagesPerSecond(*PartitionWriteSpeedMessagesPerSecond_);
+        }
+        if (PartitionWriteBurstMessages_.Defined()
+            && topicDescription.GetPartitionWriteBurstMessages() != *PartitionWriteBurstMessages_) {
+            settings.SetPartitionWriteBurstMessages(*PartitionWriteBurstMessages_);
         }
 
         if (GetMeteringMode() != NTopic::EMeteringMode::Unspecified && GetMeteringMode() != describeResult.GetTopicDescription().GetMeteringMode()) {
@@ -550,7 +630,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TCommandTopicAlter::Run(TConfig& config) {
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
@@ -578,10 +658,11 @@ namespace NYdb::NConsoleClient {
         TYdbCommand::Config(config);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
     }
 
     int TCommandTopicDrop::Run(TConfig& config) {
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
@@ -647,8 +728,17 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .Hidden()
             .StoreResult(&DlqQueueName_);
+        config.Opts->AddLongOption("receive-message-wait-time", "Receive message wait time for shared consumer (ex. '10s', '1m')")
+            .Optional()
+            .Hidden()
+            .StoreMappedResult(&ReceiveMessageWaitTime_, ParseDuration);
+        config.Opts->AddLongOption("receive-message-delay", "Receive message delay for shared consumer (ex. '1s', '1m')")
+            .Optional()
+            .Hidden()
+            .StoreMappedResult(&ReceiveMessageDelay_, ParseDuration);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
         AddAllowedCodecs(config, AllowedCodecs);
     }
 
@@ -679,7 +769,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TCommandTopicConsumerAdd::Run(TConfig& config) {
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
@@ -712,6 +802,13 @@ namespace NYdb::NConsoleClient {
         consumerSettings.KeepMessagesOrder(KeepMessagesOrder_.GetOrElse(false));
         if (DefaultProcessingTimeout_.Defined()) {
             consumerSettings.DefaultProcessingTimeout(*DefaultProcessingTimeout_);
+        }
+
+        if (ReceiveMessageWaitTime_.Defined()) {
+            consumerSettings.ReceiveMessageWaitTime(*ReceiveMessageWaitTime_);
+        }
+        if (ReceiveMessageDelay_.Defined()) {
+            consumerSettings.ReceiveMessageDelay(*ReceiveMessageDelay_);
         }
 
         if (MaxProcessingAttempts_.Defined() || DlqQueueName_.Defined()) {
@@ -753,6 +850,7 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&ConsumerName_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
     }
 
     void TCommandTopicConsumerDrop::Parse(TConfig& config) {
@@ -761,7 +859,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TCommandTopicConsumerDrop::Run(TConfig& config) {
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
@@ -796,6 +894,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->SetFreeArgsNum(1);
         AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
     }
 
     void TCommandTopicConsumerDescribe::Parse(TConfig& config) {
@@ -805,7 +904,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TCommandTopicConsumerDescribe::Run(TConfig& config) {
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto consumerDescription = topicClient.DescribeConsumer(TopicName, ConsumerName_, NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(ShowPartitionStats_)).GetValueSync();
@@ -838,6 +937,7 @@ namespace NYdb::NConsoleClient {
 
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
     }
 
     void TCommandTopicConsumerCommitOffset::Parse(TConfig& config) {
@@ -846,7 +946,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TCommandTopicConsumerCommitOffset::Run(TConfig& config) {
-        TDriver driver = CreateDriver(config);
+        auto driver = CreateDriver(config);
         NYdb::NTopic::TTopicClient topicClient(driver);
 
         auto topicDescription = topicClient.DescribeTopic(TopicName, {}).GetValueSync();
@@ -872,10 +972,15 @@ namespace NYdb::NConsoleClient {
             description << "\n  " << colors.BoldColor() << iter.first << colors.OldColor() << "\n    " << iter.second;
         }
 
+        TVector<NLastGetopt::NComp::TChoice> choices;
+        for (const auto& [transform, desc] : TransformBodyDescriptions) {
+            choices.emplace_back(ToString(transform), desc);
+        }
         config.Opts->AddLongOption("transform", description.Str())
             .Optional()
             .DefaultValue("none")
-            .StoreResult(&TransformStr_);
+            .StoreResult(&TransformStr_)
+            .Completer(NLastGetopt::NComp::Choice(std::move(choices)));
     }
 
     void TCommandWithTransformBody::ParseTransform() {
@@ -920,6 +1025,7 @@ namespace NYdb::NConsoleClient {
         TYdbCommand::Config(config);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
 
         AddMessagingFormats(config, {
                                EMessagingFormat::SingleMessage,
@@ -933,9 +1039,12 @@ namespace NYdb::NConsoleClient {
                            });
 
         // TODO(shmel1k@): improve help.
-        config.Opts->AddLongOption('c', "consumer", "Consumer name. If not set, then you need to specify partitions through --partitions to read without consumer")
+        config.Opts->AddLongOption('c', "consumer", "Consumer name. If omitted, use --partitions to target specific partitions, or --no-consumer to read all partitions without a consumer.")
             .Optional()
             .StoreResult(&Consumer_);
+        config.Opts->AddLongOption("no-consumer", "Allows to read all partitions without setting specific partition ids and without consumer.")
+            .Optional()
+            .StoreTrue(&ReadWithoutConsumer_);
 
         config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
@@ -944,7 +1053,7 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .DefaultValue(DefaultIdleTimeout)
             .StoreResult(&IdleTimeout_);
-        config.Opts->AddLongOption("commit", "Commit messages after successful read")
+        config.Opts->AddLongOption("commit", "Commit messages after successful read.")
             .Optional()
             .DefaultValue(false)
             .StoreResult(&Commit_);
@@ -961,11 +1070,11 @@ namespace NYdb::NConsoleClient {
             .RequiredArgument("TIMESTAMP")
             .Optional()
             .Handler(TimestampOptionHandler(&Timestamp_));
-        config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partition-ids 0,1,10\"")
+        config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partition-ids 0,1,10\".")
             .Optional()
             .Hidden()
             .GetOpt().SplitHandler(&PartitionIds_, ',');
-        config.Opts->AddLongOption("partitions", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partitions 0,1,10\"")
+        config.Opts->AddLongOption("partitions", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partitions 0,1,10\".")
             .Optional()
             .GetOpt().SplitHandler(&PartitionIds_, ',');
         config.Opts->AddLongOption("start-offset", "Offset to start reading from. If not specified, messages are read from the last commit point for the chosen consumer.\nExactly one partition id should be specified with the '--partitions' option.")
@@ -1062,9 +1171,12 @@ namespace NYdb::NConsoleClient {
             throw TMisuseException() << "--limit 0 is not allowed for " << MessagingFormat << " format. Please provide a non-negative --limit.";
         }
 
-        // validate partitions ids are specified, if no consumer is provided. no-consumer mode will be used.
-        if (!Consumer_ && !PartitionIds_) {
-            throw TMisuseException() << "Please specify either --consumer or --partitions to read without consumer";
+        // validate partitions ids are specified, if no consumer is provided or user explicitly set no-consumer. no-consumer mode will be used.
+        if (Consumer_ && ReadWithoutConsumer_) {
+            throw TMisuseException() << "It is not allowed to specify both --consumer and --no-consumer at the same time";
+        }
+        if (!Consumer_ && !PartitionIds_ && !ReadWithoutConsumer_) {
+            throw TMisuseException() << "Please specify either --consumer or --partitions or explicitly set --no-consumer to read without consumer";
         }
 
         if (Offset_ && !(PartitionIds_.size() == 1)) {
@@ -1092,9 +1204,9 @@ namespace NYdb::NConsoleClient {
     int TCommandTopicRead::Run(TConfig& config) {
         ValidateConfig();
 
-        auto driver =
-            std::make_unique<TDriver>(CreateDriver(config, std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)).Release())));
-        NTopic::TTopicClient topicClient(*driver);
+        auto driver = CreateDriver(config, std::unique_ptr<TLogBackend>(
+            CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)).Release()));
+        NTopic::TTopicClient topicClient(driver);
 
         auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings());
 
@@ -1117,17 +1229,23 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        driver->Stop(true);
-
         return EXIT_SUCCESS;
     }
 
     void TCommandWithCodec::AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NTopic::ECodec>& allowedCodecs) {
         TString description = PrepareAllowedCodecsDescription("Client-side compression algorithm. When read, data will be uncompressed transparently with a codec used on write", allowedCodecs);
+        TVector<NLastGetopt::NComp::TChoice> choices;
+        for (const auto& [name, codec] : ExistingCodecs) {
+            if (std::find(allowedCodecs.begin(), allowedCodecs.end(), codec) != allowedCodecs.end()) {
+                auto it = CodecsDescriptions.find(codec);
+                choices.emplace_back(name, it != CodecsDescriptions.end() ? it->second : "");
+            }
+        }
         config.Opts->AddLongOption("codec", description)
             .Optional()
             .DefaultValue("RAW")
-            .StoreResult(&CodecStr_);
+            .StoreResult(&CodecStr_)
+            .Completer(NLastGetopt::NComp::Choice(std::move(choices)));
         AllowedCodecs_ = allowedCodecs;
     }
 
@@ -1151,6 +1269,7 @@ namespace NYdb::NConsoleClient {
         TYdbCommand::Config(config);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
 
         AddMessagingFormats(config, {
                                     EMessagingFormat::NewlineDelimited,
@@ -1230,12 +1349,12 @@ namespace NYdb::NConsoleClient {
     int TCommandTopicWrite::Run(TConfig& config) {
         SetInterruptHandlers();
 
-        auto driver =
-            std::make_unique<TDriver>(CreateDriver(config, std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)).Release())));
-        NTopic::TTopicClient topicClient(*driver);
+        auto driver = CreateDriver(config, std::unique_ptr<TLogBackend>(
+            CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)).Release()));
+        NTopic::TTopicClient topicClient(driver);
 
         {
-            auto writeSession = NTopic::TTopicClient(*driver).CreateWriteSession(std::move(PrepareWriteSessionSettings()));
+            auto writeSession = NTopic::TTopicClient(driver).CreateWriteSession(std::move(PrepareWriteSessionSettings()));
             auto writer =
                 TTopicWriter(writeSession, std::move(TTopicWriterParams(MessagingFormat, Delimiter_, MessageSizeLimit_, BatchDuration_,
                                                                         BatchSize_, BatchMessagesCount_, GetTransform(),
@@ -1262,7 +1381,6 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        driver->Stop(true);
         return EXIT_SUCCESS;
     }
 

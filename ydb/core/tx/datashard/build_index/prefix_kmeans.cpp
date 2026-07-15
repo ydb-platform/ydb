@@ -1,12 +1,13 @@
 #include "kmeans_helper.h"
+#include <ydb/core/base/kmeans_clusters.h>
 #include "../datashard_impl.h"
+#include "../range_ops.h"
 #include "../scan_common.h"
 #include "../upload_stats.h"
 #include "../buffer_data.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -72,6 +73,7 @@ protected:
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
+    TString InvalidEmbeddingError;
 
     TBatchRowsUploader Uploader;
 
@@ -79,8 +81,11 @@ protected:
     TBufferData* OutputBuf = nullptr;
     TBufferData* PrefixBuf = nullptr;
 
-    const ui32 Dimensions = 0;
-    const ui32 K = 0;
+    ui32 Dimensions = 0;
+    ui32 K = 0;
+    const ui32 MaxClusters = 0;
+    const bool Adaptive = false;
+    const ui32 AdaptiveLevels = 0;
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
     const ui32 OverlapClusters = 0;
@@ -106,7 +111,13 @@ protected:
 
     bool IsExhausted = false;
 
+    TVector<NScheme::TTypeInfo> KeyTypes;
+    TSerializedCellVec LastAckedKey;
+    TSerializedCellVec PendingCheckpointKey;
+    ui64 NextCheckpointAtBytes = 0;
     std::unique_ptr<IClusters> Clusters;
+    Ydb::Table::VectorIndexSettings DeferredSettings;
+    ui32 DeferredRounds = 0;
     std::vector<std::pair<ui32, double>> TmpClusters;
 
 public:
@@ -129,15 +140,22 @@ public:
         , Uploader(request.GetDatabaseName(), request.GetScanSettings())
         , Dimensions(request.GetSettings().vector_dimension())
         , K(request.GetK())
+        , MaxClusters(request.GetK())
+        , Adaptive(request.GetAdaptive())
+        , AdaptiveLevels(request.GetLevels() ? request.GetLevels() : 1)
         , OverlapClusters(request.GetOverlapClusters() ? request.GetOverlapClusters() : 1)
         , OverlapRatio(request.GetOverlapRatio())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
         , PrefixColumns{request.GetPrefixColumns()}
+        , KeyTypes(table.KeyColumnTypes)
         , Clusters(std::move(clusters))
+        , DeferredSettings(request.GetSettings())
+        , DeferredRounds(request.GetNeedsRounds())
     {
         LOG_I("Create " << Debug());
+        NextCheckpointAtBytes = ScanSettings.GetMaxCheckpointBytes();
 
         const bool toBuild = request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD;
         OutForeign = OverlapClusters > 1 && request.GetOverlapOutForeign();
@@ -152,6 +170,13 @@ public:
         // DataPos always includes the embedding column
         DataColumnCount = ScanTags.size() - request.GetSourcePrimaryKeyColumns().size() - DataPos;
         Lead.To(ScanTags, {}, NTable::ESeek::Lower);
+        if (request.HasKeyRange()) {
+            TSerializedTableRange resumeRange;
+            resumeRange.Load(request.GetKeyRange());
+            auto scanRange = Intersect(KeyTypes, resumeRange.ToTableRange(), table.GetTableRange());
+            Lead = CreateLeadFrom(scanRange);
+            Lead.SetTags(ScanTags);
+        }
         {
             Ydb::Type type;
             auto levelTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
@@ -217,7 +242,18 @@ public:
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
 
+        if (LastAckedKey.GetBuffer()) {
+            record.SetLastKeyAck(LastAckedKey.GetBuffer());
+        }
+
         Uploader.Finish(record, status);
+
+        if (InvalidEmbeddingError) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+            auto* issue = record.AddIssues();
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            issue->set_message(InvalidEmbeddingError);
+        }
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
             LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
@@ -282,13 +318,6 @@ public:
 
         if (!Prefix) {
             Prefix = TSerializedCellVec{key.subspan(0, PrefixColumns)};
-
-            // write {Prefix..., Parent} row to PrefixBuf:
-            TVector<TCell> pk(::Reserve(Prefix.GetCells().size() + 1));
-            pk.insert(pk.end(), Prefix.GetCells().begin(), Prefix.GetCells().end());
-            pk.push_back(TCell::Make(Parent));
-
-            PrefixBuf->AddRow(pk, {});
         }
 
         if (IsFirstPrefixFeed && IsPrefixRowsValid) {
@@ -300,6 +329,10 @@ public:
         }
 
         Feed(key, *row);
+
+        if (InvalidEmbeddingError) {
+            return EScan::Final;
+        }
 
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
     }
@@ -346,9 +379,26 @@ protected:
             return;
         }
 
-        Uploader.Handle(ev);
+        bool batchUploaded = Uploader.Handle(ev);
 
         if (Uploader.GetUploadStatus().IsSuccess()) {
+            if (batchUploaded && PendingCheckpointKey.GetBuffer() && Uploader.AllFlushed()
+                && Uploader.GetUploadBytes() >= NextCheckpointAtBytes)
+            {
+                NextCheckpointAtBytes = Uploader.GetUploadBytes() + ScanSettings.GetMaxCheckpointBytes();;
+                LastAckedKey = PendingCheckpointKey;
+                PendingCheckpointKey = {};
+
+                auto progress = MakeHolder<TEvDataShard::TEvPrefixKMeansResponse>();
+                auto& rec = progress->Record;
+                rec.SetId(BuildId);
+                rec.SetTabletId(TabletId);
+                rec.SetRequestSeqNoGeneration(Response->Record.GetRequestSeqNoGeneration());
+                rec.SetRequestSeqNoRound(Response->Record.GetRequestSeqNoRound());
+                rec.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
+                rec.SetLastKeyAck(LastAckedKey.GetBuffer());
+                Send(ResponseActorId, progress.Release());
+            }
             Driver->Touch(EScan::Feed);
             return;
         }
@@ -365,8 +415,9 @@ protected:
     }
 
     void StartNewPrefix() {
-        Parent = Child + K;
+        Parent = Child + MaxClusters;
         Child = Parent + 1;
+        K = MaxClusters;
         State = EState::SAMPLE;
         Lead.To(Prefix.GetCells(), NTable::ESeek::Upper); // seek to (prefix, inf)
         Prefix = {};
@@ -374,7 +425,9 @@ protected:
         IsPrefixRowsValid = true;
         PrefixRows.Clear();
         Sampler.Finish();
-        Clusters->Clear();
+        if (Clusters) {
+            Clusters->Clear();
+        }
     }
 
     TString Debug() const
@@ -383,13 +436,14 @@ protected:
             << " State: " << State
             << " Parent: " << Parent << " Child: " << Child
             << " " << Sampler.Debug()
-            << " " << Clusters->Debug()
+            << " " << (Clusters ? Clusters->Debug() : "Clusters: null")
             << " " << Uploader.Debug();
     }
 
     bool FinishPrefix()
     {
         if (FinishPrefixImpl()) {
+            PendingCheckpointKey = Prefix;
             StartNewPrefix();
             LOG_T("FinishPrefix finished " << Debug());
             return true;
@@ -404,6 +458,7 @@ protected:
                         Feed(key.GetCells(), row.GetCells());
                     }
                     if (FinishPrefixImpl()) {
+                        PendingCheckpointKey = Prefix;
                         StartNewPrefix();
                         LOG_T("FinishPrefix finished in " << iteration << " iterations " << Debug());
                         return true;
@@ -423,17 +478,30 @@ protected:
     {
         if (State == EState::SAMPLE) {
             State = EState::KMEANS;
+            const ui64 prefixRowCount = Sampler.GetTotalSeen();
             auto rows = Sampler.Finish().second;
             if (rows.size() == 0) {
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this prefix
                 return true;
             }
+            if (Adaptive && prefixRowCount > 0) {
+                K = ::NKikimr::NKMeans::ComputeAdaptiveK(prefixRowCount, AdaptiveLevels, OverlapClusters, MaxClusters);
+            }
+            if (rows.size() > K) {
+                rows.resize(K);
+            }
             if (rows.size() < K) {
                 // if this datashard have less than K valid embeddings for this parent
                 // lets make single centroid for it
                 rows.resize(1);
             }
+            // Now we know that the prefix is correct, write {Prefix..., Parent} row to PrefixBuf
+            TVector<TCell> pk(::Reserve(Prefix.GetCells().size() + 1));
+            pk.insert(pk.end(), Prefix.GetCells().begin(), Prefix.GetCells().end());
+            pk.push_back(TCell::Make(Parent));
+            PrefixBuf->AddRow(pk, {});
+            // Set clusters
             bool ok = Clusters->SetClusters(std::move(rows));
             Y_ENSURE(ok);
             Clusters->SetRound(1);
@@ -480,8 +548,27 @@ protected:
 
     void FeedSample(TArrayRef<const TCell> row)
     {
+        if (row.at(EmbeddingPos).IsNull() || row.at(EmbeddingPos).Size() == 0) {
+            return;
+        }
+
         const auto embedding = row.at(EmbeddingPos).AsRef();
+
+        if (!Clusters) {
+            TString error;
+            TStringBuf embeddingBuf(embedding.data(), embedding.size());
+            Clusters = NKikimr::NKMeans::CreateClustersAutoDetect(DeferredSettings, embeddingBuf, DeferredRounds, error);
+            if (!Clusters) {
+                InvalidEmbeddingError = error;
+                return;
+            }
+            Dimensions = DeferredSettings.vector_dimension();
+        }
+
         if (!Clusters->IsExpectedFormat(embedding)) {
+            if (!embedding.empty()) {
+                InvalidEmbeddingError = Clusters->FormatError(embedding);
+            }
             return;
         }
 
@@ -492,6 +579,9 @@ protected:
 
     void FeedKMeans(TArrayRef<const TCell> row)
     {
+        if (row.at(EmbeddingPos).IsNull()) {
+            return;
+        }
         if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
             Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());
         }
@@ -500,6 +590,16 @@ protected:
     void FeedFinal(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
         TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
     {
+        if (row.at(EmbeddingPos).IsNull() || row.at(EmbeddingPos).Size() == 0) {
+            return;
+        }
+        const auto embedding = row.at(EmbeddingPos).AsRef();
+        if (!Clusters->IsExpectedFormat(embedding)) {
+            if (!embedding.empty()) {
+                InvalidEmbeddingError = Clusters->FormatError(embedding);
+            }
+            return;
+        }
         Clusters->FindClusters(row.at(EmbeddingPos).AsBuf(), TmpClusters, OverlapClusters, OverlapRatio);
         if (OutForeign) {
             bool foreign = false;
@@ -670,7 +770,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
         // 3. Validating vector index settings
         TString error;
         auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), request.GetNeedsRounds(), error);
-        if (!clusters) {
+        if (!clusters && !NKikimr::NKMeans::ValidateSettingsPartial(request.GetSettings(), error)) {
             badRequest(error);
             auto sent = trySendBadRequest();
             Y_ENSURE(sent);

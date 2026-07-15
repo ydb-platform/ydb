@@ -15,6 +15,8 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/singleton.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -231,7 +233,11 @@ private:
     }
 
     const NUdf::TUnboxedValue* GetElements() const final {
+#ifdef YQL_EMULATE_LAZY_ITERABLES
+        return nullptr;
+#else  // YQL_EMULATE_LAZY_ITERABLES
         return Items_.GetItems();
+#endif // YQL_EMULATE_LAZY_ITERABLES
     }
 
     bool IsSortedDict() const override {
@@ -426,7 +432,11 @@ private:
     }
 
     const NUdf::TUnboxedValue* GetElements() const final {
+#ifdef YQL_EMULATE_LAZY_ITERABLES
+        return nullptr;
+#else  // YQL_EMULATE_LAZY_ITERABLES
         return TBaseVector::data();
+#endif // YQL_EMULATE_LAZY_ITERABLES
     }
 
     bool IsSortedDict() const override {
@@ -554,7 +564,11 @@ private:
     }
 
     const NUdf::TUnboxedValue* GetElements() const override {
+#ifdef YQL_EMULATE_LAZY_ITERABLES
+        return nullptr;
+#else  // YQL_EMULATE_LAZY_ITERABLES
         return &None_;
+#endif // YQL_EMULATE_LAZY_ITERABLES
     }
 
     const NUdf::TUnboxedValue None_;
@@ -563,7 +577,7 @@ private:
 
 class TSortedSetHolder: public TComputationValue<TSortedSetHolder> {
 public:
-    typedef TUnboxedValueVector TItems;
+    using TItems = TUnboxedValueVector;
 
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {
@@ -598,7 +612,7 @@ public:
             if (NoSwap) {
                 key = *Iterator_;
                 if (Parent_->Packer_) {
-                    key = Parent_->Packer_->Decode(key.AsStringRef(), false, Parent_->HolderFactory_);
+                    key = Parent_->Packer_->Decode(key.AsStringRef(), /*desc=*/false, Parent_->HolderFactory_);
                 }
             } else {
                 key = NUdf::TUnboxedValuePod::Void();
@@ -615,7 +629,7 @@ public:
             } else {
                 payload = *Iterator_;
                 if (Parent_->Packer_) {
-                    payload = Parent_->Packer_->Decode(payload.AsStringRef(), false, Parent_->HolderFactory_);
+                    payload = Parent_->Packer_->Decode(payload.AsStringRef(), /*desc=*/false, Parent_->HolderFactory_);
                 }
             }
             return true;
@@ -629,7 +643,7 @@ public:
     TSortedSetHolder(
         TMemoryUsageInfo* memInfo,
         TSortedSetFiller filler,
-        const TKeyTypes& types,
+        TKeyTypes types,
         bool isTuple,
         EDictSortMode mode,
         bool eagerFill,
@@ -638,8 +652,8 @@ public:
         const NUdf::IEquate* equate,
         const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
-        , Filler_(filler)
-        , Types_(types)
+        , Filler_(std::move(filler))
+        , Types_(std::move(types))
         , IsTuple_(isTuple)
         , Mode_(mode)
         , Compare_(compare)
@@ -665,7 +679,7 @@ private:
         LazyBuildDict();
         NUdf::TUnboxedValue encodedKey;
         if (Packer_) {
-            encodedKey = MakeString(Packer_->Encode(key, false));
+            encodedKey = MakeString(Packer_->Encode(key, /*desc=*/false));
         }
 
         return BinarySearch(Items_.begin(), Items_.end(), NUdf::TUnboxedValuePod(Packer_ ? encodedKey : key),
@@ -676,7 +690,7 @@ private:
         LazyBuildDict();
         NUdf::TUnboxedValue encodedKey;
         if (Packer_) {
-            encodedKey = MakeString(Packer_->Encode(key, false));
+            encodedKey = MakeString(Packer_->Encode(key, /*desc=*/false));
         }
 
         const auto it = LowerBound(Items_.begin(), Items_.end(),
@@ -777,7 +791,7 @@ private:
 
 class TSortedDictHolder: public TComputationValue<TSortedDictHolder> {
 public:
-    typedef TKeyPayloadPairVector TItems;
+    using TItems = TKeyPayloadPairVector;
 
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {
@@ -812,7 +826,7 @@ public:
             if (NoSwap) {
                 key = Iterator_->first;
                 if (Parent_->Packer_) {
-                    key = Parent_->Packer_->Decode(key.AsStringRef(), false, Parent_->HolderFactory_);
+                    key = Parent_->Packer_->Decode(key.AsStringRef(), /*desc=*/false, Parent_->HolderFactory_);
                 }
             } else {
                 key = Iterator_->second;
@@ -829,7 +843,7 @@ public:
             } else {
                 payload = Iterator_->first;
                 if (Parent_->Packer_) {
-                    payload = Parent_->Packer_->Decode(payload.AsStringRef(), false, Parent_->HolderFactory_);
+                    payload = Parent_->Packer_->Decode(payload.AsStringRef(), /*desc=*/false, Parent_->HolderFactory_);
                 }
             }
             return true;
@@ -843,7 +857,7 @@ public:
     TSortedDictHolder(
         TMemoryUsageInfo* memInfo,
         TSortedDictFiller filler,
-        const TKeyTypes& types,
+        TKeyTypes types,
         bool isTuple,
         EDictSortMode mode,
         bool eagerFill,
@@ -852,8 +866,8 @@ public:
         const NUdf::IEquate* equate,
         const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
-        , Filler_(filler)
-        , Types_(types)
+        , Filler_(std::move(filler))
+        , Types_(std::move(types))
         , IsTuple_(isTuple)
         , Mode_(mode)
         , Compare_(compare)
@@ -879,7 +893,7 @@ private:
         LazyBuildDict();
         NUdf::TUnboxedValue encodedKey;
         if (Packer_) {
-            encodedKey = MakeString(Packer_->Encode(key, false));
+            encodedKey = MakeString(Packer_->Encode(key, /*desc=*/false));
         }
 
         return BinarySearch(Items_.begin(), Items_.end(),
@@ -893,7 +907,7 @@ private:
         LazyBuildDict();
         NUdf::TUnboxedValue encodedKey;
         if (Packer_) {
-            encodedKey = MakeString(Packer_->Encode(key, false));
+            encodedKey = MakeString(Packer_->Encode(key, /*desc=*/false));
         }
 
         const auto it = LowerBound(Items_.begin(), Items_.end(),
@@ -1048,11 +1062,11 @@ public:
     };
 
     THashedSetHolder(TMemoryUsageInfo* memInfo, THashedSetFiller filler,
-                     const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType,
+                     TKeyTypes types, bool isTuple, bool eagerFill, TType* encodedType,
                      const NUdf::IHash* hash, const NUdf::IEquate* equate, const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
-        , Filler_(filler)
-        , Types_(types)
+        , Filler_(std::move(filler))
+        , Types_(std::move(types))
         , Set_(0, TValueHasher(Types_, isTuple, hash), TValueEqual(Types_, isTuple, equate))
         , IsBuilt_(false)
         , HolderFactory_(holderFactory)
@@ -1437,7 +1451,7 @@ public:
         : TComputationValue(memInfo)
         , Pool_(std::move(pool))
         , Set_(std::move(set))
-        , KeyPacker_(true, keyType)
+        , KeyPacker_(/*stable=*/true, keyType)
         , Ctx_(ctx)
     {
     }
@@ -1552,8 +1566,8 @@ public:
         : TComputationValue(memInfo)
         , Pool_(std::move(pool))
         , Map_(std::move(map))
-        , KeyPacker_(true, keyType)
-        , PayloadPacker_(false, payloadType)
+        , KeyPacker_(/*stable=*/true, keyType)
+        , PayloadPacker_(/*stable=*/false, payloadType)
         , Ctx_(ctx)
     {
     }
@@ -1734,8 +1748,8 @@ public:
         : TComputationValue(memInfo)
         , Pool_(std::move(pool))
         , Map_(std::move(map))
-        , KeyPacker_(true, keyType)
-        , PayloadPacker_(false, payloadType)
+        , KeyPacker_(/*stable=*/true, keyType)
+        , PayloadPacker_(/*stable=*/false, payloadType)
         , CompCtx_(*ctx)
     {
     }
@@ -1855,11 +1869,11 @@ public:
     };
 
     THashedDictHolder(TMemoryUsageInfo* memInfo, THashedDictFiller filler,
-                      const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType,
+                      TKeyTypes types, bool isTuple, bool eagerFill, TType* encodedType,
                       const NUdf::IHash* hash, const NUdf::IEquate* equate, const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
-        , Filler_(filler)
-        , Types_(types)
+        , Filler_(std::move(filler))
+        , Types_(std::move(types))
         , Map_(0, TValueHasher(Types_, isTuple, hash), TValueEqual(Types_, isTuple, equate))
         , IsBuilt_(false)
         , HolderFactory_(holderFactory)
@@ -2176,8 +2190,8 @@ public:
         : TComputationValue<THashedSingleFixedCompactMapHolder>(memInfo)
         , Pool_(std::move(pool))
         , Map_(std::move(map))
-        , NullPayload_(std::move(nullPayload))
-        , PayloadPacker_(false, payloadType)
+        , NullPayload_(nullPayload)
+        , PayloadPacker_(/*stable=*/false, payloadType)
         , Ctx_(ctx)
     {
     }
@@ -2461,7 +2475,7 @@ public:
         , Pool_(std::move(pool))
         , Map_(std::move(map))
         , NullPayloads_(std::move(nullPayloads))
-        , PayloadPacker_(false, payloadType)
+        , PayloadPacker_(/*stable=*/false, payloadType)
         , Ctx_(ctx)
     {
     }
@@ -2645,7 +2659,7 @@ public:
 
     TLimitedList(TMemoryUsageInfo* memInfo, NUdf::TRefCountedPtr<NUdf::IBoxedValue> parent, TMaybe<ui64> skip, TMaybe<ui64> take)
         : TComputationValue(memInfo)
-        , Parent_(parent)
+        , Parent_(std::move(parent))
         , Skip_(skip)
         , Take_(take)
     {
@@ -2853,7 +2867,7 @@ class TDictValueBuilder: public NUdf::IDictValueBuilder {
 public:
     TDictValueBuilder(
         const THolderFactory& holderFactory,
-        const TKeyTypes& types,
+        TKeyTypes types,
         bool isTuple,
         ui32 dictFlags,
         TType* encodeType,
@@ -2861,7 +2875,7 @@ public:
         const NUdf::IEquate* equate,
         const NUdf::ICompare* compare)
         : HolderFactory_(holderFactory)
-        , Types_(types)
+        , Types_(std::move(types))
         , IsTuple_(isTuple)
         , DictFlags_(dictFlags)
         , EncodeType_(encodeType)
@@ -2889,7 +2903,7 @@ public:
             THashedDictFiller filler(std::bind(prepareFn, this, std::placeholders::_1));
 
             return HolderFactory_.CreateDirectHashedDictHolder(
-                filler, Types_, IsTuple_, true, EncodeType_, Hash_, Equate_);
+                filler, Types_, IsTuple_, /*eagerFill=*/true, EncodeType_, Hash_, Equate_);
         } else {
             auto prepareFn = (DictFlags_ & NUdf::TDictFlags::Multi)
                                  ? &TDictValueBuilder::PrepareMultiSortedDict
@@ -2900,7 +2914,7 @@ public:
                                      ? EDictSortMode::SortedUniqueAscending
                                      : EDictSortMode::RequiresSorting;
 
-            return HolderFactory_.CreateDirectSortedDictHolder(filler, Types_, IsTuple_, mode, true,
+            return HolderFactory_.CreateDirectSortedDictHolder(filler, Types_, IsTuple_, mode, /*eagerFill=*/true,
                                                                EncodeType_, Compare_, Equate_);
         }
     }
@@ -2926,12 +2940,12 @@ private:
                 TDefaultListRepresentation emptyList;
                 auto newList = HolderFactory_.CreateDirectListHolder(
                     emptyList.Append(std::move(value.second)));
-                map.emplace(std::move(key), std::move(newList));
+                map.emplace(std::move(key), newList);
             } else {
                 auto prevList = GetDefaultListRepresentation(it->second);
                 auto newList = HolderFactory_.CreateDirectListHolder(
                     prevList->Append(std::move(value.second)));
-                it->second = std::move(newList);
+                it->second = newList;
             }
         }
     }
@@ -2962,7 +2976,7 @@ private:
         if (EncodeType_) {
             packer.emplace(EncodeType_);
             for (auto& x : localValues) {
-                x.first = MakeString(packer->Encode(x.first, false));
+                x.first = MakeString(packer->Encode(x.first, /*desc=*/false));
             }
         }
 
@@ -2979,14 +2993,14 @@ private:
                     currentList = currentList.Append(std::move(it->second));
                 } else {
                     auto payload = HolderFactory_.CreateDirectListHolder(std::move(currentList));
-                    groups.emplace_back(std::move(lastKey), std::move(payload));
+                    groups.emplace_back(std::move(lastKey), payload);
                     currentList = TDefaultListRepresentation(std::move(it->second));
                     lastKey = std::move(it->first);
                 }
             }
 
             auto payload = HolderFactory_.CreateDirectListHolder(std::move(currentList));
-            groups.emplace_back(std::move(lastKey), std::move(payload));
+            groups.emplace_back(std::move(lastKey), payload);
         }
 
         values.swap(groups);
@@ -2998,7 +3012,7 @@ private:
         if (EncodeType_) {
             packer.emplace(EncodeType_);
             for (auto& x : values) {
-                x.first = MakeString(packer->Encode(x.first, false));
+                x.first = MakeString(packer->Encode(x.first, /*desc=*/false));
             }
         }
     }
@@ -3106,7 +3120,8 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectArrayHolder(ui64 size, NUdf::
     return res;
 }
 
-NUdf::TUnboxedValuePod THolderFactory::CreateArrowBlock(arrow::Datum&& datum) const {
+NUdf::TUnboxedValuePod THolderFactory::CreateArrowBlock(arrow::Datum&& datum, NYql::EDatumValidationMode validationMode) const {
+    ValidateDatum(datum, Nothing(), /*type=*/nullptr, validationMode);
     return Create<TArrowBlock>(std::move(datum));
 }
 
@@ -3305,7 +3320,7 @@ NUdf::TUnboxedValuePod THolderFactory::Append(NUdf::TUnboxedValuePod list, NUdf:
     TDefaultListRepresentation resList;
     if (const auto leftRepr = reinterpret_cast<const TDefaultListRepresentation*>(
             NUdf::TBoxedValueAccessor::GetListRepresentation(*boxed))) {
-        resList = std::move(*leftRepr);
+        resList = *leftRepr;
     } else {
         TThresher<false>::DoForEachItem(list,
                                         [&resList](NUdf::TUnboxedValue&& item) {
@@ -3313,7 +3328,7 @@ NUdf::TUnboxedValuePod THolderFactory::Append(NUdf::TUnboxedValuePod list, NUdf:
                                         });
     }
 
-    resList = resList.Append(std::move(last));
+    resList = resList.Append(last);
     return CreateDirectListHolder(std::move(resList));
 }
 
@@ -3330,7 +3345,7 @@ NUdf::TUnboxedValuePod THolderFactory::Prepend(NUdf::TUnboxedValuePod first, NUd
                                         });
     }
 
-    resList = resList.Prepend(std::move(first));
+    resList = resList.Prepend(first);
     return CreateDirectListHolder(std::move(resList));
 }
 
@@ -3426,11 +3441,11 @@ NUdf::TUnboxedValuePod THolderFactory::CreateVariantHolder(NUdf::TUnboxedValuePo
         return item;
     }
 
-    return CreateBoxedVariantHolder(std::move(item), index);
+    return CreateBoxedVariantHolder(item, index);
 }
 
 NUdf::TUnboxedValuePod THolderFactory::CreateBoxedVariantHolder(NUdf::TUnboxedValuePod item, ui32 index) const {
-    return NUdf::TUnboxedValuePod(AllocateOn<TVariantHolder>(CurrentAllocState_, &MemInfo_, std::move(item), index));
+    return NUdf::TUnboxedValuePod(AllocateOn<TVariantHolder>(CurrentAllocState_, &MemInfo_, item, index));
 }
 
 NUdf::TUnboxedValuePod THolderFactory::CreateIteratorOverList(NUdf::TUnboxedValuePod list) const {

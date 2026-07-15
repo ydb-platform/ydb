@@ -1,6 +1,5 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: YqlSelect unsupported: (union_op select_stmt_intersect)* */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -104,17 +103,17 @@ FROM (
     SELECT
         *
     FROM
-        ss
+        $ss AS ss
     UNION ALL
     SELECT
         *
     FROM
-        cs
+        $cs AS cs
     UNION ALL
     SELECT
         *
     FROM
-        ws
+        $ws AS ws
 ) AS tmp1
 GROUP BY
     i_item_id

@@ -156,7 +156,8 @@
                 {"Index": 11, "Name": "TableType", "Type": "TCoAtom"},
                 {"Index": 12, "Name": "Temporary", "Type": "TCoAtom"},
                 {"Index": 13, "Name": "ExistingOk", "Type": "TCoAtom"},
-                {"Index": 14, "Name": "ReplaceIfExists", "Type":  "TCoAtom"}
+                {"Index": 14, "Name": "ReplaceIfExists", "Type":  "TCoAtom"},
+                {"Index": 15, "Name": "Statistics", "Type": "TCoStatisticsList"}
             ]
         },
         {
@@ -671,7 +672,8 @@
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Secret", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Value", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "InheritPermissions", "Type": "TCoAtom"}
+                {"Index": 4, "Name": "InheritPermissions", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "ValueParamName", "Type": "TCoAtom"}
             ]
         },
         {
@@ -682,7 +684,8 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Secret", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Value", "Type": "TCoAtom"}
+                {"Index": 3, "Name": "Value", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "ValueParamName", "Type": "TCoAtom"}
             ]
         },
         {

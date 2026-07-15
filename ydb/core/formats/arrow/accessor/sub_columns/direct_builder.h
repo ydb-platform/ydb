@@ -1,4 +1,5 @@
 #pragma once
+#include "types.h"
 #include "others_storage.h"
 #include "settings.h"
 #include "stats.h"
@@ -8,9 +9,13 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
 #include <contrib/libs/xxhash/xxhash.h>
+#include <util/generic/hash_set.h>
 #include <util/string/join.h>
+
+#include <optional>
 #include <yql/essentials/types/binary_json/format.h>
 #include <yql/essentials/types/binary_json/write.h>
+
 
 namespace NKikimr::NArrow::NAccessor {
 class TSubColumnsArray;
@@ -32,8 +37,9 @@ public:
         return Accessor;
     }
 
-    void BuildSparsedAccessor(const ui32 recordsCount);
-    void BuildPlainAccessor(const ui32 recordsCount);
+    void BuildSparsedAccessor(const ui32 recordsCount, const EValueType valueType);
+    void BuildPlainAccessor(const ui32 recordsCount, const EValueType valueType);
+    void BuildDictionaryAccessor(const ui32 recordsCount, const EValueType valueType);
 
     TColumnElements(const TStringBuf key)
         : KeyName(key) {
@@ -62,7 +68,7 @@ private:
             , Hash(XXH3_64bits(Prefix.data(), Prefix.size()) ^ XXH3_64bits(Key.data(), Key.size())) {
         }
 
-        operator size_t() const {
+        explicit operator size_t() const {
             return Hash;
         }
 
@@ -168,12 +174,32 @@ public:
         }
     };
 
-    TDictStats BuildStats(const std::vector<TColumnElements*>& keys, const TSettings& settings, const ui32 recordsCount) const {
+    TDictStats BuildStats(
+        const std::vector<TColumnElements*>& keys, const TSettings& settings, const ui32 recordsCount, const bool separateColumns) const {
         auto builder = TDictStats::MakeBuilder();
         for (auto&& i : keys) {
-            builder.Add(i->GetKeyName(), i->GetRecordIndexes().size(), i->GetDataSize(),
-                settings.IsSparsed(i->GetRecordIndexes().size(), recordsCount) ? IChunkedArray::EType::SparsedArray
-                                                                               : IChunkedArray::EType::Array);
+            const ui32 presentCount = i->GetRecordIndexes().size();
+            // All stored values count toward the distinct set, nulls included (a null is one value).
+            const auto enumerateValues = [i](const auto& consumer) {
+                for (const auto& v : i->GetValues()) {
+                    if (!consumer(TStringBuf(v.data(), v.size()))) {
+                        break;
+                    }
+                }
+            };
+            // Native scalar storage applies only to separated columns, the Others store is always BinaryJson.
+            EValueType valueType = EValueType::BinaryJson;
+            if (separateColumns && settings.GetEnableNativeColumnsResolved()) {
+                valueType = DetectValueTypeForArray(i->GetValues());
+            }
+            IChunkedArray::EType accessorType = IChunkedArray::EType::Array;
+            if (settings.IsSparsed(presentCount, recordsCount)) {
+                accessorType = IChunkedArray::EType::SparsedArray;
+            } else if (separateColumns && DictionaryApplicableForValueType(valueType) &&
+                       settings.IsDictionary(presentCount, enumerateValues)) {
+                accessorType = IChunkedArray::EType::Dictionary;
+            }
+            builder.Add(i->GetKeyName(), presentCount, i->GetDataSize(), accessorType, valueType);
         }
         return builder.Finish();
     }

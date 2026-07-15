@@ -43,4 +43,6 @@ bool BuildLexerSettings(
     TIssues& issues,
     TMaybe<TParsedSettingsCache>& cache);
 
+const IUdfMeta* GetDefaultUdfMeta();
+
 } // namespace NYql::NFastCheck

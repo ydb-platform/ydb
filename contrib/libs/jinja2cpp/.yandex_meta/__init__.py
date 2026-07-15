@@ -5,7 +5,6 @@ from devtools.yamaker import fileutil
 from devtools.yamaker import pathutil
 from devtools.yamaker.project import CMakeNinjaNixProject
 
-
 HEADERS_FROM_STD = ["optional", "string_view", "variant"]
 TOKENS_FROM_STD = [
     "basic_string_view",

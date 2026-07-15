@@ -68,8 +68,11 @@
 #define _INCLUDE_STDCSOURCE_199901
 #endif
 
-#if defined(_WIN32) || defined(_WIN64) || defined(__WIN32__) || defined(__TOS_WIN__) || defined(__WINDOWS__) || \
-    defined(__CYGWIN__)
+#if defined(__CYGWIN__)
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+#elif defined(_WIN32) || defined(_WIN64) || defined(__WIN32__) || defined(__TOS_WIN__) || defined(__WINDOWS__)
 // Define target Windows version macros before including any other headers
 #include <boost/winapi/config.hpp>
 #endif

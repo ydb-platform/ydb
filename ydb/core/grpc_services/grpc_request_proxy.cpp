@@ -10,7 +10,6 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
-#include <ydb/core/security/sasl/static_credentials_provider.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -87,7 +86,6 @@ private:
     void Handle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            requestBaseCtx->FinishSpan();
             TGRpcRequestProxy::Handle(event, ctx);
         }
     }
@@ -95,7 +93,6 @@ private:
     void Handle(TEvProxyRuntimeEvent::TPtr& event, const TActorContext&) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            requestBaseCtx->FinishSpan();
             event->Release().Release()->Pass(*this);
         }
     }
@@ -111,7 +108,6 @@ private:
     }
 
     void Handle(TEvRequestAuthAndCheck::TPtr& ev, const TActorContext&) {
-        ev->Get()->FinishSpan();
         ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
     }
 
@@ -148,7 +144,6 @@ private:
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, error);
             requestBaseCtx->RaiseIssue(issue);
             requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-            requestBaseCtx->FinishSpan();
             return;
         }
 
@@ -163,7 +158,6 @@ private:
 
         if (state.State == NYdbGrpc::TAuthState::AS_FAIL) {
             requestBaseCtx->ReplyUnauthenticated();
-            requestBaseCtx->FinishSpan();
             return;
         }
 
@@ -173,7 +167,6 @@ private:
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
             requestBaseCtx->RaiseIssue(issue);
             requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-            requestBaseCtx->FinishSpan();
             return;
         }
 
@@ -183,6 +176,8 @@ private:
         // do not check connect rights for the deprecated requests without database
         // remove this along with AllowYdbRequestsWithoutDatabase flag
         bool skipCheckConnectRights = false;
+        const bool forbidRequestsToStaticNodesWithoutDatabase = AppData(ctx)->FeatureFlags.GetForbidRequestsToStaticNodesWithoutDatabase();
+        const EEmptyDatabaseMode emptyDatabaseMode = requestBaseCtx->GetEmptyDatabaseMode();
 
         if (state.State == NYdbGrpc::TAuthState::AS_NOT_PERFORMED) {
             if (IsBootstrapClusterEvent(event)) {
@@ -196,9 +191,14 @@ private:
             } else {
                 if (!std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
                     Counters->IncEmptyDatabaseNameCounter();
-                    if (DynamicNode && !AllowYdbRequestsWithoutDatabase) {
-                        requestBaseCtx->ReplyUnauthenticated("Requests without specified database are not allowed");
-                        requestBaseCtx->FinishSpan();
+                    if (!AllowYdbRequestsWithoutDatabase &&
+                        (DynamicNode || (forbidRequestsToStaticNodesWithoutDatabase
+                            && emptyDatabaseMode == EEmptyDatabaseMode::EmptyDatabaseForbidden)
+                        )
+                    ) {
+                        const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, "Requests without specified database are not allowed");
+                        requestBaseCtx->RaiseIssue(issue);
+                        requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
                         return;
                     }
                 }
@@ -209,8 +209,9 @@ private:
             }
             if (databaseName.empty()) {
                 Counters->IncDatabaseUnavailableCounter();
-                requestBaseCtx->ReplyUnauthenticated("Empty database name");
-                requestBaseCtx->FinishSpan();
+                const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, "Empty database name");
+                requestBaseCtx->RaiseIssue(issue);
+                requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
                 return;
             }
             auto it = Databases.find(databaseName);
@@ -225,7 +226,6 @@ private:
                     const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
                     requestBaseCtx->RaiseIssue(issue);
                     requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                    requestBaseCtx->FinishSpan();
                     return;
                 }
                 return;
@@ -242,7 +242,6 @@ private:
                 const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
                 requestBaseCtx->RaiseIssue(issue);
                 requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                requestBaseCtx->FinishSpan();
                 return;
             }
 
@@ -266,7 +265,6 @@ private:
                         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
                         requestBaseCtx->RaiseIssue(issue);
                         requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
-                        requestBaseCtx->FinishSpan();
                         return;
                     }
                 }
@@ -278,7 +276,6 @@ private:
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, "database unavailable");
                 requestBaseCtx->RaiseIssue(issue);
                 requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                requestBaseCtx->FinishSpan();
                 return;
             }
 
@@ -287,7 +284,6 @@ private:
                 LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
                     "Client was disconnected before processing request (grpc request proxy)");
                 requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                requestBaseCtx->FinishSpan();
                 return;
             }
 
@@ -306,7 +302,6 @@ private:
         const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, "Can't authenticate request");
         requestBaseCtx->RaiseIssue(issue);
         requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
-        requestBaseCtx->FinishSpan();
         return;
     }
 
@@ -327,7 +322,6 @@ private:
         for (auto& [_, queue] : DeferredEvents) {
             for (TEventReqHolder& req : queue) {
                 req.Ctx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                req.Ctx->FinishSpan();
             }
         }
 
@@ -471,7 +465,6 @@ void TGRpcRequestProxyImpl::HandleBootstrapClusterEvent(TAutoPtr<TEventHandle<TE
         LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
             "Client was disconnected before processing request (grpc request proxy)");
         requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-        requestProxyCtx->FinishSpan();
         return;
     }
 
@@ -554,18 +547,16 @@ void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdat
     {
         const auto& securityState = describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState();
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Updating SecurityState for " << databaseName);
-        NSasl::TStaticCredentialsProvider::GetInstance().UpdateDatabaseUsers(securityState);
-
         if (securityState.PublicKeysSize() > 0) {
             Send(MakeTicketParserID(), new TEvTicketParser::TEvUpdateLoginSecurityState(securityState));
+        } else {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no PublicKeys");
         }
     } else {
         if (!describeScheme.GetPathDescription().HasDomainDescription()) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no DomainDescription");
         } else if (!describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no SecurityState");
-        } else if (describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() == 0) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no PublicKeys");
         }
     }
 
@@ -595,13 +586,11 @@ void TGRpcRequestProxyImpl::ForgetDatabase(const TString& database) {
         while (!queue.empty()) {
             Counters->IncDatabaseUnavailableCounter();
             queue.front().Ctx->ReplyUnauthenticated("Unknown database");
-            queue.front().Ctx->FinishSpan();
             queue.pop_front();
         }
         DeferredEvents.erase(itDeferredEvents);
     }
     Databases.erase(database);
-    NSasl::TStaticCredentialsProvider::GetInstance().DeleteDatabaseUsers(database);
 }
 
 void TGRpcRequestProxyImpl::SubscribeToDatabase(const TString& database) {

@@ -246,6 +246,7 @@ public:
     }
 
     void HandleGetNextBatch(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
+        ConnectedConsumers.insert(ev->Sender);
         if (HasEnoughToSend()) {
             LOG_D("TS3FileQueueActor", "HandleGetNextBatch sending right away");
             TrySendObjects(ev->Sender, ev->Get()->Record.GetTransportMeta());
@@ -353,6 +354,7 @@ public:
     }
 
     void HandleGetNextBatchForEmptyState(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
+        ConnectedConsumers.insert(ev->Sender);
         LOG_T(
             "TS3FileQueueActor",
             "HandleGetNextBatchForEmptyState Giving away rest of Objects");
@@ -376,6 +378,7 @@ public:
     }
 
     void HandleGetNextBatchForErrorState(TEvS3Provider::TEvGetNextBatch::TPtr& ev) {
+        ConnectedConsumers.insert(ev->Sender);
         LOG_D(
             "TS3FileQueueActor",
             "HandleGetNextBatchForErrorState Giving away rest of Objects");
@@ -384,6 +387,7 @@ public:
     }
 
     void HandleUpdateConsumersCount(TEvS3Provider::TEvUpdateConsumersCount::TPtr& ev) {
+        ConnectedConsumers.insert(ev->Sender);
         if (!UpdatedConsumers.contains(ev->Sender)) {
             LOG_D(
                 "TS3FileQueueActor",
@@ -403,6 +407,15 @@ public:
     }
 
     void HandlePoison() {
+        // PoisonTimeout is a safety net for the case where some read actors are never
+        // bootstrapped (e.g. node failure during query startup).  Once we know that all
+        // consumers are alive, we can safely ignore the timeout and let the normal
+        // shutdown path run.
+        if (ConnectedConsumers.size() >= ConsumersCount) {
+            LOG_D("TS3FileQueueActor", "HandlePoison: consumers are active, ignoring PoisonTimeout");
+            return;
+        }
+        LOG_I("TS3FileQueueActor", "HandlePoison: no consumer messages received, shutting down");
         AnswerPendingRequests();
         PassAway();
     }
@@ -618,6 +631,7 @@ private:
     bool HasPendingRequests = false;
     THashSet<NActors::TActorId> StartedConsumers;
     THashSet<NActors::TActorId> UpdatedConsumers;
+    THashSet<NActors::TActorId> ConnectedConsumers;
 
     const IHTTPGateway::TPtr Gateway;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
@@ -628,7 +642,7 @@ private:
     const NS3Lister::ES3PatternType PatternType;
     const bool AllowLocalFiles;
 
-    static constexpr TDuration PoisonTimeout = TDuration::Hours(3);
+    static constexpr TDuration PoisonTimeout = TDuration::Minutes(30);
     static constexpr TDuration RoundRobinStageTimeout = TDuration::Seconds(3);
 };
 

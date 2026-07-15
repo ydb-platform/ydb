@@ -3,7 +3,6 @@
 #include <ydb/core/persqueue/public/codecs/pqv1.h>
 #include <ydb/library/actors/core/log.h>
 
-
 namespace NKikimr {
 
 
@@ -81,5 +80,4 @@ NKikimrPQClient::TDataChunk GetDeserializedData(const TString& string) {
     return proto;
 }
 
-} // NKikimr
-
+} // namespace NKikimr

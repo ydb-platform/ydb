@@ -78,7 +78,7 @@ void TGRpcPQClusterDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr 
 #endif
 
 #define SETUP_PQCD_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, pq_cluster_discovery, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, pq_cluster_discovery, auditMode, EEmptyDatabaseMode::EmptyDatabaseAllowed)
 
     SETUP_PQCD_METHOD(DiscoverClusters, DoDiscoverPQClustersRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
 

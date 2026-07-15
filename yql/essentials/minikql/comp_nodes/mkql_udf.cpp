@@ -100,7 +100,7 @@ public:
         ui32 flags = 0;
         TFunctionTypeInfo funcInfo;
         const auto status = ctx.HolderFactory.GetFunctionRegistry()->FindFunctionTypeInfo(
-            ctx.LangVer, ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
+            ctx.LangVer, ctx.RuntimeSettings, ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
             TypeConfig, flags, Pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
         if (!status.IsOk()) {
@@ -289,18 +289,12 @@ public:
 
         block = make;
 
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TUdfWrapper::MakeUdf>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), udfPtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, udfPtr}, "", block);
+        EmitFunctionCall<&TUdfWrapper::MakeUdf>(Type::getVoidTy(context), {self, ctx.Ctx, udfPtr}, ctx, block);
         BranchInst::Create(main, block);
 
         block = main;
 
-        const auto convertFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TUdfWrapper::ConvertDateTimeArg>());
-        const auto convertType = FunctionType::get(Type::getVoidTy(context), {self->getType(), udfPtr->getType()}, false);
-        const auto convertFuncPtr = CastInst::Create(Instruction::IntToPtr, convertFunc, PointerType::getUnqual(convertType), "convert", block);
-        CallInst::Create(convertType, convertFuncPtr, {self, udfPtr}, "", block);
+        EmitFunctionCall<&TUdfWrapper::ConvertDateTimeArg>(Type::getVoidTy(context), {self, udfPtr}, ctx, block);
 
         const auto argsType = ArrayType::get(valueType, RunConfigArgs);
         const auto args = new AllocaInst(argsType, 0U, "args", block);
@@ -322,10 +316,7 @@ public:
 
         ValueUnRef(RunConfigNode->GetRepresentation(), runConfigValue, ctx, block);
 
-        const auto wrap = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TUdfWrapper::Wrap>());
-        const auto funType = FunctionType::get(Type::getVoidTy(context), {self->getType(), pointer->getType()}, false);
-        const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, wrap, PointerType::getUnqual(funType), "function", block);
-        CallInst::Create(funType, doFuncPtr, {self, pointer}, "", block);
+        EmitFunctionCall<&TUdfWrapper::Wrap>(Type::getVoidTy(context), {self, pointer}, ctx, block);
     }
 #endif
 private:
@@ -333,7 +324,7 @@ private:
         ui32 flags = 0;
         TFunctionTypeInfo funcInfo;
         const auto status = ctx.HolderFactory.GetFunctionRegistry()->FindFunctionTypeInfo(
-            ctx.LangVer, ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
+            ctx.LangVer, ctx.RuntimeSettings, ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
             TypeConfig, flags, Pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
         if (!status.IsOk()) {
@@ -485,7 +476,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
     const auto userType = static_cast<TType*>(userTypeNode.GetNode());
 
     const auto status = ctx.FunctionRegistry.FindFunctionTypeInfo(
-        ctx.LangVer, ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType->IsVoid() ? nullptr : userType,
+        ctx.LangVer, *ctx.RuntimeSettings, ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType->IsVoid() ? nullptr : userType,
         typeConfig, flags, pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
     if (!status.IsOk()) {
@@ -638,7 +629,7 @@ IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFacto
     ui32 flags = 0;
     TFunctionTypeInfo funcInfo;
     const auto status = ctx.FunctionRegistry.FindFunctionTypeInfo(
-        ctx.LangVer, ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType,
+        ctx.LangVer, *ctx.RuntimeSettings, ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType,
         typeConfig, flags, pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
     if (!status.IsOk()) {

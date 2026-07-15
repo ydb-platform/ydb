@@ -1,0 +1,3 @@
+$vt = Variant<foo:Struct<a:Int32>,bar:Int32>;
+select Variant(<|a:1|>, "foo", $vt) == AsVariant(<||>,"foo")
+

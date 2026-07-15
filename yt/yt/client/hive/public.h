@@ -33,6 +33,8 @@ struct TTimestampMap;
 
 DECLARE_REFCOUNTED_STRUCT(TClusterDirectoryConfig)
 
+struct TClusterDirectoryUpdateResult;
+
 template <std::derived_from<NApi::IConnection> TConnection>
 class TClusterDirectoryBase;
 

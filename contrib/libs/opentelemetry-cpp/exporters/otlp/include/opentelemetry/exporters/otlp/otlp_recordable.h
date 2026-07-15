@@ -38,11 +38,11 @@ class OtlpRecordable final : public opentelemetry::sdk::trace::Recordable
 {
 public:
   explicit OtlpRecordable(
-      std::uint32_t max_attributes           = std::numeric_limits<std::uint32_t>::max(),
-      std::uint32_t max_events               = std::numeric_limits<std::uint32_t>::max(),
-      std::uint32_t max_links                = std::numeric_limits<std::uint32_t>::max(),
-      std::uint32_t max_attributes_per_event = std::numeric_limits<std::uint32_t>::max(),
-      std::uint32_t max_attributes_per_link  = std::numeric_limits<std::uint32_t>::max())
+      std::uint32_t max_attributes           = (std::numeric_limits<std::uint32_t>::max)(),
+      std::uint32_t max_events               = (std::numeric_limits<std::uint32_t>::max)(),
+      std::uint32_t max_links                = (std::numeric_limits<std::uint32_t>::max)(),
+      std::uint32_t max_attributes_per_event = (std::numeric_limits<std::uint32_t>::max)(),
+      std::uint32_t max_attributes_per_link  = (std::numeric_limits<std::uint32_t>::max)())
       : max_attributes_(max_attributes),
         max_events_(max_events),
         max_links_(max_links),

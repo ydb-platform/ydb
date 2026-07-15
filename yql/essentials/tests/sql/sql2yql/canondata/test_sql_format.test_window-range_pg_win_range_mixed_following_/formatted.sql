@@ -1,0 +1,63 @@
+PRAGMA WindowNewPipeline;
+
+$data = [
+    <|a: pgfloat4('1'), expected_count_w1: 2, expected_sum_w1: pgfloat4('3'), expected_count_w3: 2, expected_sum_w3: pgfloat4('3')|>,
+    <|a: pgfloat4('2'), expected_count_w1: 2, expected_sum_w1: pgfloat4('5'), expected_count_w3: 2, expected_sum_w3: pgfloat4('5')|>,
+    <|a: pgfloat4('3'), expected_count_w1: 2, expected_sum_w1: pgfloat4('7'), expected_count_w3: 2, expected_sum_w3: pgfloat4('7')|>,
+    <|a: pgfloat4('4'), expected_count_w1: 2, expected_sum_w1: pgfloat4('9'), expected_count_w3: 2, expected_sum_w3: pgfloat4('9')|>,
+    <|a: pgfloat4('5'), expected_count_w1: 1, expected_sum_w1: pgfloat4('5'), expected_count_w3: 1, expected_sum_w3: pgfloat4('5')|>,
+];
+
+$win_result = (
+    SELECT
+        a,
+        COUNT(*) OVER w1 AS count_w1,
+        pg::sum(a) OVER w1 AS sum_w1,
+        COUNT(*) OVER w2 AS count_w2,
+        pg::sum(a) OVER w2 AS sum_w2,
+        COUNT(*) OVER w3 AS count_w3,
+        pg::sum(a) OVER w3 AS sum_w3,
+        expected_count_w1,
+        expected_sum_w1,
+        expected_count_w3,
+        expected_sum_w3,
+    FROM
+        AS_TABLE($data)
+    WINDOW
+        w1 AS (
+            ORDER BY
+                a ASC
+            RANGE BETWEEN CURRENT ROW AND pgfloat8('1.0') FOLLOWING
+        ),
+        w2 AS (
+            ORDER BY
+                a ASC
+            RANGE BETWEEN CURRENT ROW AND pgfloat8('1') FOLLOWING
+        ),
+        w3 AS (
+            ORDER BY
+                a ASC
+            RANGE BETWEEN CURRENT ROW AND pgfloat8('1.0') FOLLOWING
+        )
+);
+
+SELECT
+    Ensure(count_w1, count_w1 IS NOT DISTINCT FROM count_w2),
+    Ensure(sum_w1, sum_w1 IS NOT DISTINCT FROM sum_w2),
+FROM
+    $win_result
+;
+
+SELECT
+    Ensure(count_w1, count_w1 IS NOT DISTINCT FROM expected_count_w1),
+    Ensure(sum_w1, sum_w1 IS NOT DISTINCT FROM expected_sum_w1),
+FROM
+    $win_result
+;
+
+SELECT
+    Ensure(count_w3, count_w3 IS NOT DISTINCT FROM expected_count_w3),
+    Ensure(sum_w3, sum_w3 IS NOT DISTINCT FROM expected_sum_w3),
+FROM
+    $win_result
+;

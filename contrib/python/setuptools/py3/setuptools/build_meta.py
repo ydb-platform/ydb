@@ -357,7 +357,9 @@ class _BuildMetaBackend(_ConfigSettingsTranslator):
             candidates = [f for f in dirs if f.endswith(suffix)]
 
             if len(candidates) != 0 or len(dirs) != 1:
-                assert len(candidates) == 1, f"Multiple {suffix} directories found"
+                assert len(candidates) == 1, (
+                    f"Exactly one {suffix} should have been produced, but found {len(candidates)}: {candidates}"
+                )
                 return Path(parent, candidates[0])
 
         msg = f"No {suffix} directory found in {metadata_directory}"

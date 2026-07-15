@@ -58,7 +58,6 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
     if (options.IsSql) {
         NSQLTranslation::TTranslationSettings settings;
         FillSettings(settings, options);
-        settings.EmitReadsForExists = true;
         if (options.IsLibrary) {
             settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
         }
@@ -106,7 +105,7 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
     }
 
     TExprContext libCtx;
-    libCtx.IssueManager.AddIssues(std::move(astRes.Issues));
+    libCtx.IssueManager.AddIssues(astRes.Issues);
     IModuleResolver::TPtr moduleResolver;
     TUserDataTable userDataTable = GetYqlModuleResolver(libCtx, moduleResolver, userData, options.ClusterMapping, {});
     if (!userDataTable) {
@@ -122,7 +121,7 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
 
     TExprContext exprCtx(libCtx.NextUniqueId);
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, moduleResolver.get(), nullptr, false, Max<ui32>(), options.SyntaxVersion)) {
+    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, moduleResolver.get(), /*urlListerManager=*/nullptr, /*hasAnnotations=*/false, Max<ui32>(), options.SyntaxVersion)) {
         errors.AddIssues(exprCtx.IssueManager.GetIssues());
         exprCtx.IssueManager.Reset();
         return false;

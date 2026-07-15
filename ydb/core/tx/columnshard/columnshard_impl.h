@@ -29,6 +29,7 @@
 #include "tablet/ext_tx_base.h"
 #include "transactions/tx_controller.h"
 
+#include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/tablet_counters.h>
@@ -36,8 +37,8 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
-#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -63,13 +64,20 @@ class TMovePortionsChange;
 namespace NReader {
 class TTxScan;
 class TTxInternalScan;
+
 namespace NCommon {
 class TReadMetadata;
 }
+
 namespace NPlain {
 class TIndexScannerConstructor;
 }
+
 namespace NSimple {
+class TIndexScannerConstructor;
+}
+
+namespace NTrivial {
 class TIndexScannerConstructor;
 }
 }   // namespace NReader
@@ -90,10 +98,12 @@ namespace NBlobStorage {
 class TWriteAction;
 class TOperator;
 }   // namespace NBlobStorage
+
 namespace NTier {
 class TOperator;
 }
 }   // namespace NBlobOperations
+
 namespace NCompaction {
 class TGeneralCompactColumnEngineChanges;
 }
@@ -114,6 +124,7 @@ class TTxBlobsWritingFailed;
 class TWriteTasksQueue;
 class TWriteTask;
 class TCommitOperation;
+class IScanSnapshotGuard;
 
 namespace NLoading {
 class TTxControllerInitializer;
@@ -147,7 +158,8 @@ struct TSettings {
     TSettings()
         : BlobWriteGrouppingEnabled(1, 0, 1)
         , CacheDataAfterIndexing(1, 0, 1)
-        , CacheDataAfterCompaction(1, 0, 1) {
+        , CacheDataAfterCompaction(1, 0, 1)
+    {
     }
 
     void RegisterControls(TControlBoard& icb) {
@@ -217,6 +229,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NReader::TTxInternalScan;
     friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
     friend class NOlap::NReader::NSimple::TIndexScannerConstructor;
+    friend class NOlap::NReader::NTrivial::TIndexScannerConstructor;
     friend class NOlap::NReader::NCommon::TReadMetadata;
     friend class NOlap::TRemovePortionsChange;
     friend class NOlap::TMovePortionsChange;
@@ -293,6 +306,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
     void Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NBackground::TEvExecuteGeneralLocalTransaction::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished::TPtr& ev, const TActorContext& ctx);
@@ -308,8 +322,10 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& ctx);
     void Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
@@ -466,6 +482,7 @@ protected:
 
             HFunc(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs, Handle);
             HFunc(NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
+            HFunc(NOlap::NBackground::TEvRemoveSession, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModification, Handle);
             HFunc(NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished, Handle);
 
@@ -480,10 +497,12 @@ protected:
             HFunc(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors, Handle);
             HFunc(NColumnShard::TEvPrivate::TEvAskColumnData, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
             HFunc(TEvColumnShard::TEvOverloadUnsubscribe, Handle);
             HFunc(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
             HFunc(TEvDataShard::TEvCancelBackup, Handle);
             HFunc(TEvDataShard::TEvCancelRestore, Handle);
+            HFunc(TEvDataShard::TEvCompactTable, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -517,13 +536,16 @@ private:
 
     ui64 CurrentSchemeShardId = 0;
     TMessageSeqNo LastSchemaSeqNo;
+    // Per-path SeqNo tracking for path-specific schema operations (DropTable, CopyTable). In-memory only (not persisted)
+    THashMap<ui64, TMessageSeqNo> LastSchemaSeqNoByPath;
     std::optional<NKikimrSubDomains::TProcessingParams> ProcessingParams;
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;
+    NOlap::TSnapshot LastCleanupSnapshot = NOlap::TSnapshot::Zero();
     NOlap::TSnapshot LastCompletedTx = NOlap::TSnapshot::Zero();
     ui64 LastExportNo = 0;
-    NKikimrTxColumnShard::TCompletedBackupTransaction LastCompletedBackupTransaction;
-
+    THashMap<TSchemeShardLocalPathId, NKikimrTxColumnShard::TCompletedBackupTransaction> LastCompletedBackupTransactions;
+    THashMap<ui64, NKikimrTxColumnShard::TCompletedBackupTransaction> LastCompletedBackupTransactionsByTxId;   // TxId -> BackupTransaction
     ui64 StatsReportRound = 0;
     TString OwnerPath;
 
@@ -550,7 +572,8 @@ private:
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
 
-    std::optional<ui64> ProgressTxInFlight;
+    ui64 InProgressTxId = 0;
+    bool ProgressTxScheduled = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
     TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
     TBackgroundController BackgroundController;
@@ -558,13 +581,24 @@ private:
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
-    TSpaceWatcher* SpaceWatcher;
+    std::unique_ptr<TSpaceWatcher, std::function<void(TSpaceWatcher*)>> SpaceWatcher;
     TActorId SpaceWatcherId;
     THashMap<TActorId, TActorId> PipeServersInterconnectSessions;
     TActorId ScanDiagnosticsActorId;
 
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
+
+    // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring
+    // DataShard's CompactionWaiters: on restart/move the SchemeShard's persisted queue re-sends
+    // TEvCompactTable. Each waiter is answered with OK once the table has no intersecting portions.
+    struct TForcedCompactionWaiter {
+        TActorId Sender;
+        ui64 Cookie = 0;
+        TPathId SchemePathId;
+    };
+
+    THashMap<TInternalPathId, std::vector<TForcedCompactionWaiter>> ForcedCompactionWaiters;
     ui32 JitterIntervalMS = 200;
     ui32 BaseStatsEvInflight = 0;
     ui32 ExecutorStatsEvInflight = 0;
@@ -575,8 +609,13 @@ private:
     void SendWaitPlanStep(ui64 step);
     void RescheduleWaitingReads();
     NOlap::TSnapshot GetMaxReadVersion() const;
-    NOlap::TSnapshot GetMinReadSnapshot() const;
+    NOlap::TSnapshot GetMaxReadVersionForSchema(const ui64 schemaVersion) const;
+    void PublishMinSnapshotForNewScans(const IScanSnapshotGuard& guard) const;
+    NOlap::TSnapshot GetMinSnapshotForNewReads() const;
+    bool MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId) const;
+    std::unique_ptr<NOlap::ISnapshotHolders> GetSnapshotHolders() const;
     ui64 GetOutdatedStep() const;
+
     TDuration GetTxCompleteLag() const {
         ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
         return ProgressTxController->GetTxCompleteLag(mediatorTime);
@@ -605,7 +644,12 @@ private:
         const NKikimrTxColumnShard::TCopyTable& proto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
 
     void SetupCompaction(const std::set<TInternalPathId>& pathIds);
+    void TryScheduleCompaction(const std::set<TInternalPathId>& pathIds);
+    void RecheckForcedCompactions(const TActorContext& ctx);
     void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
+    void StartCompactionTasksUpToLimit();
+    void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
+        const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
     void SetupMetadata();
     bool SetupTtl();
@@ -625,6 +669,12 @@ private:
     void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
     void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
 
+    // We assume that all the blob storage groups for a database have the same layout (erasure, etc.)
+    std::optional<NKikimr::TBlobStorageGroupType> BlobStorageLayout;
+    const std::optional<NKikimr::TBlobStorageGroupType>& GetBlobStorageLayout();
+
+    ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
+
 public:
     ui64 TabletTxCounter = 0;
 
@@ -636,7 +686,8 @@ public:
         return TablesManager;
     }
 
-    void EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId);
+    void EnqueueProgressTx(const TActorContext& ctx, const ui64 continueTxId = 0);
+
     NOlap::TSnapshot GetLastTxSnapshot() const {
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
     }

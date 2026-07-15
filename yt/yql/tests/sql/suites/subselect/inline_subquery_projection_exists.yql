@@ -1,0 +1,7 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+USE plato;
+
+SELECT EXISTS (SELECT subkey FROM Input);
+
+SELECT EXISTS (SELECT Input.subkey FROM Input JOIN Input2 ON Input.subkey = Input2.key);

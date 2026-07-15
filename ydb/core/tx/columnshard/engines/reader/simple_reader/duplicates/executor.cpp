@@ -60,6 +60,7 @@ private:
             new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
                 Request.GetGlobalContext().MakeResultInFlightGuard()));
     }
+
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         THashSet<TPortionAddress> portionAddresses;
@@ -95,6 +96,14 @@ private:
             return;
         }
 
+        if (result.HasRemovedData()) {
+            TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
+                new NPrivate::TEvFilterConstructionResult(
+                    TConclusionStatus::Fail(TStringBuilder{} << "Has removed accessors data, count " << result.GetRemovedData().size()),
+                    Request.GetGlobalContext().MakeResultInFlightGuard()));
+            return;
+        }
+
         ui64 mem = 0;
         for (const auto& accessor : result.ExtractPortionsVector()) {
             mem += accessor->GetColumnRawBytes(Request.GetGlobalContext().GetFetchingColumnIds(), false);
@@ -105,6 +114,7 @@ private:
             Request.GetGlobalContext().GetRequestGuard()->GetMemoryGroupId(),
             { std::make_shared<TColumnDataAllocation>(std::move(Request), mem) }, (ui64)TFilterAccumulator::EFetchingStage::COLUMN_DATA);
     }
+
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
         return Request.GetGlobalContext().GetAbortionFlag();
     }
@@ -136,6 +146,7 @@ private:
             new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
                 Request.GetGlobalContext().MakeResultInFlightGuard()));
     }
+
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         std::shared_ptr<TDataAccessorsRequest> request =

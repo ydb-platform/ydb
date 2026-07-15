@@ -3,6 +3,8 @@ LIBRARY()
 SRCS(
     events.cpp
     lock_handle.cpp
+    snapshot_handle.cpp
+    snapshot_registry.cpp
     types.cpp
 )
 
@@ -12,6 +14,7 @@ PEERDIR(
     library/cpp/uri
     ydb/core/base
     ydb/core/protos
+    ydb/core/scheme
     ydb/core/util
     yql/essentials/public/issue
 )

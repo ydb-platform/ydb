@@ -3,18 +3,19 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 
 #include <ydb/library/accessor/positive_integer.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/object_factory/object_factory.h>
 
+#include <algorithm>
 #include <utility>
 
 namespace NKikimr::NOlap {
@@ -23,6 +24,7 @@ class IStoragesManager;
 class TGranuleMeta;
 class TPortionInfo;
 class TPortionAccessorConstructor;
+
 namespace NDataLocks {
 class TManager;
 }
@@ -34,18 +36,23 @@ class TOptimizationPriority {
 private:
     YDB_READONLY(i64, Level, 0);
     YDB_READONLY(i64, InternalLevelWeight, 0);
+
     TOptimizationPriority(const i64 level, const i64 levelWeight)
         : Level(level)
-        , InternalLevelWeight(levelWeight) {
+        , InternalLevelWeight(levelWeight)
+    {
     }
 
 public:
+    TOptimizationPriority() = default;
+
     void Mul(const ui32 kff) {
         InternalLevelWeight *= kff;
     }
 
     ui64 GetGeneralPriority() const {
-        return ((ui64)Level << 56) + InternalLevelWeight;
+        const ui64 packedLevel = Level < 0 ? 0 : (ui64)std::min<i64>(Level, 255);
+        return (packedLevel << 56) + InternalLevelWeight;
     }
 
     bool operator<(const TOptimizationPriority& item) const {
@@ -56,12 +63,39 @@ public:
         return !Level && !InternalLevelWeight;
     }
 
+    bool IsZeroLevel() const {
+        return !Level;
+    }
+
     bool IsCritical() const {
         return Level >= 10;
     }
 
     TString DebugString() const {
         return TStringBuilder() << "(" << Level << "," << InternalLevelWeight << ")";
+    }
+
+    // Scale both Level and InternalLevelWeight by (100 + percent)%. Unlike Inc(), which bumps only the
+    // Level and leaves the weight stale (so the ceiling lands below its own level band and the weight
+    // tiebreak trips almost immediately), this keeps the ceiling internally consistent and yields a
+    // headroom that is proportional to the current backlog.
+    TOptimizationPriority IncPercent(const ui32 percent) const {
+        return TOptimizationPriority(Level + Level * (i64)percent / 100, InternalLevelWeight + InternalLevelWeight * (i64)percent / 100);
+    }
+
+    static TOptimizationPriority Normalize(ui64 min, ui64 max, ui64 weight) {
+        if (weight < min) {
+            return TOptimizationPriority(0, weight);
+        }
+
+        AFL_VERIFY(min < max);
+
+        ui64 range = max - min;
+        ui64 normalizedWeight = weight - min;
+
+        i64 level = 1 + (normalizedWeight * 9) / range;
+
+        return TOptimizationPriority(level, weight);
     }
 
     static TOptimizationPriority Critical(const i64 weight) {
@@ -92,7 +126,8 @@ private:
 
 public:
     TTaskDescription(const ui64 taskId)
-        : TaskId(taskId) {
+        : TaskId(taskId)
+    {
     }
 
     bool operator<(const TTaskDescription& item) const {
@@ -111,6 +146,7 @@ private:
     virtual bool DoIsOverloaded() const {
         return false;
     }
+
     const std::optional<ui64> NodePortionsCountLimit{};
     double WeightKff = 1;
     static inline TAtomicCounter NodePortionsCounter = 0;
@@ -123,18 +159,40 @@ protected:
         const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) = 0;
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
+    virtual std::shared_ptr<TColumnEngineChanges> DoGetNextOptimizationTask(
+        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
+
+    virtual ui32 DoGetMaxCompactionInflight() const {
+        return 1;
+    }
+
+    virtual bool DoUsesPullCompactionScheduling() const {
+        return false;
+    }
+
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
     virtual void DoActualize(const TInstant currentInstant) = 0;
+
     virtual TString DoDebugString() const {
         return "";
     }
+
     virtual NJson::TJsonValue DoSerializeToJsonVisual() const {
         return NJson::JSON_NULL;
     }
-    virtual bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
+
     virtual std::vector<TTaskDescription> DoGetTasksDescription() const = 0;
+
     virtual TConclusionStatus DoCheckWriteData() const {
         return TConclusionStatus::Success();
+    }
+
+    // Forced-compaction support: reports whether all portions have settled into the regular last
+    // level with no remaining intersections. Fail() means the optimizer does not support forced
+    // compaction (i.e. it is not tiling++); Success(true) means there are no intersections left,
+    // Success(false) means compaction is still in progress. Only tiling++ overrides this.
+    virtual TConclusion<bool> DoCheckNoIntersections() const {
+        return TConclusionStatus::Fail("forced compaction is not supported by this optimizer");
     }
 
 public:
@@ -156,7 +214,8 @@ public:
 
     IOptimizerPlanner(const TInternalPathId pathId, const std::optional<ui64>& nodePortionsCountLimit)
         : PathId(pathId)
-        , NodePortionsCountLimit(nodePortionsCountLimit) {
+        , NodePortionsCountLimit(nodePortionsCountLimit)
+    {
         Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit ? *NodePortionsCountLimit : DynamicPortionsCountLimit.load());
         Counters->BadPortionsCountLimit->Set(GetBadPortionsLimit());
     }
@@ -167,26 +226,25 @@ public:
         }
 
         if (std::cmp_less_equal(GetBadPortionsLimit(), badPortions->Val())) {
-           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
-                   ("error", "overload: bad portions")("value", badPortions->Val())("limit", GetBadPortionsLimit());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                {"error", "overload: bad portions"},
+                {"value", badPortions->Val()},
+                {"limit", GetBadPortionsLimit()});
             return true;
         }
 
         if (std::cmp_less_equal(GetNodePortionsCountLimit(), NodePortionsCounter.Val())) {
-           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
-                   ("error", "overload: node portions count limit")("value", NodePortionsCounter.Val())("limit", GetNodePortionsCountLimit());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                {"error", "overload: node portions count limit"},
+                {"value", NodePortionsCounter.Val()},
+                {"limit", GetNodePortionsCountLimit()});
             return true;
         }
 
         return DoIsOverloaded();
     }
 
-    ui64 GetBadPortionsLimit() const {
-        if (AppDataVerified().ColumnShardConfig.GetBadPortionsLimit()) {
-            return AppDataVerified().ColumnShardConfig.GetBadPortionsLimit();
-        }
-        return 2 * GetNodePortionsCountLimit();
-    }
+    ui64 GetBadPortionsLimit() const;
 
     ui64 GetNodePortionsCountLimit() const {
         return NodePortionsCountLimit.value_or(DynamicPortionsCountLimit.load());
@@ -200,7 +258,8 @@ public:
             if (std::cmp_less_equal(std::max(static_cast<ui64>(0.7 * *NodePortionsCountLimit), ui64(1)), NodePortionsCounter.Val())) {
                 return true;
             }
-        } else if (std::cmp_less_equal(std::max(static_cast<ui64>(0.7 * DynamicPortionsCountLimit.load()), ui64(1)), NodePortionsCounter.Val())) {
+        } else if (std::cmp_less_equal(
+                       std::max(static_cast<ui64>(0.7 * DynamicPortionsCountLimit.load()), ui64(1)), NodePortionsCounter.Val())) {
             return true;
         }
         return DoIsOverloaded();
@@ -208,6 +267,10 @@ public:
 
     TConclusionStatus CheckWriteData() const {
         return DoCheckWriteData();
+    }
+
+    TConclusion<bool> CheckNoIntersections() const {
+        return DoCheckNoIntersections();
     }
 
     std::vector<TTaskDescription> GetTasksDescription() const {
@@ -225,8 +288,10 @@ public:
         TModificationGuard& RemovePortion(const std::shared_ptr<TPortionInfo>& portion);
 
         TModificationGuard(IOptimizerPlanner& owner)
-            : Owner(owner) {
+            : Owner(owner)
+        {
         }
+
         ~TModificationGuard() {
             Owner.ModifyPortions(AddPortions, RemovePortions);
         }
@@ -240,6 +305,7 @@ public:
         NodePortionsCounter.Sub(LocalPortionsCount.Val());
         Counters->NodePortionsCount->Set(NodePortionsCounter.Val());
     }
+
     TString DebugString() const {
         return DoDebugString();
     }
@@ -251,7 +317,8 @@ public:
     }
 
     void ModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
-        NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"pathId", PathId});
         LocalPortionsCount.Add(add.size());
         LocalPortionsCount.Sub(remove.size());
         NodePortionsCounter.Add(add.size());
@@ -262,11 +329,24 @@ public:
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
+
+    std::shared_ptr<TColumnEngineChanges> GetNextOptimizationTask(
+        std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
+
+    ui32 GetMaxCompactionInflight() const {
+        return DoGetMaxCompactionInflight();
+    }
+
+    bool UsesPullCompactionScheduling() const {
+        return DoUsesPullCompactionScheduling();
+    }
+
     TOptimizationPriority GetUsefulMetric() const {
         auto result = DoGetUsefulMetric();
         result.Mul(WeightKff);
         return result;
     }
+
     void Actualize(const TInstant currentInstant) {
         ActualizationInstant = currentInstant;
         return DoActualize(currentInstant);
@@ -280,6 +360,7 @@ public:
         Logs,   // use Zero Levels only for performance
         LogsInStore
     };
+
     class TBuildContext {
     private:
         YDB_READONLY_DEF(TInternalPathId, PathId);
@@ -293,7 +374,8 @@ public:
             : PathId(pathId)
             , Storages(storages)
             , PKSchema(pkSchema)
-            , DefaultStrategy(EOptimizerStrategy::Default) {   //TODO configure me via DDL
+            , DefaultStrategy(EOptimizerStrategy::Default)
+        {   //TODO configure me via DDL
         }
     };
 
@@ -315,13 +397,11 @@ public:
         return NodePortionsCountLimit;
     }
 
-    static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        return BuildDefault(NKikimrConfig::TColumnShardConfig::default_instance().GetDefaultCompactionPreset());
-    }
+    static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault();
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault(const TString& defaultCompactionName) {
         auto result = TFactory::MakeHolder(defaultCompactionName);
-        AFL_VERIFY(!!result);
+        AFL_VERIFY(!!result)("name", defaultCompactionName);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }
 
@@ -362,6 +442,7 @@ public:
     }
 
     virtual TString GetClassName() const = 0;
+
     void SerializeToProto(TProto& proto) const {
         if (NodePortionsCountLimit) {
             proto.SetNodePortionsCountLimit(*NodePortionsCountLimit);

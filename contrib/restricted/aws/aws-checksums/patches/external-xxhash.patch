@@ -1,0 +1,28 @@
+Partially revert design decisions introduced in 
+https://github.com/awslabs/aws-checksums/pull/110/changes
+
+In particular, undone CRT changes described here:
+https://github.com/awslabs/aws-checksums/pull/110/changes#diff-415f30da806f726b589b0a851940d49246a09257b2908468778adf1083f5423b
+
+--- contrib/restricted/aws/aws-checksums/source/xxhash.c	(index)
++++ contrib/restricted/aws/aws-checksums/source/xxhash.c	(working tree)
+@@ -69,7 +69,7 @@
+ #endif
+ 
+ #define XXH_INLINE_ALL
+-#include "external/xxhash.h"
++#include <contrib/libs/xxhash/xxhash.h>
+ 
+ #if defined(AWS_ARCH_INTEL_X64)
+ #    if XXH_DISPATCH_SCALAR
+--- contrib/restricted/aws/aws-checksums/source/xxhash.c	(index)
++++ contrib/restricted/aws/aws-checksums/source/xxhash.c	(working tree)
+@@ -161,8 +161,6 @@ static dispatch_x86_XXH3_update_fn s_x86_XXH3_update = NULL;
+ 
+ void aws_checksums_xxhash_init(struct aws_allocator *allocator) {
+ 
+-    XXH_set_allocator(allocator);
+-
+ #if defined(AWS_ARCH_INTEL_X64)
+ 
+ #    if XXH_DISPATCH_SCALAR

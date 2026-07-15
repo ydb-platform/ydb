@@ -11,9 +11,9 @@ TEST_SRCS(
 
 REQUIREMENTS(ram:32 cpu:4)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -33,6 +33,5 @@ PEERDIR(
     ydb/tests/stress/common
     ydb/tests/stress/reconfig_state_storage_workload/workload
 )
-
 
 END()

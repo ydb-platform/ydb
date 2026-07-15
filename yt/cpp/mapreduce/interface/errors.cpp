@@ -402,11 +402,6 @@ void TErrorResponse::Setup()
     *this << Error_.FullDescription();
 }
 
-TTransportError::TTransportError(TYtError error)
-{
-    *this << error.FullDescription();
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TOperationFailedError::TOperationFailedError(

@@ -1,9 +1,12 @@
 #include "actor.h"
 
 #include <ydb/core/formats/arrow/reader/position.h>
-#include <ydb/core/tx/columnshard/blobs_reader/read_coordinator.h>
+#include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
+
+#include <ydb/library/formats/arrow/arrow_helpers.h>
+
 #include <yql/essentials/core/issue/yql_issue.h>
 
 namespace NKikimr::NOlap::NReader {
@@ -12,7 +15,7 @@ NKqp::TScanStatistics TColumnShardScan::GetScanStats() {
     TVector<NKqp::TPerStepScanStatistics> timesPerStep = [&] {
         auto cnt = ScanCountersPool.ReadStepsCounters();
         TVector<NKqp::TPerStepScanStatistics> timesPerStep;
-        for (auto& [k,v ] : cnt) {
+        for (auto& [k, v] : cnt) {
             NKqp::TPerStepScanStatistics stats;
             stats.StepName = k;
             stats.IntegralExecutionDuration = v.ExecutionDuration;
@@ -25,38 +28,44 @@ NKqp::TScanStatistics TColumnShardScan::GetScanStats() {
         }
         return timesPerStep;
     }();
-    Sort(timesPerStep, [](const auto& l, const auto& r){
+    Sort(timesPerStep, [](const auto& l, const auto& r) {
         return l.StepName < r.StepName;
     });
     NKqp::TScanStatistics stats;
     int index = 0;
-    for(auto& v: timesPerStep) {
+    for (auto& v : timesPerStep) {
         stats.emplace(index, std::move(v));
         index++;
     }
     return stats;
 }
 
-LWTRACE_USING(YDB_CS_READER);
+LWTRACE_USING(YDB_CS_SCAN);
 
 constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(60);
 constexpr TDuration COMPUTE_HARD_TIMEOUT = TDuration::Minutes(10);
 
 void TColumnShardScan::PassAway() {
+    TDuration duration = StartInstant ? TDuration::MilliSeconds((TMonotonic::Now() - *StartInstant).MilliSeconds()) : TDuration::Zero();
+    LWTRACK(ScanFinished, *ScanOrbit, PathId, TabletId, TxId, ScanId, duration, TotalRowsCount, TotalPartialSourcesCount, TotalBlobBytes,
+        TotalRawBytes);
     Send(ResourceSubscribeActorId, new TEvents::TEvPoisonPill);
-    Send(ReadCoordinatorActorId, new TEvents::TEvPoisonPill);
     IActor::PassAway();
 }
 
-TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId, const TActorId& scanDiagnosticsActorId,
-    const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
+    const TActorId& scanDiagnosticsActorId, const std::shared_ptr<IStoragesManager>& storagesManager,
+    const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const TComputeShardingPolicy& computeShardingPolicy,
     ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout,
     const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
-    const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits)
+    const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
+    std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , ColumnDataManager(columnDataManager)
+    , ScanOrbit(std::move(orbit))
+    , PathId(pathId)
     , ColumnShardActorId(columnShardActorId)
     , ScanComputeActorId(scanComputeActorId)
     , ScanDiagnosticsActorId(scanDiagnosticsActorId)
@@ -86,16 +95,16 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
 
     Y_ABORT_UNLESS(!ScanIterator);
     ResourceSubscribeActorId = ctx.Register(new NResourceBroker::NSubscribe::TActor(TabletId, SelfId()));
-    ReadCoordinatorActorId = ctx.Register(new NBlobOperations::NRead::TReadCoordinatorActor(TabletId, SelfId()));
 
-    std::shared_ptr<TReadContext> context =
-        std::make_shared<TReadContext>(StoragesManager, DataAccessorsManager, ColumnDataManager, ScanCountersPool, ReadMetadataRange, SelfId(),
-            ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy, ScanId, CPULimits);
+    std::shared_ptr<TReadContext> context = std::make_shared<TReadContext>(StoragesManager, DataAccessorsManager, ColumnDataManager,
+        ScanCountersPool, ReadMetadataRange, SelfId(), ResourceSubscribeActorId, ComputeShardingPolicy, ScanId, CPULimits, ScanOrbit);
     ScanIterator = ReadMetadataRange->StartScan(context);
     auto startResult = ScanIterator->Start();
     StartInstant = TMonotonic::Now();
     if (!startResult) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "BootstrapError")("error", startResult.GetErrorMessage());
+        YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "BootstrapError"},
+            {"error", startResult.GetErrorMessage()});
         SendScanError("scanner_start_error:" + startResult.GetErrorMessage());
         Finish(NColumnShard::TScanCounters::EStatusFinish::ProblemOnStart);
     } else {
@@ -117,15 +126,25 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
         WaitTime += delta;
     }
     StartWaitTime = TInstant::Now();
-    LWPROBE(TaskProcessed, TabletId, ScanId, TxId, delta);
+    TotalBlobBytes += ev->Get()->GetBlobBytes();
+    TotalRawBytes += ev->Get()->GetRawBytes();
+    TotalRowsCount += ev->Get()->GetFilteredRows();
+    if (ev->Get()->GetSourceId() > 0) {
+        ++TotalPartialSourcesCount;
+        LWTRACK(ScanFinishSource, *ScanOrbit, PathId, TabletId, TxId, ScanId, (ui64)ev->Get()->GetSourceId(), ev->Get()->GetBlobBytes(),
+            ev->Get()->GetRawBytes(), ev->Get()->GetFilteredRows(), ev->Get()->GetTotalRows(), ev->Get()->GetTotalReservedBytes());
+    }
     auto g = Stats->MakeGuard("task_result", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
     auto& result = ev->Get()->MutableResult();
     if (result.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TEvTaskProcessedResult")("error", result.GetErrorMessage());
+        YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "TEvTaskProcessedResult"},
+            {"error", result.GetErrorMessage()});
         SendScanError("task_error:" + result.GetErrorMessage());
         Finish(NColumnShard::TScanCounters::EStatusFinish::ConveyorInternalError);
     } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TEvTaskProcessedResult");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "TEvTaskProcessedResult"});
         if (!ScanIterator->Finished()) {
             ScanIterator->Apply(result.GetResult());
         }
@@ -138,7 +157,8 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
     StartWaitTime = TInstant::Now();
     auto g = Stats->MakeGuard("ack", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
 
-    LWPROBE(AckReceived, TabletId, ScanId, TxId, LastResultInstant ? TDuration::MilliSeconds((TMonotonic::Now() - *LastResultInstant).MilliSeconds()) : TDuration::Zero());
+    LWTRACK(AckReceived, *ScanOrbit, PathId, TabletId, TxId, ScanId,
+        LastResultInstant ? TDuration::MilliSeconds((TMonotonic::Now() - *LastResultInstant).MilliSeconds()) : TDuration::Zero());
 
     AFL_VERIFY(!AckReceivedInstant);
     AckReceivedInstant = TMonotonic::Now();
@@ -147,7 +167,9 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
 
     ChunksLimiter = TChunksLimiter(ev->Get()->FreeSpace, ev->Get()->MaxChunksCount);
     AFL_VERIFY(ev->Get()->MaxChunksCount == 1);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TEvScanDataAck")("info", ChunksLimiter.DebugString());
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"event", "TEvScanDataAck"},
+        {"info", ChunksLimiter.DebugString()});
     if (ScanIterator) {
         if (!!ScanIterator->GetAvailableResultsCount() && !*ScanIterator->GetAvailableResultsCount()) {
             ScanCountersPool.OnEmptyAck();
@@ -160,7 +182,8 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
 
 void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanPing::TPtr&) {
     if (!AckReceivedInstant) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "ping_from_kqp");
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "ping_from_kqp"});
         LastResultInstant = TMonotonic::Now();
     }
 }
@@ -174,10 +197,14 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) noe
     const TString reason = ev->Get()->GetIssues().ToOneLineString();
 
     auto prio = msg.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
-    LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_COLUMNSHARD_SCAN,
-        "Scan " << ScanActorId << " got AbortExecution"
-                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId
-                << " code: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode()) << " reason: " << reason);
+    YDB_LOG_COMP(prio, NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan got AbortExecution",
+        {"scanActorId", ScanActorId},
+        {"txId", TxId},
+        {"scanId", ScanId},
+        {"gen", ScanGen},
+        {"tablet", TabletId},
+        {"code", NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())},
+        {"reason", reason});
 
     AbortReason = std::move(reason);
     Finish(NColumnShard::TScanCounters::EStatusFinish::ExternalAbort);
@@ -194,69 +221,108 @@ void TColumnShardScan::HandleScan(TEvents::TEvUndelivered::TPtr& ev) {
             break;
     }
 
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
-        "Scan " << ScanActorId << " undelivered event: " << eventType << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen
-                << " tablet: " << TabletId << " reason: " << ev->Get()->Reason << " description: " << AbortReason);
+    YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan undelivered",
+        {"scanActorId", ScanActorId},
+        {"event", eventType},
+        {"txId", TxId},
+        {"scanId", ScanId},
+        {"gen", ScanGen},
+        {"tablet", TabletId},
+        {"reason", ev->Get()->Reason},
+        {"description", AbortReason});
 
     Finish(NColumnShard::TScanCounters::EStatusFinish::UndeliveredEvent);
 }
 
 void TColumnShardScan::CheckHanging(const bool logging) const {
     if (logging) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("HAS_ACK", AckReceivedInstant)("fi", FinishInstant)("si", !!ScanIterator)(
-            "finished", ScanIterator ? ScanIterator->Finished() : true)(
-            "has_more", ChunksLimiter.HasMore())("in_waiting", ScanCountersPool.InWaiting())("counters_waiting", ScanCountersPool.DebugString())(
-            "scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)(
-            "debug", ScanIterator ? ScanIterator->DebugString() : Default<TString>())("last", LastResultInstant);
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"HASACK", AckReceivedInstant},
+            {"fi", FinishInstant},
+            {"si", !!ScanIterator},
+            {"finished", ScanIterator ? ScanIterator->Finished() : true},
+            {"hasMore", ChunksLimiter.HasMore()},
+            {"inWaiting", ScanCountersPool.InWaiting()},
+            {"countersWaiting", ScanCountersPool.DebugString()},
+            {"scanActorId", ScanActorId},
+            {"txId", TxId},
+            {"scanId", ScanId},
+            {"gen", ScanGen},
+            {"tablet", TabletId},
+            {"debug", ScanIterator ? ScanIterator->DebugString() : Default<TString>()},
+            {"last", LastResultInstant});
     }
     const bool ok = !!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting();
     AFL_VERIFY_DEBUG(ok)
-    ("finished", ScanIterator->Finished())
-    ("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString())(
-        "counters", ScanCountersPool.DebugString());
+    ("finished", ScanIterator->Finished())("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)(
+        "debug", ScanIterator->DebugString())("counters", ScanCountersPool.DebugString());
     if (!ok) {
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_SCAN)("error", "CheckHanging")("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)(
-            "tablet", TabletId)("debug", ScanIterator->DebugString())("counters", ScanCountersPool.DebugString());
+        YDB_LOG_CRIT_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"error", "CheckHanging"},
+            {"scanActorId", ScanActorId},
+            {"txId", TxId},
+            {"scanId", ScanId},
+            {"gen", ScanGen},
+            {"tablet", TabletId},
+            {"debug", ScanIterator->DebugString()},
+            {"counters", ScanCountersPool.DebugString()});
         ScanCountersPool.OnHangingRequestDetected();
     }
 }
 
 void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "guard execution timeout")("scan_actor_id", ScanActorId);
+    YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"event", "guard execution timeout"},
+        {"scanActorId", ScanActorId});
     CheckHanging(true);
     if (!AckReceivedInstant && TMonotonic::Now() >= GetComputeDeadline()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_termination")("deadline", GetComputeDeadline())("timeout", Timeout);
+        YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "scan_termination"},
+            {"deadline", GetComputeDeadline()},
+            {"timeout", Timeout});
         SendScanError("ColumnShard scanner timeout: HAS_ACK=0");
         Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
     } else {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_continue")("deadline", GetComputeDeadlineOptional())("timeout", Timeout)("now", TMonotonic::Now());
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "scan_continue"},
+            {"deadline", GetComputeDeadlineOptional()},
+            {"timeout", Timeout},
+            {"now", TMonotonic::Now()});
         ScheduleWakeup(TMonotonic::Now() + Timeout / 5);
     }
 }
 
 bool TColumnShardScan::ProduceResults() noexcept {
     auto g = Stats->MakeGuard("ProduceResults", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
-//    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build()("method", "produce result"));
+    //    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build()("method", "produce result"));
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("stage", "start")("iterator", ScanIterator->DebugString());
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"stage", "start"},
+        {"iterator", ScanIterator->DebugString()});
     Y_ABORT_UNLESS(!Finished);
     Y_ABORT_UNLESS(ScanIterator);
 
     if (ScanIterator->Finished()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("stage", "scan iterator is finished")("iterator", ScanIterator->DebugString());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"stage", "scan iterator is finished"},
+            {"iterator", ScanIterator->DebugString()});
         return false;
     }
 
     if (!ChunksLimiter.HasMore()) {
         ScanIterator->PrepareResults();
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("stage", "limit exhausted")("limit", ChunksLimiter.DebugString());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"stage", "limit exhausted"},
+            {"limit", ChunksLimiter.DebugString()});
         return false;
     }
 
     auto resultConclusion = ScanIterator->GetBatch();
     if (resultConclusion.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("stage", "got error")("iterator", ScanIterator->DebugString())(
-            "message", resultConclusion.GetErrorMessage());
+        YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"stage", "got error"},
+            {"iterator", ScanIterator->DebugString()},
+            {"message", resultConclusion.GetErrorMessage()});
         SendScanError(resultConclusion.GetErrorMessage());
 
         ScanIterator.reset();
@@ -266,53 +332,66 @@ bool TColumnShardScan::ProduceResults() noexcept {
 
     std::unique_ptr<TPartialReadResult> resultOpt = resultConclusion.DetachResult();
     if (!resultOpt) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("stage", "no data is ready yet")("iterator", ScanIterator->DebugString());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"stage", "no data is ready yet"},
+            {"iterator", ScanIterator->DebugString()});
         return false;
     }
 
     auto& result = *resultOpt;
 
     if (!result.GetRecordsCount()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("stage", "got empty batch")("iterator", ScanIterator->DebugString());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"stage", "got empty batch"},
+            {"iterator", ScanIterator->DebugString()});
         return true;
     }
 
     {
         auto shardedBatch = result.ExtractShardedBatch();
         auto batch = shardedBatch.ExtractRecordBatch();
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("stage", "ready result")("iterator", ScanIterator->DebugString())(
-            "columns", batch->num_columns())(
-            "rows", batch->num_rows());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"stage", "ready result"},
+            {"iterator", ScanIterator->DebugString()},
+            {"columns", batch->num_columns()},
+            {"rows", batch->num_rows()});
 
         AFL_VERIFY(DataFormat == NKikimrDataEvents::FORMAT_ARROW);
 
         MakeResult(0);
         if (shardedBatch.IsSharded()) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_success")(
-                "count", shardedBatch.GetSplittedByShards().size())("info", ComputeShardingPolicy.DebugString());
+            YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                {"event", "compute_sharding_success"},
+                {"count", shardedBatch.GetSplittedByShards().size()},
+                {"info", ComputeShardingPolicy.DebugString()});
             Result->SplittedBatches = shardedBatch.GetSplittedByShards();
         } else {
             if (ComputeShardingPolicy.IsEnabled()) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "compute_sharding_problems")(
-                    "info", ComputeShardingPolicy.DebugString());
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                    {"event", "compute_sharding_problems"},
+                    {"info", ComputeShardingPolicy.DebugString()});
             }
         }
         TMemoryProfileGuard mGuard("SCAN_PROFILE::RESULT::TO_KQP", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         Rows += batch->num_rows();
         Bytes += NArrow::GetTableDataSize(batch);
 
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("stage", "data_format")("batch_size", NArrow::GetTableDataSize(Result->ArrowBatch))(
-            "num_rows", batch->num_rows())(
-            "batch_columns", JoinSeq(",", batch->schema()->field_names()));
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"stage", "data_format"},
+            {"batchSize", NArrow::GetTableDataSize(Result->ArrowBatch)},
+            {"numRows", batch->num_rows()},
+            {"batchColumns", JoinSeq(",", batch->schema()->field_names())});
         Result->ArrowBatch = std::move(batch);
     }
     if (CurrentLastReadKey && result.GetScanCursor()->GetPKCursor() && CurrentLastReadKey->GetPKCursor()) {
         auto pNew = result.GetScanCursor()->GetPKCursor();
         auto pOld = CurrentLastReadKey->GetPKCursor();
-        if (ReadMetadataRange->IsAscSorted()) {
-            AFL_VERIFY(*pOld <= *pNew)("old", pOld->DebugString())("new", pNew->DebugString());
-        } else if (ReadMetadataRange->IsDescSorted()) {
-            AFL_VERIFY(*pNew <= *pOld)("old", pOld->DebugString())("new", pNew->DebugString());
+        if (!ReadMetadataRange->GetFakeSort()) {
+            if (ReadMetadataRange->IsAscSorted()) {
+                AFL_VERIFY(*pOld <= *pNew)("old", pOld->DebugString())("new", pNew->DebugString());
+            } else if (ReadMetadataRange->IsDescSorted()) {
+                AFL_VERIFY(*pNew <= *pOld)("old", pOld->DebugString())("new", pNew->DebugString());
+            }
         }
     }
     CurrentLastReadKey = result.GetScanCursor();
@@ -321,15 +400,19 @@ bool TColumnShardScan::ProduceResults() noexcept {
         Result->LastKey = ConvertLastKey(CurrentLastReadKey->GetPKCursor()->ToBatch());
     }
     Result->LastCursorProto = CurrentLastReadKey->SerializeToProto();
-    SendResult(false, false);
+    SendResult(false, false, result.GetSourceId());
     ScanIterator->OnSentDataFromInterval(result.GetNotFinishedInterval());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("stage", "finished")("iterator", ScanIterator->DebugString());
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"stage", "finished"},
+        {"iterator", ScanIterator->DebugString()});
     return true;
 }
 
 void TColumnShardScan::ContinueProcessing() {
     if (!ScanIterator) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "ContinueProcessing")("stage", "iterator is not initialized");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "ContinueProcessing"},
+            {"stage", "iterator is not initialized"});
         return;
     }
     // Send new results if there is available capacity
@@ -353,7 +436,9 @@ void TColumnShardScan::ContinueProcessing() {
             while (true) {
                 TConclusion<bool> hasMoreData = ScanIterator->ReadNextInterval();
                 if (hasMoreData.IsFail()) {
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "ContinueProcessing")("error", hasMoreData.GetErrorMessage());
+                    YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+                        {"event", "ContinueProcessing"},
+                        {"error", hasMoreData.GetErrorMessage()});
                     ScanIterator.reset();
                     SendScanError("iterator_error:" + hasMoreData.GetErrorMessage());
                     return Finish(NColumnShard::TScanCounters::EStatusFinish::IteratorInternalErrorScan);
@@ -390,13 +475,15 @@ NKikimr::TOwnedCellVec TColumnShardScan::ConvertLastKey(const std::shared_ptr<ar
     struct TSingeRowWriter: public IRowWriter {
         TOwnedCellVec Row;
         bool Done = false;
+
         void AddRow(const TConstArrayRef<TCell>& row) override {
             Y_ABORT_UNLESS(!Done);
             Row = TOwnedCellVec::Make(row);
             Done = true;
         }
     } singleRowWriter;
-    NArrow::TArrowToYdbConverter converter(KeyYqlSchema, singleRowWriter);
+
+    NArrow::TArrowToYdbConverter converter(KeyYqlSchema, singleRowWriter, false, false);
     TString errStr;
     bool ok = converter.Process(*lastReadKey, errStr);
     Y_ABORT_UNLESS(ok, "%s", errStr.c_str());
@@ -405,7 +492,7 @@ NKikimr::TOwnedCellVec TColumnShardScan::ConvertLastKey(const std::shared_ptr<ar
     return singleRowWriter.Row;
 }
 
-bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
+bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch, ui64 sourceId) {
     if (Finished) {
         return true;
     }
@@ -419,15 +506,30 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
 
     PageFaults = 0;
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "send_data")("compute_actor_id", ScanComputeActorId)("bytes", Bytes)("rows", Rows)(
-        "faults", Result->PageFaults)("finished", Result->Finished)("fault", Result->PageFault)(
-        "schema", (Result->ArrowBatch ? Result->ArrowBatch->schema()->ToString() : ""));
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"event", "send_data"},
+        {"computeActorId", ScanComputeActorId},
+        {"bytes", Bytes},
+        {"rows", Rows},
+        {"faults", Result->PageFaults},
+        {"finished", Result->Finished},
+        {"fault", Result->PageFault},
+        {"schema", (Result->ArrowBatch ? Result->ArrowBatch->schema()->ToString() : "")});
     Finished = Result->Finished;
     if (Finished) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_finished")("compute_actor_id", ScanComputeActorId)("packs_sum", PacksSum)(
-            "bytes", Bytes)("bytes_sum", BytesSum)("rows", Rows)("rows_sum", RowsSum)("faults", Result->PageFaults)(
-            "finished", Result->Finished)("fault", Result->PageFault)("stats", Stats->ToJson())(
-            "iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO"));
+        YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "scan_finished"},
+            {"computeActorId", ScanComputeActorId},
+            {"packsSum", PacksSum},
+            {"bytes", Bytes},
+            {"bytesSum", BytesSum},
+            {"rows", Rows},
+            {"rowsSum", RowsSum},
+            {"faults", Result->PageFaults},
+            {"finished", Result->Finished},
+            {"fault", Result->PageFault},
+            {"stats", Stats->ToJson()},
+            {"iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO")});
         Result->StatsOnFinished = std::make_shared<TScanStatsOwner>(ScanIterator->GetStats());
     } else {
         AFL_VERIFY(ChunksLimiter.Take(Bytes));
@@ -453,7 +555,11 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
         }
     }
 
-    LWPROBE(SendResult, TabletId, ScanId, TxId, Result->GetRowsCount(), (Result->ArrowBatch ? NArrow::GetTableDataSize(Result->ArrowBatch) : 0), Result->CpuTime, Result->WaitTime, TInstant::Now() - LastSend, Result->Finished);
+    Result->ArrowBatch = NArrow::ClaimMemoryOwnership(Result->ArrowBatch);
+
+    LWTRACK(SendResult, *ScanOrbit, PathId, TabletId, TxId, ScanId, sourceId, Result->GetRowsCount(),
+        (Result->ArrowBatch ? NArrow::GetTableDataSize(Result->ArrowBatch) : 0), Result->CpuTime, Result->WaitTime, TInstant::Now() - LastSend,
+        Result->Finished);
     Send(ScanComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery);   // TODO: FlagSubscribeOnSession ?
     LastSend = TInstant::Now();
 
@@ -472,8 +578,12 @@ void TColumnShardScan::SendScanError(const TString& reason) {
     ev->Record.SetStatus(Ydb::StatusIds::GENERIC_ERROR);
     auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_RESULT_UNAVAILABLE, msg);
     NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_finish")("compute_actor_id", ScanComputeActorId)("stats", Stats->ToJson())(
-        "iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO"))("reason", reason);
+    YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"event", "scan_finish"},
+        {"computeActorId", ScanComputeActorId},
+        {"stats", Stats->ToJson()},
+        {"iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO")},
+        {"reason", reason});
 
     Send(ScanComputeActorId, ev.Release());
 }
@@ -481,16 +591,22 @@ void TColumnShardScan::SendScanError(const TString& reason) {
 void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish status) {
     if (AppDataVerified().ColumnShardConfig.GetEnableDiagnostics()) {
         auto scanIteratorDiagnostics = ScanIterator->DebugString(true);
-        Send(ScanDiagnosticsActorId, std::make_unique<NColumnShard::TEvPrivate::TEvReportScanIteratorDiagnostics>(RequestCookie, std::move(scanIteratorDiagnostics)));
+        Send(ScanDiagnosticsActorId,
+            std::make_unique<NColumnShard::TEvPrivate::TEvReportScanIteratorDiagnostics>(RequestCookie, std::move(scanIteratorDiagnostics)));
     }
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan " << ScanActorId << " finished for tablet " << TabletId);
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan finished for tablet",
+        {"scanActorId", ScanActorId},
+        {"tabletId", TabletId});
     Send(ColumnShardActorId, new NColumnShard::TEvPrivate::TEvReadFinished(RequestCookie, TxId));
     AFL_VERIFY(StartInstant);
     FinishInstant = TMonotonic::Now();
     ScanCountersPool.OnScanFinished(status, *FinishInstant - *StartInstant);
     ReportStats();
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_finish")("compute_actor_id", ScanComputeActorId)("stats", Stats->ToJson())(
-        "iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO"));
+    YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"event", "scan_finish"},
+        {"computeActorId", ScanComputeActorId},
+        {"stats", Stats->ToJson()},
+        {"iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO")});
     PassAway();
 }
 

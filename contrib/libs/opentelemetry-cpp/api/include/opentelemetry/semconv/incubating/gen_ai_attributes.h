@@ -35,6 +35,11 @@ static constexpr const char *kGenAiAgentId = "gen_ai.agent.id";
 static constexpr const char *kGenAiAgentName = "gen_ai.agent.name";
 
 /**
+  The version of the GenAI agent.
+ */
+static constexpr const char *kGenAiAgentVersion = "gen_ai.agent.version";
+
+/**
   Deprecated, use Event API to report completions contents.
 
   @deprecated
@@ -282,6 +287,11 @@ static constexpr const char *kGenAiRequestSeed = "gen_ai.request.seed";
 static constexpr const char *kGenAiRequestStopSequences = "gen_ai.request.stop_sequences";
 
 /**
+  Indicates whether the GenAI request was made in streaming mode.
+ */
+static constexpr const char *kGenAiRequestStream = "gen_ai.request.stream";
+
+/**
   The temperature setting for the GenAI request.
  */
 static constexpr const char *kGenAiRequestTemperature = "gen_ai.request.temperature";
@@ -310,6 +320,34 @@ static constexpr const char *kGenAiResponseId = "gen_ai.response.id";
   The name of the model that generated the response.
  */
 static constexpr const char *kGenAiResponseModel = "gen_ai.response.model";
+
+/**
+  Time to first chunk in a streaming response, measured from request issuance, in seconds. The value
+  is measured from when the client issues the generation request to when the first chunk is received
+  in the response stream.
+ */
+static constexpr const char *kGenAiResponseTimeToFirstChunk = "gen_ai.response.time_to_first_chunk";
+
+/**
+  The documents retrieved.
+  <p>
+  Instrumentations MUST follow <a href="/docs/gen-ai/gen-ai-retrieval-documents.json">Retrieval
+  documents JSON schema</a>. When the attribute is recorded on events, it MUST be recorded in
+  structured form. When recorded on spans, it MAY be recorded as a JSON string if structured format
+  is not supported and SHOULD be recorded in structured form otherwise. <p> Each document object
+  SHOULD contain at least the following properties:
+  @code id @endcode (string): A unique identifier for the document, @code score @endcode (double):
+  The relevance score of the document
+ */
+static constexpr const char *kGenAiRetrievalDocuments = "gen_ai.retrieval.documents";
+
+/**
+  The query text used for retrieval.
+  <blockquote>
+  [!Warning]
+  This attribute may contain sensitive information.</blockquote>
+ */
+static constexpr const char *kGenAiRetrievalQueryText = "gen_ai.retrieval.query.text";
 
 /**
   Deprecated, use @code gen_ai.provider.name @endcode instead.
@@ -381,17 +419,16 @@ static constexpr const char *kGenAiToolCallId = "gen_ai.tool.call.id";
 static constexpr const char *kGenAiToolCallResult = "gen_ai.tool.call.result";
 
 /**
-  The list of source system tool definitions available to the GenAI agent or model.
+  The list of tool definitions available to the GenAI agent or model.
   <p>
-  The value of this attribute matches source system tool definition format.
+  Instrumentations MUST follow <a href="/docs/gen-ai/gen-ai-tool-definitions.json">Tool Definitions
+  JSON Schema</a>. <p> When the attribute is recorded on events, it MUST be recorded in structured
+  form. When recorded on spans, it MAY be recorded as a JSON string if structured
+  format is not supported and SHOULD be recorded in structured form otherwise.
   <p>
-  It's expected to be an array of objects where each object represents a tool definition. In case a
-  serialized string is available to the instrumentation, the instrumentation SHOULD do the best
-  effort to deserialize it to an array. When recorded on spans, it MAY be recorded as a JSON string
-  if structured format is not supported and SHOULD be recorded in structured form otherwise. <p>
   Since this attribute could be large, it's NOT RECOMMENDED to populate
-  it by default. Instrumentations MAY provide a way to enable
-  populating this attribute.
+  non-required properties by default. Instrumentations MAY provide a way
+  to enable populating optional properties.
  */
 static constexpr const char *kGenAiToolDefinitions = "gen_ai.tool.definitions";
 
@@ -419,6 +456,22 @@ static constexpr const char *kGenAiToolName = "gen_ai.tool.name";
 static constexpr const char *kGenAiToolType = "gen_ai.tool.type";
 
 /**
+  The number of input tokens written to a provider-managed cache.
+  <p>
+  The value SHOULD be included in @code gen_ai.usage.input_tokens @endcode.
+ */
+static constexpr const char *kGenAiUsageCacheCreationInputTokens =
+    "gen_ai.usage.cache_creation.input_tokens";
+
+/**
+  The number of input tokens served from a provider-managed cache.
+  <p>
+  The value SHOULD be included in @code gen_ai.usage.input_tokens @endcode.
+ */
+static constexpr const char *kGenAiUsageCacheReadInputTokens =
+    "gen_ai.usage.cache_read.input_tokens";
+
+/**
   Deprecated, use @code gen_ai.usage.output_tokens @endcode instead.
 
   @deprecated
@@ -430,6 +483,11 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiUsageCompletionToken
 
 /**
   The number of tokens used in the GenAI input (prompt).
+  <p>
+  This value SHOULD include all types of input tokens, including cached tokens.
+  Instrumentations SHOULD make a best effort to populate this value, using a total
+  provided by the provider when available or, depending on the provider API,
+  by summing different token types parsed from the provider output.
  */
 static constexpr const char *kGenAiUsageInputTokens = "gen_ai.usage.input_tokens";
 
@@ -447,6 +505,22 @@ static constexpr const char *kGenAiUsageOutputTokens = "gen_ai.usage.output_toke
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiUsagePromptTokens =
     "gen_ai.usage.prompt_tokens";
+
+/**
+  The number of output tokens used for reasoning (e.g. chain-of-thought, extended thinking).
+  <p>
+  The value SHOULD be included in @code gen_ai.usage.output_tokens @endcode.
+ */
+static constexpr const char *kGenAiUsageReasoningOutputTokens =
+    "gen_ai.usage.reasoning.output_tokens";
+
+/**
+  Human-readable name of the GenAI workflow provided by the application.
+  <p>
+  This attribute can be populated in different frameworks eg: name of the first chain in LangChain
+  OR name of the crew in CrewAI.
+ */
+static constexpr const char *kGenAiWorkflowName = "gen_ai.workflow.name";
 
 namespace GenAiOpenaiRequestResponseFormatValues
 {
@@ -510,6 +584,13 @@ static constexpr const char *kTextCompletion = "text_completion";
 static constexpr const char *kEmbeddings = "embeddings";
 
 /**
+  Retrieval operation such as <a
+  href="https://platform.openai.com/docs/api-reference/vector-stores/search">OpenAI Search Vector
+  Store API</a>
+ */
+static constexpr const char *kRetrieval = "retrieval";
+
+/**
   Create GenAI agent
  */
 static constexpr const char *kCreateAgent = "create_agent";
@@ -523,6 +604,11 @@ static constexpr const char *kInvokeAgent = "invoke_agent";
   Execute a tool
  */
 static constexpr const char *kExecuteTool = "execute_tool";
+
+/**
+  Invoke GenAI workflow
+ */
+static constexpr const char *kInvokeWorkflow = "invoke_workflow";
 
 }  // namespace GenAiOperationNameValues
 
@@ -588,7 +674,7 @@ static constexpr const char *kCohere = "cohere";
 static constexpr const char *kAzureAiInference = "azure.ai.inference";
 
 /**
-  <a href="https://azure.microsoft.com/products/ai-services/openai-service/">Azure OpenAI</a>
+  <a href="https://learn.microsoft.com/en-us/azure/ai-services/openai/overview">Azure OpenAI</a>
  */
 static constexpr const char *kAzureAiOpenai = "azure.ai.openai";
 

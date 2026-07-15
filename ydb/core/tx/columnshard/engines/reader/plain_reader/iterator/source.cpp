@@ -4,7 +4,6 @@
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
-#include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
@@ -14,6 +13,8 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -30,13 +31,17 @@ void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::share
         AFL_VERIFY(Intervals.emplace(interval.GetIntervalIdx(), &interval).second);
     }
     if (AtomicCas(&SourceStartedFlag, 1, 0)) {
+        OnStartProcessing();
         SetMemoryGroupId(interval.GetIntervalId());
         AFL_VERIFY(FetchingPlan);
         InitStageData(std::make_unique<TFetchedData>(GetExclusiveIntervalOnly(), GetRecordsCount()));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", GetSourceIdx());
+        YDB_LOG_DEBUG("",
+            {"initFetchingPlan", FetchingPlan->DebugString()},
+            {"sourceIdx", GetSourceIdx()});
         NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", GetSourceIdx())("method", "InitFetchingPlan"));
         if (GetContext()->IsAborted()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "InitFetchingPlanAborted");
+            YDB_LOG_DEBUG("",
+                {"event", "InitFetchingPlanAborted"});
             return;
         }
         TFetchingScriptCursor cursor(FetchingPlan, 0);
@@ -52,7 +57,10 @@ void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& /*owner*/, const s
     for (auto&& i : Intervals) {
         i.second->OnSourceFetchStageReady(GetSourceIdx());
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "source_ready")("intervals_count", Intervals.size())("source_idx", GetSourceIdx());
+    YDB_LOG_DEBUG("",
+        {"event", "source_ready"},
+        {"intervalsCount", Intervals.size()},
+        {"sourceIdx", GetSourceIdx()});
     Intervals.clear();
 }
 
@@ -108,17 +116,24 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         }
         AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->GetRecordsCount());
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "chunks_stats")("fetch", fetchedChunks)("null", nullChunks)(
-        "reading_actions", blobsAction.GetStorageIds())("columns", columnIds.size());
+    YDB_LOG_DEBUG("",
+        {"event", "chunks_stats"},
+        {"fetch", fetchedChunks},
+        {"null", nullChunks},
+        {"readingActions", blobsAction.GetStorageIds()},
+        {"columns", columnIds.size()});
 }
 
 bool TPortionDataSource::DoStartFetchingColumns(
     const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName());
+    YDB_LOG_DEBUG("",
+        {"event", step.GetName()});
     AFL_VERIFY(columns.GetColumnsCount());
     AFL_VERIFY(!GetStageData().GetAppliedFilter() || !GetStageData().GetAppliedFilter()->IsTotalDenyFilter());
     auto& columnIds = columns.GetColumnIds();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
+    YDB_LOG_DEBUG("",
+        {"event", step.GetName()},
+        {"fetchingInfo", step.DebugString()});
 
     TBlobsAction action(GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
     {
@@ -157,14 +172,16 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
 
     auto batch = GetPortionAccessor()
                      .PrepareForAssemble(*blobSchema, columns->GetFilteredSchemaVerified(), MutableStageData().MutableBlobs(), ss)
-                     .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>(), Portion->GetPathId().DebugString())
+                     .AssembleToGeneralContainer(sequential ? columns->GetColumnIds() : std::set<ui32>())
                      .DetachResult();
     MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
 }
 
 bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
     AFL_VERIFY(!HasPortionAccessor());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
+    YDB_LOG_DEBUG("",
+        {"event", step.GetName()},
+        {"fetchingInfo", step.DebugString()});
 
     std::shared_ptr<TDataAccessorsRequest> request =
         std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN);

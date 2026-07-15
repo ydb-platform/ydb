@@ -10,6 +10,8 @@
 
 #include <ydb/public/api/grpc/draft/dummy.grpc.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -80,8 +82,8 @@ public:
     }
 
     void Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::GRPC_SERVER,
-            "Received TEvReadFinished, success = " << ev->Get()->Success);
+        YDB_LOG_DEBUG_CTX(ctx, "Received TEvReadFinished, success",
+            {"success", ev->Get()->Success});
         auto req = static_cast<const TEvBiStreamPingRequest::TRequest&>(ev->Get()->Record);
 
         if (req.copy()) {
@@ -91,8 +93,8 @@ public:
     }
 
     void Handle(TGRpcRequestProxy::TEvRefreshTokenResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_ERROR_S(ctx, NKikimrServices::GRPC_SERVER,
-            "Received TEvRefreshTokenResponse, Authenticated = " << ev->Get()->Authenticated);
+        YDB_LOG_ERROR_CTX(ctx, "Received TEvRefreshTokenResponse, Authenticated",
+            {"authenticated", ev->Get()->Authenticated});
         Request_->Write(std::move(Resp_));
         Ydb::StatusIds::StatusCode status = ev->Get()->Authenticated ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNAUTHORIZED;
         auto grpcStatus = grpc::Status(ev->Get()->Authenticated ?
@@ -172,12 +174,18 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             CQ_,
             &Draft::Dummy::DummyService::AsyncService::RequestBiStreamPing,
             [this](TIntrusivePtr<TBiStreamGRpcRequest::IContext> context) {
-                ActorSystem_->Send(GRpcRequestProxyId_, new TEvBiStreamPingRequest(context));
+                ActorSystem_->Send(
+                    GRpcRequestProxyId_,
+                    new TEvBiStreamPingRequest(
+                        context,
+                        NGRpcService::TRequestAuxSettings{
+                            .EmptyDatabaseMode = EEmptyDatabaseMode::EmptyDatabaseForbidden
+                        }
+                    )
+                );
             },
-            *ActorSystem_,
-            "BiStreamPing",
-            getCounterBlock("dummy", "biStreamPing", true),
-            nullptr);
+            *ActorSystem_, "BiStreamPing",
+            getCounterBlock("dummy", "biStreamPing", true), nullptr);
     }
 }
 

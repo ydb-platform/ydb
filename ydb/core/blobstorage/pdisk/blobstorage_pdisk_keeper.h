@@ -105,6 +105,10 @@ public:
         return ChunkTracker.GetNumActiveSlots();
     }
 
+    i64 GetUserChunkPoolSize() const {
+      return ChunkTracker.GetTotalHardLimit();
+    }
+
     TChunkIdx PopOwnerFreeChunk(TOwner owner, TString &outErrorReason) {
         if (ChunkTracker.TryAllocate(owner, 1, outErrorReason)) {
             TChunkIdx idx = PopFree(outErrorReason);
@@ -154,6 +158,10 @@ public:
         i64 totalUsed = ChunkTracker.GetTotalUsed();
         i64 totalHardLimit = ChunkTracker.GetTotalHardLimit();
         return 100.0 * (totalHardLimit ? (double)totalUsed / totalHardLimit : 1.0);
+    }
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetPDiskCapacityAlert() const {
+        return ChunkTracker.GetPDiskCapacityAlert();
     }
 
     double GetVDiskSlotUsage(TOwner owner) const {

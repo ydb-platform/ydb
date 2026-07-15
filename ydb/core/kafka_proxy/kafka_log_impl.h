@@ -1,6 +1,14 @@
 #pragma once
 
-#include "kafka_log.h"
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_log.h>
+
+namespace NKafka {
+
+inline TString LogPrefix() { return {}; }
+
+}
 
 #define KAFKA_LOG_T(stream) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << stream)
 #define KAFKA_LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KAFKA_PROXY, LogPrefix() << stream)

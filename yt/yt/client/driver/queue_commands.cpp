@@ -128,8 +128,7 @@ void TListQueueConsumerRegistrationsCommand::DoExecute(ICommandContextPtr contex
 void TPullQueueCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("queue_path", &TThis::QueuePath);
-    registrar.Parameter("offset", &TThis::Offset)
-        .Optional();
+    registrar.Parameter("offset", &TThis::Offset);
     registrar.Parameter("partition_index", &TThis::PartitionIndex);
 
     registrar.ParameterWithUniversalAccessor<i64>(
@@ -159,6 +158,11 @@ void TPullQueueCommand::Register(TRegistrar registrar)
             return command->Options.ReplicaConsistency;
         })
         .Optional(/*init*/ false);
+}
+
+bool TPullQueueCommand::HasResponseParameters() const
+{
+    return true;
 }
 
 void TPullQueueCommand::DoExecute(ICommandContextPtr context)
@@ -178,6 +182,11 @@ void TPullQueueCommand::DoExecute(ICommandContextPtr context)
         Options))
         .ValueOrThrow();
 
+    ProduceResponseParameters(context, [&] (IYsonConsumer* consumer) {
+        BuildYsonMapFragmentFluently(consumer)
+            .Item("start_offset").Value(result->GetStartOffset());
+    });
+
     auto format = context->GetOutputFormat();
     auto output = context->Request().OutputStream;
     auto writer = CreateSchemafulWriterForFormat(format, result->GetSchema(), output);
@@ -196,7 +205,8 @@ void TPullQueueConsumerCommand::Register(TRegistrar registrar)
 
     registrar.Parameter("queue_path", &TThis::QueuePath);
 
-    registrar.Parameter("offset", &TThis::Offset);
+    registrar.Parameter("offset", &TThis::Offset)
+        .Optional();
 
     registrar.Parameter("partition_index", &TThis::PartitionIndex);
 
@@ -227,6 +237,11 @@ void TPullQueueConsumerCommand::Register(TRegistrar registrar)
             return command->Options.ReplicaConsistency;
         })
         .Optional(/*init*/ false);
+}
+
+bool TPullQueueConsumerCommand::HasResponseParameters() const
+{
+    return true;
 }
 
 void TPullQueueConsumerCommand::DoExecute(ICommandContextPtr context)
@@ -247,6 +262,11 @@ void TPullQueueConsumerCommand::DoExecute(ICommandContextPtr context)
         RowBatchReadOptions,
         Options))
         .ValueOrThrow();
+
+    ProduceResponseParameters(context, [&] (IYsonConsumer* consumer) {
+        BuildYsonMapFragmentFluently(consumer)
+            .Item("start_offset").Value(result->GetStartOffset());
+    });
 
     auto format = context->GetOutputFormat();
     auto output = context->Request().OutputStream;

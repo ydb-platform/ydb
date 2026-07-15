@@ -1,17 +1,17 @@
 #pragma once
 
 #include "kqp_info_unit.h"
-#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
-#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_statistics.h>
 
-namespace NKikimr {
-namespace NKqp {
+#include <optional>
 
-using namespace NYql;
+namespace NKikimr::NKqp {
 
 struct TSortElement {
     TSortElement(const TInfoUnit& column, bool asc, bool nullsFirst) : SortColumn(column), Ascending(asc), NullsFirst(nullsFirst) {}
+    TString ToString() const;
+
     TInfoUnit SortColumn;
     bool Ascending = true;
     bool NullsFirst = true;
@@ -21,161 +21,171 @@ struct TSortElement {
  * Connection structs for the Stage graph
  * We make a special case for a Source connection that is required due to the limitation of the Data shard sources
  */
-struct TConnection {
-    TConnection(TString type, NYql::EStorageType fromSourceStageStorageType, ui32 outputIndex)
+struct TConnection: TSimpleRefCount<TConnection> {
+    TConnection(TString type, ui32 outputIndex)
         : Type(type)
-        , FromSourceStageStorageType(fromSourceStageStorageType)
         , OutputIndex(outputIndex) {
     }
     virtual ~TConnection() = default;
 
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) = 0;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) = 0;
     template <typename T>
-    TExprNode::TPtr BuildConnectionImpl(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx);
-    ui32 GetOutputIndex() const { return OutputIndex; }
+    NYql::TExprNode::TPtr BuildConnectionImpl(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    ui32 GetOutputIndex() const {
+        return OutputIndex;
+    }
+    virtual NJson::TJsonValue ToJson() const;
 
     TString Type;
-    NYql::EStorageType FromSourceStageStorageType;
     ui32 OutputIndex;
 };
 
 struct TBroadcastConnection: public TConnection {
-    TBroadcastConnection(NYql::EStorageType fromSourceStageStorageType = NYql::EStorageType::NA, ui32 outputIndex = 0)
-        : TConnection("Broadcast", fromSourceStageStorageType, outputIndex) {
+    TBroadcastConnection(ui32 outputIndex)
+        : TConnection("Broadcast", outputIndex) {
     }
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
-                                            TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
 };
 
 struct TMapConnection: public TConnection {
-    TMapConnection(NYql::EStorageType fromSourceStageStorageType = NYql::EStorageType::NA, ui32 outputIndex = 0)
-        : TConnection("Map", fromSourceStageStorageType, outputIndex) {
+    TMapConnection(ui32 outputIndex)
+        : TConnection("Map", outputIndex) {
     }
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
-                                            TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
 };
 
 struct TUnionAllConnection: public TConnection {
-    TUnionAllConnection(NYql::EStorageType fromSourceStageStorageType = NYql::EStorageType::NA, ui32 outputIndex = 0)
-        : TConnection("UnionAll", fromSourceStageStorageType, outputIndex) {
+    TUnionAllConnection(ui32 outputIndex, bool parallel = false)
+        : TConnection("UnionAll", outputIndex)
+        , Parallel(parallel) {
     }
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
-                                            TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson() const override;
+
+private:
+    bool Parallel{false};
 };
 
 struct TShuffleConnection: public TConnection {
-    TShuffleConnection(const TVector<TInfoUnit>& keys, NYql::EStorageType fromSourceStageStorageType = NYql::EStorageType::NA, ui32 outputIndex = 0)
-        : TConnection("Shuffle", fromSourceStageStorageType, outputIndex)
-        , Keys(keys) {
+    TShuffleConnection(const TVector<TInfoUnit>& keys,
+                       ui32 outputIndex,
+                       bool useSpilling = false)
+        : TConnection("HashShuffle", outputIndex)
+        , Keys(keys)
+        , UseSpilling(useSpilling) {
     }
 
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
-                                            TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TInfoUnit> Keys;
+    std::optional<NYql::NDq::EHashShuffleFuncType> HashFuncType;
+    bool UseSpilling = false;
 };
 
 struct TMergeConnection: public TConnection {
-    TMergeConnection(const TVector<TSortElement>& order, NYql::EStorageType fromSourceStageStorageType = NYql::EStorageType::NA, ui32 outputIndex = 0)
-        : TConnection("Merge", fromSourceStageStorageType, outputIndex)
+    TMergeConnection(const TVector<TSortElement>& order, ui32 outputIndex)
+        : TConnection("Merge", outputIndex)
         , Order(order) {
     }
 
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
-                                            TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TSortElement> Order;
 };
 
 struct TSourceConnection: public TConnection {
     TSourceConnection()
-        : TConnection("Source", NYql::EStorageType::RowStorage, 0) {
+        : TConnection("Source", 0) {
     }
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
-                                            TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
 };
+
+template <typename T>
+bool IsConnection(TIntrusivePtr<TConnection> connection) {
+    return dynamic_cast<T*>(connection.get());
+}
 
 /**
  * Stage graph
  *
  * TODO: Add validation, clean up interfaces
  */
-
 struct TStageGraph {
     struct TSourceStageTraits {
-        TSourceStageTraits(TVector<std::pair<TString, TInfoUnit>>&& renames, const NYql::EStorageType storageType)
-            : Renames(std::move(renames))
-            , StorageType(storageType) {
+        TSourceStageTraits(const NYql::EStorageType storageType)
+            : StorageType(storageType) {
         }
-        TVector<std::pair<TString, TInfoUnit>> Renames;
         NYql::EStorageType StorageType;
     };
 
-    TVector<int> StageIds;
-    THashMap<int, TSourceStageTraits> SourceStageRenames;
-    THashMap<int, TVector<int>> StageInputs;
-    THashMap<int, TVector<int>> StageOutputs;
-    THashMap<std::pair<int, int>, TVector<std::shared_ptr<TConnection>>> Connections;
-    THashMap<int, int> StageOutputIndices;
+    TList<ui32> StageIds;
+    THashMap<ui32, TSourceStageTraits> SourceStages;
+    THashMap<ui32, TVector<ui32>> StageInputs;
+    THashMap<ui32, TVector<ui32>> StageOutputs;
+    THashMap<std::pair<ui32, ui32>, TVector<TIntrusivePtr<TConnection>>> Connections;
+    THashMap<ui32, ui32> StageOutputIndices;
+    THashMap<ui32, TString> StageGUIDs;
 
-    int AddStage() {
-        int newStageId = StageIds.size();
-        StageIds.push_back(newStageId);
-        StageInputs[newStageId] = TVector<int>();
-        StageOutputs[newStageId] = TVector<int>();
-        return newStageId;
-    }
+    ui32 AddStage();
 
-    int AddSourceStage(const TVector<TString>& columns, const TVector<TInfoUnit>& renames, const NYql::EStorageType& storageType,
-                       bool needsMap = true) {
-        int res = AddStage();
-        TVector<std::pair<TString, TInfoUnit>> renamePairs;
-        if (needsMap) {
-            for (size_t i = 0; i < columns.size(); i++) {
-                renamePairs.emplace_back(columns[i], renames[i]);
-            }
-        }
+    ui32 AddSourceStage(const NYql::EStorageType& storageType) {
+        ui32 res = AddStage();
 
-        SourceStageRenames.insert({res, TSourceStageTraits(std::move(renamePairs), storageType)});
+        SourceStages.insert({res, TSourceStageTraits(storageType)});
         return res;
     }
 
-    bool IsSourceStage(const int id) const {
-        return SourceStageRenames.contains(id);
+    bool IsSourceStage(const ui32 id) const {
+        return SourceStages.contains(id);
     }
 
-    bool IsSourceStageRowType(const int id) const {
+    bool IsSourceStageRowType(const ui32 id) const {
         return IsSourceStageTypeImpl(id, NYql::EStorageType::RowStorage);
     }
 
-    bool IsSourceStageColumnType(const int id) const {
+    bool IsSourceStageColumnType(const ui32 id) const {
         return IsSourceStageTypeImpl(id, NYql::EStorageType::ColumnStorage);
     }
 
-    NYql::EStorageType GetStorageType(const int id) const {
-        auto it = SourceStageRenames.find(id);
-        if (it != SourceStageRenames.end()) {
+    NYql::EStorageType GetStorageType(const ui32 id) const {
+        auto it = SourceStages.find(id);
+        if (it != SourceStages.end()) {
             return it->second.StorageType;
         }
         return NYql::EStorageType::NA;
     }
 
-    void Connect(int from, int to, std::shared_ptr<TConnection> connection) {
-        auto &outputs = StageOutputs.at(from);
+    void Connect(ui32 from, ui32 to, TIntrusivePtr<TConnection> connection) {
+        auto& outputs = StageOutputs.at(from);
         outputs.push_back(to);
-        auto &inputs = StageInputs.at(to);
+        auto& inputs = StageInputs.at(to);
         inputs.push_back(from);
         Connections[std::make_pair(from, to)].push_back(connection);
     }
 
-    TVector<std::shared_ptr<TConnection>> GetConnections(int from, int to) { return Connections.at(std::make_pair(from, to)); }
+    void UpdateConnection(ui32 from, ui32 to, TIntrusivePtr<TConnection> connection) {
+        const auto it = Connections.find(std::make_pair(from, to));
+        Y_ENSURE(it != Connections.end(), "Cannot find a connection to update.");
+        auto& connections = it->second;
+        Y_ENSURE(connections.size() == 1);
+        connections.clear();
+        connections.push_back(connection);
+    }
+
+    const TVector<TIntrusivePtr<TConnection>>& GetConnections(ui32 from, ui32 to) const { return Connections.at(std::make_pair(from, to)); }
+
+    // For duplicate edges between the same stages, occurrence follows Connect() insertion order.
+    TIntrusivePtr<TConnection> TryGetConnection(ui32 from, ui32 to, ui32 occurrence = 0) const;
+
+    TList<ui32> GetTopologicalOrder() const;
 
     /**
      * Generate an expression for stage inputs
      * The complication is the special handling of Source stage due to limitation of data shard reader
      */
-    std::pair<TExprNode::TPtr, TExprNode::TPtr> GenerateStageInput(int &stageInputCounter, TExprNode::TPtr &node, TExprContext &ctx,
-                                                                   int fromStage);
+    std::pair<NYql::TExprNode::TPtr, NYql::TExprNode::TPtr> GenerateStageInput(ui32& stageInputCounter, NYql::TPositionHandle pos, NYql::TExprContext& ctx) const;
 
     ui32 GetOutputIndex(ui32 stageIndex) {
         ui32 outputIndex{0};
@@ -190,16 +200,15 @@ struct TStageGraph {
     }
 
     void TopologicalSort();
-private:
 
-    bool IsSourceStageTypeImpl(const int id, const NYql::EStorageType tableStorageType) const {
-        auto it = SourceStageRenames.find(id);
-        if (it != SourceStageRenames.end()) {
+private:
+    bool IsSourceStageTypeImpl(const ui32 id, const NYql::EStorageType tableStorageType) const {
+        auto it = SourceStages.find(id);
+        if (it != SourceStages.end()) {
             return it->second.StorageType == tableStorageType;
         }
         return false;
     }
 };
 
-}
-}
+} // namespace NKikimr::NKqp

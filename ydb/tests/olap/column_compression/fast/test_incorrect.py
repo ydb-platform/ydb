@@ -32,22 +32,27 @@ class TestIncorrectCompression(object):
 
         cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
 
+    @classmethod
+    def teardown_class(cls):
+        cls.ydb_client.stop()
+        cls.cluster.stop()
+
     COMPRESSION_CASES = [
-        ("just_text",         'qwerty',                         "mismatched input"),
-        ("unknown_key",       'codec=lz4',                      "Only algorithm and level settings supported"),
-        ("unknown_algorithm", 'algorithm=rar',                  "Unknown compression algorithm"),
-        ("only_level",        'level=3',                        "specified without an algorithm"),
-        ("negative_level",    'algorithm=zstd, level=-1',       "extraneous input"),
-        ("too_big_level",     'algorithm=zstd, level=99',       "annot parse serializer"),
-        ("double_algorithm",  'algorithm=lz4,algorithm=zstd',   "algorithm\\\' setting can be specified only once"),
-        ("double_level",      'algorithm=zstd,level=1,level=9', "level\\\' setting can be specified only once"),
+        ("just_text", 'qwerty', "mismatched input"),
+        ("unknown_key", 'codec=lz4', "Only algorithm and level settings supported"),
+        ("unknown_algorithm", 'algorithm=rar', "Unknown compression algorithm"),
+        ("only_level", 'level=3', "specified without an algorithm"),
+        ("negative_level", 'algorithm=zstd, level=-1', "extraneous input"),
+        ("too_big_level", 'algorithm=zstd, level=99', "annot parse serializer"),
+        ("double_algorithm", 'algorithm=lz4,algorithm=zstd', "algorithm\\\' setting can be specified only once"),
+        ("double_level", 'algorithm=zstd,level=1,level=9', "level\\\' setting can be specified only once"),
     ]
 
     @pytest.mark.parametrize("suffix, compression_settings, error_text", COMPRESSION_CASES)
     def test_create_with_wrong_compression(self, suffix, compression_settings, error_text):
         compressed_table_path = f"{self.test_dir}/create_{suffix}"
 
-        try:
+        with pytest.raises(ydb.issues.Error) as ex:
             self.ydb_client.query(
                 f"""
                     CREATE TABLE `{compressed_table_path}` (
@@ -60,9 +65,8 @@ class TestIncorrectCompression(object):
                     )
                 """
             )
-            assert False, 'Should Fail'
-        except ydb.issues.Error as ex:
-            assert error_text in ex.message
+
+        assert error_text in ex.value.message
 
     @pytest.mark.parametrize("suffix, compression_settings, error_text", COMPRESSION_CASES)
     def test_alter_to_wrong_compression(self, suffix, compression_settings, error_text):
@@ -81,53 +85,99 @@ class TestIncorrectCompression(object):
             """
         )
 
-        try:
+        with pytest.raises(ydb.issues.Error) as ex:
             self.ydb_client.query(
                 f"""
                     ALTER TABLE `{table_path}`
                         ALTER COLUMN `vStr` SET COMPRESSION({compression_settings});
                 """
             )
-            assert False, 'Should Fail'
-        except ydb.issues.Error as ex:
-            assert error_text in ex.message
 
-    def test_create_row_based_table_with_compression(self):
-        compressed_table_path = f"{self.test_dir}/create_row_table"
+        assert error_text in ex.value.message
 
-        try:
+    @pytest.mark.parametrize("suffix, compression_settings, error_text", COMPRESSION_CASES)
+    def test_add_with_wrong_compression(self, suffix, compression_settings, error_text):
+        table_path = f"{self.test_dir}/add_{suffix}"
+
+        self.ydb_client.query(
+            f"""
+                CREATE TABLE `{table_path}` (
+                    key Uint64 NOT NULL,
+                    vStr Utf8,
+                    PRIMARY KEY(key),
+                )
+                WITH (
+                    STORE = COLUMN
+                )
+            """
+        )
+
+        with pytest.raises(ydb.issues.Error) as ex:
             self.ydb_client.query(
                 f"""
-                    CREATE TABLE `{compressed_table_path}` (
+                    ALTER TABLE `{table_path}`
+                        ADD COLUMN `vStr2` Utf8 COMPRESSION({compression_settings});
+                """
+            )
+
+        assert error_text in ex.value.message
+
+    def test_create_row_based_table_with_column_compression(self):
+        table_path = f"{self.test_dir}/create_row_table"
+
+        with pytest.raises(ydb.issues.Error) as ex:
+            self.ydb_client.query(
+                f"""
+                    CREATE TABLE `{table_path}` (
                         key Uint64 NOT NULL,
                         vStr Utf8 COMPRESSION(algorithm=lz4),
                         PRIMARY KEY(key),
                     )
                 """
             )
-            assert False, 'Should Fail'
-        except ydb.issues.Error as ex:
-            assert "Column Compression is not supported in row tables" in ex.message
 
-    def test_tablestore(self):
-        table_path = f"{self.test_dir}/create_tablestore"
-        try:
+        assert "Column Compression is not supported in row tables" in ex.value.message
+
+    def test_alter_row_based_table_alter_column_compression(self):
+        table_path = f"{self.test_dir}/alter_row_table_alter_column"
+
+        self.ydb_client.query(
+            f"""
+                CREATE TABLE `{table_path}` (
+                    key Uint64 NOT NULL,
+                    vStr Utf8,
+                    PRIMARY KEY(key),
+                )
+            """
+        )
+
+        with pytest.raises(ydb.issues.Error) as ex:
             self.ydb_client.query(
                 f"""
-                CREATE TABLESTORE `{table_path}` (
-                    id Uint64 NOT NULL,
-                    val Int64 FAMILY fam1,
-                    PRIMARY KEY(id),
-                    Family default (
-                        COMPRESSION = "lz4"
-                    ),
-                    Family fam1 (
-                        COMPRESSION = "zstd"
-                    ),
-                )
-                WITH (STORE = COLUMN);
+                    ALTER TABLE `{table_path}` ALTER COLUMN  vStr SET COMPRESSION(algorithm=lz4);
                 """
             )
-            assert False, "Should Fail"
-        except ydb.issues.Error as ex:
-            assert "TableStore does not support column families" in ex.message
+
+        assert "Column Compression is not supported in row tables" in ex.value.message
+
+    def test_alter_row_based_table_add_column_with_compression(self):
+        table_path = f"{self.test_dir}/alter_row_table_add_column"
+
+        self.ydb_client.query(
+            f"""
+                CREATE TABLE `{table_path}` (
+                    key Uint64 NOT NULL,
+                    vStr Utf8,
+                    PRIMARY KEY(key),
+                )
+            """
+        )
+
+        with pytest.raises(ydb.issues.Error) as ex:
+            self.ydb_client.query(
+                f"""
+                    ALTER TABLE `{table_path}` ADD COLUMN  vStr2 Utf8 COMPRESSION(algorithm=zstd);
+                """
+            )
+
+        assert "Column Compression is not supported in row tables" in ex.value.message

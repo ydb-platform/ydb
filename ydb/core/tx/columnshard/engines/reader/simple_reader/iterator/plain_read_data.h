@@ -44,6 +44,7 @@ protected:
         PartialResults.clear();
         Y_ABORT_UNLESS(IsFinished());
     }
+
     virtual bool DoIsFinished() const override {
         return (Scanner->IsFinished() && PartialResults.empty());
     }
@@ -64,11 +65,13 @@ public:
     TScanHead& MutableScanner() {
         return *Scanner;
     }
+
     virtual void OnSentDataFromInterval(const TPartialSourceAddress& sourceAddress) override;
 
     void OnIntervalResult(std::unique_ptr<TPartialReadResult>&& result);
 
     TPlainReadData(const std::shared_ptr<TReadContext>& context);
+
     ~TPlainReadData() {
         if (SpecialReadContext->IsActive()) {
             Abort("unexpected on destructor");

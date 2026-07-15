@@ -1,10 +1,12 @@
-#include <ydb/library/actors/http/http.h>
-#include <ydb/library/security/util.h>
-#include <ydb/mvp/core/mvp_tokens.h>
+#include "oidc_protected_page_yandex.h"
+#include "context.h"
+
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_log.h>
-#include "context.h"
-#include "oidc_protected_page_yandex.h"
+#include <ydb/mvp/core/mvp_tokens.h>
+
+#include <ydb/library/actors/http/http.h>
+#include <ydb/library/security/util.h>
 
 namespace NMVP {
 namespace NOIDC {
@@ -33,9 +35,12 @@ void THandlerSessionServiceCheckYandex::Handle(TEvPrivate::TEvErrorResponse::TPt
     BLOG_D("SessionService.Check(): " << event->Get()->Status);
     NHttp::THttpOutgoingResponsePtr httpResponse;
     if (event->Get()->Status == "400") {
-        return ReplyAndPassAway(GetHttpOutgoingResponsePtr(Request, Settings));
+        return ReplyAndPassAway(GetHttpOutgoingResponsePtr(Request, Settings, GetRequestId()));
     } else {
-        return ReplyAndPassAway(Request->CreateResponse( event->Get()->Status, event->Get()->Message, "text/plain", event->Get()->Details));
+        NHttp::THeadersBuilder responseHeaders;
+        responseHeaders.Set("Content-Type", "text/plain");
+        SetRequestIdHeader(responseHeaders, GetRequestId());
+        return ReplyAndPassAway(Request->CreateResponse(event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details));
     }
 }
 

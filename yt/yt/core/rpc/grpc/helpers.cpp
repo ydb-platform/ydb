@@ -446,12 +446,10 @@ TErrorCode StatusCodeToErrorCode(grpc_status_code statusCode)
 
 std::string SerializeError(const TError& error)
 {
-    TString serializedError;
-    google::protobuf::io::StringOutputStream output(&serializedError);
+    // TODO(babenko): migrate to std::string
     NYT::NProto::TError protoError;
     ToProto(&protoError, error);
-    YT_VERIFY(protoError.SerializeToZeroCopyStream(&output));
-    return serializedError;
+    return protoError.SerializeAsString();
 }
 
 TError DeserializeError(TStringBuf serializedError)
@@ -473,9 +471,9 @@ TGrpcPemKeyCertPair LoadPemKeyCertPair(const TSslPemKeyCertPairConfigPtr& config
 
 TGrpcChannelCredentialsPtr LoadChannelCredentials(const TChannelCredentialsConfigPtr& config)
 {
-    TString rootCerts;
-    TString identityCerts;
-    TString identityPrivateKey;
+    std::optional<std::string> rootCerts;
+    std::optional<std::string> identityCerts;
+    std::optional<std::string> identityPrivateKey;
     if (config->PemRootCerts) {
         rootCerts = config->PemRootCerts->LoadBlob();
     }
@@ -489,12 +487,12 @@ TGrpcChannelCredentialsPtr LoadChannelCredentials(const TChannelCredentialsConfi
         tlsPairs = grpc_tls_identity_pairs_create();
         grpc_tls_identity_pairs_add_pair(
             tlsPairs,
-            identityPrivateKey.c_str(),
-            identityCerts.c_str());
+            identityPrivateKey->c_str(),
+            identityCerts->c_str());
     }
 
     TGrpcTlsCertificateProviderPtr certProvider(grpc_tls_certificate_provider_static_data_create(
-        rootCerts ? rootCerts.c_str() : nullptr,
+        rootCerts ? rootCerts->c_str() : nullptr,
         tlsPairs));
 
     grpc_tls_credentials_options* tlsOptions = grpc_tls_credentials_options_create();
@@ -512,7 +510,7 @@ TGrpcChannelCredentialsPtr LoadChannelCredentials(const TChannelCredentialsConfi
 
 TGrpcServerCredentialsPtr LoadServerCredentials(const TServerCredentialsConfigPtr& config)
 {
-    auto rootCerts = config->PemRootCerts ? config->PemRootCerts->LoadBlob() : TString();
+    auto rootCerts = config->PemRootCerts ? std::optional(config->PemRootCerts->LoadBlob()) : std::nullopt;
     std::vector<TGrpcPemKeyCertPair> keyCertPairs;
     std::vector<grpc_ssl_pem_key_cert_pair> nativeKeyCertPairs;
     for (const auto& pairConfig : config->PemKeyCertPairs) {
@@ -520,7 +518,7 @@ TGrpcServerCredentialsPtr LoadServerCredentials(const TServerCredentialsConfigPt
         nativeKeyCertPairs.push_back(*keyCertPairs.back().Unwrap());
     }
     return TGrpcServerCredentialsPtr(grpc_ssl_server_credentials_create_ex(
-        rootCerts ? rootCerts.c_str() : nullptr,
+        rootCerts ? rootCerts->c_str() : nullptr,
         nativeKeyCertPairs.data(),
         nativeKeyCertPairs.size(),
         static_cast<grpc_ssl_client_certificate_request_type>(config->ClientCertificateRequest),

@@ -1,5 +1,19 @@
 #include "schemeshard__backup_collection_common.h"
 
+namespace NKikimr::NSchemeShard {
+
+bool IsSupportedIndex(TPathId pathId, const TSchemeShard* ss) {
+    auto indexInfo = ss->Indexes.at(pathId);
+    return indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobal ||
+            indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+}
+
+bool IsSupportedIndex(TPathId pathId, const TOperationContext& context) {
+    return IsSupportedIndex(pathId, context.SS);
+}
+
+} // namespace NKikimr::NSchemeShard
+
 namespace NKikimr::NSchemeShard::NBackup {
 
 std::optional<NBackup::TBackupCollectionPaths> ResolveBackupCollectionPaths(
@@ -170,14 +184,10 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
                     continue;
                 }
 
-                auto indexInfo = context.SS->Indexes.at(childPathId);
-                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
-                    continue;
-                }
+                if (!IsSupportedIndex(childPathId, context)) continue;
 
-                // Add required PARENT directory path for index backup:
-                // {targetDir}/__ydb_backup_meta/indexes/{table_path}
-                // The index name will be the table name created within this directory
+                // Add required directory paths for index backup:
+                // {targetDir}/__ydb_backup_meta/indexes/{table_path}/{index_name}
                 TString indexBackupParentPath = JoinPath({
                     targetDir,
                     "__ydb_backup_meta",
@@ -185,6 +195,14 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
                     relativeItemPath
                 });
                 collectionPaths.emplace(indexBackupParentPath);
+                TString indexDir = JoinPath({
+                    targetDir,
+                    "__ydb_backup_meta",
+                    "indexes",
+                    relativeItemPath,
+                    childName
+                });
+                collectionPaths.emplace(indexDir);
             }
         }
     }

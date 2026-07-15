@@ -1,6 +1,8 @@
 # Secondary Indexes
 
-{{ ydb-short-name }} automatically creates a primary key index, which is why selection by primary key is always efficient, affecting only the rows needed. Selections by criteria applied to one or more non-key columns typically result in a full table scan. To make these selections efficient, use _secondary indexes_.
+{{ ydb-short-name }} automatically creates a primary key index, which is why selection by primary key is always efficient, affecting only the rows needed. Selections by criteria applied to one or more non-key columns typically result in a full table scan. To make these selections efficient, use _secondary indexes_ — global structures backed by a separate index table.
+
+[Local indexes](../glossary.md#local-index) are a separate kind of auxiliary structure: they are stored with table data and applied in the storage layer on read, without materializing a separate index table (see [Local indexes](#bloom-skip-index) below).
 
 The current version of {{ ydb-short-name }} implements _synchronous_ and _asynchronous_ global secondary indexes. Each index is a hidden table that is updated:
 
@@ -23,21 +25,27 @@ You can copy the contents of columns into a covering index. This eliminates the 
 
 ## Unique Secondary Index {#unique}
 
-This type of index enforces unique constraint behavior and, like other indexes, allows efficient point lookup queries. {{ ydb-short-name }} uses it to perform additional checks, ensuring that each distinct value in the indexed column set appears in the table no more than once. If a modifying query violates the constraint, it will be aborted with a `PRECONDITION_FAILED` status. Therefore, client code must be prepared to handle this status.
+This type of index enforces unique constraint behavior and, just like a regular secondary index, allows efficient point lookup queries. {{ ydb-short-name }} uses it to perform additional checks, ensuring that each distinct value in the indexed column set appears in the table no more than once. If a modifying query violates the constraint, it is aborted with a `PRECONDITION_FAILED` status. Therefore, client code must be prepared to handle this status.
 
-A unique secondary index is a synchronous index, so the update process is the same as in the [Synchronous Secondary Index](#sync) section described above from a transaction perspective.
-
-### Limitations
-
-Currently, a unique index cannot be added to an existing table.
+A unique secondary index is a synchronous index, so from a transactional perspective, the update process is the same as for the [synchronous secondary index](#sync) described above.
 
 ## Vector Index
 
 [Vector Index](../../dev/vector-indexes.md) is a special type of secondary index.
 
-Unlike secondary indexes, which optimize equality or range searches, vector indexes allow [vector search](../vector_search.md) based on distance or similarity functions.
+Unlike traditional secondary indexes, which optimize equality or range searches, vector indexes allow [vector search](../query_execution/vector_search.md) based on distance or similarity functions.
 
-### Creating a Secondary Index Online {#index-add}
+## Fulltext Index
+
+[Fulltext index](../../dev/fulltext-indexes.md) is a special type of secondary index.
+
+Unlike traditional secondary indexes, which optimize equality or range searches, fulltext indexes allow scalable text search by words and phrases (and, with n-grams, by substrings). See also: [Fulltext search](../query_execution/fulltext_search.md).
+
+## Local indexes {#bloom-skip-index}
+
+[Local indexes](../query_execution/local_indexes.md) are auxiliary structures stored together with table data and applied while reading in the storage layer. They do not materialize a separate index table. Currently, [Bloom skip indexes](../../dev/bloom-skip-indexes.md) are implemented; other kinds are planned.
+
+## Creating a Secondary Index Online {#index-add}
 
 {{ ydb-short-name }} lets you create new and delete existing secondary indexes without stopping the service. For a single table, you can only create one index at a time.
 
@@ -60,7 +68,11 @@ Possible impact on user transactions:
 * There may be an increase in delays because transactions are now distributed (when creating a synchronous index).
 * There may be an enhanced background of `OVERLOADED` errors because index table automatic shard splitting is actively running during data writes.
 
-The rate of data writes is selected to minimize their impact on user transactions. To quickly complete the operation, we recommend running the online creation of a secondary index when the user load is minimum.
+{% note info %}
+
+The data write rate is chosen to minimize the impact of the write process on user transactions. To control the rate, configure limits for the corresponding queue in the [resource broker](../../reference/configuration/resource_broker_config.md#resource-broker-config).
+
+{% endnote %}
 
 Creating an index is an asynchronous operation. If the client-server connection is interrupted after the operation has started, index building continues. You can manage asynchronous operations using the {{ ydb-short-name }} CLI.
 

@@ -249,13 +249,21 @@ bool TValue::GetBool() const {
     }
 }
 
-const TStringBuf TValue::GetString() const {
+TStringBuf TValue::GetString() const {
     Y_DEBUG_ABORT_UNLESS(IsString());
 
     if (const auto* value = std::get_if<TEntryCursor>(&Value_)) {
         return value->GetString();
     } else if (const auto* value = std::get_if<TUnboxedValue>(&Value_)) {
-        return value->AsStringRef();
+        if (value->IsEmbedded()) {
+            // need to adjust Utf8 mark
+            auto data = reinterpret_cast<const char*>(value);
+            auto size = ui8(data[TUnboxedValuePod::InternalBufferSize]) & ~NodeTypeMask;
+            return TStringBuf(data, size);
+        } else {
+            auto cleanValue = ClearUtf8Mark(*value);
+            return cleanValue.AsStringRef();
+        }
     } else {
         Y_ABORT("Unexpected variant case in GetString");
     }

@@ -211,9 +211,9 @@
     ],
     "test.test[InMem-Queue-default.txt-Debug]": [
         {
-            "checksum": "d9554d97e40327e2e0e59de498c2a7e2",
-            "size": 611,
-            "uri": "https://{canondata_backend}/1936842/adb6621ea582bf3dea04cd9842f6c1b6c2cfa21a/resource.tar.gz#test.test_InMem-Queue-default.txt-Debug_/opt.yql"
+            "checksum": "85831299c757da052985580b6aab71cb",
+            "size": 688,
+            "uri": "https://{canondata_backend}/1925842/88069d6be6751b70ec9ff6c210bca6bb43e68103/resource.tar.gz#test.test_InMem-Queue-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[InMem-Queue-default.txt-Results]": [
@@ -225,9 +225,9 @@
     ],
     "test.test[InMem-QueueMixedTypes-default.txt-Debug]": [
         {
-            "checksum": "2606a7648965c0491aa608feab97b6c8",
-            "size": 797,
-            "uri": "https://{canondata_backend}/1936842/adb6621ea582bf3dea04cd9842f6c1b6c2cfa21a/resource.tar.gz#test.test_InMem-QueueMixedTypes-default.txt-Debug_/opt.yql"
+            "checksum": "3f1e4fb73238ee08c4192e6ffd4dcdb3",
+            "size": 873,
+            "uri": "https://{canondata_backend}/1925842/88069d6be6751b70ec9ff6c210bca6bb43e68103/resource.tar.gz#test.test_InMem-QueueMixedTypes-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[InMem-QueueMixedTypes-default.txt-Results]": [
@@ -501,6 +501,20 @@
             "checksum": "449d62fa0820fe5b2ae08079521c833b",
             "size": 385,
             "uri": "https://{canondata_backend}/1600758/4248636efdaa36f150a17c3f1e81c0728d33ae03/resource.tar.gz#test.test_Udf-PythonGeneratorWithClosure--Results_/results.txt"
+        }
+    ],
+    "test.test[Window-WinOnRowsVoidFrameNewPipeline-default.txt-Debug]": [
+        {
+            "checksum": "7e2d7feee49bc17f0ca41058bc3370b0",
+            "size": 1344,
+            "uri": "https://{canondata_backend}/1130705/f063f5c683c4b036174d6c51e3491bd3171db43f/resource.tar.gz#test.test_Window-WinOnRowsVoidFrameNewPipeline-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Window-WinOnRowsVoidFrameNewPipeline-default.txt-Results]": [
+        {
+            "checksum": "d610600f721698c6fdd12432ed8752ad",
+            "size": 458,
+            "uri": "https://{canondata_backend}/1130705/f063f5c683c4b036174d6c51e3491bd3171db43f/resource.tar.gz#test.test_Window-WinOnRowsVoidFrameNewPipeline-default.txt-Results_/results.txt"
         }
     ]
 }

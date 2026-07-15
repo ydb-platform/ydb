@@ -37,6 +37,43 @@ cdef class ResponseBuffer:
         self.gen = source.gen
         self.buffer = NULL
         self.slice = <char*>PyMem_Malloc(self.slice_sz)
+        self._exception_tag = getattr(source, "exception_tag", None)
+        self.open_marker = None
+        self.close_marker = None
+        self.carryover = b""
+        self.exception_buf = None
+        self.last_message_data = None
+        self.current_chunk = None
+        if self._exception_tag:
+            tag_bytes = self._exception_tag.encode()
+            self.open_marker = b"__exception__" + tag_bytes
+            self.close_marker = tag_bytes + b"__exception__"
+
+    cdef void _check_for_exception(self, object chunk) except *:
+        cdef object search_data
+        cdef Py_ssize_t marker_pos
+        cdef Py_ssize_t carry_size
+        if not self._exception_tag:
+            return
+        if self.exception_buf is not None:
+            self.exception_buf += chunk
+            if self.close_marker in self.exception_buf:
+                self.last_message_data = bytes(self.exception_buf)
+                raise StreamCompleteException
+            return
+        search_data = self.carryover + chunk
+        marker_pos = search_data.find(self.open_marker)
+        if marker_pos != -1:
+            self.exception_buf = bytearray(search_data[marker_pos:])
+            if self.close_marker in self.exception_buf:
+                self.last_message_data = bytes(self.exception_buf)
+                raise StreamCompleteException
+            return
+        carry_size = len(self.open_marker) - 1
+        if len(search_data) >= carry_size:
+            self.carryover = search_data[-carry_size:]
+        else:
+            self.carryover = search_data
 
     # Note that return char * return from this method is only good until the next call to _read_bytes_c or
     # _read_byte_load, since it points into self.buffer which can be replaced with the next chunk from the stream
@@ -74,6 +111,7 @@ cdef class ResponseBuffer:
             chunk = next(self.gen, None)
             if not chunk:
                 raise StreamCompleteException
+            self._check_for_exception(chunk)
             x = len(chunk)
             ptr = <char *> chunk
             if cur_len + x <= sz:
@@ -90,6 +128,7 @@ cdef class ResponseBuffer:
                 self.buffer = <char *> self.buff_source.buf
                 self.buf_sz = x
                 self.buf_loc = tail
+                self.current_chunk = chunk
                 cur_len += tail
         return self.slice
 
@@ -101,8 +140,9 @@ cdef class ResponseBuffer:
         chunk = next(self.gen, None)
         if not chunk:
             raise StreamCompleteException
+        self._check_for_exception(chunk)
         x = len(chunk)
-        py_chunk = chunk
+        self.current_chunk = chunk
         if x > 1:
             PyBuffer_Release(&self.buff_source)
             PyObject_GetBuffer(chunk, &self.buff_source, PyBUF_SIMPLE | PyBUF_ANY_CONTIGUOUS)
@@ -119,18 +159,29 @@ cdef class ResponseBuffer:
         cdef unsigned char b
         cdef char* buf
         while x < num_rows:
-            sz = 0
-            shift = 0
-            while 1:
-                if self.buf_loc < self.buf_sz:
-                    b = self.buffer[self.buf_loc]
-                    self.buf_loc += 1
-                else:
-                    b = self._read_byte_load()
-                sz += ((b & 0x7f) << shift)
-                if (b & 0x80) == 0:
-                    break
-                shift += 7
+            # Fast path: 1-byte varint covers most string lengths < 128
+            if self.buf_loc < self.buf_sz:
+                b = self.buffer[self.buf_loc]
+                self.buf_loc += 1
+            else:
+                b = self._read_byte_load()
+
+            if (b & 0x80) == 0:
+                sz = b
+            else:
+                sz = b & 0x7f
+                shift = 7
+                while 1:
+                    if self.buf_loc < self.buf_sz:
+                        b = self.buffer[self.buf_loc]
+                        self.buf_loc += 1
+                    else:
+                        b = self._read_byte_load()
+                    sz += ((b & 0x7f) << shift)
+                    if (b & 0x80) == 0:
+                        break
+                    shift += 7
+
             buf = self.read_bytes_c(sz)
             if encoding:
                 try:
@@ -154,21 +205,29 @@ cdef class ResponseBuffer:
         cdef char * null_map = <char *> PyMem_Malloc(<size_t> num_rows)
         memcpy(<void *> null_map, <void *> self.read_bytes_c(num_rows), num_rows)
         for x in range(num_rows):
+            # Fast path: 1-byte varint covers most string lengths < 128
             if self.buf_loc < self.buf_sz:
                 b = self.buffer[self.buf_loc]
                 self.buf_loc += 1
             else:
                 b = self._read_byte_load()
-            shift = 0
-            sz = b & 0x7f
-            while b & 0x80:
-                shift += 7
-                if self.buf_loc < self.buf_sz:
-                    b = self.buffer[self.buf_loc]
-                    self.buf_loc += 1
-                else:
-                    b = self._read_byte_load()
-                sz += ((b & 0x7f) << shift)
+
+            if (b & 0x80) == 0:
+                sz = b
+            else:
+                sz = b & 0x7f
+                shift = 7
+                while 1:
+                    if self.buf_loc < self.buf_sz:
+                        b = self.buffer[self.buf_loc]
+                        self.buf_loc += 1
+                    else:
+                        b = self._read_byte_load()
+                    sz += ((b & 0x7f) << shift)
+                    if (b & 0x80) == 0:
+                        break
+                    shift += 7
+
             buf = self.read_bytes_c(sz)
             if null_map[x]:
                 v = null_obj
@@ -283,7 +342,7 @@ cdef class ResponseBuffer:
         enc = pyenc
         for x in range(num_rows):
             try:
-                v = PyUnicode_Decode(b, sz, enc, errors)
+                v = PyUnicode_Decode(b, sz, enc, errors).rstrip("\x00")
             except UnicodeDecodeError:
                 v = PyBytes_FromStringAndSize(b, sz).hex()
             PyTuple_SET_ITEM(column, x, v)
@@ -297,10 +356,16 @@ cdef class ResponseBuffer:
             self.source = None
 
     @property
+    def exception_tag(self):
+        return self._exception_tag
+
+    @property
     def last_message(self):
-        if self.buffer == NULL:
-            return self.slice[0:]
-        return self.buffer[self.buf_sz:]
+        if self.last_message_data is not None:
+            return self.last_message_data
+        if self.current_chunk is not None:
+            return self.current_chunk
+        return b""
 
     def __dealloc__(self):
         self.close()

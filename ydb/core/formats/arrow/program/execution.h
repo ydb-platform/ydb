@@ -30,8 +30,17 @@ public:
         YDB_READONLY_DEF(TString, ColumnName);
         std::optional<bool> IsFullColumn;
         THashSet<TString> SubColumnNames;
+        bool UseDictionaryOnly = false;
 
     public:
+        bool GetUseDictionaryOnly() const {
+            return UseDictionaryOnly;
+        }
+
+        void SetUseDictionaryOnly(const bool value) {
+            UseDictionaryOnly = value;
+        }
+
         TDataAddress SelectSubColumns(const THashSet<TString>& selected) const {
             AFL_VERIFY(selected.size());
             TDataAddress result(ColumnId, ColumnName, std::nullopt);
@@ -42,6 +51,9 @@ public:
                 }
                 AFL_VERIFY(SubColumnNames.contains(i));
                 result.AddSubColumnName(i);
+            }
+            if (UseDictionaryOnly) {
+                result.SetUseDictionaryOnly(true);
             }
             return result;
         }
@@ -71,6 +83,9 @@ public:
         void MergeFrom(const TDataAddress& addr) {
             AFL_VERIFY(ColumnId == addr.ColumnId);
             AFL_VERIFY(ColumnName == addr.ColumnName);
+            if (addr.UseDictionaryOnly) {
+                UseDictionaryOnly = true;
+            }
             if (IsFullColumn) {
                 AFL_VERIFY(!!addr.IsFullColumn);
                 if (IsFullColumn == addr.IsFullColumn && !*IsFullColumn) {
@@ -102,6 +117,9 @@ public:
             result.InsertValue("name", ColumnName);
             if (SubColumnNames.size()) {
                 result.InsertValue("sub", JoinSeq(",", SubColumnNames));
+            }
+            if (UseDictionaryOnly) {
+                result.InsertValue("dict_only", true);
             }
             return result;
         }
@@ -225,12 +243,15 @@ public:
         YDB_READONLY(ui32, ColumnId, 0);
         YDB_READONLY_DEF(TString, SubColumnName);
         TIndexCheckOperation Operation;
+        YDB_READONLY_DEF(TString, ColumnName);
 
     public:
-        TCheckIndexContext(const ui32 columnId, const TString& subColumnName, const TIndexCheckOperation& operation)
+        TCheckIndexContext(const ui32 columnId, const TString& subColumnName, const TIndexCheckOperation& operation,
+            const TString& columnName = {})
             : ColumnId(columnId)
             , SubColumnName(subColumnName)
-            , Operation(operation) {
+            , Operation(operation)
+            , ColumnName(columnName) {
         }
 
         const TIndexCheckOperation& GetOperation() const {

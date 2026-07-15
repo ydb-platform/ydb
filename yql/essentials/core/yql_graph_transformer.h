@@ -9,6 +9,7 @@
 #include <util/datetime/base.h>
 
 #include <functional>
+#include <utility>
 
 namespace NYql {
 
@@ -163,7 +164,7 @@ public:
     }
 
     NThreading::TFuture<void> GetAsyncFuture(const TExprNode& input) final {
-        TTransformScope scope(Statistics_, nullptr);
+        TTransformScope scope(Statistics_, /*exprCtx=*/nullptr);
         AsyncStart_ = TInstant::Now();
 
         return DoGetAsyncFuture(input);
@@ -197,18 +198,18 @@ struct TTransformStage {
     EYqlIssueCode IssueCode;
     TString IssueMessage;
 
-    TTransformStage(const TAutoPtr<IGraphTransformer>& transformer, const TString& name, EYqlIssueCode issueCode, const TString& issueMessage = {})
-        : Name(name)
+    TTransformStage(const TAutoPtr<IGraphTransformer>& transformer, TString name, EYqlIssueCode issueCode, TString  issueMessage = {})
+        : Name(std::move(name))
         , IssueCode(issueCode)
-        , IssueMessage(issueMessage)
+        , IssueMessage(std::move(issueMessage))
         , RawTransformer_(transformer.Get())
         , Transformer_(transformer)
     {}
 
-    TTransformStage(IGraphTransformer& transformer, const TString& name, EYqlIssueCode issueCode, const TString& issueMessage = {})
-        : Name(name)
+    TTransformStage(IGraphTransformer& transformer, TString name, EYqlIssueCode issueCode, TString issueMessage = {})
+        : Name(std::move(name))
         , IssueCode(issueCode)
-        , IssueMessage(issueMessage)
+        , IssueMessage(std::move(issueMessage))
         , RawTransformer_(&transformer)
     {}
 
@@ -336,8 +337,8 @@ THolder<IGraphTransformer> CreateSinglePassFunctorTransformer(TFunctor functor) 
     return MakeHolder<TSinglePassFunctorTransformer<TFunctor>>(std::move(functor));
 }
 
-typedef std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)> TAsyncTransformCallback;
-typedef NThreading::TFuture<TAsyncTransformCallback> TAsyncTransformCallbackFuture;
+using TAsyncTransformCallback = std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)>;
+using TAsyncTransformCallbackFuture = NThreading::TFuture<TAsyncTransformCallback>;
 
 template <typename TDerived>
 class TAsyncCallbackTransformer : public TGraphTransformerBase {
@@ -407,7 +408,7 @@ WrapFutureCallback(const TFuture& future, const TCallback& callback, const TStri
                     else {
                         if (res.Repeat()) {
                             input->SetState(TExprNode::EState::ExecutionRequired);
-                            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, false);
+                            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/false);
                         }
                         return callback(res, input, output, ctx);
                     }
@@ -433,7 +434,7 @@ WrapModifyFuture(const TFuture& future, const TResultExtractor& extractor, const
         input->SetState(TExprNode::EState::ExecutionComplete);
         output->SetResult(std::move(resultNode));
         if (input != output) {
-            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
         }
         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Ok);
     }, message);
@@ -456,15 +457,15 @@ inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Sync
 }
 
 inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> SyncRepeatWithRestart() {
-    return SyncStatus(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
+    return SyncStatus(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true));
 }
 
-typedef std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash> TSyncMap;
+using TSyncMap = std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash>;
 }
 
 template<>
 inline void Out<NYql::IGraphTransformer::TStatus>(
-    IOutputStream &out, const NYql::IGraphTransformer::TStatus& status)
+    IOutputStream &out, const NYql::IGraphTransformer::TStatus& value)
 {
-    status.Out(out);
+    value.Out(out);
 }

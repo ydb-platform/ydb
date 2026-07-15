@@ -4,7 +4,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 namespace NKikimr::NEvWrite::NErrorCodes {

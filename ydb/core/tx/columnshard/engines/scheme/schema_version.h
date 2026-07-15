@@ -11,7 +11,8 @@ private:
 
 public:
     TSchemaPresetVersionInfo(const NKikimrTxColumnShard::TSchemaPresetVersionInfo& proto)
-        : Proto(proto) {
+        : Proto(proto)
+    {
     }
 
     const NKikimrTxColumnShard::TSchemaPresetVersionInfo& GetProto() const {
@@ -19,12 +20,15 @@ public:
     }
 
     auto operator<=>(const TSchemaPresetVersionInfo& rhs) const {
-        return std::tuple(Proto.GetId(), Proto.GetSinceStep(), Proto.GetSinceTxId()) <=> std::tuple(rhs.Proto.GetId(), rhs.Proto.GetSinceStep(), rhs.Proto.GetSinceTxId());
+        return std::tuple(Proto.GetId(), Proto.GetSinceStep(), Proto.GetSinceTxId()) <=>
+               std::tuple(rhs.Proto.GetId(), rhs.Proto.GetSinceStep(), rhs.Proto.GetSinceTxId());
     }
 
     void SaveToLocalDb(NIceDb::TNiceDb& db) {
         using namespace NKikimr::NColumnShard;
-        db.Table<Schema::SchemaPresetVersionInfo>().Key(Proto.GetId(), Proto.GetSinceStep(), Proto.GetSinceTxId()).Update<Schema::SchemaPresetVersionInfo::InfoProto>(Proto.SerializeAsString());
+        db.Table<Schema::SchemaPresetVersionInfo>()
+            .Key(Proto.GetId(), Proto.GetSinceStep(), Proto.GetSinceTxId())
+            .Update<Schema::SchemaPresetVersionInfo::InfoProto>(Proto.SerializeAsString());
     }
 
     TSnapshot GetSnapshot() const {
@@ -43,4 +47,4 @@ public:
         return Proto.GetDiff().UpsertColumnsSize() + Proto.GetDiff().UpsertIndexesSize();
     }
 };
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

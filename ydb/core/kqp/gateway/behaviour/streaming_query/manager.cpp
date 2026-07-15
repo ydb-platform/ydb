@@ -8,6 +8,8 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/services/metadata/service.h>
 
+#include <yql/essentials/core/sql_types/hopping.h>
+
 #include <library/cpp/protobuf/interop/cast.h>
 
 namespace NKikimr::NKqp {
@@ -92,7 +94,25 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
     return result;
 }
 
-[[nodiscard]] TYqlConclusionStatus FillStreamingQueryDesc(NKikimrSchemeOp::TStreamingQueryDescription& streamingQueryDesc, const TString& name, const NYql::TObjectSettingsImpl& settings) {
+TYqlConclusion<std::optional<TString>> ParseWatermarkLateEventsPolicy(NYql::TFeaturesExtractor& featuresExtractor) {
+    const auto& value = featuresExtractor.Extract(TStreamingQueryConfig::TProperties::WatermarkLateEventsPolicy);
+    if (!value) {
+        return std::nullopt;
+    }
+
+    const auto policy = to_lower(*value);
+
+    if (!TryFromString<NYql::NHoppingWindow::EPolicy>(policy)) {
+        return TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+            TStringBuilder() << "Invalid value for watermark_late_events_policy: '" << *value << "'"
+        );
+    }
+
+    return std::optional<TString>(policy);
+}
+
+[[nodiscard]] TYqlConclusionStatus FillStreamingQueryDesc(NKikimrSchemeOp::TStreamingQueryDescription& streamingQueryDesc, const TString& name, const NYql::TObjectSettingsImpl& settings, TActorSystem* actorSystem) {
     streamingQueryDesc.SetName(name);
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();
@@ -118,7 +138,21 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
     }
 
     if (const auto streamingDisposition = streamingDispositionStatus.DetachResult()) {
+        if (!actorSystem) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Object operation needs an actor system. Please contact internal support");
+        }
+        if (!AppData(actorSystem)->FeatureFlags.GetEnableStreamingQueryDisposition()) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Streaming query disposition is disabled. Please contact your system administrator to enable it");
+        }
         properties.emplace(TStreamingQueryConfig::TProperties::StreamingDisposition, streamingDisposition->SerializeAsString());
+    }
+
+    auto watermarkLateEventsPolicyStatus = ParseWatermarkLateEventsPolicy(featuresExtractor);
+    if (watermarkLateEventsPolicyStatus.IsFail()) {
+        return watermarkLateEventsPolicyStatus;
+    }
+    if (const auto watermarkLateEventsPolicy = watermarkLateEventsPolicyStatus.DetachResult()) {
+        properties.emplace(TStreamingQueryConfig::TProperties::WatermarkLateEventsPolicy, *watermarkLateEventsPolicy);
     }
 
     if (!featuresExtractor.IsFinished()) {
@@ -211,7 +245,7 @@ TAsyncStatus TStreamingQueryManager::DoModify(const NYql::TObjectSettingsImpl& s
 }
 
 TYqlConclusionStatus TStreamingQueryManager::DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
-    Y_UNUSED(manager);    
+    Y_UNUSED(manager);
 
     try {
         switch (context.GetActivityType()) {
@@ -236,7 +270,8 @@ TYqlConclusionStatus TStreamingQueryManager::PrepareCreateStreamingQuery(NKqpPro
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Options 'OR REPLACE' and 'IF NOT EXISTS' can not be used together for STREAMING_QUERY objects");
     }
 
-    auto pathPairStatus = SplitPath(settings.GetObjectId(), context.GetExternalData().GetDatabase(), /* createDir */ true);
+    const auto& externalContext = context.GetExternalData();
+    auto pathPairStatus = SplitPath(settings.GetObjectId(), externalContext.GetDatabase(), /* createDir */ true);
     if (pathPairStatus.IsFail()) {
         return pathPairStatus;
     }
@@ -248,11 +283,12 @@ TYqlConclusionStatus TStreamingQueryManager::PrepareCreateStreamingQuery(NKqpPro
     schemeTx.SetFailedOnAlreadyExists(!settings.GetExistingOk());
     schemeTx.SetReplaceIfExists(settings.GetReplaceIfExists());
 
-    return FillStreamingQueryDesc(*schemeTx.MutableCreateStreamingQuery(), name, settings);
+    return FillStreamingQueryDesc(*schemeTx.MutableCreateStreamingQuery(), name, settings, externalContext.GetActorSystem());
 }
 
 TYqlConclusionStatus TStreamingQueryManager::PrepareAlterStreamingQuery(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) {
-    auto pathPairStatus = SplitPath(settings.GetObjectId(), context.GetExternalData().GetDatabase(), /* createDir */ false);
+    const auto& externalContext = context.GetExternalData();
+    auto pathPairStatus = SplitPath(settings.GetObjectId(), externalContext.GetDatabase(), /* createDir */ false);
     if (pathPairStatus.IsFail()) {
         return pathPairStatus;
     }
@@ -263,7 +299,7 @@ TYqlConclusionStatus TStreamingQueryManager::PrepareAlterStreamingQuery(NKqpProt
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterStreamingQuery);
     schemeTx.SetSuccessOnNotExist(settings.GetMissingOk());
 
-    return FillStreamingQueryDesc(*schemeTx.MutableCreateStreamingQuery(), name, settings);
+    return FillStreamingQueryDesc(*schemeTx.MutableCreateStreamingQuery(), name, settings, externalContext.GetActorSystem());
 }
 
 TYqlConclusionStatus TStreamingQueryManager::PrepareDropStreamingQuery(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) {

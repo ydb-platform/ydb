@@ -10,6 +10,8 @@
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
@@ -96,8 +98,10 @@ namespace NKikimr::NStorage {
                 }
             }
             if (!found) {
-                STLOG(PRI_DEBUG, BS_NODE, NWDC62, "FetchStorageConfig: requestor put to pending queue", (SelfId, SelfId()),
-                    (Request, request));
+                YDB_LOG_DEBUG("FetchStorageConfig: requestor put to pending queue",
+                    {"marker", "NWDC62"},
+                    {"selfId", SelfId()},
+                    {"request", request});
                 DetachQuery();
                 Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
                 TActivationContext::Schedule(TDuration::Seconds(3), new IEventHandle(TEvents::TSystem::Wakeup, 0,
@@ -198,7 +202,18 @@ namespace NKikimr::NStorage {
                         dom->ClearExplicitAllocators();
                         dom->ClearExplicitMediators();
                     }
-                    enrich(domains, replace("domains_config"));
+                    auto replaceDomainsConfigAndRemoveTopLevelStoragePoolTypes = [](auto rootNode, auto protoNode, auto& doc) {
+                        auto m = rootNode.Map().at("config").Map();
+                        // remove top-level storage_pool_types (they are now inside domains_config.domain[0])
+                        if (auto ref = m.pair_at_opt("storage_pool_types")) {
+                            m.Remove(ref);
+                        }
+                        if (auto ref = m.pair_at_opt("domains_config")) {
+                            m.Remove(ref);
+                        }
+                        m.Append(doc.CreateScalar("domains_config"), protoNode);
+                    };
+                    enrich(domains, replaceDomainsConfigAndRemoveTopLevelStoragePoolTypes);
                 } else {
                     throw TExError() << "State storage, state storage board and scheme board configs are not equal";
                 }
@@ -218,8 +233,9 @@ namespace NKikimr::NStorage {
         bool transient = ev->Cookie;
         for (const auto& node : config.GetAllNodes()) {
             if (requestorHosts.contains(node.GetHost()) && node.GetPort() == cmd.GetRequestorPort()) {
-                STLOG(PRI_DEBUG, BS_NODE, NWDC82, "FetchStorageConfig: TEvNodeWardenStorageConfig received, host found",
-                    (SelfId, SelfId()));
+                YDB_LOG_DEBUG("FetchStorageConfig: TEvNodeWardenStorageConfig received, host found",
+                    {"marker", "NWDC82"},
+                    {"selfId", SelfId()});
 
                 std::optional<TString> mainConfigYaml;
                 std::optional<TString> storageConfigYaml;
@@ -238,12 +254,15 @@ namespace NKikimr::NStorage {
                 return PassAway();
             }
         }
-        STLOG(PRI_DEBUG, BS_NODE, NWDC86, "FetchConfigConfig: TEvNodeWardenStorageConfig received, host still not found",
-            (SelfId, SelfId()));
+        YDB_LOG_DEBUG("FetchConfigConfig: TEvNodeWardenStorageConfig received, host still not found",
+            {"marker", "NWDC86"},
+            {"selfId", SelfId()});
     }
 
     void TInvokeRequestHandlerActor::HandleWakeup() {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC87, "FetchStorageConfig: timed out", (SelfId, SelfId()));
+        YDB_LOG_DEBUG("FetchStorageConfig: timed out",
+            {"marker", "NWDC87"},
+            {"selfId", SelfId()});
         ReplyToFetchStorageConfig(std::nullopt, std::nullopt, false);
         PassAway();
     }
@@ -278,6 +297,8 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request) {
         RunCommonChecks();
+
+        IsDryRun = request.GetDryRun();
 
         // extract YAML files provided by the user
         NewYaml = request.HasYAML() ? std::make_optional(request.GetYAML()) : std::nullopt;
@@ -373,6 +394,9 @@ namespace NKikimr::NStorage {
 
         // check if we are enabling distconf by this operation and handle it accordingly
         if (!Self->SelfManagementEnabled && ProposedStorageConfig.GetSelfManagementConfig().GetEnabled()) {
+            if (IsDryRun) {
+                throw TExError() << "DryRun is not supported when enabling distconf";
+            }
             ControllerOp = EControllerOp::ENABLE_DISTCONF;
             TryEnableDistconf(); // collect quorum of configs first to see if we have to do rolling restart of the cluster
         } else {
@@ -463,6 +487,11 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::ReplaceStorageConfigExecute() {
         Y_ABORT_UNLESS(!LifetimeToken.expired());
+
+        if (IsDryRun) {
+            return Finish(TResult::OK, std::nullopt);
+        }
+
         for (const auto& actorId : Self->DetachedQueries) {
             Send(actorId, new TEvNodeWardenStorageConfig(std::make_shared<const NKikimrBlobStorage::TStorageConfig>(
                 ProposedStorageConfig), false, nullptr, nullptr), 0, 1);
@@ -481,7 +510,7 @@ namespace NKikimr::NStorage {
 
             if (!res->HasCollectConfigs()) {
                 throw TExError() << "Incorrect CollectConfigs response";
-            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
+            } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, IsDryRun); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
             } else if (r.ConfigToPropose) {
                 throw TExError() << "Unexpected config proposition";
@@ -507,8 +536,12 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_NODE, NWDC65, "received TEvClientConnected", (SelfId, SelfId()), (Status, msg.Status),
-            (ClientId, msg.ClientId), (ServerId, msg.ServerId));
+        YDB_LOG_DEBUG("Received TEvClientConnected",
+            {"marker", "NWDC65"},
+            {"selfId", SelfId()},
+            {"status", msg.Status},
+            {"clientId", msg.ClientId},
+            {"serverId", msg.ServerId});
 
         if (msg.Status != NKikimrProto::OK) {
             ControllerPipeId = {};
@@ -518,8 +551,11 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_NODE, NWDC79, "received TEvClientDestroyed", (SelfId, SelfId()),
-            (ClientId, msg.ClientId), (ServerId, msg.ServerId));
+        YDB_LOG_DEBUG("Received TEvClientDestroyed",
+            {"marker", "NWDC79"},
+            {"selfId", SelfId()},
+            {"clientId", msg.ClientId},
+            {"serverId", msg.ServerId});
 
         ControllerPipeId = {};
         throw TExError() << "Pipe to BSC disconnected";
@@ -527,8 +563,10 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
         const auto& response = ev->Get()->Record.GetResponse();
-        STLOG(PRI_DEBUG, BS_NODE, NWDC80, "received TEvControllerConfigResponse", (SelfId, SelfId()),
-            (Response, response));
+        YDB_LOG_DEBUG("Received TEvControllerConfigResponse",
+            {"marker", "NWDC80"},
+            {"selfId", SelfId()},
+            {"response", response});
         if (response.StatusSize() != 1 || response.GetStatus(0).GetInterfaceVersion() < BSC_INTERFACE_DISTCONF_CONTROL) {
             throw TExError() << "BS_CONTROLLER is way too old to process this query";
         }
@@ -563,6 +601,7 @@ namespace NKikimr::NStorage {
 
             case EControllerOp::DISABLE_DISTCONF:
                 record.SetOperation(NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf);
+                record.SetDryRun(IsDryRun);
                 if (ProposedStorageConfig.HasExpectedStorageYamlVersion()) {
                     record.SetExpectedStorageConfigVersion(ProposedStorageConfig.GetExpectedStorageYamlVersion());
                     record.SetPeerName(replaceStorageConfig.GetPeerName());
@@ -605,8 +644,10 @@ namespace NKikimr::NStorage {
             return record;
         };
 
-        STLOG(PRI_DEBUG, BS_NODE, NWDC81, "received TEvControllerDistconfResponse", (SelfId, SelfId()),
-            (Record, getRecord()));
+        YDB_LOG_DEBUG("Received TEvControllerDistconfResponse",
+            {"marker", "NWDC81"},
+            {"selfId", SelfId()},
+            {"record", getRecord()});
 
         if (const auto& status = record.GetStatus(); status != NKikimrBlobStorage::TEvControllerDistconfResponse::OK) {
             throw TExError() << "Failed to interact with BSC to update configuration"
@@ -645,8 +686,11 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        STLOG(PRI_DEBUG, BS_NODE, NWDC77, "received TEvControllerValidateConfigResponse", (SelfId, SelfId()),
-            (InternalError, ev->Get()->InternalError), (Status, record.GetStatus()));
+        YDB_LOG_DEBUG("Received TEvControllerValidateConfigResponse",
+            {"marker", "NWDC77"},
+            {"selfId", SelfId()},
+            {"internalError", ev->Get()->InternalError},
+            {"status", record.GetStatus()});
 
         if (ev->Get()->InternalError) {
             throw TExError() << "Failed to validate config through console: " << *ev->Get()->InternalError;

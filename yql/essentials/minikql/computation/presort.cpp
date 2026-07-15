@@ -11,6 +11,8 @@
 #include <util/system/unaligned_mem.h>
 #include <util/string/builder.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 namespace NDetail {
@@ -311,9 +313,9 @@ struct TDictItem {
     TString KeyBuffer;
     NUdf::TUnboxedValue Payload;
 
-    TDictItem(const TString& keyBuffer, const NUdf::TUnboxedValue& payload)
-        : KeyBuffer(keyBuffer)
-        , Payload(payload)
+    TDictItem(TString keyBuffer, NUdf::TUnboxedValue payload)
+        : KeyBuffer(std::move(keyBuffer))
+        , Payload(std::move(payload))
     {
     }
 
@@ -350,11 +352,11 @@ void EncodeValue(TType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& ou
             auto iterator = value.GetListIterator();
             NUdf::TUnboxedValue item;
             while (iterator.Next(item)) {
-                EncodeBool<false>(output, true);
+                EncodeBool<false>(output, /*value=*/true);
                 EncodeValue(itemType, item, output);
             }
 
-            EncodeBool<false>(output, false);
+            EncodeBool<false>(output, /*value=*/false);
             break;
         }
 
@@ -407,9 +409,10 @@ void EncodeValue(TType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& ou
             auto dictType = static_cast<TDictType*>(type);
             auto iter = value.GetDictIterator();
             if (value.IsSortedDict()) {
-                NUdf::TUnboxedValue key, payload;
+                NUdf::TUnboxedValue key;
+                NUdf::TUnboxedValue payload;
                 while (iter.NextPair(key, payload)) {
-                    EncodeBool<false>(output, true);
+                    EncodeBool<false>(output, /*value=*/true);
                     EncodeValue(dictType->GetKeyType(), key, output);
                     EncodeValue(dictType->GetPayloadType(), payload, output);
                 }
@@ -417,7 +420,8 @@ void EncodeValue(TType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& ou
                 // canonize keys
                 TVector<TDictItem> items;
                 items.reserve(value.GetDictLength());
-                NUdf::TUnboxedValue key, payload;
+                NUdf::TUnboxedValue key;
+                NUdf::TUnboxedValue payload;
                 TVector<ui8> buffer;
                 while (iter.NextPair(key, payload)) {
                     buffer.clear();
@@ -428,13 +432,13 @@ void EncodeValue(TType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& ou
                 Sort(items.begin(), items.end());
                 // output values
                 for (const auto& x : items) {
-                    EncodeBool<false>(output, true);
+                    EncodeBool<false>(output, /*value=*/true);
                     output.insert(output.end(), x.KeyBuffer.begin(), x.KeyBuffer.end());
                     EncodeValue(dictType->GetPayloadType(), x.Payload, output);
                 }
             }
 
-            EncodeBool<false>(output, false);
+            EncodeBool<false>(output, /*value=*/false);
             break;
         }
 

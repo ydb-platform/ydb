@@ -174,6 +174,9 @@ namespace NKqp {
         if (!NullableFlag) {
             str << " NOT NULL";
         }
+        if (DictionaryEncodingFlag) {
+            str << " ENCODING(DICT)";
+        }
         if (ColumnCompression) {
             str << " COMPRESSION(";
             bool haveSome = false;
@@ -287,7 +290,10 @@ namespace NKqp {
             return arrow::field(name, arrow::int64(), nullable);
         case NScheme::NTypeIds::JsonDocument:
             return arrow::field(name, arrow::binary(), nullable);
+        case NScheme::NTypeIds::DyNumber:
+            return arrow::field(name, arrow::binary(), nullable);
         case NScheme::NTypeIds::Decimal:
+        case NScheme::NTypeIds::Uuid:
             return arrow::field(name, std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE), nullable);
         case NScheme::NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {

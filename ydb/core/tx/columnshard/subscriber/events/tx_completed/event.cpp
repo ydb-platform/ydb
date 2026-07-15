@@ -3,7 +3,7 @@
 namespace NKikimr::NColumnShard::NSubscriber {
 
 TString TEventTxCompleted::DoDebugString() const {
-        return "tx_id=" + std::to_string(TxId);
+    return "tx_id=" + std::to_string(TxId);
 }
 
-} //namespace NKikimr::NColumnShard::NSubscriber
+}   //namespace NKikimr::NColumnShard::NSubscriber

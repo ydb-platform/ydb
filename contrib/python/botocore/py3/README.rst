@@ -37,11 +37,11 @@ Assuming that you have Python and ``virtualenv`` installed, set up your environm
 
     $ git clone https://github.com/boto/botocore.git
     $ cd botocore
-    $ virtualenv venv
+    $ python -m venv .venv
     ...
-    $ . venv/bin/activate
-    $ pip install -r requirements.txt
-    $ pip install -e .
+    $ source .venv/bin/activate
+    $ python -m pip install -r requirements.txt
+    $ python -m pip install -e .
 
 .. code-block:: sh
 

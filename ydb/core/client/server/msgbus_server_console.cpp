@@ -9,6 +9,8 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/ticket_parser.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr {
 namespace NMsgBusProxy {
 
@@ -75,8 +77,8 @@ public:
 
         // Don't print security token.
         Request.ClearSecurityToken();
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "Forwarding console request: %s",
-                  Request.ShortDebugString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "Forwarding console request",
+            {"request", Request});
 
         if (Request.HasCreateTenantRequest()) {
             auto request = MakeHolder<TEvConsole::TEvCreateTenantRequest>();
@@ -356,6 +358,7 @@ public:
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             SFunc(TEvents::TEvWakeup, HandleTimeout);
+            CFunc(TEvents::TSystem::PoisonPill, TBase::Cancel);
         default:
             Y_ABORT("TConsoleRequestActor::MainState unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(),
@@ -364,11 +367,7 @@ public:
     }
 
     bool CheckAccessGetNodeConfig() const {
-        if (TBase::IsTokenRequired()) {
-            return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
-        }
-        // if token is not required access is granted
-        return true;
+        return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
     }
 
 private:

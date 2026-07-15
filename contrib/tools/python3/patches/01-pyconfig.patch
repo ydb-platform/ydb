@@ -1,0 +1,24 @@
+--- contrib/tools/python3/Include/pyconfig.h	(index)
++++ contrib/tools/python3/Include/pyconfig.h	(working tree)
+@@ -12,3 +12,21 @@
+ #if defined(_musl_)
+ #   include "pyconfig-musl.h"
+ #endif
++
++#undef Py_DEBUG
++
++/* Define if you want to build an interpreter with many run-time checks. */
++#if !defined(NDEBUG) && !defined(Py_LIMITED_API) && !defined(DISABLE_PYDEBUG)
++#define Py_DEBUG
++#define GC_NDEBUG
++#endif
++
++#ifdef Py_DEBUG
++#define ABIFLAGS "d"
++#else
++#define ABIFLAGS ""
++#endif
++
++#ifdef address_sanitizer_enabled
++#undef WITH_PYMALLOC
++#endif

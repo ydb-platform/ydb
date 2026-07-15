@@ -28,6 +28,26 @@ using ECompressionCodec = NKikimr::NDataShard::NBackupRestoreTraits::ECompressio
     template<ECompressionCodec Codec>                                                                                                 \
     void N(NUnitTest::TTestContext&)
 
+// Same as Y_UNIT_TEST_WITH_COMPRESSION, but also runs each codec with `OptName` false and true
+// (template<bool OptName>), e.g. EnableLocalIndexAsSchemeObject.
+#define Y_UNIT_TEST_WITH_COMPRESSION_FLAG(N, OptName)                                                                                 \
+    template<ECompressionCodec Codec, bool OptName> void N(NUnitTest::TTestContext&);                                                 \
+    struct TTestRegistration##N##WithCompressionFlag {                                                                                \
+        TTestRegistration##N##WithCompressionFlag() {                                                                                 \
+            TCurrentTest::AddTest(#N "[Raw]-" #OptName "-false",                                                                      \
+                static_cast<void (*)(NUnitTest::TTestContext&)>(&N<ECompressionCodec::None, false>), false);                          \
+            TCurrentTest::AddTest(#N "[Raw]-" #OptName "-true",                                                                       \
+                static_cast<void (*)(NUnitTest::TTestContext&)>(&N<ECompressionCodec::None, true>), false);                           \
+            TCurrentTest::AddTest(#N "[Zstd]-" #OptName "-false",                                                                     \
+                static_cast<void (*)(NUnitTest::TTestContext&)>(&N<ECompressionCodec::Zstd, false>), false);                          \
+            TCurrentTest::AddTest(#N "[Zstd]-" #OptName "-true",                                                                      \
+                static_cast<void (*)(NUnitTest::TTestContext&)>(&N<ECompressionCodec::Zstd, true>), false);                           \
+        }                                                                                                                             \
+    };                                                                                                                                \
+    static TTestRegistration##N##WithCompressionFlag testRegistration##N##WithCompressionFlag;                                        \
+    template<ECompressionCodec Codec, bool OptName>                                                                                   \
+    void N(NUnitTest::TTestContext&)
+
 namespace NAttr {
 
 enum class EKeys {
@@ -121,7 +141,7 @@ class TFileDescriber {
 public:
     TFileDescriber(const TFsPath& dir, const TFsPath& name)
         : Dir(dir)
-        , Path(dir / name)
+        , Path(TFsPath("/") / dir / name)
     {}
 
     const TString& GetDir() const {
@@ -272,7 +292,7 @@ public:
     }
 
     TString GetRestoredDir() const {
-        return TStringBuilder() << "/Restored" << Dir;
+        return TStringBuilder() << "/Restored/" << Dir;
     }
 
     TString GetExportRequest(ui32 port) const {
@@ -305,7 +325,7 @@ private:
 
     const char* ExportRequestItemTemp = R"(
         items {
-            source_path: "/MyRoot%s"
+            source_path: "/MyRoot/%s"
             destination_prefix: "%s"
         }
     )";
@@ -313,7 +333,7 @@ private:
     const char* ImportRequestItemTemp = R"(
         items {
             source_prefix: "%s"
-            destination_path: "/MyRoot/Restored%s"
+            destination_path: "/MyRoot/Restored/%s"
         }
     )";
 };
@@ -354,7 +374,7 @@ private:
 
 public:
     TSimpleTopic(ui64 number, ui64 countConsumers = 0)
-        : TSchemeObjectDescriber(Sprintf("/Topic_%d", number), "create_topic.pb")
+        : TSchemeObjectDescriber(Sprintf("Topic_%d", number), "create_topic.pb")
     {
         google::protobuf::TextFormat::ParseFromString(Sprintf(TopicPrivate, number), &PrivateProto);
         google::protobuf::TextFormat::ParseFromString(TopicPublic, &PublicProto);

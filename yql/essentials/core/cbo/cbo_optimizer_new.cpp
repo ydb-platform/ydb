@@ -1,6 +1,7 @@
 #include "cbo_optimizer_new.h"
 
 #include <array>
+#include <utility>
 
 #include <util/string/builder.h>
 #include <util/generic/hash.h>
@@ -87,8 +88,8 @@ TJoinOptimizerNode::TJoinOptimizerNode(
     : IBaseOptimizerNode(JoinNodeType)
     , LeftArg(left)
     , RightArg(right)
-    , LeftJoinKeys(leftKeys)
-    , RightJoinKeys(rightKeys)
+    , LeftJoinKeys(std::move(leftKeys))
+    , RightJoinKeys(std::move(rightKeys))
     , JoinType(joinType)
     , JoinAlgo(joinAlgo)
     , LeftAny(leftAny)
@@ -139,9 +140,9 @@ bool IsPKJoin(const TOptimizerStatistics& stats, const TVector<TJoinColumn>& joi
         return false;
     }
 
-    for (size_t i = 0; i < stats.KeyColumns->Data.size(); i++) {
+    for (const auto& name : stats.KeyColumns->Data) {
         if (std::find_if(joinKeys.begin(), joinKeys.end(),
-                         [&](const TJoinColumn& c) { return c.AttributeName == stats.KeyColumns->Data[i]; }) == joinKeys.end()) {
+                         [&](const TJoinColumn& c) { return c.AttributeName == name; }) == joinKeys.end()) {
             return false;
         }
     }

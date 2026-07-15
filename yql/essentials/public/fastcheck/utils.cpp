@@ -5,16 +5,8 @@
 
 namespace NYql::NFastCheck {
 
-TUdfFilter ParseUdfFilter(const NJson::TJsonValue& json) {
-    TUdfFilter res;
-    for (auto& [module, v] : json.GetMapSafe()) {
-        auto& names = res.Modules[to_lower(module)];
-        for (auto& item : v.GetArraySafe()) {
-            names.insert(to_lower(item.GetMapSafe().at("name").GetStringSafe()));
-        }
-    }
-
-    return res;
+std::unique_ptr<IUdfMeta> LoadUdfMeta(TStringBuf json) {
+    return ParseUdfMeta(NJson::ReadJsonFastTree(json));
 }
 
 void FillClusters(const TChecksRequest& request, NSQLTranslation::TTranslationSettings& settings) {

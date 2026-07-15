@@ -53,13 +53,21 @@ static constexpr const char *kHttpRequestHeader = "http.request.header";
   could end up converting valid HTTP request methods to @code _OTHER @endcode, then it MUST provide
   a way to override the list of known HTTP methods. If this override is done via environment
   variable, then the environment variable MUST be named OTEL_INSTRUMENTATION_HTTP_KNOWN_METHODS and
-  support a comma-separated list of case-sensitive known HTTP methods (this list MUST be a full
-  override of the default known method, it is not a list of known methods in addition to the
-  defaults). <p> HTTP method names are case-sensitive and @code http.request.method @endcode
-  attribute value MUST match a known HTTP method name exactly. Instrumentations for specific web
-  frameworks that consider HTTP methods to be case insensitive, SHOULD populate a canonical
-  equivalent. Tracing instrumentations that do so, MUST also set @code http.request.method_original
-  @endcode to the original value.
+  support a comma-separated list of case-sensitive known HTTP methods. <p>
+
+  If this override is done via declarative configuration, then the list MUST be configurable via the
+  @code known_methods @endcode property (an array of case-sensitive strings with minimum items 0)
+  under @code .instrumentation/development.general.http.client @endcode and/or
+  @code .instrumentation/development.general.http.server @endcode.
+  <p>
+  In either case, this list MUST be a full override of the default known methods,
+  it is not a list of known methods in addition to the defaults.
+  <p>
+  HTTP method names are case-sensitive and @code http.request.method @endcode attribute value MUST
+  match a known HTTP method name exactly. Instrumentations for specific web frameworks that consider
+  HTTP methods to be case insensitive, SHOULD populate a canonical equivalent. Tracing
+  instrumentations that do so, MUST also set @code http.request.method_original @endcode to the
+  original value.
  */
 static constexpr const char *kHttpRequestMethod = "http.request.method";
 

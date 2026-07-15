@@ -11,7 +11,7 @@ int GetThreadCount()
 #ifdef _linux_
     TFileInput statusFile("/proc/self/status");
     TString line;
-    std::optional<int> threads = 0;
+    std::optional<int> threads;
     while (statusFile.ReadLine(line)) {
         constexpr std::string_view threadsHeader = "Threads:\t";
         if (auto pos = line.find(threadsHeader); pos != std::string::npos) {

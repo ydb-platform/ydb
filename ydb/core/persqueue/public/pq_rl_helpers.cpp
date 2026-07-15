@@ -40,6 +40,10 @@ bool TRlHelpers::IsQuotaRequired() const {
     return MeteringMode == NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS && Ctx;
 }
 
+void TRlHelpers::SetRlContext(const TRlContext& ctx) {
+    Ctx = ctx;
+}
+
 void TRlHelpers::RequestInitQuota(ui64 amount, const TActorContext& ctx, NWilson::TTraceId traceId) {
     RequestQuota(amount, EWakeupTag::RlInit, EWakeupTag::RlInitNoResource, ctx, std::move(traceId));
 }
@@ -114,4 +118,4 @@ void TRlHelpers::Handle(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {
     MeteringMode = result->DescribeSchemeResult.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetMeteringMode();
 }
 
-}
+} // namespace NKikimr::NPQ

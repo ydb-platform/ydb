@@ -478,7 +478,7 @@ void ToUnversionedValue(
 }
 
 void UnversionedValueToMapImpl(
-    std::function<google::protobuf::Message*(TString)> appender,
+    std::function<google::protobuf::Message*(std::string)> appender,
     const NYson::TProtobufMessageType* type,
     TUnversionedValue unversionedValue);
 
@@ -495,6 +495,26 @@ void FromUnversionedValue(
             return &pair.first->second;
         },
         NYson::ReflectProtobufMessageType<TValue>(),
+        unversionedValue);
+}
+
+void UnversionedValueToMapImpl(
+    std::function<void(std::string, TUnversionedValue)> appender,
+    TUnversionedValue unversionedValue);
+
+template <class TKey, class TValue>
+void FromUnversionedValue(
+    THashMap<TKey, TValue>* map,
+    TUnversionedValue unversionedValue)
+    requires TUnversionedValueConversionTraits<TValue>::Scalar
+{
+    map->clear();
+    UnversionedValueToMapImpl(
+        [&] (std::string key, TUnversionedValue itemValue) {
+            auto [it, inserted] = map->emplace(FromString<TKey>(std::move(key)), TValue());
+            Y_UNUSED(inserted);
+            FromUnversionedValue(&it->second, itemValue);
+        },
         unversionedValue);
 }
 

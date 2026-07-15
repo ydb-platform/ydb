@@ -204,6 +204,42 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         UNIT_ASSERT_STRING_CONTAINS(creationResult.GetIssues().ToString(), "Error: Cannot divide type String and String");
     }
 
+    void InvalidRef(const char* createTableQuery, const char* selectTableQuery) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(createTableQuery, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), "Failed to CREATE TABLE: " << result.GetIssues().ToOneLineString());
+        }
+        {
+            auto result = session.ExecuteQuery(std::format("CREATE VIEW `View` WITH (security_invoker = true) AS {}", selectTableQuery),
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), "CREATE VIEW executed successfully");
+        }
+    }
+
+    Y_UNIT_TEST(InvalidTableRef) {
+        InvalidRef(
+            "CREATE TABLE `Table` (key Int32, PRIMARY KEY (key))",
+            "SELECT `key` FROM `MissingTable`"
+        );
+    }
+
+    Y_UNIT_TEST(InvalidColumnRef) {
+        InvalidRef(
+            "CREATE TABLE `Table` (key Int32, PRIMARY KEY (key))",
+            "SELECT `MissingColumn` FROM `Table`"
+        );
+    }
+
+    Y_UNIT_TEST(InvalidIndexRef) {
+        InvalidRef(
+            "CREATE TABLE `Table` (key Int32, value Int32, PRIMARY KEY (key), INDEX `Index` GLOBAL ON (value))",
+            "SELECT `value` FROM `Table` VIEW `MissingIndex`"
+        );
+    }
+
     Y_UNIT_TEST(ParsingSecurityInvoker) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
@@ -418,7 +454,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         ).ExtractValueSync();
 
         UNIT_ASSERT(!dropResult.IsSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Path does not exist");
+        UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Path `/Root/NonexistingView` does not exist");
     }
 
     Y_UNIT_TEST(CallDropViewOnTable) {
@@ -467,7 +503,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         {
             const auto dropResult = session.ExecuteSchemeQuery(dropQuery).GetValueSync();
             UNIT_ASSERT(!dropResult.IsSuccess());
-            UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Path does not exist");
+            UNIT_ASSERT_STRING_CONTAINS(dropResult.GetIssues().ToString(), "Error: Path `/Root/TheView` does not exist");
         }
     }
 
@@ -613,6 +649,36 @@ Y_UNIT_TEST_SUITE(TSelectFromViewTest) {
             )
         );
         CompareResults(etalonResults, selectFromViewResults);
+    }
+
+    Y_UNIT_TEST(LeftJoinViewsWithNoMatch) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto session = kikimr.GetQueryClient().GetSession().ExtractValueSync().GetSession();
+
+        ExecuteQuery(session, R"(
+            CREATE VIEW upstream WITH (security_invoker = true) AS SELECT 1 AS id;
+        )");
+        ExecuteQuery(session, R"(
+            CREATE VIEW model WITH (security_invoker = true) AS SELECT * FROM upstream;
+        )");
+        ExecuteQuery(session, R"(
+            CREATE VIEW expected WITH (security_invoker = true) AS SELECT 2 AS id;
+        )");
+        ExecuteQuery(session, R"(
+            CREATE VIEW proxy_expected WITH (security_invoker = true) AS SELECT * FROM expected;
+        )");
+        const auto selectResult = ExecuteQuery(session, R"(
+            SELECT a.id, b.id
+            FROM model AS a
+            LEFT JOIN proxy_expected AS b ON a.id = b.id
+            WHERE b.id IS NULL;
+        )");
+
+        UNIT_ASSERT_EQUAL(selectResult.GetResultSets().size(), 1);
+        CompareYson(
+            FormatResultSetYson(selectResult.GetResultSets()[0]),
+            R"([[1;#]])"
+        );
     }
 
     Y_UNIT_TEST(ReadTestCasesFromFiles) {

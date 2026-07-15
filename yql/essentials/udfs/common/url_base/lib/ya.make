@@ -2,7 +2,7 @@ LIBRARY()
 
 YQL_ABI_VERSION(
     2
-    37
+    46
     0
 )
 

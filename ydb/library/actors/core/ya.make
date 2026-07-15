@@ -31,11 +31,13 @@ SRCS(
     callstack.cpp
     callstack.h
     config.h
+    coro_stack_pool.cpp
     cpu_manager.cpp
     cpu_manager.h
     defs.h
     event.cpp
     event.h
+    event_flat.h
     event_load.cpp
     event_local.h
     event_pb.cpp
@@ -94,6 +96,8 @@ SRCS(
     scheduler_cookie.cpp
     scheduler_cookie.h
     scheduler_queue.h
+    subsystem.cpp
+    subsystem.h
     servicemap.h
 )
 
@@ -103,11 +107,13 @@ GENERATE_ENUM_SERIALIZATION(log_iface.h)
 
 PEERDIR(
     ydb/library/actors/actor_type
+    ydb/library/actors/core/subsystems
     ydb/library/actors/interconnect/rdma
     ydb/library/actors/core/harmonizer
     ydb/library/actors/memory_log
     ydb/library/actors/prof
     ydb/library/actors/protos
+    ydb/library/actors/struct_log
     ydb/library/actors/util
     ydb/library/services
     library/cpp/execprofile
@@ -115,9 +121,11 @@ PEERDIR(
     library/cpp/logger
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters
+    library/cpp/string_utils/base64
     library/cpp/svnversion
     library/cpp/time_provider
     library/cpp/threading/future
+    library/cpp/threading/queue
 )
 
 IF (SANITIZER_TYPE == "thread")
@@ -136,4 +144,5 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
     ut_fat
+    ut_mprotect
 )

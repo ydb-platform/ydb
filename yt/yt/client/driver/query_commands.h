@@ -20,7 +20,7 @@ public:
 
 private:
     NQueryTrackerClient::EQueryEngine Engine;
-    TString Query;
+    std::string Query;
 
     void DoExecute(ICommandContextPtr context) override;
 };

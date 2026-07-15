@@ -3,16 +3,18 @@
 #include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap::NReader::NSimple {
 
 TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     : TBase(context)
-    , SpecialReadContext(std::make_shared<TSpecialReadContext>(context)) {
+    , SpecialReadContext(std::make_shared<TSpecialReadContext>(context))
+{
     auto constructor = SpecialReadContext->GetReadMetadata()->ExtractSelectInfo();
     constructor->FillReadStats(GetReadMetadata()->ReadStats);
     SpecialReadContext->RegisterActors(*constructor);
-    Scanner =
-        std::make_shared<TScanHead>(std::move(constructor), SpecialReadContext);
+    Scanner = std::make_shared<TScanHead>(std::move(constructor), SpecialReadContext);
     auto& stats = GetReadMetadata()->ReadStats;
     stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetColumnsCount();
 }
@@ -28,8 +30,11 @@ std::vector<std::unique_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyR
     AFL_VERIFY(count == ReadyResultsCount);
     ReadyResultsCount = 0;
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoExtractReadyResults")("result", result.size())("count", count)(
-        "finished", Scanner->IsFinished());
+    YDB_LOG_DEBUG("",
+        {"event", "DoExtractReadyResults"},
+        {"result", result.size()},
+        {"count", count},
+        {"finished", Scanner->IsFinished()});
     return std::move(result);
 }
 

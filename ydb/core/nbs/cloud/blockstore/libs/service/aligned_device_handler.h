@@ -23,6 +23,7 @@ private:
     const ui32 BlockSize;
     const ui32 MaxBlockCount;
     const ui32 MaxBlockCountForZeroBlocksRequest;
+    const TVolumeConfigPtr VolumeConfig;
 
 public:
     TAlignedDeviceHandler(TDeviceHandlerParams params, ui32 maxSubRequestSize);

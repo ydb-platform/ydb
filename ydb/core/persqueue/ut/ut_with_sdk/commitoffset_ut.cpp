@@ -190,7 +190,6 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     Y_UNIT_TEST(Commit_WithWrongSession_ToParent) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
-        setup.CreateTopicWithAutoscale();
 
         {
             auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 1);

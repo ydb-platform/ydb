@@ -74,14 +74,6 @@ bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings,
                 DateFormat = readSettings->Child(i);
                 continue;
             }
-            if (readSettings->Child(i)->Head().IsAtom("watermarkadjustlateevents")) {
-                WatermarkAdjustLateEvents = readSettings->Child(i);
-                continue;
-            }
-            if (readSettings->Child(i)->Head().IsAtom("watermarkdroplateevents")) {
-                WatermarkDropLateEvents = readSettings->Child(i);
-                continue;
-            }
             if (readSettings->Child(i)->Head().IsAtom("watermarkgranularity")) {
                 WatermarkGranularity = readSettings->Child(i);
                 continue;
@@ -96,6 +88,10 @@ bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings,
             }
             if (readSettings->Child(i)->Head().IsAtom("skip.json.errors") || readSettings->Child(i)->Head().IsAtom("sharedreadingskipjsonerrors")) {
                 SkipJsonErrors = readSettings->Child(i);
+                continue;
+            }
+            if (readSettings->Child(i)->Head().IsAtom("csvdelimiter")) {
+                CsvDelimiter = readSettings->Child(i);
                 continue;
             }
             if (readSettings->Child(i)->Head().IsAtom("streaming")) {

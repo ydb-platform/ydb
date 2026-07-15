@@ -13,6 +13,7 @@
 #include <yt/yql/providers/yt/provider/yql_yt_layers_integration.h>
 #include <yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_helper.h>
 
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/transform/yql_exec.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
@@ -118,6 +119,7 @@ public:
         AddHandler({TYtDqProcessWrite::CallableName()}, RequireFirst(),
             Hndl(&TYtDataSinkExecTransformer::HandleYtDqProcessWrite));
         AddHandler({TYtTryFirst::CallableName()}, RequireFirst(), Hndl(&TYtDataSinkExecTransformer::HandleTryFirst));
+        AddHandler({TYtPersist::CallableName()}, RequireAllOf({TYtPersist::idx_World, TYtPersist::idx_Input}), Hndl(&TYtDataSinkExecTransformer::HandleOutputOp<true>));
     }
 
     void Rewind() override {
@@ -308,10 +310,13 @@ private:
             finalCypressPaths.emplace_back(ptr->first);
         }
 
-        const auto queryCacheMode = config->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable);
+        auto queryCacheMode = config->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable);
+        TMaybe<TString> parentOutputHash;
         if (queryCacheMode != EQueryCacheMode::Disable) {
             if (!hasNonDeterministicFunctions) {
-                operationHash = TYtNodeHashCalculator(State_, cluster, config).GetHash(*optimizedNode);
+                TYtNodeHashCalculator hashCalculator(State_, cluster, config);
+                parentOutputHash = hashCalculator.GetParentOutputHash(*input);
+                operationHash = hashCalculator.GetHash(*optimizedNode);
                 if (!operationHash.empty()) {
                     THashBuilder builder;
                     builder << TYtNodeHashCalculator::MakeSalt(settings, cluster) << operationHash << snaphsotsResult.size();
@@ -354,7 +359,6 @@ private:
             }
         }
 
-
         return State_->Gateway->Run(optimizedNode, ctx,
             IYtGateway::TRunOptions(State_->SessionId)
                 .UserDataBlocks(files)
@@ -365,9 +369,11 @@ private:
                 .Config(std::move(config))
                 .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
                 .OperationHash(operationHash)
+                .OutputHash(parentOutputHash)
                 .SecureParams(secureParams)
                 .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
                 .LangVer(State_->Types->LangVer)
+                .RuntimeSettings(State_->Types->RuntimeSettings)
                 .AdditionalSecurityTags(addSecTags)
                 .LayersPaths(std::move(finalCypressPaths))
             );
@@ -663,7 +669,7 @@ private:
     TStatusCallbackPair HandleYtDqProcessWrite(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         const TYtDqProcessWrite op(input);
         const auto section = op.Output().Cast<TYtOutSection>();
-        Y_ENSURE(section.Size() == 1, "TYtDqProcessWrite expects 1 output table but got " << section.Size());
+        YQL_ENSURE(section.Size() == 1, "YtDqProcessWrite expects 1 output table but got " << section.Size());
         const TYtOutTable tmpTable = section.Item(0);
 
         if (AssignRuntimeCluster(op, output, ctx)) {
@@ -713,7 +719,7 @@ private:
         }
         else {
             // Fourth iteration: everything is done, return ok status.
-            Y_ENSURE(input->GetResult().Type() == TExprNode::World, "Unexpected result type: " << input->GetResult().Type());
+            YQL_ENSURE(input->GetResult().Type() == TExprNode::World, "Unexpected result type: " << input->GetResult().Type());
             return SyncOk();
         }
     }
@@ -814,7 +820,7 @@ private:
         if (!delegatedNode) {
             const auto clusterStr = op.DataSink().Cluster().StringValue();
             const auto config = State_->Configuration->GetSettingsForNode(*input);
-            const auto tmpFolder = GetTablesTmpFolder(*config, clusterStr);
+            const auto tmpFolder = GetTablesTmpFolder(*config, clusterStr, State_->UseSecureTmp, State_->Types->OperationOptions);
 
             delegatedNode = input->ChildPtr(TYtDqProcessWrite::idx_Input);
 

@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import hashlib
 import io
+import json
 import os
 import os.path
 import six
@@ -20,6 +21,7 @@ from threading import Lock
 import pytest
 import yatest.common
 import cyson
+from library.python import resource
 
 import logging
 import getpass
@@ -37,10 +39,21 @@ UNDEFINED_SANITIZER_IGNORE_STRINGS = [
     "Module not loaded for script type"
 ]
 
+FEATURES = json.loads(resource.find('yql/essentials/data/language/features.json'))
+LANGVER = json.loads(resource.find('yql/essentials/data/language/langver.json'))
+
 
 def get_param(name, default=None):
     name = 'YQL_' + name.upper()
     return yatest.common.get_param(name, os.environ.get(name) or default)
+
+
+def get_secure_params(cfg):
+    return {
+        item[1]: item[2]
+        for item in cfg
+        if len(item) == 3 and item[0] == 'secure_param'
+    }
 
 
 def do_custom_query_check(res, sql_query):
@@ -56,13 +69,18 @@ def do_custom_query_check(res, sql_query):
 
 
 def do_custom_error_check(res, sql_query):
-    err_string = None
-    custom_error = re.search(r"/\* custom error:(.*?)\*/", sql_query, re.DOTALL)
-    if custom_error:
-        err_string = custom_error.group(1).strip()
-    assert err_string, 'Expected custom error check in test.\nTest error: %s' % res.std_err
-    log('Custom error: ' + err_string)
-    assert err_string in res.std_err, '"' + err_string + '" is not found in "' + res.std_err + "'"
+    custom_errors = re.findall(r"/\* custom error:(.*?)\*/", sql_query, re.DOTALL)
+    assert custom_errors, 'Expected custom error check in test.\nTest error: %s' % res.std_err
+
+    missing_errors = []
+    for err_string in custom_errors:
+        err_string = err_string.strip()
+        log('Custom error: ' + err_string)
+        if err_string not in res.std_err:
+            missing_errors.append(err_string)
+
+    missing_list = '\n'.join('  - "' + e + '"' for e in missing_errors)
+    assert len(missing_errors) == 0, 'Custom errors not found in stderr:\n%s\n\nActual stderr:\n%s' % (missing_list, res.std_err)
 
 
 def skip_on_ubsan_known_failure(res_text):
@@ -81,6 +99,15 @@ def get_gateway_cfg_filename():
         return 'gateways.conf'
     else:
         return 'gateways-' + suffix + '.conf'
+
+
+def merge_gateway_cfg_patch(patch_cfg_file, gateway_config):
+    """Merge gateway config patch from a file path, if it exists."""
+    if not patch_cfg_file:
+        return
+    if os.path.exists(patch_cfg_file):
+        with open(patch_cfg_file) as f:
+            text_format.Merge(f.read(), gateway_config)
 
 
 def merge_default_gateway_cfg(cfg_dir, gateway_config):
@@ -184,9 +211,32 @@ def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir
             content = b''
             exists = False
         else:
+            def _read_splitted(path):
+                """Return concatenated part-file bytes if path has a splitted attr, else None."""
+                attr_path = path + '.attr'
+                if not os.path.exists(attr_path):
+                    return None
+                with open(attr_path, 'rb') as attr_f:
+                    attr_bytes = attr_f.read()
+                if not attr_bytes:
+                    return None
+                num_parts = cyson.loads(attr_bytes).get(b'splitted')
+                if num_parts is None:
+                    return None
+                parts = []
+                for i in range(int(num_parts)):
+                    with open(path + '.part.{}'.format(i), 'rb') as f:
+                        parts.append(f.read())
+                return b''.join(parts)
+
             if os.path.exists(src_file):
                 with open(src_file, 'rb') as f:
                     content = f.read()
+                # Main file may be empty when data is in .part.N files (FMR splitted output).
+                if not content:
+                    splitted = _read_splitted(src_file)
+                    if splitted is not None:
+                        content = splitted
             elif src_file_alternative and os.path.exists(src_file_alternative):
                 with open(src_file_alternative, 'rb') as f:
                     content = f.read()
@@ -519,10 +569,25 @@ def is_xfail(cfg, filename=''):
 
 
 def get_langver(cfg):
-    for item in cfg:
-        if item[0] == 'langver':
-            return item[1]
-    return None
+    def decode(langver):
+        if langver == 'max':
+            return LANGVER['max']
+        if langver == 'unknown':
+            return None
+        return langver
+
+    def resolve(alias):
+        if alias in FEATURES:
+            return FEATURES[alias]["min_langver"]
+        if alias[0].isdigit():
+            return alias
+        raise ValueError('Bad alias ' + alias)
+
+    return next((
+        decode(resolve(item[1]))
+        for item in cfg
+        if item[0] == 'langver'
+    ), None)
 
 
 def get_envs(cfg):
@@ -531,6 +596,10 @@ def get_envs(cfg):
         if item[0] == 'env':
             envs[item[1]] = item[2]
     return envs
+
+
+def is_forceblocks(cfg):
+    return any(item[0] == 'forceblocks' for item in cfg)
 
 
 def is_skip_forceblocks(cfg):
@@ -566,6 +635,13 @@ def is_canonize_yt(cfg):
         if item[0] == 'canonize_yt':
             return True
     return False
+
+
+def get_gateway_cfg_patch(cfg):
+    for item in cfg:
+        if item[0] == 'gateway_cfg_patch':
+            return item[1]
+    return None
 
 
 def is_with_final_result_issues(cfg):

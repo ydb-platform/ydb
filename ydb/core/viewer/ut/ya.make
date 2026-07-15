@@ -6,9 +6,10 @@ ADDINCL(
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -24,6 +25,7 @@ SRCS(
 PEERDIR(
     ydb/core/mon
     ydb/core/mon/ut_utils
+    ydb/core/persqueue/ut/common
     library/cpp/http/misc
     library/cpp/http/simple
     ydb/core/testlib/default

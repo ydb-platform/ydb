@@ -16,6 +16,12 @@ YDB follows the "Documentation as Code" approach. For comprehensive information 
 
 This folder provides two scripts to help you work with the documentation locally:
 
+### Install diplodoc CLI
+
+```bash
+npm install -g @diplodoc/cli@latest
+```
+
 ### `build.sh` - Build Documentation Only
 
 Builds the YDB documentation and outputs it to a specified directory.

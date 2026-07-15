@@ -74,6 +74,14 @@ PeriodicExportingMetricReader::PeriodicExportingMetricReader(
   }
 }
 
+PeriodicExportingMetricReader::~PeriodicExportingMetricReader()
+{
+  if (!IsShutdown())
+  {
+    Shutdown();
+  }
+}
+
 AggregationTemporality PeriodicExportingMetricReader::GetAggregationTemporality(
     InstrumentType instrument_type) const noexcept
 {

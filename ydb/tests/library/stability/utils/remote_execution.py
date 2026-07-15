@@ -564,7 +564,7 @@ def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: b
 
         scp_cmd += [local_path, f"{scp_host}:{tmp_path}"]
 
-        yatest.common.execute(scp_cmd, wait=True, check_exit_code=True)
+        yatest.common.execute(scp_cmd, wait=True, check_exit_code=True, timeout=300)
 
         # Move from /tmp to target location
         if execute_command(host, f"mv {tmp_path} {remote_path}", raise_on_error=False, timeout=30).exit_code != 0:

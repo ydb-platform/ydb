@@ -17,7 +17,7 @@ private:
 
     explicit THybridHyperLogLog(unsigned precision)
         : Var_(THybridSet())
-        , SizeLimit_((1u << precision) / 8)
+        , SizeLimit_((1U << precision) / 8)
         , Precision_(precision)
     {
     }

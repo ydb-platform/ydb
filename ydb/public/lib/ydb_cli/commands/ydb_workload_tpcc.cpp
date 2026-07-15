@@ -9,6 +9,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/tx.h>
 
+#include <library/cpp/getopt/small/completer.h>
 #include <util/generic/serialized_enum.h>
 #include <util/system/info.h>
 
@@ -124,6 +125,10 @@ void TCommandTPCCImport::Config(TConfig& config) {
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
             .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
+    config.Opts->AddLongOption(
+        "compact", "Compact tables after importing data"
+    ).NoArgument().StoreTrue(&RunConfig->Compact);
+
     // TODO: detect automatically
     config.Opts->AddLongOption(
         "threads", TStringBuilder() << "Number of threads loading the data (default: auto)")
@@ -145,7 +150,7 @@ void TCommandTPCCImport::Config(TConfig& config) {
         "connections", TStringBuilder() << "Number of SDK driver/client instances (default: auto)")
             .RequiredArgument("INT").StoreResult(&RunConfig->DriverCount).DefaultValue(0);
 
-    // for now. Later might be "config.HelpCommandVerbosiltyLevel <= 1" or advanced section
+    // for now. Later might be "config.HelpCommandVerbosityLevel <= 1" or advanced section
     if (true) {
         logLevelOpt.Hidden();
         connectionsOpt.Hidden();
@@ -210,9 +215,16 @@ void TCommandTPCCRun::Config(TConfig& config) {
         "threads", TStringBuilder() << "Number of threads executing queries (default: auto)")
             .RequiredArgument("INT").StoreResult(&RunConfig->ThreadCount);
 
-    config.Opts->AddLongOption(
-        'f', "format", TStringBuilder() << "Output format: " << GetEnumAllNames<NTPCC::TRunConfig::EFormat>())
-            .OptionalArgument("STRING").StoreResult(&RunConfig->Format).DefaultValue(RunConfig->Format);
+    {
+        TVector<NLastGetopt::NComp::TChoice> formatChoices;
+        for (auto val : GetEnumAllValues<NTPCC::TRunConfig::EFormat>()) {
+            formatChoices.emplace_back(ToString(val));
+        }
+        config.Opts->AddLongOption(
+            'f', "format", TStringBuilder() << "Output format: " << GetEnumAllNames<NTPCC::TRunConfig::EFormat>())
+                .OptionalArgument("STRING").StoreResult(&RunConfig->Format).DefaultValue(RunConfig->Format)
+                .Completer(NLastGetopt::NComp::Choice(std::move(formatChoices)));
+    }
 
     config.Opts->AddLongOption(
         "no-tui", TStringBuilder() << "Disable TUI, which is enabled by default in interactive mode")
@@ -244,14 +256,38 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     auto txModeOpt = config.Opts->AddLongOption(
         "tx-mode", TStringBuilder() << "Transaction mode: serializable-rw or snapshot-rw")
-            .OptionalArgument("STRING").StoreMappedResult(&RunConfig->TxMode, [](const TString& value) {
+            .OptionalArgument("STRING").StoreMappedResult(&RunConfig->TxMode, [runConfig = RunConfig](const TString& value) {
                 if (value == "serializable-rw") {
                     return NQuery::TTxSettings::SerializableRW();
                 } else if (value == "snapshot-rw") {
                     return NQuery::TTxSettings::SnapshotRW();
+                } else if (value == "read-committed-rw") {
+                    // Experimental isolation level. Hidden from help at current time.
+                    return NQuery::TTxSettings::ReadCommittedRW();
+                } else if (value == "mixed") {
+                    // This option is useful for stress tests. Hidden from help.
+                    runConfig->MixedTxMode = true;
+                    return NQuery::TTxSettings::SerializableRW();
                 }
                 throw yexception() << "Invalid transaction mode: " << value << ". Valid values are: serializable-rw, snapshot-rw";
-            }).DefaultValue("serializable-rw");
+            }).DefaultValue("serializable-rw")
+            .Completer(NLastGetopt::NComp::Choice({{"serializable-rw", "Serializable read-write"},
+                                                   {"snapshot-rw", "Snapshot read-write"}}));
+
+    auto txModeWeightSerializableOpt = config.Opts->AddLongOption(
+        "tx-mode-weight-serializable",
+        TStringBuilder() << "Weight for serializable-rw in mixed tx mode (default: 0)")
+            .RequiredArgument("FLOAT").StoreResult(&RunConfig->TxModeWeightSerializable).DefaultValue(0.0);
+
+    auto txModeWeightSnapshotOpt = config.Opts->AddLongOption(
+        "tx-mode-weight-snapshot",
+        TStringBuilder() << "Weight for snapshot-rw in mixed tx mode (default: 0)")
+            .RequiredArgument("FLOAT").StoreResult(&RunConfig->TxModeWeightSnapshot).DefaultValue(0.0);
+
+    auto txModeWeightReadCommittedOpt = config.Opts->AddLongOption(
+        "tx-mode-weight-read-committed",
+        TStringBuilder() << "Weight for read-committed-rw in mixed tx mode (default: 0)")
+            .RequiredArgument("FLOAT").StoreResult(&RunConfig->TxModeWeightReadCommitted).DefaultValue(0.0);
 
     auto simulateOpt = config.Opts->AddLongOption(
         "simulate", TStringBuilder() << "Simulate transaction execution (delay is simulated transaction latency ms)")
@@ -261,7 +297,7 @@ void TCommandTPCCRun::Config(TConfig& config) {
         "simulate-select1", TStringBuilder() << "Instead of real queries, execute specified number of SELECT 1 queries")
             .OptionalArgument("INT").StoreResult(&RunConfig->SimulateTransactionSelect1Count).DefaultValue(0);
 
-    // for now. Later might be "config.HelpCommandVerbosiltyLevel <= 1" or advanced section
+    // for now. Later might be "config.HelpCommandVerbosityLevel <= 1" or advanced section
     if (true) {
         highresHistOpt.Hidden();
         extendedStatsOpt.Hidden();
@@ -270,10 +306,32 @@ void TCommandTPCCRun::Config(TConfig& config) {
         noDelaysOpt.Hidden();
         simulateOpt.Hidden();
         simulateSelect1Opt.Hidden();
+        txModeWeightSerializableOpt.Hidden();
+        txModeWeightSnapshotOpt.Hidden();
+        txModeWeightReadCommittedOpt.Hidden();
     }
 }
 
 int TCommandTPCCRun::Run(TConfig& connectionConfig) {
+    if (RunConfig->TxModeWeightSerializable < 0.0
+        || RunConfig->TxModeWeightSnapshot < 0.0
+        || RunConfig->TxModeWeightReadCommitted < 0.0) {
+        Cout << "Run failed: --tx-mode-weight-* values must be non-negative" << Endl;
+        return 1;
+    }
+    double totalWeight = RunConfig->TxModeWeightSerializable
+        + RunConfig->TxModeWeightSnapshot
+        + RunConfig->TxModeWeightReadCommitted;
+    if (RunConfig->MixedTxMode) {
+        if (totalWeight <= 0.0) {
+            Cout << "Run failed: --tx-mode mixed requires at least one non-zero --tx-mode-weight-* option" << Endl;
+            return 1;
+        }
+    } else if (totalWeight > 0.0) {
+        Cout << "Run failed: --tx-mode-weight-* options are only valid with --tx-mode mixed" << Endl;
+        return 1;
+    }
+
     RunConfig->SetFullPath(connectionConfig);
     try {
         NTPCC::RunSync(connectionConfig, *RunConfig);
@@ -356,7 +414,8 @@ void TCommandTPCC::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'p', "path", TStringBuilder() << "Database path where benchmark tables are located")
-            .RequiredArgument("STRING").StoreResult(&RunConfig->Path);
+            .RequiredArgument("STRING").StoreResult(&RunConfig->Path)
+            .SchemePathCompletionForDir();
 }
 
 } // namespace NYdb::NConsoleClient

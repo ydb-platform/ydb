@@ -1,6 +1,7 @@
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_helpers.h"
 
+#include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
@@ -10,6 +11,8 @@
 #include <ydb/library/yql/providers/common/pushdown/settings.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -19,6 +22,21 @@ namespace NYql {
 using namespace NNodes;
 
 namespace {
+
+const TTypeAnnotationNode* BuildPqMetaFieldExprType(const TMetaFieldDescriptor& descriptor, TExprContext& ctx) {
+    switch (descriptor.Type) {
+        case EMetaFieldType::Uint64:
+            return ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+        case EMetaFieldType::Timestamp:
+            return ctx.MakeType<TDataExprType>(EDataSlot::Timestamp);
+        case EMetaFieldType::String:
+            return ctx.MakeType<TDataExprType>(EDataSlot::String);
+        case EMetaFieldType::DictStringString: {
+            const auto* stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+            return ctx.MakeType<TDictExprType>(stringType, stringType);
+        }
+    }
+}
 
 struct TWatermarkPushdownSettings: public NPushdown::TSettings {
     TWatermarkPushdownSettings()
@@ -32,6 +50,7 @@ struct TWatermarkPushdownSettings: public NPushdown::TSettings {
             EFlag::StringTypes |
             EFlag::TimestampCtor |
             EFlag::IntervalCtor |
+            EFlag::DateCtor |
             EFlag::ImplicitConversionToInt64 |
             EFlag::DoNotCheckCompareArgumentsTypes |
 
@@ -39,9 +58,15 @@ struct TWatermarkPushdownSettings: public NPushdown::TSettings {
             EFlag::ArithmeticalExpressions |
             EFlag::CastExpression |
             EFlag::DivisionExpressions |
+            EFlag::ExpressionAsPredicate |
             EFlag::JustPassthroughOperators |
             EFlag::UnaryOperators |
             EFlag::MinMax |
+            EFlag::IsDistinctOperator |
+            EFlag::ToBytesFromStringExpressions |
+            EFlag::ToStringFromStringExpressions |
+            EFlag::FlatMapOverOptionals |
+            EFlag::StructOperators |
             EFlag::NonDeterministic
         );
     }
@@ -119,13 +144,15 @@ public:
     const TTypeAnnotationNode* GetReadTopicSchema(const TExprNode* topic, const TExprNode* columns, TExprContext& ctx, TColumnOrder& columnOrder) {
         const auto metadata = topic->Child(TPqTopic::idx_Metadata);
         TVector<const TItemExprType*> items;
-        items.reserve((columns ? columns->ChildrenSize() : 0) + metadata->ChildrenSize());
 
         const auto* itemSchema = topic->GetTypeAnn()->Cast<TListExprType>()
             ->GetItemType()->Cast<TStructExprType>();
 
         std::unordered_set<TString> addedFields;
-        if (columns) {
+        if (columns && !TCoVoid::Match(columns)) {
+            YQL_ENSURE(columns->IsList(),
+                "PqReadTopic.Columns: expected list of column name atoms (userschema order)");
+            items.reserve(columns->ChildrenSize() + metadata->ChildrenSize());
             columnOrder.Reserve(items.capacity());
 
             for (auto c : columns->Children()) {
@@ -141,18 +168,19 @@ public:
                     return nullptr;
                 }
 
-                columnOrder.AddColumn(TString(columnName));
+                TString columnNameStr(columnName);
+                columnOrder.AddColumn(columnNameStr);
                 items.push_back(itemSchema->GetItems()[*index]);
-                addedFields.emplace(columnName);
+                addedFields.emplace(std::move(columnNameStr));
             }
 
             for (auto c : itemSchema->GetItems()) {
-                const TString columnName(c->GetName());
-                if (addedFields.contains(columnName)) {
+                const TString name(c->GetName());
+                if (addedFields.contains(name)) {
                     continue;
                 }
 
-                columnOrder.AddColumn(columnName);
+                columnOrder.AddColumn(name);
                 items.push_back(c);
             }
         } else {
@@ -163,7 +191,7 @@ public:
     }
 
     TStatus HandleReadTopic(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 6, 9, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 8, 10, ctx)) {
             return TStatus::Error;
         }
 
@@ -174,6 +202,11 @@ public:
         const auto format = input->Child(TPqReadTopic::idx_Format);
         const auto compression = input->Child(TPqReadTopic::idx_Compression);
         const auto settings = input->Child(TPqReadTopic::idx_Settings);
+
+        const TExprNode* userSchemaColumnsArg = nullptr;
+        if (input->ChildrenSize() > TPqReadTopic::idx_UserSchemaColumns) {
+            userSchemaColumnsArg = input->Child(TPqReadTopic::idx_UserSchemaColumns);
+        }
 
         if (!EnsureWorldType(*world, ctx)) {
             return TStatus::Error;
@@ -206,7 +239,12 @@ public:
         if (!State_->IsRtmrMode() && !NCommon::ValidateFormatForInput(      // Rtmr has 3 field (key/subkey/value).
             format->Content(),
             schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
-            [](TStringBuf fieldName) {return FindPqMetaFieldDescriptorBySysColumn(TString(fieldName)).has_value(); },
+            [this](TStringBuf fieldName) {
+                return GetPqMetaFieldDescriptorBySysColumn(
+                    TString(fieldName),
+                    State_->EnableUserAttributesInTopicQuery
+                ).has_value();
+            },
             ctx)) {
             return TStatus::Error;
         }
@@ -227,31 +265,95 @@ public:
             if (!EnsureAtom(setting->Head(), ctx)) {
                 return TStatus::Error;
             }
+
+            const TStringBuf settingName = setting->Head().Content();
+            if (settingName == "csvdelimiter"sv) {
+                if (format->Content() != "csv"sv && format->Content() != "csv_with_names"sv) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()),
+                        TStringBuilder() << "csv_delimiter can only be used with csv or csv_with_names format"));
+                    return TStatus::Error;
+                }
+                if (setting->ChildrenSize() < 2 || !EnsureAtom(*setting->Child(1), ctx)) {
+                    return TStatus::Error;
+                }
+                const TStringBuf delimiter = setting->Child(1)->Content();
+                if (delimiter.size() != 1) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Child(1)->Pos()), "csv_delimiter must be single character"));
+                    return TStatus::Error;
+                }
+            }
         }
 
-        if (TPqReadTopic::idx_Watermark < input->ChildrenSize()) {
-            auto& watermark = input->ChildRef(TPqReadTopic::idx_Watermark);
-            const auto status = ConvertToLambda(watermark, ctx, 1, 1);
-            if (status != TStatus::Ok) {
-                return status;
+        if (userSchemaColumnsArg && !TCoVoid::Match(userSchemaColumnsArg)) {
+            YQL_ENSURE(userSchemaColumnsArg->IsList(),
+                "UserSchemaColumns must be a list of column name atoms (userschema order)");
+            for (const auto& atomNode : userSchemaColumnsArg->Children()) {
+                if (!EnsureAtom(*atomNode, ctx)) {
+                    return TStatus::Error;
+                }
             }
-            if (!UpdateLambdaAllArgumentsTypes(watermark, {schema->Cast<TListExprType>()->GetItemType()}, ctx)) {
-                return TStatus::Error;
+            const auto* rowSpecType = topic->GetTypeAnn()->Cast<TListExprType>()
+                ->GetItemType()->Cast<TStructExprType>();
+            // Internal invariant for TPqReadTopic before DQ-level rewrites:
+            // UserSchemaColumns is built from source SCHEMA and must be a subset of Topic.RowSpec.
+            for (const auto& atomNode : userSchemaColumnsArg->Children()) {
+                const TString columnName(atomNode->Content());
+                YQL_ENSURE(rowSpecType->FindItem(columnName),
+                    "userschemacolumns: unknown data column: " << columnName);
             }
-            if (!watermark->GetTypeAnn()) {
-                return TStatus::Repeat;
-            }
-            if (!EnsureSpecificDataType(*watermark, EDataSlot::Timestamp, ctx, true)) {
-                return TStatus::Error;
-            }
+        }
 
-            const TCoLambda lambda(watermark);
-            const auto lambdaArg = TExprBase(lambda.Args().Arg(0).Ptr());
-            const auto lambdaBody = lambda.Body();
-            if (!TestExprForPushdown(ctx, lambdaArg, lambdaBody, TWatermarkPushdownSettings())) {
-                ctx.AddError(TIssue(ctx.GetPosition(watermark->Pos()), TStringBuilder()
-                    << "Bad watermark expression"));
-                return TStatus::Error;
+        if (input->ChildrenSize() > TPqReadTopic::idx_Watermark) {
+            auto& watermarkNode = input->ChildRef(TPqReadTopic::idx_Watermark);
+            if (!TCoVoid::Match(watermarkNode.Get())) {
+                const auto status = ConvertToLambda(watermarkNode, ctx, 1, 1);
+                if (status != TStatus::Ok) {
+                    return status;
+                }
+                if (!UpdateLambdaAllArgumentsTypes(watermarkNode, {schema->Cast<TListExprType>()->GetItemType()}, ctx)) {
+                    return TStatus::Error;
+                }
+                if (!watermarkNode->GetTypeAnn()) {
+                    return TStatus::Repeat;
+                }
+                if (!EnsureSpecificDataType(*watermarkNode, EDataSlot::Timestamp, ctx, true)) {
+                    return TStatus::Error;
+                }
+
+                const TCoLambda lambda(watermarkNode);
+                const auto lambdaArg = TExprBase(lambda.Args().Arg(0).Ptr());
+                const auto lambdaBody = lambda.Body();
+
+                if (!IsPureIsolatedLambda(*lambdaBody.Ptr())) {
+                    ctx.AddError(TIssue(ctx.GetPosition(watermarkNode->Pos()), "Expected pure expression for watermark definition"));
+                    return TStatus::Error;
+                }
+
+                const auto maybeSub = lambdaBody.Maybe<TCoSub>();
+                if (!maybeSub) {
+                    ctx.AddError(TIssue(ctx.GetPosition(watermarkNode->Pos()), "Expected top-level subtraction"));
+                    return TStatus::Error;
+                }
+                const auto sub = maybeSub.Cast();
+
+                const auto maybeInterval = sub.Right().Maybe<TCoInterval>();
+                if (!maybeInterval) {
+                    ctx.AddError(TIssue(ctx.GetPosition(watermarkNode->Pos()), "Expected interval as watermark delay"));
+                    return TStatus::Error;
+                }
+
+                if (!TestExprForPushdown(ctx, lambdaArg, lambdaBody, TWatermarkPushdownSettings())) {
+                    TStringBuilder err;
+                    err << "Bad watermark expression: ";
+                    NYql::NConnector::NApi::TExpression watermarkExprProto;
+                    // SerializeWatermarkExpr is for more sensible error message
+                    if (NYql::SerializeWatermarkExpr(ctx, lambda, &watermarkExprProto, err)) {
+                        // SerializeWatermarkExpr unexpectedly succeed
+                        err << "[unspecified error, please report to support]";
+                    }
+                    ctx.AddError(TIssue(ctx.GetPosition(watermarkNode->Pos()), err));
+                    return TStatus::Error;
+                }
             }
         }
 
@@ -260,7 +362,7 @@ public:
             schema
         }));
 
-        if (!columns) {
+        if (!columns || TCoVoid::Match(columns)) {
             return TStatus::Ok;
         }
 
@@ -268,7 +370,7 @@ public:
     }
 
     TStatus HandleDqTopicSource(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 7, 8, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 10, 12, ctx)) {
             return TStatus::Error;
         }
 
@@ -276,6 +378,9 @@ public:
         const auto topic = input->Child(TDqPqTopicSource::idx_Topic);
         const auto settings = input->Child(TDqPqTopicSource::idx_Settings);
         const auto rowType = input->Child(TDqPqTopicSource::idx_RowType);
+        const auto partitions = input->Child(TDqPqTopicSource::idx_Partitions);
+        const auto offsetPredicate = input->Child(TDqPqTopicSource::idx_OffsetPredicate);
+        const auto writeTimePredicate = input->Child(TDqPqTopicSource::idx_WriteTimePredicate);
 
         if (!EnsureWorldType(*world, ctx)) {
             return TStatus::Error;
@@ -306,9 +411,26 @@ public:
             return TStatus::Error;
         }
 
-        if (TDqPqTopicSource::idx_Watermark < input->ChildrenSize()) {
-            const auto watermark = input->Child(TDqPqTopicSource::idx_Watermark);
-            if (!EnsureAtom(*watermark, ctx)) {
+        if (TDqPqTopicSource::idx_WatermarkExpr < input->ChildrenSize()) {
+            auto& watermarkExpr = input->ChildRef(TDqPqTopicSource::idx_WatermarkExpr);
+            const auto status = ConvertToLambda(watermarkExpr, ctx, 1, 1);
+            if (status != TStatus::Ok) {
+                return status;
+            }
+            if (!UpdateLambdaAllArgumentsTypes(watermarkExpr, {rowType->GetTypeAnn()->Cast<TTypeExprType>()->GetType()}, ctx)) {
+                return TStatus::Error;
+            }
+            if (!watermarkExpr->GetTypeAnn()) {
+                return TStatus::Repeat;
+            }
+            if (!EnsureSpecificDataType(*watermarkExpr, EDataSlot::Timestamp, ctx, true)) {
+                return TStatus::Error;
+            }
+        }
+
+        if (TDqPqTopicSource::idx_WatermarkSerialized < input->ChildrenSize()) {
+            const auto watermarkSerialized = input->Child(TDqPqTopicSource::idx_WatermarkSerialized);
+            if (!EnsureAtom(*watermarkSerialized, ctx)) {
                 return TStatus::Error;
             }
         }
@@ -363,13 +485,34 @@ public:
                 return TStatus::Error;
             }
             const TString metadataSysColumnName(metadataSysColumn->Content());
-            const auto descriptor = FindPqMetaFieldDescriptorBySysColumn(metadataSysColumnName);
+            if (State_->ForbidYqlSysColumnsAndSystemMetadata && SkipPqSystemPrefix(metadataSysColumnName)) {
+                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
+                    << "_yql_sys_ columns are not allowed, use __ydb_-prefixed columns instead"));
+                return TStatus::Error;
+            }
+            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
+                metadataSysColumnName,
+                State_->EnableUserAttributesInTopicQuery);
             if (!descriptor) {
                 ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
                     << "Pq Meta Field Descriptor was not found"));
                 return TStatus::Error;
             }
-            items.emplace_back(ctx.MakeType<TDataExprType>(descriptor->Type));
+            items.emplace_back(BuildPqMetaFieldExprType(*descriptor, ctx));
+        }
+
+        if (!partitions->IsCallable(TCoVoid::CallableName())) {
+            if (!EnsureListType(*partitions, ctx)) {
+                return TStatus::Error;
+            }
+        }
+
+        if (!EnsureAtom(*offsetPredicate, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(*writeTimePredicate, ctx)) {
+            return TStatus::Error;
         }
 
         input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TTupleExprType>(items)));
@@ -388,6 +531,13 @@ public:
 
         auto rowSchema = rowSpec->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
         for (const auto& rowSchemaItem : rowSchema->GetItems()) {
+            const TString columnName(rowSchemaItem->GetName());
+            if (SkipYdbSystemPrefix(columnName)) {
+                ctx.AddError(TIssue(ctx.GetPosition(rowSpec->Pos()), TStringBuilder()
+                    << "Schema column name '" << columnName
+                    << "' is not allowed: names starting with '__ydb_' are reserved for system columns"));
+                return TStatus::Error;
+            }
             items.push_back(rowSchemaItem);
         }
 
@@ -402,13 +552,20 @@ public:
                 return TStatus::Error;
             }
             const TString metadataSysColumnName(metadataSysColumn->Content());
-            const auto descriptor = FindPqMetaFieldDescriptorBySysColumn(metadataSysColumnName);
+            if (State_->ForbidYqlSysColumnsAndSystemMetadata && SkipPqSystemPrefix(metadataSysColumnName)) {
+                ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
+                    << "_yql_sys_ columns are not allowed, use __ydb_-prefixed columns instead"));
+                return TStatus::Error;
+            }
+            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
+                metadataSysColumnName,
+                State_->EnableUserAttributesInTopicQuery);
             if (!descriptor) {
                 ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
                     << "Pq Meta Field Descriptor was not found"));
                 return TStatus::Error;
             }
-            items.emplace_back(ctx.MakeType<TItemExprType>(descriptor->SysColumn, ctx.MakeType<TDataExprType>(descriptor->Type)));
+            items.emplace_back(ctx.MakeType<TItemExprType>(descriptor->SysColumn, BuildPqMetaFieldExprType(*descriptor, ctx)));
         }
 
         input->SetTypeAnn(ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(items)));
@@ -416,13 +573,24 @@ public:
     }
 
     TStatus HandleMetadata(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        if (State_->ForbidYqlSysColumnsAndSystemMetadata) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                "SystemMetadata is not allowed, use __ydb_-prefixed columns instead"));
+            return TStatus::Error;
+        }
+
         const auto key = input->ChildPtr(0);
         if (!EnsureCallable(*key, ctx)) {
             return TStatus::Error;
         }
 
         const auto metadataKey = TString(key->TailPtr()->Content());
-        const auto descriptor = FindPqMetaFieldDescriptorByKey(metadataKey, State_->AllowTransparentSystemColumns);
+        const auto descriptor = GetPqMetaFieldDescriptorByKey(
+            metadataKey,
+            State_->AddTransparentPrefixToTransparentSystemColumns,
+            State_->EnableUserAttributesInTopicQuery,
+            State_->ForbidYqlSysColumnsAndSystemMetadata
+        );
         if (!descriptor) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                 << "Metadata key " << metadataKey << " wasn't found"));
@@ -454,14 +622,47 @@ public:
                 return TStatus::Error;
             }
 
-            bool isOptional = false;
-            const TDataExprType* dataType = nullptr;
-            if (!EnsureDataOrOptionalOfData(row->Pos(), structType->GetItems()[*pos]->GetItemType(), isOptional, dataType, ctx)) {
-                return TStatus::Error;
-            }
+            if (descriptor->Type == EMetaFieldType::DictStringString) {
+                const auto* itemType = structType->GetItems()[*pos]->GetItemType();
+                const TTypeAnnotationNode* dictType = itemType;
+                if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+                    dictType = itemType->Cast<TOptionalExprType>()->GetItemType();
+                }
+                if (!EnsureDictType(row->Pos(), *dictType, ctx)) {
+                    return TStatus::Error;
+                }
+                const auto* dict = dictType->Cast<TDictExprType>();
+                if (!EnsureSpecificDataType(row->Pos(), *dict->GetKeyType(), EDataSlot::String, ctx)) {
+                    return TStatus::Error;
+                }
+                if (!EnsureSpecificDataType(row->Pos(), *dict->GetPayloadType(), EDataSlot::String, ctx)) {
+                    return TStatus::Error;
+                }
+            } else {
+                bool isOptional = false;
+                const TDataExprType* dataType = nullptr;
+                if (!EnsureDataOrOptionalOfData(row->Pos(), structType->GetItems()[*pos]->GetItemType(), isOptional, dataType, ctx)) {
+                    return TStatus::Error;
+                }
 
-            if (!EnsureSpecificDataType(row->Pos(), *dataType, descriptor->Type, ctx)) {
-                return TStatus::Error;
+                EDataSlot expectedSlot = EDataSlot::String;
+                switch (descriptor->Type) {
+                    case EMetaFieldType::Uint64:
+                        expectedSlot = EDataSlot::Uint64;
+                        break;
+                    case EMetaFieldType::Timestamp:
+                        expectedSlot = EDataSlot::Timestamp;
+                        break;
+                    case EMetaFieldType::String:
+                        expectedSlot = EDataSlot::String;
+                        break;
+                    case EMetaFieldType::DictStringString:
+                        YQL_ENSURE(false, "unexpected DictStringString in scalar branch");
+                        break;
+                }
+                if (!EnsureSpecificDataType(row->Pos(), *dataType, expectedSlot, ctx)) {
+                    return TStatus::Error;
+                }
             }
 
             output = ctx.Builder(input->Pos())
@@ -474,7 +675,7 @@ public:
             return TStatus::Repeat;
         }
 
-        input->SetTypeAnn(ctx.MakeType<TDataExprType>(descriptor->Type));
+        input->SetTypeAnn(BuildPqMetaFieldExprType(*descriptor, ctx));
         return TStatus::Ok;
     }
 

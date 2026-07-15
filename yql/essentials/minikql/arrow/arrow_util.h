@@ -11,6 +11,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/arrow/mkql_bit_utils.h>
 #include <yql/essentials/public/udf/arrow/util.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -202,6 +203,10 @@ struct TPrimitiveDataType<NYql::NDecimal::TInt128> {
     };
 };
 
+inline constexpr size_t UuidBinarySize = NYql::NUdf::UUID_SIZE;
+
+std::shared_ptr<arrow::DataType> GetUuidArrowType();
+
 template <typename T, typename = typename std::enable_if<std::is_arithmetic<T>::value>::type>
 inline arrow::Datum MakeScalarDatum(T value) {
     return arrow::Datum(std::make_shared<typename TPrimitiveDataType<T>::TScalarResult>(value));
@@ -221,6 +226,8 @@ inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType() {
 using NYql::NUdf::TTypedBufferBuilder;
 
 std::shared_ptr<arrow::Buffer> MakeEmptyBuffer();
+
+void UntrackDatum(const arrow::Datum& datum);
 
 } // namespace NKikimr::NMiniKQL
 

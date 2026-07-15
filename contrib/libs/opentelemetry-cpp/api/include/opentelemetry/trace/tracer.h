@@ -8,6 +8,7 @@
 #include "opentelemetry/context/context.h"
 #include "opentelemetry/nostd/shared_ptr.h"
 #include "opentelemetry/nostd/string_view.h"
+#include "opentelemetry/trace/context.h"
 #include "opentelemetry/trace/default_span.h"
 #include "opentelemetry/trace/scope.h"
 #include "opentelemetry/trace/span.h"
@@ -27,7 +28,13 @@ namespace trace
 class Tracer
 {
 public:
-  virtual ~Tracer() = default;
+  Tracer()                          = default;
+  virtual ~Tracer()                 = default;
+  Tracer(const Tracer &)            = default;
+  Tracer &operator=(const Tracer &) = default;
+  Tracer(Tracer &&)                 = default;
+  Tracer &operator=(Tracer &&)      = default;
+
   /**
    * Starts a span.
    *
@@ -35,6 +42,9 @@ public:
    *
    * Attributes will be processed in order, previous attributes with the same
    * key will be overwritten.
+   *
+   * Note: Adding attributes and links at span creation is preferred to adding them later,
+   * as samplers can only consider information already present during span creation.
    */
   virtual nostd::shared_ptr<Span> StartSpan(nostd::string_view name,
                                             const common::KeyValueIterable &attributes,
@@ -152,15 +162,7 @@ public:
    */
   static nostd::shared_ptr<Span> GetCurrentSpan() noexcept
   {
-    context::ContextValue active_span = context::RuntimeContext::GetValue(kSpanKey);
-    if (nostd::holds_alternative<nostd::shared_ptr<Span>>(active_span))
-    {
-      return nostd::get<nostd::shared_ptr<Span>>(active_span);
-    }
-    else
-    {
-      return nostd::shared_ptr<Span>(new DefaultSpan(SpanContext::GetInvalid()));
-    }
+    return opentelemetry::trace::GetSpan(opentelemetry::context::RuntimeContext::GetCurrent());
   }
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2

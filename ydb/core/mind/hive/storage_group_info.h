@@ -3,7 +3,7 @@
 #include "hive.h"
 #include "leader_tablet_info.h"
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 namespace NKikimr {
 namespace NHive {
@@ -48,6 +48,7 @@ struct TStorageGroupInfo {
     TStorageResources AcquiredResources;
     TStorageResources MaximumResources;
     NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters GroupParameters;
+    EGroupState Status = EGroupState::Active;
 
     TStorageGroupInfo(const TStoragePoolInfo& storagePool, TStorageGroupId id);
     TStorageGroupInfo(const TStorageGroupInfo&) = delete;
@@ -67,6 +68,7 @@ struct TStorageGroupInfo {
     bool IsBalanceByIOPS() const;
     bool IsBalanceByThroughput() const;
     bool IsBalanceBySize() const;
+    bool IsActive() const;
 };
 
 }

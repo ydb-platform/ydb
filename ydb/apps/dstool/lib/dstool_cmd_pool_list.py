@@ -22,10 +22,11 @@ def apply_func(func, arg):
         return 0
 
 
-def calculate_estimated_usage(pdisk_map, pdisk_slot_usage_map, vslot_map, groups):
+def calculate_estimated_usage(pdisk_map, vslot_map, groups):
     max_used_size = 0
     min_fair_size = 0
     vslot_fair_usages = []
+    total_size_in_units = 0
     for group in groups:
         vslot_fair_sizes = []
         vslot_used_sizes = []
@@ -35,8 +36,11 @@ def calculate_estimated_usage(pdisk_map, pdisk_slot_usage_map, vslot_map, groups
             if pdisk_id not in pdisk_map:
                 continue
 
+            pdisk = pdisk_map[pdisk_id]
             vslot_used_sizes.append(vslot.VDiskMetrics.AllocatedSize)
-            vslot_fair_size = pdisk_map[pdisk_id].PDiskMetrics.TotalSize / pdisk_slot_usage_map[pdisk_id]
+            _, pdisk_slot_size_in_units = common.get_pdisk_inferred_settings(pdisk)
+            weight = common.get_vslot_owner_weight(group.GroupSizeInUnits, pdisk_slot_size_in_units)
+            vslot_fair_size = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
             vslot_fair_sizes.append(vslot_fair_size)
 
         min_vslot_fair_size = apply_func(min, vslot_fair_sizes)
@@ -52,11 +56,13 @@ def calculate_estimated_usage(pdisk_map, pdisk_slot_usage_map, vslot_map, groups
         else:
             vslot_fair_usages.append(0.0)
 
+        total_size_in_units += group.GroupSizeInUnits or 1
+
     estimated_usage = max_used_size / min_fair_size if min_fair_size else 0.0
     max_vslot_fair_usage = apply_func(max, vslot_fair_usages)
     mean_vslot_fair_usage = apply_func(sum, vslot_fair_usages) / len(vslot_fair_usages) if len(vslot_fair_usages) > 0 else 0.0
     std_dev_vslot_fair_usage = math.sqrt(sum((x - mean_vslot_fair_usage)**2 for x in vslot_fair_usages) / len(vslot_fair_usages)) if len(vslot_fair_usages) > 0 else 0.0
-    groups_fair_count = math.ceil(len(vslot_fair_usages) * estimated_usage / 0.85)
+    groups_fair_count = math.ceil(total_size_in_units * estimated_usage / 0.85)
 
     res = {}
     res['EstimatedUsage'] = estimated_usage
@@ -76,6 +82,7 @@ def do(args):
         'ErasureSpecies',
         'Kind',
         'DefaultGroupSizeInUnits',
+        'TotalSizeInUnits',
         'VDiskKind',
         'Groups_TOTAL',
         'Groups_UNKNOWN',
@@ -89,10 +96,11 @@ def do(args):
         'VDisks_ERROR',
         'VDisks_REPLICATING',
         'VDisks_INIT_PENDING',
-        'Usage',
+        'Usage',  # legacy
         'AvailableSize',
         'UsedSize',
-        'TotalSize',
+        'Limit',
+        'TotalSize',  # legacy
         'EstimatedUsage',
         'MaxVDiskEstimatedUsage',
         'MeanVDiskEstimatedUsage',
@@ -104,7 +112,7 @@ def do(args):
         'PoolName',
         'ErasureSpecies',
         'Kind',
-        'DefaultGroupSizeInUnits',
+        'TotalSizeInUnits',
         'Groups_TOTAL',
         'VDisks_TOTAL',
     ]
@@ -112,6 +120,7 @@ def do(args):
         'Usage': '%',
         'AvailableSize': 'bytes',
         'UsedSize': 'bytes',
+        'Limit': 'bytes',
         'TotalSize': 'bytes',
         'EstimatedUsage': '%',
         'MaxVDiskEstimatedUsage': '%',
@@ -123,7 +132,7 @@ def do(args):
         visible_columns.extend(['VDisks_READY', 'VDisks_ERROR', 'VDisks_REPLICATING', 'VDisks_INIT_PENDING'])
 
     if args.show_vdisk_usage or args.all_columns:
-        visible_columns.extend(['Usage', 'AvailableSize', 'UsedSize', 'TotalSize'])
+        visible_columns.extend(['Usage', 'AvailableSize', 'UsedSize', 'Limit', 'TotalSize'])
 
     if args.show_vdisk_estimated_usage or args.all_columns:
         visible_columns.extend(['GroupsForEstimatedUsage@85', 'EstimatedUsage', 'MaxVDiskEstimatedUsage', 'MeanVDiskEstimatedUsage', 'StdDevVDiskEstimatedUsage'])
@@ -148,11 +157,13 @@ def do(args):
 
         for key in ['Groups_TOTAL', 'Groups_' + kikimr_bsconfig.TGroupStatus.E.Name(group.OperatingStatus)]:
             groups[key] += 1
+        groups['TotalSizeInUnits'] += group.GroupSizeInUnits or 1
 
         if 'groups_list' not in pool:
             pool['groups_list'] = []
         pool['groups_list'].append(group)
 
+    pdisk_map = common.build_pdisk_map(base_config)
     vslot_map = common.build_vslot_map(base_config)
     for vslot_id, vslot in vslot_map.items():
         if vslot.GroupId not in group_map:
@@ -169,6 +180,16 @@ def do(args):
         vslots['TotalSize'] += vslot.VDiskMetrics.AllocatedSize
         vslots['AvailableSize'] += vslot.VDiskMetrics.AvailableSize
         vslots['TotalSize'] += vslot.VDiskMetrics.AvailableSize
+
+        pdisk = pdisk_map.get(common.get_pdisk_id(vslot.VSlotId))
+        vdisk_slot_size = None
+        if pdisk is not None:
+            _, pdisk_slot_size_in_units = common.get_pdisk_inferred_settings(pdisk)
+            weight = common.get_vslot_owner_weight(group.GroupSizeInUnits, pdisk_slot_size_in_units)
+            vdisk_slot_size = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
+
+        if vdisk_slot_size is not None:
+            vslots['Limit'] = vslots.get('Limit', 0) + vdisk_slot_size
 
         for key in ['VDisks_TOTAL', 'VDisks_' + vslot.Status]:
             vslots[key] += 1
@@ -207,9 +228,7 @@ def do(args):
             pool['groups_list'] = []
 
         # fill in usage estimations
-        pdisk_map = common.build_pdisk_map(base_config)
-        pdisk_slot_usage_map = common.build_pdisk_usage_map(base_config, count_donors=True)
-        usage_map = calculate_estimated_usage(pdisk_map, pdisk_slot_usage_map, vslot_map, pool['groups_list'])
+        usage_map = calculate_estimated_usage(pdisk_map, vslot_map, pool['groups_list'])
 
         for key, value in usage_map.items():
             row[key] = value

@@ -1,6 +1,7 @@
 #pragma once
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/library/signals/owner.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr::NOlap::NResourceBroker::NSubscribe {
@@ -44,6 +45,7 @@ private:
     using TBase = NColumnShard::TCommonCountersOwner;
     THashMap<TString, std::shared_ptr<TSubscriberTypeCounters>> ResourceTypeCounters;
     TMutex Mutex;
+
 public:
     TSubscriberCounters()
         : TBase("ResourcesSubscriber")
@@ -53,4 +55,4 @@ public:
     std::shared_ptr<TSubscriberTypeCounters> GetTypeCounters(const TString& resourceType);
 };
 
-}
+}   // namespace NKikimr::NOlap::NResourceBroker::NSubscribe

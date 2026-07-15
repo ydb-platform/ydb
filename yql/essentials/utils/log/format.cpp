@@ -66,10 +66,34 @@ TString FallbackFormat(const TLogRecord& rec) {
     return out;
 }
 
+TString GetBasicLoggingFormatFromRecord(const TLogRecord& rec) {
+    auto priority = rec.Priority;
+    switch (priority) {
+        case TLOG_EMERG:
+        case TLOG_ALERT:
+        case TLOG_CRIT:
+        case TLOG_ERR:
+            return "ERROR";
+
+        case TLOG_WARNING:
+            return "WARN";
+
+        case TLOG_NOTICE:
+        case TLOG_INFO:
+            return "INFO";
+
+        case TLOG_DEBUG:
+        case TLOG_RESOURCES:
+            return "DEBUG";
+        default:
+            return "DEBUG";
+    }
+}
+
 class TFormattingLogBackend final: public TForwardingLogBackend {
 public:
     explicit TFormattingLogBackend(TFormatter formatter, bool isStrict, TAutoPtr<TLogBackend> child)
-        : TForwardingLogBackend(std::move(child))
+        : TForwardingLogBackend(child)
         , Formatter_(std::move(formatter))
         , IsStrict_(isStrict)
     {
@@ -88,7 +112,7 @@ public:
             TStringBuilder message;
             message << "LogRecord is not supported: ";
             PrintBody(message, rec, /* flagBegin = */ 0);
-            ythrow yexception() << std::move(message);
+            ythrow yexception() << message;
         } else {
             message = FallbackFormat(rec);
         }
@@ -109,11 +133,7 @@ protected:
             }
 
             const TStringBuf actual = flags[i].first;
-            if (actual != expected) {
-                return false;
-            }
-
-            return true;
+            return actual == expected;
         };
 
         return AllOf(std::views::iota(Min<size_t>(), MaxRequiredContextKey), isSupported);
@@ -156,6 +176,8 @@ TString JsonFormat(const TLogRecord& rec) {
     buf.BeginObject();
     buf.WriteKey("message");
     buf.WriteString(TStringBuf(rec.Data, rec.Len));
+    buf.WriteKey("levelStr");
+    buf.WriteString(GetBasicLoggingFormatFromRecord(rec));
     buf.WriteKey("@fields");
     buf.BeginObject();
     for (const auto& [key, value] : rec.MetaFlags) {
@@ -168,7 +190,7 @@ TString JsonFormat(const TLogRecord& rec) {
 }
 
 TAutoPtr<TLogBackend> MakeFormattingLogBackend(TFormatter formatter, bool isStrict, TAutoPtr<TLogBackend> child) {
-    return new TFormattingLogBackend(std::move(formatter), isStrict, std::move(child));
+    return new TFormattingLogBackend(std::move(formatter), isStrict, child);
 }
 
 } // namespace NYql::NLog

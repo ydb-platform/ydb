@@ -3,13 +3,13 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 FORK_SUBTESTS()
 
-SIZE(SMALL)
+SIZE(MEDIUM)
 
 TEST_SRCS(
+    test_column_family_negative.py
     test_disabled.py
     test_incorrect.py
     test_mixed.py
-    test_obsolete.py
 )
 
 PEERDIR(

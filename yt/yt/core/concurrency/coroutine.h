@@ -1,7 +1,7 @@
 #pragma once
 
 #include "public.h"
-#include "execution_stack.h"
+#include "pooled_execution_stack.h"
 
 #include <yt/yt/core/actions/callback.h>
 
@@ -49,9 +49,14 @@ private:
         Completed,
     };
 
-    std::shared_ptr<TExecutionStack> CoroutineStack_;
+    std::shared_ptr<NThreading::TExecutionStack> CoroutineStack_;
 
-    TExceptionSafeContext CallerContext_;
+    // Points to a TExceptionSafeContext placed on the stack of the thread that
+    // called Resume(). Owning the caller context per-invocation (rather than as
+    // a member captured once at construction) keeps TSAN's fiber and ASAN's
+    // stack bounds in sync with the thread actually driving the coroutine,
+    // which may differ from the thread that constructed it.
+    TExceptionSafeContext* CallerContext_ = nullptr;
 
     // We have to delay initialization of this object until the body
     // of ctor.

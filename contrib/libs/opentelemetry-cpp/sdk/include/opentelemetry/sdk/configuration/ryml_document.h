@@ -22,7 +22,7 @@ class RymlDocument : public Document
 public:
   static std::unique_ptr<Document> Parse(const std::string &source, const std::string &content);
 
-  RymlDocument() {}
+  RymlDocument() : event_handler_(MakeCallbacks()) {}
   RymlDocument(RymlDocument &&)                      = delete;
   RymlDocument(const RymlDocument &)                 = delete;
   RymlDocument &operator=(RymlDocument &&)           = delete;
@@ -36,6 +36,8 @@ public:
   DocumentNodeLocation Location(ryml::ConstNodeRef node) const;
 
 private:
+  static ryml::Callbacks MakeCallbacks();
+
   ryml::ParserOptions opts_;
   ryml::Parser::handler_type event_handler_;
   std::unique_ptr<ryml::Parser> parser_;

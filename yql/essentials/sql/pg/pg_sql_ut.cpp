@@ -421,7 +421,7 @@ Y_UNIT_TEST(ParamRef_IntAndPoint) {
         10,
         {},
         EDebugOutput::None,
-        false,
+        /*ansiLexer=*/false,
         settings);
     TMap<TString, TString> expectedParamToType{
         {"$p1", "'int4"},
@@ -442,7 +442,7 @@ Y_UNIT_TEST(ParamRef_IntUnknownInt) {
         10,
         {},
         EDebugOutput::None,
-        false,
+        /*ansiLexer=*/false,
         settings);
     TMap<TString, TString> expectedParamToType{
         {"$p1", "'int4"},
@@ -583,7 +583,7 @@ Y_UNIT_TEST(SetConfig_SearchPath) {
         10,
         {},
         EDebugOutput::ToCerr,
-        false,
+        /*ansiLexer=*/false,
         settings);
     UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
     UNIT_ASSERT(res.Root);
@@ -599,7 +599,7 @@ from pg_type)",
         10,
         {},
         EDebugOutput::None,
-        false,
+        /*ansiLexer=*/false,
         settings);
     UNIT_ASSERT(res.IsOk());
     UNIT_ASSERT(res.Root);
@@ -615,7 +615,7 @@ from pg_catalog.pg_type)",
         10,
         {},
         EDebugOutput::None,
-        false,
+        /*ansiLexer=*/false,
         settings);
     UNIT_ASSERT(res.IsOk());
     UNIT_ASSERT(res.Root);
@@ -626,7 +626,7 @@ from pg_catalog.pg_type)",
         10,
         {},
         EDebugOutput::None,
-        false,
+        /*ansiLexer=*/false,
         settings);
     UNIT_ASSERT(res.IsOk());
     UNIT_ASSERT(res.Root);
@@ -637,7 +637,7 @@ from pg_catalog.pg_type)",
         10,
         {},
         EDebugOutput::None,
-        false,
+        /*ansiLexer=*/false,
         settings);
     UNIT_ASSERT(res.IsOk());
     UNIT_ASSERT(res.Root);
@@ -650,7 +650,7 @@ using namespace NYql;
 Y_UNIT_TEST(Empty) {
     NPg::ClearExtensions();
     UNIT_ASSERT_VALUES_EQUAL(NPg::ExportExtensions(), "");
-    NPg::ImportExtensions("", true, nullptr);
+    NPg::ImportExtensions("", /*typesOnly=*/true, /*loader=*/nullptr);
 }
 
 Y_UNIT_TEST(ProcsAndType) {
@@ -684,7 +684,7 @@ Y_UNIT_TEST(ProcsAndType) {
     desc.Name = "MyExt";
     desc.InstallName = "$libdir/MyExt";
     desc.SqlPaths.push_back(h.Name());
-    NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+    NPg::RegisterExtensions({desc}, /*typesOnly=*/true, *NSQLTranslationPG::CreateExtensionSqlParser(), /*loader=*/nullptr);
     auto validate = [&]() {
         const auto& type = NPg::LookupType("mytype");
         UNIT_ASSERT_VALUES_EQUAL(type.Category, 'U');
@@ -707,7 +707,7 @@ Y_UNIT_TEST(ProcsAndType) {
     validate();
     auto exported = NPg::ExportExtensions();
     NPg::ClearExtensions();
-    NPg::ImportExtensions(exported, true, nullptr);
+    NPg::ImportExtensions(exported, /*typesOnly=*/true, /*loader=*/nullptr);
     validate();
 }
 
@@ -730,13 +730,13 @@ Y_UNIT_TEST(InsertValues) {
     desc.Name = "MyExt";
     desc.InstallName = "$libdir/MyExt";
     desc.SqlPaths.push_back(h.Name());
-    NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+    NPg::RegisterExtensions({desc}, /*typesOnly=*/true, *NSQLTranslationPG::CreateExtensionSqlParser(), /*loader=*/nullptr);
     auto validate = [&]() {
-        const auto& table = NPg::LookupStaticTable({"pg_catalog", "mytable"});
+        const auto& table = NPg::LookupStaticTable({.Schema = "pg_catalog", .Name = "mytable"});
         UNIT_ASSERT(table.Kind == NPg::ERelKind::Relation);
-        size_t remap[2];
+        size_t remap[2]; // NOLINT(modernize-avoid-c-arrays)
         size_t rowStep;
-        const auto& data = *NPg::ReadTable({"pg_catalog", "mytable"}, {"foo", "bar"}, remap, rowStep);
+        const auto& data = *NPg::ReadTable({.Schema = "pg_catalog", .Name = "mytable"}, {"foo", "bar"}, remap, rowStep);
         UNIT_ASSERT_VALUES_EQUAL(rowStep, 3);
         UNIT_ASSERT_VALUES_EQUAL(data.size(), 2 * rowStep);
         UNIT_ASSERT_VALUES_EQUAL(data[rowStep * 0 + remap[0]], "1");
@@ -748,7 +748,7 @@ Y_UNIT_TEST(InsertValues) {
     validate();
     auto exported = NPg::ExportExtensions();
     NPg::ClearExtensions();
-    NPg::ImportExtensions(exported, true, nullptr);
+    NPg::ImportExtensions(exported, /*typesOnly=*/true, /*loader=*/nullptr);
     validate();
 }
 
@@ -783,7 +783,7 @@ Y_UNIT_TEST(Casts) {
     desc.Name = "MyExt";
     desc.InstallName = "$libdir/MyExt";
     desc.SqlPaths.push_back(h.Name());
-    NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+    NPg::RegisterExtensions({desc}, /*typesOnly=*/true, *NSQLTranslationPG::CreateExtensionSqlParser(), /*loader=*/nullptr);
     auto validate = [&]() {
         auto sourceId = NPg::LookupType("foo").TypeId;
         auto targetId = NPg::LookupType("bar").TypeId;
@@ -799,7 +799,7 @@ Y_UNIT_TEST(Casts) {
     validate();
     auto exported = NPg::ExportExtensions();
     NPg::ClearExtensions();
-    NPg::ImportExtensions(exported, true, nullptr);
+    NPg::ImportExtensions(exported, /*typesOnly=*/true, /*loader=*/nullptr);
     validate();
 }
 
@@ -862,7 +862,7 @@ Y_UNIT_TEST(Operators) {
     desc.Name = "MyExt";
     desc.InstallName = "$libdir/MyExt";
     desc.SqlPaths.push_back(h.Name());
-    NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+    NPg::RegisterExtensions({desc}, /*typesOnly=*/true, *NSQLTranslationPG::CreateExtensionSqlParser(), /*loader=*/nullptr);
     auto validate = [&]() {
         auto typeId = NPg::LookupType("foo").TypeId;
         TVector<ui32> args{typeId, typeId};
@@ -908,7 +908,7 @@ Y_UNIT_TEST(Operators) {
     validate();
     auto exported = NPg::ExportExtensions();
     NPg::ClearExtensions();
-    NPg::ImportExtensions(exported, true, nullptr);
+    NPg::ImportExtensions(exported, /*typesOnly=*/true, /*loader=*/nullptr);
     validate();
 }
 
@@ -965,7 +965,7 @@ Y_UNIT_TEST(Aggregates) {
     desc.Name = "MyExt";
     desc.InstallName = "$libdir/MyExt";
     desc.SqlPaths.push_back(h.Name());
-    NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+    NPg::RegisterExtensions({desc}, /*typesOnly=*/true, *NSQLTranslationPG::CreateExtensionSqlParser(), /*loader=*/nullptr);
     auto validate = [&]() {
         auto typeId = NPg::LookupType("foo").TypeId;
         auto internalTypeId = NPg::LookupType("internal").TypeId;
@@ -984,7 +984,7 @@ Y_UNIT_TEST(Aggregates) {
     validate();
     auto exported = NPg::ExportExtensions();
     NPg::ClearExtensions();
-    NPg::ImportExtensions(exported, true, nullptr);
+    NPg::ImportExtensions(exported, /*typesOnly=*/true, /*loader=*/nullptr);
     validate();
 }
 
@@ -1080,7 +1080,7 @@ Y_UNIT_TEST(OpClasses) {
     desc.Name = "MyExt";
     desc.InstallName = "$libdir/MyExt";
     desc.SqlPaths.push_back(h.Name());
-    NPg::RegisterExtensions({desc}, true, *NSQLTranslationPG::CreateExtensionSqlParser(), nullptr);
+    NPg::RegisterExtensions({desc}, /*typesOnly=*/true, *NSQLTranslationPG::CreateExtensionSqlParser(), /*loader=*/nullptr);
     auto validate = [&]() {
         const auto& typeDesc = NPg::LookupType("foo");
         auto typeId = typeDesc.TypeId;
@@ -1108,7 +1108,234 @@ Y_UNIT_TEST(OpClasses) {
     validate();
     auto exported = NPg::ExportExtensions();
     NPg::ClearExtensions();
-    NPg::ImportExtensions(exported, true, nullptr);
+    NPg::ImportExtensions(exported, /*typesOnly=*/true, /*loader=*/nullptr);
     validate();
 }
+
 } // Y_UNIT_TEST_SUITE(PgExtensions)
+
+Y_UNIT_TEST_SUITE(PgWarningPragma) {
+
+Y_UNIT_TEST(WarningAsErrorLangver) {
+    TString query = R"sql(
+        SET warning = 'error', '*';
+        SELECT 1 FROM plato.Input FOR UPDATE;
+    )sql";
+
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("VariableSetStmt, Warning pragma is not available before language version 2026.01", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningAsError) {
+    TString query = R"sql(
+        SET warning = 'error', '*';
+        SELECT 1 FROM plato.Input FOR UPDATE;
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("SelectStmt: lockingClause is ignored", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningDisable) {
+    TString query = R"sql(
+        SET warning = 'disable', '*';
+        SELECT 1 FROM plato.Input FOR UPDATE;
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
+    UNIT_ASSERT(res.Root);
+    UNIT_ASSERT_EQUAL(res.Issues.Size(), 0);
+}
+
+Y_UNIT_TEST(WarningDefault) {
+    TString query = R"sql(
+        SET warning = 'default', '*';
+        SELECT 1 FROM plato.Input FOR UPDATE;
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
+    UNIT_ASSERT(res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_WARNING);
+    UNIT_ASSERT_STRING_CONTAINS("SelectStmt: lockingClause is ignored", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningInvalidAction) {
+    TString query = R"sql(
+        SET warning = 'invalid_action', '*';
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("unknown warning action 'invalid_action', expecting one of DEFAULT, ERROR, DISABLE", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningInvalidPattern) {
+    TString query = R"sql(
+        SET warning = 'error', 'invalid[pattern';
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("unknown warning code 'invalid[pattern', expecting integer or '*'", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningMissingArguments) {
+    TString query = R"sql(
+        SET warning = 'error';
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("VariableSetStmt, expected 2 args for Warning pragma, but got: 1", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningTooManyArguments) {
+    TString query = R"sql(
+        SET warning = 'error', '*', 'extra';
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("VariableSetStmt, expected 2 args for Warning pragma, but got: 3", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningSpecificCode) {
+    TString query = R"sql(
+        SET warning = 'error', '7000';
+        SELECT 1 FROM plato.Input FOR UPDATE;
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("SelectStmt: lockingClause is ignored", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningSpecificCodeDisable) {
+    TString query = R"sql(
+        SET warning = 'disable', '7000';
+        SELECT 1 FROM plato.Input FOR UPDATE;
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
+    UNIT_ASSERT(res.Root);
+    UNIT_ASSERT_EQUAL(res.Issues.Size(), 0);
+}
+
+Y_UNIT_TEST(WarningNonStringAction) {
+    TString query = R"sql(
+        SET warning = 123, '*';
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("VariableSetStmt, expected string literal for Warning action", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningNonStringPattern) {
+    TString query = R"sql(
+        SET warning = 'error', 123;
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("VariableSetStmt, expected string literal for Warning pattern", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningMultipleRules) {
+    TString query = R"sql(
+        SET warning = 'disable', '*';
+        SET warning = 'error', '7000';
+        SELECT 1 FROM plato.Input FOR UPDATE;
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("SelectStmt: lockingClause is ignored", issue.GetMessage());
+}
+
+Y_UNIT_TEST(WarningNoArguments) {
+    TString query = R"sql(
+        SET warning = '';
+    )sql";
+
+    TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(res.Issues.Size() > 0);
+
+    auto issue = *(res.Issues.begin());
+    UNIT_ASSERT_EQUAL(issue.GetSeverity(), NYql::TSeverityIds::S_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS("VariableSetStmt, expected 2 args for Warning pragma, but got: 1", issue.GetMessage());
+}
+
+} // Y_UNIT_TEST_SUITE(PgWarningPragma)

@@ -1,10 +1,13 @@
 #pragma once
 #include "common.h"
-#include <util/generic/string.h>
-#include <ydb/library/actors/core/log.h>
+
 #include <ydb/core/tx/columnshard/blob.h>
-#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/remove_gc.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
+
+#include <ydb/library/actors/core/log.h>
+
+#include <util/generic/string.h>
 
 namespace NKikimr::NColumnShard {
 class TColumnShard;
@@ -21,6 +24,7 @@ private:
 protected:
     TBlobsCategories BlobsToRemove;
     std::shared_ptr<NBlobOperations::TRemoveGCCounters> Counters;
+
 protected:
     bool AbortedFlag = false;
     bool FinishedFlag = false;
@@ -33,6 +37,7 @@ protected:
 
     virtual void RemoveBlobIdFromDB(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobManagerDb& dbBlobs) = 0;
     virtual bool DoIsEmpty() const = 0;
+
 public:
     void AddSharedBlobToNextIteration(const TUnifiedBlobId& blobId, const TTabletId ownerTabletId) {
         AFL_VERIFY(BlobsToRemove.RemoveBorrowed(ownerTabletId, blobId));
@@ -56,7 +61,8 @@ public:
         return !AbortedFlag && !FinishedFlag;
     }
 
-    IBlobsGCAction(const TString& storageId, TBlobsCategories&& blobsToRemove, const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters)
+    IBlobsGCAction(
+        const TString& storageId, TBlobsCategories&& blobsToRemove, const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters)
         : TBase(storageId)
         , BlobsToRemove(std::move(blobsToRemove))
         , Counters(counters)
@@ -70,4 +76,4 @@ public:
     void OnFinished();
 };
 
-}
+}   // namespace NKikimr::NOlap

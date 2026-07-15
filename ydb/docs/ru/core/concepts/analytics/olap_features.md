@@ -33,7 +33,7 @@
 
 ### Пакетная загрузка (Batch Ingestion)
 
-  - [Коннектор Apache Spark](../../integrations/ingestion/spark.md): чтение и запись данных для ETL/ELT-задач.
+  - [Коннектор Apache Spark](../../integrations/query-engines/spark.md): чтение и запись данных для ETL/ELT-задач.
   - [BulkUpsert API](../../recipes/ydb-sdk/bulk-upsert.md): высокопроизводительная вставка больших объемов данных через SDK.
 
 ### Взаимодействие с внешними системами
@@ -60,7 +60,7 @@
 
 Инструменты для разработчиков приложений.
 
-  - [Обзор {{ydb-short-name}} SDK](../../reference/ydb-sdk/index.md): нативные SDK для Go, Python, Java, C++, Node.js.
+  - [Обзор {{ydb-short-name}} SDK](../../reference/ydb-sdk/index.md): нативные SDK для Go, Python, Java, C++, JavaScript.
   - [JDBC драйвер](../../reference/languages-and-apis/jdbc-driver/index.md): стандартный способ подключения из Java-экосистемы.
   - [{{ydb-short-name}} CLI](../../reference/ydb-cli/index.md): инструмент командной строки для администрирования и выполнения запросов.
 
@@ -84,7 +84,7 @@
 
 ### Управление производительностью
 
-  - [Анализ планов запросов (EXPLAIN)](../../dev/query-plans-optimization.md): как понять план выполнения запроса и найти узкие места.
+  - [Анализ планов запросов (EXPLAIN)](../../dev/query-execution-optimization/query-plans-optimization.md): как понять план выполнения запроса и найти узкие места.
   - [Управление нагрузкой (Resource Pools)](../../dev/resource-consumption-management.md): изоляция ресурсов CPU для разных команд или нагрузок.
   - [Стоимостной оптимизатор](../query_execution/optimizer.md): обзор принципов работы планировщика запросов.
 

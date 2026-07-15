@@ -1,19 +1,19 @@
 import logging
+from collections.abc import Generator, Iterable, Sequence
 from math import log
-from typing import Iterable, Sequence, Optional, Any, Dict, NamedTuple, Generator, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, NamedTuple
 
+from clickhouse_connect.driver import options
 from clickhouse_connect.driver.binding import quote_identifier
-
-from clickhouse_connect.driver.ctypes import data_conv
 from clickhouse_connect.driver.context import BaseQueryContext
-from clickhouse_connect.driver.options import np, pd, pd_time_test
-from clickhouse_connect.driver.exceptions import ProgrammingError, DataError
+from clickhouse_connect.driver.ctypes import data_conv
+from clickhouse_connect.driver.exceptions import DataError, ProgrammingError
 
 if TYPE_CHECKING:
     from clickhouse_connect.datatypes.base import ClickHouseType
 
 logger = logging.getLogger(__name__)
-DEFAULT_BLOCK_BYTES = 1 << 21   # Try to generate blocks between 1MB and 2MB in raw size
+DEFAULT_BLOCK_BYTES = 1 << 21  # Try to generate blocks between 1MB and 2MB in raw size
 
 
 class InsertBlock(NamedTuple):
@@ -21,29 +21,29 @@ class InsertBlock(NamedTuple):
     column_count: int
     row_count: int
     column_names: Iterable[str]
-    column_types: Iterable['ClickHouseType']
+    column_types: Iterable["ClickHouseType"]
     column_data: Iterable[Sequence[Any]]
 
 
-# pylint: disable=too-many-instance-attributes
 class InsertContext(BaseQueryContext):
     """
     Reusable Argument/parameter object for inserts.
     """
 
-    # pylint: disable=too-many-arguments
-    def __init__(self,
-                 table: str,
-                 column_names: Sequence[str],
-                 column_types: Sequence['ClickHouseType'],
-                 data: Any = None,
-                 column_oriented: Optional[bool] = None,
-                 settings: Optional[Dict[str, Any]] = None,
-                 compression: Optional[Union[str, bool]] = None,
-                 query_formats: Optional[Dict[str, str]] = None,
-                 column_formats: Optional[Dict[str, Union[str, Dict[str, str]]]] = None,
-                 block_size: Optional[int] = None,
-                 transport_settings: Optional[Dict[str, str]] = None):
+    def __init__(
+        self,
+        table: str,
+        column_names: Sequence[str],
+        column_types: Sequence["ClickHouseType"],
+        data: Any = None,
+        column_oriented: bool | None = None,
+        settings: dict[str, Any] | None = None,
+        compression: str | bool | None = None,
+        query_formats: dict[str, str] | None = None,
+        column_formats: dict[str, str | dict[str, str]] | None = None,
+        block_size: int | None = None,
+        transport_settings: dict[str, str] | None = None,
+    ):
         super().__init__(settings, query_formats, column_formats, transport_settings=transport_settings)
         self.table = table
         self.column_names = column_names
@@ -73,10 +73,10 @@ class InsertContext(BaseQueryContext):
         self._data = None
         if data is None or len(data) == 0:
             return
-        if pd and isinstance(data, pd.DataFrame):
+        if options.pd and isinstance(data, options.pd.DataFrame):
             data = self._convert_pandas(data)
             self.column_oriented = True
-        if np and isinstance(data, np.ndarray):
+        if options.np and isinstance(data, options.np.ndarray):
             data = self._convert_numpy(data)
         if self.column_oriented:
             self._next_block_data = self._column_block_data
@@ -92,7 +92,7 @@ class InsertContext(BaseQueryContext):
             self.column_count = len(data[0])
         if self.row_count and self.column_count:
             if self.column_count != len(self.column_names):
-                raise ProgrammingError('Insert data column count does not match column names')
+                raise ProgrammingError("Insert data column count does not match column names")
             self._data = data
             self.block_row_count = self._calc_block_size()
 
@@ -118,7 +118,7 @@ class InsertContext(BaseQueryContext):
                 sample = [data[j][i] for j in range(0, self.row_count, sample_freq)]
                 d_size = d_type.data_size(sample)
             row_size += d_size
-        shift_size = (21 - int(log(row_size, 2)))
+        shift_size = 21 - int(log(row_size, 2))
         return 1 if shift_size < 0 else 1 << (21 - int(log(row_size, 2)))
 
     def next_block(self) -> Generator[InsertBlock, None, None]:
@@ -129,9 +129,9 @@ class InsertContext(BaseQueryContext):
                 return
             if self.current_block == 0:
                 cols = f" ({', '.join([quote_identifier(x) for x in self.column_names])})"
-                prefix = f'INSERT INTO {self.table}{cols} FORMAT Native\n'.encode()
+                prefix = f"INSERT INTO {self.table}{cols} FORMAT Native\n".encode()
             else:
-                prefix = bytes()
+                prefix = b""
             self.current_block += 1
             data = self._next_block_data(self.current_row, block_end)
             yield InsertBlock(prefix, self.column_count, row_count, self.column_names, self.column_types, data)
@@ -140,7 +140,7 @@ class InsertContext(BaseQueryContext):
     def _column_block_data(self, block_start, block_end):
         if block_start == 0 and self.row_count <= block_end:
             return self._block_columns  # Optimization if we don't need to break up the block
-        return [col[block_start: block_end] for col in self._block_columns]
+        return [col[block_start:block_end] for col in self._block_columns]
 
     def _row_block_data(self, block_start, block_end):
         return data_conv.pivot(self._block_rows, block_start, block_end)
@@ -150,37 +150,44 @@ class InsertContext(BaseQueryContext):
         for df_col_name, col_name, ch_type in zip(df.columns, self.column_names, self.column_types):
             df_col = df[df_col_name]
             d_type_kind = df_col.dtype.kind
-            if ch_type.python_type == int:
-                if d_type_kind == 'f':
-                    df_col = df_col.round().astype(ch_type.base_type, copy=False)
-                elif d_type_kind in ('i', 'u') and not df_col.hasnans:
+            if ch_type.python_type is int:
+                if d_type_kind == "f":
+                    df_col = df_col.round().astype(ch_type.base_type)
+                elif d_type_kind in ("i", "u") and not df_col.hasnans:
                     data.append(df_col.to_list())
                     continue
-            elif 'datetime' in ch_type.np_type and (pd_time_test(df_col) or 'datetime64[ns' in str(df_col.dtype)):
-                div = ch_type.nano_divisor
-                data.append([None if pd.isnull(x) else x.value // div for x in df_col])
-                self.column_formats[col_name] = 'int'
+            elif "datetime" in ch_type.np_type and (options.pd_time_test(df_col) or "datetime64" in str(df_col.dtype)):
+                np_col = df_col.to_numpy(dtype=ch_type.np_type)
+                int_col = np_col.astype("int64")
+                if df_col.hasnans:
+                    nat_mask = options.pd.isnull(df_col).to_numpy()
+                    int_list = int_col.tolist()
+                    data.append([None if nat_mask[i] else int_list[i] for i in range(len(int_list))])
+                else:
+                    data.append(int_col.tolist())
+                self.column_formats[col_name] = "int"
                 continue
             if ch_type.nullable:
-                if d_type_kind == 'O':
-                    #  This is ugly, but the multiple replaces seem required as a result of this bug:
-                    #  https://github.com/pandas-dev/pandas/issues/29024
-                    df_col = df_col.replace({pd.NaT: None}).replace({np.nan: None})
-                elif 'Float' in ch_type.base_type:
-                    data.append([None if pd.isnull(x) else x for x in df_col])
+                if d_type_kind == "O" or ch_type.np_type == "O":
+                    data.append(df_col.to_numpy(dtype=object, na_value=None))
                     continue
-                else:
-                    df_col = df_col.replace({np.nan: None})
-            data.append(df_col.to_numpy(copy=False))
+                if "Float" in ch_type.base_type:
+                    data.append([None if options.pd.isnull(x) else x for x in df_col])
+                    continue
+                df_col = df_col.replace({options.np.nan: None})
+            if ch_type.np_type == "O":
+                data.append(df_col.to_numpy(dtype=object, na_value=None))
+            else:
+                data.append(df_col.to_numpy(copy=False))
         return data
 
     def _convert_numpy(self, np_array):
         if np_array.dtype.names is None:
-            if 'date' in str(np_array.dtype):
+            if "date" in str(np_array.dtype):
                 for col_name, col_type in zip(self.column_names, self.column_types):
-                    if 'date' in col_type.np_type:
-                        self.column_formats[col_name] = 'int'
-                return np_array.astype('int').tolist()
+                    if "date" in col_type.np_type:
+                        self.column_formats[col_name] = "int"
+                return np_array.astype("int").tolist()
             for col_type in self.column_types:
                 if col_type.byte_size == 0 or col_type.byte_size > np_array.dtype.itemsize:
                     return np_array.tolist()
@@ -193,8 +200,8 @@ class InsertContext(BaseQueryContext):
             data = [np_array[col_name] for col_name in np_array.dtype.names]
         for ix, (col_name, col_type) in enumerate(zip(self.column_names, self.column_types)):
             d_type = data[ix].dtype
-            if 'date' in str(d_type) and 'date' in col_type.np_type:
-                self.column_formats[col_name] = 'int'
+            if "date" in str(d_type) and "date" in col_type.np_type:
+                self.column_formats[col_name] = "int"
                 data[ix] = data[ix].astype(int).tolist()
             elif col_type.byte_size == 0 or col_type.byte_size > d_type.itemsize:
                 data[ix] = data[ix].tolist()

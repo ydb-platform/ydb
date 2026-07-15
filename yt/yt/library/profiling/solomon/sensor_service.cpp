@@ -20,6 +20,7 @@ using namespace NConcurrency;
 using namespace NYTree;
 
 using NYT::ToProto;
+using NYT::FromProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -140,13 +141,14 @@ public:
         , Exporter_(std::move(exporter))
         , RootSensorServiceImpl_(New<TSensorServiceImpl>(/*name*/ std::string(), Registry_.Get(), &Exporter_->Lock_))
         , Root_(GetEphemeralNodeFactory(/*shouldHideAttributes*/ true)->CreateMap())
+        , RootService_(Root_->Via(GetInvoker()))
         , SensorTreeUpdateDuration_(Registry_->GetSelfProfiler().Timer("/sensor_service_tree_update_duration"))
     { }
 
-    void Initialize()
+    void InitializeRefCounted()
     {
         UpdateSensorTreeExecutor_ = New<TPeriodicExecutor>(
-            Exporter_->ControlQueue_->GetInvoker(),
+            GetInvoker(),
             BIND(&TSensorService::UpdateSensorTree, MakeWeak(this)),
             Config_->UpdateSensorServiceTreePeriod);
         UpdateSensorTreeExecutor_->Start();
@@ -158,11 +160,17 @@ private:
     const TSolomonExporterPtr Exporter_;
     const TSensorServiceImplPtr RootSensorServiceImpl_;
     const IMapNodePtr Root_;
+    const IYPathServicePtr RootService_;
 
     THashMap<std::string, TSensorServiceImplPtr> NameToSensorServiceImpl_;
 
     TEventTimer SensorTreeUpdateDuration_;
     TPeriodicExecutorPtr UpdateSensorTreeExecutor_;
+
+    IInvokerPtr GetInvoker()
+    {
+        return Exporter_->ControlQueue_->GetInvoker();
+    }
 
     void UpdateSensorTree()
     {
@@ -184,8 +192,9 @@ private:
             EmplaceOrCrash(NameToSensorServiceImpl_, name, sensorServiceImpl);
 
             auto node = CreateVirtualNode(std::move(sensorServiceImpl));
+            auto path = TYPath("/" + name);
+
             try {
-                auto path = TYPath("/" + name);
                 ForceYPath(Root_, path);
                 SetNodeByYPath(Root_, path, node);
             } catch (const std::exception& ex) {
@@ -225,7 +234,7 @@ private:
         const TYPath& path,
         const IYPathServiceContextPtr& /*context*/) override
     {
-        return TResolveResultThere{Root_, "/" + path};
+        return TResolveResultThere{RootService_, "/" + path};
     }
 
     bool DoInvoke(const IYPathServiceContextPtr& context) override
@@ -239,7 +248,7 @@ private:
         auto guard = WaitFor(TAsyncLockReaderGuard::Acquire(&Exporter_->Lock_))
             .ValueOrThrow();
 
-        auto attributeKeys = NYT::FromProto<THashSet<std::string>>(request->attributes().keys());
+        auto attributeKeys = FromProto<THashSet<std::string>>(request->attributes().keys());
         context->SetRequestInfo("AttributeKeys: %v", attributeKeys);
 
         response->set_value(BuildYsonStringFluently()
@@ -279,12 +288,10 @@ IYPathServicePtr CreateSensorService(
     TSolomonRegistryPtr registry,
     TSolomonExporterPtr exporter)
 {
-    auto service = New<TSensorService>(
+    return New<TSensorService>(
         std::move(config),
         std::move(registry),
         std::move(exporter));
-    service->Initialize();
-    return service;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

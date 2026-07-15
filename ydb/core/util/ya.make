@@ -7,6 +7,8 @@ SRCS(
     cache.cpp
     cache.h
     circular_queue.h
+    circular_sparse_queue.h
+    circular_sparse_queue.cpp
     concurrent_rw_hash.cpp
     concurrent_rw_hash.h
     console.cpp
@@ -48,6 +50,7 @@ SRCS(
     random.cpp
     simple_cache.h
     source_location.cpp
+    spsc_circular_queue.h
     stlog.cpp
     stlog.h
     text.cpp
@@ -82,23 +85,6 @@ PEERDIR(
     library/cpp/deprecated/atomic
     ydb/library/yverify_stream
 )
-
-IF (OS_WINDOWS)
-    CFLAGS(
-        -DKIKIMR_DISABLE_S3_OPS
-    )
-    SRCS(
-        aws_windows_stub.cpp
-    )
-ELSE()
-    PEERDIR(
-        contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
-        contrib/libs/curl
-    )
-    SRCS(
-        aws.cpp
-    )
-ENDIF()
 
 END()
 

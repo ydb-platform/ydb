@@ -35,7 +35,7 @@ namespace NKikimr::NSQS {
     }
 
     void TMonitoringActor::RequestMetrics(TDuration runAfter, const TActorContext& ctx) {
-        RunYqlQuery(RemovedQueuesQuery, std::nullopt, true, runAfter, Cfg().GetRoot(), ctx);
+        RunYqlQuery(RemovedQueuesQuery, std::nullopt, true, runAfter, ctx);
     }
 
     void TMonitoringActor::HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {

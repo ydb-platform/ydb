@@ -1,18 +1,24 @@
 #include <ydb/core/http_proxy/ut/datastreams_fixture/datastreams_fixture.h>
-
+#include <ydb/core/http_proxy/ut/datastreams_fixture/sqs_xml_ut_helpers.h>
 #include <ydb/core/http_proxy/http_req.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/ymq/actor/auth_factory.h>
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
-
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json_value.h>
-#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/testing/unittest/registar.h>
 
+#include <mutex>
+#include <optional>
 #include <thread>
 
 using namespace NKikimr::NHttpProxy;
@@ -22,17 +28,515 @@ using namespace NActors;
 
 Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
+    NYdb::TDriver CreateDriver(ui16 kikimrGrpcPort) {
+        TString endpoint = TStringBuilder() << "localhost:" << kikimrGrpcPort;
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(endpoint)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin")
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+        return NYdb::TDriver(driverConfig);
+    }
+
+    void PrepareConfigs(NYdb::TKikimrWithGrpcAndRootSchema* kikimrServer) {
+        auto& pqConfig = kikimrServer->GetRuntime()->GetAppData().PQConfig;
+        pqConfig.ClearValidRetentionLimits();
+    }
+
+    enum class ESqsProtocol {
+        Json,
+        Xml,
+    };
+
+    enum class ETestCredentials {
+        UserAccountIam,
+        ServiceAccountIam,
+        StaticCredentials,
+    };
+
+    TStringBuf ToString(ESqsProtocol protocol) {
+        switch (protocol) {
+            case ESqsProtocol::Json:
+                return "Json";
+            case ESqsProtocol::Xml:
+                return "Xml";
+        }
+    }
+
+    TStringBuf ToString(ETestCredentials credentials) {
+        switch (credentials) {
+            case ETestCredentials::UserAccountIam:
+                return "UserAccountIam";
+            case ETestCredentials::ServiceAccountIam:
+                return "ServiceAccountIam";
+            case ETestCredentials::StaticCredentials:
+                return "StaticCredentials";
+        }
+    }
+
+    TString AuthHeader(THttpProxyTestMock& fixture, ETestCredentials credentials) {
+        switch (credentials) {
+            case ETestCredentials::UserAccountIam:
+                return "X-YaCloud-SubjectToken: user@builtin";
+            case ETestCredentials::ServiceAccountIam:
+                return "X-YaCloud-SubjectToken: proxy_sa@builtin";
+            case ETestCredentials::StaticCredentials:
+                return fixture.FormAuthorizationStr("ru-central1");
+        }
+    }
+
+    NJson::TJsonMap AsJsonMap(const NJson::TJsonValue& value) {
+        NJson::TJsonMap map;
+        map.GetMapSafe() = value.GetMapSafe();
+        return map;
+    }
+
+    THttpResult SendSqsRequest(
+        THttpProxyTestMock& fixture,
+        ESqsProtocol protocol,
+        ETestCredentials credentials,
+        bool withFolderId,
+        TStringBuf action,
+        const NJson::TJsonValue& request
+    ) {
+        const TString handler = withFolderId ? "/Root?folderId=folder4" : "/Root";
+        const TString auth = AuthHeader(fixture, credentials);
+
+        switch (protocol) {
+            case ESqsProtocol::Json:
+                return fixture.SendHttpRequest(handler, TStringBuilder() << "AmazonSQS." << action, request, auth);
+            case ESqsProtocol::Xml: {
+                const TString body = EncodeSqsXmlRequest(action, AsJsonMap(request));
+                return fixture.SendHttpRequestXmlRaw(handler, {body.data(), body.size()}, auth);
+            }
+        }
+    }
+
+    NJson::TJsonMap ParseSqsResponse(ESqsProtocol protocol, const TString& body) {
+        switch (protocol) {
+            case ESqsProtocol::Json: {
+                NJson::TJsonMap json;
+                UNIT_ASSERT(NJson::ReadJsonTree(body, &json));
+                return json;
+            }
+            case ESqsProtocol::Xml:
+                return ParseSqsXmlResponse(body);
+        }
+    }
+
+    TString MatrixCaseLabel(ESqsProtocol protocol, ETestCredentials credentials, bool withFolderId) {
+        return TStringBuilder() << "protocol=" << ToString(protocol)
+            << " credentials=" << ToString(credentials)
+            << " withFolderId=" << withFolderId;
+    }
+
+    void AssertAccessDenied(const THttpResult& res, const TString& label) {
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 403, label << "\n" << res.Body);
+    }
+
+    void AssertQueueDoesNotExist(ESqsProtocol protocol, const THttpResult& res, const TString& label) {
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 400, label << "\n" << res.Body);
+        const auto json = ParseSqsResponse(protocol, res.Body);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+    }
+
+    class TCapturingSqsAuthFactory final : public NKikimr::NSQS::IAuthFactory {
+    public:
+        explicit TCapturingSqsAuthFactory(NKikimr::NSQS::IAuthFactory& delegate)
+            : Delegate_(delegate)
+        {}
+
+        void Initialize(
+            NActors::TActorSystemSetup::TLocalServices& services,
+            const TAppData& appData,
+            const TSqsConfig& config) override
+        {
+            Delegate_.Initialize(services, appData, config);
+        }
+
+        void RegisterAuthActor(NActors::TActorSystem& system, NKikimr::NSQS::TAuthActorData&& data) override {
+            {
+                std::lock_guard<std::mutex> guard(Mutex_);
+                CapturedSourceAddress_ = TString(data.SourceAddress);
+            }
+
+            Delegate_.RegisterAuthActor(system, std::move(data));
+        }
+
+        TCredentialsFactoryPtr CreateCredentialsProviderFactory(const TSqsConfig& config) override {
+            return Delegate_.CreateCredentialsProviderFactory(config);
+        }
+
+        TString GetCapturedSourceAddress() const {
+            std::lock_guard<std::mutex> guard(Mutex_);
+            return CapturedSourceAddress_;
+        }
+
+    private:
+        NKikimr::NSQS::IAuthFactory& Delegate_;
+        mutable std::mutex Mutex_;
+        TString CapturedSourceAddress_;
+    };
+
+    TString CreateQueueForAuthMatrix(THttpProxyTestMock& fixture, ESqsProtocol protocol, bool withFolderId) {
+        auto createQueueReq = THttpProxyTestMock::CreateSqsCreateQueueRequest();
+        createQueueReq["QueueName"] = TStringBuilder() << "AuthMatrixQueue" << (protocol == ESqsProtocol::Json ? "Json" : "Xml") << (withFolderId ? "WithFolder" : "WithoutFolder");
+
+        auto createQueueRes = SendSqsRequest(
+            fixture,
+            protocol,
+            ETestCredentials::ServiceAccountIam,
+            withFolderId,
+            "CreateQueue",
+            std::move(createQueueReq));
+        UNIT_ASSERT_VALUES_EQUAL_C(createQueueRes.HttpCode, 200, createQueueRes.Body);
+
+        const auto json = ParseSqsResponse(protocol, createQueueRes.Body);
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT(!queueUrl.empty());
+        return queueUrl;
+    }
+
+    TString QueueResourceDirFromQueueUrl(const TString& queueUrl, const TString& queueName, const TString& sqsDatabaseRoot) {
+        size_t pathBegin = TString::npos;
+        const size_t scheme = queueUrl.find("://");
+        if (scheme != TString::npos) {
+            pathBegin = queueUrl.find('/', scheme + 3);
+        }
+        if (pathBegin == TString::npos) {
+            pathBegin = queueUrl.find('/');
+        }
+        UNIT_ASSERT_C(pathBegin != TString::npos, queueUrl);
+
+        TString path = TString(queueUrl.substr(pathBegin));
+        const TString tail = TStringBuilder() << '/' << queueName;
+        UNIT_ASSERT_C(path.EndsWith(tail), queueUrl);
+        path.resize(path.size() - tail.size());
+
+        TString queueDir;
+        if (path.StartsWith("/Root/")) {
+            queueDir = std::move(path);
+        } else {
+            TString root = sqsDatabaseRoot;
+            while (root.EndsWith('/')) {
+                root.resize(root.size() - 1);
+            }
+            queueDir = root + path;
+        }
+        return queueDir;
+    }
+
+    std::optional<TString> TryMigrationTopicPathFromScheme(
+        NYdb::NScheme::TSchemeClient& schemeClient,
+        const TString& queueResourceDir
+    ) {
+        auto ld = schemeClient.ListDirectory(queueResourceDir).GetValueSync();
+        if (!ld.IsSuccess()) {
+            return {};
+        }
+        for (const auto& ch : ld.GetChildren()) {
+            TString name(ch.Name);
+            if (name.size() >= 2 && name[0] == 'v') {
+                return TStringBuilder() << queueResourceDir << '/' << name << "/streamImpl";
+            }
+        }
+        return {};
+    }
+
+    void WaitBothStdMigrationTopicsPresent(
+        NYdb::NTopic::TTopicClient& topicClient,
+        NYdb::NScheme::TSchemeClient& schemeClient,
+        const TString& queueResourceDirA,
+        const TString& queueResourceDirB,
+        TDuration timeout
+    ) {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline) {
+            const auto pathA = TryMigrationTopicPathFromScheme(schemeClient, queueResourceDirA);
+            const auto pathB = TryMigrationTopicPathFromScheme(schemeClient, queueResourceDirB);
+            if (!pathA || !pathB) {
+                Sleep(TDuration::MilliSeconds(250));
+                continue;
+            }
+            const auto da = topicClient.DescribeTopic(*pathA).GetValueSync();
+            const auto db = topicClient.DescribeTopic(*pathB).GetValueSync();
+            if (da.IsSuccess() && db.IsSuccess()) {
+                UNIT_ASSERT_VALUES_EQUAL(da.GetTopicDescription().GetPartitions().size(), 1u);
+                UNIT_ASSERT_VALUES_EQUAL(db.GetTopicDescription().GetPartitions().size(), 1u);
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(250));
+        }
+        const auto pathA = TryMigrationTopicPathFromScheme(schemeClient, queueResourceDirA);
+        const auto pathB = TryMigrationTopicPathFromScheme(schemeClient, queueResourceDirB);
+        UNIT_ASSERT_C(pathA.has_value(), "no v* version directory under queue path A");
+        UNIT_ASSERT_C(pathB.has_value(), "no v* version directory under queue path B");
+        const auto da = topicClient.DescribeTopic(*pathA).GetValueSync();
+        const auto db = topicClient.DescribeTopic(*pathB).GetValueSync();
+        UNIT_ASSERT_C(da.IsSuccess(), da.GetIssues().ToString());
+        UNIT_ASSERT_C(db.IsSuccess(), db.GetIssues().ToString());
+    }
+
+    NYdb::NTopic::TTopicDescription DescribeMigrationTopicByQueueUrl(
+        THttpProxyTestMock& fixture,
+        const TString& queueUrl,
+        const TString& queueName,
+        TDuration timeout = TDuration::Seconds(30)
+    ) {
+        NYdb::TDriver driver(CreateDriver(fixture.KikimrGrpcPort));
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        NYdb::NScheme::TSchemeClient schemeClient(driver);
+
+        const TString& sqsRoot = fixture.KikimrServer->GetRuntime()->GetAppData().SqsConfig.GetRoot();
+        const TString queueResourceDir = QueueResourceDirFromQueueUrl(queueUrl, queueName, sqsRoot);
+        const TInstant deadline = TInstant::Now() + timeout;
+
+        while (TInstant::Now() < deadline) {
+            const auto topicPath = TryMigrationTopicPathFromScheme(schemeClient, queueResourceDir);
+            if (topicPath) {
+                auto describe = topicClient.DescribeTopic(*topicPath).GetValueSync();
+                if (describe.IsSuccess()) {
+                    auto description = describe.GetTopicDescription();
+                    driver.Stop(true);
+                    return description;
+                }
+            }
+            Sleep(TDuration::MilliSeconds(250));
+        }
+
+        const auto topicPath = TryMigrationTopicPathFromScheme(schemeClient, queueResourceDir);
+        UNIT_ASSERT_C(topicPath.has_value(), TStringBuilder() << "no migration topic for queue " << queueName);
+
+        auto describe = topicClient.DescribeTopic(*topicPath).GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+        auto description = describe.GetTopicDescription();
+        driver.Stop(true);
+        return description;
+    }
+
+    void EnableCompatibility(auto& kikimrServer,auto& driver) {
+        NYdb::NQuery::TQueryClient queryClient(driver);
+
+        auto execute = queryClient.ExecuteQuery(Sprintf(R"__(
+            INSERT INTO `%s/.Settings` (Account, Name, Value) VALUES ('cloud4', 'MigrationCompatibility', 'true')
+        )__", kikimrServer->GetRuntime()->GetAppData().SqsConfig.GetRoot().c_str()), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(execute.IsSuccess(), execute.GetIssues().ToString());
+
+        // Wait for user settings to be updated.
+        Sleep(TDuration::Seconds(1));
+    }
+
     Y_UNIT_TEST_F(TestCreateQueue, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        CreateQueue({{"QueueName", "ExampleQueueName"}});
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+
+        {
+            NYdb::NScheme::TSchemeClient schemeClient(driver);
+            auto describe = schemeClient.ListDirectory("/Root/SQS/cloud4/000000000000000101v0").GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+            for (auto& c : describe.GetChildren()) {
+                Cerr << (TStringBuilder() << ">>>>> /Root/SQS/cloud4/000000000000000101v0/" << c.Name << Endl);
+            }
+        }
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl").GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueSetsDefaultTopicMessageRateLimit, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        const TString queueName = "CreateQueueDefaultRateLimit";
+        auto json = CreateQueue({{"QueueName", queueName}});
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT(!queueUrl.empty());
+
+        const auto description = DescribeMigrationTopicByQueueUrl(*this, queueUrl, queueName);
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteSpeedMessagesPerSecond(),
+            NKikimr::NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteBurstMessages(),
+            NKikimr::NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+        );
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueSetsContentBasedDeduplicationMessageRateLimit, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        const TString queueName = "CreateQueueContentBasedDeduplicationRateLimit.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
+        });
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT(!queueUrl.empty());
+
+        const auto description = DescribeMigrationTopicByQueueUrl(*this, queueUrl, queueName);
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteSpeedMessagesPerSecond(),
+            NKikimr::NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteBurstMessages(),
+            NKikimr::NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST
+        );
+    }
+
+    Y_UNIT_TEST_F(TestEnableContentBasedDeduplicationMessageRateLimit, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        const TString queueName = "EnableContentBasedDeduplicationRateLimit.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "false"}}}
+        });
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT(!queueUrl.empty());
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"ContentBasedDeduplication", "true"}}}
+        });
+
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["ContentBasedDeduplication"] == "true";
+        });
+
+        const auto description = DescribeMigrationTopicByQueueUrl(*this, queueUrl, queueName);
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteSpeedMessagesPerSecond(),
+            NKikimr::NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteBurstMessages(),
+            NKikimr::NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST
+        );
+    }
+
+    Y_UNIT_TEST_F(TestDisableContentBasedDeduplicationMessageRateLimit, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        const TString queueName = "DisableContentBasedDeduplicationRateLimit.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
+        });
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT(!queueUrl.empty());
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"ContentBasedDeduplication", "false"}}}
+        });
+
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["ContentBasedDeduplication"] == "false";
+        });
+
+        const auto description = DescribeMigrationTopicByQueueUrl(*this, queueUrl, queueName);
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteSpeedMessagesPerSecond(),
+            NKikimr::NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetPartitionWriteBurstMessages(),
+            NKikimr::NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+        );
+    }
+
+    Y_UNIT_TEST_F(TestDeferredTopicCreationForPreexistingQueues, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
+        const TString nameA = "DeferredMigrationQueueA";
+        const TString nameB = "DeferredMigrationQueueB";
+        auto jsonA = CreateQueue({{"QueueName", nameA}});
+        auto jsonB = CreateQueue({{"QueueName", nameB}});
+        const TString urlA = GetByPath<TString>(jsonA, "QueueUrl");
+        const TString urlB = GetByPath<TString>(jsonB, "QueueUrl");
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        NYdb::NScheme::TSchemeClient schemeClient(driver);
+        const TString& sqsRoot = KikimrServer->GetRuntime()->GetAppData().SqsConfig.GetRoot();
+        const TString resourceDirA = QueueResourceDirFromQueueUrl(urlA, nameA, sqsRoot);
+        const TString resourceDirB = QueueResourceDirFromQueueUrl(urlB, nameB, sqsRoot);
+
+        Sleep(TDuration::Seconds(3));
+
+        const auto topicPathBeforeA = TryMigrationTopicPathFromScheme(schemeClient, resourceDirA);
+        const auto topicPathBeforeB = TryMigrationTopicPathFromScheme(schemeClient, resourceDirB);
+        UNIT_ASSERT(topicPathBeforeA.has_value() && topicPathBeforeB.has_value());
+        UNIT_ASSERT(!topicClient.DescribeTopic(*topicPathBeforeA).GetValueSync().IsSuccess());
+        UNIT_ASSERT(!topicClient.DescribeTopic(*topicPathBeforeB).GetValueSync().IsSuccess());
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        WaitBothStdMigrationTopicsPresent(topicClient, schemeClient, resourceDirA, resourceDirB, TDuration::Seconds(150));
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueue_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         CreateQueue({{"QueueName", "ExampleQueueName"}});
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndSameParams, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        auto req = NJson::TJsonMap{{"QueueName", "ExampleQueueName"}};
+        CreateQueue(req);
+        CreateQueue(req);
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndSameParams_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto req = NJson::TJsonMap{{"QueueName", "ExampleQueueName"}};
         CreateQueue(req);
         CreateQueue(req);
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndDifferentParams, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        auto req = NJson::TJsonMap{
+            {"QueueName", "ExampleQueueName"},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
+        };
+        CreateQueue(req);
+
+        req["Attributes"]["MessageRetentionPeriod"] = "61";
+        auto json = CreateQueue(req, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "ValidationError");
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndDifferentParams_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto req = NJson::TJsonMap{
             {"QueueName", "ExampleQueueName"},
             {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
@@ -46,6 +550,21 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithBadQueueName, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        auto json = CreateQueue({
+            {"QueueName", "B@d_queue_name"},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
+        }, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidParameterValue");
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithBadQueueName_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto json = CreateQueue({
             {"QueueName", "B@d_queue_name"},
             {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
@@ -55,18 +574,24 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithEmptyName, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto json = CreateQueue({}, 400);
         TString resultType = GetByPath<TString>(json, "__type");
         UNIT_ASSERT_VALUES_EQUAL(resultType, "MissingParameter");
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithWrongBody, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto json = CreateQueue({{"wrongField", "foobar"}}, 400);
         TString resultType = GetByPath<TString>(json, "__type");
         UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidArgumentException");
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithWrongAttribute, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto json = CreateQueue({
             {"QueueName", "ExampleQueueName"},
             {"Attributes", NJson::TJsonMap{
@@ -80,6 +605,8 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithAllAttributes, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto json1 = CreateQueue({{"QueueName", "queue-1.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}});
         auto attributes1 = GetQueueAttributes({
             {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
@@ -113,9 +640,76 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         });
         TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
         UNIT_ASSERT(resultQueueUrl.EndsWith(queueName));
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000301v0/v4/streamImpl").GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+        auto& description = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+        auto& consumer = description.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetConsumerName(), "ydb-sqs-consumer");
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetConsumerType(), NYdb::NTopic::EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDefaultProcessingTimeout(), TDuration::Seconds(3600));
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetDeadLetterQueue(), "sqs://cloud4/folder4/queue-1.fifo");
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 3);
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithAllAttributes_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
+        auto json1 = CreateQueue({{"QueueName", "queue-1.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}});
+        auto attributes1 = GetQueueAttributes({
+            {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
+            {"AttributeNames", NJson::TJsonArray{"QueueArn"}}
+        });
+        auto queueArn1 = GetByPath<TString>(attributes1, "Attributes.QueueArn");
+
+        auto queueName = "ExampleQueueName.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"DelaySeconds", "60"},
+                {"MaximumMessageSize", "1024"},
+                {"MessageRetentionPeriod", "60"},
+                {"ReceiveMessageWaitTimeSeconds", "10"},
+                {"VisibilityTimeout", "3600"},
+
+                {"RedrivePolicy", TStringBuilder() << "{\"deadLetterTargetArn\":\"" << queueArn1 << "\", \"maxReceiveCount\": 3}"},
+
+                // 2024-10-07: RedriveAllowPolicy not supported yet.
+                // {"RedriveAllowPolicy", TStringBuilder() << "{\"redrivePermission\":\"byQueue\", \"sourceQueueArns\": [\"" << queueArn2 << "\", \"" << queueArn3 << "\"]}"},
+
+                // FIFO queue
+                {"FifoQueue", "true"},
+                {"ContentBasedDeduplication", "true"}
+
+                // High throughput for FIFO queues not supported yet.
+                // {"DeduplicationScope", "messageGroup"},
+                // {"FifoThroughputLimit", "perMessageGroupId"}
+            }}
+        });
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT(resultQueueUrl.EndsWith(queueName));
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000301v0/v4/streamImpl").GetValueSync();
+        UNIT_ASSERT_C(!describe.IsSuccess(), "Topic should not be created because feature flag is disabled");
+        driver.Stop(true);
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithTags, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto tags = NJson::TJsonMap{
             {"key1", "value1"},
             {"key2", "value2"},
@@ -165,6 +759,36 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestGetQueueUrl, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        auto json = GetQueueUrl({}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "MissingParameter");
+
+        json = CreateQueue({{"QueueName", ""}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "MissingParameter");
+
+        auto queueName = "ExampleQueueName";
+        json = CreateQueue({{"QueueName", queueName}});
+
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+        json = GetQueueUrl({{"QueueName", queueName}});
+        UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetByPath<TString>(json, "QueueUrl"));
+
+        // We ignore QueueOwnerAWSAccountId parameter.
+        json = GetQueueUrl({{"QueueName", queueName}, {"QueueOwnerAWSAccountId", "some-account-id"}});
+        UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetByPath<TString>(json, "QueueUrl"));
+
+        json = GetQueueUrl({{"QueueName", queueName}, {"WrongParameter", "some-value"}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "InvalidArgumentException");
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueUrl_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto json = GetQueueUrl({}, 400);
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "MissingParameter");
 
@@ -187,6 +811,22 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestGetQueueUrlOfNotExistingQueue, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        auto json = GetQueueUrl({{"QueueName", "not-existing-queue"}}, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueUrlOfNotExistingQueue_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto json = GetQueueUrl({{"QueueName", "not-existing-queue"}}, 400);
         TString resultType = GetByPath<TString>(json, "__type");
         UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
@@ -195,6 +835,10 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestGetQueueUrlWithIAM, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
         auto req = CreateSqsGetQueueUrlRequest();
         req["QueueName"] = "not-existing-queue";
         auto res = SendHttpRequest("/Root?folderId=XXX", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: Bearer proxy_sa@builtin");
@@ -208,7 +852,318 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
     }
 
+    Y_UNIT_TEST_F(TestGetQueueUrlWithIAMWithoutFolderId, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        auto req = CreateSqsGetQueueUrlRequest();
+        req["QueueName"] = "not-existing-queue";
+        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueUrlWithIAM_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
+        auto req = CreateSqsGetQueueUrlRequest();
+        req["QueueName"] = "not-existing-queue";
+        auto res = SendHttpRequest("/Root?folderId=XXX", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: Bearer proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueUrlWithIAMWithoutFolderId_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
+        auto req = CreateSqsGetQueueUrlRequest();
+        req["QueueName"] = "not-existing-queue";
+        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageWithIAMWithoutFolderId, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto createQueueReq = CreateSqsCreateQueueRequest();
+        createQueueReq["QueueName"] = "ExampleQueueName";
+        auto createQueueRes = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), "X-YaCloud-SubjectToken: proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(createQueueRes.HttpCode, 200);
+
+        NJson::TJsonValue createQueueJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(createQueueRes.Body, &createQueueJson));
+        const TString queueUrl = GetByPath<TString>(createQueueJson, "QueueUrl");
+        UNIT_ASSERT(!queueUrl.empty());
+
+        NJson::TJsonValue sendMessageReq;
+        sendMessageReq["QueueUrl"] = queueUrl;
+        sendMessageReq["MessageBody"] = "MessageBody-0";
+        auto sendMessageRes = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), "X-YaCloud-SubjectToken: proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(sendMessageRes.HttpCode, 200);
+
+        NJson::TJsonValue sendMessageJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(sendMessageRes.Body, &sendMessageJson));
+        UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MessageId").empty());
+    }
+
+    Y_UNIT_TEST_F(TestHttpProxySetsAuthSourceAddressFromForwardedFor, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        auto& appData = KikimrServer->GetRuntime()->GetAppData();
+        appData.FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        appData.FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        auto* previousAuthFactory = appData.SqsAuthFactory;
+
+        TCapturingSqsAuthFactory authFactory(*previousAuthFactory);
+        appData.SqsAuthFactory = &authFactory;
+        struct TRestoreAuthFactory {
+            TAppData& AppData;
+            NKikimr::NSQS::IAuthFactory* PreviousAuthFactory;
+
+            ~TRestoreAuthFactory() {
+                AppData.SqsAuthFactory = PreviousAuthFactory;
+            }
+        } restoreAuthFactory{appData, previousAuthFactory};
+
+        const TString sourceAddress = "203.0.113.42";
+        auto createQueueReq = CreateSqsCreateQueueRequest();
+        createQueueReq["QueueName"] = "HttpProxySourceAddressQueue";
+        const TString authorization = TStringBuilder()
+            << "X-YaCloud-SubjectToken: proxy_sa@builtin"
+            << "\r\nX-Forwarded-For:" << sourceAddress;
+
+        auto createQueueRes = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), authorization);
+        UNIT_ASSERT_VALUES_EQUAL_C(createQueueRes.HttpCode, 200, createQueueRes.Body);
+
+        UNIT_ASSERT_VALUES_EQUAL(authFactory.GetCapturedSourceAddress(), sourceAddress);
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageWithIAMWithoutFolderId_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+
+        auto createQueueReq = CreateSqsCreateQueueRequest();
+        createQueueReq["QueueName"] = "ExampleQueueName";
+        auto createQueueRes = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), "X-YaCloud-SubjectToken: proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(createQueueRes.HttpCode, 200);
+
+        NJson::TJsonValue createQueueJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(createQueueRes.Body, &createQueueJson));
+        const TString queueUrl = GetByPath<TString>(createQueueJson, "QueueUrl");
+        UNIT_ASSERT(!queueUrl.empty());
+
+        NJson::TJsonValue sendMessageReq;
+        sendMessageReq["QueueUrl"] = queueUrl;
+        sendMessageReq["MessageBody"] = "MessageBody-0";
+        auto sendMessageRes = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), "X-YaCloud-SubjectToken: proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(sendMessageRes.HttpCode, 200);
+
+        NJson::TJsonValue sendMessageJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(sendMessageRes.Body, &sendMessageJson));
+        UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MessageId").empty());
+    }
+
+    Y_UNIT_TEST_F(TestAuthMatrixForGetQueueUrlJsonSqs, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        for (const auto credentials : {ETestCredentials::UserAccountIam, ETestCredentials::ServiceAccountIam, ETestCredentials::StaticCredentials}) {
+            for (const bool withFolderId : {false, true}) {
+                auto req = CreateSqsGetQueueUrlRequest();
+                req["QueueName"] = "not-existing-queue";
+                auto res = SendSqsRequest(*this, ESqsProtocol::Json, credentials, withFolderId, "GetQueueUrl", std::move(req));
+                const TString label = MatrixCaseLabel(ESqsProtocol::Json, credentials, withFolderId);
+
+                if (credentials == ETestCredentials::UserAccountIam && !withFolderId) {
+                    AssertAccessDenied(res, label);
+                } else {
+                    AssertQueueDoesNotExist(ESqsProtocol::Json, res, label);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(TestAuthMatrixForGetQueueUrlXmlSqs, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        for (const auto credentials : {ETestCredentials::UserAccountIam, ETestCredentials::ServiceAccountIam, ETestCredentials::StaticCredentials}) {
+            for (const bool withFolderId : {false, true}) {
+                auto req = CreateSqsGetQueueUrlRequest();
+                req["QueueName"] = "not-existing-queue";
+                auto res = SendSqsRequest(*this, ESqsProtocol::Xml, credentials, withFolderId, "GetQueueUrl", std::move(req));
+                const TString label = MatrixCaseLabel(ESqsProtocol::Xml, credentials, withFolderId);
+
+                if (credentials == ETestCredentials::UserAccountIam && !withFolderId) {
+                    AssertAccessDenied(res, label);
+                } else {
+                    AssertQueueDoesNotExist(ESqsProtocol::Xml, res, label);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(TestAuthMatrixForSendMessageJsonSqs, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        for (const bool withFolderId : {false, true}) {
+            const TString queueUrl = CreateQueueForAuthMatrix(*this, ESqsProtocol::Json, withFolderId);
+
+            for (const auto credentials : {ETestCredentials::UserAccountIam, ETestCredentials::ServiceAccountIam, ETestCredentials::StaticCredentials}) {
+                NJson::TJsonValue req;
+                req["QueueUrl"] = queueUrl;
+                req["MessageBody"] = "MessageBody-0";
+                auto res = SendSqsRequest(*this, ESqsProtocol::Json, credentials, withFolderId, "SendMessage", std::move(req));
+                const TString label = MatrixCaseLabel(ESqsProtocol::Json, credentials, withFolderId);
+
+                if (credentials == ETestCredentials::UserAccountIam && !withFolderId) {
+                    AssertAccessDenied(res, label);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, label << "\n" << res.Body);
+                    const auto json = ParseSqsResponse(ESqsProtocol::Json, res.Body);
+                    UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+                    UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(TestAuthMatrixForSendMessageXmlSqs, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        for (const bool withFolderId : {false, true}) {
+            const TString queueUrl = CreateQueueForAuthMatrix(*this, ESqsProtocol::Xml, withFolderId);
+
+            for (const auto credentials : {ETestCredentials::UserAccountIam, ETestCredentials::ServiceAccountIam, ETestCredentials::StaticCredentials}) {
+                NJson::TJsonValue req;
+                req["QueueUrl"] = queueUrl;
+                req["MessageBody"] = "MessageBody-0";
+                auto res = SendSqsRequest(*this, ESqsProtocol::Xml, credentials, withFolderId, "SendMessage", std::move(req));
+                const TString label = MatrixCaseLabel(ESqsProtocol::Xml, credentials, withFolderId);
+
+                if (credentials == ETestCredentials::UserAccountIam && !withFolderId) {
+                    AssertAccessDenied(res, label);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, label << "\n" << res.Body);
+                    const auto json = ParseSqsResponse(ESqsProtocol::Xml, res.Body);
+                    UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+                    UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST_F(TestSendMessage, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        json = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "MessageBody-0"}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "SequenceNumber").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "MessageBody-1"},
+            {"DelaySeconds", 900}
+        });
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+
+        NYdb::NTopic::TDescribeTopicSettings settings;
+        settings.IncludeStats(true);
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", settings).GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions()[0].GetPartitionStats()->GetEndOffset(), 2); // check that message was written
+    }
+
+    Y_UNIT_TEST_F(TestSendMessage_WithUserSettings, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        EnableCompatibility(KikimrServer, driver);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        json = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "MessageBody-0"}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "SequenceNumber").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "MessageBody-1"},
+            {"DelaySeconds", 900}
+        });
+
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+
+        NYdb::NTopic::TDescribeTopicSettings settings;
+        settings.IncludeStats(true);
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", settings).GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions()[0].GetPartitionStats()->GetEndOffset(), 2); // check that message was written
+    }
+
+    Y_UNIT_TEST_F(TestSendMessage_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 
@@ -228,6 +1183,151 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(BillingRecordsForJsonApi, THttpProxyTestMockWithMetering) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto meteringLogFilePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
+
+        // loadBillingRecords was copied from metering_ut.cpp.
+        // Probably, that file is a better place for this test.
+        auto loadBillingRecords = [](const TString& filepath) -> TVector<NSc::TValue> {
+            TString data = TFileInput(filepath).ReadAll();
+            auto rawRecords = SplitString(data, "\n");
+            TVector<NSc::TValue> records;
+            for (auto& record : rawRecords) {
+                records.push_back(NSc::TValue::FromJson(record));
+            }
+            return records;
+        };
+
+        TVector<NSc::TValue> records;
+        auto waitBillingRecords = [&]() {
+            static size_t expectedCount = 0;
+            expectedCount += 3;  // 2 traffic records, 1 request record
+            while (records.size() != expectedCount) {
+                Sleep(TDuration::Seconds(1));
+                records = loadBillingRecords(meteringLogFilePath);
+            }
+        };
+        auto queueTags = NJson::TJsonMap{
+            {"k1", "v1"},
+            {"k2", "v2"},
+        };
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Tags", queueTags}
+        });
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+        waitBillingRecords();
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", TString(1_KB, 'x')},  // 1 request unit
+        });
+        waitBillingRecords();
+
+        json = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 20},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        waitBillingRecords();
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", TString(150_KB, 'x')},  // 3 request units
+        });
+        waitBillingRecords();
+
+        json = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 20},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        waitBillingRecords();
+
+        auto makeRecordTags = [](TVector<std::pair<TString, TString>> pairs) {
+            NSc::TValue tags;
+            tags.SetDict();
+            for (auto const& [k, v] : pairs) {
+                tags[k] = v;
+            }
+            return tags;
+        };
+        NSc::TValue queueTagsDict;
+        queueTagsDict.SetDict();
+        for (auto const& [k, v] : queueTags.GetMapSafe()) {
+            queueTagsDict[k] = v.GetString();
+        }
+        auto makeRecord = [&makeRecordTags](
+            TString type,
+            TString resourceId,
+            size_t quantity,
+            TVector<std::pair<TString, TString>> tags,
+            NSc::TValue queueTags = {}
+        ) {
+            return NKikimr::NSQS::CreateMeteringBillingRecord(
+                "folder4",
+                resourceId,
+                type,
+                "fqdn",
+                TInstant::Now(),
+                quantity,
+                type == "ymq.traffic.v1" ? "byte" : "request",
+                makeRecordTags(tags),
+                queueTags
+            );
+        };
+
+        TVector<NSc::TValue> expectedRecords{
+            // CreateQueue
+            makeRecord("ymq.traffic.v1", "", 0, {{"direction", "ingress"}, {"type", "inet"}}),
+            makeRecord("ymq.traffic.v1", "", 0, {{"direction", "egress"}, {"type", "inet"}}),
+            makeRecord("ymq.requests.v1", "", 1, {{"queue_type", "other"}}),
+
+            // SendMessage 1 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 1, {{"queue_type", "std"}}, queueTagsDict),
+
+            // ReceiveMessage 1 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 1, {{"queue_type", "std"}}, queueTagsDict),
+
+            // SendMessage 150 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}, queueTagsDict),
+
+            // ReceiveMessage 150 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}, queueTagsDict),
+        };
+
+        auto asExpected = [](NSc::TValue record, NSc::TValue expected) {
+            return record["folder_id"] == expected["folder_id"] &&
+                   record["resource_id"] == expected["resource_id"] &&
+                   record["schema"] == expected["schema"] &&
+                   record["usage"]["unit"] == expected["usage"]["unit"] &&
+                   (record["schema"] != "ymq.requests.v1" || record["usage"]["quantity"] == expected["usage"]["quantity"]) &&
+                   record["tags"]["direction"] == expected["tags"]["direction"] &&
+                   record["tags"]["queue_type"] == expected["tags"]["queue_type"] &&
+                   record["labels"]["k1"] == expected["labels"]["k1"] &&
+                   record["labels"]["k2"] == expected["labels"]["k2"];
+        };
+        for (size_t i = 0; i < records.size(); ++i) {
+            UNIT_ASSERT(asExpected(records[i], expectedRecords[i]));
+        }
+    }
+
+    Y_UNIT_TEST_F(BillingRecordsForJsonApi_TableImplementation, THttpProxyTestMockWithMetering) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto meteringLogFilePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
 
         // loadBillingRecords was copied from metering_ut.cpp.
@@ -365,6 +1465,22 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSendMessageEmptyQueueUrl, THttpProxyTestMockForSQS) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        // We had a bug that crashed the server if QueueUrl was empty in a request.
+        SendMessage({
+            {"QueueUrl", ""},
+            {"MessageBody", "MessageBody-0"}
+        }, 400);
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageEmptyQueueUrl_TableImplementation, THttpProxyTestMockForSQS) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         // We had a bug that crashed the server if QueueUrl was empty in a request.
         SendMessage({
             {"QueueUrl", ""},
@@ -373,6 +1489,35 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSendMessageFifoQueue, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName.fifo"},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"}
+            }}
+        });
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        auto body = "MessageBody-0";
+        json = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", body},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"},
+            {"MessageGroupId", "MessageGroupId-0"}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "SequenceNumber").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageFifoQueue_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto json = CreateQueue({
             {"QueueName", "ExampleQueueName.fifo"},
             {"Attributes", NJson::TJsonMap{
@@ -394,6 +1539,59 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSendMessageWithAttributes, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        json = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "MessageBody-0"},
+            {"MessageAttributes", NJson::TJsonMap{
+                {"string-attr", NJson::TJsonMap{
+                    {"DataType", "String"},
+                    {"StringValue", "1"}
+                }},
+                {"number-attr", NJson::TJsonMap{
+                    {"DataType", "Number"},
+                    {"StringValue", "1"}
+                }},
+                {"binary-attr", NJson::TJsonMap{
+                    {"DataType", "Binary"},
+                    {"BinaryValue", Base64Encode("encoded-value")}
+                }},
+                {"custom-type-attr", NJson::TJsonMap{
+                    {"DataType", "Number.float"},
+                    {"StringValue", "2.7182818284"}
+                }}
+            }},
+
+            // From Amazon SQS docs: "Currently, the only supported message system attribute is AWSTraceHeader".
+            // We do not support the attribute, but need to check that it doesn't lead to fails.
+            {"MessageSystemAttributes", NJson::TJsonMap{
+                {"AWSTraceHeader", NJson::TJsonMap{
+                    {"DataType", "String"},
+                    {"StringValue", "Root=1-5759e988-bd862e3fe1be46a994272793;Sampled=1"}
+                }}
+            }}
+        });
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+
+        auto attrs = json["Messages"][0]["MessageAttributes"];
+        UNIT_ASSERT_VALUES_EQUAL(attrs["string-attr"]["StringValue"].GetString(), "1");
+        UNIT_ASSERT_VALUES_EQUAL(attrs["number-attr"]["StringValue"].GetString(), "1");
+        UNIT_ASSERT_VALUES_EQUAL(Base64Decode(attrs["binary-attr"]["BinaryValue"].GetString()), "encoded-value");
+        UNIT_ASSERT_VALUES_EQUAL(attrs["custom-type-attr"]["StringValue"].GetString(), "2.7182818284");
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageWithAttributes_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 
@@ -439,6 +1637,69 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestReceiveMessage, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationFinished(true);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        auto body0 = "MessageBody-0";
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body0}});
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body0);
+
+        for (size_t i = 1; i <= 10; ++i) {
+            auto body = TStringBuilder() << "MessageBody-" << i;
+            SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
+        }
+
+        WaitQueueAttributes(queueUrl, 10, {{"ApproximateNumberOfMessages", "11"}});
+
+        Sleep(TDuration::Seconds(1));
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}, {"MaxNumberOfMessages", 10}});
+        Cerr << (TStringBuilder() << ">>>>> JSON: " << json.GetStringRobust() << Endl);
+        UNIT_ASSERT_GE(json["Messages"].GetArray().size(), 1);
+    }
+
+    Y_UNIT_TEST_F(TestReceiveMessage_TopicImplementation_Compatibility, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        auto body0 = "MessageBody-0";
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body0}});
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body0);
+
+        for (size_t i = 1; i <= 10; ++i) {
+            auto body = TStringBuilder() << "MessageBody-" << i;
+            SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
+        }
+
+        WaitQueueAttributes(queueUrl, 10, {{"ApproximateNumberOfMessages", "11"}});
+
+        Sleep(TDuration::Seconds(1));
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}, {"MaxNumberOfMessages", 10}});
+        Cerr << (TStringBuilder() << ">>>>> JSON: " << json.GetStringRobust() << Endl);
+        UNIT_ASSERT_GE(json["Messages"].GetArray().size(), 1);
+    }
+
+    Y_UNIT_TEST_F(TestReceiveMessage_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 
@@ -461,6 +1722,10 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestReceiveMessageWithAttributes, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
         // Test if we process AttributeNames, MessageSystemAttributeNames, MessageAttributeNames correctly.
 
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
@@ -505,7 +1770,108 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
             // Request message system attributes using AttributeNames field.
             json = receiveMessage({{"AttributeNames", NJson::TJsonArray{
-                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber"
+                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber",
+                "MessageDeduplicationId", "MessageGroupId", "AWSTraceHeader", "DeadLetterQueueSourceArn"
+            }}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["ApproximateReceiveCount"].GetString().empty());
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["ApproximateFirstReceiveTimestamp"].GetString().empty());
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SenderId"].GetString().empty());
+        }
+
+        {
+            // Test MessageSystemAttributeNames field.
+
+            // Request SentTimestamp.
+            json = receiveMessage({{"MessageSystemAttributeNames", NJson::TJsonArray{"SentTimestamp"}}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+
+            // Request All message system attributes.
+            json = receiveMessage({{"MessageSystemAttributeNames", NJson::TJsonArray{"All"}}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+
+            // Request message system attributes.
+            json = receiveMessage({{"MessageSystemAttributeNames", NJson::TJsonArray{
+                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber",
+                "MessageDeduplicationId", "MessageGroupId", "AWSTraceHeader", "DeadLetterQueueSourceArn"
+            }}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+        }
+
+        {
+            // Test MessageAttributeNames
+
+            json = receiveMessage({{"MessageAttributeNames", NJson::TJsonArray{}}});
+            auto attrs = json["Messages"][0]["MessageAttributes"];
+
+            UNIT_ASSERT_VALUES_EQUAL(attrs.GetMapSafe().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(attrs["SomeAttribute"]["StringValue"].GetString(), "1");
+            UNIT_ASSERT_VALUES_EQUAL(attrs["AnotherAttribute"]["StringValue"].GetString(), "2");
+
+            json = receiveMessage({{"MessageAttributeNames", NJson::TJsonArray{"All"}}});
+            UNIT_ASSERT_VALUES_EQUAL(attrs.GetMapSafe().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(attrs["SomeAttribute"]["StringValue"].GetString(), "1");
+            UNIT_ASSERT_VALUES_EQUAL(attrs["AnotherAttribute"]["StringValue"].GetString(), "2");
+
+            json = receiveMessage({{"MessageAttributeNames", NJson::TJsonArray{"SomeAttribute"}}});
+
+            // We return all attributes, no matter what MessageAttributeNames are in the request. Should be fixed and uncommented:
+            //     UNIT_ASSERT_VALUES_EQUAL(attrs.GetMapSafe().size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(attrs["SomeAttribute"]["StringValue"].GetString(), "1");
+        }
+    }
+
+    Y_UNIT_TEST_F(TestReceiveMessageWithAttributes_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
+        // Test if we process AttributeNames, MessageSystemAttributeNames, MessageAttributeNames correctly.
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        TString messageBody = "MessageBody-0";
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", messageBody},
+            {"MessageAttributes", NJson::TJsonMap{
+                {"SomeAttribute", NJson::TJsonMap{
+                    {"StringValue", "1"},
+                    {"DataType", "String"}
+                }},
+                {"AnotherAttribute", NJson::TJsonMap{
+                    {"StringValue", "2"},
+                    {"DataType", "String"}
+                }}
+            }}
+        });
+
+        auto receiveMessage = [&, this](NJson::TJsonMap request, ui32 expectedStatus = 200) -> NJson::TJsonMap {
+            request["VisibilityTimeout"] = 0;  // Keep the message visible for next ReceiveMessage requests.
+            request["QueueUrl"] = queueUrl;
+            request["WaitTimeSeconds"] = 20;
+            json = ReceiveMessage(request, expectedStatus);
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], messageBody);
+            return json;
+        };
+
+        {
+            // Test deprecated AttributeNames field.
+
+            // Request SentTimestamp message system attribute using deprecated AttributeNames field.
+            json = receiveMessage({{"AttributeNames", NJson::TJsonArray{"SentTimestamp"}}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+
+            // Request All message system attributes using deprecated AttributeNames field.
+            json = receiveMessage({{"AttributeNames", NJson::TJsonArray{"All"}}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+
+            // Request message system attributes using AttributeNames field.
+            json = receiveMessage({{"AttributeNames", NJson::TJsonArray{
+                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber",
                 "MessageDeduplicationId", "MessageGroupId", "AWSTraceHeader", "DeadLetterQueueSourceArn"
             }}});
             UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
@@ -524,7 +1890,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
             // Request message system attributes.
             json = receiveMessage({{"MessageSystemAttributeNames", NJson::TJsonArray{
-                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber"
+                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber",
                 "MessageDeduplicationId", "MessageGroupId", "AWSTraceHeader", "DeadLetterQueueSourceArn"
             }}});
             UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
@@ -555,6 +1921,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestReceiveMessageWithAttemptId, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
         auto json = CreateQueue({
             {"QueueName", "ExampleQueueName.fifo"},
             {"Attributes", NJson::TJsonMap{
@@ -585,6 +1952,123 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestGetQueueAttributes, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        auto json1 = CreateQueue({{"QueueName", "queue-1.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}});
+        auto attributes1 = GetQueueAttributes({
+            {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
+            {"AttributeNames", NJson::TJsonArray{"QueueArn"}}
+        });
+        auto queueArn1 = GetByPath<TString>(attributes1, "Attributes.QueueArn");
+
+        auto queueName = "ExampleQueueName.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"DelaySeconds", "1"},
+                {"FifoQueue", "true"},
+                {"ContentBasedDeduplication", "true"},
+                {"RedrivePolicy", TStringBuilder() << "{\"deadLetterTargetArn\":\"" << queueArn1 << "\", \"maxReceiveCount\": 3}"}
+            }}
+        });
+
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT(resultQueueUrl.EndsWith(queueName));
+
+        GetQueueAttributes({{"wrong-field", "some-value"}}, 400);
+        GetQueueAttributes({{"QueueUrl", "invalid-url"}}, 400);
+
+        {
+            auto json = GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+            });
+            UNIT_ASSERT(json.GetMapSafe().empty());
+        }
+
+        {
+            auto json = GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{}}
+            });
+            UNIT_ASSERT(json.GetMapSafe().empty());
+        }
+
+        {
+            auto json = GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"All"}}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
+            UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
+        }
+
+        {
+            auto json = GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"All", "DelaySeconds"}}
+            });
+            UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
+        }
+
+        {
+            auto json = GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"DelaySeconds"}}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"].GetMapSafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
+        }
+
+        GetQueueAttributes({
+            {"QueueUrl", resultQueueUrl},
+            {"AttributeNames", NJson::TJsonArray{"UnknownAttribute"}}
+        }, 400);
+
+        GetQueueAttributes({
+            {"QueueUrl", resultQueueUrl},
+            {"AttributeNames", NJson::TJsonArray{"All", "UnknownAttribute"}}
+        }, 400);
+
+        GetQueueAttributes({
+            {"QueueUrl", resultQueueUrl},
+            {"AttributeNames", NJson::TJsonArray{"DelaySeconds", "UnknownAttribute"}}
+        }, 400);
+
+        {
+            auto json = GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{
+                    "ApproximateNumberOfMessages",
+                    "ApproximateNumberOfMessagesDelayed",
+                    "ApproximateNumberOfMessagesNotVisible",
+                    "CreatedTimestamp",
+                    "DelaySeconds",
+                    // "LastModifiedTimestamp",  // Not supported at this moment.
+                    "MaximumMessageSize",
+                    "MessageRetentionPeriod",
+                    "QueueArn",
+                    "ReceiveMessageWaitTimeSeconds",
+                    "VisibilityTimeout",
+
+                    "RedrivePolicy",
+
+                    "FifoQueue",
+                    "ContentBasedDeduplication",
+                }}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
+            UNIT_ASSERT_GT(json["Attributes"].GetMapSafe().size(), 5);
+        }
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueAttributes_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto json1 = CreateQueue({{"QueueName", "queue-1.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}});
         auto attributes1 = GetQueueAttributes({
             {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
@@ -694,6 +2178,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestListQueues, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
         auto json = ListQueues({});
 
         size_t numOfExampleQueues = 10;
@@ -730,6 +2215,66 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestDeleteMessage, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        DeleteMessage({}, 400);
+        DeleteMessage({{"QueueUrl", "wrong-queue-url"}}, 400);
+        DeleteMessage({{"QueueUrl", 123}}, 400);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        DeleteMessage({{"QueueUrl", queueUrl}}, 400);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", "unknown-receipt-handle"}}, 400);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", ""}}, 400);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", 123}}, 400);
+
+        auto body = "MessageBody-0";
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body);
+
+        auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle.empty());
+
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}, {"UnknownParameter", 123}}, 400);
+
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}});
+
+        {
+            NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+            NYdb::NTopic::TTopicClient topicClient(driver);
+
+            NYdb::NTopic::TDescribeConsumerSettings settings;
+            settings.IncludeStats(true);
+            auto describe = topicClient.DescribeConsumer("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", "ydb-sqs-consumer", settings).GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions()[0].GetPartitionStats()->GetEndOffset(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 1);
+        }
+
+        WaitQueueAttributes(queueUrl, 10, {
+            {"ApproximateNumberOfMessages", "0"},
+            {"ApproximateNumberOfMessagesNotVisible", "0"}
+        });
+
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}});
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}}, 500);
+    }
+
+    Y_UNIT_TEST_F(TestDeleteMessage_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         DeleteMessage({}, 400);
         DeleteMessage({{"QueueUrl", "wrong-queue-url"}}, 400);
         DeleteMessage({{"QueueUrl", 123}}, 400);
@@ -765,6 +2310,40 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestPurgeQueue, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        auto json = PurgeQueue({{"QueueUrl", "unknown-queue-url"}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "ValidationException");
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "message"), "Invalid queue url");
+
+        json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "MessageBody-0"}});
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "MessageBody-1"}});
+
+        // All available messages in a queue (including in-flight messages) should be deleted.
+        // Set VisibilityTimeout to large value to be sure the message is in-flight during the test.
+        ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}, {"VisibilityTimeout", 43000}});  // ~12 hours
+
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["ApproximateNumberOfMessages"] == "2" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "1";
+        });
+
+        PurgeQueue({{"QueueUrl", queueUrl}});
+
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["ApproximateNumberOfMessages"] == "0" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
+        });
+    }
+
+    Y_UNIT_TEST_F(TestPurgeQueue_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto json = PurgeQueue({{"QueueUrl", "unknown-queue-url"}}, 400);
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "ValidationException");
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "message"), "Invalid queue url");
@@ -791,6 +2370,55 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestDeleteQueue, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        NYdb::NTopic::TTopicClient topicClient(driver);
+
+        NYdb::NTopic::TDescribeTopicSettings settings;
+        settings.IncludeStats(true);
+
+        auto json = DeleteQueue({{"QueueUrl", "non-existent-queue"}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "ValidationException");
+
+        json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        {
+            auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", settings).GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        }
+
+        DeleteQueue({{"QueueUrl", queueUrl}});
+
+        auto getQueueUrlRequest = CreateSqsGetQueueUrlRequest();
+        for (int i = 0; i < 61; ++i) {
+            auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", getQueueUrlRequest, FormAuthorizationStr("ru-central1"));
+            if (res.HttpCode == 200) {
+                // The queue should be deleted within 60 seconds.
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+                UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+                UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+
+                break;
+            }
+        }
+
+        {
+            auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", settings).GetValueSync();
+            UNIT_ASSERT_C(!describe.IsSuccess(), describe.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_F(TestDeleteQueue_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto json = DeleteQueue({{"QueueUrl", "non-existent-queue"}}, 400);
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "ValidationException");
 
@@ -816,6 +2444,96 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSetQueueAttributes, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        auto json = CreateQueue({
+            {"QueueName", "DLQ.fifo"},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+        });
+        auto attributes1 = GetQueueAttributes({
+            {"QueueUrl", GetByPath<TString>(json, "QueueUrl")},
+            {"AttributeNames", NJson::TJsonArray{"QueueArn"}}
+        });
+        auto queueArn1 = GetByPath<TString>(attributes1, "Attributes.QueueArn");
+
+        json = CreateQueue({
+            {"QueueName", "ExampleQueueName.fifo"},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+        });
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        auto attributes = NJson::TJsonMap{
+            {"DelaySeconds", "2"},
+            {"MaximumMessageSize", "12345"},
+            {"MessageRetentionPeriod", "678"},
+            {"ReceiveMessageWaitTimeSeconds", "9"},
+            {"VisibilityTimeout", "1234"},
+
+            {"RedrivePolicy", TStringBuilder() << "{\"deadLetterTargetArn\":\"" << queueArn1 << "\",\"maxReceiveCount\":3}"},
+
+            // 2024-10-07: RedriveAllowPolicy not supported yet.
+            // {"RedriveAllowPolicy", TStringBuilder() << "{\"redrivePermission\":\"byQueue\", \"sourceQueueArns\": [\"" << queueArn2 << "\", \"" << queueArn3 << "\"]}"},
+
+            // High throughput for FIFO queues not supported yet.
+            // {"DeduplicationScope", "messageGroup"},
+            // {"FifoThroughputLimit", "perMessageGroupId"}
+        };
+
+        SetQueueAttributes({{"QueueUrl", queueUrl}, {"Attributes", attributes}});
+
+        WaitQueueAttributes(queueUrl, 10, [&attributes](NJson::TJsonMap json) {
+            for (auto& [k, v] : attributes.GetMapSafe()) {
+                if (json["Attributes"][k].GetStringSafe() != v) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        {
+            auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000301v0/v4/streamImpl").GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetConsumerName(), "ydb-sqs-consumer");
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetConsumerType(), NYdb::NTopic::EConsumerType::Shared);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetKeepMessagesOrder(), true);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDefaultProcessingTimeout(), TDuration::Seconds(1234));
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetEnabled(), true);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetDeadLetterQueue(), "sqs://cloud4/folder4/DLQ.fifo");
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 3);
+        }
+
+        driver.Stop(true);
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"DelaySeconds", "-1"}}}
+        }, 400);
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"DelaySeconds", "901"}}}
+        }, 400);
+
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["DelaySeconds"] == "2";
+        });
+
+        json = SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"UnknownAttribute", "value"}}}
+        }, 400);
+    }
+
+    Y_UNIT_TEST_F(TestSetQueueAttributes_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto json = CreateQueue({
             {"QueueName", "DLQ.fifo"},
             {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
@@ -881,6 +2599,55 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSendMessageBatch, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName.fifo"},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ContentBasedDeduplication", "true"}
+            }}
+        });
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        json = SendMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{
+                    {"Id", "Id-0"},
+                    {"MessageBody", "MessageBody-0"},
+                    {"MessageGroupId", "MessageGroupId-0"},
+                    {"MessageAttributes", NJson::TJsonMap{
+                        {"SomeAttribute", NJson::TJsonMap{
+                            {"DataType", "String"},
+                            {"StringValue", "1"}
+                        }}
+                    }}
+                },
+                NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "MessageBody-1"}, {"MessageGroupId", "MessageGroupId-1"}},
+                NJson::TJsonMap{{"Id", "Id-2"}, {"MessageBody", "MessageBody-2"}},
+            }}
+        });
+
+        UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
+        auto succesful0 = json["Successful"][0];
+        UNIT_ASSERT(succesful0["Id"] == "Id-0");
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageAttributes").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MessageId").empty());
+
+        UNIT_ASSERT(json["Successful"][1]["Id"] == "Id-1");
+
+        UNIT_ASSERT(json["Failed"].GetArray().size() == 1);
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageBatch_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto json = CreateQueue({
             {"QueueName", "ExampleQueueName.fifo"},
             {"Attributes", NJson::TJsonMap{
@@ -922,6 +2689,117 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestDeleteMessageBatch, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        DeleteMessageBatch({}, 400);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl}
+        }, 400);
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", {}}
+        }, 400);
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{}}
+        }, 400);
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonMap{}}
+        }, 400);
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", {""}}
+        }, 400);
+
+        json = SendMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"MessageBody", "MessageBody-0"}, {"MessageDeduplicationId", "MessageDeduplicationId-0"}},
+                NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "MessageBody-1"}, {"MessageDeduplicationId", "MessageDeduplicationId-1"}}
+            }}
+        });
+        UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
+
+        TVector<NJson::TJsonValue> messages;
+        for (int i = 0; i < 20; ++i) {
+            auto json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+            if (!json.GetMapSafe().empty()) {
+                for (auto& m : json["Messages"].GetArray()) {
+                    messages.push_back(m);
+                }
+            }
+            if (messages.size() >= 2) {
+                break;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+
+        auto receiptHandle0 = messages[0]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle0.empty());
+        auto receiptHandle1 = messages[1]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle1.empty());
+
+        json = DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"ReceiptHandle", receiptHandle0}},
+                NJson::TJsonMap{{"Id", "Id-1"}, {"ReceiptHandle", receiptHandle1}}
+            }}
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"].GetArray().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"][0]["Id"], "Id-0");
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"][1]["Id"], "Id-1");
+
+        {
+            NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+            NYdb::NTopic::TTopicClient topicClient(driver);
+
+            NYdb::NTopic::TDescribeConsumerSettings settings;
+            settings.IncludeStats(true);
+            auto describe = topicClient.DescribeConsumer("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", "ydb-sqs-consumer", settings).GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions()[0].GetPartitionStats()->GetEndOffset(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 2);
+        }
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 0);
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        json = DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"ReceiptHandle", receiptHandle0}},
+                NJson::TJsonMap{{"Id", "Id-1"}, {"ReceiptHandle", receiptHandle1}}
+            }}
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(json["Failed"].GetArray().size(), 2, json.GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL(json["Failed"][0]["Id"], "Id-0");
+        UNIT_ASSERT_VALUES_EQUAL(json["Failed"][1]["Id"], "Id-1");
+
+    }
+
+    Y_UNIT_TEST_F(TestDeleteMessageBatch_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         DeleteMessageBatch({}, 400);
 
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
@@ -999,6 +2877,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestListDeadLetterSourceQueues, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
         auto createQueueReq = CreateSqsCreateQueueRequest();
         auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
@@ -1045,6 +2924,65 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestChangeMessageVisibility, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        ChangeMessageVisibility({}, 400);
+        ChangeMessageVisibility({
+            {"QueueUrl", "unknown-url"},
+            {"ReceiptHandle", "unknown-receipt-handle"},
+            {"VisibilityTimeout", 1}
+        }, 400);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        ChangeMessageVisibility({
+            {"QueueUrl", queueUrl},
+            {"VisibilityTimeout", 1}
+        }, 400);
+
+        ChangeMessageVisibility({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", "unknown-receipt-handle"},
+        }, 400);
+
+        ChangeMessageVisibility({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", "unknown-receipt-handle"},
+            {"VisibilityTimeout", 1}
+        }, 400);
+
+        auto body = "MessageBody-0";
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+        auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle.empty());
+
+        ChangeMessageVisibility({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", receiptHandle},
+            {"VisibilityTimeout", 1}
+        });
+
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["ApproximateNumberOfMessages"] == "1" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
+        });
+
+        //ChangeMessageVisibility({
+        //    {"QueueUrl", queueUrl},
+        //    {"ReceiptHandle", receiptHandle},
+        //    {"VisibilityTimeout", 1}
+        //}, 400);
+    }
+
+    Y_UNIT_TEST_F(TestChangeMessageVisibility_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         ChangeMessageVisibility({}, 400);
         ChangeMessageVisibility({
             {"QueueUrl", "unknown-url"},
@@ -1096,6 +3034,112 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestChangeMessageVisibilityBatch, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        json = SendMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"MessageBody", "MessageBody-0"}, {"MessageDeduplicationId", "MessageDeduplicationId-0"}},
+                NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "MessageBody-1"}, {"MessageDeduplicationId", "MessageDeduplicationId-1"}}
+            }}
+        });
+        UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
+
+        TVector<NJson::TJsonValue> messages;
+        for (int i = 0; i < 20; ++i) {
+            auto json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+            if (!json.GetMapSafe().empty()) {
+                for (auto& m : json["Messages"].GetArray()) {
+                    messages.push_back(m);
+                }
+            }
+            if (messages.size() >= 2) {
+                break;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+
+        auto receiptHandle0 = messages[0]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle0.empty());
+        auto receiptHandle1 = messages[1]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle1.empty());
+
+        ChangeMessageVisibilityBatch({
+            {"QueueUrl", queueUrl},
+        }, 400);
+
+        ChangeMessageVisibilityBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", ""}
+        }, 400);
+
+        json = ChangeMessageVisibilityBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{}}
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(json["__type"].GetString(), "AWS.SimpleQueueService.EmptyBatchRequest");
+
+        json = ChangeMessageVisibilityBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"ReceiptHandle", "CgNtZzEQAhojZmIzMGE1M2YtZjZkN2VjMTgtNTEwY2UwMGUtZTc2NjE2MWQg4uql3acyKAA"}, {"VisibilityTimeout", 1}}
+            }}
+        });
+
+
+        ChangeMessageVisibilityBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"ReceiptHandle", 0}}
+            }}
+        }, 400);
+
+        ChangeMessageVisibilityBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"ReceiptHandle", receiptHandle0}}
+            }}
+        });
+
+        ChangeMessageVisibilityBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"VisibilityTimeout", 1}}
+            }}
+        });
+
+        json = ChangeMessageVisibilityBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"ReceiptHandle", receiptHandle0}, {"VisibilityTimeout", 1}}
+            }}
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"][0]["Id"], "Id-0");
+
+        json = ChangeMessageVisibilityBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"ReceiptHandle", receiptHandle0}, {"VisibilityTimeout", 1}},
+                NJson::TJsonMap{{"Id", "Id-1"}, {"ReceiptHandle", receiptHandle1}, {"VisibilityTimeout", 2}}
+            }}
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"].GetArray().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"][0]["Id"], "Id-0");
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"][1]["Id"], "Id-1");
+    }
+
+    Y_UNIT_TEST_F(TestChangeMessageVisibilityBatch_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 
@@ -1194,6 +3238,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestListQueueTags, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
         auto queues = TVector{
             CreateQueue({{"QueueName", "ExampleQueueName"}}),
             CreateQueue({{"QueueName", "ExampleQueueName.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}}),
@@ -1206,6 +3251,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestTagQueue, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
         using NJson::TJsonMap;
         using NJson::TJsonArray;
         auto queues = TVector{
@@ -1264,6 +3310,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestUntagQueue, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
         auto queues = TVector{
             CreateQueue({{"QueueName", "ExampleQueueName"}}),
             CreateQueue({{"QueueName", "ExampleQueueName.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}}),
@@ -1297,6 +3344,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestTagQueueMultipleQueriesInflight, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
         // Without additional checks, a Tag/UntagQueue queries may overwrite
         // changes made by a different query run in parallel.
         // Current behavior: if there was a conflicting query, return 500 error.
@@ -1338,5 +3386,354 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             UNIT_ASSERT(stop || json.GetMapSafe().empty());
         }
     }
+
+    Y_UNIT_TEST_F(TestMoveMessagesToDLQ, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json1 = CreateQueue({{"QueueName", "queue-1.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}});
+        auto attributes1 = GetQueueAttributes({
+            {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
+            {"AttributeNames", NJson::TJsonArray{"QueueArn"}}
+        });
+        auto queueArn1 = GetByPath<TString>(attributes1, "Attributes.QueueArn");
+
+        auto queueName = "ExampleQueueName.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "3"},
+                {"VisibilityTimeout", "1"},
+
+                {"RedrivePolicy", TStringBuilder() << "{\"deadLetterTargetArn\":\"" << queueArn1 << "\", \"maxReceiveCount\": 1}"},
+            }}
+        });
+
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        SendMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"MessageBody", "MessageBody-0"},
+            {"MessageGroupId", "MessageGroupId-0"},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+        });
+        {
+            auto json = ReceiveMessage({
+                {"QueueUrl", resultQueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-0");
+        }
+
+        {
+            // Reading from DLQ queue should return the message.
+            auto json = ReceiveMessage({
+                {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
+                {"WaitTimeSeconds", 10}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-0");
+        }
+    }
+
+    Y_UNIT_TEST_F(TestSendMessage_Deduplication_Compatibility, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+
+        auto queueName = "ExampleQueueName.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "3"},
+                {"VisibilityTimeout", "1"},
+            }}
+        });
+
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        SendMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"MessageBody", "MessageBody-0"},
+            {"MessageGroupId", "MessageGroupId-0"},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+        });
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        SendMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"MessageBody", "MessageBody-0"},
+            {"MessageGroupId", "MessageGroupId-0"},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+        });
+
+        // check
+        {
+            auto json = ReceiveMessage({
+                {"QueueUrl", resultQueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-0");
+        }
+        {
+            auto json = ReceiveMessage({
+                {"QueueUrl", resultQueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Messages"].GetType(), NJson::EJsonValueType::JSON_UNDEFINED, "Message was deduplicated and not written to the topic: " << json.GetStringRobust());
+        }
+    }
+
+    Y_UNIT_TEST_F(TestSendMessage_Deduplication_Compatibility_WithUserSettings, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+
+        auto queueName = "ExampleQueueName.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "3"},
+                {"VisibilityTimeout", "1"},
+            }}
+        });
+
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        SendMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"MessageBody", "MessageBody-0"},
+            {"MessageGroupId", "MessageGroupId-0"},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+        });
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        EnableCompatibility(KikimrServer, driver);
+
+        SendMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"MessageBody", "MessageBody-0"},
+            {"MessageGroupId", "MessageGroupId-0"},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+        });
+
+        // check
+        {
+            auto json = ReceiveMessage({
+                {"QueueUrl", resultQueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-0");
+        }
+        {
+            auto json = ReceiveMessage({
+                {"QueueUrl", resultQueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Messages"].GetType(), NJson::EJsonValueType::JSON_UNDEFINED, "Message was deduplicated and not written to the topic: " << json.GetStringRobust());
+        }
+    }
+
+
+    Y_UNIT_TEST_F(TestReceiveMessage_Fifo_Compatibility, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+
+        auto queueName = "ExampleQueueName.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "3"},
+                {"VisibilityTimeout", "10"},
+            }}
+        });
+
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        // Send to table
+        SendMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"MessageBody", "MessageBody-0"},
+            {"MessageGroupId", "MessageGroupId-0"},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+        });
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        // Send to topic
+        SendMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"MessageBody", "MessageBody-1"},
+            {"MessageGroupId", "MessageGroupId-0"},
+            {"MessageDeduplicationId", "MessageDeduplicationId-1"}
+        });
+
+        // check
+        NJson::TJsonValue receipt;
+        {
+            auto json = ReceiveMessage({
+                {"QueueUrl", resultQueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 10}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-0");
+            receipt = json["Messages"][0]["ReceiptHandle"];
+        }
+        {
+            auto json = ReceiveMessage({
+                {"QueueUrl", resultQueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Messages"].GetType(), NJson::EJsonValueType::JSON_UNDEFINED, "Message group was locked and not returned: " << json.GetStringRobust());
+        }
+
+        DeleteMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"ReceiptHandle", receipt}
+        });
+
+        json = ReceiveMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"WaitTimeSeconds", 1},
+            {"VisibilityTimeout", 10}
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-1");
+    }
+
+    Y_UNIT_TEST_F(NoBillingRecordsOnJsonApiAuthFailure, THttpProxyTestMockWithMetering) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto meteringLogFilePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
+
+        auto loadBillingRecords = [](const TString& filepath) -> TVector<NSc::TValue> {
+            TString data = TFileInput(filepath).ReadAll();
+            auto rawRecords = SplitString(data, "\n");
+            TVector<NSc::TValue> records;
+            for (auto& record : rawRecords) {
+                records.push_back(NSc::TValue::FromJson(record));
+            }
+            return records;
+        };
+
+        // First, create a queue with valid auth to generate baseline billing records
+        // Each successful SQS request generates 3 billing records (2 traffic + 1 request)
+        auto json = CreateQueue({{"QueueName", "MeteringTestQueue"}});
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        TVector<NSc::TValue> records = loadBillingRecords(meteringLogFilePath);
+
+        const size_t baselineRecordCount = records.size();
+
+        // Disable authorization so that subsequent requests are sent without an
+        // Authorization header (FormAuthorizationStr returns an empty string).
+        DisableAuthorization();
+
+        // Send a JSON API CreateQueue request without authorization header.
+        // This triggers an IAM auth failure in TYmqHttpRequestActor::HandleYmqCloudAuthorizationResponse,
+        // which sets IamAuthFailed_ = true, causing DoMetering() to skip billing record generation.
+        // Auth failures are reported with HTTP code 400.
+        CreateQueue({{"QueueName", "AuthFailQueue"}}, 400);
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+
+        // Verify no additional billing records were generated for the failed auth request
+        records = loadBillingRecords(meteringLogFilePath);
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), baselineRecordCount,
+            "Auth failure should not generate billing records, but got "
+            << records.size() << " records instead of " << baselineRecordCount);
+
+        // Re-enable authorization and verify that metering resumes: a successful
+        // request must again produce billing records (3 per request).
+        EnableAuthorization();
+        CreateQueue({{"QueueName", "AuthReenabledQueue"}});
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        const size_t expectedAfterReenable = baselineRecordCount + 3;
+        records = loadBillingRecords(meteringLogFilePath);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), expectedAfterReenable,
+            "Metering should resume after authorization is re-enabled, but got "
+            << records.size() << " records instead of " << expectedAfterReenable);
+    }
+
+    Y_UNIT_TEST_F(NoBillingRecordsOnXmlApiAuthFailure, THttpProxyTestMockWithMetering) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto meteringLogFilePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
+
+        auto loadBillingRecords = [](const TString& filepath) -> TVector<NSc::TValue> {
+            TString data = TFileInput(filepath).ReadAll();
+            auto rawRecords = SplitString(data, "\n");
+            TVector<NSc::TValue> records;
+            for (auto& record : rawRecords) {
+                records.push_back(NSc::TValue::FromJson(record));
+            }
+            return records;
+        };
+
+        // First, create a queue with valid auth (via JSON API) to generate baseline billing records
+        auto json = CreateQueue({{"QueueName", "MeteringTestQueue"}});
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        TVector<NSc::TValue> records = loadBillingRecords(meteringLogFilePath);
+
+        const size_t baselineRecordCount = records.size();
+
+        // Disable authorization so that subsequent requests are sent without an
+        // Authorization header (FormAuthorizationStr returns an empty string).
+        DisableAuthorization();
+
+        // Send an XML API CreateQueue request without authorization header.
+        // This triggers the XML API auth path (TCloudAuthRequestProxy) which calls
+        // Callback_->OnIamAuthError(), setting SkipMetering on the response.
+        // Auth failures are reported with HTTP code 400 and an IncompleteSignature error.
+        auto json2 = CreateQueueXml({{"QueueName", "XmlAuthFailQueue"}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json2, "__type"), "IncompleteSignature");
+
+        // Wait for metering flush interval to pass
+        Sleep(TDuration::Seconds(2));
+
+        // Verify no additional billing records were generated for the failed auth request
+        records = loadBillingRecords(meteringLogFilePath);
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), baselineRecordCount,
+            "Auth failure on XML API should not generate billing records, but got "
+            << records.size() << " records instead of " << baselineRecordCount);
+
+        // Re-enable authorization and verify that metering resumes: a successful
+        // XML API request must again produce billing records (3 per request).
+        EnableAuthorization();
+        CreateQueueXml({{"QueueName", "XmlAuthReenabledQueue"}});
+
+        const size_t expectedAfterReenable = baselineRecordCount + 3;
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        records = loadBillingRecords(meteringLogFilePath);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), expectedAfterReenable,
+            "Metering should resume after authorization is re-enabled, but got "
+            << records.size() << " records instead of " << expectedAfterReenable);
+    }
+
 
 } // Y_UNIT_TEST_SUITE(TestYmqHttpProxy)

@@ -7,6 +7,7 @@
 #include "datashard_integrity_trails.h"
 
 #include <ydb/core/engine/mkql_engine_flat_host.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -39,6 +40,17 @@ public:
         }
 
         return !op->HasRuntimeConflicts();
+    }
+
+    void FillDeferredBreakerInfo(ui64 lockTxId, NKikimrQueryStats::TTxStats* txStats) {
+        auto lockInfo = DataShard.SysLocksTable().GetRawLock(lockTxId);
+        if (!lockInfo || !lockInfo->GetBreakVersion()) {
+            return;
+        }
+        if (lockInfo->GetBreakerQuerySpanId() && !lockInfo->IsBreakerConsumed()) {
+            txStats->AddDeferredBreakerQuerySpanIds(lockInfo->GetBreakerQuerySpanId());
+            txStats->AddDeferredBreakerNodeIds(lockInfo->GetBreakerNodeId());
+        }
     }
 
     // Filter out self-breaks from locksBrokenByTx, log breaker TLI events, and update TxStats.
@@ -94,6 +106,13 @@ public:
 
             NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), message,
                 otherLocksBroken, primaryBreakerSpanId, victimQuerySpanIds);
+
+            for (ui64 lockId : otherLocksBroken) {
+                auto lockInfo = DataShard.SysLocksTable().GetRawLock(lockId);
+                if (lockInfo) {
+                    lockInfo->ConsumeBreakerInfo();
+                }
+            }
         }
         return otherLocksBroken.size();
     }
@@ -203,6 +222,8 @@ public:
 
                 if (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE ||
+                    operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT ||
+                    operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT ||
                     userDb.NeedToReadBeforeWrite(fullTableId))
                 {
                     for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
@@ -232,6 +253,9 @@ public:
             NDataIntegrity::LogVictimDetected(ctx, DataShard.TabletID(), "Write transaction was a victim of broken locks",
                                               lockTxId ? DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(lockTxId) : Nothing(),
                                               querySpanId ? TMaybe<ui64>(querySpanId) : Nothing());
+            if (lockTxId) {
+                FillDeferredBreakerInfo(lockTxId, writeOp.GetWriteResult()->Record.MutableTxStats());
+            }
         } else {
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with existing key.");
             writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Conflict with existing key.");
@@ -251,6 +275,10 @@ public:
 
         const TSerializedCellMatrix& matrix = validatedOperation.GetMatrix();
         const auto operationType = validatedOperation.GetOperationType();
+        auto userCtx = validatedOperation.GetUserCtx();
+        if (userCtx == nullptr) {
+            userCtx = NACLib::TUserContextBuilder().Build();
+        }
 
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
@@ -258,6 +286,7 @@ public:
 
         // Main update cycle
 
+        bool notReady = false;
         for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx)
         {
             FillKey(scheme, userTable, tableInfo, validatedOperation, rowIdx, key);
@@ -265,42 +294,45 @@ public:
             switch (operationType) {
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.UpsertRow(fullTableId, key, ops, defaultFilledColumnCount);
+                    userDb.UpsertRow(fullTableId, key, ops, defaultFilledColumnCount, userCtx);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.ReplaceRow(fullTableId, key, ops);
+                    userDb.ReplaceRow(fullTableId, key, ops, userCtx);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE: {
-                    userDb.EraseRow(fullTableId, key);
+                    userDb.EraseRow(fullTableId, key, userCtx);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.InsertRow(fullTableId, key, ops);
+                    userDb.InsertRow(fullTableId, key, ops, userCtx);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.UpdateRow(fullTableId, key, ops);
+                    userDb.UpdateRow(fullTableId, key, ops, userCtx);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.IncrementRow(fullTableId, key, ops, false /*insertMissing*/);
+                    userDb.IncrementRow(fullTableId, key, ops, false /*insertMissing*/, userCtx);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.IncrementRow(fullTableId, key, ops, true /*insertMissing*/);
+                    userDb.IncrementRow(fullTableId, key, ops, true /*insertMissing*/, userCtx);
                     break;
                 }
                 default:
                     // Checked before in TWriteOperation
                     Y_ENSURE(false, operationType << " operation is not supported now");
             }
+        }
+        if (notReady) {
+            throw TNotReadyTabletException();
         }
 
         // Counters
@@ -455,6 +487,7 @@ public:
                     NDataIntegrity::LogVictimDetected(ctx, tabletId, "Write transaction was a victim of broken locks",
                                                       DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(guardLocks.LockTxId),
                                                       guardLocks.QuerySpanId ? TMaybe<ui64>(guardLocks.QuerySpanId) : Nothing());
+                    FillDeferredBreakerInfo(guardLocks.LockTxId, writeOp->GetWriteResult()->Record.MutableTxStats());
                     return EExecutionStatus::Executed;
                 };
 
@@ -513,6 +546,13 @@ public:
                 NDataIntegrity::LogVictimDetected(ctx, tabletId, "Write transaction was a victim of broken locks",
                                                   victimQuerySpanId,
                                                   guardLocks.QuerySpanId ? TMaybe<ui64>(guardLocks.QuerySpanId) : Nothing());
+
+                {
+                    auto* txStats = writeOp->GetWriteResult()->Record.MutableTxStats();
+                    for (const auto& brokenLock : brokenLocks) {
+                        FillDeferredBreakerInfo(brokenLock.GetLockId(), txStats);
+                    }
+                }
 
                 for (auto& brokenLock : brokenLocks) {
                     writeOp->GetWriteResult()->Record.MutableTxLocks()->Add()->Swap(&brokenLock);
@@ -709,6 +749,9 @@ public:
             NDataIntegrity::LogVictimDetected(ctx, DataShard.TabletID(), "Write transaction was a victim of broken locks",
                                               guardLocks.LockTxId ? DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(guardLocks.LockTxId) : Nothing(),
                                               guardLocks.QuerySpanId ? TMaybe<ui64>(guardLocks.QuerySpanId) : Nothing());
+            if (guardLocks.LockTxId) {
+                FillDeferredBreakerInfo(guardLocks.LockTxId, writeOp->GetWriteResult()->Record.MutableTxStats());
+            }
 
             ResetChanges(userDb, txc);
 

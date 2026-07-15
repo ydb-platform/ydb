@@ -4,6 +4,7 @@ import "ydb/core/protos/console_base.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/draft/ydb_dynamic_config.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrConsole;
 option java_package = "ru.yandex.kikimr.proto";
@@ -129,7 +130,7 @@ message TConfigItem {
         YamlConfigEnabledItem = 64;
         ScanConveyorConfigItem = 65;
         ColumnShardConfigItem = 66;
-        LocalPgWireConfigItem = 69;
+        reserved 69; // LocalPgWireConfigItem
         AwsCompatibilityConfigItem = 70;
         KafkaProxyConfigItem = 71;
         CompConveyorConfigItem = 72;
@@ -148,6 +149,7 @@ message TConfigItem {
         WorkloadManagerConfigItem = 90;
         CompGroupedMemoryLimiterConfig = 92;
         BlockstoreConfigItem = 93;
+        PrivateDatabaseConfigItem = 94;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;
@@ -155,6 +157,8 @@ message TConfigItem {
         CompositeConveyorConfigItem = 109;
         PortionsMetadataCacheItem = 110;
         DeduGroupedMemoryLimiterConfig = 112;
+        StatisticsConfigItem = 113;
+        TliConfigItem = 120;
 
         // synthetic kinds for audit purposes only
         DatabaseYamlConfigChangeItem = 32767;
@@ -247,7 +251,7 @@ message TConfigureRequest {
     optional bool FillAffectedConfigs = 3;
     // For internal use only.
     // Used for logging user requests
-    optional bytes UserToken = 4;
+    optional bytes UserToken = 4 [(Ydb.sensitive) = true];
 }
 
 message TConfigureResponse {
@@ -271,7 +275,7 @@ message TConfigureResponse {
 
 message TSetYamlConfigRequest {
     optional Ydb.DynamicConfig.SetConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
     optional bool BypassAuth = 5;
@@ -284,7 +288,7 @@ message TSetYamlConfigResponse {
 
 message TReplaceYamlConfigRequest {
     optional Ydb.DynamicConfig.ReplaceConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
     optional bool BypassAuth = 5;
@@ -297,7 +301,7 @@ message TReplaceYamlConfigResponse {
 
 message TDropConfigRequest {
     optional Ydb.DynamicConfig.DropConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -307,7 +311,7 @@ message TDropConfigResponse {
 
 message TAddVolatileConfigRequest {
     optional Ydb.DynamicConfig.AddVolatileConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -317,19 +321,36 @@ message TAddVolatileConfigResponse {
 
 message TGetAllConfigsRequest {
     optional Ydb.DynamicConfig.GetConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
     optional bool BypassAuth = 5;
 }
 
+// A single config field that the config parser did not recognize.
+// Deprecated=false: genuinely unknown field (rendered red in the UI).
+// Deprecated=true:  reserved/removed proto slot (rendered amber in the UI).
+message TYamlConfigUnknownField {
+    optional string Path = 1;       // full path to the field, e.g. /config/blob_storage_config/foo
+    optional string Name = 2;       // leaf key name, e.g. foo
+    optional string Proto = 3;      // full name of the proto message that owns the slot
+    optional bool Deprecated = 4;
+}
+
+// Persisted/cached snapshot of unknown fields detected when a config was uploaded.
+message TYamlConfigUnknownFields {
+    repeated TYamlConfigUnknownField Fields = 1;
+}
+
 message TGetAllConfigsResponse {
     reserved 1;
     optional Ydb.DynamicConfig.GetConfigResult Response = 2;
+    // Unknown/deprecated fields of the main (cluster) config, cached from upload time.
+    repeated TYamlConfigUnknownField MainConfigUnknownFields = 3;
 }
 
 message TIsYamlReadOnlyRequest {
-    optional bytes UserToken = 1;
+    optional bytes UserToken = 1 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -340,7 +361,7 @@ message TIsYamlReadOnlyResponse {
 
 message TGetNodeLabelsRequest {
     optional Ydb.DynamicConfig.GetNodeLabelsRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -351,7 +372,7 @@ message TGetNodeLabelsResponse {
 
 message TGetAllMetadataRequest {
     optional Ydb.DynamicConfig.GetMetadataRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -362,7 +383,7 @@ message TGetAllMetadataResponse {
 
 message TRemoveVolatileConfigRequest {
     optional Ydb.DynamicConfig.RemoveVolatileConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -372,7 +393,7 @@ message TRemoveVolatileConfigResponse {
 
 message TResolveConfigRequest {
     optional Ydb.DynamicConfig.ResolveConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -383,7 +404,7 @@ message TResolveConfigResponse {
 
 message TResolveAllConfigRequest {
     optional Ydb.DynamicConfig.ResolveAllConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -662,7 +683,7 @@ message TToggleConfigValidatorResponse {
 
 message TFetchStartupConfigRequest {
     optional Ydb.DynamicConfig.FetchStartupConfigRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }
@@ -673,7 +694,7 @@ message TFetchStartupConfigResponse {
 
 message TGetConfigurationVersionRequest {
     optional Ydb.DynamicConfig.GetConfigurationVersionRequest Request = 1;
-    optional bytes UserToken = 2;
+    optional bytes UserToken = 2 [(Ydb.sensitive) = true];
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
 }

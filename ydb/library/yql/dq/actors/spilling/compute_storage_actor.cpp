@@ -60,7 +60,7 @@ public:
 
     void Bootstrap() {
         auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, SpillerName_,
-            SelfId(), false);
+            SelfId(), false, ESpillingType::Compute);
         SpillingActorId_ = Register(spillingActor);
         Become(&TDqComputeStorageActor::WorkState);
     }

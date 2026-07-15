@@ -12,10 +12,13 @@ private:
 
 public:
     explicit TChunkOriginalData(const TBlobRange& range)
-        : Range(range) {
+        : Range(range)
+    {
     }
+
     explicit TChunkOriginalData(const TString& data)
-        : Data(data) {
+        : Data(data)
+    {
     }
 
     ui32 GetSize() const {
@@ -29,6 +32,7 @@ public:
     bool HasData() const {
         return !!Data;
     }
+
     const TBlobRange& GetBlobRangeVerified() const;
     const TString& GetDataVerified() const;
 };

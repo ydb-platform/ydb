@@ -45,7 +45,12 @@ namespace NKikimr::NKqp {
     ///
     std::shared_ptr<NYdb::TDriver> MakeSharedYdbDriverWithStop(std::unique_ptr<NYdb::TDriver> driver);
 
-    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings = std::nullopt);
+    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings = std::nullopt);
+
+    struct TScriptExecutionSettings {
+        bool EnableBackgroundLeaseChecks = true;
+        TDuration LeaseCheckStartupTimeout = TDuration::Seconds(15);
+    };
 
     struct TKqpFederatedQuerySetup {
         // This Driver must be declared FIRST in this struct.
@@ -62,29 +67,33 @@ namespace NKikimr::NKqp {
         NYql::TYtGatewayConfig YtGatewayConfig;
         NYql::IYtGateway::TPtr YtGateway;
         NYql::TSolomonGatewayConfig SolomonGatewayConfig;
-        NYql::ISolomonGateway::TPtr SolomonGateway;
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
         NYql::TTaskTransformFactory DqTaskTransformFactory;
         NYql::TPqGatewayConfig PqGatewayConfig;
-        NYql::IPqGateway::TPtr PqGateway;
+        NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
+        TScriptExecutionSettings ScriptExecutionSettings = {};
     };
 
     struct IKqpFederatedQuerySetupFactory {
         using TPtr = std::shared_ptr<IKqpFederatedQuerySetupFactory>;
         virtual void Cleanup();
         virtual std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem* actorSystem) = 0;
+        virtual void SetScriptExecutionSettings(const TScriptExecutionSettings& settings) = 0;
         virtual ~IKqpFederatedQuerySetupFactory() = default;
     };
 
-    struct TKqpFederatedQuerySetupFactoryNoop: public IKqpFederatedQuerySetupFactory {
+    struct TKqpFederatedQuerySetupFactoryNoop : public IKqpFederatedQuerySetupFactory {
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
             return std::nullopt;
         }
+
+        void SetScriptExecutionSettings(const TScriptExecutionSettings&) override {
+        }
     };
 
-    struct TKqpFederatedQuerySetupFactoryDefault: public IKqpFederatedQuerySetupFactory {
+    struct TKqpFederatedQuerySetupFactoryDefault : public IKqpFederatedQuerySetupFactory {
         TKqpFederatedQuerySetupFactoryDefault(){};
 
         TKqpFederatedQuerySetupFactoryDefault(
@@ -93,6 +102,8 @@ namespace NKikimr::NKqp {
             const NKikimrConfig::TAppConfig& appConfig);
 
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem* actorSystem) override;
+
+        void SetScriptExecutionSettings(const TScriptExecutionSettings& settings) override;
 
         void Cleanup() override;
 
@@ -104,7 +115,6 @@ namespace NKikimr::NKqp {
         NYql::TYtGatewayConfig YtGatewayConfig;
         NYql::IYtGateway::TPtr YtGateway;
         NYql::TSolomonGatewayConfig SolomonGatewayConfig;
-        NYql::ISolomonGateway::TPtr SolomonGateway;
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         NYql::NConnector::IClient::TPtr ConnectorClient;
         std::optional<NActors::TActorId> DatabaseResolverActorId;
@@ -115,9 +125,10 @@ namespace NKikimr::NKqp {
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         std::shared_ptr<NYdb::TDriver> Driver;
         std::optional<TLocalTopicClientSettings> LocalTopicClientSettings;
+        TScriptExecutionSettings ScriptExecutionSettings;
     };
 
-    struct TKqpFederatedQuerySetupFactoryMock: public IKqpFederatedQuerySetupFactory {
+    struct TKqpFederatedQuerySetupFactoryMock : public IKqpFederatedQuerySetupFactory {
         TKqpFederatedQuerySetupFactoryMock() = delete;
 
         TKqpFederatedQuerySetupFactoryMock(
@@ -130,12 +141,11 @@ namespace NKikimr::NKqp {
             const NYql::TYtGatewayConfig& ytGatewayConfig,
             NYql::IYtGateway::TPtr ytGateway,
             const NYql::TSolomonGatewayConfig& solomonGatewayConfig,
-            const NYql::ISolomonGateway::TPtr& solomonGateway,
             NMiniKQL::TComputationNodeFactory computationFactory,
             const NYql::NDq::TS3ReadActorFactoryConfig& s3ReadActorFactoryConfig,
             NYql::TTaskTransformFactory dqTaskTransformFactory,
             const NYql::TPqGatewayConfig& pqGatewayConfig,
-            NYql::IPqGateway::TPtr pqGateway,
+            NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
             NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr,
             std::shared_ptr<NYdb::TDriver> driver)
             : HttpGateway(httpGateway)
@@ -147,15 +157,18 @@ namespace NKikimr::NKqp {
             , YtGatewayConfig(ytGatewayConfig)
             , YtGateway(ytGateway)
             , SolomonGatewayConfig(solomonGatewayConfig)
-            , SolomonGateway(solomonGateway)
             , ComputationFactory(computationFactory)
             , S3ReadActorFactoryConfig(s3ReadActorFactoryConfig)
             , DqTaskTransformFactory(dqTaskTransformFactory)
             , PqGatewayConfig(pqGatewayConfig)
-            , PqGateway(pqGateway)
+            , PqGatewayFactory(pqGatewayFactory)
             , ActorSystemPtr(actorSystemPtr)
             , Driver(driver)
         {
+        }
+
+        void SetScriptExecutionSettings(const TScriptExecutionSettings& settings) override {
+            ScriptExecutionSettings = settings;
         }
 
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
@@ -163,13 +176,14 @@ namespace NKikimr::NKqp {
                 Driver, HttpGateway, ConnectorClient, CredentialsFactory,
                 DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig,
                 YtGatewayConfig, YtGateway, SolomonGatewayConfig,
-                SolomonGateway, ComputationFactory, S3ReadActorFactoryConfig,
-                DqTaskTransformFactory, PqGatewayConfig, PqGateway, ActorSystemPtr};
+                ComputationFactory, S3ReadActorFactoryConfig,
+                DqTaskTransformFactory, PqGatewayConfig, PqGatewayFactory, ActorSystemPtr,
+                ScriptExecutionSettings};
         }
 
         void Cleanup() override {
             HttpGateway.reset();
-            PqGateway.Reset();
+            PqGatewayFactory.Reset();
         }
 
     private:
@@ -182,14 +196,14 @@ namespace NKikimr::NKqp {
         NYql::TYtGatewayConfig YtGatewayConfig;
         NYql::IYtGateway::TPtr YtGateway;
         NYql::TSolomonGatewayConfig SolomonGatewayConfig;
-        NYql::ISolomonGateway::TPtr SolomonGateway;
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
         NYql::TTaskTransformFactory DqTaskTransformFactory;
         NYql::TPqGatewayConfig PqGatewayConfig;
-        NYql::IPqGateway::TPtr PqGateway;
+        NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         std::shared_ptr<NYdb::TDriver> Driver;
+        TScriptExecutionSettings ScriptExecutionSettings;
     };
 
     IKqpFederatedQuerySetupFactory::TPtr MakeKqpFederatedQuerySetupFactory(

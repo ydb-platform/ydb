@@ -11,6 +11,8 @@
 #include "monitoring.h"
 #include "tx__set_down.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -295,7 +297,7 @@ public:
         for (const auto& tabletIdx : tabletIdIndex) {
             TTabletInfo& x = *tabletIdx.second;
             if (BadOnly) {
-                if (x.IsAlive()) {
+                if (x.IsAlive() && !x.RestartsOften()) {
                     continue;
                 }
                 if (x.IsLeader() && (x.AsLeader().IsLockedToActor() || x.AsLeader().IsExternalBoot())) {
@@ -968,6 +970,19 @@ public:
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
             Self->ProcessWaitQueue();
         }
+        if (params.contains("resetAllowedMetrics")) {
+            ChangeRequest = true;
+            if (Event->GetMethod() != HTTP_METHOD_POST) {
+                Status = "error";
+                return true;
+            }
+            auto& jsonReset = jsonOperation["AllowedMetricsReset"];
+            for (const auto& [type, _] : Self->TabletTypeAllowedMetrics) {
+                jsonReset.AppendValue(GetTabletTypeShortName(type));
+                db.Table<Schema::TabletTypeMetrics>().Key(type).Delete();
+            }
+            Self->TabletTypeAllowedMetrics.clear();
+        }
         if (params.contains("allowedMetrics")) {
             auto& jsonAllowedMetrics = jsonOperation["AllowedMetricsUpdate"];
             TVector<TString> allowedMetrics = SplitString(params.Get("allowedMetrics"), ";");
@@ -1265,7 +1280,12 @@ public:
         ShowConfig(out, "DataCenterChangeReactionPeriod");
 
         out << "<div class='row' style='margin-top:40px'>";
-        out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'>AllowedMetrics:</label></div>";
+        bool allowedMetricsLocalOverridden = !Self->TabletTypeAllowedMetrics.empty();
+        out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'";
+        if (!allowedMetricsLocalOverridden) {
+            out << " style='font-weight:normal'";
+        }
+        out << ">AllowedMetrics:</label></div>";
         out << "<div class='col-sm-3' style='padding-top:5px'><table>";
         out << "<tr><th style='padding:2px 10px'>Tablet</th><th style='padding:2px 10px'>Cnt</th><th style='padding:2px 10px'>CPU</th><th style='padding:2px 10px'>Mem</th><th style='padding:2px 10px'>Net</th></tr>";
         for (TTabletTypes::EType tabletType : {
@@ -1274,16 +1294,19 @@ public:
              TTabletTypes::Mediator,
              TTabletTypes::SchemeShard,
              TTabletTypes::Hive,
+             TTabletTypes::Kesus,
              TTabletTypes::KeyValue,
              TTabletTypes::PersQueue,
              TTabletTypes::PersQueueReadBalancer,
              TTabletTypes::NodeBroker,
              TTabletTypes::TestShard,
              TTabletTypes::BlobDepot,
-             TTabletTypes::ColumnShard}) {
+             TTabletTypes::ColumnShard,
+             TTabletTypes::FileStore,
+        }) {
             const TVector<i64>& allowedMetrics = Self->GetTabletTypeAllowedMetricIds(tabletType);
             out << "<tr>"
-                   "<td>" << GetTabletTypeShortName(tabletType) << "</td>";
+                   "<td title='" << TTabletTypes::EType_Name(tabletType) << "'>" << GetTabletTypeShortName(tabletType) << "</td>";
             out << "<td><input id='cpu' class='form-control' type='checkbox' checked='' disabled='' style='width:20px;height:20px;margin:2px auto'</input></td>";
             out << "<td><input id='cpu' class='form-control' type='checkbox'";
             if (Find(allowedMetrics, NKikimrTabletBase::TMetrics::kCPUFieldNumber) != allowedMetrics.end()) {
@@ -1303,7 +1326,8 @@ public:
             out << "</tr>";
         }
         out << "</table></div>";
-        out << "<div class='col-sm-2' style='padding-top:22px'><button type='button' class='btn' style='margin-top:5px' onclick='applyTab(this);' disabled='true'>Apply</button></div>";
+        out << "<div class='col-sm-1' style='padding-top:22px'><button type='button' class='btn' style='margin-top:5px' onclick='applyTab(this);' disabled='true'>Apply</button></div>";
+        out << "<div class='col-sm-1' style='padding-top:22px'><button type='button' class='btn' style='margin-top:5px' onclick='resetTab(this);' " << (allowedMetricsLocalOverridden ? "" : "disabled='true'") << ">Reset</button></div>";
         out << "</div>";
 
         out << "</div>";
@@ -1372,7 +1396,20 @@ public:
                    $.ajax({
                        type: 'POST',
                        url: document.URL + '&' + name + '=' + val,
-                       success: function() { $(button).prop('disabled', true).removeClass('btn-danger'); },
+                       success: function() {
+                         $(button).prop('disabled', true).removeClass('btn-danger');
+                         $(button).parent().next().children('button').prop('disabled', false);
+                         $(button).parent().parent().find('label').removeAttr('style');
+                       },
+                       error: function() { $(button).addClass('btn-danger'); }
+                   });
+               }
+
+               function resetTab(button) {
+                   $.ajax({
+                       type: 'POST',
+                       url: document.URL + '&resetAllowedMetrics=1',
+                       success: function() { document.location.reload(); },
                        error: function() { $(button).addClass('btn-danger'); }
                    });
                }
@@ -2119,13 +2156,10 @@ function reassignGroups() {
             type: 'POST',
             url: url,
             success: function() {
-
+                $('#status_text').text("Started reassign actor");
             },
             error: function(jqXHR, status) {
                 $('#status_text').text(status);
-            },
-            complete: function() {
-                $('#status_text').text("Started reassign actor");
             },
         });
     }
@@ -2560,10 +2594,11 @@ public:
         TString ToHTML() const {
             auto totalCount = LeaderCount + FollowerCount;
             TStringBuilder str;
+            str << "<span title='" << TTabletTypes::EType_Name(TabletType) << "' ";
             if (MaxCount > 0) {
-                str << "<span class='box' ";
+                str << " class='box' ";
             } else {
-                str << "<span class='box box-disabled' ";
+                str << " class='box box-disabled' ";
             }
             if (totalCount > MaxCount) {
                 str << " style='color: red' ";
@@ -2775,7 +2810,11 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_SetDown(" << NodeId << ")::Complete Response=" << Response);
+        YDB_LOG_DEBUG("THive::TTxMonEvent_SetDown::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", NodeId},
+            {"down", Down},
+            {"response", Response});
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2824,7 +2863,11 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_SetFreeze(" << NodeId << ")::Complete Response=" << Response);
+        YDB_LOG_DEBUG("THive::TTxMonEvent_SetFreeze::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", NodeId},
+            {"freeze", Freeze},
+            {"response", Response});
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2868,7 +2911,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_KickNode(" << NodeId << ")::Complete Response=" << Response);
+        YDB_LOG_DEBUG("THive::TTxMonEvent_KickNode::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", NodeId},
+            {"response", Response});
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2980,7 +3026,7 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        auto cgi = GetParams(ev->Get());
+        auto cgi = GetParams(Event.Get());
         MaxMovements = FromStringWithDefault(cgi.Get("movements"), MaxMovements);
         MaxInFlight = FromStringWithDefault(cgi.Get("inflight"), MaxInFlight);
     }
@@ -3019,7 +3065,7 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        auto cgi = GetParams(ev->Get());
+        auto cgi = GetParams(Event.Get());
         Settings.NumReassigns = FromStringWithDefault(cgi.Get("reassigns"), 1000);
         Settings.MaxInFlight = FromStringWithDefault(cgi.Get("inflight"), 1);
         Settings.StoragePool = cgi.Get("pool");
@@ -3053,7 +3099,7 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        TenantName = GetParams(ev->Get()).Get("tenantName");
+        TenantName = GetParams(Event.Get()).Get("tenantName");
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE_FROM_SCRATCH; }
@@ -3076,7 +3122,7 @@ public:
             return true;
         }
         for (const auto& tablet : Self->Tablets) {
-            Self->Execute(Self->CreateRestartTablet(tablet.second.GetFullTabletId()));
+            Self->Execute(Self->CreateForceRestartTablet(tablet.second.GetFullTabletId()));
         }
         return true;
     }
@@ -3142,6 +3188,14 @@ public:
             }
         }
 
+    };
+
+    struct TMonitoringReassignCallback : IReassignCallback {
+        virtual IEventBase* MakeEvent(ui64 tabletsDone) override {
+            NJson::TJsonValue response;
+            response["total"] = tabletsDone;
+            return new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(response, false));
+        }
     };
 
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
@@ -3280,7 +3334,7 @@ public:
         jsonOperation["Reassign"] = description;
         WriteOperation(db, jsonOperation);
 
-        Self->StartReassignActor(std::move(operations), Wait ? Source : TActorId(), MaxInFlight, description);
+        Self->StartReassignActor(std::move(operations), Wait ? Source : TActorId(), MaxInFlight, description, std::make_unique<TMonitoringReassignCallback>());
         return true;
     }
 

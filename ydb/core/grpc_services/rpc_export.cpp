@@ -7,6 +7,7 @@
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
@@ -17,11 +18,6 @@
 #include <util/folder/path.h>
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
-
-#ifdef _linux_
-#include <sys/vfs.h>
-#include <linux/magic.h>
-#endif
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -229,6 +225,10 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             TTraits::SetSourcePath(exportSettings, CommonSourcePath);
         }
 
+        if constexpr (IsFsExport) {
+            exportSettings->set_base_path(StripTrailingSlashes(exportSettings->base_path()));
+        }
+
         exportSettings->clear_items();
         for (const auto& [sourcePath, info] : ExportItems) {
             auto* item = exportSettings->add_items();
@@ -248,7 +248,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         for (const auto& item : TTraits::GetItems(settings)) {
             TString userSpecifiedPath = CanonizePath(item.source_path());
             TString fullPath;
-            if (HasCommonSourcePathPrefix(userSpecifiedPath)) {
+            if (HasCommonSourcePathPrefix(userSpecifiedPath) || userSpecifiedPath == CommonSourcePath) {
                 fullPath = userSpecifiedPath; // Full path
             } else {
                 fullPath = CommonSourcePath + userSpecifiedPath; // Relative path
@@ -571,6 +571,21 @@ public:
         const auto& settings = request.settings();
         InitCommonSourcePath();
 
+        if constexpr (TTraits::HasEncryption) {
+            if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
+                if (!NBackup::IsEncryptedExportEnabled(*AppData())) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
+                }
+                if (!TTraits::HasDestination(settings)) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix specified for encrypted export");
+                }
+
+                if (!ValidateEncryptionParameters()) {
+                    return;
+                }
+            }
+        }
+
         try {
             ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
         } catch (const std::exception& ex) {
@@ -582,16 +597,6 @@ public:
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
                     "base_path must be an absolute path");
             }
-
-#ifdef _linux_
-            struct statfs fsInfo;
-            if (statfs(settings.base_path().c_str(), &fsInfo) == 0) {
-                if (fsInfo.f_type != NFS_SUPER_MAGIC) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
-                        "base_path must be on NFS filesystem");
-                }
-            }
-#endif
 
             TString error;
             if (!ValidateFsPath(settings.base_path(), "base_path", error)) {
@@ -613,9 +618,8 @@ public:
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
             }
         } else {
-            const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
             const bool commonDestSpecified = TTraits::HasDestination(settings);
-            if (!encryptedExportFeatureFlag) {
+            if (!NBackup::IsExportFilteringEnabled(*AppData())) {
                 // Check that no new fields are specified
                 if constexpr (IsS3Export) {
                     if (commonDestSpecified) {
@@ -625,8 +629,17 @@ public:
                 if (!settings.source_path().empty()) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source path is not supported in current configuration");
                 }
-                if (settings.has_encryption_settings()) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
+                if constexpr (IsFsExport) {
+                    if (settings.items().empty()) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
+                            "Exporting without explicitly specified items is not supported in current configuration");
+                    }
+                    for (const auto& item : settings.items()) {
+                        if (TTraits::GetDestination(item).empty()) {
+                            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
+                                TStringBuilder() << "destination_path must be specified for item \"" << item.source_path() << "\" in current configuration");
+                        }
+                    }
                 }
             }
             if (settings.items().empty() && !commonDestSpecified) {
@@ -635,17 +648,6 @@ public:
             for (const auto& item : settings.items()) {
                 if (TTraits::GetDestination(item).empty() && !commonDestSpecified) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix or common destination prefix specified for item \"" << item.source_path() << "\"");
-                }
-            }
-        }
-        if constexpr (TTraits::HasEncryption) {
-            if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
-                if (!TTraits::HasDestination(settings)) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix specified for encrypted export");
-                }
-
-                if (!ValidateEncryptionParameters()) {
-                    return;
                 }
             }
         }

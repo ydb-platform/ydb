@@ -12,4 +12,4 @@ ui32 TController::GetLimitForAddress(const NActualizer::TRWAddress& address) con
     }
 }
 
-}
+}   // namespace NKikimr::NOlap::NActualizer

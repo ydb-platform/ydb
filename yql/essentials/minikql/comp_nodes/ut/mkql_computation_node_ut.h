@@ -5,6 +5,7 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include "../mkql_factories.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -85,7 +86,9 @@ struct TSetup {
     explicit TSetup(TComputationNodeFactory nodeFactory = GetTestFactory(), TVector<TUdfModuleInfo>&& modules = {})
         : Alloc(__LOCATION__)
         , StatsRegistry(CreateDefaultStatsRegistry())
+        , RuntimeSettings(NYql::MakeRuntimeSettingsMutable())
     {
+        RuntimeSettings->DatumValidation.Set(NYql::DefaultDatumTestValidationMode);
         NodeFactory = nodeFactory;
         FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         if (!modules.empty()) {
@@ -119,7 +122,7 @@ struct TSetup {
         Explorer.Walk(pgm.GetNode(), Env->GetNodeStack());
         TComputationPatternOpts opts(Alloc.Ref(), *Env, NodeFactory,
                                      FunctionRegistry.Get(), NUdf::EValidateMode::Greedy, NUdf::EValidatePolicy::Exception,
-                                     UseLLVM ? "" : "OFF", graphPerProcess, StatsRegistry.Get(), nullptr, nullptr);
+                                     UseLLVM ? "" : "OFF", graphPerProcess, StatsRegistry.Get(), /*countersProvider=*/nullptr, /*secureParamsProvider=*/nullptr, /*logProvider=*/nullptr, NYql::UnknownLangVersion, RuntimeSettings);
         Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
         auto graph = Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
         Terminator.Reset(new TBindTerminator(graph->GetTerminator()));
@@ -129,13 +132,13 @@ struct TSetup {
     void RenameCallable(TRuntimeNode pgm, TString originalName, TString newName) {
         const auto renameProvider = [originalName = std::move(originalName), newName = std::move(newName)](TInternName name) -> TCallableVisitFunc {
             if (name == originalName) {
-                return [name, newName = std::move(newName)](TCallable& callable, const TTypeEnvironment& env) {
+                return [name, newName = newName](TCallable& callable, const TTypeEnvironment& env) {
                     TCallableBuilder callableBuilder(env, newName,
-                                                     callable.GetType()->GetReturnType(), false);
+                                                     callable.GetType()->GetReturnType(), /*disableMerge=*/false);
                     for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {
                         callableBuilder.Add(callable.GetInput(i));
                     }
-                    return TRuntimeNode(callableBuilder.Build(), false);
+                    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
                 };
             } else {
                 return TCallableVisitFunc();
@@ -158,6 +161,7 @@ struct TSetup {
     TIntrusivePtr<IRandomProvider> RandomProvider;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     IStatsRegistryPtr StatsRegistry;
+    NYql::TRuntimeSettings::TPtr RuntimeSettings;
 
     THolder<TTypeEnvironment> Env;
     THolder<TProgramBuilder> PgmBuilder;

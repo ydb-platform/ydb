@@ -1,4 +1,5 @@
 #include "tx_write_source_cursor.h"
+
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 namespace NKikimr::NOlap::NDataSharing {
@@ -13,4 +14,4 @@ bool TTxWriteSourceCursor::DoExecute(NTabletFlatExecutor::TTransactionContext& t
 void TTxWriteSourceCursor::DoComplete(const TActorContext& /*ctx*/) {
 }
 
-}
+}   // namespace NKikimr::NOlap::NDataSharing

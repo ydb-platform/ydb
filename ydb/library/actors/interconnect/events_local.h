@@ -191,14 +191,26 @@ namespace NActors {
             HANDSHAKE_FAIL_SESSION_MISMATCH,
         };
 
-        TEvHandshakeFail(EnumHandshakeFail temporary, TString explanation)
+        enum class EReason {
+            Unspecified,
+            RemoteNodeDoesNotKnowLocalNode,
+        };
+
+        TEvHandshakeFail(EnumHandshakeFail temporary, TString explanation, TString peerHostName = {},
+                         TString peerError = {}, EReason reason = EReason::Unspecified)
             : Temporary(temporary)
             , Explanation(std::move(explanation))
+            , PeerHostName(std::move(peerHostName))
+            , PeerError(std::move(peerError))
+            , Reason(reason)
         {
         }
 
         const EnumHandshakeFail Temporary;
         const TString Explanation;
+        const TString PeerHostName;
+        const TString PeerError;
+        const EReason Reason;
     };
 
     struct TEvKick: public TEventLocal<TEvKick, ui32(ENetwork::Kick)> {
@@ -357,6 +369,24 @@ namespace NActors {
         TEvSecureSocket(TIntrusivePtr<NInterconnect::TSecureSocket> socket)
             : Socket(std::move(socket))
         {}
+    };
+
+    struct TEvForwardSubscribeSession : TEventLocal<TEvForwardSubscribeSession, (ui32)ENetwork::EvForwardSubscribeSession> {
+        TAutoPtr<IEventHandle> Event;
+        ui32 ActivityIndex = Max<ui32>();
+        TString EventTypeName;
+        TString StackTrace;
+
+        TEvForwardSubscribeSession(TAutoPtr<IEventHandle> event, ui32 activityIndex, TString eventTypeName, TString stackTrace)
+            : Event(std::move(event))
+            , ActivityIndex(activityIndex)
+            , EventTypeName(std::move(eventTypeName))
+            , StackTrace(std::move(stackTrace))
+        {}
+
+        ui32 CalculateSerializedSize() const override {
+            return Event ? Event->GetSize() : 0;
+        }
     };
 
     struct TEvSubscribeForConnection : TEventLocal<TEvSubscribeForConnection, (ui32)ENetwork::EvSubscribeForConnection> {

@@ -5,7 +5,9 @@
 #include <ydb/core/base/appdata.h>
 
 #include <library/cpp/protobuf/json/json2proto.h>
+#include <library/cpp/protobuf/json/util.h>
 
+#include <ydb/core/config/protos/marker.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/config/validation/validators.h>
 
@@ -28,7 +30,7 @@ NKikimrConfig::TAppConfig YamlToProto(
     NJson::ReadJsonTree(resolvedJsonConfig, &json);
 
     NKikimrConfig::TAppConfig yamlProtoConfig;
-    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(allowUnknown, std::move(unknownFieldsCollector)), yamlProtoConfig, preTransform, true);
+    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(allowUnknown, std::move(unknownFieldsCollector)), yamlProtoConfig, preTransform, /*phase=*/ nullptr, /*relaxed=*/ true);
 
     return yamlProtoConfig;
 }
@@ -40,7 +42,8 @@ void ResolveAndParseYamlConfig(
     NKikimrConfig::TAppConfig& appConfig,
     std::optional<TString> databaseYamlConfig,
     TString* resolvedYamlConfig,
-    TString* resolvedJsonConfig)
+    TString* resolvedJsonConfig,
+    TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector)
 {
     TStringStream resolvedJsonConfigStream;
     bool hasMetadata = false;
@@ -51,19 +54,20 @@ void ResolveAndParseYamlConfig(
             hasMetadata = true;
         }
 
+        TSet<NYamlConfig::TNamedLabel> namedLabels;
+        for (auto& [name, label] : labels) {
+            namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
+        }
+
         if (databaseYamlConfig) {
             auto d = NFyaml::TDocument::Parse(*databaseYamlConfig);
+            NYamlConfig::ResolveDatabaseConfig(d, namedLabels);
             NYamlConfig::AppendDatabaseConfig(tree, d);
         }
 
         for (auto& [_, config] : volatileYamlConfigs) {
             auto d = NFyaml::TDocument::Parse(config);
             NYamlConfig::AppendVolatileConfigs(tree, d);
-        }
-
-        TSet<NYamlConfig::TNamedLabel> namedLabels;
-        for (auto& [name, label] : labels) {
-            namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
         }
 
         auto config = NYamlConfig::Resolve(tree, namedLabels);
@@ -90,7 +94,7 @@ void ResolveAndParseYamlConfig(
         appConfig.SetYamlConfigEnabled(true);
     }
 
-    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true), appConfig, true, true);
+    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true, std::move(unknownFieldsCollector)), appConfig, true, /*phase=*/ nullptr, /*relaxed=*/ true);
 }
 
 void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to) {

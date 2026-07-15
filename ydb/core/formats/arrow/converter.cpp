@@ -18,12 +18,12 @@
 namespace NKikimr::NArrow {
 
 static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryPool& memPool, TString& errorMessage, const bool allowInfDouble) {
-    if (!cell.AsBuf()) {
-        cell = TCell();
-        return true;
-    }
     switch (colType.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber: {
+            if (!cell.AsBuf()) {
+                cell = TCell();
+                break;
+            }
             const auto dyNumber = NDyNumber::ParseDyNumberString(cell.AsBuf());
             if (!dyNumber.Defined()) {
                 errorMessage = "Invalid DyNumber string representation";
@@ -34,6 +34,10 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
             break;
         }
         case NScheme::NTypeIds::JsonDocument: {
+            if (!cell.AsBuf()) {
+                cell = TCell();
+                break;
+            }
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(cell.AsBuf(), allowInfDouble);
             if (std::holds_alternative<TString>(binaryJson)) {
                 errorMessage = "Invalid JSON for JsonDocument provided: " + std::get<TString>(binaryJson);
@@ -87,6 +91,13 @@ static arrow::Status ConvertColumn(
     switch (colType.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber: {
             for (i32 i = 0; i < binaryArray.length(); ++i) {
+                if (binaryArray.IsNull(i)) {
+                    auto appendResult = builder.AppendNull();
+                    if (!appendResult.ok()) {
+                        return appendResult;
+                    }
+                    continue;
+                }
                 auto value = binaryArray.Value(i);
                 const auto dyNumber = NDyNumber::ParseDyNumberString(TStringBuf(value.data(), value.size()));
                 if (!dyNumber.Defined()) {
@@ -101,6 +112,13 @@ static arrow::Status ConvertColumn(
         }
         case NScheme::NTypeIds::JsonDocument: {
             for (i32 i = 0; i < binaryArray.length(); ++i) {
+                if (binaryArray.IsNull(i)) {
+                    auto appendResult = builder.AppendNull();
+                    if (!appendResult.ok()) {
+                        return appendResult;
+                    }
+                    continue;
+                }
                 auto value = binaryArray.Value(i);
                 if (!value.size()) {
                     Y_ABORT_UNLESS(builder.AppendNull().ok());
@@ -266,6 +284,7 @@ bool TArrowToYdbConverter::NeedInplaceConversion(const NScheme::TTypeInfo& typeI
                 return true;
             }
             [[fallthrough]];
+        case NScheme::NTypeIds::Interval:
         case NScheme::NTypeIds::Timestamp64:
         case NScheme::NTypeIds::Interval64:
         case NScheme::NTypeIds::Datetime64:
@@ -340,7 +359,7 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
 
             if (NeedDataConversionWithSettings(colType)) {
                 for (i32 i = 0; i < unroll; ++i) {
-                    if (!ConvertData(cells[i][col], colType, memPool, errorMessage, AllowInfDouble_)) {
+                    if (WithConversion_ && !ConvertData(cells[i][col], colType, memPool, errorMessage, AllowInfDouble_)) {
                         return false;
                     }
                 }

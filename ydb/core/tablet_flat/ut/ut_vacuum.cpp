@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.FireDummyTablet(TestTabletFlags);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.FireDummyTablet(TestTabletFlags);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.RestartTablet(TestTabletFlags);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(235);
+            executor->StartVacuum(235ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } }, true);
         auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_VALUES_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -322,7 +322,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_VALUES_EQUAL(readRows, 2);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -356,7 +356,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.WaitFor<NFake::TEvCompacted>();
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(235);
+            executor->StartVacuum(235ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -411,7 +411,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -456,7 +456,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -489,8 +489,8 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
-            executor->StartVacuum(235);
+            executor->StartVacuum(234ull);
+            executor->StartVacuum(235ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -508,12 +508,12 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendAsync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(236);
+            executor->StartVacuum(236ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
         env.SendAsync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(237);
+            executor->StartVacuum(237ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -535,7 +535,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -565,7 +565,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 43) }, true);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -591,7 +591,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.WaitFor<NFake::TEvCompacted>();
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(235);
+            executor->StartVacuum(235ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -629,21 +629,21 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_VALUES_EQUAL(readRows, 0);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev1 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
         UNIT_ASSERT_VALUES_EQUAL(ev1->Get()->VacuumGeneration, 234);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(115);
+            executor->StartVacuum(115ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
         UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->VacuumGeneration, 234);
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(234);
+            executor->StartVacuum(234ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
         auto ev3 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
@@ -690,7 +690,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.WaitFor<NFake::TEvCompacted>();
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(235);
+            executor->StartVacuum(235ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -742,7 +742,7 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 42) });
 
         env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
-            executor->StartVacuum(235);
+            executor->StartVacuum(235ull);
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
@@ -754,6 +754,48 @@ Y_UNIT_TEST_SUITE(Vacuum) {
 
         auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
         UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->VacuumGeneration, 235);
+
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
+    }
+
+    Y_UNIT_TEST(NoTag) {
+        TString value42(size_t(100 * 1024), 'a');
+
+        TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+        env.FireDummyTablet(TestTabletFlags);
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
+
+        env.SendSync(new NFake::TEvCompact(101));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCount(env, value42, 1), 1);
+
+        env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 42) });
+
+        int readRows = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(101, readRows) });
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 0);
+
+        env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
+            executor->StartVacuum(TNoTag());
+            executor->StartVacuum(TVacuumGeneration(555));
+            executor->StartVacuum(TNoTag());
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        } });
+        auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->VacuumGeneration, 555);
+
+
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
+        env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 42) });
+        env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
+            executor->StartVacuum(TNoTag());
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        } });
+        auto ev3 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev3->Get()->VacuumGeneration, 555);
 
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
     }

@@ -30,6 +30,10 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kExceptionEscaped = "excep
 
 /**
   The exception message.
+  <blockquote>
+  [!WARNING]
+  <p>
+  This attribute may contain sensitive information.</blockquote>
  */
 static constexpr const char *kExceptionMessage = "exception.message";
 
@@ -41,7 +45,11 @@ static constexpr const char *kExceptionStacktrace = "exception.stacktrace";
 
 /**
   The type of the exception (its fully-qualified class name, if applicable). The dynamic type of the
-  exception should be preferred over the static type in languages that support it.
+  exception should be preferred over the static type in languages that support it. <p> If the
+  recorded exception type is a wrapper that is not meaningful for failure classification,
+  instrumentation MAY use the type of the inner exception instead. For example, in Go, errors
+  created with @code fmt.Errorf @endcode using @code %w @endcode MAY be unwrapped when the wrapper
+  type does not help classify the failure.
  */
 static constexpr const char *kExceptionType = "exception.type";
 

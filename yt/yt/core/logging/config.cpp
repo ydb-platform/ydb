@@ -13,6 +13,7 @@
 namespace NYT::NLogging {
 
 using namespace NYTree;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -58,6 +59,8 @@ void TLogWriterConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("json_format", &TThis::JsonFormat)
         .Default();
+    registrar.Parameter("yson_format", &TThis::YsonFormat)
+        .Default(EYsonFormat::Text);
 
     registrar.Postprocessor([] (TThis* config) {
         // COMPAT(max42).
@@ -199,7 +202,7 @@ void TLogManagerConfig::Register(TRegistrar registrar)
         .Default(1'000'000);
     registrar.Parameter("shutdown_grace_timeout", &TThis::ShutdownGraceTimeout)
         .Default(TDuration::Seconds(1));
-    registrar.Parameter("shutdown_busy_timeout", &TThis::ShutdownGraceTimeout)
+    registrar.Parameter("shutdown_busy_timeout", &TThis::ShutdownBusyTimeout)
         .Default(TDuration::Zero());
 
     registrar.Parameter("rules", &TThis::Rules);
@@ -260,11 +263,11 @@ TLogManagerConfigPtr TLogManagerConfig::ApplyDynamic(const TLogManagerDynamicCon
     return mergedConfig;
 }
 
-TLogManagerConfigPtr TLogManagerConfig::CreateLogFile(const TString& path, ELogLevel logLevel)
+TLogManagerConfigPtr TLogManagerConfig::CreateLogFile(const std::string& path, ELogLevel logLevel)
 {
     auto rule = New<TRuleConfig>();
     rule->MinLevel = logLevel;
-    rule->Writers.push_back(TString(DefaultFileWriterName));
+    rule->Writers.push_back(std::string(DefaultFileWriterName));
 
     auto fileWriterConfig = New<TFileLogWriterConfig>();
     fileWriterConfig->FileName = NFS::NormalizePathSeparators(path);
@@ -284,7 +287,7 @@ TLogManagerConfigPtr TLogManagerConfig::CreateStderrLogger(ELogLevel logLevel)
 {
     auto rule = New<TRuleConfig>();
     rule->MinLevel = logLevel;
-    rule->Writers.push_back(TString(DefaultStderrWriterName));
+    rule->Writers.push_back(std::string(DefaultStderrWriterName));
 
     auto stderrWriterConfig = New<TStderrLogWriterConfig>();
 
@@ -321,9 +324,9 @@ TLogManagerConfigPtr TLogManagerConfig::CreateSilent()
 }
 
 TLogManagerConfigPtr TLogManagerConfig::CreateYTServer(
-    const TString& componentName,
-    const TString& directory,
-    const THashMap<TString, TString>& structuredCategoryToWriterName)
+    const std::string& componentName,
+    const std::string& directory,
+    const THashMap<std::string, std::string>& structuredCategoryToWriterName)
 {
     auto config = New<TLogManagerConfig>();
 
@@ -382,7 +385,7 @@ TLogManagerConfigPtr TLogManagerConfig::CreateYTServer(
     return config;
 }
 
-TLogManagerConfigPtr TLogManagerConfig::CreateFromFile(const TString& file, const NYPath::TYPath& path)
+TLogManagerConfigPtr TLogManagerConfig::CreateFromFile(const std::string& file, const NYPath::TYPath& path)
 {
     NYTree::INodePtr node;
     {
@@ -410,21 +413,21 @@ TLogManagerConfigPtr TLogManagerConfig::TryCreateFromEnv()
     auto logIncludeCategoriesStr = GetEnv("YT_LOG_INCLUDE_CATEGORIES");
 
     auto rule = New<TRuleConfig>();
-    rule->Writers.push_back(TString(DefaultStderrWriterName));
+    rule->Writers.push_back(std::string(DefaultStderrWriterName));
     rule->MinLevel = *logLevel;
 
-    std::vector<TString> logExcludeCategories;
+    std::vector<std::string> logExcludeCategories;
     if (logExcludeCategoriesStr) {
-        logExcludeCategories = SplitString(logExcludeCategoriesStr, ",");
+        StringSplitter(logExcludeCategoriesStr).Split(',').Collect(&logExcludeCategories);
     }
 
     for (const auto& excludeCategory : logExcludeCategories) {
         rule->ExcludeCategories.insert(excludeCategory);
     }
 
-    std::vector<TString> logIncludeCategories;
+    std::vector<std::string> logIncludeCategories;
     if (logIncludeCategoriesStr) {
-        logIncludeCategories = SplitString(logIncludeCategoriesStr, ",");
+        StringSplitter(logIncludeCategoriesStr).Split(',').Collect(&logIncludeCategories);
     }
 
     if (!logIncludeCategories.empty()) {
@@ -450,7 +453,7 @@ TLogManagerConfigPtr TLogManagerConfig::TryCreateFromEnv()
 void TLogManagerConfig::UpdateWriters(
     const std::function<IMapNodePtr(const IMapNodePtr&)> updater)
 {
-    THashMap<TString, IMapNodePtr> updatedWriters;
+    THashMap<std::string, IMapNodePtr> updatedWriters;
     for (const auto& [name, configNode] : Writers) {
         if (auto updatedConfigNode = updater(configNode)) {
             EmplaceOrCrash(updatedWriters, name, updatedConfigNode);

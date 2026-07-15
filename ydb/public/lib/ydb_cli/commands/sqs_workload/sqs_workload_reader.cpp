@@ -75,11 +75,6 @@ namespace NYdb::NConsoleClient {
             deleteMessageBatchRequest.SetAdditionalCustomHeaderValue(
                 AMZ_TARGET_HEADER, SQS_TARGET_DELETE_MESSAGE_BATCH);
 
-            if (params.SetSubjectToken && params.Token.Defined()) {
-                deleteMessageBatchRequest.SetAdditionalCustomHeaderValue(
-                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token->c_str());
-            }
-
             auto deleteMessageBatchOutcome =
                 client->DeleteMessageBatch(deleteMessageBatchRequest);
 
@@ -113,7 +108,7 @@ namespace NYdb::NConsoleClient {
             return false;
         }
 
-        return (params.ErrorMessagesDestiny == ERROR_MESSAGES_DESTINY_FATAL) ||
+        return (params.ErrorMessagesPolicy == ERROR_MESSAGES_DESTINY_FATAL) ||
                (std::rand() % 3 == 0);
     }
 
@@ -155,11 +150,6 @@ namespace NYdb::NConsoleClient {
             receiveMessageRequest.SetMaxNumberOfMessages(params.BatchSize);
             receiveMessageRequest.SetAdditionalCustomHeaderValue(
                 AMZ_TARGET_HEADER, SQS_TARGET_RECEIVE_MESSAGE);
-
-            if (params.SetSubjectToken && params.Token.Defined()) {
-                receiveMessageRequest.SetAdditionalCustomHeaderValue(
-                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token->c_str());
-            }
 
             {
                 std::unique_lock locker(*params.Mutex);

@@ -1,20 +1,26 @@
 #pragma once
-#include <library/cpp/deprecated/atomic/atomic.h>
-#include <util/system/spinlock.h>
-#include <util/generic/queue.h>
-#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+#include "grpc_log.h"
+#include "cracked_page.h"
+
+#include <ydb/mvp/core/protos/mvp.pb.h>
+#include <ydb/mvp/core/core_ydb.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
-#include <library/cpp/json/json_writer.h>
-#include <library/cpp/json/json_reader.h>
-#include <ydb/mvp/core/protos/mvp.pb.h>
-#include <ydb/mvp/core/core_ydb.h>
+
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h>
 #include <ydb/public/api/client/nc_private/iam/v1/token_service.grpc.pb.h>
 #include <ydb/public/api/client/nc_private/iam/v1/token_exchange_service.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_auth.pb.h>
-#include "grpc_log.h"
+
+#include <library/cpp/deprecated/atomic/atomic.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
+
+#include <util/generic/queue.h>
+#include <util/system/spinlock.h>
 
 namespace NMVP {
 
@@ -30,7 +36,7 @@ protected:
     static constexpr TDuration RPC_TIMEOUT = TDuration::Seconds(10);
     static constexpr TDuration PERIODIC_CHECK = TDuration::Seconds(30);
     static constexpr TDuration SUCCESS_REFRESH_PERIOD = TDuration::Hours(1);
-    static constexpr TDuration ERROR_REFRESH_PERIOD = TDuration::Hours(1);
+    static constexpr TDuration ERROR_REFRESH_PERIOD = TDuration::Minutes(10);
 
     struct TEvPrivate {
         enum EEv {
@@ -54,13 +60,11 @@ protected:
         template <ui32 TEventType, typename TResponse>
         struct TEvUpdateToken : NActors::TEventLocal<TEvUpdateToken<TEventType, TResponse>, TEventType> {
             TString Name;
-            TString Subject;
             NYdbGrpc::TGrpcStatus Status;
             TResponse Response;
 
-            TEvUpdateToken(const TString& name, const TString& subject, NYdbGrpc::TGrpcStatus&& status, TResponse&& response)
+            TEvUpdateToken(const TString& name, NYdbGrpc::TGrpcStatus&& status, TResponse&& response)
                 : Name(name)
-                , Subject(subject)
                 , Status(status)
                 , Response(response)
             {}
@@ -102,13 +106,13 @@ protected:
 
     struct TTokenConfigs {
         THashMap<TString, NMvp::TMetadataTokenInfo> MetadataTokenConfigs;
-        THashMap<TString, NMvp::TJwtInfo> JwtTokenConfigs;
+        THashMap<TString, NMvp::TOAuth2Exchange> OAuth2ExchangeConfigs;
         THashMap<TString, NMvp::TOAuthInfo> OauthTokenConfigs;
         THashMap<TString, NMvp::TStaticCredentialsInfo> StaticCredentialsConfigs;
         NMvp::EAccessServiceType AccessServiceType;
 
         const NMvp::TMetadataTokenInfo* GetMetadataTokenConfig(const TString& name);
-        const NMvp::TJwtInfo* GetJwtTokenConfig(const TString& name);
+        const NMvp::TOAuth2Exchange* GetOAuth2ExchangeConfig(const TString& name);
         const NMvp::TOAuthInfo* GetOAuthTokenConfig(const TString& name);
         const NMvp::TStaticCredentialsInfo* GetStaticCredentialsTokenConfig(const TString& name);
 
@@ -133,33 +137,30 @@ protected:
 
     template <typename TGRpcService>
     std::unique_ptr<NMVP::TLoggedGrpcServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TString& endpoint) {
-        TStringBuf scheme = "grpc";
-        TStringBuf host;
-        TStringBuf uri;
-        NHttp::CrackURL(endpoint, scheme, host, uri);
+        TCrackedPage cracked(endpoint);
         NYdbGrpc::TGRpcClientConfig config;
-        config.Locator = host;
-        config.EnableSsl = (scheme == "grpcs");
+        config.Locator = cracked.Host;
+        config.EnableSsl = cracked.IsSecureScheme();
         SetGrpcKeepAlive(config);
         return std::unique_ptr<NMVP::TLoggedGrpcServiceConnection<TGRpcService>>(new NMVP::TLoggedGrpcServiceConnection<TGRpcService>(config, GRpcClientLow.CreateGRpcServiceConnection<TGRpcService>(config)));
     }
 
     template <typename TGrpcService, typename TRequest, typename TResponse, typename TUpdateToken>
-    void RequestCreateToken(const TString& name, const TString& endpoint, TRequest& request, typename NYdbGrpc::TSimpleRequestProcessor<typename TGrpcService::Stub, TRequest, TResponse>::TAsyncRequest asyncRequest, const TString& subject = "") {
+    void RequestCreateToken(const TString& name, const TString& endpoint, TRequest& request, typename NYdbGrpc::TSimpleRequestProcessor<typename TGrpcService::Stub, TRequest, TResponse>::TAsyncRequest asyncRequest) {
         NActors::TActorId actorId = SelfId();
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         NYdbGrpc::TCallMeta meta;
         meta.Timeout = NYdb::TDeadline::SafeDurationCast(RPC_TIMEOUT);
         auto connection = CreateGRpcServiceConnection<TGrpcService>(endpoint);
         NYdbGrpc::TResponseCallback<TResponse> cb =
-            [actorId, actorSystem, name, subject](NYdbGrpc::TGrpcStatus&& status, TResponse&& response) -> void {
-                actorSystem->Send(actorId, new TUpdateToken(name, subject, std::move(status), std::move(response)));
+            [actorId, actorSystem, name](NYdbGrpc::TGrpcStatus&& status, TResponse&& response) -> void {
+                actorSystem->Send(actorId, new TUpdateToken(name, std::move(status), std::move(response)));
         };
         connection->DoRequest(request, std::move(cb), asyncRequest, meta);
     }
 
     void UpdateMetadataToken(const NMvp::TMetadataTokenInfo* metadataTokenInfo);
-    void UpdateJwtToken(const NMvp::TJwtInfo* iwtInfo);
+    void UpdateOAuth2ExchangeToken(const NMvp::TOAuth2Exchange* tokenExchangeInfo);
     void UpdateOAuthToken(const NMvp::TOAuthInfo* oauthInfo);
     void UpdateStaticCredentialsToken(const NMvp::TStaticCredentialsInfo* staticCredentialsInfo);
     void UpdateStaffApiUserToken(const NMvp::TStaffApiUserTokenInfo* staffApiUserTokenInfo);

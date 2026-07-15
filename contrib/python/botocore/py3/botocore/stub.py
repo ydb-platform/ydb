@@ -239,8 +239,8 @@ class Stubber:
     def _add_response(self, method, service_response, expected_params):
         if not hasattr(self.client, method):
             raise ValueError(
-                "Client %s does not have method: %s"
-                % (self.client.meta.service_model.service_name, method)
+                f"Client {self.client.meta.service_model.service_name} "
+                f"does not have method: {method}"
             )
 
         # Create a successful http response
@@ -383,16 +383,20 @@ class Stubber:
             if param not in params or expected_params[param] != params[param]:
                 raise StubAssertionError(
                     operation_name=model.name,
-                    reason='Expected parameters:\n%s,\nbut received:\n%s'
-                    % (pformat(expected_params), pformat(params)),
+                    reason=(
+                        f'Expected parameters:\n{pformat(expected_params)},\n'
+                        f'but received:\n{pformat(params)}'
+                    ),
                 )
 
         # Ensure there are no extra params hanging around
         if sorted(expected_params.keys()) != sorted(params.keys()):
             raise StubAssertionError(
                 operation_name=model.name,
-                reason='Expected parameters:\n%s,\nbut received:\n%s'
-                % (pformat(expected_params), pformat(params)),
+                reason=(
+                    f'Expected parameters:\n{pformat(expected_params)},\n'
+                    f'but received:\n{pformat(params)}'
+                ),
             )
 
     def _should_not_stub(self, context):

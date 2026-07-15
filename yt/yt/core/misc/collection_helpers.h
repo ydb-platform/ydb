@@ -119,11 +119,11 @@ const T& GetOrCrash(const std::variant<TVariantArgs...>& variant Y_LIFETIME_BOUN
  * Returns the copy of the value in #map if #key is present
  * of the copy of #defaultValue otherwise.
  */
-template <class TMap, class TKey>
-typename TMap::mapped_type GetOrDefault(
+template <class TMap, class TKey, class TReturnType = TMap::mapped_type>
+TReturnType GetOrDefault(
     const TMap& map,
     const TKey& key,
-    const typename TMap::mapped_type& defaultValue = {})
+    const std::type_identity_t<TReturnType>& defaultValue = {})
     requires (!TIsDefaultMap<TMap>::Value);
 
 //! Same as #GetOrDefault, but returns a const reference instead of a copied value.

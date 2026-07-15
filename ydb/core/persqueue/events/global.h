@@ -14,6 +14,7 @@
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqevents_global.pb.h>
 
 namespace NKikimr::TEvPersQueue {
     enum EEv {
@@ -59,6 +60,9 @@ namespace NKikimr::TEvPersQueue {
         EvBalancingSubscribe,
         EvBalancingUnsubscribe,
         EvBalancingSubscribeNotify,
+        EvPartitionUpdateReadMetrics,
+        EvCheckMessageDeduplicationRequest,
+        EvCheckMessageDeduplicationResponse,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -67,10 +71,17 @@ namespace NKikimr::TEvPersQueue {
     static_assert(
         EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ)");
+    static_assert(EvInternalEvents == InternalEventSpaceBegin(NPQ::NEvents::EServices::INTERNAL));
+    static_assert(EvPartitionUpdateReadMetrics < EvResponse, "EvPartitionUpdateReadMetrics must be in the first PQ global event block");
 
     struct TEvRequest : public TEventPB<TEvRequest,
             NKikimrClient::TPersQueueRequest, EvRequest> {
         TEvRequest() {}
+    };
+
+    struct TEvPartitionUpdateReadMetrics : public TEventPB<TEvPartitionUpdateReadMetrics,
+            NKikimrPQ::TPersQueuePartitionUpdateReadMetrics, EvPartitionUpdateReadMetrics> {
+        TEvPartitionUpdateReadMetrics() = default;
     };
 
     struct TEvResponse: public TEventPB<TEvResponse,
@@ -230,6 +241,8 @@ namespace NKikimr::TEvPersQueue {
     };
 
     struct TEvProposeTransaction : public TEventPreSerializedPB<TEvProposeTransaction, NKikimrPQ::TEvProposeTransaction, EvProposeTransaction> {
+        bool GetSkipSrcIdInfo() const;
+
         NWilson::TSpan ExecuteSpan;
     };
 
@@ -257,7 +270,8 @@ namespace NKikimr::TEvPersQueue {
     struct TEvReadingPartitionFinishedRequest : public TEventPB<TEvReadingPartitionFinishedRequest, NKikimrPQ::TEvReadingPartitionFinishedRequest, EvReadingPartitionFinished> {
         TEvReadingPartitionFinishedRequest() = default;
 
-        TEvReadingPartitionFinishedRequest(const TString& consumer, ui32 partitionId, bool scaleAwareSDK, bool startedReadingFromEndOffset) {
+        TEvReadingPartitionFinishedRequest(const TActorId& pipeClient, const TString& consumer, ui32 partitionId, bool scaleAwareSDK, bool startedReadingFromEndOffset) {
+            ActorIdToProto(pipeClient, Record.MutablePipeClient());
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
             Record.SetScaleAwareSDK(scaleAwareSDK);
@@ -268,7 +282,8 @@ namespace NKikimr::TEvPersQueue {
     struct TEvReadingPartitionStartedRequest : public TEventPB<TEvReadingPartitionStartedRequest, NKikimrPQ::TEvReadingPartitionStartedRequest, EvReadingPartitionStarted> {
         TEvReadingPartitionStartedRequest() = default;
 
-        TEvReadingPartitionStartedRequest(const TString& consumer, ui32 partitionId) {
+        TEvReadingPartitionStartedRequest(const TActorId& pipeClient, const TString& consumer, ui32 partitionId) {
+            ActorIdToProto(pipeClient, Record.MutablePipeClient());
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
         }
@@ -308,4 +323,19 @@ namespace NKikimr::TEvPersQueue {
         }
     };
 
+    struct TEvCheckMessageDeduplicationRequest: TEventPB<TEvCheckMessageDeduplicationRequest, NKikimrPQ::TEvCheckMessageDeduplicationRequest, EvCheckMessageDeduplicationRequest> {
+        TEvCheckMessageDeduplicationRequest() = default;
+
+        TEvCheckMessageDeduplicationRequest(ui32 partitionId, ui32 generation, const auto& messageDeduplicationIds) {
+            Record.SetPartitionId(partitionId);
+            Record.SetGeneration(generation);
+            for (const auto& id : messageDeduplicationIds) {
+                Record.AddMessageDeduplicationId(id);
+            }
+        }
+    };
+
+    struct TEvCheckMessageDeduplicationResponse: TEventPB<TEvCheckMessageDeduplicationResponse, NKikimrPQ::TEvCheckMessageDeduplicationResponse, EvCheckMessageDeduplicationResponse> {
+        TEvCheckMessageDeduplicationResponse() = default;
+    };
 } // namespace NKikimr::TEvPersQueue

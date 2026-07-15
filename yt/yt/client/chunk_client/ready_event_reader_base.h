@@ -24,8 +24,8 @@ class TReadyEventReaderBase
     : public virtual NChunkClient::IReadyEventReaderBase
 {
 protected:
-    //! Return ready event without starting wait timer. Intended for internal use in subclasses.
-    TFuture<void> ReadyEvent() const;
+    //! Returns ready event without starting wait timer. Intended for internal use in subclasses.
+    TFuture<void> InternalGetReadyEvent() const;
 
     //! Checks that ReadyEvent is set and the result is not an error.
     bool IsReadyEventSetAndOK() const;
@@ -34,11 +34,13 @@ protected:
     //! stops wait timer when ready event is ready.
     void SetReadyEvent(TFuture<void> readyEvent);
 
-    //! Return how much time caller spent waiting on ready event.
+    //! Returns how much time caller spent waiting on ready event.
     TDuration GetWaitTime() const;
 
 private:
+    //! Protects ReadyEvent_ and WaitTimer_.
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+
     TFuture<void> ReadyEvent_ = OKFuture;
 
     //! This timer is started when GetReadyEvent() is invoked and stopped when ready event is set.

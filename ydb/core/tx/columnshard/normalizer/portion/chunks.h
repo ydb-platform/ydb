@@ -72,7 +72,8 @@ public:
         template <class TSource>
         TChunkInfo(TKey&& key, const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
             : Key(std::move(key))
-            , CLContext(rowset, dsGroupSelector) {
+            , CLContext(rowset, dsGroupSelector)
+        {
         }
 
         ui32 GetRecordsCount() const {
@@ -94,6 +95,7 @@ public:
         std::shared_ptr<TColumnLoader> GetLoader() const {
             return Schema->GetColumnLoaderVerified(Key.GetColumnIdx());
         }
+
         void InitSchema(const NColumnShard::TTablesManager& tm);
 
         bool operator<(const TChunkInfo& other) const {
@@ -107,7 +109,8 @@ public:
 public:
     TChunksNormalizer(const TNormalizationController::TInitContext& info)
         : TBase(info)
-        , DsGroupSelector(info.GetStorageInfo()) {
+        , DsGroupSelector(info.GetStorageInfo())
+    {
     }
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(

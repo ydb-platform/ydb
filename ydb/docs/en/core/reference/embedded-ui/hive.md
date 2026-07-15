@@ -51,7 +51,7 @@ Additional pages are presented below the table:
 * **Nodes**: A list of nodes.
 * **Storage**: A list of storage group pools.
 * **Groups**: A list of storage groups for each tablet.
-* **Settings**: The Hive configuration page.
+* **Settings** {#settings}: The Hive configuration page.
 * **Reassign Groups**: The page for reassigning storage groups across tablets.
 
 You can also view what tablets use a particular group and, vice versa, what groups are used on a particular tablet.

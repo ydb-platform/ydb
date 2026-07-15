@@ -268,6 +268,10 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr VPatchPartPlacementVerifyFailed;
     ::NMonitoring::TDynamicCounters::TCounterPtr PatchesWithFallback;
 
+    // cancellation
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CancellationGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CancelledEvents;
+
     TRequestMonGroup& GetRequestMonGroup(ERequestType request) {
         switch (request) {
             case ERequestType::Get: return GetGroup;

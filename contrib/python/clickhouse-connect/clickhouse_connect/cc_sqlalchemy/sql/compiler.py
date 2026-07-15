@@ -1,14 +1,167 @@
-from sqlalchemy.exc import CompileError
-from sqlalchemy.sql.compiler import SQLCompiler
+import re
 
-from clickhouse_connect.cc_sqlalchemy import ArrayJoin
+from sqlalchemy.exc import CompileError
+from sqlalchemy.sql import elements, sqltypes
+from sqlalchemy.sql.compiler import SQLCompiler
+from sqlalchemy.util import memoized_property
+
+from clickhouse_connect.cc_sqlalchemy.datatypes.base import ChSqlaType
 from clickhouse_connect.cc_sqlalchemy.sql import format_table
 
+# The driver's external_bind_re only recognizes \w+ placeholder names.
+_bind_name_re = re.compile(r"\w+\Z")
 
-# pylint: disable=arguments-differ
+
+def _find_outermost_marker(text, markers):
+    """Earliest index in `text` where any of `markers` appears at paren depth 0, skipping
+    string literals (single-quoted) and backtick-quoted identifiers. -1 if no match.
+    Used to splice PREWHERE into a SELECT body without matching subquery clauses.
+    """
+    depth = 0
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == "'" or c == "`":
+            quote = c
+            i += 1
+            while i < n:
+                if text[i] == "\\" and i + 1 < n:
+                    i += 2
+                    continue
+                if text[i] == quote:
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+        elif depth == 0:
+            for marker in markers:
+                if text.startswith(marker, i):
+                    return i
+        i += 1
+    return -1
+
+
+def _ch_type_name(sqla_type):
+    """Map a SQLAlchemy type to a ClickHouse type name, or None if unmapped."""
+    if isinstance(sqla_type, ChSqlaType):
+        return sqla_type.name
+    # Order matters so we need to check subtypes before parent types
+    if isinstance(sqla_type, sqltypes.SmallInteger):
+        return "Int16"
+    if isinstance(sqla_type, sqltypes.BigInteger):
+        return "Int64"
+    if isinstance(sqla_type, sqltypes.Integer):
+        return "Int32"
+    if isinstance(sqla_type, sqltypes.Float):
+        return "Float64"
+    if isinstance(sqla_type, sqltypes.Numeric):
+        p = sqla_type.precision or 18
+        s = sqla_type.scale or 0
+        return f"Decimal({p}, {s})"
+    if isinstance(sqla_type, sqltypes.Boolean):
+        return "Bool"
+    if isinstance(sqla_type, sqltypes.DateTime):
+        return "DateTime"
+    if isinstance(sqla_type, sqltypes.Date):
+        return "Date"
+    if isinstance(sqla_type, sqltypes.String):
+        return "String"
+    return None
+
+
+def _resolve_ch_type_name(sqla_type):
+    """ClickHouse type name for a VALUES column, falling back to String."""
+    return _ch_type_name(sqla_type) or "String"
+
+
+def _resolve_ch_bind_type(sqla_type):
+    """ClickHouse type name for a server-side bind, raising on unmapped types."""
+    if isinstance(sqla_type, sqltypes.TupleType):
+        return f"Tuple({', '.join(_resolve_ch_bind_type(t) for t in sqla_type.types)})"
+    name = _ch_type_name(sqla_type)
+    if name is None:
+        raise CompileError(f"server_side_params needs an explicit type for every bind; none resolved for {sqla_type!r}.")
+    return name
+
+
 class ChStatementCompiler(SQLCompiler):
+    # SQLAlchemy 1.4 does not pass bindparam_type to bindparam_string, so stash it here.
+    _ch_bind_type = None
 
-    # pylint: disable=attribute-defined-outside-init,unused-argument
+    @property
+    def _server_side_params(self):
+        return getattr(self.dialect, "server_side_params", False)
+
+    @property
+    def _ch_array_binds(self):
+        return self.__dict__.setdefault("_ch_array_bind_names", set())
+
+    @memoized_property
+    def _bind_processors(self):
+        """Bind processors with array-bound params dropped; the driver formats those."""
+        processors = SQLCompiler._bind_processors.fget(self)
+        if self._ch_array_binds:
+            return {k: v for k, v in processors.items() if k not in self._ch_array_binds}
+        return processors
+
+    def _ch_check_bind_name(self, name):
+        if not _bind_name_re.match(name):
+            raise CompileError(
+                f"server_side_params cannot bind parameter {name!r}: ClickHouse server-side "
+                "parameter names must match [A-Za-z0-9_]. Rename the bind parameter."
+            )
+
+    def visit_bindparam(self, bindparam, **kw):
+        if not self._server_side_params:
+            return super().visit_bindparam(bindparam, **kw)
+        if bindparam.expanding and not kw.get("literal_binds") and not bindparam.literal_execute:
+            return self._ch_expanding_bindparam(bindparam, **kw)
+        prev = self._ch_bind_type
+        self._ch_bind_type = bindparam.type
+        try:
+            return super().visit_bindparam(bindparam, **kw)
+        finally:
+            self._ch_bind_type = prev
+
+    def _ch_has_bind_processor(self, sqla_type):
+        if isinstance(sqla_type, sqltypes.TupleType):
+            return any(self._ch_has_bind_processor(t) for t in sqla_type.types)
+        return sqla_type._cached_bind_processor(self.dialect) is not None
+
+    def _ch_expanding_bindparam(self, bindparam, **kw):
+        """Render an IN-family bind as a single {name:Array(Type)} placeholder."""
+        # Array binds skip per-element processors, so a type that needs one can't be bound.
+        if self._ch_has_bind_processor(bindparam.type):
+            raise CompileError(f"server_side_params cannot bind an IN list of {bindparam.type!r}: it needs a bind processor.")
+        # Drop the param from post-compile expansion so its list reaches the driver intact.
+        super().visit_bindparam(bindparam, **kw)
+        self.post_compile_params = self.post_compile_params.difference([bindparam])
+        name = self._truncate_bindparam(bindparam)
+        actual = self.escaped_bind_names.get(name, name) if self.escaped_bind_names else name
+        self._ch_check_bind_name(actual)
+        self._ch_array_binds.add(actual)
+        return "{" + actual + ":Array(" + _resolve_ch_bind_type(bindparam.type) + ")}"
+
+    def bindparam_string(self, name, **kw):
+        base = super().bindparam_string(name, **kw)
+        if not self._server_side_params or kw.get("post_compile") or kw.get("expanding"):
+            return base
+        actual = self.escaped_bind_names.get(name, name) if self.escaped_bind_names else name
+        self._ch_check_bind_name(actual)
+        ch_type = kw.get("bindparam_type") or self._ch_bind_type
+        if ch_type is None:
+            raise CompileError(f"server_side_params requires a typed bind parameter, but none was available for {name!r}.")
+        return "{" + actual + ":" + _resolve_ch_bind_type(ch_type) + "}"
+
+    def _raise_on_escape(self, binary, operator_name: str):
+        if binary.modifiers.get("escape") is not None:
+            raise CompileError(f"ClickHouse does not support the ESCAPE clause on {operator_name}")
+
     def visit_delete(self, delete_stmt, visiting_cte=None, **kw):
         table = delete_stmt.table
         text = f"DELETE FROM {format_table(table)}"
@@ -24,36 +177,101 @@ class ChStatementCompiler(SQLCompiler):
 
         return text
 
-    def visit_array_join(self, array_join_clause, asfrom=False, from_linter=None, **kw):
-        left = self.process(array_join_clause.left, asfrom=True, from_linter=from_linter, **kw)
-        array_col = self.process(array_join_clause.array_column, **kw)
-        join_type = "LEFT ARRAY JOIN" if array_join_clause.is_left else "ARRAY JOIN"
-        text = f"{left} {join_type} {array_col}"
-        if array_join_clause.alias:
-            text += f" AS {self.preparer.quote(array_join_clause.alias)}"
+    def visit_values(self, element, asfrom=False, from_linter=None, visiting_cte=None, **kw):
+        """Compile a VALUES clause using ClickHouse's VALUES table function syntax.
 
-        return text
+        ClickHouse requires the column structure as the first argument:
+            VALUES('col1 Type1, col2 Type2', (row1_val1, row1_val2), ...)
+
+        This differs from standard SQL which places column names after the alias:
+            (VALUES (row1), (row2)) AS name (col1, col2)
+
+        Compatible with both SQLAlchemy 1.4 and 2.x.
+        """
+        if getattr(element, "_independent_ctes", None):
+            self._dispatch_independent_ctes(element, kw)
+
+        structure = ", ".join(f"{col.name} {_resolve_ch_type_name(col.type)}" for col in element.columns)
+
+        kw.setdefault("literal_binds", element.literal_binds)
+        tuples = ", ".join(
+            self.process(
+                elements.Tuple(types=element._column_types, *elem).self_group(),  # noqa: B026
+                **kw,
+            )
+            for chunk in element._data
+            for elem in chunk
+        )
+
+        structure_literal = self.render_literal_value(structure, sqltypes.String())
+        v = f"VALUES({structure_literal}, {tuples})"
+
+        # SA 2.x has _unnamed; SA 1.4 uses name=None for unnamed values
+        is_unnamed = getattr(element, "_unnamed", element.name is None)
+        if is_unnamed:
+            name = None
+        elif isinstance(element.name, elements._truncated_label):
+            name = self._truncated_identifier("values", element.name)
+        else:
+            name = element.name
+
+        lateral = "LATERAL " if element._is_lateral else ""
+
+        if asfrom:
+            if from_linter:
+                # SA 2.x has _de_clone(); SA 1.4 doesn't
+                key = element._de_clone() if hasattr(element, "_de_clone") else element
+                from_linter.froms[key] = name if name is not None else "(unnamed VALUES element)"
+
+            if visiting_cte is not None and visiting_cte.element is element:
+                if element._is_lateral:
+                    raise CompileError("Can't use a LATERAL VALUES expression inside of a CTE")
+                v = f"SELECT * FROM {v}"
+            elif name:
+                kw["include_table"] = False
+                v = f"{lateral}{v}{self.get_render_as_alias_suffix(self.preparer.quote(name))}"
+            else:
+                v = f"{lateral}{v}"
+
+        return v
 
     def visit_join(self, join, **kw):
-        if isinstance(join, ArrayJoin):
-            return self.visit_array_join(join, **kw)
-
         left = self.process(join.left, **kw)
         right = self.process(join.right, **kw)
         onclause = join.onclause
 
+        is_cross = getattr(join, "_is_cross", False) or onclause is None
         if getattr(join, "full", False):
-            join_kw = " FULL OUTER JOIN "
-        elif onclause is None:
-            join_kw = " CROSS JOIN "
+            join_type = "FULL OUTER JOIN"
+        elif is_cross:
+            join_type = "CROSS JOIN"
         elif join.isouter:
-            join_kw = " LEFT OUTER JOIN "
+            join_type = "LEFT OUTER JOIN"
         else:
-            join_kw = " INNER JOIN "
+            join_type = "INNER JOIN"
 
-        text = left + join_kw + right
+        # ClickHouse modifiers: [GLOBAL] [ALL|ANY|ASOF] <join_type>
+        distribution = getattr(join, "distribution", None)
+        strictness = getattr(join, "strictness", None)
+        parts = []
+        if distribution:
+            parts.append(distribution)
+        if strictness:
+            parts.append(strictness)
+        parts.append(join_type)
+        join_kw = " ".join(parts)
 
-        if onclause is not None:
+        text = f"{left} {join_kw} {right}"
+
+        using_columns = getattr(join, "using_columns", None)
+        if using_columns:
+            # Process the onclause so the from-linter registers the
+            # table relationship, but render USING syntax instead.
+            if onclause is not None:
+                self.process(onclause, **kw)
+            quoted = ", ".join(self.preparer.quote(col) for col in using_columns)
+            text += f" USING ({quoted})"
+        elif not is_cross and onclause is not None:
             text += " ON " + self.process(onclause, **kw)
 
         return text
@@ -77,14 +295,146 @@ class ChStatementCompiler(SQLCompiler):
     def update_from_clause(self, update_stmt, from_table, extra_froms, from_hints, **kw):
         raise NotImplementedError("ClickHouse doesn't support UPDATE with FROM clause")
 
-    # pylint: disable=unused-argument
     def visit_empty_set_expr(self, element_types, **kw):
         return "SELECT 1 WHERE 1=0"
 
     def visit_sequence(self, sequence, **kw):
         raise NotImplementedError("ClickHouse doesn't support sequences")
 
-    def get_from_hint_text(self, table, text):
-        if text == "FINAL":
-            return "FINAL"
-        return super().get_from_hint_text(table, text)
+    def group_by_clause(self, select, **kw):
+        """Render GROUP BY using label aliases instead of full expressions."""
+        kw["_ch_group_by"] = True
+        return super().group_by_clause(select, **kw)
+
+    def visit_label(
+        self,
+        label,
+        within_columns_clause=False,
+        render_label_as_label=None,
+        **kw,
+    ):
+        ch_group_by = kw.pop("_ch_group_by", False)
+        if ch_group_by and not within_columns_clause and render_label_as_label is None:
+            if isinstance(label.name, elements._truncated_label):
+                labelname = self._truncated_identifier("colident", label.name)
+            else:
+                labelname = label.name
+            return self.preparer.format_label(label, labelname)
+        return super().visit_label(
+            label,
+            within_columns_clause=within_columns_clause,
+            render_label_as_label=render_label_as_label,
+            **kw,
+        )
+
+    def _ch_modifier_attr(self, select, compile_state, attr, default):
+        """Read a CH modifier attribute."""
+        val = getattr(select, attr, None)
+        if val is not None:
+            return val
+        if compile_state is not None:
+            orig = getattr(compile_state, "select_statement", None)
+            if orig is not None and orig is not select:
+                return getattr(orig, attr, default)
+        return default
+
+    def _compose_select_body(self, text, select, compile_state, inner_columns, froms, byfrom, toplevel, kwargs):
+        ch_final = self._ch_modifier_attr(select, compile_state, "_ch_final", set())
+        ch_sample = self._ch_modifier_attr(select, compile_state, "_ch_sample", {})
+        ch_prewhere = self._ch_modifier_attr(select, compile_state, "_ch_prewhere", None)
+        ch_limit_by = self._ch_modifier_attr(select, compile_state, "_ch_limit_by", None)
+
+        prev_lb = getattr(self, "_ch_active_limit_by", None)
+        self._ch_active_limit_by = ch_limit_by
+
+        try:
+            if ch_final or ch_sample:
+                mods = {}
+                for target in ch_final | set(ch_sample):
+                    parts = []
+                    if target in ch_final:
+                        parts.append("FINAL")
+                    if target in ch_sample:
+                        parts.append(f"SAMPLE {ch_sample[target]}")
+                    mods[target] = " ".join(parts)
+
+                prev = getattr(self, "_ch_from_modifiers", None)
+                self._ch_from_modifiers = mods
+                try:
+                    result = super()._compose_select_body(text, select, compile_state, inner_columns, froms, byfrom, toplevel, kwargs)
+                finally:
+                    self._ch_from_modifiers = prev
+            else:
+                result = super()._compose_select_body(text, select, compile_state, inner_columns, froms, byfrom, toplevel, kwargs)
+        finally:
+            self._ch_active_limit_by = prev_lb
+
+        if ch_prewhere is not None:
+            prewhere_text = self.process(ch_prewhere.whereclause, **kwargs)
+            prewhere_segment = f" \nPREWHERE {prewhere_text}"
+            markers = (" \nWHERE ", " GROUP BY ", " \nHAVING ", " ORDER BY ", "\n LIMIT ")
+            insert_at = _find_outermost_marker(result, markers)
+            if insert_at == -1:
+                result = result + prewhere_segment
+            else:
+                result = result[:insert_at] + prewhere_segment + result[insert_at:]
+
+        # LIMIT BY: SA calls limit_clause() only when there's a regular LIMIT/OFFSET.
+        # Without one, it's never called, so append the LIMIT BY here instead.
+        if ch_limit_by is not None and not select._has_row_limiting_clause:
+            result += self._render_ch_limit_by(ch_limit_by, kwargs)
+
+        return result
+
+    def _render_ch_limit_by(self, ch_limit_by, kw):
+        by_text = ", ".join(self.process(col, **kw) for col in ch_limit_by.by_clauses)
+        offset_prefix = f"{ch_limit_by.offset}, " if ch_limit_by.offset is not None else ""
+        return f"\n LIMIT {offset_prefix}{ch_limit_by.limit} BY {by_text}"
+
+    def limit_clause(self, select, **kw):
+        text = ""
+        ch_limit_by = getattr(select, "_ch_limit_by", None)
+        if ch_limit_by is None:
+            ch_limit_by = getattr(self, "_ch_active_limit_by", None)
+        if ch_limit_by is not None:
+            text += self._render_ch_limit_by(ch_limit_by, kw)
+        text += super().limit_clause(select, **kw)
+        return text
+
+    def visit_table(self, table, asfrom=False, iscrud=False, ashint=False, fromhints=None, enclosing_alias=None, **kwargs):
+        result = super().visit_table(
+            table, asfrom=asfrom, iscrud=iscrud, ashint=ashint, fromhints=fromhints, enclosing_alias=enclosing_alias, **kwargs
+        )
+        if asfrom and enclosing_alias is None:
+            mods = getattr(self, "_ch_from_modifiers", None)
+            if mods and table in mods:
+                result += " " + mods[table]
+        return result
+
+    def visit_alias(self, alias, asfrom=False, **kwargs):
+        result = super().visit_alias(alias, asfrom=asfrom, **kwargs)
+        if asfrom:
+            mods = getattr(self, "_ch_from_modifiers", None)
+            if mods and alias in mods:
+                result += " " + mods[alias]
+        return result
+
+    def visit_like_op_binary(self, binary, operator, **kw):
+        self._raise_on_escape(binary, "LIKE")
+        return super().visit_like_op_binary(binary, operator, **kw)
+
+    def visit_not_like_op_binary(self, binary, operator, **kw):
+        self._raise_on_escape(binary, "LIKE")
+        return super().visit_not_like_op_binary(binary, operator, **kw)
+
+    def visit_ilike_op_binary(self, binary, operator, **kw):
+        self._raise_on_escape(binary, "ILIKE")
+        left = self.process(binary.left, **kw)
+        right = self.process(binary.right, **kw)
+        return f"{left} ILIKE {right}"
+
+    def visit_not_ilike_op_binary(self, binary, operator, **kw):
+        self._raise_on_escape(binary, "ILIKE")
+        left = self.process(binary.left, **kw)
+        right = self.process(binary.right, **kw)
+        return f"{left} NOT ILIKE {right}"

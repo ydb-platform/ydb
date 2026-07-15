@@ -19,7 +19,7 @@ public:
     }
 
     TNodePtr Build(const TSQLv1ParserAST& ast);
-    TNodePtr Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& ast);
+    TNodePtr Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& statements);
 
     bool Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, size_t statementNumber);
 
@@ -35,9 +35,13 @@ private:
     bool AlterTableAlterFamily(const TRule_alter_table_alter_column_family& node, TAlterTableParameters& params);
     bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_uncompat& node, TTableSettings& tableSettings, ETableType tableType);
     bool AlterTableSetTableSetting(const TRule_alter_table_set_table_setting_compat& node, TTableSettings& tableSettings, ETableType tableType);
+    bool AlterTableSetIndexSetting(const TRule_alter_table_set_table_setting_uncompat& node, TTableSettings& tableSettings, TIndexDescription::TIndexSettings& indexSettings, ETableType tableType);
+    bool AlterTableSetIndexSetting(const TRule_alter_table_set_table_setting_compat& node, TTableSettings& tableSettings, TIndexDescription::TIndexSettings& indexSettings, ETableType tableType);
     bool AlterTableResetTableSetting(const TRule_alter_table_reset_table_setting& node, TTableSettings& tableSettings, ETableType tableType);
     bool AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params);
-    void AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params);
+    bool AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params);
+    bool AlterTableAddStatistics(const TRule_alter_table_add_statistics& node, TAlterTableParameters& params);
+    bool AlterTableDropStatistics(const TRule_alter_table_drop_statistics& node, TAlterTableParameters& params);
     void AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params);
     bool AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params);
     bool AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params);
@@ -52,6 +56,9 @@ private:
     bool AlterTableAlterColumnSetNotNull(const TRule_alter_table_alter_column_set_not_null& node, TAlterTableParameters& params);
     bool AlterTableAlterColumnSetCompression(const TRule_alter_table_alter_column_set_compression& node, TAlterTableParameters& params);
     bool AlterTableCompact(const TRule_alter_table_compact& node, TAlterTableParameters& params);
+    bool AlterTableAlterColumnSetDefault(const TRule_alter_table_alter_column_set_default& node, TAlterTableParameters& params);
+    bool AlterTableAlterColumnDropDefault(const TRule_alter_table_alter_column_drop_default& node, TAlterTableParameters& params);
+    bool AlterTableAlterColumnSetEncoding(const TRule_alter_table_alter_column_set_encoding& node, TAlterTableParameters& params);
 
     TNodePtr Build(const TRule_delete_stmt& stmt);
 
@@ -61,28 +68,11 @@ private:
     TSourcePtr Build(const TRule_set_clause_list& stmt);
     TSourcePtr Build(const TRule_multiple_column_assignment& stmt);
 
-    template <class TNode>
-    void ParseStatementName(const TNode& node, TString& internalStatementName, TString& humanStatementName) {
-        internalStatementName.clear();
-        humanStatementName.clear();
-        const auto& descr = AltDescription(node);
-        TVector<TString> parts;
-        Split(descr, "_", parts);
-        Y_DEBUG_ABORT_UNLESS(parts.size() > 1);
-        parts.pop_back();
-        for (auto& part : parts) {
-            part.to_upper(0, 1);
-            internalStatementName += part;
-            if (!humanStatementName.empty()) {
-                humanStatementName += ' ';
-            }
-            humanStatementName += to_upper(part);
-        }
-    }
-
     const bool TopLevel_;
     const bool AllowTopLevelPragmas_;
 };
+
+bool IsYqlSelectCompatiblePragma(TStringBuf prefix, TStringBuf pragma);
 
 void EnumeratePragmas(std::function<void(std::string_view)> callback);
 void EnumerateStmtContexts(std::function<void(std::string_view)> callback);

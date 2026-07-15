@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "rich_constrained.h"
 #endif
-#undef RICH_CONSTRAINED_INL_H_
 
 #include "parser_detail.h"
 
@@ -78,7 +77,7 @@ std::optional<std::vector<NYTree::IMapNodePtr>> CollectRawRangeNodes(const TCons
             THROW_ERROR_EXCEPTION("YPath cannot be annotated with both multiple (\"ranges\" attribute) "
                 "and single (\"lower_limit\" or \"upper_limit\" attributes) ranges");
         }
-        THashMap<TString, NYTree::IMapNodePtr> rangeNode;
+        THashMap<std::string, NYTree::IMapNodePtr> rangeNode;
         if (optionalLowerLimitNode) {
             rangeNode["lower_limit"] = optionalLowerLimitNode;
         }
@@ -444,9 +443,9 @@ bool TConstrainedRichYPath<TValidator...>::HasNontrivialRanges() const
 }
 
 template <class... TValidator>
-std::optional<TString> TConstrainedRichYPath<TValidator...>::GetFileName() const
+std::optional<std::string> TConstrainedRichYPath<TValidator...>::GetFileName() const
 {
-    return FindAttribute<TString>(*this, "file_name");
+    return FindAttribute<std::string>(*this, "file_name");
 }
 
 template <class... TValidator>
@@ -664,15 +663,27 @@ NTableClient::TVersionedWriteOptions TConstrainedRichYPath<TValidator...>::GetVe
 }
 
 template <class... TValidator>
-std::optional<TString> TConstrainedRichYPath<TValidator...>::GetAccessMethod() const
+std::optional<std::string> TConstrainedRichYPath<TValidator...>::GetAccessMethod() const
 {
-    return FindAttribute<TString>(*this, "access_method");
+    return FindAttribute<std::string>(*this, "access_method");
 }
 
 template <class... TValidator>
-std::optional<TString> TConstrainedRichYPath<TValidator...>::GetInputQuery() const
+std::optional<std::string> TConstrainedRichYPath<TValidator...>::GetInputQuery() const
 {
-    return FindAttribute<TString>(*this, "input_query");
+    return FindAttribute<std::string>(*this, "input_query");
+}
+
+template <class... TValidator>
+std::optional<std::string> TConstrainedRichYPath<TValidator...>::GetQueueConsumerName() const
+{
+    return FindAttribute<std::string>(*this, "queue_consumer_name");
+}
+
+template <class... TValidator>
+void TConstrainedRichYPath<TValidator...>::SetQueueConsumerName(const std::string& value)
+{
+    SetAttribute("queue_consumer_name", value);
 }
 
 template <class... TValidator>
@@ -701,7 +712,7 @@ template <class... TValidator>
 void TRequiredAttributesValidator<AttributeKey...>::operator()(const TConstrainedRichYPath<TValidator...>& path) const
 {
     auto validateOne = [&] (const char* attributeName) {
-        THROW_ERROR_EXCEPTION_IF(!path.Attributes().Contains(attributeName), "YPath %Qv does not have attribute %Qv", path, attributeName);
+        THROW_ERROR_EXCEPTION_IF(!path.Attributes().Contains(attributeName), "YPath %v does not have attribute %Qv", path, attributeName);
     };
     (validateOne(AttributeKey), ...);
 }
@@ -717,7 +728,7 @@ void TWhitelistAttributesValidator<AttributeKey...>::operator()(const TConstrain
             continue;
         }
 
-        THROW_ERROR_EXCEPTION("YPath %Qv has unexpected attribute %Qv", path, key);
+        THROW_ERROR_EXCEPTION("YPath %v has unexpected attribute %Qv", path, key);
     }
 }
 
@@ -727,7 +738,7 @@ template <class... TValidator>
 void FormatValue(TStringBuilderBase* builder, const TConstrainedRichYPath<TValidator...>& path, TStringBuf spec)
 {
     // NB: We intentionally use Text format since string-representation of rich ypath should be readable.
-    FormatValue(builder, ConvertToStringImpl(path.GetPath(), path.Attributes(), NYson::EYsonFormat::Text), spec);
+    FormatValue(builder, ConvertToString(path.GetPath(), path.Attributes(), NYson::EYsonFormat::Text), spec);
 }
 
 template <class... TValidator>
@@ -767,7 +778,7 @@ void Deserialize(TConstrainedRichYPath<TValidator...>& richPath, NYson::TYsonPul
 template <class... TValidator>
 void ToProto(TString* protoPath, const TConstrainedRichYPath<TValidator...>& path)
 {
-    *protoPath = ConvertToStringImpl(path.GetPath(), path.Attributes(), NYson::EYsonFormat::Binary);
+    *protoPath = ConvertToString(path.GetPath(), path.Attributes(), NYson::EYsonFormat::Binary);
 }
 
 template <class... TValidator>
@@ -779,7 +790,7 @@ void FromProto(TConstrainedRichYPath<TValidator...>* path, const TString& protoP
 template <class... TValidator>
 void ToProto(std::string* protoPath, const TConstrainedRichYPath<TValidator...>& path)
 {
-    *protoPath = ConvertToStringImpl(path.GetPath(), path.Attributes(), NYson::EYsonFormat::Binary);
+    *protoPath = ConvertToString(path.GetPath(), path.Attributes(), NYson::EYsonFormat::Binary);
 }
 
 template <class... TValidator>
@@ -795,5 +806,5 @@ void FromProto(TConstrainedRichYPath<TValidator...>* path, const std::string& pr
 template <class... TValidator>
 size_t THash<NYT::NYPath::TConstrainedRichYPath<TValidator...>>::operator()(const NYT::NYPath::TConstrainedRichYPath<TValidator...>& richYPath) const
 {
-    return ComputeHash(ToString(richYPath));
+    return ComputeHash(NYT::NYPath::ConvertToString(richYPath.GetPath(), richYPath.Attributes(), NYT::NYson::EYsonFormat::Text, /*sortAttributes*/ true));
 }

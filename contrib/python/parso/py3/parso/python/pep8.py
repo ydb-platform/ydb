@@ -676,7 +676,7 @@ class PEP8Normalizer(ErrorFinder):
                 elif leaf.parent.type == 'function' and leaf.parent.name == leaf:
                     self.add_issue(leaf, 743, message % 'function')
                 else:
-                    self.add_issuadd_issue(741, message % 'variables', leaf)
+                    self.add_issue(741, message % 'variables', leaf)
         elif leaf.value == ':':
             if isinstance(leaf.parent, (Flow, Scope)) and leaf.parent.type != 'lambdef':
                 next_leaf = leaf.get_next_leaf()
@@ -764,4 +764,4 @@ class BlankLineAtEnd(Rule):
     message = 'Blank line at end of file'
 
     def is_issue(self, leaf):
-        return self._newline_count >= 2
+        return False  # TODO return self._newline_count >= 2

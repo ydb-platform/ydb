@@ -85,10 +85,11 @@ namespace NYql::NDq {
 
     private:
         // clang-format off
-        STRICT_STFUNC(StateFunc,
+        STRICT_STFUNC_EXC(StateFunc,
                       hFunc(TEvReadSplitsIterator, Handle);
                       hFunc(TEvReadSplitsPart, Handle);
                       hFunc(TEvReadSplitsFinished, Handle);
+                      , ExceptionFunc(std::exception, HandleException)
         )
         // clang-format on
 
@@ -167,7 +168,7 @@ namespace NYql::NDq {
                     response.error());
             }
 
-            YQL_ENSURE(response.arrow_ipc_streaming().size(), "empty data");
+            YQL_ENSURE(response.arrow_ipc_streaming().size(), "empty data from connector");
 
             // Preserve stream message to return it to ComputeActor later
             LastReadSplitsResponse_ = std::move(ev->Get()->Response);
@@ -249,6 +250,16 @@ namespace NYql::NDq {
             IngressStats_.Resume();
         }
 
+        void HandleException(const std::exception& e) {
+            YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << SelfId() << " Got unexpected exception: " << e.what();
+
+            NotifyComputeActorWithIssue(
+                TActivationContext::ActorSystem(),
+                ComputeActorId_,
+                InputIndex_,
+                TIssue(TStringBuilder() << "Internal error. Got unexpected exception: " << e.what()));
+        }
+
         void NotifyComputeActorWithData() {
             Send(ComputeActorId_, new TEvNewAsyncInputDataArrived(InputIndex_));
         }
@@ -328,11 +339,11 @@ namespace NYql::NDq {
             for (int i = 0; i < batch->num_columns(); ++i) {
                 const auto& columnName = batch->schema()->field(i)->name();
                 const auto ix = fieldNameOrder[columnName];
-                structItems[ix] = HolderFactory_.CreateArrowBlock(arrow::Datum(batch->column(i)));
+                structItems[ix] = HolderFactory_.CreateArrowBlock(arrow::Datum(batch->column(i)), NYql::DefaultDatumValidationMode);
             }
 
             structItems[fieldNameOrder[BlockLengthColumnName]] = HolderFactory_.CreateArrowBlock(
-                arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch->num_rows())));
+                arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch->num_rows())), NYql::DefaultDatumValidationMode);
             value = structObj;
 
             buffer.emplace_back(std::move(value));

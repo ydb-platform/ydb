@@ -11,7 +11,8 @@ namespace NKikimr::NOlap {
 TBatchSerializedSlice::TBatchSerializedSlice(const std::shared_ptr<arrow::RecordBatch>& batch, NArrow::NSplitter::ISchemaDetailInfo::TPtr schema,
     std::shared_ptr<NColumnShard::TSplitterCounters> counters, const NSplitter::TSplitSettings& settings)
     : TBase(TValidator::CheckNotNull(batch)->num_rows(), schema, counters)
-    , Batch(batch) {
+    , Batch(batch)
+{
     Y_ABORT_UNLESS(batch);
     Data.reserve(batch->num_columns());
     for (auto&& i : batch->schema()->fields()) {

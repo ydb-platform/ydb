@@ -15,7 +15,7 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/type_ann/type_ann_core.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_constraint.h>
@@ -794,16 +794,14 @@ TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
                     }
                     break;
                 }
-                case EYtSettingType::QLFilter: {
-                    for (const auto& p : section.Paths()) {
-                        TYtPathInfo pathInfo(p);
-                        if (pathInfo.QLFilter) {
-                            GetNodesToCalculateFromQLFilter(*pathInfo.QLFilter, needCalc, uniqNodes);
-                        }
-                    }
-                }
                 default:
                     break;
+                }
+            }
+            for (const auto& path: section.Paths()) {
+                const TYtPathInfo pathInfo(path);
+                if (pathInfo.QLFilter) {
+                    GetNodesToCalculateFromQLFilter(*pathInfo.QLFilter, needCalc, uniqNodes);
                 }
             }
         }
@@ -960,6 +958,7 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
             .SecureParams(secureParams)
             .RuntimeLogLevel(state->Types->RuntimeLogLevel)
             .LangVer(state->Types->LangVer)
+            .RuntimeSettings(state->Types->RuntimeSettings)
         );
     return WrapFutureCallback(future, [state, calcNodes](const IYtGateway::TCalcResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         YQL_ENSURE(res.Data.size() == calcNodes.size());
@@ -1600,8 +1599,8 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
     bool exactCopySort = false;
     bool hasAux = false;
     TVector<std::pair<TYqlRowSpecInfo::TPtr, bool>> rowSpecs;
-    const ui64 outNativeYtTypeFlags = outRowSpec ? outRowSpec->GetNativeYtTypeFlags() : (state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
-    TYtOutTableInfo outTable(scheme.Cast<TStructExprType>(), outNativeYtTypeFlags);
+    const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(dataSink.Cluster().StringValue(), *state->Configuration);
+    TYtOutTableInfo outTable(scheme.Cast<TStructExprType>(), nativeTypeCompatibility);
     outTable.RowSpec->SetConstraints(opts.Constraints);
     TMaybe<NYT::TNode> outNativeType;
     if (outRowSpec) {
@@ -1728,7 +1727,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
             for (size_t i = 0; i < section.Paths().Size(); ++i) {
                 auto path = section.Paths().Item(i);
                 if (rowSpecs[i].second) {
-                    TYtOutTableInfo mapOutTable(scheme.Cast<TStructExprType>(), outNativeYtTypeFlags);
+                    TYtOutTableInfo mapOutTable(scheme.Cast<TStructExprType>(), nativeTypeCompatibility);
                     if (outNativeType) {
                         mapOutTable.RowSpec->CopyTypeOrders(*outNativeType, useNativeYtDefaultColumnOrder);
                     }
@@ -1743,6 +1742,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                     if (sortConstraintEnabled) {
                         TKeySelectorBuilder builder(path.Pos(), ctx, useNativeDescSort, scheme.Cast<TStructExprType>());
                         builder.ProcessRowSpec(*mapOutTable.RowSpec);
+                        builder.FillRowSpecSort(*mapOutTable.RowSpec, useNativeYtDefaultColumnOrder);
                         if (builder.NeedMap()) {
                             mapper = builder.MakeRemapLambda(true);
                         }
@@ -1828,6 +1828,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
         if (sortConstraintEnabled && outTable.RowSpec->IsSorted()) {
             TKeySelectorBuilder builder(pos, ctx, useNativeDescSort, scheme.Cast<TStructExprType>());
             builder.ProcessRowSpec(*outTable.RowSpec);
+            builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
             if (builder.NeedMap()) {
                 mapper = builder.MakeRemapLambda(true);
             }
@@ -2485,6 +2486,63 @@ TMaybe<TVector<TString>> BuildLayersPaths(const TExprNode::TPtr& input, const TS
         finalCypressPaths.emplace_back(std::move(loc.Path));
     }
     return finalCypressPaths;
+}
+
+bool CanReplaceParentOutputHash(const TExprNode& node) {
+    if (!node.IsCallable(TYtMerge::CallableName())) {
+        return false;
+    }
+
+    TYtMerge opMerge(&node);
+    if (!HasSetting(opMerge.Settings().Ref(), EYtSettingType::CombineChunks)) {
+        return false;
+    }
+    if (!HasSetting(opMerge.Settings().Ref(), EYtSettingType::ReplaceParentCache)) {
+        return false;
+    }
+    if (HasSettingsExcept(opMerge.Settings().Ref(), EYtSettingType::CombineChunks | EYtSettingType::ReplaceParentCache)) {
+        return false;
+    }
+
+    const auto sections = opMerge.Input();
+    if (sections.Size() != 1) {
+        return false;
+    }
+
+    const auto section = sections.Item(0);
+    if (!section.Settings().Empty()) {
+        return false;
+    }
+
+    const auto paths = section.Paths();
+    if (paths.Size() != 1) {
+        return false;
+    }
+
+    const auto path = paths.Item(0);
+    if (!path.Ranges().Maybe<TCoVoid>()
+        || !path.QLFilter().Maybe<TCoVoid>()
+        || !path.Columns().Maybe<TCoVoid>()
+        || path.AdditionalAttributes())
+    {
+        return false;
+    }
+
+    const TYtPathInfo pathInfo(path);
+    if (pathInfo.RequiresRemap()) {
+        return false;
+    }
+    if (pathInfo.Table->Meta && (pathInfo.Table->Meta->IsDynamic || pathInfo.Table->Meta->HasRLS)) {
+        return false;
+    }
+
+    return true;
+}
+
+ui64 GetNativeYtTypeCompatibility(const TString& cluster, const TYtSettings& config) {
+    const auto useNativeYtTypes = config.UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES);
+    const auto nativeTypeCompatibility = config.NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
+    return useNativeYtTypes ? nativeTypeCompatibility : NTCF_NONE;
 }
 
 } // NYql

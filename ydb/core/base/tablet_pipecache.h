@@ -111,7 +111,7 @@ struct TEvPipeCache {
     struct TEvForcePipeReconnect : public TEventLocal<TEvForcePipeReconnect, EvForcePipeReconnect> {
         const ui64 TabletId;
 
-        explicit TEvForcePipeReconnect(ui64 tabletId) 
+        explicit TEvForcePipeReconnect(ui64 tabletId)
             : TabletId(tabletId)
         {
         }

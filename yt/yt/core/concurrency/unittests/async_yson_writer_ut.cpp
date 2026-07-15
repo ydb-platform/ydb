@@ -5,10 +5,13 @@
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/serialize.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 namespace NYT::NYson {
 namespace {
 
 using namespace NYTree;
+using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -46,7 +49,7 @@ TEST(TAsyncYsonWriterTest, SyncNode)
     asyncWriter.OnInt64Scalar(123);
     EXPECT_EQ(
         ConvertToYsonString(123),
-        asyncWriter.Finish().Get().ValueOrThrow());
+        WaitForFast(asyncWriter.Finish()).ValueOrThrow());
 }
 
 TEST(TAsyncYsonWriterTest, SyncList)
@@ -61,8 +64,8 @@ TEST(TAsyncYsonWriterTest, SyncList)
         writer.OnStringScalar("c");
     writer.OnEndList();
     EXPECT_EQ(
-        ConvertToYsonString(std::vector<TString>{"a", "b", "c"}),
-        writer.Finish().Get().ValueOrThrow());
+        ConvertToYsonString(std::vector<std::string>{"a", "b", "c"}),
+        WaitForFast(writer.Finish()).ValueOrThrow());
 }
 
 TEST(TAsyncYsonWriterTest, SyncListFragment)
@@ -75,8 +78,8 @@ TEST(TAsyncYsonWriterTest, SyncListFragment)
     writer.OnListItem();
     writer.OnStringScalar("c");
     EXPECT_EQ(
-        ConvertToListFragment(std::vector<TString>{"a", "b", "c"}),
-        writer.Finish().Get().ValueOrThrow());
+        ConvertToListFragment(std::vector<std::string>{"a", "b", "c"}),
+        WaitForFast(writer.Finish()).ValueOrThrow());
 }
 
 TEST(TAsyncYsonWriterTest, SyncMapFragment)
@@ -89,8 +92,8 @@ TEST(TAsyncYsonWriterTest, SyncMapFragment)
     writer.OnKeyedItem("c");
     writer.OnInt64Scalar(3);
     EXPECT_EQ(
-        ConvertToMapFragment(std::vector<std::pair<TString, int>>{{"a", 1}, {"b", 2}, {"c", 3}}),
-        writer.Finish().Get().ValueOrThrow());
+        ConvertToMapFragment(std::vector<std::pair<std::string, int>>{{"a", 1}, {"b", 2}, {"c", 3}}),
+        WaitForFast(writer.Finish()).ValueOrThrow());
 }
 
 TEST(TAsyncYsonWriterTest, AsyncNode)
@@ -99,7 +102,7 @@ TEST(TAsyncYsonWriterTest, AsyncNode)
     asyncWriter.OnRaw(MakeFuture(ConvertToYsonString(123)));
     EXPECT_EQ(
         ConvertToYsonString(123),
-        asyncWriter.Finish().Get().ValueOrThrow());
+        WaitForFast(asyncWriter.Finish()).ValueOrThrow());
 }
 
 TEST(TAsyncYsonWriterTest, AsyncListFragment)
@@ -113,7 +116,7 @@ TEST(TAsyncYsonWriterTest, AsyncListFragment)
     writer.OnRaw(MakeFuture(ConvertToYsonString(3)));
     EXPECT_EQ(
         ConvertToListFragment(std::vector<int>{1, 2, 3}),
-        writer.Finish().Get().ValueOrThrow());
+        WaitForFast(writer.Finish()).ValueOrThrow());
 }
 
 TEST(TAsyncYsonWriterTest, AsyncList)
@@ -129,7 +132,7 @@ TEST(TAsyncYsonWriterTest, AsyncList)
     writer.OnEndList();
     EXPECT_EQ(
         ConvertToYsonString(std::vector<int>{1, 2, 3}),
-        writer.Finish().Get().ValueOrThrow());
+        WaitForFast(writer.Finish()).ValueOrThrow());
 }
 
 TEST(TAsyncYsonWriterTest, AsyncMap)
@@ -145,8 +148,8 @@ TEST(TAsyncYsonWriterTest, AsyncMap)
     writer.OnEndMap();
 
     EXPECT_EQ(
-        ConvertToYsonString(THashMap<TString, int>{{"a", 1}, {"b", 2}, {"c", 3}}),
-        writer.Finish().Get().ValueOrThrow());
+        ConvertToYsonString(THashMap<std::string, int>{{"a", 1}, {"b", 2}, {"c", 3}}),
+        WaitForFast(writer.Finish()).ValueOrThrow());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

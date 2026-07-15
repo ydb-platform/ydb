@@ -5,13 +5,13 @@ SRCS(
     kqp_ut_common.cpp
     kqp_ut_common.h
     columnshard.cpp
-    kqp_benches.cpp
 )
 
 PEERDIR(
     library/cpp/testing/common
     ydb/core/kqp/federated_query
     ydb/core/testlib
+    ydb/library/testlib/common
     ydb/library/yql/providers/s3/actors_factory
     yql/essentials/public/udf
     yql/essentials/udfs/common/datetime2
@@ -34,5 +34,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
+
+GENERATE_ENUM_SERIALIZATION(olap_indexes_enums.h)
 
 END()

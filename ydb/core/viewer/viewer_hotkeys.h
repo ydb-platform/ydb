@@ -65,40 +65,42 @@ public:
 
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         if (DescribeResult.Set(std::move(ev))) {
-            const auto& pbRecord(DescribeResult->GetRecord());
-            if (pbRecord.HasPathDescription()) {
-                const auto& pathDescription = pbRecord.GetPathDescription();
-                TableName = pathDescription.GetSelf().GetName();
-                auto securityObject = std::make_unique<TSecurityObject>(pathDescription.GetSelf().GetOwner(), pathDescription.GetSelf().GetEffectiveACL(), false);
-                auto tokenObject = GetRequest().GetUserTokenObject();
-                if (tokenObject && !securityObject->CheckAccess(NACLib::SelectRow, NACLib::TUserToken(tokenObject))) {
-                    return ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Read access required"), "Access denied");
-                }
-                const auto& partitions = pathDescription.GetTablePartitions();
-                const auto& metrics = pathDescription.GetTablePartitionMetrics();
-
-                if (!metrics.empty()) {
-                    TVector<std::pair<ui64, int>> tabletsOrder;
-
-                    for (int i = 0; i < metrics.size(); ++i) {
-                        tabletsOrder.emplace_back(metrics.Get(i).GetCPU(), i);
+            if (DescribeResult.IsOk()) {
+                const auto& pbRecord(DescribeResult->GetRecord());
+                if (pbRecord.HasPathDescription()) {
+                    const auto& pathDescription = pbRecord.GetPathDescription();
+                    TableName = pathDescription.GetSelf().GetName();
+                    auto securityObject = std::make_unique<TSecurityObject>(pathDescription.GetSelf().GetOwner(), pathDescription.GetSelf().GetEffectiveACL(), false);
+                    auto tokenObject = GetRequest().GetUserTokenObject();
+                    if (tokenObject && !securityObject->CheckAccess(NACLib::SelectRow, NACLib::TUserToken(tokenObject))) {
+                        return ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Read access required"), "Access denied");
                     }
+                    const auto& partitions = pathDescription.GetTablePartitions();
+                    const auto& metrics = pathDescription.GetTablePartitionMetrics();
 
-                    Sort(tabletsOrder, std::greater<std::pair<ui64, int>>());
-                    ShardsAsked = std::clamp<int>(std::min<int>(LimitShards, std::ceil(PollingFactor * tabletsOrder.size())), 1, tabletsOrder.size());
+                    if (!metrics.empty()) {
+                        TVector<std::pair<ui64, int>> tabletsOrder;
 
-                    for (int i = 0; i < ShardsAsked; ++i) {
-                        THolder<TEvDataShard::TEvGetDataHistogramRequest> request = MakeHolder<TEvDataShard::TEvGetDataHistogramRequest>();
-                        if (EnableSampling) {
-                            request->Record.SetCollectKeySampleMs(SamplingPeriod);
+                        for (int i = 0; i < metrics.size(); ++i) {
+                            tabletsOrder.emplace_back(metrics.Get(i).GetCPU(), i);
                         }
-                        if (ReturnActualData) {
-                            request->Record.SetActualData(true);
+
+                        Sort(tabletsOrder, std::greater<std::pair<ui64, int>>());
+                        ShardsAsked = std::clamp<int>(std::min<int>(LimitShards, std::ceil(PollingFactor * tabletsOrder.size())), 1, tabletsOrder.size());
+
+                        for (int i = 0; i < ShardsAsked; ++i) {
+                            THolder<TEvDataShard::TEvGetDataHistogramRequest> request = MakeHolder<TEvDataShard::TEvGetDataHistogramRequest>();
+                            if (EnableSampling) {
+                                request->Record.SetCollectKeySampleMs(SamplingPeriod);
+                            }
+                            if (ReturnActualData) {
+                                request->Record.SetActualData(true);
+                            }
+                            ui64 datashardId = partitions.Get(tabletsOrder[i].second).GetDatashardId();
+                            TRequestResponse<TEvDataShard::TEvGetDataHistogramResponse>& histogramResponse = HistogramResponses.emplace_back();
+                            ui64 cookie = HistogramResponses.size(); // to make sure it starts from 1
+                            histogramResponse = MakeRequestToTablet<TEvDataShard::TEvGetDataHistogramResponse>(datashardId, request.Release(), cookie);
                         }
-                        ui64 datashardId = partitions.Get(tabletsOrder[i].second).GetDatashardId();
-                        TRequestResponse<TEvDataShard::TEvGetDataHistogramResponse>& histogramResponse = HistogramResponses.emplace_back();
-                        ui64 cookie = HistogramResponses.size(); // to make sure it starts from 1
-                        histogramResponse = MakeRequestToTablet<TEvDataShard::TEvGetDataHistogramResponse>(datashardId, request.Release(), cookie);
                     }
                 }
             }

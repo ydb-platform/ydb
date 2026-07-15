@@ -233,12 +233,12 @@ TResult SwitchTypeImpl(arrow::Type::type typeId, TFunc&& f) {
 
 template <typename TFunc, bool EnableNull = false>
 bool SwitchType(arrow::Type::type typeId, TFunc&& f) {
-    return SwitchTypeImpl<bool, false, TFunc, EnableNull>(typeId, std::move(f));
+    return SwitchTypeImpl<bool, false, TFunc, EnableNull>(typeId, std::forward<TFunc>(f));
 }
 
 template <typename TFunc>
 bool SwitchTypeWithNull(arrow::Type::type typeId, TFunc&& f) {
-    return SwitchType<TFunc, true>(typeId, std::move(f));
+    return SwitchType<TFunc, true>(typeId, std::forward<TFunc>(f));
 }
 
 template <typename TFunc>

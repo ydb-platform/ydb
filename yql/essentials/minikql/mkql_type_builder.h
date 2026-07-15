@@ -3,10 +3,10 @@
 #include "mkql_node.h"
 
 #include <yql/essentials/core/sql_types/block.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 #include <yql/essentials/public/udf/arrow/block_type_helper.h>
-#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/parser/pg_wrapper/interface/compare.h>
 
 #include <util/generic/size_literals.h>
@@ -100,6 +100,7 @@ class TFunctionTypeInfoBuilder: public NUdf::IFunctionTypeInfoBuilder {
 public:
     TFunctionTypeInfoBuilder(
         NYql::TLangVersion langver,
+        const NYql::TRuntimeSettings& runtimeSettings,
         const TTypeEnvironment& env,
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
         const TStringBuf& moduleName,
@@ -196,10 +197,12 @@ public:
     void SetMinLangVer(ui32 langver) override;
     void SetMaxLangVer(ui32 langver) override;
     ui32 GetCurrentLangVer() const override;
+    NUdf::TStringRef GetRuntimeSetting(NUdf::TStringRef name) const override;
     NUdf::ILinearTypeBuilder::TPtr Linear(bool isDynamic) const override;
 
 private:
     const NYql::TLangVersion LangVer_;
+    const NYql::TRuntimeSettings& RuntimeSettings_;
     const TTypeEnvironment& Env_;
     NUdf::TUniquePtr<NUdf::IBoxedValue> Implementation_;
     const TType* ReturnType_;

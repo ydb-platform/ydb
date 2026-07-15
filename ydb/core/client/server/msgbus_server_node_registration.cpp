@@ -169,16 +169,13 @@ public:
             HFunc(TEvInterconnect::TEvNodesInfo, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            CFunc(TEvents::TSystem::PoisonPill, TBase::Cancel);
         }
     }
 
 private:
     bool CheckAccess() {
-        if (TBase::IsTokenRequired()) {
-            return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
-        }
-        // if token is not required access is granted
-        return true;
+        return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
     }
 
     NKikimrClient::TNodeRegistrationRequest Request;

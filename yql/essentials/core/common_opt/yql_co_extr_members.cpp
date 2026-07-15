@@ -92,7 +92,7 @@ TExprNode::TPtr ApplyExtractMembersToFilterSkipNullMembers(const TExprNode::TPtr
     }
     innerExtracted.insert(filteredMembers.begin(), filteredMembers.end());
 
-    const auto inputType = GetSequenceItemType(filterInput, false);
+    const auto inputType = GetSequenceItemType(filterInput, /*allowMultiIO=*/false);
     YQL_ENSURE(inputType);
     const size_t inputWidth = inputType->Cast<TStructExprType>()->GetSize();
     YQL_ENSURE(inputWidth >= innerExtracted.size());
@@ -496,6 +496,19 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
     TSet<TStringBuf> payloadFields;
     TExprNodeList newCalcs;
     auto calcs = ExtractCalcsOverWindow(node, ctx);
+    for (auto& calcNode : calcs) {
+        // exclude all columns used in WinFilter predicates from drop list
+        TCoCalcOverWindowTuple calc(calcNode);
+        for (const auto& winOnRows : calc.Frames().Ref().ChildrenList()) {
+            if (TCoWinFilter::Match(winOnRows.Get())) {
+                TCoWinFilter winFilter(winOnRows);
+                auto structType = winFilter.ItemType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                for (const auto& item : structType->GetItems()) {
+                    toDrop.erase(item->GetName());
+                }
+            }
+        }
+    }
     bool dropped = false;
     for (auto& calcNode : calcs) {
         TCoCalcOverWindowTuple calc(calcNode);
@@ -546,6 +559,17 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
         TExprNodeList newFrames;
         for (const auto& winOnRows : calc.Frames().Ref().ChildrenList()) {
             YQL_ENSURE(TCoWinOnBase::Match(winOnRows.Get()));
+            if (TCoWinFilter::Match(winOnRows.Get())) {
+                TCoWinFilter winFilter(winOnRows);
+                auto structType = winFilter.ItemType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                for (const auto& item : structType->GetItems()) {
+                    if (!payloadFields.contains(item->GetName())) {
+                        usedFields.insert(item->GetName());
+                    }
+                }
+                newFrames.push_back(winOnRows);
+                continue;
+            }
 
             TExprNodeList newFrameItems;
             newFrameItems.push_back(winOnRows->ChildPtr(0));
@@ -644,7 +668,8 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
         outMembers.insert(x->Content());
     }
 
-    // TODOD: remove ExtractMembers pushdown to inputs when FieldSubsetEnableMultiusage is enabled
+    // TODO: this code can be simplified - no need to duplicate the logic of AggregateSubsetFieldsAnalyzer here
+    // ApplyExtractMembersToAggregate can simply remove unneded payloads - the remaining will be done by AggregateSubsetFieldsAnalyzer
     TMaybe<TStringBuf> sessionColumn;
     const auto sessionSetting = GetSetting(aggr.Settings().Ref(), "session");
     if (sessionSetting) {
@@ -810,8 +835,8 @@ TExprNode::TPtr ApplyExtractMembersToChain1Map(const TExprNode::TPtr& node, TExp
 
     if (allMembers != members) {
         output = Build<TCoExtractMembers>(ctx, chain1Map.Pos())
-            .Input(std::move(output))
-            .Members(std::move(members))
+            .Input(output)
+            .Members(members)
             .Done().Ptr();
     }
 
@@ -856,8 +881,8 @@ TExprNode::TPtr ApplyExtractMembersToCondense1(const TExprNode::TPtr& node, TExp
 
     if (allMembers != members) {
         output = Build<TCoExtractMembers>(ctx, condense1.Pos())
-            .Input(std::move(output))
-            .Members(std::move(members))
+            .Input(output)
+            .Members(members)
             .Done().Ptr();
     }
 
@@ -894,5 +919,17 @@ TExprNode::TPtr ApplyExtractMembersToNarrowMap(const TExprNode::TPtr& node, cons
     });
     return ctx.ChangeChild(*node, TCoMapBase::idx_Lambda, ctx.DeepCopyLambda(node->Tail(), std::move(body)));
 }
+
+TExprNode::TPtr ApplyExtractMembersToTableSource(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+    TCoTableSource tableSource(node);
+    YQL_CLOG(DEBUG, Core) << "Propagate ExtractMembers over " << node->Content() << logSuffix;
+    return Build<TCoTableSource>(ctx, node->Pos())
+        .Input<TCoExtractMembers>()
+            .Input(tableSource.Input())
+            .Members(members)
+        .Build()
+        .Done().Ptr();
+}
+
 
 } // NYql

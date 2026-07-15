@@ -26,7 +26,11 @@ using InstrumentationScopeAttributes = opentelemetry::sdk::common::AttributeMap;
 class InstrumentationScope
 {
 public:
-  InstrumentationScope(const InstrumentationScope &) = default;
+  InstrumentationScope(const InstrumentationScope &)            = default;
+  InstrumentationScope(InstrumentationScope &&)                 = default;
+  InstrumentationScope &operator=(const InstrumentationScope &) = default;
+  InstrumentationScope &operator=(InstrumentationScope &&)      = default;
+  ~InstrumentationScope()                                       = default;
 
   /**
    * Returns a newly created InstrumentationScope with the specified library name and version.

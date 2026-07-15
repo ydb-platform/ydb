@@ -7,6 +7,8 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -124,14 +126,14 @@ struct TMakeTypeArgs<NYql::ETypeAnnotationKind::DynamicLinear> {
 
 template <NYql::ETypeAnnotationKind Kind>
 class TMakeTypeWrapper: public TMutableComputationNode<TMakeTypeWrapper<Kind>> {
-    typedef TMutableComputationNode<TMakeTypeWrapper<Kind>> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TMakeTypeWrapper<Kind>>;
 
 public:
     TMakeTypeWrapper(TComputationMutables& mutables, TVector<IComputationNode*>&& args, ui32 exprCtxMutableIndex, NYql::TPosition pos)
         : TBaseComputation(mutables)
         , Args_(std::move(args))
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
-        , Pos_(pos)
+        , Pos_(std::move(pos))
     {
     }
 
@@ -150,7 +152,8 @@ public:
                 }
 
                 if (*slot == NUdf::EDataSlot::Decimal) {
-                    NUdf::TUnboxedValue param1, param2;
+                    NUdf::TUnboxedValue param1;
+                    NUdf::TUnboxedValue param2;
                     MKQL_ENSURE(iter.Next(param1), "Unexpected end of list");
                     MKQL_ENSURE(iter.Next(param2), "Unexpected end of list");
                     auto dataType = exprCtxPtr->template MakeType<NYql::TDataExprParamsType>(*slot, TStringBuf(param1.AsStringRef()), TStringBuf(param2.AsStringRef()));

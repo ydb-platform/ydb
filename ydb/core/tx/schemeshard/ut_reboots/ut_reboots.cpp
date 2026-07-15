@@ -1,6 +1,8 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -9,20 +11,18 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
-    Y_UNIT_TEST(Fake) {
-    }
-    Y_UNIT_TEST(CreateDirWithIntermediateDirs) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateDir, 2, 1, false) {
         const TString validScheme = "Valid/x/y/z";
         const TString invalidScheme = "Invalid/wr0ng n@me";
         const auto validStatus = NKikimrScheme::StatusAccepted;
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
-        CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
+        CreateWithIntermediateDirs(t, [&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
             TestMkDir(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
         });
     }
 
-    Y_UNIT_TEST(CreateTableWithIntermediateDirs) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateTable, 2, 1, false) {
         const TString validScheme = R"(
             Name: "Valid/x/y/z"
             Columns { Name: "RowId" Type: "Uint64" }
@@ -36,12 +36,12 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         const auto validStatus = NKikimrScheme::StatusAccepted;
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
-        CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
+        CreateWithIntermediateDirs(t, [&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
             TestCreateTable(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
         });
     }
 
-    Y_UNIT_TEST(CreateTableWithIntermediateDirsAndRejectInSolomon) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateTablAndRejectInSolomon, 2, 1, false) {
         const TString validScheme = R"(
             Name: "Valid/x/y/z"
             PartitionCount: 2
@@ -55,12 +55,12 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         const auto validStatus = NKikimrScheme::StatusAccepted;
         const auto invalidStatus = NKikimrScheme::StatusInvalidParameter;
 
-        CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
+        CreateWithIntermediateDirs(t, [&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
             TestCreateSolomon(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
         });
     }
 
-    Y_UNIT_TEST(CreateTableWithIntermediateDirsAndRejectInTable) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateTableAndRejectInTable, 2, 1, false) {
         const TString validScheme = R"(
             Name: "Valid/x/y/z/table_name"
             Columns { Name: "RowId" Type: "Uint64" }
@@ -74,12 +74,12 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         const auto validStatus = NKikimrScheme::StatusAccepted;
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
-        CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
+        CreateWithIntermediateDirs(t, [&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
             TestCreateTable(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
         });
     }
 
-    Y_UNIT_TEST(CreateKesusWithIntermediateDirs) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateKesus, 2, 1, false) {
         const TString validScheme = R"(
             Name: "Valid/x/y/z"
         )";
@@ -89,12 +89,12 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         const auto validStatus = NKikimrScheme::StatusAccepted;
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
-        CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
+        CreateWithIntermediateDirs(t, [&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
             TestCreateKesus(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
         });
     }
 
-    Y_UNIT_TEST(CreateSolomonWithIntermediateDirs) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateSolomon, 2, 1, false) {
         const TString validScheme = R"(
             Name: "Valid/x/y/z"
             PartitionCount: 2
@@ -105,19 +105,19 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         const auto validStatus = NKikimrScheme::StatusAccepted;
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
-        CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
+        CreateWithIntermediateDirs(t, [&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
             TestCreateSolomon(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
         });
     }
 
-    Y_UNIT_TEST(CreateDirWithIntermediateDirsForceDrop) {
-        CreateWithIntermediateDirsForceDrop([](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateDirAndForceDrop, 2, 1, false) {
+        CreateWithIntermediateDirsForceDrop(t, [](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
             AsyncMkDir(runtime, txId, root, "x/y/z");
         });
     }
 
-    Y_UNIT_TEST(CreateTableWithIntermediateDirsForceDrop) {
-        CreateWithIntermediateDirsForceDrop([](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateTableAndForceDrop, 2, 1, false) {
+        CreateWithIntermediateDirsForceDrop(t, [](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
             AsyncCreateTable(runtime, txId, root, R"(
                 Name: "x/y/z"
                 Columns { Name: "RowId" Type: "Uint64" }
@@ -126,16 +126,16 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateKesusWithIntermediateDirsForceDrop) {
-        CreateWithIntermediateDirsForceDrop([](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateKesusAndForceDrop, 2, 1, false) {
+        CreateWithIntermediateDirsForceDrop(t, [](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
             AsyncCreateKesus(runtime, txId, root, R"(
                 Name: "x/y/z"
             )");
         });
     }
 
-    Y_UNIT_TEST(CreateSolomonWithIntermediateDirsForceDrop) {
-        CreateWithIntermediateDirsForceDrop([](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateSolomonAndForceDrop, 2, 1, false) {
+        CreateWithIntermediateDirsForceDrop(t, [](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
             AsyncCreateSolomon(runtime, txId, root, R"(
                 Name: "x/y/z"
                 PartitionCount: 2
@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateSubDomainWithIntermediateDirs) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateSubDomain, 2, 1, false) {
         const TString validScheme = R"(
             Name: "Valid/x/y/z"
             PlanResolution: 50
@@ -157,12 +157,12 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         const auto validStatus = NKikimrScheme::StatusAccepted;
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
-        CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
+        CreateWithIntermediateDirs(t, [&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
             TestCreateSubDomain(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
         });
     }
 
-    Y_UNIT_TEST(CreateWithIntermediateDirs) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateRtmr, 2, 1, false) {
         const TString validScheme = R"(
             Name: "Valid/x/y/z"
             PartitionsCount: 0
@@ -173,13 +173,13 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         const auto validStatus = NKikimrScheme::StatusAccepted;
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
-        CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
+        CreateWithIntermediateDirs(t, [&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
             TestCreateRtmrVolume(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
         });
     }
 
-    Y_UNIT_TEST(CreateWithIntermediateDirsForceDrop) {
-        CreateWithIntermediateDirsForceDrop([](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateRtmrAndForceDrop, 2, 1, false) {
+        CreateWithIntermediateDirsForceDrop(t, [](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
             AsyncCreateRtmrVolume(runtime, txId, root, R"(
                 Name: "x/y/z"
                 PartitionsCount: 0
@@ -189,11 +189,7 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
 }
 
 Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
-    Y_UNIT_TEST(Fake) {
-    }
-
-    Y_UNIT_TEST(CopyWithData) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyWithData, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -274,8 +270,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropWithData) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropWithData, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -355,8 +350,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateIndexedTableWithReboots) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateIndexedTableWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             AsyncMkDir(runtime, ++t.TxId, "/MyRoot", "DirB");
             AsyncCreateIndexedTable(runtime, ++t.TxId, "/MyRoot/DirB", R"(
@@ -422,8 +416,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropIndexedTableWithReboots) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropIndexedTableWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -471,8 +464,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateIndexedTableAndForceDrop) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateIndexedTableAndForceDrop, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion dirAVersion;
 
@@ -523,8 +515,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateIndexedTableAndForceDropSimultaneously) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateIndexedTableAndForceDropSimultaneously, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion dirAVersion;
             {
@@ -564,8 +555,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropIndexedTableAndForceDropSimultaneously) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropIndexedTableAndForceDropSimultaneously, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion dirAVersion;
 
@@ -621,8 +611,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateNotNullColumnTableWithReboots) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateNotNullColumnTableWithReboots, 2, 1, false) {
         t.GetTestEnvOptions().EnableNotNullDataColumns(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TestMkDir(runtime, ++t.TxId, "/MyRoot", "DirB");
@@ -647,8 +636,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
         });
     }
 
-    Y_UNIT_TEST(DropNotNullColumnTableWithReboots) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropNotNullColumnTableWithReboots, 2, 1, false) {
         t.GetTestEnvOptions().EnableNotNullDataColumns(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -677,11 +665,109 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
             }
         });
     }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyColumnTableWithLocalBloomIndexes, 2, 1, false) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TPathVersion pathVersion;
+            {
+                TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+                runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot",
+                    NLocalIndexes::OlapTableWithBloomAndNgramIndexes("ColumnTableSrc"));
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableSrc"),
+                    {NLs::PathExist, NLs::ChildrenCount(2)});
+            }
+
+            t.TestEnv->ReliablePropose(runtime, ConsistentCopyTablesRequest(++t.TxId, "/MyRoot", R"(
+                CopyTableDescriptions {
+                    SrcPath: "/MyRoot/ColumnTableSrc"
+                    DstPath: "/MyRoot/ColumnTableDst"
+                    IsBackup: true
+                }
+            )", {pathVersion}),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableSrc"),
+                    {NLs::PathExist, NLs::ChildrenCount(2)});
+                NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTableDst");
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CopyTableWithMultiColumnStatistics, 2, 1, false) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TPathVersion pathVersion;
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "src"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                    MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/src"),
+                    {NLs::PathExist});
+            }
+
+            t.TestEnv->ReliablePropose(runtime, ConsistentCopyTablesRequest(++t.TxId, "/", R"(
+                CopyTableDescriptions {
+                    SrcPath: "/MyRoot/src"
+                    DstPath: "/MyRoot/dst"
+                })", {pathVersion}),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/dst", true, true), {
+                    NLs::PathExist,
+                    NLs::CheckMultiColumnStatistics("s1", {"value"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+                });
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AlterTableKeepsMultiColumnStatistics, 2, 1, false) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "StatsTable"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                    MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            t.TestEnv->ReliablePropose(runtime, AlterTableRequest(++t.TxId, "/MyRoot",
+                                                                  R"(Name: "StatsTable" Columns { Name: "extra" Type: "Uint64" })"),
+                                       {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/StatsTable", true, true), {
+                    NLs::PathExist,
+                    NLs::CheckMultiColumnStatistics("s1", {"value"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+                });
+            }
+        });
+    }
 }
 
 Y_UNIT_TEST_SUITE(TSolomonReboots) {
-    Y_UNIT_TEST(CreateDropSolomonWithReboots) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateDropSolomonWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TestCreateSolomon(runtime, ++t.TxId, "/MyRoot", R"(
                                                           Name: "Solomon"
@@ -708,8 +794,7 @@ Y_UNIT_TEST_SUITE(TSolomonReboots) {
         });
     }
 
-    Y_UNIT_TEST(AdoptDropSolomonWithReboots) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(AdoptDropSolomonWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             NKikimrSchemeOp::TCreateSolomonVolume volumeDescr;
             {
@@ -747,8 +832,7 @@ Y_UNIT_TEST_SUITE(TSolomonReboots) {
         });
     }
 
-    Y_UNIT_TEST(CreateAlterSolomonWithReboots) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateAlterSolomonWithReboots, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             NKikimrSchemeOp::TCreateSolomonVolume volumeDescr;
             {

@@ -1,6 +1,7 @@
 #include "format.h"
 
 #include <util/string/vector.h>
+#include <library/cpp/getopt/small/completer.h>
 #include <library/cpp/json/json_prettifier.h>
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
@@ -65,6 +66,53 @@ namespace {
         { EMessagingFormat::Csv, "CSV format with header row containing metadata field names." },
         { EMessagingFormat::Tsv, "TSV format with header row containing metadata field names." },
     };
+    // Build TChoice list (value + description) for shell completion. Consumed
+    // by TClientCommandOption::ChoicesWithCompletion(), which both registers
+    // the completer for native bash/zsh generators and populates TOpt::Choices_
+    // so that external tools (e.g. `ydb config completion json`) can retrieve
+    // the list of allowed values.
+    template <typename TEnum>
+    TVector<NLastGetopt::NComp::TChoice> MakeChoicesWithDescriptions(
+            const TVector<TEnum>& values,
+            const THashMap<TEnum, TString>& descriptions) {
+        TVector<NLastGetopt::NComp::TChoice> choices;
+        choices.reserve(values.size());
+        for (const auto& value : values) {
+            auto it = descriptions.find(value);
+            TString desc = (it != descriptions.end()) ? it->second : "";
+            choices.emplace_back(ToString(value), std::move(desc));
+        }
+        return choices;
+    }
+
+    bool IsConnectionPlanNode(const NJson::TJsonValue& plan) {
+        const auto& node = plan.GetMapSafe();
+        return node.contains("PlanNodeType")
+            && node.at("PlanNodeType").GetStringSafe() == "Connection";
+    }
+
+    TString FormatConnectionPlanNode(const NJson::TJsonValue& plan) {
+        const auto& node = plan.GetMapSafe();
+        const TString displayName = node.at("Node Type").GetStringSafe() + " connection";
+
+        TVector<TString> info;
+        auto appendField = [&](TStringBuf field) {
+            if (auto it = node.find(field); it != node.end()) {
+                info.emplace_back(TStringBuilder() << field << ": " << it->second.GetStringRobust());
+            }
+        };
+
+        appendField("KeyColumns");
+        appendField("HashFunc");
+        appendField("SortColumns");
+        appendField("Parallel");
+        appendField("Blocks");
+
+        if (info.empty()) {
+            return displayName;
+        }
+        return TStringBuilder() << displayName << " (" << JoinStrings(info, ", ") << ")";
+    }
 } // anonymous namespace
 
 void TCommandWithResponseHeaders::PrintResponseHeader(const TStatus& status) {
@@ -123,11 +171,12 @@ void TCommandWithInput::AddInputFormats(TClientCommand::TConfig& config,
         AllowedInputFormats.insert(format);
     }
     description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
-    if (config.HelpCommandVerbosiltyLevel <= 1) {
+    if (config.HelpCommandVerbosityLevel <= 1) {
         description << Endl << "Use -hh option to see all options relevant to input format.";
     }
     config.Opts->AddLongOption("input-format", description.Str())
-        .RequiredArgument("STRING").StoreResult(&InputFormat);
+        .RequiredArgument("STRING").StoreResult(&InputFormat)
+        .ChoicesWithCompletion(MakeChoicesWithDescriptions(allowedFormats, inputFormatDescriptions));
 }
 
 void TCommandWithInput::AddInputFramingFormats(TClientCommand::TConfig &config,
@@ -149,8 +198,9 @@ void TCommandWithInput::AddInputFramingFormats(TClientCommand::TConfig &config,
     }
     description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
     auto& inputFraming = config.Opts->AddLongOption("input-framing", description.Str())
-            .RequiredArgument("STRING").StoreResult(&InputFramingFormat);
-    if (config.HelpCommandVerbosiltyLevel <= 1) {
+            .RequiredArgument("STRING").StoreResult(&InputFramingFormat)
+            .ChoicesWithCompletion(MakeChoicesWithDescriptions(allowedFormats, InputFramingDescriptions));
+    if (config.HelpCommandVerbosityLevel <= 1) {
         inputFraming.Hidden();
     }
 }
@@ -174,8 +224,8 @@ void TCommandWithInput::AddInputBinaryStringEncodingFormats(TClientCommand::TCon
     }
     description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
     config.Opts->AddLongOption("input-binary-strings", description.Str())
-
-        .RequiredArgument("STRING").StoreResult(&InputBinaryStringEncodingFormat);
+        .RequiredArgument("STRING").StoreResult(&InputBinaryStringEncodingFormat)
+        .ChoicesWithCompletion(MakeChoicesWithDescriptions(allowedFormats, BinaryStringEncodingFormatDescriptions));
 }
 
 void TCommandWithInput::AddLegacyInputFormats(TClientCommand::TConfig& config, const TString& legacyName,
@@ -243,7 +293,7 @@ void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config,
         auto findResult = FormatDescriptions.find(format);
         Y_ABORT_UNLESS(findResult != FormatDescriptions.end(),
             "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
-        if (config.HelpCommandVerbosiltyLevel >= 2) {
+        if (config.HelpCommandVerbosityLevel >= 2) {
             description << "\n  " << colors.BoldColor() << format << colors.OldColor()
                 << "\n    " << findResult->second;
         } else {
@@ -255,13 +305,14 @@ void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config,
             description << colors.BoldColor() << format << colors.OldColor();
         }
     }
-    if (config.HelpCommandVerbosiltyLevel >= 2) {
+    if (config.HelpCommandVerbosityLevel >= 2) {
         description << "\nDefault: " << colors.CyanColor() << defaultFormat << colors.OldColor() << ".";
     } else {
         description << " (default: " << colors.CyanColor() << defaultFormat << colors.OldColor() << ")";
     }
     config.Opts->AddLongOption("format", description.Str())
-        .RequiredArgument("STRING").StoreResult(&OutputFormat);
+        .RequiredArgument("STRING").StoreResult(&OutputFormat)
+        .ChoicesWithCompletion(MakeChoicesWithDescriptions(allowedFormats, FormatDescriptions));
     AllowedFormats = allowedFormats;
 }
 
@@ -348,8 +399,9 @@ void TCommandWithMessagingFormat::AddMessagingFormats(TClientCommand::TConfig& c
             << "\n    " << findResult->second;
     }
     config.Opts->AddLongOption("format", description.Str())
-        .DefaultValue( "single-message" )
-        .RequiredArgument("STRING").StoreResult(&MessagingFormat);
+        .DefaultValue("single-message")
+        .RequiredArgument("STRING").StoreResult(&MessagingFormat)
+        .ChoicesWithCompletion(MakeChoicesWithDescriptions(allowedFormats, MessagingFormatDescriptions));
     AllowedMessagingFormats = allowedFormats;
 }
 
@@ -467,8 +519,8 @@ void TQueryPlanPrinter::PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<T
                      << " (" << JoinStrings(info, ", ") << ")" << Endl;
             }
         }
-    } else if (node.contains("PlanNodeType") && node.at("PlanNodeType").GetString() == "Connection") {
-        Output << prefix << "<" << node.at("Node Type").GetString() << ">" << Endl;
+    } else if (IsConnectionPlanNode(plan)) {
+        Output << prefix << "<" << FormatConnectionPlanNode(plan) << ">" << Endl;
     } else {
         Output << prefix << node.at("Node Type").GetString() << Endl;
     }
@@ -664,7 +716,13 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
         }
     } else {
         TStringBuilder operation;
-        operation << arrowOffset << colors.LightCyan() << node.at("Node Type").GetString() << colors.Default();
+        operation << arrowOffset << colors.LightCyan();
+        if (IsConnectionPlanNode(plan)) {
+            operation << FormatConnectionPlanNode(plan);
+        } else {
+            operation << node.at("Node Type").GetString();
+        }
+        operation << colors.Default();
         newRow.WriteToLastColumn(std::move(operation));
     }
 

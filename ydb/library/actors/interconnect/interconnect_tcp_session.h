@@ -7,6 +7,8 @@
 #include <ydb/library/actors/interconnect/logging/logging.h>
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
+#include <ydb/library/actors/interconnect/retro_tracing/spans.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/util/rope.h>
@@ -23,19 +25,24 @@
 
 #include <util/generic/queue.h>
 #include <util/generic/deque.h>
+#include <util/digest/multi.h>
 #include <util/datetime/cputimer.h>
 
 #include "events_local.h"
 #include "interconnect_impl.h"
 #include "interconnect_zc_processor.h"
+#include "uring_context.h"
 #include "interconnect_channel.h"
 #include "watchdog_timer.h"
 #include "event_holder_pool.h"
 #include "channel_scheduler.h"
 #include "outgoing_stream.h"
+#include "interconnect_session_iface.h"
+#include "interconnect_direct_session.h"
 
 #include <unordered_set>
 #include <unordered_map>
+#include <tuple>
 
 namespace NInterconnect {
     class TInterconnectZcProcessor;
@@ -155,7 +162,7 @@ namespace NActors {
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 TRdmaReadContext::TPtr RdmaReadContext = nullptr;
                 size_t RdmaSize = 0;
-                ui32 RdmaCheckSum = 0;
+                std::optional<ui32> RdmaCumulativeCheckSum;
             };
 
             std::deque<TPendingEvent> PendingEvents;
@@ -168,7 +175,7 @@ namespace NActors {
 
             void PrepareCatchBuffer();
             void ApplyCatchBuffer();
-            void FetchBuffers(ui16 channel, size_t numBytes, std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ);
+            int FetchBuffers(ui16 channel, size_t numBytes, std::deque<std::tuple<ui16, TMutableContiguousSpan>>& outQ);
             void DropFront(TRope *from, size_t numBytes);
 
             struct TRdmaReadReqOk {};
@@ -181,6 +188,11 @@ namespace NActors {
         std::unordered_map<ui16, TPerChannelContext> ChannelMap;
         ui64 LastProcessedSerial = 0;
         bool Terminated = false;
+
+        // Direct send/receive handle shared with users via TEvNodeConnected. The input session
+        // consults it before dispatching an incoming event into the actor system; if a receiver is
+        // registered for the recipient, the event is delivered directly instead.
+        std::shared_ptr<TDirectSessionV1> DirectSession;
 
         TReceiveContext() {
             GetTimeFast(&StartTime);
@@ -264,6 +276,8 @@ namespace NActors {
             cFunc(EvCheckDeadPeer, HandleCheckDeadPeer)
             cFunc(TEvConfirmUpdate::EventType, HandleConfirmUpdate)
             hFunc(NMon::TEvHttpInfoRes, GenerateHttpInfo)
+            hFunc(TEvUringRecvComplete, Handle)
+            hFunc(TEvUringRegisterResult, Handle)
         )
 
     private:
@@ -278,12 +292,26 @@ namespace NActors {
         TInterconnectProxyCommon::TPtr Common;
         const ui32 NodeId;
         const TSessionParams Params;
+
+        TUringContext::TPtr UringContext;
+        ui16 MainRecvBufGroupId = 0;
+        ui16 XdcRecvBufGroupId = 0;
+        bool MainRecvMultishotActive = false;
+        bool XdcRecvMultishotActive = false;
+        // Diagnostic recv-path counters (instrumentation for the idle-keepalive DeadPeer hunt).
+        ui64 UringMainRecvCompletions = 0;
+        ui64 UringMainRecvBytes = 0;
+        // XDC receive over io_uring: a single async readv directly into the XdcInputQ
+        // destination spans (or the catch-stream buffer) is kept in flight at a time.
+        ui64 UringXdcReadSeqNo = 0;
+        bool UringXdcReadInFlight = false;
+        bool UringXdcReadIsCatch = false;
         NInterconnect::NRdma::TQueuePair::TPtr RdmaQp;
         NInterconnect::NRdma::ICq::TPtr RdmaCq;
         XXH3_state_t XxhashState;
         XXH3_state_t XxhashXdcState;
 
-        size_t PayloadSize;
+        size_t PayloadSize = 0;
         ui32 ChecksumExpected, Checksum;
         bool IgnorePayload;
         TRope Payload;
@@ -303,7 +331,7 @@ namespace NActors {
         };
         std::deque<TInboundPacket> InboundPacketQ;
         std::deque<std::tuple<ui16, TMutableContiguousSpan>> XdcInputQ; // target buffers for the XDC stream with channel reference
-        std::deque<std::tuple<ui16, ui32>> XdcChecksumQ; // (size, expectedChecksum)
+        std::deque<std::tuple<ui16, std::optional<ui32>>> XdcChecksumQ; // (size, optional(expectedChecksum)). nullopt if checksums are disabled.
         ui32 XdcCurrentChecksum = 0;
 
         // catch stream -- used after TCP reconnect to match XDC stream with main packet stream
@@ -336,9 +364,17 @@ namespace NActors {
 
         void Handle(TEvPollerReady::TPtr ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
+        void Handle(TEvUringRecvComplete::TPtr& ev);
+        void Handle(TEvUringRegisterResult::TPtr& ev);
         void HandleConfirmUpdate();
         void Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev);
         void ReceiveData();
+        void StartRecvUring();
+        // XDC-over-io_uring receive helpers (Caveat 3).
+        void DriveXdcUring();
+        bool SubmitXdcRecvUring();
+        void ProcessXdcCatchBytesUring(ssize_t recvres);
+        void ProcessXdcBytesUring(ssize_t recvres);
         void ProcessHeader();
         void ProcessPayload(ui64 *numDataBytes);
         void ProcessInboundPacketQ(ui64 numXdcBytesRead, ui64 numRdmaBytesRead);
@@ -352,7 +388,7 @@ namespace NActors {
         void ApplyXdcCatchStream();
         bool ReadXdc(ui64 *numDataBytes);
         void HandleXdcChecksum(TContiguousSpan span);
-        TRcBuf AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, bool isRdma);
+        TRcBuf AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, ui64 alignment, bool isRdma);
 
         TReceiveContext::TPerChannelContext& GetPerChannelContext(ui16 channel) const;
 
@@ -370,6 +406,13 @@ namespace NActors {
 
         inline ui64 GetMaxCyclesPerEvent() const {
             return DurationToCycles(TDuration::MicroSeconds(500));
+        }
+
+        bool UseKernelLivenessMode() const {
+            // Once kernel liveness is negotiated for this session, user-space liveness checks
+            // are disabled and both actors rely on kernel keepalive/user-timeout.
+            // Keep this condition identical to TInterconnectSessionTCP::UseKernelLivenessMode().
+            return Params.UseKernelLiveness;
         }
 
         const TDuration DeadPeerTimeout;
@@ -406,6 +449,7 @@ namespace NActors {
     class TInterconnectSessionTCP
        : public TActor<TInterconnectSessionTCP>
        , public TInterconnectLoggingBase
+       , public IInterconnectSession
     {
         enum {
             EvCheckCloseOnIdle = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -448,40 +492,71 @@ namespace NActors {
             return EActivityType::INTERCONNECT_SESSION_TCP;
         }
 
-        TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params);
+        struct TSubscriberInfo {
+            ui64 Cookie = 0;
+            ui32 ActivityIndex = Max<ui32>();
+            TString EventTypeName;
+            TString StackTrace;
+        };
+
+        using TSubscriberHistoryKey = std::tuple<TString, ui32, TString>;
+
+        struct TSubscriberHistoryKeyHash {
+            size_t operator()(const TSubscriberHistoryKey& key) const noexcept {
+                return MultiHash(std::get<0>(key), std::get<1>(key), std::get<2>(key));
+            }
+        };
+
+        using TSubscriberHistory = std::unordered_map<TSubscriberHistoryKey, ui64, TSubscriberHistoryKeyHash>;
+        static constexpr ui64 MaxSubscriberHistoryEntries = 1000;
+
+        explicit TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy);
         ~TInterconnectSessionTCP();
 
-        void Init();
-        void CloseInputSession();
-        bool IsRdmaInUse();
+        void Init(const TSessionParams& params) override;
+        void CloseInputSession() override;
+        bool IsRdmaInUse() override;
+        bool HasRdmaState() const override;
+        bool SupportsContinuation() const override { return true; }
 
         static TEvTerminate* NewEvTerminate(TDisconnectReason reason) {
             return new TEvTerminate(std::move(reason));
         }
 
-        TDuration GetPingRTT() const {
+        TDuration GetPingRTT() const override {
             return TDuration::MicroSeconds(ReceiveContext->PingRTT_us);
         }
 
-        i64 GetClockSkew() const {
+        i64 GetClockSkew() const override {
             return ReceiveContext->ClockSkew_us;
         }
 
-        std::optional<ui8> GetXDCFlags() const noexcept;
+        std::optional<ui8> GetXDCFlags() const noexcept override;
+
+        // IInterconnectSession bridge/accessors
+        IActor& SessionActor() noexcept override { return *this; }
+        const TSessionParams& GetParams() const override { return Params; }
+        const TIntrusivePtr<NInterconnect::TStreamSocket>& GetSocket() const override { return Socket; }
+        ui64 GetTotalOutputQueueSize() const override { return TotalOutputQueueSize; }
 
     private:
         friend class TInterconnectProxyTCP;
 
         void Handle(TEvTerminate::TPtr& ev);
         void HandlePoison();
-        void Terminate(TDisconnectReason reason);
+        void Terminate(TDisconnectReason reason) override;
         void PassAway() override;
 
         void Enqueue(STATEFN_SIG);
         void Forward(STATEFN_SIG);
+        void ForwardWithSubscribe(STATEFN_SIG);
         void ForwardDelayed();
         void Subscribe(STATEFN_SIG);
         void Unsubscribe(STATEFN_SIG);
+        void EnqueueForward(TAutoPtr<IEventHandle> ev);
+        void UpdateSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex = Max<ui32>(),
+            TString eventTypeName = {},
+            TString stackTrace = {});
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         std::optional<TTimeLimit> TimeLimit;
@@ -490,6 +565,7 @@ namespace NActors {
             TimeLimit.emplace(GetMaxCyclesPerEvent());
             STRICT_STFUNC_BODY(
                 fFunc(TEvInterconnect::EvForward, Forward)
+                fFunc(TEvForwardSubscribeSession::EventType, ForwardWithSubscribe)
                 cFunc(TEvInterconnect::EvForwardDelayed, ForwardDelayed)
                 cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
                 fFunc(TEvInterconnect::TEvConnectNode::EventType, Subscribe)
@@ -506,6 +582,11 @@ namespace NActors {
                 hFunc(TEvSocketDisconnect, OnDisconnect)
                 hFunc(TEvTerminate, Handle)
                 hFunc(TEvProcessPingRequest, Handle)
+                hFunc(TEvUringRegisterResult, Handle)
+                hFunc(TEvUringRegisterFailed, Handle)
+                hFunc(TEvUringWriteComplete, Handle)
+                hFunc(TEvUringSendZcNotif, Handle)
+                cFunc(static_cast<ui32>(ENetwork::EvProcessDirectSessionQueue), HandleProcessDirectSessionQueue)
             )
             UpdateUtilization();
         }
@@ -514,8 +595,8 @@ namespace NActors {
 
         void OnDisconnect(TEvSocketDisconnect::TPtr& ev);
 
-        THolder<TEvHandshakeAck> ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev);
-        void SetNewConnection(TEvHandshakeDone::TPtr& ev);
+        THolder<TEvHandshakeAck> ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) override;
+        void SetNewConnection(TEvHandshakeDone::TPtr& ev) override;
 
         TEvRam* RamInQueue = nullptr;
         ui64 RamStartedCycles = 0;
@@ -538,7 +619,12 @@ namespace NActors {
 
         void Handle(TEvPollerReady::TPtr& ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
+        void Handle(TEvUringRegisterResult::TPtr& ev);
+        void Handle(TEvUringRegisterFailed::TPtr& ev);
+        void Handle(TEvUringWriteComplete::TPtr& ev);
+        void Handle(TEvUringSendZcNotif::TPtr& ev);
         void WriteData();
+        void WriteDataUring();
         ssize_t HandleWriteResult(ssize_t r, const TString& err);
         ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
 
@@ -547,10 +633,10 @@ namespace NActors {
         void DropConfirmed(ui64 confirm);
         void ShutdownSocket(TDisconnectReason reason);
 
-        void StartHandshake();
+        void StartHandshake() override;
         void ReestablishConnection(TEvHandshakeDone::TPtr&& ev, bool startHandshakeOnSessionClose,
                 TDisconnectReason reason);
-        void ReestablishConnectionWithHandshake(TDisconnectReason reason);
+        void ReestablishConnectionWithHandshake(TDisconnectReason reason) override;
         void ReestablishConnectionExecute();
 
         TInterconnectProxyTCP* const Proxy;
@@ -561,6 +647,10 @@ namespace NActors {
         TDuration GetLostConnectionTimeout() const;
         ui32 GetTotalInflightAmountOfData() const;
         ui64 GetMaxCyclesPerEvent() const;
+        bool UseKernelLivenessMode() const {
+            // Effective liveness mode for the currently attached transport connection.
+            return KernelLivenessMode;
+        }
 
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -598,7 +688,9 @@ namespace NActors {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        const TSessionParams Params;
+        TSessionParams Params; // stable session template used for continuation handshakes
+        // Runtime mode negotiated for the current socket; may differ from Params on reconnect.
+        bool KernelLivenessMode = false;
         std::unique_ptr<TEventHolderPool> Pool;
         TMaybe<TChannelScheduler> ChannelScheduler;
         ui64 TotalOutputQueueSize;
@@ -645,20 +737,55 @@ namespace NActors {
         TPollerToken::TPtr PollerToken;
         TPollerToken::TPtr XdcPollerToken;
         ui32 SendBufferSize;
+
+        TUringContext::TPtr UringContext;
+        ui64 UringWriteSeqNo = 0;
+        bool UringMainWriteInFlight = false;
+        bool UringXdcWriteInFlight = false;
+        struct TUringWriteInFlight {
+            size_t Bytes;
+            bool IsXdc;
+            bool IsOutOfBand = false;
+            std::vector<struct iovec> Iovecs;
+        };
+        THashMap<ui64, TUringWriteInFlight> UringWritesInFlight;
+
+        // Diagnostic send-path counters (instrumentation for the idle-keepalive DeadPeer hunt).
+        ui64 UringMainWritevSubmitted = 0;  // main-socket writevs handed to io_uring
+        ui64 UringMainWriteCompleted = 0;   // main-socket writev completions processed
+        // Monotonic timestamp at which UringMainWriteInFlight last went true; TMonotonic::Zero()
+        // when the latch is clear. Used to detect a wedged single-in-flight write latch.
+        TMonotonic UringMainWriteInFlightSince;
+        TMonotonic UringMainWriteStuckReported; // throttles the "latch stuck" NOTICE
+
+        // IORING_OP_SEND_ZC buffer lifetime (Caveat 5). When the XDC stream is sent with
+        // io_uring zero-copy, an XdcStream buffer must not be freed (DropFront) until the
+        // kernel posts the corresponding IORING_CQE_F_NOTIF. We advance the read cursor on
+        // the data CQE (safe) but gate DropFront on the cumulative notif-confirmed offset.
+        bool UringZcEnabled = false;
+        ui64 XdcZcNotifCum = 0;     // cumulative XDC bytes whose send_zc NOTIF has arrived
+        ui64 XdcDropWantedCum = 0;  // cumulative XDC bytes the peer has confirmed for dropping
+        ui64 XdcDroppedCum = 0;     // cumulative XDC bytes physically dropped from XdcStream
+        std::deque<ui64> XdcZcNotifQueue; // FIFO of in-flight zc send sizes awaiting NOTIF
+        void DropFrontXdc(size_t bytes);
+        void FlushXdcZcDrop();
         ui64 InflightDataAmount = 0;
         ui64 RdmaInflightDataAmount = 0;
 
-        std::unordered_map<TActorId, ui64, TActorId::THash> Subscribers;
+        std::unordered_map<TActorId, TSubscriberInfo, TActorId::THash> Subscribers;
+        TSubscriberHistory SubscriberHistory;
+        bool SubscriberHistoryOverflow = false;
 
         struct TDelayedEvent {
             TAutoPtr<IEventHandle> Event;
-            NWilson::TSpan Span;
+            TDelayedEventSpan::TUniversal Span;
         };
         std::deque<TDelayedEvent> DelayedEvents;
 
         // time at which we want to send confirmation packet even if there was no outgoing data
         ui64 UnconfirmedBytes = 0;
         TMonotonic ForcePacketTimestamp = TMonotonic::Max();
+        TMonotonic ClockSkewPingTimestamp = TMonotonic::Max();
         TPriorityQueue<TMonotonic, TVector<TMonotonic>, std::greater<TMonotonic>> FlushSchedule;
         size_t MaxFlushSchedule = 0;
         ui64 FlushEventsScheduled = 0;
@@ -669,11 +796,19 @@ namespace NActors {
         void HandleFlush();
         void ResetFlushLogic();
 
-        void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev);
+        void GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) override;
 
         TIntrusivePtr<TReceiveContext> ReceiveContext;
         TActorId ReceiverId;
         TDuration Ping;
+
+        // Direct send/receive handle handed out to subscribers via TEvNodeConnected; also published
+        // into ReceiveContext so the input session can intercept incoming events.
+        std::shared_ptr<TDirectSessionV1> DirectSession;
+
+        // Drains the direct session's lock-free registration queue on the session/input-session mailbox
+        // thread (woken via EvProcessDirectSessionQueue by producers).
+        void HandleProcessDirectSessionQueue();
 
         ui64 ConfirmPacketsForcedBySize = 0;
         ui64 ConfirmPacketsForcedByTimeout = 0;

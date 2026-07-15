@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/datashard/datashard.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
@@ -30,33 +32,64 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_FINISH_TRAVERSAL; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Execute");
+        YDB_LOG_DEBUG("TTxFinishTraversal::Execute",
+            {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->FinishTraversal(
-            db,
-            /*finishAllForceTraversalTables=*/Status != NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        // Map TEvAnalyzeResponse status to the persisted terminal state:
+        //   SUCCESS   -> nullopt  (natural completion path: mark only the current table done;
+        //                           if all tables are done the op flips to STATE_DONE)
+        //   CANCELLED -> STATE_CANCELLED (user cancel)
+        //   ERROR     -> STATE_FAILED    (terminal failure: scan error, deadline, etc.)
+        std::optional<Ydb::Table::AnalyzeState::State> forceTerminalState;
+        switch (Status) {
+            case NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS:
+                break;
+            case NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED:
+                forceTerminalState = Ydb::Table::AnalyzeState::STATE_CANCELLED;
+                break;
+            default:
+                forceTerminalState = Ydb::Table::AnalyzeState::STATE_FAILED;
+                break;
+        }
+        Self->FinishTraversal(db, forceTerminalState, Issues);
 
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete " <<
-            Self->LastTraversalWasForceString() << " traversal for path " << PathId);
+        YDB_LOG_DEBUG("TTxFinishTraversal::Complete traversal for path",
+            {"tabletId", Self->TabletID()},
+            {"lastTraversalWasForce", Self->LastTraversalWasForceString()},
+            {"pathId", PathId});
 
         if (!ReplyToActorId) {
-            SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. No ActorId to send reply.");            
+            YDB_LOG_DEBUG("TTxFinishTraversal::Complete. No ActorId to send reply",
+                {"tabletId", Self->TabletID()});
             return;
         }
 
-        auto forceTraversalRemained = Self->ForceTraversalOperation(OperationId);       
-        
-        if (forceTraversalRemained) {
-            SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. Don't send TEvAnalyzeResponse. " <<
-                "There are pending operations, OperationId " << OperationId.Quote() << " , ActorId=" << ReplyToActorId);
+        // Check whether the operation still has pending (non-terminal) tables.
+        // If the operation is now terminal (or was deleted), send the response.
+        auto forceTraversal = Self->ForceTraversalOperation(OperationId);
+        const bool isTerminal = !forceTraversal || IsTerminalAnalyzeState(forceTraversal->State);
+
+        const bool hasPendingTables = !isTerminal &&
+            std::any_of(forceTraversal->Tables.begin(), forceTraversal->Tables.end(),
+                [](const TForceTraversalTable& t) {
+                    return t.Status != TForceTraversalTable::EStatus::TraversalFinished;
+                });
+
+        if (hasPendingTables) {
+            YDB_LOG_DEBUG("TTxFinishTraversal::Complete. Don't send TEvAnalyzeResponse. There are pending operations.",
+                {"tabletId", Self->TabletID()},
+                {"operationId", OperationId.Quote()},
+                {"actorId", ReplyToActorId});
         } else {
-            SA_LOG_D("[" << Self->TabletID() << "] TTxFinishTraversal::Complete. " <<
-                "Send TEvAnalyzeResponse, OperationId=" << OperationId.Quote() << ", ActorId=" << ReplyToActorId);
+            YDB_LOG_DEBUG("TTxFinishTraversal::Complete. Send TEvAnalyzeResponse.",
+                {"tabletId", Self->TabletID()},
+                {"operationId", OperationId.Quote()},
+                {"actorId", ReplyToActorId});
             auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
             response->Record.SetOperationId(OperationId);
             response->Record.SetStatus(Status);
@@ -64,62 +97,19 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
                 NYql::IssueToMessage(issue, response->Record.AddIssues());
             }
             ctx.Send(ReplyToActorId, response.release());
+            // Clear ReplyToActorId to prevent double-reply on subsequent traversal ticks
+            if (forceTraversal) {
+                forceTraversal->ReplyToActorId = TActorId{};
+            }
         }
     }
 };
-void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr&) {
+
+void TStatisticsAggregator::DispatchFinishTraversalTx(
+        NKikimrStat::TEvAnalyzeResponse::EStatus status,
+        NYql::TIssues issues) {
     Execute(
-        new TTxFinishTraversal(this, NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS),
-        TActivationContext::AsActorContext());
-}
-void TStatisticsAggregator::Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr&) {
-    NYql::TIssue error(TStringBuilder() << "Could not find table id: "
-        << TraversalPathId.LocalPathId << ", deleted its statistics");
-    Execute(
-        new TTxFinishTraversal(this, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, {error}),
-        TActivationContext::AsActorContext());
-}
-void TStatisticsAggregator::Handle(TEvStatistics::TEvFinishTraversal::TPtr& ev) {
-    if (ev->Sender != AnalyzeActorId) {
-        return;
-    }
-
-    using EStatus = TEvStatistics::TEvFinishTraversal::EStatus;
-    switch (ev->Get()->Status) {
-    case EStatus::Success:
-        std::move(
-            ev->Get()->Statistics.begin(), ev->Get()->Statistics.end(),
-            std::back_inserter(StatisticsToSave));
-        SaveStatisticsToTable();
-        return;
-    case EStatus::TableNotFound:
-        DeleteStatisticsFromTable();
-        return;
-    case EStatus::InternalError:
-        Execute(
-            new TTxFinishTraversal(
-                this, NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, std::move(ev->Get()->Issues)),
-            TActivationContext::AsActorContext());
-        return;
-    }
-}
-
-void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev) {
-    const auto& operationId = ev->Get()->Record.GetOperationId();
-    if (operationId != ForceTraversalOperationId) {
-        SA_LOG_N("Got unexpected TEvAnalyzeCancel with"
-            << " operationId: " << operationId.Quote()
-            << ", expected: " << ForceTraversalOperationId.Quote() << ", ignoring");
-        return;
-    }
-
-    SA_LOG_D("Got TEvAnalyzeCancel, operationId: " << operationId.Quote());
-    if (AnalyzeActorId) {
-        Send(AnalyzeActorId, new TEvents::TEvPoison());
-    }
-
-    Execute(
-        new TTxFinishTraversal(this, NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED),
+        new TTxFinishTraversal(this, status, std::move(issues)),
         TActivationContext::AsActorContext());
 }
 

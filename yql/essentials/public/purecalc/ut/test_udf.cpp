@@ -5,7 +5,6 @@
 #include <yql/essentials/public/purecalc/ut/protos/test_structs.pb.h>
 #include <yql/essentials/public/udf/udf_counter.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
-#include <library/cpp/testing/unittest/registar.h>
 
 class TMyModule: public NKikimr::NUdf::IUdfModule {
 public:
@@ -46,7 +45,7 @@ public:
         if (name == NKikimr::NUdf::TStringRef::Of("Func")) {
             builder.SimpleSignature<i32(i32)>();
             builder.Implementation(new TFunc(
-                builder.GetCounter("FuncCalls", true),
+                builder.GetCounter("FuncCalls", /*deriv=*/true),
                 builder.GetScopedProbe("FuncTime")));
         }
     }
@@ -120,7 +119,7 @@ Y_UNIT_TEST(TestCounters) {
     auto factory = MakeProgramFactory();
 
     i64 callCounter = 0;
-    TMyCountersProvider myCountersProvider(&callCounter, nullptr);
+    TMyCountersProvider myCountersProvider(&callCounter, /*log=*/nullptr);
     factory->AddUdfModule("MyModule", new TMyModule);
     factory->SetCountersProvider(&myCountersProvider);
 
@@ -146,7 +145,7 @@ Y_UNIT_TEST(TestCountersFilteredColumns) {
     auto factory = MakeProgramFactory();
 
     i64 callCounter = 0;
-    TMyCountersProvider myCountersProvider(&callCounter, nullptr);
+    TMyCountersProvider myCountersProvider(&callCounter, /*log=*/nullptr);
     factory->AddUdfModule("MyModule", new TMyModule);
     factory->SetCountersProvider(&myCountersProvider);
 
@@ -174,7 +173,7 @@ Y_UNIT_TEST(TestScopedProbes) {
     auto factory = MakeProgramFactory();
 
     TString log;
-    TMyCountersProvider myCountersProvider(nullptr, &log);
+    TMyCountersProvider myCountersProvider(/*calls=*/nullptr, &log);
     factory->AddUdfModule("MyModule", new TMyModule);
     factory->SetCountersProvider(&myCountersProvider);
 

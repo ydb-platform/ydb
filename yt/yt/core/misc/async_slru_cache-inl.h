@@ -374,6 +374,14 @@ template <class TKey, class TValue, class THash>
 typename TAsyncSlruCacheBase<TKey, TValue, THash>::TValuePtr
 TAsyncSlruCacheBase<TKey, TValue, THash>::Find(const TKey& key)
 {
+    return Find<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+typename TAsyncSlruCacheBase<TKey, TValue, THash>::TValuePtr
+TAsyncSlruCacheBase<TKey, TValue, THash>::Find(const THeterogenousKey& key)
+{
     auto* shard = GetShardByKey(key);
 
     if (GhostCachesEnabled_.load()) {
@@ -434,8 +442,8 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::GetAll()
         const auto& shard = Shards_[shardIndex];
 
         auto readerGuard = ReaderGuard(shard.SpinLock);
-        for (const auto& [key, rawValue] : shard.ValueMap) {
-            if (auto value = DangerousGetPtr<TValue>(rawValue)) {
+        for (const auto& [key, weakValue] : shard.ValueMap) {
+            if (auto value = weakValue.Lock()) {
                 result.push_back(std::move(value));
             }
         }
@@ -446,6 +454,14 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::GetAll()
 template <class TKey, class TValue, class THash>
 typename TAsyncSlruCacheBase<TKey, TValue, THash>::TValueFuture
 TAsyncSlruCacheBase<TKey, TValue, THash>::Lookup(const TKey& key)
+{
+    return Lookup<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+typename TAsyncSlruCacheBase<TKey, TValue, THash>::TValueFuture
+TAsyncSlruCacheBase<TKey, TValue, THash>::Lookup(const THeterogenousKey& key)
 {
     auto* shard = GetShardByKey(key);
 
@@ -488,8 +504,9 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::Touch(const TValuePtr& value)
 }
 
 template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
 typename TAsyncSlruCacheBase<TKey, TValue, THash>::TValueFuture
-TAsyncSlruCacheBase<TKey, TValue, THash>::DoLookup(TShard* shard, const TKey& key)
+TAsyncSlruCacheBase<TKey, TValue, THash>::DoLookup(TShard* shard, const THeterogenousKey& key)
 {
     auto readerGuard = ReaderGuard(shard->SpinLock);
 
@@ -524,7 +541,7 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::DoLookup(TShard* shard, const TKey& ke
         return {};
     }
 
-    auto value = DangerousGetPtr(valueIt->second);
+    auto value = valueIt->second.Lock();
     if (!value) {
         return {};
     }
@@ -587,11 +604,11 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key, i64 
 
     if (auto valueFuture = DoLookup(shard, key)) {
         if (GhostCachesEnabled_.load()) {
-            if (valueFuture.IsSet() && valueFuture.Get().IsOK()) {
+            if (valueFuture.IsSet() && valueFuture.GetOrCrash().IsOK()) {
                 bool smallInserted = shard->SmallGhost.BeginInsert(key, cookieWeight);
                 bool largeInserted = shard->LargeGhost.BeginInsert(key, cookieWeight);
                 if (smallInserted || largeInserted) {
-                    const auto& value = valueFuture.Get().Value();
+                    const auto& value = valueFuture.GetOrCrash().Value();
                     i64 weight = GetWeight(value);
                     if (smallInserted) {
                         shard->SmallGhost.EndInsert(value, weight);
@@ -693,7 +710,7 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::BeginInsert(const TKey& key, i64 
             return insertCookie;
         }
 
-        if (auto value = DangerousGetPtr(valueIt->second)) {
+        if (auto value = valueIt->second.Lock()) {
             auto* item = new TItem(value);
             value->Item_ = item;
 
@@ -917,7 +934,9 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::DoTryRemove(
     }
 
     if (forbidResurrection || !IsResurrectionSupported()) {
-        valueIt->second->ResetCache();
+        if (auto value = valueIt->second.Lock()) {
+            value->ResetCache();
+        }
         valueMap.erase(valueIt);
     }
 
@@ -1022,7 +1041,8 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::UpdateWeight(const TValuePtr& val
 }
 
 template <class TKey, class TValue, class THash>
-auto TAsyncSlruCacheBase<TKey, TValue, THash>::GetShardByKey(const TKey& key) const -> TShard*
+template <class THeterogenousKey>
+auto TAsyncSlruCacheBase<TKey, TValue, THash>::GetShardByKey(const THeterogenousKey& key) const -> TShard*
 {
     return &Shards_[THash()(key) & (Config_->ShardCount - 1)];
 }
@@ -1066,7 +1086,8 @@ auto TAsyncSlruCacheBase<TKey, TValue, THash>::GetLargeGhostCounters() const -> 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TKey, class TValue, class THash>
-bool TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::DoLookup(const TKey& key, bool allowAsyncHits)
+template <class THeterogenousKey>
+bool TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::DoLookup(const THeterogenousKey& key, bool allowAsyncHits)
 {
     auto readerGuard = ReaderGuard(SpinLock_);
 
@@ -1101,7 +1122,8 @@ bool TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::DoLookup(const TKey&
 }
 
 template <class TKey, class TValue, class THash>
-void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Find(const TKey& key)
+template <class THeterogenousKey>
+void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Find(const THeterogenousKey& key)
 {
     if (!DoLookup(key, /*allowAsyncHits*/ false)) {
         Counters_->MissedCounter.Increment();
@@ -1109,7 +1131,8 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Find(const TKey& key
 }
 
 template <class TKey, class TValue, class THash>
-void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Lookup(const TKey& key)
+template <class THeterogenousKey>
+void TAsyncSlruCacheBase<TKey, TValue, THash>::TGhostShard::Lookup(const THeterogenousKey& key)
 {
     if (!DoLookup(key, /*allowAsyncHits*/ true)) {
         Counters_->MissedCounter.Increment();
@@ -1449,7 +1472,7 @@ TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::~TInsertCookie()
 
 template <class TKey, class TValue, class THash>
 typename TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie&
-TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::operator=(TInsertCookie&& other)
+TAsyncSlruCacheBase<TKey, TValue, THash>::TInsertCookie::operator=(TInsertCookie&& other) noexcept
 {
     if (this != &other) {
         Abort();

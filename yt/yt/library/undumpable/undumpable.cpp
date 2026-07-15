@@ -105,7 +105,7 @@ public:
         while (mark) {
             int ret = ::madvise(mark->Ptr, mark->Size, MADV_DONTDUMP);
             if (ret == 0) {
-                ++result.MarkedSize += mark->Size;
+                result.MarkedSize += mark->Size;
             } else {
                 auto errorCode = LastSystemError();
                 for (auto& record : result.FailedToMarkMemory) {
@@ -126,11 +126,11 @@ private:
     std::atomic<size_t> UndumpableSize_ = 0;
     std::atomic<size_t> UndumpableFootprint_ = 0;
 
-    NThreading::TSpinLock MarkListsLock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, MarkListsLock_);
     TUndumpableMark* AllMarksHead_ = nullptr;
     TUndumpableMark* FreeMarksHead_ = nullptr;
 
-    NThreading::TSpinLock MarkTableLock_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, MarkTableLock_);
     std::optional<THashMap<void*, TUndumpableMark*>> MarkTable_;
 
     TUndumpableMark* GetFreeMark()

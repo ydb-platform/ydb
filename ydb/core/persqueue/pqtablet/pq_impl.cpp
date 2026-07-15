@@ -6,8 +6,10 @@
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
+#include <ydb/core/persqueue/public/pqdata_transaction_compat.h>
 #include <ydb/core/persqueue/pqtablet/cache/read.h>
 #include <ydb/core/persqueue/pqtablet/readproxy/readproxy.h>
+#include <ydb/core/persqueue/pqtablet/batching/batch_processor.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
@@ -30,9 +32,9 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
-#include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/json/json_writer.h>
 
 #include <util/generic/strbuf.h>
@@ -57,7 +59,6 @@ static constexpr ui32 MAX_BYTES = 25_MB;
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
 static constexpr ui32 MAX_HEARTBEAT_SIZE = 2_KB;
 static constexpr ui32 MAX_TXS = 1000;
-
 struct TChangeNotification {
     TChangeNotification(const TActorId& actor, const ui64 txId)
         : Actor(actor)
@@ -733,7 +734,7 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
 
         // this branch will be executed only if EnableKafkaTransactions feature flag is enabled, cause
         // sending transactional requests through Kafka API is restricted by feature flag here: ydb/core/kafka_proxy/kafka_connection.cpp
-        if (txWrite.GetKafkaTransaction() && txWrite.HasCreatedAt()) {
+        if (writeId.IsKafkaApiTransaction() && txWrite.HasCreatedAt()) {
             writeInfo.KafkaTransaction = true;
             writeInfo.CreatedAt = TInstant::MilliSeconds(txWrite.GetCreatedAt());
         }
@@ -1059,8 +1060,6 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     case WRITE_TX_COOKIE:
         PQ_LOG_D("Handle TEvKeyValue::TEvResponse (WRITE_TX_COOKIE)");
         EndWriteTxs(resp, ctx);
-        // Завершилась операция с CmdWrite. Можно отправлять отложенные TEvReadSetAck
-        SendDeferredReadSetAcks(ctx);
         break;
     default:
         PQ_LOG_ERROR("Unexpected KV response: " << ev->Get()->ToString() << " " << ctx.SelfID);
@@ -1114,17 +1113,34 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
     Counters->Percentile().Populate(counters.Percentile());
     Counters->Cumulative().Populate(counters.Cumulative());
 
-    partition.ReservedBytes = counters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Get();
+    auto newReservedBytes = counters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Get();
+    auto combinedReservedBytes = ReservedBytes + newReservedBytes;
+    ReservedBytes = combinedReservedBytes > partition.ReservedBytes ? combinedReservedBytes - partition.ReservedBytes : 0;
+    partition.ReservedBytes = newReservedBytes;
 
     // restore cache's simple counters cleaned by partition's counters
     SetCacheCounters(CacheCounters);
-    ui64 reservedSize = std::accumulate(Partitions.begin(), Partitions.end(), 0ul,
-        [](ui64 sum, const auto& p) { return sum + p.second.ReservedBytes; });
-    Counters->Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(reservedSize);
+    Counters->Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedBytes);
 
     // Features of the implementation of SimpleCounters. It is necessary to restore the value of
     // indicators for transactions.
     SetTxCounters();
+}
+
+void TPersQueue::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext&)
+{
+    const auto partitionId = ev->Get()->PartitionId;
+
+    auto it = Partitions.find(TPartitionId{partitionId});
+    if (it == Partitions.end()) {
+        return;
+    }
+
+    auto& partitionInfo = it->second;
+    if (!partitionInfo.InitDone) {
+        return;
+    }
+    Forward(ev, partitionInfo.Actor);
 }
 
 
@@ -1240,6 +1256,7 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
 
     if (!partitionId.IsSupportivePartition()) {
         ProcessCheckPartitionStatusRequests(partitionId);
+        ProcessCheckMessageDeduplicationRequests(partitionId);
     }
 
     if (allInitialized) {
@@ -1605,6 +1622,37 @@ void TPersQueue::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     }
 }
 
+void TPersQueue::Handle(TEvPersQueue::TEvPartitionUpdateReadMetrics::TPtr& ev, const TActorContext& ctx)
+{
+    if (!ConfigInited || TabletState == NKikimrPQ::EDropped) {
+        return;
+    }
+
+    const auto& record = ev->Get()->Record;
+    if (!record.HasUpdateReadMetrics() || !record.HasPartition()) {
+        return;
+    }
+
+    const auto& metrics = record.GetUpdateReadMetrics();
+    if (!metrics.HasClientId()) {
+        return;
+    }
+
+    auto it = Partitions.find(TPartitionId(record.GetPartition()));
+    if (it == Partitions.end() || !it->second.InitDone) {
+        return;
+    }
+
+    TDuration inFlightLimitReachedDuration = TDuration::Zero();
+    if (metrics.HasInFlightLimitReachedDurationMs()) {
+        inFlightLimitReachedDuration = TDuration::MilliSeconds(metrics.GetInFlightLimitReachedDurationMs());
+    }
+
+    ctx.Send(it->second.Actor,
+        new TEvPQ::TEvUpdateReadMetrics(metrics.GetClientId(), inFlightLimitReachedDuration),
+        0, 0, NWilson::TTraceId(ev->TraceId));
+}
+
 
 void TPersQueue::Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx) {
     for (auto partition : ev->Get()->Record.GetPartitions()) {
@@ -1836,6 +1884,28 @@ void TPersQueue::HandleUpdateWriteTimestampRequest(const ui64 responseCookie, NW
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
+void TPersQueue::FillBatchInfo(
+    const NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmd,
+    TEvPQ::TEvWrite::TMsg& msg) const
+{
+    if (cmd.HasMaxSeqNo()) {
+        msg.MaxSeqNo = static_cast<ui64>(cmd.GetMaxSeqNo());
+    }
+    msg.LogicalMessageCount = static_cast<ui32>(cmd.GetLogicalMessageCount());
+    msg.IsBatch = cmd.GetIsBatch();
+    if (cmd.GetPartNo() > 0) {
+        return;
+    }
+
+    msg.PartitionKeys.reserve(cmd.PartitionKeysSize());
+    for (ui32 i = 0; i < cmd.PartitionKeysSize(); ++i) {
+        const auto& partitionKey = cmd.GetPartitionKeys(i);
+        msg.PartitionKeys.emplace_back(
+            partitionKey.GetKey(),
+            partitionKey.HasSize() ? static_cast<ui64>(partitionKey.GetSize()) : 0);
+    }
+}
+
 void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
@@ -1900,7 +1970,6 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
         }
 
         ui64 createTimestampMs = 0, writeTimestampMs = 0;
-        NKikimrPQClient::TDataChunk proto;
         std::optional<TString> deduplicationId;
 
         TString errorStr = "";
@@ -1916,6 +1985,10 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "too long partition key";
         } else if (cmd.GetSeqNo() < 0) {
             errorStr = "SeqNo must be >= 0";
+        } else if (cmd.HasMaxSeqNo() && cmd.GetMaxSeqNo() < 0) {
+            errorStr = "MaxSeqNo must be >= 0";
+        } else if (cmd.GetLogicalMessageCount() < 1 || cmd.GetLogicalMessageCount() > MAX_LOGICAL_MESSAGE_COUNT) {
+            errorStr = TStringBuilder() << "LogicalMessageCount must be >= 1 and <= " << MAX_LOGICAL_MESSAGE_COUNT;
         } else if (cmd.HasPartNo() && (cmd.GetPartNo() < 0 || cmd.GetPartNo() >= Max<ui16>())) {
             errorStr = "PartNo must be >= 0 and < 65535";
         } else if (cmd.HasPartNo() != cmd.HasTotalParts()) {
@@ -1954,13 +2027,22 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             return;
         }
 
-        if (proto.ParseFromString(cmd.GetData())) {
-            for (auto& attr : *proto.MutableMessageMeta()) {
-                if (attr.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
-                    deduplicationId = attr.value();
-                    break;
+        if (cmd.HasMessageDeduplicationId()) {
+            deduplicationId = cmd.GetMessageDeduplicationId();
+
+            auto deduplicationIdFromMetadata = [&cmd] () -> TString {
+                NKikimrPQClient::TDataChunk proto;
+                if (proto.ParseFromString(cmd.GetData())) {
+                    for (auto& attr : *proto.MutableMessageMeta()) {
+                        if (attr.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
+                            return attr.value();
+                        }
+                    }
                 }
-            }
+                return TString();
+            };
+
+            Y_ASSERT(deduplicationId.value() == deduplicationIdFromMetadata());
         }
 
         ui32 mSize = MAX_BLOB_PART_SIZE - cmd.GetSourceId().size() - sizeof(ui32) - TClientBlob::OVERHEAD; //megaqc - remove this
@@ -2012,13 +2094,15 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                     .UncompressedSize = uncompressedSize,
                     .PartitionKey = cmd.GetPartitionKey(),
                     .ExplicitHashKey = cmd.GetExplicitHash(),
+                    .ChoosePartitionKey = cmd.GetChoosePartitionKey(),
                     .External = cmd.GetExternalOperation(),
                     .IgnoreQuotaDeadline = cmd.GetIgnoreQuotaDeadline(),
                     .HeartbeatVersion = heartbeatVersion,
                     .EnableKafkaDeduplication = cmd.GetEnableKafkaDeduplication(),
                     .ProducerEpoch = (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing()),
-                    .MessageDeduplicationId = deduplicationId
+                    .MessageDeduplicationId = deduplicationId,
                 });
+                FillBatchInfo(cmd, msgs.back());
 
                 partNo++;
                 uncompressedSize = 0;
@@ -2061,13 +2145,15 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 .UncompressedSize = cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0u,
                 .PartitionKey = cmd.GetPartitionKey(),
                 .ExplicitHashKey = cmd.GetExplicitHash(),
+                .ChoosePartitionKey = cmd.GetChoosePartitionKey(),
                 .External = cmd.GetExternalOperation(),
                 .IgnoreQuotaDeadline = cmd.GetIgnoreQuotaDeadline(),
                 .HeartbeatVersion = heartbeatVersion,
                 .EnableKafkaDeduplication = cmd.GetEnableKafkaDeduplication(),
                 .ProducerEpoch = (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing()),
-                .MessageDeduplicationId = std::move(deduplicationId)
+                .MessageDeduplicationId = std::move(deduplicationId),
             });
+            FillBatchInfo(cmd, msgs.back());
         }
         PQ_LOG_D("got client message topic: " << (TopicConverter ? TopicConverter->GetClientsideName() : "Undefined") <<
                  " partition: " << req.GetPartition() <<
@@ -2082,10 +2168,16 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
         initialSeqNo = req.GetInitialSeqNo();
     }
     THolder<TEvPQ::TEvWrite> event =
-        MakeHolder<TEvPQ::TEvWrite>(responseCookie, req.GetMessageNo(),
-                                    req.HasOwnerCookie() ? req.GetOwnerCookie() : "",
-                                    req.HasCmdWriteOffset() ? req.GetCmdWriteOffset() : TMaybe<ui64>(),
-                                    std::move(msgs), req.GetIsDirectWrite(), initialSeqNo);
+        MakeHolder<TEvPQ::TEvWrite>(
+            responseCookie,
+            req.GetMessageNo(),
+            req.HasOwnerCookie() ? req.GetOwnerCookie() : "",
+            req.HasCmdWriteOffset() ? req.GetCmdWriteOffset() : TMaybe<ui64>(),
+            std::move(msgs),
+            req.GetIsDirectWrite(),
+            initialSeqNo,
+            TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked
+        );
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
@@ -2166,15 +2258,15 @@ void TPersQueue::HandleReadRequest(
     if (!cmd.HasOffset()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "no offset in read request: " << ToString(req).data());
+    } else if (cmd.GetOffset() < 0) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+            TStringBuilder() << "invalid offset in read request: " << ToString(req).data());
     } else if (!cmd.HasClientId()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "no clientId in read request: " << ToString(req).data());
+        TStringBuilder() << "no clientId in read request: " << ToString(req).data());
     } else if (cmd.HasCount() && cmd.GetCount() <= 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "invalid count in read request: " << ToString(req).data());
-    } else if (!cmd.HasOffset() || cmd.GetOffset() < 0) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "invalid offset in read request: " << ToString(req).data());
     } else if (cmd.HasBytes() && cmd.GetBytes() <= 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "invalid bytes in read request: " << ToString(req).data());
@@ -2225,6 +2317,7 @@ void TPersQueue::HandleReadRequest(
                                        cmd.GetClientId(),
                                        cmd.HasTimeoutMs() ? cmd.GetTimeoutMs() : 0,
                                        bytes,
+                                       cmd.GetReadToBlobEnd(),
                                        cmd.HasMaxTimeLagMs() ? cmd.GetMaxTimeLagMs() : 0,
                                        cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0,
                                        clientDC,
@@ -2522,6 +2615,38 @@ void TPersQueue::HandleWriteRequestForSupportivePartition(const ui64 responseCoo
     HandleWriteRequest(responseCookie, std::move(traceId), actorId, req, ctx);
 }
 
+void TPersQueue::HandleAbortDeferredStagingRequest(const ui64 responseCookie,
+                                                   NWilson::TTraceId /* traceId */,
+                                                   const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                   const TActorContext& ctx)
+{
+    PQ_ENSURE(req.HasWriteId());
+    const TWriteId writeId = GetWriteId(req);
+    if (!writeId.IsDeferredPublicationApiTransaction()) {
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                   "CmdAbortDeferredStaging requires deferred publication WriteId");
+        return;
+    }
+
+    const ui32 originalPartitionId = req.GetPartition();
+    if (TxWrites.contains(writeId)) {
+        TTxWriteInfo& writeInfo = TxWrites.at(writeId);
+        if (writeInfo.Partitions.contains(originalPartitionId) && !writeInfo.Deleting) {
+            PQ_LOG_TX_I("abort deferred staging for WriteId " << writeId << " partition " << originalPartitionId);
+            BeginDeletePartitions(writeId, writeInfo);
+            TxWritesChanged = true;
+            TryWriteTxs(ctx);
+        }
+    }
+
+    InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OWNERSHIP);
+    auto fakeResponse = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
+    auto& record = *fakeResponse->Response;
+    record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    record.MutablePartitionResponse()->MutableCmdAbortDeferredStagingResult();
+    ctx.Send(SelfId(), fakeResponse.Release());
+}
+
 void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
                                                    NWilson::TTraceId traceId,
                                                    const NKikimrClient::TPersQueuePartitionRequest& req,
@@ -2534,8 +2659,11 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         HandleReserveBytesRequestForSupportivePartition(responseCookie, std::move(traceId), req, sender, ctx);
     } else if (req.CmdWriteSize()) {
         HandleWriteRequestForSupportivePartition(responseCookie, std::move(traceId), req, ctx);
+    } else if (req.HasCmdAbortDeferredStaging()) {
+        HandleAbortDeferredStagingRequest(responseCookie, std::move(traceId), req, ctx);
     } else {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "CmdGetOwnership, CmdReserveBytes or CmdWrite expected");
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                   "CmdGetOwnership, CmdReserveBytes, CmdWrite or CmdAbortDeferredStaging expected");
     }
 }
 
@@ -2553,9 +2681,16 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         req.HasCmdGetOwnership()
         || req.HasCmdReserveBytes()
         || req.CmdWriteSize()
+        || req.HasCmdAbortDeferredStaging()
         ;
     if (!isValid) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "CmdGetOwnership, CmdReserveBytes or CmdWrite expected");
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                   "CmdGetOwnership, CmdReserveBytes, CmdWrite or CmdAbortDeferredStaging expected");
+        return;
+    }
+
+    if (req.HasCmdAbortDeferredStaging()) {
+        HandleAbortDeferredStagingRequest(responseCookie, std::move(event->TraceId), req, ctx);
         return;
     }
 
@@ -2565,7 +2700,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
         // This branch happens when previous Kafka transaction has committed and we receive write for next one
         // after PQ has deleted supportive partition and before it has deleted writeId from TxWrites (tx has not transaitioned to DELETED state)
         PQ_LOG_D("GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%01");
-        KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId].push_back(event);
+        KafkaNextTransactionRequests[writeId.GetKafkaProducerInstanceId()].push_back(event);
         return;
     } else if (TxWrites.contains(writeId) && TxWrites.at(writeId).Partitions.contains(originalPartitionId)) {
         //
@@ -2586,7 +2721,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
             // This branch happens when previous Kafka transaction has committed and we receive write for next one
             // before PQ has deleted supportive partition for previous transaction
             PQ_LOG_D("GetOwnership request for the next Kafka transaction while previous is being deleted. Saving it till the complete delete of the previous tx.%02");
-            KafkaNextTransactionRequests[writeId.KafkaProducerInstanceId].push_back(event);
+            KafkaNextTransactionRequests[writeId.GetKafkaProducerInstanceId()].push_back(event);
             return;
         }
 
@@ -2604,10 +2739,10 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
     } else {
         if (!req.GetNeedSupportivePartition()) {
             // missing supportivce partition in kafka transaction means that we already committed and deleted transaction for current producerId + producerEpoch
-            NPersQueue::NErrorCode::EErrorCode errorCode = writeId.KafkaApiTransaction ?
+            NPersQueue::NErrorCode::EErrorCode errorCode = writeId.IsKafkaApiTransaction() ?
                 NPersQueue::NErrorCode::KAFKA_TRANSACTION_MISSING_SUPPORTIVE_PARTITION :
                 NPersQueue::NErrorCode::PRECONDITION_FAILED;
-            TString error = writeId.KafkaApiTransaction ?
+            TString error = writeId.IsKafkaApiTransaction() ?
                 "Kafka transaction and there is no supportive partition for current producerId and producerEpoch. It means GetOwnership request was not called from TPartitionWriter" :
                 "lost messages";
 
@@ -2650,7 +2785,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
             SubscribeWriteId(writeId, ctx);
         }
 
-        if (writeId.KafkaApiTransaction) {
+        if (writeId.IsKafkaApiTransaction()) {
             writeInfo.KafkaTransaction = true;
             writeInfo.CreatedAt = TAppData::TimeProvider->Now();
         }
@@ -2681,7 +2816,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
             directKey.SessionId = pipeIter->second.SessionId;
             directKey.PartitionSessionId = pipeIter->second.PartitionSessionId;
         }
-        TActorId rr = ctx.RegisterWithSameMailbox(CreateReadProxy(ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request));
+        TActorId rr = ctx.RegisterWithSameMailbox(CreateReadProxy(
+            ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request, BatchProcessorActor));
         ans = CreateResponseProxy(rr, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
     } else {
         ans = CreateResponseProxy(ev->Sender, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
@@ -2744,7 +2880,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         + req.HasCmdSplitMessageGroup()
         + req.HasCmdPublishRead()
         + req.HasCmdForgetRead()
-        + req.HasCmdUpdateReadMetrics();
+        + req.HasCmdUpdateReadMetrics()
+        + req.HasCmdAbortDeferredStaging();
 
     if (count != 1) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -2795,7 +2932,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 }
-
 
 void TPersQueue::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&)
 {
@@ -2926,6 +3062,7 @@ void TPersQueue::HandleDie(const TActorContext& ctx)
         ctx.Send(p.second.Actor, new TEvents::TEvPoisonPill());
     }
     ctx.Send(CacheActor, new TEvents::TEvPoisonPill());
+    ctx.Send(BatchProcessorActor, new TEvents::TEvPoisonPill());
 
     for (auto& pipe : PipesInfo) {
         if (!pipe.second.SessionId.empty()) {
@@ -2990,6 +3127,7 @@ void TPersQueue::CreatedHook(const TActorContext& ctx)
 {
     IsServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
     CacheActor = ctx.RegisterWithSameMailbox(new TPQCacheProxy(ctx.SelfID, TabletID()));
+    BatchProcessorActor = ctx.Register(NBatching::CreateBatchProcessor(TabletID(), ctx.SelfID));
 
     SamplingControl = AppData(ctx)->TracingConfigurator->GetControl();
 
@@ -3123,7 +3261,7 @@ void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
 
     for (auto& pair : TxWrites) {
         if (txnExpired(pair.second)) {
-            PQ_LOG_D("Transaction for Kafka producer " << pair.first.KafkaProducerInstanceId << " is expired");
+            PQ_LOG_D("Transaction for Kafka producer " << pair.first.GetKafkaProducerInstanceId() << " is expired");
             BeginDeletePartitions(pair.first, pair.second);
         }
     }
@@ -3131,7 +3269,7 @@ void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
 
 void TPersQueue::TryContinueKafkaWrites(const TMaybe<TWriteId> writeId, const TActorContext& ctx) {
     if (writeId.Defined() && writeId->IsKafkaApiTransaction()) {
-        auto it = KafkaNextTransactionRequests.find(writeId->KafkaProducerInstanceId);
+        auto it = KafkaNextTransactionRequests.find(writeId->GetKafkaProducerInstanceId());
         if (it != KafkaNextTransactionRequests.end()) {
             for (auto& request : it->second) {
                 Handle(request, ctx);
@@ -3237,7 +3375,7 @@ bool TPersQueue::CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& ope
                                        const TWriteId& writeId) const
 {
     TPartitionId partitionId;
-    if (operation.GetKafkaTransaction()) {
+    if (IsKafkaWriteOperation(operation) || IsDeferredPublicationFinalizeOperation(operation)) {
         auto txWriteInfoIt = TxWrites.find(writeId);
         if (txWriteInfoIt == TxWrites.end()) {
             return false;
@@ -3251,15 +3389,10 @@ bool TPersQueue::CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& ope
     } else {
         partitionId = TPartitionId{operation.GetPartitionId(),
                                  writeId,
-                                 operation.GetSupportivePartition()};
+                                 GetSupportivePartition(operation)};
     }
     PQ_LOG_TX_D("PartitionId " << partitionId << " for WriteId " << writeId);
     return Partitions.contains(partitionId);
-}
-
-static bool IsWriteTxOperation(const NKikimrPQ::TPartitionOperation& operation) {
-    bool isRead = operation.HasCommitOffsetsBegin() || (operation.GetKafkaTransaction() && operation.HasCommitOffsetsEnd());
-    return !isRead;
 }
 
 bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const
@@ -3281,6 +3414,48 @@ bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBod
     return true;
 }
 
+namespace {
+
+using EDeferredFinalizeOp = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp;
+
+bool HasDeferredPublicationFinalizeOperation(const NKikimrPQ::TDataTransaction& txBody)
+{
+    for (const auto& operation : txBody.GetOperations()) {
+        if (IsDeferredPublicationFinalizeOperation(operation)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool AllOperationsAreDeferredPublicationFinalize(const NKikimrPQ::TDataTransaction& txBody)
+{
+    for (const auto& operation : txBody.GetOperations()) {
+        if (!IsDeferredPublicationFinalizeOperation(operation)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+TMaybe<EDeferredFinalizeOp> GetSingleDeferredPublicationFinalizeOp(const NKikimrPQ::TDataTransaction& txBody)
+{
+    TMaybe<EDeferredFinalizeOp> result;
+    for (const auto& operation : txBody.GetOperations()) {
+        if (!IsDeferredPublicationFinalizeOperation(operation)) {
+            continue;
+        }
+        const auto op = operation.GetWrite().GetDeferredPublication().GetOp();
+        if (result.Defined() && *result != op) {
+            return Nothing();
+        }
+        result = op;
+    }
+    return result;
+}
+
+} // namespace
+
 void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> ev,
                                        const TActorContext& ctx)
 {
@@ -3291,7 +3466,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
     NKikimrPQ::TEvProposeTransaction& event = *ev->MutableRecord();
     PQ_ENSURE(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
     PQ_ENSURE(event.HasData());
-    const NKikimrPQ::TDataTransaction& txBody = event.GetData();
+    NKikimrPQ::TDataTransaction& txBody = *event.MutableData();
 
     if (TabletState != NKikimrPQ::ENormal) {
         PQ_LOG_TX_W("TxId " << event.GetTxId() << " invalid PQ tablet state (" << NKikimrPQ::ETabletState_Name(TabletState) << ")");
@@ -3311,6 +3486,72 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
                                     "empty list of operations",
                                     ctx);
         return;
+    }
+
+    EnsureCanonical(txBody);
+
+    const bool hasDeferredFinalize = HasDeferredPublicationFinalizeOperation(txBody);
+    if (hasDeferredFinalize) {
+        if (txBody.GetImmediate()) {
+            PQ_LOG_TX_W("TxId " << event.GetTxId() << " immediate transaction is not supported for deferred publication finalize");
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "immediate transaction is not supported for deferred publication finalize",
+                                        ctx);
+            return;
+        }
+
+        if (!txBody.HasWriteId() || !GetWriteId(txBody).IsDeferredPublicationApiTransaction()) {
+            PQ_LOG_TX_W("TxId " << event.GetTxId() << " invalid WriteId for deferred publication finalize");
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "invalid WriteId",
+                                        ctx);
+            return;
+        }
+
+        if (!AllOperationsAreDeferredPublicationFinalize(txBody)) {
+            PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication finalize allows only finalize operations");
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "deferred publication finalize allows only finalize operations",
+                                        ctx);
+            return;
+        }
+
+        const auto finalizeOp = GetSingleDeferredPublicationFinalizeOp(txBody);
+        if (!finalizeOp.Defined()) {
+            PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication finalize requires matching Publish or Cancel op");
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "deferred publication finalize requires matching Publish or Cancel op",
+                                        ctx);
+            return;
+        }
+    } else if (txBody.HasWriteId() && GetWriteId(txBody).IsDeferredPublicationApiTransaction()) {
+        PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication WriteId requires finalize operation");
+        SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                    event.GetTxId(),
+                                    NKikimrPQ::TError::BAD_REQUEST,
+                                    "deferred publication WriteId requires finalize operation",
+                                    ctx);
+        return;
+    } else {
+        for (const auto& operation : txBody.GetOperations()) {
+            if (IsDeferredPublicationFinalizeOperation(operation)) {
+                PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication finalize requires deferred WriteId");
+                SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                            event.GetTxId(),
+                                            NKikimrPQ::TError::BAD_REQUEST,
+                                            "deferred publication finalize requires deferred WriteId",
+                                            ctx);
+                return;
+            }
+        }
     }
 
     if (!CheckTxWriteOperations(txBody)) {
@@ -3480,6 +3721,7 @@ void TPersQueue::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorConte
 
 void TPersQueue::MovePendingDeferredReadSetAcks()
 {
+    AFL_ENSURE(DeferredReadSetAcks.empty())("DeferredReadSetAcks", DeferredReadSetAcks.size());
     DeferredReadSetAcks = std::move(PendingDeferredReadSetAcks);
     PendingDeferredReadSetAcks.clear();
 }
@@ -3615,16 +3857,16 @@ void TPersQueue::SubscribeWriteId(const TWriteId& writeId,
                                   const TActorContext& ctx)
 {
     PQ_LOG_TX_D("send TEvSubscribeLock for WriteId " << writeId);
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.NodeId),
-             new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.KeyId, writeId.NodeId));
+    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
+             new NLongTxService::TEvLongTxService::TEvSubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
 }
 
 void TPersQueue::UnsubscribeWriteId(const TWriteId& writeId,
                                     const TActorContext& ctx)
 {
     PQ_LOG_TX_D("send TEvUnsubscribeLock for WriteId " << writeId);
-    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.NodeId),
-             new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.KeyId, writeId.NodeId));
+    ctx.Send(NLongTxService::MakeLongTxServiceID(writeId.GetNodeId()),
+             new NLongTxService::TEvLongTxService::TEvUnsubscribeLock(writeId.GetKeyId(), writeId.GetNodeId()));
 }
 
 void TPersQueue::CreateSupportivePartitionActors(const TActorContext& ctx)
@@ -3700,6 +3942,7 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
     SendReplies(ctx);
     CheckChangedTxStates(ctx);
     CreateSupportivePartitionActors(ctx);
+    SendDeferredReadSetAcks(ctx);
 
     WriteTxsInProgress = false;
 
@@ -4001,9 +4244,14 @@ void TPersQueue::SavePlanStep(NKikimrPQ::TTabletTxInfo& info)
 
 void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
 {
-    auto setKafkaTxnTimeout = [](const TTxWriteInfo& txWriteInfo, NKikimrPQ::TTabletTxInfo::TTxWriteInfo& infoToPersist) {
-        if (txWriteInfo.KafkaTransaction) {
+    auto persistTxWriteMeta = [](const TWriteId& writeId, const TTxWriteInfo& txWriteInfo,
+                                  NKikimrPQ::TTabletTxInfo::TTxWriteInfo& infoToPersist) {
+        // TTxWriteInfo.KafkaTransaction is not read by current code (type comes from WriteId).
+        // Persist it for rolling-upgrade compatibility with older PQ tablet binaries.
+        if (writeId.IsKafkaApiTransaction()) {
             infoToPersist.SetKafkaTransaction(true);
+        }
+        if (txWriteInfo.KafkaTransaction) {
             infoToPersist.SetCreatedAt(txWriteInfo.CreatedAt.MilliSeconds());
         }
     };
@@ -4012,12 +4260,12 @@ void TPersQueue::SaveTxWrites(NKikimrPQ::TTabletTxInfo& info)
         if (write.Partitions.empty()) {
             auto* txWrite = info.MutableTxWrites()->Add();
             SetWriteId(*txWrite, writeId);
-            setKafkaTxnTimeout(write, *txWrite);
+            persistTxWriteMeta(writeId, write, *txWrite);
         } else {
             for (auto [partitionId, shadowPartitionId] : write.Partitions) {
                 auto* txWrite = info.MutableTxWrites()->Add();
                 SetWriteId(*txWrite, writeId);
-                setKafkaTxnTimeout(write, *txWrite);
+                persistTxWriteMeta(writeId, write, *txWrite);
                 txWrite->SetOriginalPartitionId(partitionId);
                 txWrite->SetInternalPartitionId(shadowPartitionId.InternalPartitionId);
             }
@@ -4139,17 +4387,22 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
             event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
         }
 
-        if (operation.HasCommitOffsetsBegin()) {
-            event->AddOperation(operation.GetConsumer(),
-                                operation.GetCommitOffsetsBegin(),
-                                operation.GetCommitOffsetsEnd(),
-                                operation.HasForceCommit() ? operation.GetForceCommit() : false,
-                                operation.HasKillReadSession() ? operation.GetKillReadSession() : false,
-                                operation.HasOnlyCheckCommitedToFinish() ? operation.GetOnlyCheckCommitedToFinish() : false,
-                                operation.HasReadSessionId() ? operation.GetReadSessionId() : "");
+        if (HasTopicReadCommit(operation)) {
+            event->AddOperation(GetReadConsumer(operation),
+                                GetReadCommitOffsetsBegin(operation),
+                                GetReadCommitOffsetsEnd(operation),
+                                GetReadForceCommit(operation),
+                                GetReadKillReadSession(operation),
+                                GetReadOnlyCheckCommitedToFinish(operation),
+                                GetReadSessionId(operation));
         }
-        if (operation.GetKafkaTransaction() && operation.HasCommitOffsetsEnd()) {
-            event->AddKafkaOffsetCommitOperation(operation.GetConsumer(), operation.GetCommitOffsetsEnd());
+        if (HasKafkaReadCommit(operation)) {
+            Y_VALIDATE(operation.GetRead().GetKafka().HasCommitOffsetsEnd(),
+                "kafka read commit operation without CommitOffsetsEnd");
+            event->AddKafkaOffsetCommitOperation(GetReadConsumer(operation), GetReadCommitOffsetsEnd(operation));
+        }
+        if (IsDeferredPublicationFinalizeOperation(operation)) {
+            event->DeferredFinalizeOp = operation.GetWrite().GetDeferredPublication().GetOp();
         }
     }
 
@@ -4179,6 +4432,7 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                 const TPartitionInfo& partition = Partitions.at(partitionId);
 
                 event->SupportivePartitionActor = partition.Actor;
+                event->SetSkipSrcIdInfo(tx.GetSkipSrcIdInfo());
             }
         } else {
             PQ_LOG_TX_W("Unknown WriteId " << writeId << " for TxId " << tx.TxId);
@@ -4791,7 +5045,7 @@ void TPersQueue::InitMediatorTimeCast(const TActorContext& ctx)
     }
 }
 
-bool TPersQueue::ReadyForDroppedReply() const 
+bool TPersQueue::ReadyForDroppedReply() const
 {
     if (TabletState != NKikimrPQ::EDropped) {
         return false;
@@ -4936,6 +5190,7 @@ IActor* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                           SubDomainOutOfSpace,
                           (ui32)channels,
                           GetPartitionQuoter(partitionId),
+                          BatchProcessorActor,
                           SamplingControl,
                           newPartition);
 }
@@ -5200,6 +5455,20 @@ void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partiti
     }
 }
 
+void TPersQueue::ProcessCheckMessageDeduplicationRequests(const TPartitionId& partitionId)
+{
+    PQ_ENSURE(!partitionId.WriteId.Defined());
+    ui32 originalPartitionId = partitionId.OriginalPartitionId;
+    auto sit = CheckMessageDeduplicationRequests.find(originalPartitionId);
+    if (sit != CheckMessageDeduplicationRequests.end()) {
+        auto it = Partitions.find(partitionId);
+        for (auto& r : sit->second) {
+            Forward(r, it->second.Actor);
+        }
+        CheckMessageDeduplicationRequests.erase(sit);
+    }
+}
+
 void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev)
 {
     PQ_LOG_TX_D("Handle TEvLongTxService::TEvLockStatus " << ev->Get()->Record.ShortDebugString());
@@ -5275,6 +5544,8 @@ void TPersQueue::DeletePartition(const TPartitionId& partitionId, const TActorCo
 
     const TPartitionInfo& partition = p->second;
     ctx.Send(partition.Actor, new TEvents::TEvPoisonPill());
+
+    ReservedBytes = ReservedBytes > partition.ReservedBytes ? ReservedBytes - partition.ReservedBytes : 0;
 
     PQ_LOG_D("DeletePartition " << partitionId);
     Partitions.erase(partitionId);
@@ -5449,6 +5720,33 @@ void TPersQueue::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     Forward(ev, ReadBalancerActorId);
 }
 
+void TPersQueue::Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+void TPersQueue::Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    auto partitionId = record.GetPartitionId();
+    auto* p = Partitions.FindPtr(TPartitionId{partitionId});
+    if (p == nullptr) [[unlikely]] {
+        PQ_LOG_I("TEvCheckMessageDeduplicationRequest: unknown partition " << partitionId);
+        auto response = MakeHolder<NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse>();
+        response->Record.SetPartitionId(partitionId);
+        response->Record.SetGeneration(record.GetGeneration());
+        response->Record.SetStatus(NKikimrPQ::EStatus::ERROR);
+        for (const auto& messageId : record.GetMessageDeduplicationId()) {
+            response->Record.MutableResult()->try_emplace(messageId);
+        }
+        Send(ev->Sender, response.Release());
+        return;
+    }
+    if (!p->InitDone) [[unlikely]] {
+        CheckMessageDeduplicationRequests[partitionId].push_back(std::move(ev));
+        return;
+    }
+    Forward(ev, p->Actor);
+}
+
 template<typename TEventHandle>
 bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev) {
     auto it = Partitions.find(TPartitionId{partitionId});
@@ -5469,16 +5767,13 @@ bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev
 
 void TPersQueue::ProcessMLPQueue() {
     auto queue = std::exchange(MLPRequests, {});
-    while(!queue.empty()) {
+    while (!queue.empty()) {
         auto ev = std::move(queue.front());
         queue.pop_front();
 
-        auto result = std::visit([&, this](auto& ev) {
+        std::visit([&, this](auto& ev) {
             return ForwardToPartition(ev->Get()->GetPartitionId(), ev);
         }, ev);
-        if (!result) {
-            return;
-        }
     }
 }
 
@@ -5489,6 +5784,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
     {
         HFuncTraced(TEvInterconnect::TEvNodeInfo, Handle);
         HFuncTraced(TEvPersQueue::TEvRequest, Handle);
+        HFuncTraced(TEvPersQueue::TEvPartitionUpdateReadMetrics, Handle);
         HFuncTraced(TEvPersQueue::TEvUpdateConfig, Handle);
         HFuncTraced(TEvPersQueue::TEvOffsets, Handle);
         HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
@@ -5497,6 +5793,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvKeyValue::TEvResponse, Handle);
         HFuncTraced(TEvPQ::TEvInitComplete, Handle);
         HFuncTraced(TEvPQ::TEvPartitionCounters, Handle);
+        HFuncTraced(TEvPQ::TEvConsumerBatchProcessorMetrics, Handle);
         HFuncTraced(TEvPQ::TEvMetering, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCounters, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCountersDrop, Handle);
@@ -5537,6 +5834,8 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         hFuncTraced(TEvPQ::TEvMLPPurgeRequest, Handle);
         hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
+        hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
+        hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             return false;
     }

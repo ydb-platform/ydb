@@ -1,5 +1,3 @@
-/* dqfile can not */
-/* hybridfile can not - missing langver support */
 PRAGMA YqlSelect = 'force';
 
 SELECT
@@ -7,8 +5,8 @@ SELECT
     l_linestatus,
     Sum(l_quantity) AS sum_qty,
     Sum(l_extendedprice) AS sum_base_price,
-    Sum(l_extendedprice * (1 - l_discount)) AS sum_disc_price,
-    Sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) AS sum_charge,
+    Sum(l_extendedprice * ($to_decimal(1) - l_discount)) AS sum_disc_price,
+    Sum(l_extendedprice * ($to_decimal(1) - l_discount) * ($to_decimal(1) + l_tax)) AS sum_charge,
     Avg(l_quantity) AS avg_qty,
     Avg(l_extendedprice) AS avg_price,
     Avg(l_discount) AS avg_disc,

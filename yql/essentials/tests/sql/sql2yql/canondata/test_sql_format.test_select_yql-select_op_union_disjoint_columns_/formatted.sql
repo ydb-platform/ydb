@@ -1,0 +1,58 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    *
+FROM (
+    SELECT
+        1 AS a,
+        2 AS b,
+        3 AS c
+    UNION ALL
+    SELECT
+        4 AS d,
+        5 AS e,
+        6 AS f
+    UNION ALL
+    SELECT
+        7 AS g,
+        8 AS h,
+        9 AS i
+);
+
+SELECT
+    *
+FROM (
+    SELECT
+        1 AS a,
+        2 AS b,
+        3 AS c
+    INTERSECT
+    SELECT
+        4 AS d,
+        5 AS e,
+        6 AS f
+    INTERSECT
+    SELECT
+        7 AS g,
+        8 AS h,
+        9 AS i
+);
+
+SELECT
+    *
+FROM (
+    SELECT
+        1 AS a,
+        2 AS b,
+        3 AS c
+    INTERSECT
+    SELECT
+        4 AS c,
+        5 AS d,
+        6 AS e
+    INTERSECT
+    SELECT
+        7 AS e,
+        8 AS f,
+        9 AS g
+);

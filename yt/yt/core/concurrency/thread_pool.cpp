@@ -2,7 +2,7 @@
 #include "notify_manager.h"
 #include "single_queue_scheduler_thread.h"
 #include "private.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 #include "thread_pool_detail.h"
 
 #include <yt/yt/core/actions/invoker_detail.h>

@@ -26,6 +26,12 @@ class MultiLogRecordProcessor : public LogRecordProcessor
 {
 public:
   MultiLogRecordProcessor(std::vector<std::unique_ptr<LogRecordProcessor>> &&processors);
+
+  MultiLogRecordProcessor(const MultiLogRecordProcessor &)            = delete;
+  MultiLogRecordProcessor(MultiLogRecordProcessor &&)                 = delete;
+  MultiLogRecordProcessor &operator=(const MultiLogRecordProcessor &) = delete;
+  MultiLogRecordProcessor &operator=(MultiLogRecordProcessor &&)      = delete;
+
   ~MultiLogRecordProcessor() override;
 
   void AddProcessor(std::unique_ptr<LogRecordProcessor> &&processor);
@@ -74,6 +80,12 @@ protected:
    */
   bool InternalShutdown(
       std::chrono::microseconds timeout = (std::chrono::microseconds::max)()) noexcept;
+
+  bool EnabledImplementation(
+      const opentelemetry::context::Context &context,
+      const opentelemetry::sdk::instrumentationscope::InstrumentationScope &instrumentation_scope,
+      opentelemetry::logs::Severity severity,
+      opentelemetry::nostd::string_view event_name) const noexcept override;
 
 private:
   std::vector<std::unique_ptr<LogRecordProcessor>> processors_;

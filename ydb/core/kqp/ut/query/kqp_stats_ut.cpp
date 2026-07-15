@@ -194,10 +194,8 @@ Y_UNIT_TEST(MultiTxStatsFullScan) {
     MultiTxStatsFull<NYdb::NTable::TScanQueryPartIterator>(GetScanStreamIterator);
 }
 
-Y_UNIT_TEST_TWIN(DeferredEffects, UseSink) {
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-    auto kikimr = DefaultKikimrRunner({}, app);
+Y_UNIT_TEST(DeferredEffects) {
+    auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     TString planJson;
@@ -241,7 +239,7 @@ Y_UNIT_TEST_TWIN(DeferredEffects, UseSink) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
-    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), UseSink ? 2 : 3);
+    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 2);
 
     result = session.ExecuteDataQuery(R"(
         SELECT * FROM `/Root/TwoShard`;
@@ -251,7 +249,7 @@ Y_UNIT_TEST_TWIN(DeferredEffects, UseSink) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
-    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), UseSink ? 2 : 3);
+    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 2);
 
     auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);
     UNIT_ASSERT(ru != result.GetResponseMetadata().end());
@@ -259,10 +257,8 @@ Y_UNIT_TEST_TWIN(DeferredEffects, UseSink) {
     UNIT_ASSERT(std::atoi(ru->second.c_str()) > 1);
 }
 
-Y_UNIT_TEST_TWIN(DataQueryWithEffects, UseSink) {
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-    auto kikimr = DefaultKikimrRunner({}, app);
+Y_UNIT_TEST(DataQueryWithEffects) {
+    auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -279,13 +275,8 @@ Y_UNIT_TEST_TWIN(DataQueryWithEffects, UseSink) {
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
-    if (UseSink) {
-        auto node = FindPlanNodeByKv(plan, "Node Type", "Stage");
-        UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 1);
-    } else {
-        auto node = FindPlanNodeByKv(plan, "Node Type", "Upsert-ConstantExpr");
-        UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 2);
-    }
+    auto node = FindPlanNodeByKv(plan, "Node Type", "Stage");
+    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 1);
 }
 
 Y_UNIT_TEST(DataQueryMulti) {
@@ -408,11 +399,8 @@ Y_UNIT_TEST(StatsProfile) {
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
-    auto node1 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
-    UNIT_ASSERT_EQUAL(node1.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 2);
-
-    //auto node2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
-    //UNIT_ASSERT_EQUAL(node2.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 1);
+    auto node1 = FindPlanNodeByKv(plan, "Node Type", "ResultSet");
+    UNIT_ASSERT_GE(node1.GetMap().at("Nodes").GetArraySafe().size(), 1);
 }
 
 Y_UNIT_TEST_TWIN(StreamLookupStats, StreamLookupJoin) {
@@ -621,10 +609,8 @@ Y_UNIT_TEST(SysViewCancelled) {
     }
 }
 
-Y_UNIT_TEST_TWIN(OneShardLocalExec, UseSink) {
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-    auto kikimr = DefaultKikimrRunner({}, app);
+Y_UNIT_TEST(OneShardLocalExec) {
+    auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -662,10 +648,8 @@ Y_UNIT_TEST_TWIN(OneShardLocalExec, UseSink) {
     UNIT_ASSERT_VALUES_EQUAL(counters.NonLocalSingleNodeReqCount->Val(), 0);
 }
 
-Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-    TKikimrRunner kikimr(TKikimrSettings(app).SetNodeCount(2));
+Y_UNIT_TEST(OneShardNonLocalExec) {
+    TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 

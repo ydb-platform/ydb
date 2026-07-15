@@ -405,10 +405,6 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
         LOG_WARN_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session without AuthInfo : " << DiscoveryConverter->GetPrintableString()
                                                          << " sourceId " << SourceId << " from " << PeerName);
         SessionsWithoutAuth.Inc();
-        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-            CloseSession("Unauthenticated access is forbidden, please provide credentials", NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
-            return;
-        }
         if (FirstACLCheck) {
             FirstACLCheck = false;
             DiscoverPartition(ctx);
@@ -451,11 +447,13 @@ void TWriteSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr&
     TString maskedTicket = ticket.size() > 5 ? (ticket.substr(0, 5) + "***" + ticket.substr(ticket.size() - 5)) : "***";
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "CheckACL ticket " << maskedTicket << " got result from TICKET_PARSER response: error: "
                             << ev->Get()->Error << " user: "
-                            << (ev->Get()->Error.empty() ? ev->Get()->Token->GetUserSID() : ""));
+                            << (!ev->Get()->HasError() ? ev->Get()->Token->GetUserSID() : ""));
 
-    if (!ev->Get()->Error.empty()) {
-        CloseSession(TStringBuilder() << "Ticket parsing error: " << ev->Get()->Error, NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
-        return;
+    if (ev->Get()->HasError()) {
+        if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+            CloseSession(TStringBuilder() << "Ticket parsing error: " << ev->Get()->Error, NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
+            return;
+        }
     }
     Token = ev->Get()->Token;
 

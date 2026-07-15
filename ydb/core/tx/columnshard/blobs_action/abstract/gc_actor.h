@@ -4,9 +4,8 @@
 #include "gc.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
-
-#include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/blobs_action/events/delete_blobs.h>
+#include <ydb/core/tx/columnshard/common/tablet_id.h>
 
 namespace NKikimr::NOlap::NBlobOperations {
 
@@ -19,10 +18,12 @@ private:
     const TTabletId SelfTabletId;
     std::shared_ptr<IBlobsGCAction> GCAction;
     virtual void DoOnSharedRemovingFinished() = 0;
+
     void OnSharedRemovingFinished() {
         SharedRemovingFinished = true;
         DoOnSharedRemovingFinished();
     }
+
     void Handle(NEvents::TEvDeleteSharedBlobsFinished::TPtr& ev) {
         const TTabletId sourceTabletId = (TTabletId)ev->Get()->Record.GetTabletId();
         auto* blobIds = BlobIdsByTablets.Find(sourceTabletId);
@@ -46,6 +47,7 @@ private:
             OnSharedRemovingFinished();
         }
     }
+
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         auto* blobIds = BlobIdsByTablets.Find((TTabletId)ev->Cookie);
         AFL_VERIFY(blobIds);
@@ -57,10 +59,13 @@ private:
         NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(ev.release(), (ui64)tabletId, true), IEventHandle::FlagTrackDelivery, (ui64)tabletId);
     }
+
 protected:
     bool SharedRemovingFinished = false;
+
 public:
-    TSharedBlobsCollectionActor(const TString& operatorId, const TTabletId selfTabletId, const TBlobsByTablet& blobIds, const std::shared_ptr<IBlobsGCAction>& gcAction)
+    TSharedBlobsCollectionActor(
+        const TString& operatorId, const TTabletId selfTabletId, const TBlobsByTablet& blobIds, const std::shared_ptr<IBlobsGCAction>& gcAction)
         : OperatorId(operatorId)
         , BlobIdsByTablets(blobIds)
         , SelfTabletId(selfTabletId)
@@ -87,7 +92,6 @@ public:
             }
         }
     }
-
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations

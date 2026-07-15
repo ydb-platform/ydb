@@ -19,6 +19,7 @@ private:
         }
 
         Ydb::Table::ExecuteDataQueryRequest request;
+        request.mutable_query_cache_policy()->set_keep_in_cache(true);
         TStringBuilder sb;
         sb << "--!syntax_v1\n";
         sb << "SELECT " + TSecret::TDecoder::SecretId + ", " + TSecret::TDecoder::OwnerUserId + ", " + TSecret::TDecoder::Value << Endl;

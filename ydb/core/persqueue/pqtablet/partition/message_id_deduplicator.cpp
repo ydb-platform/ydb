@@ -3,6 +3,7 @@
 
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 
 namespace NKikimr::NPQ {
 
@@ -52,6 +53,15 @@ std::optional<ui64> TMessageIdDeduplicator::AddMessage(const TString& deduplicat
     Queue.emplace_back(deduplicationId, expirationTime, offset);
     Messages.emplace(deduplicationId, offset);
 
+    return std::nullopt;
+}
+
+std::optional<ui64> TMessageIdDeduplicator::CheckMessageId(const TString& deduplicationId) {
+    Compact(); // remove obsolete messages
+    auto* message = MapFindPtr(Messages, deduplicationId);
+    if (message) {
+        return *message;
+    }
     return std::nullopt;
 }
 

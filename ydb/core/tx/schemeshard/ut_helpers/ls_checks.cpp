@@ -1,5 +1,7 @@
 #include "ls_checks.h"
 
+#include <algorithm>
+
 #include <google/protobuf/text_format.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
@@ -452,6 +454,10 @@ void IsTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     CheckPathType(record, NKikimrSchemeOp::EPathTypeTable);
 }
 
+void IsColumnTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeColumnTable);
+}
+
 void IsExternalTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     CheckPathType(record, NKikimrSchemeOp::EPathTypeExternalTable);
 }
@@ -494,6 +500,10 @@ void IsReplication(const NKikimrScheme::TEvDescribeSchemeResult& record) {
 
 void IsTransfer(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     CheckPathType(record, NKikimrSchemeOp::EPathTypeTransfer);
+}
+
+void IsTestShardSet(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeTestShardSet);
 }
 
 void CheckPathType(const NKikimrScheme::TEvDescribeSchemeResult& record, NKikimrSchemeOp::EPathType pathType) {
@@ -736,6 +746,21 @@ TCheckFunc PQPartitionsInsideDomain(ui64 count) {
     };
 }
 
+TCheckFunc PQGroupsInsideDomain(ui64 count) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_C(IsGoodDomainStatus(record.GetStatus()), "Unexpected status: " << record.GetStatus());
+
+        const auto& pathDescr = record.GetPathDescription();
+        const auto& domain = pathDescr.GetDomainDescription();
+        const auto& curCount = domain.GetPQGroupsInside();
+
+        UNIT_ASSERT_EQUAL_C(curCount, count,
+                            "pq groups inside domain count mismatch, domain with id " << domain.GetDomainKey().GetPathId() <<
+                                " has count " << curCount <<
+                                " but expected " << count);
+    };
+}
+
 DESCRIBE_ASSERT_EQUAL(TopicReservedStorage, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetReserveSize(), "Topic ReserveSize")
 DESCRIBE_ASSERT_EQUAL(TopicAccountSize, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetAccountSize(), "Topic AccountSize")
 DESCRIBE_ASSERT_GE(TopicAccountSizeGE, ui64, subdomain.GetDiskSpaceUsage().GetTopics().GetAccountSize(), "Topic AccountSize")
@@ -867,6 +892,12 @@ TCheckFunc IndexesCount(ui32 count) {
     };
 }
 
+TCheckFunc ColumnTableIndexesCount(ui32 count) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetColumnTableDescription().GetSchema().IndexesSize(), count);
+    };
+}
+
 TCheckFunc IndexType(NKikimrSchemeOp::EIndexType type) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTableIndex().GetType(), type);
@@ -942,6 +973,9 @@ TCheckFunc SpecializedIndexDescription(const TString& proto) {
                         << actual.ShortDebugString());
                 break;
             }
+            case NKikimrSchemeOp::TIndexDescription::kBloomFilterDescription:
+            case NKikimrSchemeOp::TIndexDescription::kBloomNGrammFilterDescription:
+                break;
             case NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET: {
                 UNIT_ASSERT_C(proto == "SPECIALIZEDINDEXDESCRIPTION_NOT_SET",
                     TStringBuilder() << "Expected"
@@ -1016,6 +1050,18 @@ TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state) {
 TCheckFunc StreamVirtualTimestamps(bool value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetVirtualTimestamps(), value);
+    };
+}
+
+TCheckFunc StreamUserSIDs(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetUserSIDs(), value);
+    };
+}
+
+TCheckFunc StreamTraceIds(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetTraceIds(), value);
     };
 }
 
@@ -1586,6 +1632,44 @@ TCheckFunc CheckPathState(NKikimrSchemeOp::EPathState pathState) {
         UNIT_ASSERT(self.HasCreateFinished());
         ui32 curPathState = self.GetPathState();
         UNIT_ASSERT_VALUES_EQUAL(curPathState, (ui32)pathState);
+    };
+}
+
+TCheckFunc CheckMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& table = record.GetPathDescription().GetTable();
+        const auto& stats = table.GetMultiColumnStatistics();
+        auto it = std::find_if(stats.begin(), stats.end(),
+            [&](const auto& s) { return s.GetName() == name; });
+        UNIT_ASSERT_C(it != stats.end(), "MultiColumnStatistics '" << name << "' not found");
+        const auto& stat = *it;
+        UNIT_ASSERT_VALUES_EQUAL(stat.ColumnNamesSize(), static_cast<i32>(columns.size()));
+        for (i32 i = 0; i < static_cast<i32>(columns.size()); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(stat.GetColumnNames(i), columns[i]);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(stat.TypesSize(), static_cast<i32>(types.size()));
+        for (i32 i = 0; i < static_cast<i32>(types.size()); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(stat.GetTypes(i)), static_cast<int>(types[i]));
+        }
+    };
+}
+
+TCheckFunc CheckColumnTableMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        const auto& tableDesc = record.GetPathDescription().GetColumnTableDescription();
+        const auto& stats = tableDesc.GetMultiColumnStatistics();
+        auto it = std::find_if(stats.begin(), stats.end(),
+            [&](const auto& s) { return s.GetName() == name; });
+        UNIT_ASSERT_C(it != stats.end(), "MultiColumnStatistics '" << name << "' not found");
+        const auto& stat = *it;
+        UNIT_ASSERT_VALUES_EQUAL(stat.ColumnNamesSize(), static_cast<i32>(columns.size()));
+        for (i32 i = 0; i < static_cast<i32>(columns.size()); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(stat.GetColumnNames(i), columns[i]);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(stat.TypesSize(), static_cast<i32>(types.size()));
+        for (i32 i = 0; i < static_cast<i32>(types.size()); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(stat.GetTypes(i)), static_cast<int>(types[i]));
+        }
     };
 }
 

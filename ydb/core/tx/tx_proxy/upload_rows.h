@@ -30,6 +30,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
                                  EUploadRowsMode mode = EUploadRowsMode::Normal,
                                  bool writeToPrivateTable = false,
                                  bool writeToIndexImplTable = false,
+                                 bool disableChangeCollection = false,
                                  ui64 cookie = 0,
                                  TBackoff backoff = TBackoff(0));
 } // namespace NTxProxy

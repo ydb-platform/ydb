@@ -43,10 +43,12 @@ struct IStatsAggregator;
 using IStatsAggregatorPtr = std::shared_ptr<IStatsAggregator>;
 
 struct IClientPercentileCalculator;
-using IClientPercentileCalculatorPtr = std::shared_ptr<IClientPercentileCalculator>;
+using IClientPercentileCalculatorPtr =
+    std::shared_ptr<IClientPercentileCalculator>;
 
 struct IIncompleteRequestProvider;
-using IIncompleteRequestProviderPtr = std::shared_ptr<IIncompleteRequestProvider>;
+using IIncompleteRequestProviderPtr =
+    std::shared_ptr<IIncompleteRequestProvider>;
 
 struct IProfileLog;
 using IProfileLogPtr = std::shared_ptr<IProfileLog>;

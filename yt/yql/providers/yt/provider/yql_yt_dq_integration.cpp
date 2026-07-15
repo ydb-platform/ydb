@@ -264,7 +264,9 @@ public:
                         YQL_ENSURE(tableName, "Unaccounted anonymous table: " << pathInfo->Table->Name);
                         pathInfo->Table->Name = tableName;
                     }
-
+                    if (pathInfo->Table->Meta && pathInfo->Table->Meta->Attrs.Value("optimize_for", "scan") != "scan") {
+                        pathInfo->Columns = nullptr;
+                    }
                     paths.push_back(pathInfo);
                     keys.emplace_back(TStringBuilder() << groupId << "/" << pathId);
                 }
@@ -406,7 +408,7 @@ public:
                 }
 
                 if (pragma == "pooltrees" && node.ChildrenSize() >= 5) {
-                    auto pools = NPrivate::GetDefaultParser<TVector<TString>>()(TString{node.Child(4)->Content()});
+                    auto pools = NCommon::NPrivate::GetDefaultParser<TVector<TString>>()(TString{node.Child(4)->Content()});
                     for (const auto& pool : pools) {
                         if (!POOL_TREES_WHITELIST.contains(pool)) {
                             AddInfo(ctx, TStringBuilder() << "unsupported pool tree: " << pool, skipIssues);
@@ -436,11 +438,11 @@ public:
             const auto enableDynamicStoreRead = ytState->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
             ui64 chunksCount = 0ull;
             for (auto section: maybeRead.Cast().Input()) {
-                if (HasSettingsExcept(maybeRead.Cast().Input().Item(0).Settings().Ref(), DqReadSupportedSettings) || HasNonEmptyKeyFilter(maybeRead.Cast().Input().Item(0))) {
+                if (HasSettingsExcept(section.Settings().Ref(), DqReadSupportedSettings) || HasNonEmptyKeyFilter(section)) {
                     TStringBuilder info;
                     info << "unsupported path settings: ";
-                    if (maybeRead.Cast().Input().Item(0).Settings().Size() > 0) {
-                        for (auto& setting : maybeRead.Cast().Input().Item(0).Settings().Ref().Children()) {
+                    if (section.Settings().Size() > 0) {
+                        for (auto& setting : section.Settings().Ref().Children()) {
                             if (setting->ChildrenSize() != 0) {
                                 info << setting->Child(0)->Content() << ",";
                             }
@@ -486,6 +488,9 @@ public:
                             return false;
                         } else if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
                             AddMessage(ctx, "dynamic store read", skipIssues, ytState->PassiveExecution);
+                            return false;
+                        } else if (tableInfo->Meta->HasRLS) {
+                            AddMessage(ctx, "rls table", skipIssues, ytState->PassiveExecution);
                             return false;
                         }
 
@@ -636,6 +641,9 @@ public:
                         } else if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
                             AddErrorWrap(ctx, node_->Pos(), "dynamic store read");
                             return Nothing();
+                        } else if (tableInfo->Meta->HasRLS) {
+                            AddErrorWrap(ctx, node_->Pos(), "rls table");
+                            return Nothing();
                         } else { //
                             if (tableInfo->Meta->Attrs.Value("erasure_codec", "none") != "none") {
                                 hasErasure = true;
@@ -670,7 +678,7 @@ public:
                     ++idx;
                     continue;
                 }
-                ui64 readSize = std::accumulate(res[idx].begin(), res[idx].end(), 0);
+                ui64 readSize = std::accumulate(res[idx].begin(), res[idx].end(), 0ull);
                 ++idx;
                 dataSizePerJob = Max(ui64(dataSizePerJob / *codecCpu), 10_KB);
                 const ui64 parts = (readSize + dataSizePerJob - 1) / dataSizePerJob;
@@ -692,8 +700,12 @@ public:
         YQL_ENSURE(ytState);
 
         if (auto maybeYtReadTable = TMaybeNode<TYtReadTable>(read)) {
-            TMaybeNode<TCoSecureParam> secParams;
             const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster().StringValue();
+            if (!ytState->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
+                AddErrorWrap(ctx, read->Pos(), TStringBuilder() << "disabled for cluster " << cluster);
+                return nullptr;
+            }
+            TMaybeNode<TCoSecureParam> secParams;
             if (ytState->ResolveClusterToken(cluster)) {
                 secParams = Build<TCoSecureParam>(ctx, read->Pos()).Name().Build(TString("cluster:default_").append(cluster)).Done();
             }
@@ -712,8 +724,14 @@ public:
 
         if (auto maybeWrite = TMaybeNode<TYtWriteTable>(write)) {
             if (ytState->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+                const auto cluster = maybeWrite.Cast().DataSink().Cluster().StringValue();
+                if (!ytState->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
+                    AddErrorWrap(ctx, write->Pos(), TStringBuilder() << "disabled for cluster " << cluster);
+                    return nullptr;
+                }
                 const auto& content = maybeWrite.Cast().Content();
-                if (TYtMaterialize::Match(&SkipCallables(content.Ref(), {TCoSort::CallableName(), TCoTopSort::CallableName(), TCoAssumeSorted::CallableName(), TCoAssumeConstraints::CallableName()}))) {
+                const auto& clearContent = SkipCallables(content.Ref(), {TCoSort::CallableName(), TCoTopSort::CallableName(), TCoAssumeSorted::CallableName(), TCoAssumeConstraints::CallableName()});
+                if (TMaybeNode<TCoRight>(&clearContent).Input().Maybe<TYtMaterialize>()) {
                     return write;
                 }
                 TExprNode::TPtr newContent;
@@ -722,32 +740,59 @@ public:
                     // Duplicate AssumeSorted before YtMaterialize, because DQ cannot keep sort and so optimizes AssumeSorted as complete Sort
                     // Before: YtWrite -> AssumeSorted -> ...
                     // After: YtWrite -> AssumeConstraints -> YtMaterialize -> AssumeSorted -> ...
-                    newContent = Build<TYtMaterialize>(ctx, content.Pos())
-                        .World(materializeWorld)
-                        .DataSink(maybeWrite.Cast().DataSink())
-                        .Input(content)
-                        .Settings().Build()
+                    newContent = Build<TCoRight>(ctx, content.Pos())
+                        .Input<TYtMaterialize>()
+                            .World(materializeWorld)
+                            .DataSink(maybeWrite.Cast().DataSink())
+                            .Input(content)
+                            .Settings()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::Transparent), TNodeFlags::Default).Build()
+                                .Build()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::PruneUnusedColumns), TNodeFlags::Default).Build()
+                                .Build()
+                            .Build()
+                        .Build()
                         .Done().Ptr();
                 } else if (content.Raw()->IsCallable({TCoSort::CallableName(), TCoTopSort::CallableName()}) && !content.Raw()->GetConstraint<TSortedConstraintNode>()) {
                     // For Sorts by non members lambdas do it on YT side because of aux columns
                     // Before: YtWrite -> Sort/TopSort -> ...
                     // After: YtWrite -> Sort/TopSort -> YtMaterialize -> ...
-                    auto materialize = Build<TYtMaterialize>(ctx, content.Pos())
-                        .World(materializeWorld)
-                        .DataSink(maybeWrite.Cast().DataSink())
-                        .Input(content.Cast<TCoInputBase>().Input())
-                        .Settings().Build()
-                        .Done();
-                    newContent = ctx.ChangeChild(content.Ref(), TCoInputBase::idx_Input, materialize.Ptr());
+                    TExprNode::TPtr materialize = Build<TCoRight>(ctx, content.Pos())
+                        .Input<TYtMaterialize>()
+                            .World(materializeWorld)
+                            .DataSink(maybeWrite.Cast().DataSink())
+                            .Input(content.Cast<TCoInputBase>().Input())
+                            .Settings()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::Transparent), TNodeFlags::Default).Build()
+                                .Build()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::PruneUnusedColumns), TNodeFlags::Default).Build()
+                                .Build()
+                            .Build()
+                        .Build()
+                        .Done().Ptr();
+                    newContent = ctx.ChangeChild(content.Ref(), TCoInputBase::idx_Input, std::move(materialize));
                 } else {
                     // Materialize dq graph to yt table before YtWrite:
                     // Before: YtWrite -> Some callables ...
                     // After: YtWrite -> YtMaterialize -> Some callables ...
-                    newContent = Build<TYtMaterialize>(ctx, content.Pos())
-                        .World(materializeWorld)
-                        .DataSink(maybeWrite.Cast().DataSink())
-                        .Input(content)
-                        .Settings().Build()
+                    newContent = Build<TCoRight>(ctx, content.Pos())
+                        .Input<TYtMaterialize>()
+                            .World(materializeWorld)
+                            .DataSink(maybeWrite.Cast().DataSink())
+                            .Input(content)
+                            .Settings()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::Transparent), TNodeFlags::Default).Build()
+                                .Build()
+                                .Add()
+                                    .Name().Value(ToString(EYtSettingType::PruneUnusedColumns), TNodeFlags::Default).Build()
+                                .Build()
+                            .Build()
+                        .Build()
                         .Done().Ptr();
                 }
                 auto constraintSet = content.Raw()->GetConstraintSet();
@@ -921,7 +966,7 @@ public:
         const auto type = GetSequenceItemType(input->Pos(), input->GetTypeAnn(), false, ctx);
 
         YQL_ENSURE(type);
-        TYtOutTableInfo outTableInfo(type->Cast<TStructExprType>(), ytState->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE, order);
+        TYtOutTableInfo outTableInfo(type->Cast<TStructExprType>(), GetNativeYtTypeCompatibility(cluster, *ytState->Configuration), order);
 
         const auto res = ytState->Gateway->PrepareFullResultTable(
             IYtGateway::TFullResultTableOptions(ytState->SessionId)

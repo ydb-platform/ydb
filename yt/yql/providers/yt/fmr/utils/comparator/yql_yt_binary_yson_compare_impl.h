@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_parser_fragment_list_index.h>
 #include <util/generic/strbuf.h>
 #include <library/cpp/yson/detail.h>
 #include <library/cpp/yson/zigzag.h>
@@ -9,27 +10,25 @@
 
 
 #include <cstring>
+#include <variant>
 
 namespace NYql::NFmr {
 
-struct TColumnOffsetRange {
-    ui64 StartOffset = 0;
-    ui64 EndOffset = 0;
+using TSmallKeyValue = std::variant<std::monostate, bool, i64, ui64, double>;
 
-    bool IsValid() const {
-        return EndOffset > StartOffset;
-    }
+TMaybe<TSmallKeyValue> TryExtractSmallYsonValue(TStringBuf ysonData);
+
+struct TExtractedKey {
+    TMaybe<TSmallKeyValue> Small;
+    TStringBuf RawYson;
 };
+
+int CompareExtractedKeys(const TExtractedKey& lhs, const TExtractedKey& rhs);
 
 enum class ESortOrder {
     Ascending = 0,
     Descending = 1
 };
-
-// Row markup: key columns ranges + last range is full row boundary [rowStart,rowEnd).
-using TRowIndexMarkup = std::vector<TColumnOffsetRange>;
-
-
 
 struct TYsonReader {
     TStringBuf Data;

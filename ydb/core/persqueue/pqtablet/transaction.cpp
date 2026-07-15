@@ -1,8 +1,10 @@
 #include "transaction.h"
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
+#include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #define TX_ENSURE(condition) AFL_ENSURE(condition)("TxId", TxId)("State", NKikimrPQ::TTransaction_EState_Name(State))
 
@@ -103,12 +105,15 @@ void TDistributedTransaction::InitPartitions(const google::protobuf::RepeatedPtr
     Partitions.clear();
 
     for (auto& o : operations) {
-        if (!o.HasCommitOffsetsBegin()) {
+        NKikimrPQ::TPartitionOperation operation = o;
+        EnsureCanonical(operation);
+
+        if (IsWriteTxOperation(operation)) {
             HasWriteOperations = true;
         }
 
-        Operations.push_back(o);
-        Partitions.insert(o.GetPartitionId());
+        Operations.push_back(std::move(operation));
+        Partitions.insert(Operations.back().GetPartitionId());
     }
 }
 
@@ -184,6 +189,9 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
     }
 
     InitPartitions(txBody.GetOperations());
+
+    Y_VALIDATE(!(txBody.HasWriteId() && !HasWriteOperations),
+        "TDataTransaction has WriteId but no write operation");
 
     if (txBody.HasWriteId() && HasWriteOperations) {
         WriteId = GetWriteId(txBody);
@@ -351,7 +359,7 @@ void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event
 
 void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
 {
-    if (PredicateRecipients.contains(tabletId)) {
+    if (PredicateRecipients.contains(tabletId) && !PredicateRecipients[tabletId]) {
         PredicateRecipients[tabletId] = true;
         ++PredicateAcksCount;
 
@@ -449,7 +457,12 @@ NKikimrPQ::TTransaction TDistributedTransaction::Serialize(EState state) {
         TX_ENSURE(false);
     }
 
-    tx.MutableOperations()->Add(Operations.begin(), Operations.end());
+    tx.MutableOperations()->Reserve(Operations.size());
+    for (const auto& operation : Operations) {
+        NKikimrPQ::TPartitionOperation persisted = operation;
+        DowngradeToLegacy(persisted);
+        *tx.MutableOperations()->Add() = std::move(persisted);
+    }
     if (SelfDecision != NKikimrTx::TReadSetData::DECISION_UNKNOWN) {
         tx.SetPredicate(SelfDecision == NKikimrTx::TReadSetData::DECISION_COMMIT);
     }
@@ -524,6 +537,11 @@ const TVector<NKikimrTx::TEvReadSet>& TDistributedTransaction::GetBindedMsgs(ui6
     static TVector<NKikimrTx::TEvReadSet> empty;
 
     return empty;
+}
+
+bool TDistributedTransaction::GetSkipSrcIdInfo() const
+{
+    return AllExistingWritesSkipConflictCheck(Operations);
 }
 
 void TDistributedTransaction::SetExecuteSpan(NWilson::TSpan&& span)

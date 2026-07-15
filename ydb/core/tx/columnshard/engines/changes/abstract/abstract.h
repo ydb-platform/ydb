@@ -54,7 +54,8 @@ public:
         const TString& currentTierName)
         : CurrentScheme(currentScheme)
         , TargetScheme(targetScheme)
-        , CurrentTierName(currentTierName) {
+        , CurrentTierName(currentTierName)
+    {
         AFL_VERIFY(CurrentTierName);
     }
 
@@ -118,15 +119,18 @@ public:
     TFinalizationContext(ui64& lastGranuleId, ui64& lastPortionId, const TSnapshot& snapshot)
         : LastGranuleId(&lastGranuleId)
         , LastPortionId(&lastPortionId)
-        , Snapshot(snapshot) {
+        , Snapshot(snapshot)
+    {
     }
 
     ui64 NextGranuleId() {
         return ++(*LastGranuleId);
     }
+
     ui64 NextPortionId() {
         return ++(*LastPortionId);
     }
+
     const TSnapshot& GetSnapshot() const {
         return Snapshot;
     }
@@ -145,9 +149,11 @@ class TChangesFinishContext {
 public:
     const bool FinishedSuccessfully = true;
     const TString ErrorMessage;
+
     TChangesFinishContext(const TString& errorMessage)
         : FinishedSuccessfully(false)
-        , ErrorMessage(errorMessage) {
+        , ErrorMessage(errorMessage)
+    {
     }
 
     TChangesFinishContext() = default;
@@ -164,6 +170,7 @@ public:
     const TDuration Duration;
     TColumnEngineForLogs& EngineLogs;
     const TSnapshot Snapshot;
+
     TWriteIndexCompleteContext(const TActorContext& actorContext, const ui32 blobsWritten, const ui64 bytesWritten, const TDuration d,
         TColumnEngineForLogs& engineLogs, const TSnapshot& snapshot)
         : ActorContext(actorContext)
@@ -171,7 +178,8 @@ public:
         , BytesWritten(bytesWritten)
         , Duration(d)
         , EngineLogs(engineLogs)
-        , Snapshot(snapshot) {
+        , Snapshot(snapshot)
+    {
     }
 };
 
@@ -185,7 +193,8 @@ public:
         const TVersionedIndex& schemaVersions, const NColumnShard::TIndexationCounters& counters, const NOlap::TSnapshot& lastCommittedTx)
         : SchemaVersions(schemaVersions)
         , Counters(counters)
-        , LastCommittedTx(lastCommittedTx) {
+        , LastCommittedTx(lastCommittedTx)
+    {
     }
 
     std::shared_ptr<TFilteredSnapshotSchema> BuildResultFiltered(
@@ -244,7 +253,8 @@ private:
 
 public:
     TDataAccessorsInitializationContext(const std::shared_ptr<const TVersionedIndex>& versionedIndex)
-        : VersionedIndex(versionedIndex) {
+        : VersionedIndex(versionedIndex)
+    {
         AFL_VERIFY(VersionedIndex);
     }
 };
@@ -262,16 +272,21 @@ protected:
     virtual NDataLocks::ELockCategory GetLockCategory() const = 0;
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;
+
     virtual void DoOnAfterCompile(const TFinalizationContext& /*context*/) {
     }
+
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) = 0;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) = 0;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) = 0;
+
     virtual bool NeedConstruction() const {
         return true;
     }
+
     virtual void DoStart(NColumnShard::TColumnShard& context) = 0;
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept = 0;
+
     virtual void OnAbortEmergency() {
     }
 
@@ -281,6 +296,7 @@ protected:
 
     virtual ui64 DoCalcMemoryForUsage() const = 0;
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const = 0;
+
     std::shared_ptr<NDataLocks::ILock> BuildDataLock() const {
         return DoBuildDataLock();
     }
@@ -354,7 +370,8 @@ public:
 
     TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const NBlobOperations::EConsumer consumerId)
         : StateGuard(NChanges::TChangesCounters::GetStageCounters(consumerId))
-        , BlobsAction(storagesManager, consumerId) {
+        , BlobsAction(storagesManager, consumerId)
+    {
     }
 
     TConclusionStatus ConstructBlobs(TConstructionContext& context) noexcept;
@@ -387,6 +404,7 @@ public:
         //        Y_ABORT_UNLESS(result.size());
         return result;
     }
+
     virtual TString TypeString() const = 0;
     TString DebugString() const;
 

@@ -605,7 +605,7 @@ public:
 
     bool OnDouble(double value) final
     {
-        if (Y_UNLIKELY(std::isinf(value))) {
+        if (std::isinf(value)) [[unlikely]] {
             ythrow TJsonException() << "infinite values are not allowed";
         }
         return true;

@@ -19,7 +19,6 @@ Y_UNIT_TEST_SUITE(KqpReattach) {
     Y_UNIT_TEST(ReattachDeliveryProblem) {
         TKikimrSettings settings;
         settings.SetUseRealThreads(false).SetEnableDataShardVolatileTransactions(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();

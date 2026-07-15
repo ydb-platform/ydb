@@ -25,7 +25,8 @@ public:
 
     TBuildBatchesTask(NEvWrite::TWriteData&& writeData, const TWritingContext& context)
         : WriteData(std::move(writeData))
-        , Context(context) {
+        , Context(context)
+    {
         WriteData.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::BuildBatch);
     }
 };

@@ -1,5 +1,86 @@
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.33.0 {#2-33-0}
+
+Дата выхода 23 июня 2026. Для обновления до версии **2.33.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* AI-ассистент в [интерактивном режиме](./reference/ydb-cli/interactive-cli.md) `{{ ydb-cli }}` теперь умеет искать информацию в документации {{ ydb-short-name }}, что делает ответы более точными.
+
+## Версия 2.32.0 {#2-32-0}
+
+Дата выхода 22 июня 2026. Для обновления до версии **2.32.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Добавлен AI-режим в [интерактивный режим](./reference/ydb-cli/interactive-cli.md) `{{ ydb-cli }}`. Для переключения нажмите `Ctrl+T`.
+* Добавлена команда [`{{ ydb-cli }} workload fulltext`](./reference/ydb-cli/workload-fulltext.md) для нагрузочного тестирования и оценки качества полнотекстовых индексов.
+* Добавлена команда `SET resource_pool` в [интерактивный режим](./reference/ydb-cli/interactive-cli.md) `{{ ydb-cli }}`.
+* Добавлена опция `--resource-pool` в [команду](./reference/ydb-cli/sql.md) `{{ ydb-cli }} sql`.
+* Добавлена опция `--no-consumer` в [команду](./reference/ydb-cli/topic-read.md) `{{ ydb-cli }} topic read` для чтения из топика без читателя.
+* Добавлены опции `--partition-write-speed-mps` и `--partition-write-burst-messages` в [команду](./reference/ydb-cli/topic-create.md) `{{ ydb-cli }} topic create` и [команду](./reference/ydb-cli/topic-alter.md) `{{ ydb-cli }} topic alter`.
+* Добавлена опция `--partition-max-inflight-bytes` в [команду](./reference/ydb-cli/workload-topic.md) `{{ ydb-cli }} workload topic`.
+* Добавлены опции `--codec kafka-batch`, `--batch-inner-codec`, `--batch-flush-interval`, `--batch-flush-size` и `--batch-flush-message-count` в [команды](./reference/ydb-cli/workload-topic.md) `{{ ydb-cli }} workload topic run write|full`.
+* Добавлена статистика процессорного времени (CPU time) в [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`.
+
+### Улучшения
+
+* [Команда](./reference/ydb-cli/commands/scheme-describe.md) `{{ ydb-cli }} scheme describe` теперь выводит понятное человеку описание внешних источников данных (тип источника, расположение, способ аутентификации, база данных, свойства и время создания) вместо пустого вывода.
+
+## Версия 2.31.0 {#2-31-0}
+
+Дата выхода 20 апреля 2026. Для обновления до версии **2.31.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Добавлена опция `--stats` в [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`, позволяющая включить сбор расширенной статистики выполнения (например, `--stats profile`).
+
+## Версия 2.30.0 {#2-30-0}
+
+Дата выхода 7 апреля 2026. Для обновления до версии **2.30.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Добавлена команда `{{ ydb-cli }} config completion` для генерации скриптов автодополнения команд для bash и zsh.
+* Добавлены команды `{{ ydb-cli }} export nfs` и `{{ ydb-cli }} import nfs`, позволяющие создавать и восстанавливать резервные копии непосредственно в/из общей NFS-директории, примонтированной на каждом хосте кластера.
+* Добавлена опция `--compact` в [команду](./reference/ydb-cli/workload-tpcc.md) `{{ ydb-cli }} workload tpcc import`.
+* Добавлена опция `--tx-mode` в [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`, позволяющая задать режим транзакции (например, `no-tx`, `serializable-rw`, `snapshot-rw`).
+* Добавлена поддержка новой операции [компакшна](./concepts/glossary.md#compaction) в [подкомандах](./reference/ydb-cli/operation-list.md) `{{ ydb-cli }} operation`.
+
+### Улучшения
+
+* При явном указании [профиля](./reference/ydb-cli/profile/index.md) с помощью опции `-p`/`--profile` активный профиль больше не используется: все параметры берутся только из указанного профиля, переменных окружения и командной строки. Это устраняет путаницу, когда выбранный профиль неожиданно дополнялся настройками из активного профиля.
+
+## Версия 2.29.0 {#2-29-0}
+
+Дата выхода 11 февраля 2026. Для обновления до версии **2.29.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Улучшения [интерактивного режима](./reference/ydb-cli/interactive-cli.md) `{{ ydb-cli }}`:
+  * Добавлена команда `/help` для получения справки по командам интерактивного режима.
+  * Добавлена команда `/config`, предоставляющая интерактивный диалог для просмотра и изменения параметров {{ ydb-short-name }} CLI:
+    * Включение/выключение подсказок автодополнения.
+    * Включение/выключение цветного вывода.
+    * Интерактивный выбор цветовой темы из набора предустановленных вариантов с возможностью клонирования и настройки собственной темы.
+* Добавлен прогресс-бар загрузки в [команду](./reference/ydb-cli/commands/service.md) `{{ ydb-cli }} update`.
+* Добавлена опция `--include-index-data` в [команду](./reference/ydb-cli/export-import/export-s3.md) `{{ ydb-cli }} export s3`, позволяющая экспортировать данные индексов.
+* Добавлена опция `--index-population-mode` в [команду](./reference/ydb-cli/export-import/import-s3.md) `{{ ydb-cli }} import s3`, позволяющая выбрать режим наполнения индекса (например, `build` или `import`).
+* Добавлены поля `Created by`, `Create time` и `End time` для операций "build index" и "execute script" в [подкомандах](./reference/ydb-cli/operation-list.md) `{{ ydb-cli }} operation`.
+* Добавлена поддержка единого формата временных интервалов во всех командах {{ ydb-short-name }} CLI. Опции, принимающие временные интервалы, теперь поддерживают явное указание единиц времени (например, `5s`, `2m`, `1h`) с сохранением обратной совместимости с числовыми значениями без суффикса, которые интерпретируются в исходных единицах по умолчанию.
+* В описании семейств столбцов [команды](./reference/ydb-cli/commands/scheme-describe.md) `{{ ydb-cli }} scheme describe` устаревшее поле "Keep in memory" заменено на "Cache mode".
+
+### Улучшения
+
+* Улучшены [команды](./reference/ydb-cli/profile/index.md) `{{ ydb-cli }} init` и `{{ ydb-cli }} config profile` с добавлением интерактивных меню.
+* Улучшены прогресс-бары: единообразные единицы MiB/GiB, стабильное отображение скорости, двойной прогресс-бар для [команды](./reference/ydb-cli/export-import/import-file.md) `{{ ydb-cli }} import file`, показывающий как отправленные, так и подтверждённые байты.
+
+### Исправления ошибок
+
+* Исправлена ошибка Out Of Memory в [команде](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload query run` при выполнении запросов с большими наборами результатов.
+* Исправлен разбор параметров аутентификации по логину и паролю: пароль из [профиля](./reference/ydb-cli/profile/index.md) больше не используется, если имя пользователя получено из другого источника.
+
 ## Версия 2.28.0 {#2-28-0}
 
 Дата выхода 19 декабря 2025. Для обновления до версии **2.28.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
@@ -379,7 +460,7 @@
 ### Исправления ошибок
 
 * Исправлена ошибка вывода таблиц в `pretty` формате с [Unicode](https://ru.wikipedia.org/wiki/Юникод) символами.
-* Исправлена ошибка подстановки неправильного первичного ключа в команде [ydb tools pg-convert](postgresql/import.md#pg-convert).
+* Исправлена ошибка подстановки неправильного первичного ключа в команде `ydb tools pg-convert`.
 
 ## Версия 2.7.0 {#2-7-0}
 
@@ -387,7 +468,7 @@
 
 ### Функциональность
 
-* Добавлена команда [ydb tools pg-convert](postgresql/import.md#pg-convert), выполняющая подготовку дампа, полученного утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), к загрузке в postgres-совместимую прослойку YDB.
+* Добавлена команда `ydb tools pg-convert`, выполняющая подготовку дампа, полученного утилитой [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html), к загрузке в postgres-совместимую прослойку YDB.
 * Добавлена команда нагрузочного тестирования `{{ ydb-cli }} workload query`, которая нагружает базу [запросами выполнения скрипта](reference/ydb-cli/yql.md) в несколько потоков.
 * Добавлена команда для просмотра списка разрешений `{{ ydb-cli }} scheme permissions list`.
 * В командах [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb table query explain](reference/ydb-cli/commands/explain-plan.md), [ydb yql](reference/ydb-cli/yql.md) и [ydb scripting yql](reference/ydb-cli/scripting-yql.md) добавлена опция `--flame-graph`, задающая путь до файла, в котором необходимо сохранить визуализацию статистики выполнения запросов.

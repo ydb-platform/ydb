@@ -11,7 +11,7 @@ TExprNode::TPtr NYql::NPureCalc::NodeFromBlocks(
     const TStructExprType* structType,
     TExprContext& ctx) {
     const auto items = structType->GetItems();
-    Y_ENSURE(items.size() > 0);
+    Y_ENSURE(!items.empty());
     // clang-format off
     return ctx.Builder(pos)
         .Lambda()
@@ -73,7 +73,7 @@ TExprNode::TPtr NYql::NPureCalc::NodeToBlocks(
     const TStructExprType* structType,
     TExprContext& ctx) {
     const auto items = structType->GetItems();
-    Y_ENSURE(items.size() > 0);
+    Y_ENSURE(!items.empty());
     // clang-format off
     return ctx.Builder(pos)
         .Lambda()
@@ -132,8 +132,8 @@ TExprNode::TPtr NYql::NPureCalc::NodeToBlocks(
 
 TExprNode::TPtr NYql::NPureCalc::ApplyToIterable(
     const TPositionHandle& pos,
-    const TExprNode::TPtr iterable,
-    const TExprNode::TPtr lambda,
+    const TExprNode::TPtr& iterable,
+    const TExprNode::TPtr& lambda,
     bool wrapLMap,
     TExprContext& ctx) {
     if (wrapLMap) {

@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/tx/columnshard/counters/histogram_borders.h>
+
 #include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/signals/agent.h>
@@ -6,10 +8,8 @@
 #include <ydb/library/signals/histogram.h>
 #include <ydb/library/signals/owner.h>
 
-
 #include <library/cpp/json/writer/json_value.h>
 #include <util/string/builder.h>
-#include <ydb/core/tx/columnshard/counters/histogram_borders.h>
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
@@ -172,7 +172,8 @@ private:
 
 public:
     TPortionGroupCounters(const TString& kind, const NColumnShard::TCommonCountersOwner& baseOwner)
-        : TBase(baseOwner, "kind", kind) {
+        : TBase(baseOwner, "kind", kind)
+    {
         Count = TBase::GetDeriviative("Portions/Count");
         RawBytes = TBase::GetDeriviative("Portions/Raw/Bytes");
         BlobBytes = TBase::GetDeriviative("Portions/Blob/Bytes");
@@ -205,13 +206,15 @@ public:
     const std::shared_ptr<TValueAggregationAgent> BlobBytes;
     const std::shared_ptr<TValueAggregationAgent> RawBytes;
     const NColumnShard::TIncrementalHistogram BlobBytesHistogram;
+
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, "category", categoryName)
         , RecordsCount(TBase::GetValueAutoAggregations("ByGranule/Portions/RecordsCount"))
         , Count(TBase::GetValueAutoAggregations("ByGranule/Portions/Count"))
         , BlobBytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Blob/Bytes"))
         , RawBytes(TBase::GetValueAutoAggregations("ByGranule/Portions/Raw/Bytes"))
-        , BlobBytesHistogram(base.GetModuleId(), "ByLevel/BlobBytes", categoryName, NColumnShard::THistorgamBorders::BytesBorders){
+        , BlobBytesHistogram(base.GetModuleId(), "ByLevel/BlobBytes", categoryName, NColumnShard::THistorgamBorders::BytesBorders)
+    {
     }
 };
 

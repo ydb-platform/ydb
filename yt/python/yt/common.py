@@ -1,11 +1,4 @@
 try:
-    from yt.packages.six import iteritems, PY3, text_type, binary_type, string_types
-    from yt.packages.six.moves import map as imap
-except ImportError:
-    from six import iteritems, PY3, text_type, binary_type, string_types
-    from six.moves import map as imap
-
-try:
     from library.python.prctl import prctl
 except ImportError:
     prctl = None
@@ -470,7 +463,7 @@ def _pretty_format_escape(value):
         value.encode("utf-8")
         return value
     except UnicodeDecodeError:
-        return "".join(imap(escape, value))
+        return "".join(map(escape, value))
 
 
 def _pretty_format_bytes(value):
@@ -482,7 +475,7 @@ def _pretty_format_bytes(value):
     try:
         return value.decode("utf-8")
     except UnicodeDecodeError:
-        return "".join(imap(escape, value))
+        return "".join(map(escape, value))
 
 
 def _pretty_format_attribute(name, value, attribute_length_limit):
@@ -502,7 +495,7 @@ def _pretty_format_attribute(name, value, attribute_length_limit):
         if hasattr(value, "_bytes"):
             value = value._bytes
         else:
-            if isinstance(value, string_types):
+            if isinstance(value, str):
                 value = to_native_str(value)
             else:
                 value = str(value)
@@ -595,7 +588,7 @@ def _pretty_format_full_errors(error, attribute_length_limit):
             "%(file)s:%(line)d" % attributes,
             attribute_length_limit=attribute_length_limit))
 
-    for key, value in iteritems(attributes):
+    for key, value in attributes.items():
         if key in origin_keys or key in location_keys or key in origin_cpp_keys:
             continue
         lines.append(_pretty_format_attribute(
@@ -667,7 +660,7 @@ def require(condition, exception_func):
 def update_inplace(object: _T, patch) -> _T:
     """Apply patch to object inplace"""
     if isinstance(patch, Mapping) and isinstance(object, Mapping):
-        for key, value in iteritems(patch):
+        for key, value in patch.items():
             if key in object:
                 object[key] = update_inplace(object[key], value)
             else:
@@ -696,13 +689,13 @@ def update(object: _T, patch) -> _T:
 def flatten(obj, list_types=(list, tuple, set, frozenset, types.GeneratorType)):
     """Create flat list from all elements."""
     if isinstance(obj, list_types):
-        return list(chain(*imap(flatten, obj)))
+        return list(chain(*map(flatten, obj)))
     return [obj]
 
 
 def update_from_env(variables):
     """Update variables dict from environment (cuts name prefix "YT_")."""
-    for key, value in iteritems(os.environ):
+    for key, value in os.environ.items():
         prefix = "YT_"
         if not key.startswith(prefix):
             continue
@@ -733,7 +726,7 @@ def get_value(value, default):
 
 
 def filter_dict(predicate, dictionary):
-    return dict([(k, v) for (k, v) in iteritems(dictionary) if predicate(k, v)])
+    return dict([(k, v) for (k, v) in dictionary.items() if predicate(k, v)])
 
 
 def set_pdeathsig(signum=None):
@@ -806,9 +799,7 @@ def make_non_blocking(fd):
 
 
 def to_native_str(string, encoding="utf-8", errors="strict"):
-    if not PY3 and isinstance(string, text_type):
-        return string.encode(encoding)
-    if PY3 and isinstance(string, binary_type):
+    if isinstance(string, bytes):
         return string.decode(encoding, errors=errors)
     return string
 

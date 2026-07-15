@@ -1,13 +1,13 @@
 #include "abstract.h"
 #include "default.h"
+#include "sub_column.h"
 
 namespace NKikimr::NOlap::NIndexes {
 
 TConclusionStatus TReadDataExtractorContainer::DeserializeFromJson(const NJson::TJsonValue& jsonValue) {
     if (!jsonValue.IsDefined() || jsonValue.IsNull()) {
         if (!Initialize(TDefaultDataExtractor::GetClassNameStatic())) {
-            return TConclusionStatus::Fail(
-                "cannot build default data extractor ('" + TDefaultDataExtractor::GetClassNameStatic() + "')");
+            return TConclusionStatus::Fail("cannot build default data extractor ('" + TDefaultDataExtractor::GetClassNameStatic() + "')");
         }
         return TConclusionStatus::Success();
     }
@@ -31,6 +31,10 @@ bool TReadDataExtractorContainer::DeserializeFromProto(const IReadDataExtractor:
     } else {
         return TBase::DeserializeFromProto(data);
     }
+}
+
+bool TReadDataExtractorContainer::HasSubColumn() const {
+    return Object && Object->GetClassName() == TSubColumnDataExtractor::GetClassNameStatic();
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

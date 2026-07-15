@@ -189,7 +189,8 @@ Y_UNIT_TEST(CanSetAllPermissions) {
         setup.DbPath,
         TMaybe<TString>(userToken),
         setup.FakeMonActor,
-        NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin));
+        NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
+        "192.168.0.101");
 
     setup.RequestCheckActor(std::move(ev));
 

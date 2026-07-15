@@ -10,6 +10,8 @@
 
 #include <util/stream/output.h>
 
+#include <array>
+
 namespace NKikimr {
 
 using namespace NYdb::NTopic;
@@ -65,7 +67,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         SimpleTest(SdkVersion::PQv1, false);
     }
 
-    void ReadingAfterSplitTest(SdkVersion sdk, bool autoscaleAwareSDK, bool autoCommit) {
+    void ReadingAfterSplitTest(SdkVersion sdk, bool autoscaleAwareSDK, bool autoCommit, bool withoutConsumer) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale();
 
@@ -84,11 +86,14 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         UNIT_ASSERT(writeSession->Write(Msg("message_3.1", 5)));
 
-        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 3, .AutoCommit = autoCommit, .AutoPartitioningSupport = autoscaleAwareSDK });
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 3, .AutoCommit = autoCommit, .AutoPartitioningSupport = autoscaleAwareSDK, .WithoutConsumer = withoutConsumer });
         readSession->Run();
         readSession->WaitAllMessages();
 
+        std::vector<ui32> expectedPartionsOrder{0, 2, 4};
+        auto expectedNextPartionId = expectedPartionsOrder.begin();
         for(const auto& info : readSession->GetReceivedMessages()) {
+            UNIT_ASSERT_VALUES_EQUAL(*expectedNextPartionId++, info.PartitionId);
             if (info.Data == "message_1.1") {
                 UNIT_ASSERT_VALUES_EQUAL(0, info.PartitionId);
                 UNIT_ASSERT_VALUES_EQUAL(2, info.SeqNo);
@@ -108,22 +113,26 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_BeforeAutoscaleAwareSDK) {
-        ReadingAfterSplitTest(SdkVersion::Topic, false, true);
+        ReadingAfterSplitTest(SdkVersion::Topic, false, true, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK) {
-        ReadingAfterSplitTest(SdkVersion::Topic, true, false);
+        ReadingAfterSplitTest(SdkVersion::Topic, true, false, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK_AutoCommit) {
-        ReadingAfterSplitTest(SdkVersion::Topic, true, true);
+        ReadingAfterSplitTest(SdkVersion::Topic, true, true, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PQv1) {
-        ReadingAfterSplitTest(SdkVersion::PQv1, false, true);
+        ReadingAfterSplitTest(SdkVersion::PQv1, false, true, false);
     }
 
-    void ReadingAfterSplitTest_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
+    Y_UNIT_TEST(ReadingAfterSplitTest_AutoscaleAwareSDK_WithoutConsumer) {
+        ReadingAfterSplitTest(SdkVersion::Topic, true, false, true);
+    }
+
+    void ReadingAfterSplitTest_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK, bool withoutConsumer) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale();
 
@@ -142,7 +151,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         UNIT_ASSERT(writeSession->Write(Msg("message_3.1", 5)));
 
-        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 1, .AutoCommit = !autoscaleAwareSDK, .Partitions= {2}, .AutoPartitioningSupport = autoscaleAwareSDK });
+        auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .ExpectedMessagesCount = 1, .AutoCommit = !autoscaleAwareSDK, .Partitions= {2}, .AutoPartitioningSupport = autoscaleAwareSDK, .WithoutConsumer = withoutConsumer });
         readSession->Run();
         readSession->WaitAllMessages();
 
@@ -162,15 +171,19 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_BeforeAutoscaleAwareSDK) {
-        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, false);
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, false, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK) {
-        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, true);
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, true, false);
     }
 
     Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_PQv1) {
-        ReadingAfterSplitTest_PreferedPartition(SdkVersion::PQv1, false);
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::PQv1, false, false);
+    }
+
+    Y_UNIT_TEST(ReadingAfterSplitTest_PreferedPartition_AutoscaleAwareSDK_ReadWithoutConsumer) {
+        ReadingAfterSplitTest_PreferedPartition(SdkVersion::Topic, true, true);
     }
 
     void PartitionSplit_oldSDK(SdkVersion sdk) {
@@ -953,6 +966,322 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
     }
 
+    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_KllSketchBasedSplit) {
+        TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, true);
+        TTopicClient client = setup.MakeClient();
+
+        static constexpr std::array<const char*, 3> PartitionKeys = {
+            "kll-sketch-key-a",
+            "kll-sketch-key-b",
+            "kll-sketch-key-c",
+        };
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(2)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(2))
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTopicDescription().GetPartitions().size(), 1);
+
+        auto makeProducer = [&](const TString& idPrefix) {
+            TProducerSettings settings;
+            settings
+                .Path(TString{TEST_TOPIC})
+                .Codec(ECodec::RAW);
+            settings.ProducerIdPrefix(idPrefix);
+            settings.SubSessionIdleTimeout(TDuration::Seconds(30));
+            settings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Bound);
+            settings.MaxBlockTimeout(TDuration::Seconds(30));
+            settings.PartitioningKeyHasher([](const std::string_view& key) {
+                return std::string(NKikimr::NPQ::AsKeyBound(NKikimr::NPQ::Hash(TString{key})));
+            });
+            return client.CreateProducer(settings);
+        };
+
+        auto flushAll = [](std::initializer_list<std::shared_ptr<IProducer>> producers) {
+            for (const auto& p : producers) {
+                UNIT_ASSERT_C(p->Flush().GetValueSync().IsSuccess(), "failed to flush producer");
+            }
+        };
+
+        auto writeMessage = [&](const std::shared_ptr<IProducer>& producer, const TString& body, ui64 seqNo) {
+            TString key(PartitionKeys[seqNo % PartitionKeys.size()]);
+            TWriteMessage message(key, body);
+            message.SeqNo(seqNo);
+            auto result = producer->Write(std::move(message));
+            if (!result.IsQueued()) {
+                UNIT_ASSERT_C(false, "failed to write message: " << result.ErrorMessage.value_or("unknown error") << " " << (result.ClosedDescription ? result.ClosedDescription->DebugString() : "no description"));
+            }
+        };
+
+        auto msg = TString(1_MB, 'a');
+
+        auto producer1 = makeProducer("producer-1");
+
+        {
+            writeMessage(producer1, msg, 1);
+            writeMessage(producer1, msg, 2);
+            flushAll({producer1});
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+        }
+
+        {
+            writeMessage(producer1, msg, 3);
+            writeMessage(producer1, msg, 4);
+            writeMessage(producer1, msg, 5);
+            writeMessage(producer1, msg, 6);
+            flushAll({producer1});
+            Sleep(TDuration::Seconds(10));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 5);
+        }
+
+        {
+            writeMessage(producer1, msg, 7);
+            writeMessage(producer1, msg, 8);
+            writeMessage(producer1, msg, 9);
+            writeMessage(producer1, msg, 10);
+            flushAll({producer1});
+            Sleep(TDuration::Seconds(5));
+            auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 7);
+        }
+
+        UNIT_ASSERT_C(producer1->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-1");
+    }
+
+    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_MessagesBasedSplit) {
+        TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, false, true);
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(2)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(2))
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto describeBefore = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(describeBefore.GetTopicDescription().GetPartitions().size(), 1);
+
+        AlterTopicPartitionWriteSpeedInMessagesPerSecondViaAlterTopicStrategy(setup, 120);
+
+        auto tiny = TString(32, 'x');
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TString{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TString{TEST_TOPIC}, false);
+
+        for (ui32 i = 0; i < 121; ++i) {
+            UNIT_ASSERT(writeSession_1->Write(Msg(tiny, 1 + i)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(tiny, 1000 + i)));
+        }
+        Sleep(TDuration::Seconds(12));
+        auto describeAfter = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_C(
+            describeAfter.GetTopicDescription().GetPartitions().size() >= 3,
+            "expected split by incoming message rate (partitions# " << describeAfter.GetTopicDescription().GetPartitions().size() << ")"
+        );
+
+        writeSession_1->Close(TDuration::Seconds(5));
+        writeSession_2->Close(TDuration::Seconds(5));
+    }
+
+    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_MessagesBasedSplit_WithPartitioningKeys) {
+        TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, false, true);
+        TTopicClient client = setup.MakeClient();
+
+        static constexpr size_t NumKeys = 512;
+        std::vector<std::string> keys;
+        for (size_t i = 0; i < NumKeys; ++i) {
+            auto key = "msg-rate-split-key-" + ToString(i);
+            auto hashed = std::string(NKikimr::NPQ::AsKeyBound(NKikimr::NPQ::Hash(key)));
+            keys.push_back(hashed);
+        }
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(2)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(2))
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto describeBefore = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(describeBefore.GetTopicDescription().GetPartitions().size(), 1);
+
+        AlterTopicPartitionWriteSpeedInMessagesPerSecondViaAlterTopicStrategy(setup, 120);
+
+        auto makeProducer = [&](const TString& idPrefix) {
+            TProducerSettings settings;
+            settings
+                .Path(TString{TEST_TOPIC})
+                .Codec(ECodec::RAW);
+            settings.ProducerIdPrefix(idPrefix);
+            settings.SubSessionIdleTimeout(TDuration::Seconds(30));
+            settings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Bound);
+            settings.MaxBlockTimeout(TDuration::Seconds(30));
+            settings.PartitioningKeyHasher([](const std::string_view& key) {
+                return std::string(NKikimr::NPQ::AsKeyBound(NKikimr::NPQ::Hash(TString{key})));
+            });
+            return client.CreateProducer(settings);
+        };
+
+        auto flushAll = [](std::initializer_list<std::shared_ptr<IProducer>> producers) {
+            for (const auto& p : producers) {
+                UNIT_ASSERT_C(p->Flush().GetValueSync().IsSuccess(), "failed to flush producer");
+            }
+        };
+
+        auto writeMessage = [&](const std::shared_ptr<IProducer>& producer, const TString& body, ui64 seqNo) {
+            TString key(keys[seqNo % keys.size()]);
+            TWriteMessage message(key, body);
+            message.SeqNo(seqNo);
+            auto result = producer->Write(std::move(message));
+            if (!result.IsQueued()) {
+                UNIT_ASSERT_C(false, "failed to write message: " << result.ErrorMessage.value_or("unknown error") << " " << (result.ClosedDescription ? result.ClosedDescription->DebugString() : "no description"));
+            }
+        };
+
+        auto tiny = TString(32, 'x');
+        auto producer1 = makeProducer("producer-1");
+        auto producer2 = makeProducer("producer-2");
+
+        for (ui32 i = 0; i < 121; ++i) {
+            writeMessage(producer1, tiny, 1 + i);
+            writeMessage(producer2, tiny, 1000 + i);
+        }
+        flushAll({producer1, producer2});
+        Sleep(TDuration::Seconds(12));
+
+        auto describeAfter = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_C(
+            describeAfter.GetTopicDescription().GetPartitions().size() >= 3,
+            "expected split by message rate with distinct partitioning keys (partitions# " << describeAfter.GetTopicDescription().GetPartitions().size() << ")"
+        );
+
+        UNIT_ASSERT_C(producer1->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-1");
+        UNIT_ASSERT_C(producer2->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-2");
+    }
+
+    Y_UNIT_TEST(PartitionSplit_KllSketchBasedSplit_CheckBoundaries) {
+        TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, true);
+        TTopicClient client = setup.MakeClient();
+
+        static constexpr size_t NumKeys = 10000;
+        std::vector<std::string> keys;
+        for (size_t i = 0; i < NumKeys; ++i) {
+            auto key = "kll-sketch-key-" + ToString(i);
+            auto hashed = std::string(NKikimr::NPQ::AsKeyBound(NKikimr::NPQ::Hash(key)));
+            keys.push_back(hashed);
+        }
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(2)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(2))
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTopicDescription().GetPartitions().size(), 1);
+
+        auto makeProducer = [&](const TString& idPrefix) {
+            TProducerSettings settings;
+            settings
+                .Path(TString{TEST_TOPIC})
+                .Codec(ECodec::RAW);
+            settings.ProducerIdPrefix(idPrefix);
+            settings.SubSessionIdleTimeout(TDuration::Seconds(30));
+            settings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Bound);
+            settings.MaxBlockTimeout(TDuration::Seconds(30));
+            settings.PartitioningKeyHasher([](const std::string_view& key) {
+                return std::string(NKikimr::NPQ::AsKeyBound(NKikimr::NPQ::Hash(TString{key})));
+            });
+            return client.CreateProducer(settings);
+        };
+
+        auto flushAll = [](std::initializer_list<std::shared_ptr<IProducer>> producers) {
+            for (const auto& p : producers) {
+                UNIT_ASSERT_C(p->Flush().GetValueSync().IsSuccess(), "failed to flush producer");
+            }
+        };
+
+        auto writeMessage = [&](const std::shared_ptr<IProducer>& producer, const TString& body, ui64 seqNo) {
+            TString key(keys[seqNo % keys.size()]);
+            TWriteMessage message(key, body);
+            message.SeqNo(seqNo);
+            auto result = producer->Write(std::move(message));
+            if (!result.IsQueued()) {
+                UNIT_ASSERT_C(false, "failed to write message: " << result.ErrorMessage.value_or("unknown error") << " " << (result.ClosedDescription ? result.ClosedDescription->DebugString() : "no description"));
+            }
+        };
+
+        auto msg = TString(16, 'a');
+        auto producer1 = makeProducer("producer-1");
+
+        for (ui64 seqNo = 1; seqNo <= 1_MB / 16; ++seqNo) {
+            writeMessage(producer1, msg, seqNo);
+        }
+
+        flushAll({producer1});
+        Sleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_C(producer1->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-1");
+
+        auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT(describe.GetTopicDescription().GetPartitions().size() >= 3);
+
+        auto partitions = describe.GetTopicDescription().GetPartitions();
+        std::string midKey;
+        for (const auto& partition : partitions) {
+            if (partition.GetPartitionId() == 1) {
+                UNIT_ASSERT_C(partition.GetToBound().has_value(), "to bound is not set");
+                midKey = *partition.GetToBound();
+            }
+        }
+
+        std::sort(keys.begin(), keys.end());
+
+        size_t num = 0;
+        for (size_t i = 0; i < NumKeys; ++i) {
+            if (keys[i] > midKey) {
+                ++num;
+            }
+        }
+        UNIT_ASSERT(num >= NumKeys / 2 - NumKeys / 10 && num <= NumKeys / 2 + NumKeys / 10);
+    }
+
     Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_AfterAlter) {
         TTopicSdkTestSetup setup = CreateSetup();
         TTopicClient client = setup.MakeClient();
@@ -1013,6 +1342,146 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
         }
+    }
+
+    Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_KllSketchBasedSplit_WithExplicitPartition) {
+        TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, true);
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+                .MinActivePartitions(1)
+                .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                    .UpUtilizationPercent(2)
+                    .DownUtilizationPercent(1)
+                    .StabilizationWindow(TDuration::Seconds(2))
+                    .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto makeProducer = [&](const TString& idPrefix) {
+            TProducerSettings settings;
+            settings
+                .Path(TString{TEST_TOPIC})
+                .Codec(ECodec::RAW);
+            settings.ProducerIdPrefix(idPrefix);
+            settings.SubSessionIdleTimeout(TDuration::Seconds(30));
+            settings.MaxBlockTimeout(TDuration::Seconds(30));
+            return client.CreateProducer(settings);
+        };
+
+        auto flushAll = [](std::initializer_list<std::shared_ptr<IProducer>> producers) {
+            for (const auto& p : producers) {
+                UNIT_ASSERT_C(p->Flush().GetValueSync().IsSuccess(), "failed to flush producer");
+            }
+        };
+
+        auto describePartitionCount = [&]() -> size_t {
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe);
+            return describe.GetTopicDescription().GetPartitions().size();
+        };
+
+        // Autosplit is async; fixed sleeps are flaky on slow CI.
+        auto waitAtLeastPartitions = [&](size_t minPartitions, TDuration maxWait) -> size_t {
+            const TInstant deadline = TInstant::Now() + maxWait;
+            size_t last = describePartitionCount();
+            while (last < minPartitions && TInstant::Now() < deadline) {
+                Sleep(TDuration::Seconds(1));
+                last = describePartitionCount();
+            }
+            return last;
+        };
+
+        // KLL autosplit may split partition 1 before the third load phase; pick any leaf partition.
+        auto findWritableLeafPartition = [&](ui32 preferredId) -> ui32 {
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe);
+            TVector<ui32> leafPartitionIds;
+            for (const auto& partition : describe.GetTopicDescription().GetPartitions()) {
+                if (partition.GetChildPartitionIds().empty()) {
+                    leafPartitionIds.push_back(partition.GetPartitionId());
+                }
+            }
+            UNIT_ASSERT_C(!leafPartitionIds.empty(), "no leaf partitions in describe");
+            for (const ui32 id : leafPartitionIds) {
+                if (id == preferredId) {
+                    return preferredId;
+                }
+            }
+            for (const ui32 id : leafPartitionIds) {
+                if (id != 0) {
+                    return id;
+                }
+            }
+            return leafPartitionIds.front();
+        };
+
+        // Producer rejects explicit writes to a partition that already has Children_ in its cache
+        // (see TProducer::WriteInternal). Returns false if the partition was split mid-test.
+        auto writeToPartition = [](const std::shared_ptr<IProducer>& producer, const TString& body, ui64 seqNo, ui32 partitionId) -> bool {
+            TWriteMessage message(partitionId, body);
+            message.SeqNo(seqNo);
+            auto result = producer->Write(std::move(message));
+            if (result.IsQueued()) {
+                return true;
+            }
+            if (result.ErrorMessage == "Partition was split") {
+                return false;
+            }
+            UNIT_ASSERT_C(false, "failed to write message: " << result.ErrorMessage.value_or("unknown error") << " "
+                << (result.ClosedDescription ? result.ClosedDescription->DebugString() : "no description"));
+            return false;
+        };
+
+        auto msg = TString(1_MB, 'a');
+
+        auto producer1 = makeProducer("producer-1");
+        auto producer2 = makeProducer("producer-2");
+
+        {
+            writeToPartition(producer1, msg, 1, 0);
+            writeToPartition(producer2, msg, 2, 0);
+            flushAll({producer1, producer2});
+            auto partitionsCount = waitAtLeastPartitions(3, TDuration::Seconds(60));
+            UNIT_ASSERT_EQUAL_C(partitionsCount, 3, "partitions: " << partitionsCount << " expected: 3");
+        }
+
+        {
+            writeToPartition(producer1, msg, 3, 0);
+            writeToPartition(producer2, msg, 4, 0);
+            writeToPartition(producer1, msg, 5, 0);
+            writeToPartition(producer2, msg, 6, 0);
+            flushAll({producer1, producer2});
+            auto partitionsCount = waitAtLeastPartitions(5, TDuration::Seconds(60));
+            UNIT_ASSERT_EQUAL_C(partitionsCount, 5, "partitions: " << partitionsCount << " expected: 5");
+        }
+
+        {
+            auto partitionsCount = describePartitionCount();
+            if (partitionsCount < 7) {
+                // Refresh producers so Children_ matches current describe.
+                UNIT_ASSERT_C(producer1->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-1");
+                UNIT_ASSERT_C(producer2->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-2");
+                producer1 = makeProducer("producer-1");
+                producer2 = makeProducer("producer-2");
+
+                const ui32 targetPartition = findWritableLeafPartition(1);
+                writeToPartition(producer1, msg, 7, targetPartition);
+                writeToPartition(producer2, msg, 8, targetPartition);
+                writeToPartition(producer1, msg, 9, targetPartition);
+                writeToPartition(producer2, msg, 10, targetPartition);
+                flushAll({producer1, producer2});
+                partitionsCount = waitAtLeastPartitions(7, TDuration::Seconds(60));
+            }
+            UNIT_ASSERT_EQUAL_C(partitionsCount, 7, "partitions: " << partitionsCount << " expected: 7");
+        }
+
+        UNIT_ASSERT_C(producer1->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-1");
+        UNIT_ASSERT_C(producer2->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-2");
     }
 
     void ExecuteQuery(NYdb::NTable::TSession& session, const TString& query ) {
@@ -1244,6 +1713,34 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             auto v = f.GetValueSync();
             UNIT_ASSERT_C(!v.IsSuccess(),  "Error: " << v);
         }
+    }
+
+    Y_UNIT_TEST(PartitionSplit_AutosplitByMinPartitionCount) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TOPIC `/Root/dir/origin`
+                WITH (
+                    AUTO_PARTITIONING_STRATEGY = 'SCALE_UP_AND_DOWN',
+                    MIN_ACTIVE_PARTITIONS = 3
+                );
+        )");
+
+        AssertPartitionCount(setup, "/Root/dir/origin", 3);
+
+        // MAX_ACTIVE_PARTITIONS has to be not less than MIN_ACTIVE_PARTITIONS
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TOPIC `/Root/dir/origin`
+                SET (
+                    MAX_ACTIVE_PARTITIONS = 20,
+                    MIN_ACTIVE_PARTITIONS = 20
+                );
+        )");
+        WaitAndAssertPartitionCount(setup, "/Root/dir/origin", 37); // 17 inactive, 20 active
     }
 
     Y_UNIT_TEST(BalancingAfterSplit_sessionsWithPartition) {

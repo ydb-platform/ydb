@@ -9,6 +9,8 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NCompaction {
 
 std::vector<TWritePortionInfoWithBlobsResult> TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(TConstructionContext& context,
@@ -104,7 +106,8 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                 ++subsetsCount;
             }
             if (toMerge.size()) {
-                auto merged = BuildAppendedPortionsByChunks(context, buildPortionsToMerge(toMerge, appendedToMerge.empty()), resultFiltered, stats);
+                auto merged =
+                    BuildAppendedPortionsByChunks(context, buildPortionsToMerge(toMerge, appendedToMerge.empty()), resultFiltered, stats);
                 if (appendedToMerge.size()) {
                     if (merged.size()) {
                         appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged), GranuleMeta));
@@ -135,10 +138,15 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         for (auto&& p : AppendedPortions) {
             sbAppended << p.GetPortionConstructor().DebugString() << ";";
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "blobs_created_diff")("appended", sbAppended)("switched", sbSwitched);
+        YDB_LOG_DEBUG("",
+            {"event", "blobs_created_diff"},
+            {"appended", sbAppended},
+            {"switched", sbSwitched});
     }
-    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "blobs_created")("appended", AppendedPortions.size())(
-        "switched", SwitchedPortions.size());
+    YDB_LOG_INFO("",
+        {"event", "blobs_created"},
+        {"appended", AppendedPortions.size()},
+        {"switched", SwitchedPortions.size()});
 
     return TConclusionStatus::Success();
 }

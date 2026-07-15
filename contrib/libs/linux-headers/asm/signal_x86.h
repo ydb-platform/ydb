@@ -2,9 +2,8 @@
 #ifndef _ASM_X86_SIGNAL_H
 #define _ASM_X86_SIGNAL_H
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 #include <linux/types.h>
-#include <linux/time.h>
 
 
 /* Avoid too many header ordering problems.  */
@@ -15,7 +14,7 @@ struct siginfo;
 #define NSIG		32
 typedef unsigned long sigset_t;
 
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 
 
 #define SIGHUP		 1
@@ -67,7 +66,7 @@ typedef unsigned long sigset_t;
 
 #include <asm-generic/signal-defs.h>
 
-#ifndef __ASSEMBLY__
+#ifndef __ASSEMBLER__
 
 
 /* Here we must cater to libcs that poke about in kernel headers.  */
@@ -103,6 +102,6 @@ typedef struct sigaltstack {
 	__kernel_size_t ss_size;
 } stack_t;
 
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 
 #endif /* _ASM_X86_SIGNAL_H */

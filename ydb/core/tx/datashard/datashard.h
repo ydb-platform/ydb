@@ -18,7 +18,7 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <library/cpp/time_provider/time_provider.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 namespace arrow {
 
@@ -27,6 +27,20 @@ class RecordBatch;
 }
 
 namespace NKikimr {
+
+// Only used below as a pointer in a factory-function declaration; a
+// forward declaration avoids pulling the heavy ydb/core/base/blobstorage.h
+// into this widely-included header.
+class TTabletStorageInfo;
+
+// Direct part import (EnableDataShardDirectPartImport). Forward-declared so
+// the heavy ydb/core/tablet_flat/flat_direct_part_writer.h is not pulled into
+// this widely-included header; the events below only hold THolder<> pointers and
+// have out-of-line destructors (see datashard_direct_import.cpp).
+namespace NTabletFlatExecutor {
+    class TDirectPartWriter;
+    struct TDirectPartResult;
+}
 
 namespace NDataShard {
     using TShardState = NKikimrTxDataShard::EDatashardState;
@@ -157,6 +171,9 @@ namespace NDataShard {
     extern ui64 gDbStatsDataSizeResolution;
     extern ui64 gDbStatsRowCountResolution;
     extern ui32 gDbStatsHistogramBucketsCount;
+    extern ui32 gFulltextMaxDelta;
+    extern ui32 gFulltextMaxSegment;
+    extern ui32 gFulltextSegmentPenalty;
 
     // This SeqNo is used to discard outdated schema Tx requests on datashards.
     // In case of tablet restart on network disconnects SS can resend same Propose for the same schema Tx.
@@ -372,11 +389,25 @@ namespace TEvDataShard {
 
         EvBuildFulltextIndexRequest,
         EvBuildFulltextIndexResponse,
-        
+
         EvAsyncJobComplete,
 
         EvBuildFulltextDictRequest,
         EvBuildFulltextDictResponse,
+
+        EvValidateRowConditionRequest,
+        EvValidateRowConditionResponse,
+
+        EvIncrementalRestoreShardProgress,
+
+        EvIncrementalRestoreSrcCreateRequest,
+
+        // Direct part import
+        EvS3DirectWriteBegin,
+        EvS3DirectWriteBeginResult,
+        EvS3DirectWriteFinish,
+        EvS3DirectWriteFinishResult,
+        EvS3DirectWriteAbort,
 
         EvEnd
     };
@@ -642,14 +673,7 @@ namespace TEvDataShard {
             AddError(error, message);
         }
 
-        void SetStepOrderId(const std::pair<ui64, ui64>& stepOrderId) {
-            Record.SetStep(stepOrderId.first);
-            Record.SetOrderId(stepOrderId.second);
-            // Note: this method is used by schema operations where stepOrderId == commitVersion
-            auto* commitVersion = Record.MutableCommitVersion();
-            commitVersion->SetStep(stepOrderId.first);
-            commitVersion->SetTxId(stepOrderId.second);
-        }
+        void SetStepOrderId(const std::pair<ui64, ui64>& stepOrderId);
 
         void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {
             auto entry = Record.AddTxLocks();
@@ -1053,22 +1077,14 @@ namespace TEvDataShard {
         // CellVec (TODO: add schema?)
 
         TConstArrayRef<TCell> GetCells(size_t row) const {
-            if (Rows.empty() && Batch.Empty() && RowsSerialized.empty())
+            if (Batch.Empty() && RowsSerialized.empty())
                 return {};
-
-            if (!Rows.empty()) {
-                return Rows[row];
-            }
 
             if (!Batch.Empty()) {
                 return Batch[row];
             }
 
             return RowsSerialized[row].GetCells();
-        }
-
-        void SetRows(TVector<TOwnedCellVec>&& rows) {
-            Rows = std::move(rows);
         }
 
         void SetBatch(TOwnedCellVecBatch&& batch) {
@@ -1084,10 +1100,9 @@ namespace TEvDataShard {
         std::shared_ptr<arrow::RecordBatch> GetArrowBatch();
         std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const;
 
-    private:
-        // for local events
-        TVector<TOwnedCellVec> Rows;
+        size_t GetDataSizeEstimate() const;
 
+    private:
         // batch for local events
         TOwnedCellVecBatch Batch;
 
@@ -1432,6 +1447,14 @@ namespace TEvDataShard {
             Y_ENSURE(Info.DataETag);
         }
 
+        TString GetUserSID() const {
+            return ""; // S3 import doesn't generates CDC at all (see TTxS3UploadRows constructor)
+        }
+
+        TString GetUserTraceId() const {
+            return ""; // S3 import doesn't generates CDC at all (see TTxS3UploadRows constructor)
+        }
+
         TString ToString() const override {
             return TStringBuilder() << ToStringHeader() << " {"
                 << " TxId: " << TxId
@@ -1473,6 +1496,120 @@ namespace TEvDataShard {
         }
 
         TAutoPtr<IDestructable> Prod;
+    };
+
+    // Direct part import events (EnableDataShardDirectPartImport). Exchanged
+    // between the S3 downloader actor and its DataShard to build the restored
+    // table as a single sorted part instead of replaying rows through UploadRows.
+
+    // Downloader -> DataShard: reserve a direct part write for the given user table.
+    struct TEvS3DirectWriteBegin : public TEventLocal<TEvS3DirectWriteBegin, TEvDataShard::EvS3DirectWriteBegin> {
+        ui64 TxId;
+        ui64 TableId;
+
+        TEvS3DirectWriteBegin(ui64 txId, ui64 tableId)
+            : TxId(txId)
+            , TableId(tableId)
+        {
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " TxId: " << TxId
+                << " TableId: " << TableId
+            << " }";
+        }
+    };
+
+    // DataShard -> downloader: hands over the part writer (or an error). The
+    // writer is owned by the downloader from now on. Destructor is defined
+    // out-of-line where TDirectPartWriter is complete.
+    struct TEvS3DirectWriteBeginResult : public TEventLocal<TEvS3DirectWriteBeginResult, TEvDataShard::EvS3DirectWriteBeginResult> {
+        ui64 TxId;
+        bool Success;
+        TString Error;
+        ui32 Step; // reserved step of the write (for TEvS3DirectWriteAbort)
+        THolder<NTabletFlatExecutor::TDirectPartWriter> Writer;
+
+        // Defined out-of-line (datashard_direct_import.cpp) because TDirectPartWriter
+        // is only forward-declared here.
+        TEvS3DirectWriteBeginResult(ui64 txId, THolder<NTabletFlatExecutor::TDirectPartWriter> writer, ui32 step);
+        TEvS3DirectWriteBeginResult(ui64 txId, TString error);
+        ~TEvS3DirectWriteBeginResult();
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " TxId: " << TxId
+                << " Success: " << Success
+                << " Error: " << Error
+                << " Step: " << Step
+            << " }";
+        }
+    };
+
+    // Downloader -> DataShard: the part is built; attach it and persist the final
+    // restore progress atomically. Destructor is out-of-line.
+    struct TEvS3DirectWriteFinish : public TEventLocal<TEvS3DirectWriteFinish, TEvDataShard::EvS3DirectWriteFinish> {
+        ui64 TxId;
+        ui64 TableId;
+        THolder<NTabletFlatExecutor::TDirectPartResult> Result;
+        NDataShard::TS3Download Info; // final progress to persist for idempotent restart
+
+        // Defined out-of-line (datashard_direct_import.cpp) because TDirectPartResult
+        // is only forward-declared here.
+        TEvS3DirectWriteFinish(ui64 txId, ui64 tableId,
+                THolder<NTabletFlatExecutor::TDirectPartResult> result,
+                const NDataShard::TS3Download& info);
+        ~TEvS3DirectWriteFinish();
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " TxId: " << TxId
+                << " TableId: " << TableId
+                << " Info: " << Info
+            << " }";
+        }
+    };
+
+    // DataShard -> downloader: the attach transaction has committed (or failed).
+    struct TEvS3DirectWriteFinishResult : public TEventLocal<TEvS3DirectWriteFinishResult, TEvDataShard::EvS3DirectWriteFinishResult> {
+        ui64 TxId;
+        bool Success;
+        TString Error;
+
+        explicit TEvS3DirectWriteFinishResult(ui64 txId, bool success = true, TString error = {})
+            : TxId(txId)
+            , Success(success)
+            , Error(std::move(error))
+        {
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " TxId: " << TxId
+                << " Success: " << Success
+                << " Error: " << Error
+            << " }";
+        }
+    };
+
+    // Downloader -> DataShard: release a reserved write's GC barrier (on abort).
+    struct TEvS3DirectWriteAbort : public TEventLocal<TEvS3DirectWriteAbort, TEvDataShard::EvS3DirectWriteAbort> {
+        ui64 TxId;
+        ui32 Step;
+
+        TEvS3DirectWriteAbort(ui64 txId, ui32 step)
+            : TxId(txId)
+            , Step(step)
+        {
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " TxId: " << TxId
+                << " Step: " << Step
+            << " }";
+        }
     };
 
     struct TEvObjectStorageListingRequest
@@ -1534,6 +1671,25 @@ namespace TEvDataShard {
                           NKikimrTxDataShard::TEvBuildIndexProgressResponse,
                           TEvDataShard::EvBuildIndexProgressResponse>
     {
+    };
+
+    // Sent DS->SS once an incremental restore scan terminates.
+    struct TEvIncrementalRestoreShardProgress
+        : public TEventPB<TEvIncrementalRestoreShardProgress,
+                          NKikimrTxDataShard::TEvIncrementalRestoreShardProgress,
+                          TEvDataShard::EvIncrementalRestoreShardProgress>
+    {
+        TEvIncrementalRestoreShardProgress() = default;
+    };
+
+    // Sent SS->DS to invoke an incremental restore scan on a source DataShard.
+    // Reply arrives via TEvIncrementalRestoreShardProgress on the SS pipe.
+    struct TEvIncrementalRestoreSrcCreateRequest
+        : public TEventPB<TEvIncrementalRestoreSrcCreateRequest,
+                          NKikimrTxDataShard::TEvIncrementalRestoreSrcCreateRequest,
+                          TEvDataShard::EvIncrementalRestoreSrcCreateRequest>
+    {
+        TEvIncrementalRestoreSrcCreateRequest() = default;
     };
 
     struct TEvSampleKRequest
@@ -1637,8 +1793,8 @@ namespace TEvDataShard {
                           NKikimrTxDataShard::TEvIncrementalRestoreResponse,
                           TEvDataShard::EvIncrementalRestoreResponse> {
         TEvIncrementalRestoreResponse() = default;
-        
-        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx, 
+
+        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx,
                                      NKikimrTxDataShard::TEvIncrementalRestoreResponse::Status status, const TString& errorMessage = "") {
             Record.SetTxId(txId);
             Record.SetTableId(tableId);
@@ -1649,8 +1805,8 @@ namespace TEvDataShard {
                 Record.SetErrorMessage(errorMessage);
             }
         }
-        
-        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx, 
+
+        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx,
                                      NKikimrTxDataShard::TEvIncrementalRestoreResponse::Status status, ui64 processedRows, ui64 processedBytes,
                                      const TString& lastProcessedKey = "", const TString& errorMessage = "") {
             Record.SetTxId(txId);
@@ -1986,6 +2142,20 @@ namespace TEvDataShard {
         : public TEventPB<TEvValidateUniqueIndexResponse,
                           NKikimrTxDataShard::TEvValidateUniqueIndexResponse,
                           TEvDataShard::EvValidateUniqueIndexResponse>
+    {
+    };
+
+    struct TEvValidateRowConditionRequest
+        : public TEventPB<TEvValidateRowConditionRequest,
+                          NKikimrTxDataShard::TEvValidateRowConditionRequest,
+                          TEvDataShard::EvValidateRowConditionRequest>
+    {
+    };
+
+    struct TEvValidateRowConditionResponse
+        : public TEventPB<TEvValidateRowConditionResponse,
+                          NKikimrTxDataShard::TEvValidateRowConditionResponse,
+                          TEvDataShard::EvValidateRowConditionResponse>
     {
     };
 };

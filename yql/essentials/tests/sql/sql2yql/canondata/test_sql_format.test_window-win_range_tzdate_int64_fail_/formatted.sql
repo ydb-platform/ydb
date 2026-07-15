@@ -1,7 +1,7 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
-/* custom error: Error while processing RANGE bound: Cannot add type TzDate and Int64 */
+/* custom error: Error while processing RANGE bound */
+/* custom error: Cannot add type TzDate and Int64 */
 $data = [
     <|a: TzDate('2024-01-01,Europe/Moscow'), count: 1|>,
     <|a: TzDate('2024-01-02,Europe/Moscow'), count: 1|>,

@@ -8,9 +8,9 @@ namespace NKikimr::NOlap {
 
 using TLogThis = TCtorLogger<NKikimrServices::TX_COLUMNSHARD>;
 
-enum class TOperationWriteId : ui64 {
+enum class TOperationWriteId: ui64 {
 };
-enum class TInsertWriteId : ui64 {
+enum class TInsertWriteId: ui64 {
 };
 
 inline TOperationWriteId operator++(TOperationWriteId& w) noexcept {

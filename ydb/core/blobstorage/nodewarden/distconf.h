@@ -85,6 +85,7 @@ namespace NKikimr::NStorage {
                EvConfigProposed,
                EvRetryCollectConfigsAndPropose,
                EvRetryPersistConfig,
+               EvFlushRetroTraceBatch,
             };
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
@@ -271,6 +272,10 @@ namespace NKikimr::NStorage {
         TBindQueue OtherPilesBindQueue;
         bool Scheduled = false;
 
+        // unbound-state diagnostic
+        ui32 BindFailuresStreak = 0;
+        TInstant LastUnboundWarnAt = TInstant::Zero();
+
         // incoming bindings
         struct TIndirectBoundNode {
             std::list<TStorageConfigMeta> Configs; // last one is the latest one
@@ -322,6 +327,7 @@ namespace NKikimr::NStorage {
         ui64 ScepterCounter = 1; // increased every time Scepter gets changed
         TString ErrorReason;
         std::optional<TString> CurrentSelfAssemblyUUID;
+        bool MajorityOfNodesConnected = false;
         bool GlobalQuorum = false;
         bool QuorumValid = false;
 
@@ -350,6 +356,14 @@ namespace NKikimr::NStorage {
         bool ProposeRequestInFlight = false;
         std::optional<std::tuple<ui64, ui32>> ProposedConfigHashVersion;
         std::vector<std::tuple<TActorId, TString, ui64>> ConsoleConfigValidationQ;
+
+        // retro trace root-side batching
+        TControlWrapper RootRetroTraceBatchIntervalSec = TControlWrapper(10, 1, 3600);
+        std::vector<NWilson::TTraceId> PendingRetroTraceIds;
+        bool RetroTraceBatchFlushScheduled = false;
+
+        void HandleFlushRetroTraceBatch();
+        void FlushRetroTraceBatch();
 
         // cache subsystem
         struct TCacheItem {
@@ -417,6 +431,7 @@ namespace NKikimr::NStorage {
         void UnsubscribeInterconnect(ui32 nodeId);
         TActorId SubscribeToPeerNode(ui32 nodeId, TActorId sessionId);
         void AbortBinding(const char *reason, bool sendUnbindMessage = true, bool sendUpdate = true);
+        void LogUnboundBindingWarning();
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
         void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig);
@@ -453,7 +468,7 @@ namespace NKikimr::NStorage {
             bool AutomaticBootstrap = false;
         };
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
-            std::optional<TStringBuf> selfAssemblyUUID);
+            std::optional<TString> selfAssemblyUUID, bool dryRun = false);
 
         void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
 
@@ -469,7 +484,9 @@ namespace NKikimr::NStorage {
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
             i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
             bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit, TBridgePileId bridgePileId,
-            std::optional<TGroupId> bridgeProxyGroupId);
+            std::optional<TGroupId> bridgeProxyGroupId,
+            const NProtoBuf::RepeatedField<ui32>& selfHealAllowedNodes = {},
+            bool applyNodeAllowList = false);
 
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
 
@@ -478,6 +495,7 @@ namespace NKikimr::NStorage {
         void PerformScatterTask(TScatterTask& task);
         void Perform(TEvGather::TCollectConfigs *response, const TEvScatter::TCollectConfigs& request, TScatterTask& task);
         void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
+        void Perform(TEvGather::TDemandRetroTrace *response, const TEvScatter::TDemandRetroTrace& request, TScatterTask& task);
 
         void SwitchToError(const TString& reason);
 
@@ -583,13 +601,14 @@ namespace NKikimr::NStorage {
         TActorId StaticNodeSessionId;
         bool ReconnectScheduled = false;
         THashSet<ui32> ConnectedDynamicNodes;
+        ui64 StaticNodeSubscriptionCookie = 0;
 
         // these are used on the dynamic nodes
         void ApplyStaticNodeIds(const std::vector<ui32>& nodeIds);
         void ConnectToStaticNode();
         void HandleReconnect();
-        void OnStaticNodeConnected(ui32 nodeId, TActorId sessionId);
-        void OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId);
+        void OnStaticNodeConnected(ui32 nodeId, TActorId sessionId, ui64 cookie);
+        void OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId, ui64 cookie);
         void Handle(TEvNodeWardenDynamicConfigPush::TPtr ev);
 
         // these are used on the static nodes

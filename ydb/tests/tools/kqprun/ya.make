@@ -12,6 +12,8 @@ SRCS(
 PEERDIR(
     library/cpp/getopt
 
+    ydb/core/protos
+    ydb/library/testlib/common
     ydb/library/yql/providers/pq/gateway/dummy
     ydb/tests/tools/kqprun/runlib
     ydb/tests/tools/kqprun/src
@@ -30,6 +32,7 @@ PEERDIR(
     yql/essentials/udfs/common/string
     yql/essentials/udfs/common/yson2
     yql/essentials/udfs/common/json2
+    ydb/apps/ydbd/export
 )
 
 YQL_LAST_ABI_VERSION()

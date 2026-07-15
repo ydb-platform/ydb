@@ -25,6 +25,7 @@ private:
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
             FetchingContext->OnError(errorMessage);
         }
+
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
             FetchingContext->MutableCurrentContext().RegisterResourcesGuard(std::move(guard));
@@ -35,7 +36,8 @@ private:
     public:
         TSubscriber(const ui64 memory, const std::shared_ptr<TPortionsDataFetcher>& fetchingContext)
             : TBase(memory)
-            , FetchingContext(fetchingContext) {
+            , FetchingContext(fetchingContext)
+        {
         }
     };
 
@@ -66,24 +68,32 @@ private:
         virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
             if (result.HasErrors()) {
                 Fetcher->OnError("cannot fetch accessors");
-            } else {
-                AFL_VERIFY(result.GetPortions().size() == Fetcher->GetInput().GetPortions().size());
-                std::vector<std::shared_ptr<TPortionDataAccessor>> accessors;
-                for (auto&& i : Fetcher->GetInput().GetPortions()) {
-                    accessors.emplace_back(result.ExtractPortionAccessorVerified(i->GetPortionInfo()->GetPortionId()));
-                }
-                Fetcher->MutableCurrentContext().SetPortionAccessors(std::move(accessors));
-                Fetcher->MutableScript().Next();
-                Fetcher->Resume(Fetcher);
+                return;
             }
+
+            if (result.HasRemovedData()) {
+                Fetcher->OnError(TStringBuilder{} << "some portion accessors were removed, count: " << result.GetRemovedData().size());
+                return;
+            }
+
+            AFL_VERIFY(result.GetPortions().size() == Fetcher->GetInput().GetPortions().size());
+            std::vector<std::shared_ptr<TPortionDataAccessor>> accessors;
+            for (auto&& i : Fetcher->GetInput().GetPortions()) {
+                accessors.emplace_back(result.ExtractPortionAccessorVerified(i->GetPortionInfo()->GetPortionId()));
+            }
+            Fetcher->MutableCurrentContext().SetPortionAccessors(std::move(accessors));
+            Fetcher->MutableScript().Next();
+            Fetcher->Resume(Fetcher);
         }
+
         virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
             return Default<std::shared_ptr<const TAtomicCounter>>();
         }
 
     public:
         TSubscriber(const std::shared_ptr<TPortionsDataFetcher>& fetcher)
-            : Fetcher(fetcher) {
+            : Fetcher(fetcher)
+        {
         }
     };
 
@@ -113,6 +123,7 @@ private:
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
             FetchingContext->OnError(errorMessage);
         }
+
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
             FetchingContext->MutableCurrentContext().RegisterResourcesGuard(std::move(guard));
@@ -123,7 +134,8 @@ private:
     public:
         TSubscriber(const ui64 memory, const std::shared_ptr<TPortionsDataFetcher>& fetchingContext)
             : TBase(memory)
-            , FetchingContext(fetchingContext) {
+            , FetchingContext(fetchingContext)
+        {
         }
     };
 
@@ -145,7 +157,8 @@ protected:
 
 public:
     TAskDataResourceStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds)
-        : ColumnIds(columnIds) {
+        : ColumnIds(columnIds)
+    {
     }
 };
 
@@ -214,6 +227,7 @@ private:
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
             FetchingContext->OnError(errorMessage);
         }
+
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
             FetchingContext->MutableCurrentContext().RegisterResourcesGuard(std::move(guard));
@@ -224,7 +238,8 @@ private:
     public:
         TSubscriber(const ui64 memory, const std::shared_ptr<TPortionsDataFetcher>& fetchingContext)
             : TBase(memory)
-            , FetchingContext(fetchingContext) {
+            , FetchingContext(fetchingContext)
+        {
         }
     };
 
@@ -237,7 +252,8 @@ private:
 public:
     TAskGeneralResourceStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const ui64 memoryUsage)
         : ColumnIds(columnIds)
-        , MemoryUsage(memoryUsage) {
+        , MemoryUsage(memoryUsage)
+    {
     }
 };
 
@@ -256,6 +272,7 @@ private:
             FetchingContext->MutableScript().Next();
             FetchingContext->Resume(FetchingContext);
         }
+
         virtual bool DoOnError(
             const TString& storageId, const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
             FetchingContext->OnError("cannot read blob range: " + storageId + "::" + range.ToString() + "::" + status.GetErrorMessage());
@@ -266,7 +283,8 @@ private:
         TSubscriber(
             const std::shared_ptr<TPortionsDataFetcher>& fetchingContext, std::vector<std::shared_ptr<IBlobsReadingAction>>&& readActions)
             : TBase(readActions, ::ToString(fetchingContext->GetInput().GetConsumer()), fetchingContext->GetInput().GetExternalTaskId())
-            , FetchingContext(fetchingContext) {
+            , FetchingContext(fetchingContext)
+        {
         }
     };
 
@@ -303,7 +321,8 @@ private:
 
 public:
     TAskDataStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds)
-        : ColumnIds(columnIds) {
+        : ColumnIds(columnIds)
+    {
     }
 };
 
@@ -328,9 +347,7 @@ private:
             AFL_VERIFY(accessor->GetPortionInfo().GetAddress() == portion->GetPortionInfo()->GetAddress());
 
             std::shared_ptr<NArrow::TGeneralContainer> container =
-                accessor->PrepareForAssemble(*schemas[i], *schemas[i], blobs[i])
-                    .AssembleToGeneralContainer({}, portion->GetPortionInfo()->GetPathId().DebugString())
-                    .DetachResult();
+                accessor->PrepareForAssemble(*schemas[i], *schemas[i], blobs[i]).AssembleToGeneralContainer({}).DetachResult();
             result.emplace_back(std::move(*container));
         }
         context.SetAssembledData(std::move(result));

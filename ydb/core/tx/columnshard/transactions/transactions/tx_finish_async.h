@@ -7,6 +7,7 @@ class TTxFinishAsyncTransaction: public NTabletFlatExecutor::TTransactionBase<TC
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<TColumnShard>;
     const ui64 TxId;
+
 public:
     TTxFinishAsyncTransaction(TColumnShard& owner, const ui64 txId)
         : TBase(&owner)
@@ -18,4 +19,4 @@ public:
     virtual void Complete(const TActorContext& ctx) override;
 };
 
-}
+}   // namespace NKikimr::NColumnShard

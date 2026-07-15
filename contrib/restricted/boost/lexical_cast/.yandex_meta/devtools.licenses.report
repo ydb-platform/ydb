@@ -49,6 +49,7 @@ BELONGS ya.make
         include/boost/lexical_cast.hpp [5:7]
         include/boost/lexical_cast/bad_lexical_cast.hpp [5:7]
         include/boost/lexical_cast/detail/buffer_view.hpp [3:5]
+        include/boost/lexical_cast/detail/config.hpp [3:5]
         include/boost/lexical_cast/detail/converter_lexical.hpp [5:7]
         include/boost/lexical_cast/detail/converter_lexical_streams.hpp [5:7]
         include/boost/lexical_cast/detail/converter_numeric.hpp [5:7]
@@ -74,7 +75,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        include/boost/detail/lcast_precision.hpp [3:6]
+        include/boost/lexical_cast/detail/lcast_precision.hpp [3:6]
 
 KEEP     BSL-1.0              946bc271e5e8c30479a080d5b8ef3415
 BELONGS ya.make

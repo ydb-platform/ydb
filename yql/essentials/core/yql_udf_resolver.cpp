@@ -2,6 +2,10 @@
 
 namespace NYql {
 
+bool IUdfResolver::IsPartial() const {
+    return false;
+}
+
 TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks, THoldingFileStorage& storage, NUdf::ELogLevel logLevel) {
     TVector<IUdfResolver::TImport> imports;
     imports.reserve(blocks.size());

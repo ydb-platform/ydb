@@ -26,11 +26,13 @@ struct TDqBlockJoinContext {
     TDqJoinImplRenames Renames;
     EJoinKind Kind;
     TSides<i32> TempStateIndes;
+    TBlockHashJoinSettings Settings;
     // Pre-computed during graph construction in WrapDqBlockHashJoin using the
     // program's TTypeEnvironment.  This avoids creating TOptionalType objects
     // at runtime (inside DoCalculate) whose lifetime depends on the
     // TComputationContext – which may differ between iterations/retries.
     TSides<TVector<TType*>> UserTypes;
+    TSides<TVector<int>> ColumnPermutation;
 };
 
 class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
@@ -39,10 +41,13 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
                             const TDqBlockJoinContext* meta,
                             TSides<std::unique_ptr<IBlockLayoutConverter>>& converters, ESide side)
         : Side_(side)
+        , Meta_(meta)
+        , ArrowPool_(&ctx.ArrowMemoryPool)
         , Stream_(stream.SelectSide(side))
         , StreamValues_(Stream_->GetValue(ctx))
         , Buff_(ctx.MutableValues.get() + meta->TempStateIndes.SelectSide(side), meta->InputTypes.SelectSide(side).size())
         , ArrowBlockToInternalConverter_(converters.SelectSide(side).get())
+        , ColumnPermutation_(meta->ColumnPermutation.SelectSide(side))
     {}
 
     bool Finished() const {
@@ -67,6 +72,14 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         }
         const size_t cols = UserDataCols();
         TVector<arrow::Datum> columns = ArrowFromUV({Buff_.data(), cols});
+        if (!ColumnPermutation_.empty()) {
+            TVector<arrow::Datum> permuted(cols);
+            for (size_t j = 0; j < cols; ++j) {
+                permuted[j] = std::move(columns[ColumnPermutation_[j]]);
+            }
+            columns = std::move(permuted);
+        }
+        NormalizeScalarColumns(columns);
         IBlockLayoutConverter::TPackResult result;
         ArrowBlockToInternalConverter_->Pack(columns, result);
         return One{std::move(result)};
@@ -81,24 +94,52 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         return arrow;
     }
 
+    void NormalizeScalarColumns(TVector<arrow::Datum>& columns) {
+        bool hasScalar = false;
+        for (const auto& column : columns) {
+            if (column.is_scalar()) {
+                hasScalar = true;
+                break;
+            }
+        }
+        if (!hasScalar) {
+            return;
+        }
+
+        const ui64 blockLen = GetBlockCount(Buff_[UserDataCols()]);
+        MKQL_ENSURE(blockLen > 0, "Got a scalar column in a zero-length block");
+
+        const auto& inputTypes = Meta_->InputTypes.SelectSide(Side_);
+        for (size_t j = 0; j < columns.size(); ++j) {
+            if (columns[j].is_scalar()) {
+                TType* itemType = inputTypes[j]->GetItemType();
+                columns[j] = MakeArrayFromScalar(*columns[j].scalar(), blockLen, itemType, *ArrowPool_);
+            }
+        }
+    }
+
     bool Finished_ = false;
-    [[maybe_unused]]ESide Side_;
+    ESide Side_;
+    const TDqBlockJoinContext* Meta_;
+    arrow::MemoryPool* ArrowPool_;
     IComputationNode* Stream_;
     NYql::NUdf::TUnboxedValue StreamValues_;
     std::span<NYql::NUdf::TUnboxedValue> Buff_;
     IBlockLayoutConverter* ArrowBlockToInternalConverter_;
+    TVector<int> ColumnPermutation_;
 };
 
 template<EJoinKind Kind>
 struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     TRenamesPackedTupleOutput(const TDqBlockJoinContext* meta, TSides<IBlockLayoutConverter*> converters,
-                              const TVector<TType*>& userBuildTypes, arrow::MemoryPool& arrowPool)
+                              const TVector<TType*>& userNullTypes, arrow::MemoryPool& arrowPool)
         : Renames_(&meta->Renames)
         , Converters_(converters)
+        , LeftIsBuild_(meta->Settings.LeftIsBuild())
     {
         if constexpr (!std::is_same_v<decltype(Nulls_), Empty>) {
             TVector<arrow::Datum> nulls;
-            for(auto* type:userBuildTypes) {
+            for(auto* type:userNullTypes) {
                 auto strname = type->GetKindAsStr();
                 MKQL_ENSURE(type->IsOptional(), Sprintf("expected every type of right side to be optional when join type is Left, got type №%i: %s  ", nulls.size()+1, strname.data()));
                 int blockSize = NMiniKQL::CalcBlockLen(NMiniKQL::CalcMaxBlockItemSize(type));
@@ -106,7 +147,11 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
                 builder->Add(NYql::NUdf::TBlockItem{});
                 nulls.push_back(builder->Build(true));
             }
-            Converters_.Build->Pack(nulls,Nulls_);
+            if (LeftIsBuild_) {
+                Converters_.Probe->Pack(nulls, Nulls_);
+            } else {
+                Converters_.Build->Pack(nulls, Nulls_);
+            }
         }
     }
 
@@ -136,7 +181,11 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
             void operator()(TSingleTuple tuple) {
                 if constexpr (Kind == EJoinKind::Left) {
                     TSingleTuple null{.PackedData = self.Nulls_.PackedTuples.data(), .OverflowBegin = self.Nulls_.Overflow.data() };
-                    this->operator()(TSides<TSingleTuple>{.Build = null, .Probe = tuple});
+                    if (self.LeftIsBuild_) {
+                        this->operator()(TSides<TSingleTuple>{.Build = tuple, .Probe = null});
+                    } else {
+                        this->operator()(TSides<TSingleTuple>{.Build = null, .Probe = tuple});
+                    }
                 } else if constexpr(SemiOrOnlyJoin(Kind)) {
                     self.Output_.Probe.AppendTuple(tuple, self.Converters_.Probe->GetTupleLayout());
                 }
@@ -194,6 +243,7 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     const TDqJoinImplRenames* Renames_;
     TSides<IBlockLayoutConverter*> Converters_;
     BuildNullIfNeeded Nulls_;
+    bool LeftIsBuild_;
 };
 
 template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapper<Kind>> {
@@ -208,7 +258,6 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-
         TTypeInfoHelper helper;
         TSides<std::unique_ptr<IBlockLayoutConverter>> layouts;
         const auto& userTypes = Meta_->UserTypes;
@@ -217,10 +266,11 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             for (int column : Meta_->KeyColumns.SelectSide(side)) {
                 roles[column] = NPackedTuple::EColumnRole::Key;
             }
-            bool rememberNullBitmaps = !(Kind == EJoinKind::Left && side == ESide::Build);
-            layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool, rememberNullBitmaps);
+            layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
         }
-        return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_, std::move(layouts), Meta_.get(), userTypes.Build);
+        const auto& userNullTypes = (Kind == EJoinKind::Left && Meta_->Settings.LeftIsBuild()) ? userTypes.Probe : userTypes.Build;
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_,
+            std::move(layouts), Meta_.get(), userNullTypes);
     }
 
   private:
@@ -239,7 +289,8 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                                                     .Probe = {ctx, streams, meta, Converters_, ESide::Probe}},
                     ctx, "BlockHashJoin",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
-                                                              .Probe = Converters_.Probe->GetTupleLayout()})
+                                                              .Probe = Converters_.Probe->GetTupleLayout()},
+                    meta->Settings)
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool)
         {}
@@ -249,9 +300,9 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             i64 rows = Output_.SizeTuples();
             TVector<arrow::Datum> arrowOutput = Output_.FlushAndApplyRenames();
             for (int colIndex = 0; colIndex < Output_.Columns(); ++colIndex) {
-                output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(std::move(arrowOutput[colIndex]));
+                output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(std::move(arrowOutput[colIndex]), Ctx_->RuntimeSettings.DatumValidation.Get());
             }
-            output[Output_.Columns()] = Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(rows)));
+            output[Output_.Columns()] = Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(rows)), Ctx_->RuntimeSettings.DatumValidation.Get());
 
             MKQL_ENSURE(Output_.SizeTuples() == 0, "something left after flush??");
             return NYql::NUdf::EFetchStatus::Ok;
@@ -265,8 +316,11 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             if (Finished_) {
                 return NYql::NUdf::EFetchStatus::Finish;
             }
-            while (Output_.SizeTuples() < Threshold_) {
-                auto res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn());
+            auto outputIsFull = [&]() {
+                return Output_.SizeTuples() >= MaxOutputRows_;
+            };
+            while (!outputIsFull()) {
+                auto res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn(), outputIsFull);
                 switch (res) {
                 case EFetchResult::Finish: {
                     if (Output_.SizeTuples() == 0) {
@@ -290,7 +344,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         JoinType Join_;
         TComputationContext* Ctx_;
         TRenamesPackedTupleOutput<Kind> Output_;
-        const int Threshold_ = 10000;
+        static constexpr i64 MaxOutputRows_ = 10000;
         bool Finished_ = false;
     };
 
@@ -306,7 +360,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
 } // namespace
 
 IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
+    MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
     TDqBlockJoinContext meta;
 
     const auto joinType = callable.GetType()->GetReturnType();
@@ -390,14 +444,76 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         }();
         meta.Renames.push_back({.Index = rename.Index, .Side = thisSide});
     }
+
+    {
+        const auto settingsTuple = AS_VALUE(TTupleLiteral, callable.GetInput(7));
+        if (settingsTuple->GetValuesCount() >= 1) {
+            meta.Settings.BuildSide = static_cast<EBuildSide>(AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>());
+        }
+    }
+    if (meta.Settings.LeftIsBuild()) {
+        std::swap(meta.InputTypes.Build, meta.InputTypes.Probe);
+        std::swap(meta.KeyColumns.Build, meta.KeyColumns.Probe);
+        for (auto& rename : meta.Renames) {
+            rename.Side = (rename.Side == ESide::Build) ? ESide::Probe : ESide::Build;
+        }
+    }
+
+    for (ESide side : EachSide) {
+        auto& keyColumns = meta.KeyColumns.SelectSide(side);
+        int numDataCols = meta.InputTypes.SelectSide(side).size() - 1;
+        int numKeys = keyColumns.size();
+
+        bool needsReorder = false;
+        for (int i = 0; i < numKeys; ++i) {
+            if (keyColumns[i] != i) {
+                needsReorder = true;
+                break;
+            }
+        }
+        if (!needsReorder) {
+            continue;
+        }
+
+        TVector<int> perm(numDataCols);
+        std::iota(perm.begin(), perm.end(), 0);
+        for (int i = 0; i < numKeys; ++i) {
+            auto it = std::find(perm.begin(), perm.end(), keyColumns[i]);
+            std::swap(perm[i], *it);
+        }
+
+        meta.ColumnPermutation.SelectSide(side) = perm;
+
+        auto origTypes = TVector<TBlockType*>(meta.InputTypes.SelectSide(side).begin(),
+                                              meta.InputTypes.SelectSide(side).begin() + numDataCols);
+        for (int i = 0; i < numDataCols; ++i) {
+            meta.InputTypes.SelectSide(side)[i] = origTypes[perm[i]];
+        }
+
+        TVector<int> inv(numDataCols);
+        for (int i = 0; i < numDataCols; ++i) {
+            inv[perm[i]] = i;
+        }
+        for (auto& rename : meta.Renames) {
+            if (rename.Side == side) {
+                rename.Index = inv[rename.Index];
+            }
+        }
+
+        for (int i = 0; i < numKeys; ++i) {
+            keyColumns[i] = i;
+        }
+    }
+
     for(ESide side: EachSide) {
         meta.TempStateIndes.SelectSide(side) = std::exchange(ctx.Mutables.CurValueIndex, meta.InputTypes.SelectSide(side).size() + ctx.Mutables.CurValueIndex);
     }
 
+    const ESide nullableSide = meta.Settings.LeftIsBuild() ? ESide::Probe : ESide::Build;
     for (ESide side : EachSide) {
         for (int index = 0; index < std::ssize(meta.InputTypes.SelectSide(side)) - 1; ++index) {
             TType* thisType = meta.InputTypes.SelectSide(side)[index]->GetItemType();
-            if (meta.Kind == EJoinKind::Left && side == ESide::Build && !thisType->IsOptional()) {
+            if (meta.Kind == EJoinKind::Left && side == nullableSide && !thisType->IsOptional()) {
                 meta.UserTypes.SelectSide(side).push_back(TOptionalType::Create(thisType, ctx.Env));
             } else {
                 meta.UserTypes.SelectSide(side).push_back(thisType);
@@ -405,17 +521,21 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         }
     }
 
+    const auto streams = meta.Settings.LeftIsBuild()
+        ? TSides<IComputationNode*>{.Build = leftStream, .Probe = rightStream}
+        : TSides<IComputationNode*>{.Build = rightStream, .Probe = leftStream};
+
     using enum EJoinKind;
     if (joinKind == Inner) {
-        return new TBlockHashJoinWrapper<Inner>(ctx.Mutables, meta, {.Build = rightStream, .Probe = leftStream});
+        return new TBlockHashJoinWrapper<Inner>(ctx.Mutables, meta, streams);
     } else if (joinKind == LeftOnly) {
-        return new TBlockHashJoinWrapper<LeftOnly>(ctx.Mutables, meta, {.Build = rightStream, .Probe = leftStream});
+        return new TBlockHashJoinWrapper<LeftOnly>(ctx.Mutables, meta, streams);
     } else if (joinKind == LeftSemi) {
-        return new TBlockHashJoinWrapper<LeftSemi>(ctx.Mutables, meta, {.Build = rightStream, .Probe = leftStream});
+        return new TBlockHashJoinWrapper<LeftSemi>(ctx.Mutables, meta, streams);
     } else if (joinKind == Left) {
-        return new TBlockHashJoinWrapper<Left>(ctx.Mutables, meta, {.Build = rightStream, .Probe = leftStream});
+        return new TBlockHashJoinWrapper<Left>(ctx.Mutables, meta, streams);
     } else {
-        MKQL_ENSURE(false, "unsupported join type in block hash join" );
+        MKQL_ENSURE(false, "unsupported join type in block hash join");
     }
 }
 

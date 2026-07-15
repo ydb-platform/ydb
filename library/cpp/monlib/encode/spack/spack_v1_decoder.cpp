@@ -62,22 +62,48 @@ namespace NMonitoring {
 
                 TimePrecision_ = DecodeTimePrecision(Header_.TimePrecision);
 
-                const ui64 labelSizeTotal = ui64(Header_.LabelNamesSize) + Header_.LabelValuesSize;
+                // (2) read string pools
+                TVector<char> namesBuf;
+                TVector<char> valuesBuf;
 
+                if (Header_.Version == SV1_03) {
+                    auto namesResult = ReadLengthDelimitedStringPool(Header_.LabelNamesSize);
+                    namesBuf = std::move(namesResult.first);
+                    auto valuesResult = ReadLengthDelimitedStringPool(Header_.LabelValuesSize);
+                    valuesBuf = std::move(valuesResult.first);
+
+                    TStringPool labelNames(namesBuf.data(), namesResult.second);
+                    TStringPool labelValues(valuesBuf.data(), valuesResult.second);
+
+                    DecodeBody(labelNames, labelValues, c);
+                    return;
+                }
+
+                const ui64 labelSizeTotal = ui64(Header_.LabelNamesSize) + Header_.LabelValuesSize;
                 DECODE_ENSURE(labelSizeTotal <= LABEL_SIZE_LIMIT, "Label names & values size of " << HumanReadableSize(labelSizeTotal, SF_BYTES)
                     << " exceeds the limit which is " << HumanReadableSize(LABEL_SIZE_LIMIT, SF_BYTES));
 
-                // (2) read string pools
-                TVector<char> namesBuf(Header_.LabelNamesSize);
+                namesBuf.resize(Header_.LabelNamesSize);
                 readBytes = In_->Load(namesBuf.data(), namesBuf.size());
                 DECODE_ENSURE(readBytes == Header_.LabelNamesSize, "not enough data to read label names pool");
-                TStringPool labelNames(namesBuf.data(), namesBuf.size());
+                {
+                    TStringPool labelNames(namesBuf.data(), namesBuf.size());
 
-                TVector<char> valuesBuf(Header_.LabelValuesSize);
-                readBytes = In_->Load(valuesBuf.data(), valuesBuf.size());
-                DECODE_ENSURE(readBytes == Header_.LabelValuesSize, "not enough data to read label values pool");
-                TStringPool labelValues(valuesBuf.data(), valuesBuf.size());
+                    valuesBuf.resize(Header_.LabelValuesSize);
+                    readBytes = In_->Load(valuesBuf.data(), valuesBuf.size());
+                    DECODE_ENSURE(readBytes == Header_.LabelValuesSize, "not enough data to read label values pool");
+                    TStringPool labelValues(valuesBuf.data(), valuesBuf.size());
 
+                    DecodeBody(labelNames, labelValues, c);
+                }
+            }
+
+        private:
+            void DecodeBody(
+                    const TStringPool& labelNames,
+                    const TStringPool& labelValues,
+                    IMetricConsumer* c)
+            {
                 // (3) read common time
                 c->OnCommonTime(ReadTime());
 
@@ -93,7 +119,6 @@ namespace NMonitoring {
                 c->OnStreamEnd();
             }
 
-        private:
             void ReadMetrics(
                     const TStringPool& labelNames,
                     const TStringPool& labelValues,
@@ -111,15 +136,15 @@ namespace NMonitoring {
                     c->OnMemOnly(ReadFixed<ui8>() & 0x01);
 
                     auto metricNameValueIndex = std::numeric_limits<ui32>::max();
-                    if (Header_.Version >= SV1_02) {
+                    if (Header_.Version == SV1_02) {
                         metricNameValueIndex = ReadVarint();
                     }
 
                     // (5.3) labels
                     ui32 labelsCount = ReadVarint();
-                    DECODE_ENSURE(Header_.Version >= SV1_02 || labelsCount > 0, "metric #" << i << " has no labels");
+                    DECODE_ENSURE(Header_.Version == SV1_02 || labelsCount > 0, "metric #" << i << " has no labels");
                     c->OnLabelsBegin();
-                    if (Header_.Version >= SV1_02) {
+                    if (Header_.Version == SV1_02) {
                         c->OnLabel(MetricNameLabel_, labelValues.Get(metricNameValueIndex));
                     }
                     ReadLabels(labelNames, labelValues, labelsCount, c);
@@ -271,6 +296,26 @@ namespace NMonitoring {
 
             inline ui32 ReadVarint() {
                 return ReadVarUInt32(In_);
+            }
+
+            std::pair<TVector<char>, TVector<std::pair<ui32, ui32>>> ReadLengthDelimitedStringPool(ui32 count) {
+                TVector<char> storage;
+                TVector<std::pair<ui32, ui32>> segments;
+                segments.reserve(count);
+
+                for (ui32 i = 0; i < count; i++) {
+                    ui32 len = ReadVarint();
+                    ui32 offset = static_cast<ui32>(storage.size());
+                    storage.resize(offset + len);
+                    if (len > 0) {
+                        size_t readBytes = In_->Load(storage.data() + offset, len);
+                        DECODE_ENSURE(readBytes == len, "not enough data to read string #" << i
+                            << " (expected " << len << " bytes, got " << readBytes << ")");
+                    }
+                    segments.emplace_back(offset, len);
+                }
+
+                return {std::move(storage), std::move(segments)};
             }
 
         private:

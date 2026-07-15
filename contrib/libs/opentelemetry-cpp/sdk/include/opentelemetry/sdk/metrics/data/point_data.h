@@ -141,6 +141,8 @@ public:
   // Default constructor
   Base2ExponentialHistogramPointData() = default;
 
+  ~Base2ExponentialHistogramPointData() = default;
+
   // Members
   double sum_            = {};
   double min_            = {};
@@ -161,10 +163,12 @@ class DropPointData
 {
 public:
   // TODO: remove ctors and initializers when GCC<5 stops shipping on Ubuntu
-  DropPointData(DropPointData &&)            = default;
-  DropPointData(const DropPointData &)       = default;
-  DropPointData()                            = default;
-  DropPointData &operator=(DropPointData &&) = default;
+  DropPointData(DropPointData &&)                 = default;
+  DropPointData(const DropPointData &)            = default;
+  DropPointData()                                 = default;
+  DropPointData &operator=(const DropPointData &) = default;
+  DropPointData &operator=(DropPointData &&)      = default;
+  ~DropPointData()                                = default;
 };
 
 }  // namespace metrics

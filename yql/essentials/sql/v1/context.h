@@ -4,8 +4,9 @@
 #include "sql.h"
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_warning.h>
+#include <yql/essentials/core/langver/feature.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/cluster_mapping.h>
 
@@ -18,6 +19,8 @@
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 
+#include <utility>
+
 namespace NSQLTranslationV1 {
 inline bool IsAnonymousName(const TString& name) {
     return name == "$_";
@@ -28,9 +31,9 @@ inline bool IsStreamingService(const TString& service) {
 }
 
 struct TNodeWithUsageInfo: public TThrRefBase {
-    explicit TNodeWithUsageInfo(const TNodePtr& node, TPosition namePos, int level)
-        : Node(node)
-        , NamePos(namePos)
+    explicit TNodeWithUsageInfo(TNodePtr node, TPosition namePos, int level)
+        : Node(std::move(node))
+        , NamePos(std::move(namePos))
         , Level(level)
     {
     }
@@ -55,6 +58,7 @@ struct TScopedState: public TThrRefBase {
     bool WarnUntypedStringLiterals = false;
     bool SimplePgByDefault = false;
     TNamedNodesMap NamedNodes;
+    THashSet<std::pair</*prefix=*/TString, /*pragma=*/TString>> ActivePragmas;
 
     struct TLocal {
         TVector<std::pair<TString, TDeferredAtom>> UsedClusters;
@@ -87,7 +91,9 @@ enum class EColumnRefState {
     MatchRecognizeDefineAggregate,
 };
 
-enum class EYqlSelectMode {
+using NSQLTranslation::EYqlSelect;
+
+enum class EFlattenAndAggrExprsPersistence {
     Disable,
     Auto,
     Force,
@@ -95,12 +101,12 @@ enum class EYqlSelectMode {
 
 class TContext {
 public:
-    TContext(const TLexers& lexers,
-             const TParsers& parsers,
+    TContext(TLexers lexers,
+             TParsers parsers,
              const NSQLTranslation::TTranslationSettings& settings,
-             const NSQLTranslation::TSQLHints& hints,
+             NSQLTranslation::TSQLHints hints,
              NYql::TIssues& issues,
-             const TString& query = {});
+             TString query = {});
 
     virtual ~TContext();
 
@@ -194,7 +200,7 @@ public:
     TString AddSimpleUdf(const TString& udf);
     void SetPackageVersion(const TString& packageName, ui32 version);
 
-    bool IsStreamingService(const TStringBuf service) const;
+    bool IsStreamingService(TStringBuf service) const;
 
     bool CheckColumnReference(TPosition pos, const TString& name) {
         const bool allowed = GetColumnReferenceState() != EColumnRefState::Deny;
@@ -251,30 +257,39 @@ public:
         return MatchRecognizeAggregations_;
     }
 
+    bool IsAnyUnusedHintForToken(NYql::TPosition tokenPos, std::function<bool(NSQLTranslation::TSQLHint)> pred);
+
     TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
+
+    // `if ( ret.error()    ) an error issued`
+    // `if (!ret.error()    ) hint not found`
+    // `if ( ret.has_value()) hint is returned`
+    std::expected<NSQLTranslation::TSQLHint, bool> PullHintForToken(NYql::TPosition tokenPos, TStringBuf name);
+
+    TVector<NSQLTranslation::TSQLHint> PullHintForToken(
+        NYql::TPosition tokenPos,
+        std::function<bool(NSQLTranslation::TSQLHint)> pred);
+
     bool WarnUnusedHints();
 
     TScopedStatePtr CreateScopedState() const;
 
-    EYqlSelectMode GetYqlSelectMode() const {
+    EYqlSelect GetYqlSelectMode() const {
         return YqlSelectMode_;
     }
 
-    void SetYqlSelectMode(EYqlSelectMode mode) {
+    void SetYqlSelectMode(EYqlSelect mode) {
         YqlSelectMode_ = mode;
-        if (YqlSelectMode_ != EYqlSelectMode::Disable) {
+        if (YqlSelectMode_ != EYqlSelect::Disable) {
             DeriveColumnOrder = true;
         }
     }
 
-    bool EnsureBackwardCompatibleFeatureAvailable(
-        TPosition position,
-        TStringBuf feature,
-        NYql::TLangVersion version);
+    bool IsAvailable(const NYql::TFeature& feature) const;
+
+    bool EnsureAvailable(TPosition position, const NYql::TFeature& feature);
 
 private:
-    bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const;
-
     IOutputStream& MakeIssue(
         NYql::ESeverity severity,
         NYql::TIssueCode code,
@@ -309,7 +324,7 @@ private:
     TVector<TMatchRecognizeAggregation> MatchRecognizeAggregations_;
     TString NoColumnErrorContext_ = "in current scope";
     TVector<TBlocks*> CurrentBlocks_;
-    EYqlSelectMode YqlSelectMode_ = EYqlSelectMode::Disable;
+    EYqlSelect YqlSelectMode_ = EYqlSelect::Disable;
 
 public:
     THashMap<TString, std::pair<TPosition, TNodePtr>> Variables;
@@ -414,11 +429,12 @@ public:
     bool FailOnGroupByExprOverride = false;
     bool EmitUnionMerge = false;
     bool OptimizeSimpleIlike = false;
-    bool PersistableFlattenAndAggrExprs = false;
+    EFlattenAndAggrExprsPersistence FlattenAndAggrExprsPersistence =
+        EFlattenAndAggrExprsPersistence::Disable;
     bool DisableLegacyNotNull = false;
     bool DebugPositions = false;
-    bool StrictWarningAsError = false;
-    bool WindowNewPipeline = false;
+    bool WindowNewPipeline = true;
+    bool YqlSelectAllowUnnamedGroupByExpr = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
     TMaybe<TString> Engine;
@@ -470,10 +486,11 @@ TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString&
 
 class TTranslation {
 protected:
-    typedef TSet<ui32> TSetType;
+    using TSetType = TSet<ui32>;
 
 protected:
     explicit TTranslation(TContext& ctx);
+    TTranslation(const TTranslation&) = default;
 
 public:
     TContext& Context();
@@ -487,7 +504,7 @@ public:
         return IdContent(Ctx_, Token(token));
     }
 
-    TString Identifier(const TString& str) const {
+    [[nodiscard]] TString Identifier(const TString& str) const {
         return IdContent(Ctx_, str);
     }
 
@@ -498,21 +515,15 @@ public:
     TString PushNamedNode(TPosition namePos, const TString& name, TNodePtr node);
     TString PushNamedAtom(TPosition namePos, const TString& name);
     bool PopNamedNode(const TString& name);
-    bool WarnUnusedNodes() const;
+    [[nodiscard]] bool WarnUnusedNodes() const;
 
     template <typename TNode>
     void AltNotImplemented(const TString& ruleName, const TNode& node) {
         AltNotImplemented(ruleName, node.Alt_case(), node, TNode::descriptor());
     }
 
-    template <typename TNode>
-    TString AltDescription(const TNode& node) const {
-        return AltDescription(node, node.Alt_case(), TNode::descriptor());
-    }
-
 protected:
     void AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr);
-    TString AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const;
 
 protected:
     TContext& Ctx_;

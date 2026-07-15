@@ -1,0 +1,40 @@
+LIBRARY(commands)
+
+SRCS(
+    generate.cpp
+    ydb_root.cpp
+    ydb_service_experimental_fq.cpp
+    ydb_service_experimental.cpp
+    ydb_sql.cpp
+)
+
+PEERDIR(
+    contrib/libs/apache/arrow
+    contrib/libs/protobuf
+    library/cpp/json
+    library/cpp/protobuf/json
+    library/cpp/protobuf/util
+    library/cpp/threading/future
+    ydb/apps/ydb/commands
+    ydb/public/api/protos
+    ydb/public/lib/fq
+    ydb/public/lib/json_value
+    ydb/public/lib/operation_id
+    ydb/public/lib/ydb_cli/commands
+    ydb/public/lib/ydb_cli/common
+    ydb/public/lib/ydb_cli/dump
+    ydb/public/lib/ydb_cli/import
+    ydb/public/lib/ydb_cli/topic
+    ydb/public/lib/yson_value
+    ydb/public/sdk/cpp/src/client/draft
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/topic
+    yql/essentials/public/issue
+)
+
+END()

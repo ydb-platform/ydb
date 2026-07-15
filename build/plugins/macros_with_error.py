@@ -5,12 +5,14 @@ import _common
 import ymake
 
 
-def onmacros_with_error(unit, *args):
+@ymake.macro
+def MACROS_WITH_ERROR(unit: ymake.Unit, *args: tuple[str, ...]):
     sys.stderr.write('This macros will fail\n')
     raise Exception('Expected fail in MACROS_WITH_ERROR')
 
 
-def onrestrict_path(unit, *args):
+@ymake.macro
+def RESTRICT_PATH(unit: ymake.Unit, *args: tuple[str, ...]):
     if args:
         if 'MSG' in args:
             pos = args.index('MSG')
@@ -25,14 +27,16 @@ def onrestrict_path(unit, *args):
             ymake.report_configure_error(error_msg)
 
 
-def onassert(unit, *args):
+@ymake.macro
+def ASSERT(unit: ymake.Unit, *args: tuple[str, ...]):
     val = unit.get(args[0])
     if val and val.lower() == "no":
         msg = ' '.join(args[1:])
         ymake.report_configure_error(msg)
 
 
-def onvalidate_in_dirs(unit, *args):
+@ymake.macro
+def VALIDATE_IN_DIRS(unit: ymake.Unit, *args: tuple[str, ...]):
     files_var = args[0]
     pattern = args[1]
     no_srcdir = args[2] == '--'
@@ -58,3 +62,37 @@ def onvalidate_in_dirs(unit, *args):
                     f"{pfx}'{pat}' in [[imp]]DIRS[[rst]] argument is prohibited. Seen [[unimp]]{dir}[[rst]]"
                 )
                 unit.set([files_var, ""])
+
+
+@ymake.macro
+def _ASSERT_NO_YAMAKE(unit: ymake.Unit, *args: tuple[str, ...]):
+    """
+    @usage: _ASSERT_NO_YAMAKE(<files> [MSG <message>])
+
+    Check that no ya.make files are found in <files> list.
+    Macro is primarily targeted to recursive globs validation and so made internal as `_GLOB` macro is.
+
+    - Optional MSG allows overriding the reason
+    - Macro is incompatible with `_LATE_GLOB`
+
+    @example:
+    ```
+    macro NO_MODULES_INSIDE() {
+        _GLOB(YAMAKES **/ya.make EXCLUDE ya.make)
+        _ASSERT_NO_YAMAKE($YAMAKES MSG no modules expected inside the current one)
+    }
+    ```
+    """
+
+    if args:
+        if 'MSG' in args:
+            pos = args.index('MSG')
+            files, msg = args[:pos], args[pos + 1 :]
+            msg = ' '.join(msg)
+        else:
+            files, msg = args, 'prohibited from recursive glob match'
+
+        found = next((f for f in files if f.endswith('ya.make')), None)
+        if found:
+            error_msg = "unexpected ya.make: '[[imp]]{}[[rst]]' - {}".format(found, msg)
+            ymake.report_configure_error(error_msg)

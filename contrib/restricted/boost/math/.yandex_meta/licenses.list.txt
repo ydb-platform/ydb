@@ -176,6 +176,12 @@ DEALINGS IN THE SOFTWARE.
 
 
 ====================COPYRIGHT====================
+//           Copyright Maksym Zhelyeznyakov 2025-2026.
+// Distributed under the Boost Software License, Version 1.0.
+//      (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
 //           Copyright Matthew Pulver 2018 - 2019.
 // Distributed under the Boost Software License, Version 1.0.
 //      (See accompanying file LICENSE_1_0.txt or copy at

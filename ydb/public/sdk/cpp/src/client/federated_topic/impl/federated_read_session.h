@@ -46,7 +46,7 @@ public:
 
         using T = std::decay_t<TEvent>;
         if constexpr (std::is_same_v<T, NTopic::TSessionClosedEvent>) {
-            return Federate(std::move(event), std::move(fps));
+            return Federate(std::forward<TEvent>(event), std::move(fps));
         } else if constexpr (std::is_same_v<T, NTopic::TReadSessionEvent::TEvent>) {
             psPtr = std::visit([](auto&& arg) -> NTopic::TPartitionSession::TPtr {
                 using T = std::decay_t<decltype(arg)>;
@@ -58,7 +58,7 @@ public:
             }, event);
 
             if (!psPtr) {  // TSessionClosedEvent
-                return Federate(std::move(event), std::move(fps));
+                return Federate(std::forward<TEvent>(event), std::move(fps));
             }
         } else {
             psPtr = event.GetPartitionSession();
@@ -71,12 +71,12 @@ public:
             }
             fps = FederatedPartitionSessions[psPtr.Get()];
 
-            if constexpr (std::is_same_v<TEvent, NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>) {
+            if constexpr (std::is_same_v<T, NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>) {
                 FederatedPartitionSessions.erase(psPtr.Get());
             }
         }
 
-        return Federate(std::move(event), std::move(fps));
+        return Federate(std::forward<TEvent>(event), std::move(fps));
     }
 
     template <typename TEvent>
@@ -95,11 +95,11 @@ public:
             using T = std::decay_t<decltype(arg)>;
             std::optional<TReadSessionEvent::TEvent> ev;
             if constexpr (std::is_same_v<T, NTopic::TReadSessionEvent::TDataReceivedEvent>) {
-                ev = TReadSessionEvent::TDataReceivedEvent(std::move(arg), std::move(fps));
+                ev = TReadSessionEvent::TDataReceivedEvent(std::forward<decltype(arg)>(arg), std::move(fps));
             } else if constexpr (std::is_same_v<T, NTopic::TSessionClosedEvent>) {
-                ev = std::move(arg);
+                ev = std::forward<decltype(arg)>(arg);
             } else {
-                ev = TReadSessionEvent::TFederated(std::move(arg), std::move(fps));
+                ev = TReadSessionEvent::TFederated(std::forward<decltype(arg)>(arg), std::move(fps));
             }
             return *ev;
         },

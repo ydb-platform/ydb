@@ -2,7 +2,7 @@ YQL_UDF_CONTRIB(pire_udf)
     
     YQL_ABI_VERSION(
         2
-        27
+        46
         0
     )
 

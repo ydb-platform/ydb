@@ -23,7 +23,8 @@ public:
         : ShardingInfo(shardingInfo)
         , SinceSnapshot(sinceSnapshot)
         , SnapshotVersion(version)
-        , PathId(pathId) {
+        , PathId(pathId)
+    {
         AFL_VERIFY(!!ShardingInfo);
     }
 };
@@ -37,8 +38,10 @@ private:
 
     public:
         TSchemaInfoByVersion(const ISnapshotSchema::TPtr& schema)
-            : Schema(schema) {
+            : Schema(schema)
+        {
         }
+
         void AddIgnoreSchemaVersionTo(const ui64 to) {
             AFL_VERIFY(!IgnoreToVersion);
             IgnoreToVersion = to;
@@ -183,6 +186,17 @@ public:
     ISnapshotSchema::TPtr GetLastSchema() const {
         Y_ABORT_UNLESS(!SnapshotByVersion.empty());
         return SnapshotByVersion.rbegin()->second.GetSchema();
+    }
+
+    // Exclusive upper bound (in snapshots) of the range in which `version` is the active schema:
+    // the snapshot at which the first schema strictly newer than `version` was introduced.
+    // Returns nullopt when `version` is the latest known schema (active with no upper bound).
+    std::optional<TSnapshot> GetNextSchemaSnapshot(const ui64 version) const {
+        auto it = SnapshotByVersion.upper_bound(version);
+        if (it == SnapshotByVersion.end()) {
+            return std::nullopt;
+        }
+        return it->second.GetSchema()->GetSnapshot();
     }
 
     bool IsEmpty() const {

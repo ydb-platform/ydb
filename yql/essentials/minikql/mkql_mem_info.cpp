@@ -9,7 +9,7 @@ namespace NKikimr::NMiniKQL {
 namespace {
 
 #if !defined(NDEBUG)
-static constexpr char COLLECT_STACK_TRACE_KEY[] = "YQL_MKQL_COLLECT_STACKTRACES_FOR_ALLOCATIONS";
+constexpr char COLLECT_STACK_TRACE_KEY[] = "YQL_MKQL_COLLECT_STACKTRACES_FOR_ALLOCATIONS";
 
 bool ShouldCollectStackTracesForAllocations() {
     static bool Result = []() {
@@ -80,7 +80,7 @@ void TMemoryUsageInfo::Take(const void* mem, ui64 size, TMkqlLocation location) 
             AllocationsMap_.erase(it);
         }
     }
-    auto res = AllocationsMap_.emplace(mem, TAllocationInfo{size, WrapLocation(std::move(location)), false});
+    auto res = AllocationsMap_.emplace(mem, TAllocationInfo{.Size = size, .Location = WrapLocation(location), .IsDeleted = false});
     Y_DEBUG_ABORT_UNLESS(res.second, "Duplicate allocation at: %p, "
                                      "already allocated at: %s", mem, LocationToString(res.first->second.Location).c_str());
     // Clog << Title_ << " take: " << size << " -> " << mem << " " << AllocationsMap_.size() << Endl;

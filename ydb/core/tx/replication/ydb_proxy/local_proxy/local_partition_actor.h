@@ -6,11 +6,10 @@
 namespace NKikimr::NReplication {
 
 using namespace NActors;
-using namespace NSchemeCache;
 
-enum class EWakeupType : ui64 {
+enum class EWakeupType: ui64 {
     Describe,
-    InitOffset
+    InitOffset,
 };
 
 class ILocalTopicPartitionActor {
@@ -28,19 +27,19 @@ protected:
 class TBaseLocalTopicPartitionActor
     : public TActorBootstrapped<TBaseLocalTopicPartitionActor>
     , public ILocalTopicPartitionActor
-    , private TSchemeCacheHelpers
+    , private NSchemeCache::TSchemeCacheHelpers
 {
     using TThis = TBaseLocalTopicPartitionActor;
     static constexpr size_t MaxAttempts = 5;
 
 public:
-    TBaseLocalTopicPartitionActor(const std::string& database, const std::string&& topicPath, const ui32 partitionId);
+    TBaseLocalTopicPartitionActor(const std::string& database, const std::string& topicPath, ui32 partitionId);
     void Bootstrap();
 
 protected:
     void DoDescribe(const TString& topicPath);
 
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    void Handle(TEvNavigateResult::TPtr& ev);
     void HandleOnDescribe(TEvents::TEvWakeup::TPtr& ev);
 
     TCheckFailFunc DoRetryDescribe();

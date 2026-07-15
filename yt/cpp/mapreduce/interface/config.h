@@ -186,6 +186,9 @@ struct TConfig
     int ReadRetryCount;
     int StartOperationRetryCount;
 
+    // The CheckClusterLiveness operation should be retried, but fewer times than other operations.
+    int CheckLivenessRetryCount;
+
     /// @brief Period for checking status of running operation.
     TDuration OperationTrackerPollPeriod = TDuration::Seconds(5);
 
@@ -209,7 +212,7 @@ struct TConfig
 
     /// Defines replication factor that is used for files that are uploaded to YT
     /// to use them in operations.
-    int FileCacheReplicationFactor = 10;
+    TPatchableField<i64> FileCacheReplicationFactor = TPatchableField<i64>("file_cache_replication_factor", 10);
 
     /// @brief Used when waiting for other process which uploads the same file to the file cache.
     ///
@@ -238,6 +241,18 @@ struct TConfig
     // Testing options, should never be used in user programs.
     bool UseAbortableResponse = false;
     bool EnableDebugMetrics = false;
+
+    /// @brief Simulate a response that halts (stops sending data) mid-stream.
+    ///
+    /// Testing options, should never be used in user programs.
+    /// When enabled, the HTTP response will be truncated after @ref HaltingResponseBytesLimit bytes.
+    bool UseHaltingResponse = false;
+
+    /// @brief Maximum number of bytes sent before the response is halted.
+    ///
+    /// Testing options, should never be used in user programs.
+    /// Only meaningful when @ref UseHaltingResponse is true.
+    i64 HaltingResponseBytesLimit = 64 * 1024;
 
     //
     // There is optimization used with local YT that enables to skip binary upload and use real binary path.
@@ -278,6 +293,15 @@ struct TConfig
 
     /// Pattern for generating operation web link in |GetOperationWebInterfaceUrl|.
     TPatchableField<TString> OperationLinkPattern = TPatchableField<TString>("operation_link_pattern", "https://yt.yandex-team.ru/{cluster_ui_host}/operations/{operation_id}");
+
+    /// Allow to create trace_id on client side and propogate with request
+    bool EnableClientTracing = true;
+
+    /// Use a separate connection for lightweight control requests.
+    /// If this option is set to true, a separate connection is opened for lightweight requests (for example, ping_transaction).
+    /// This is needed so that important lightweight requests do not wait for heavy requests, such as file writes, to complete.
+    /// However, using this option increases the number of open TCP connections.
+    bool EnableControlMultiplexingBand = false;
 
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);

@@ -1,6 +1,6 @@
 USE plato;
 
-PRAGMA yt.EnableFuseMapToMapReduce;
+PRAGMA yt.FuseMapToMapReduce="normal";
 PRAGMA yt.JobBlockInput;
 
 SELECT

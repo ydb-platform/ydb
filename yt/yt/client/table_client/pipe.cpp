@@ -7,34 +7,51 @@
 
 #include <yt/yt/core/misc/ring_queue.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
+
 namespace NYT::NTableClient {
 
+using namespace NThreading;
 using NChunkClient::NProto::TDataStatistics;
-using NCrypto::TMD5Hash;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TSchemafulPipeBufferTag
 { };
 
-struct TSchemafulPipe::TData
-    : public TRefCounted
+struct TSchemafulPipeData;
+using TSchemafulPipeDataPtr = TIntrusivePtr<TSchemafulPipeData>;
+
+DECLARE_REFCOUNTED_CLASS(TSchemafulPipeReader);
+DECLARE_REFCOUNTED_CLASS(TSchemafulPipeWriter);
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TSchemafulPipeData final
 {
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock);
 
-    const TRowBufferPtr RowBuffer;
-    TRingQueue<TUnversionedRow> RowQueue;
+    const IMemoryChunkProviderPtr ChunkProvider;
+    const std::optional<int> MaxFlushBatchCount;
+
+    TRingQueue<TSharedRange<TUnversionedRow>> FlushedBatches;
 
     TPromise<void> ReaderReadyEvent;
     TPromise<void> WriterReadyEvent = NewPromise<void>();
 
     int RowsWritten = 0;
     int RowsRead = 0;
+    bool WriterBlocked = false;
     bool WriterClosed = false;
     bool Failed = false;
 
-    explicit TData(IMemoryChunkProviderPtr chunkProvider)
-        : RowBuffer(New<TRowBuffer>(TSchemafulPipeBufferTag(), std::move(chunkProvider)))
+    explicit TSchemafulPipeData(IMemoryChunkProviderPtr chunkProvider, std::optional<int> maxFlushBatchCount)
+        : ChunkProvider(std::move(chunkProvider))
+        , MaxFlushBatchCount(maxFlushBatchCount)
     {
         ResetReaderReadyEvent();
     }
@@ -42,7 +59,16 @@ struct TSchemafulPipe::TData
     void ResetReaderReadyEvent()
     {
         ReaderReadyEvent = NewPromise<void>();
-        ReaderReadyEvent.OnCanceled(BIND(&TSchemafulPipe::TData::HandleCancel, MakeWeak(this)));
+        ReaderReadyEvent.OnCanceled(BIND(&TSchemafulPipeData::HandleCancel, MakeWeak(this)));
+    }
+
+    TPromise<void> ResetWriterReadyEvent()
+    {
+        YT_ASSERT_SPINLOCK_AFFINITY(SpinLock);
+        auto oldEvent = std::move(WriterReadyEvent);
+        WriterReadyEvent = NewPromise<void>();
+        WriterBlocked = true;
+        return oldEvent;
     }
 
     void HandleCancel(const TError& error)
@@ -60,12 +86,14 @@ struct TSchemafulPipe::TData
 
         {
             auto guard = Guard(SpinLock);
-            if (WriterClosed || Failed)
+            if (WriterClosed || Failed) {
                 return;
+            }
 
             Failed = true;
             readerReadyEvent = ReaderReadyEvent;
             writerReadyEvent = WriterReadyEvent;
+            WriterBlocked = false;
         }
 
         readerReadyEvent.TrySet(error);
@@ -75,47 +103,74 @@ struct TSchemafulPipe::TData
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSchemafulPipe::TReader
+class TSchemafulPipeReader
     : public ISchemafulUnversionedReader
 {
 public:
-    explicit TReader(TDataPtr data)
+    explicit TSchemafulPipeReader(TSchemafulPipeDataPtr data)
         : Data_(std::move(data))
     { }
 
     IUnversionedRowBatchPtr Read(const TRowBatchReadOptions& options) override
     {
-        std::vector<TUnversionedRow> rows;
-        rows.reserve(options.MaxRowsPerRead);
-        i64 dataWeight = 0;
+        TSharedRange<TUnversionedRow> readRange;
+        TPromise<void> writerReadyEvent;
 
         {
             auto guard = Guard(Data_->SpinLock);
 
-            if (Data_->WriterClosed && Data_->RowsWritten == Data_->RowsRead) {
+            if (Data_->Failed) {
+                ReadyEvent_ = Data_->ReaderReadyEvent.ToFuture();
+            } else if (Data_->WriterClosed && Data_->RowsWritten == Data_->RowsRead) {
                 return nullptr;
-            }
+            } else {
+                if (CurrentBatch_.Empty() && !Data_->FlushedBatches.empty()) {
+                    CurrentBatch_ = std::move(Data_->FlushedBatches.front());
+                    Data_->FlushedBatches.pop();
 
-            if (!Data_->Failed) {
-                auto& rowQueue = Data_->RowQueue;
-                while (!rowQueue.empty() &&
-                    std::ssize(rows) < options.MaxRowsPerRead &&
-                    dataWeight < options.MaxDataWeightPerRead)
-                {
-                    auto row = rowQueue.front();
-                    rowQueue.pop();
-                    dataWeight += GetDataWeight(row);
-                    rows.push_back(row);
-                    ++Data_->RowsRead;
+                    if (Data_->WriterBlocked &&
+                        Data_->MaxFlushBatchCount &&
+                        std::ssize(Data_->FlushedBatches) < *Data_->MaxFlushBatchCount)
+                    {
+                        Data_->WriterBlocked = false;
+                        writerReadyEvent = std::move(Data_->WriterReadyEvent);
+                        Data_->WriterReadyEvent = NewPromise<void>();
+                    }
+                }
+
+                if (!CurrentBatch_.Empty()) {
+                    i64 dataWeight = 0;
+                    auto it = CurrentBatch_.begin();
+                    while (it != CurrentBatch_.end() &&
+                        std::distance(CurrentBatch_.begin(), it) < options.MaxRowsPerRead &&
+                        dataWeight < options.MaxDataWeightPerRead)
+                    {
+                        dataWeight += GetDataWeight(*it);
+                        ++it;
+                    }
+
+                    auto rowCount = std::distance(CurrentBatch_.begin(), it);
+                    Data_->RowsRead += rowCount;
+
+                    if (it == CurrentBatch_.end()) {
+                        readRange = std::move(CurrentBatch_);
+                    } else {
+                        readRange = CurrentBatch_.Slice(CurrentBatch_.begin(), it);
+                        CurrentBatch_ = CurrentBatch_.Slice(it, CurrentBatch_.end());
+                    }
                 }
             }
 
-            if (rows.empty()) {
+            if (!Data_->Failed && readRange.Empty()) {
                 ReadyEvent_ = Data_->ReaderReadyEvent.ToFuture();
             }
         }
 
-        return CreateBatchFromUnversionedRows(MakeSharedRange(std::move(rows), MakeStrong(this)));
+        if (writerReadyEvent) {
+            writerReadyEvent.TrySet(TError());
+        }
+
+        return CreateBatchFromUnversionedRows(std::move(readRange));
     }
 
     TFuture<void> GetReadyEvent() const override
@@ -125,12 +180,12 @@ public:
 
     TDataStatistics GetDataStatistics() const override
     {
-        return DataStatistics_;
+        return DataStatistics_.Load();
     }
 
     void SetDataStatistics(TDataStatistics dataStatistics)
     {
-        DataStatistics_ = std::move(dataStatistics);
+        DataStatistics_.Store(std::move(dataStatistics));
     }
 
     NChunkClient::TCodecStatistics GetDecompressionStatistics() const override
@@ -149,20 +204,26 @@ public:
     }
 
 private:
-    const TDataPtr Data_;
-    TDataStatistics DataStatistics_;
+    const TSchemafulPipeDataPtr Data_;
+
+    TAtomicObject<TDataStatistics> DataStatistics_;
 
     TFuture<void> ReadyEvent_ = OKFuture;
+
+    TSharedRange<TUnversionedRow> CurrentBatch_;
 };
+
+DEFINE_REFCOUNTED_TYPE(TSchemafulPipeReader);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSchemafulPipe::TWriter
+class TSchemafulPipeWriter
     : public IUnversionedRowsetWriter
 {
 public:
-    explicit TWriter(TDataPtr data)
+    explicit TSchemafulPipeWriter(TSchemafulPipeDataPtr data)
         : Data_(std::move(data))
+        , RowBuffer_(New<TRowBuffer>(TSchemafulPipeBufferTag(), Data_->ChunkProvider))
     { }
 
     TFuture<void> Close() override
@@ -180,6 +241,11 @@ public:
 
             if (!Data_->Failed) {
                 doClose = true;
+                if (!Rows_.empty()) {
+                    Data_->FlushedBatches.push(MakeSharedRange(
+                        std::move(Rows_),
+                        std::move(RowBuffer_)));
+                }
             }
 
             readerReadyEvent = Data_->ReaderReadyEvent;
@@ -196,10 +262,22 @@ public:
 
     bool Write(TRange<TUnversionedRow> rows) override
     {
-        // Copy data (no lock).
-        auto capturedRows = Data_->RowBuffer->CaptureRows(rows);
+        if (rows.empty()) {
+            return true;
+        }
 
-        // Enqueue rows (with lock).
+        for (auto row : rows) {
+            Rows_.push_back(RowBuffer_->CaptureRow(row));
+        }
+
+        const bool needsFlush = RowBuffer_->GetSize() >= FlushDataWeight;
+
+        // Preallocate the next buffer outside the spinlock.
+        TRowBufferPtr nextRowBuffer;
+        if (needsFlush) {
+            nextRowBuffer = New<TRowBuffer>(TSchemafulPipeBufferTag(), Data_->ChunkProvider);
+        }
+
         TPromise<void> readerReadyEvent;
 
         {
@@ -211,27 +289,52 @@ public:
                 return false;
             }
 
-            for (auto row : capturedRows) {
-                Data_->RowQueue.push(row);
-                ++Data_->RowsWritten;
-            }
+            Data_->RowsWritten += std::ssize(rows);
 
-            readerReadyEvent = std::move(Data_->ReaderReadyEvent);
-            Data_->ResetReaderReadyEvent();
+            if (needsFlush) {
+                Data_->FlushedBatches.push(MakeSharedRange(
+                    std::move(Rows_),
+                    std::move(RowBuffer_)));
+                RowBuffer_ = std::move(nextRowBuffer);
+
+                readerReadyEvent = std::move(Data_->ReaderReadyEvent);
+                Data_->ResetReaderReadyEvent();
+
+                if (Data_->MaxFlushBatchCount &&
+                    std::ssize(Data_->FlushedBatches) > *Data_->MaxFlushBatchCount)
+                {
+                    if (!Data_->WriterBlocked) {
+                        Data_->ResetWriterReadyEvent();
+                    }
+                    readerReadyEvent.TrySet(TError());
+                    return false;
+                }
+            }
         }
 
-        // Signal readers.
-        readerReadyEvent.TrySet(TError());
+        // Signal readers only when a new batch was flushed.
+        if (readerReadyEvent) {
+            readerReadyEvent.TrySet(TError());
+        }
 
         return true;
     }
 
     TFuture<void> GetReadyEvent() override
     {
-        // TODO(babenko): implement backpressure from reader
         auto guard = Guard(Data_->SpinLock);
-        YT_VERIFY(Data_->Failed);
-        return Data_->WriterReadyEvent;
+        if (Data_->Failed) {
+            return Data_->WriterReadyEvent.ToFuture();
+        }
+        if (Data_->MaxFlushBatchCount &&
+            std::ssize(Data_->FlushedBatches) > *Data_->MaxFlushBatchCount)
+        {
+            if (!Data_->WriterBlocked) {
+                Data_->ResetWriterReadyEvent();
+            }
+            return Data_->WriterReadyEvent.ToFuture();
+        }
+        return OKFuture;
     }
 
     std::optional<TRowsDigest> GetDigest() const override
@@ -240,73 +343,65 @@ public:
     }
 
 private:
-    const TDataPtr Data_;
+    const TSchemafulPipeDataPtr Data_;
+
+    TRowBufferPtr RowBuffer_;
+    std::vector<TUnversionedRow> Rows_;
 };
+
+DEFINE_REFCOUNTED_TYPE(TSchemafulPipeWriter);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSchemafulPipe::TImpl
-    : public TRefCounted
+class TSchemafulPipe
+    : public ISchemafulPipe
 {
 public:
-    explicit TImpl(IMemoryChunkProviderPtr chunkProvider)
-        : Data_(New<TData>(std::move(chunkProvider)))
-        , Reader_(New<TReader>(Data_))
-        , Writer_(New<TWriter>(Data_))
+    TSchemafulPipe(IMemoryChunkProviderPtr chunkProvider, std::optional<int> maxFlushBatchCount)
+        : Data_(New<TSchemafulPipeData>(std::move(chunkProvider), maxFlushBatchCount))
+        , Reader_(New<TSchemafulPipeReader>(Data_))
+        , Writer_(New<TSchemafulPipeWriter>(Data_))
     { }
 
-    ISchemafulUnversionedReaderPtr GetReader() const
+    ISchemafulUnversionedReaderPtr GetReader() const final
     {
         return Reader_;
     }
 
-    IUnversionedRowsetWriterPtr GetWriter() const
+    IUnversionedRowsetWriterPtr GetWriter() const final
     {
         return Writer_;
     }
 
-    void Fail(const TError& error)
+    void Fail(const TError& error) final
     {
         Data_->Fail(error);
     }
 
-    void SetDataStatistics(TDataStatistics dataStatistics)
+    void SetReaderDataStatistics(TDataStatistics dataStatistics) final
     {
         Reader_->SetDataStatistics(std::move(dataStatistics));
     }
 
 private:
-    TDataPtr Data_;
-    TReaderPtr Reader_;
-    TWriterPtr Writer_;
+    const TSchemafulPipeDataPtr Data_;
+    const TSchemafulPipeReaderPtr Reader_;
+    const TSchemafulPipeWriterPtr Writer_;
 };
+
+DEFINE_REFCOUNTED_TYPE(TSchemafulPipe);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSchemafulPipe::TSchemafulPipe(IMemoryChunkProviderPtr chunkProvider)
-    : Impl_(New<TImpl>(std::move(chunkProvider)))
-{ }
+} // namespace
 
-TSchemafulPipe::~TSchemafulPipe() = default;
+////////////////////////////////////////////////////////////////////////////////
 
-ISchemafulUnversionedReaderPtr TSchemafulPipe::GetReader() const
+ISchemafulPipePtr CreateSchemafulPipe(
+    IMemoryChunkProviderPtr chunkProvider,
+    std::optional<int> maxFlushBatchCount)
 {
-    return Impl_->GetReader();
-}
-
-IUnversionedRowsetWriterPtr TSchemafulPipe::GetWriter() const
-{
-    return Impl_->GetWriter();
-}
-
-void TSchemafulPipe::Fail(const TError& error)
-{
-    Impl_->Fail(error);
-}
-
-void TSchemafulPipe::SetDataStatistics(TDataStatistics dataStatistics)
-{
-    return Impl_->SetDataStatistics(std::move(dataStatistics));
+    return New<TSchemafulPipe>(std::move(chunkProvider), maxFlushBatchCount);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

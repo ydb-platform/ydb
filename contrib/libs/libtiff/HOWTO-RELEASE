@@ -44,7 +44,7 @@ Notes on releasing.
 3. Create doc/releases/vX.X.rst and add it to git with 'git add doc/releases/vX.X.rst'.
    Update doc/releases/index.rst to point to the new file
    Take ChangeLog entries and rst-ify in there.
-   Easist thing to do is take doc/releases/vX.(X-1).rst and use it as a template.
+   Easiest thing to do is take doc/releases/vX.(X-1).rst and use it as a template.
 
 4. Add vX.X.rst file to the list of 'rst_sources' files in the doc/Makefile.am.
 

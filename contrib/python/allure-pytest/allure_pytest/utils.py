@@ -7,10 +7,10 @@ from allure_commons.model2 import StatusDetails
 from allure_commons.types import LabelType
 from allure_pytest.stash import stashed
 
-ALLURE_DESCRIPTION_MARK = 'allure_description'
-ALLURE_DESCRIPTION_HTML_MARK = 'allure_description_html'
-ALLURE_LABEL_MARK = 'allure_label'
-ALLURE_LINK_MARK = 'allure_link'
+ALLURE_DESCRIPTION_MARK = "allure_description"
+ALLURE_DESCRIPTION_HTML_MARK = "allure_description_html"
+ALLURE_LABEL_MARK = "allure_label"
+ALLURE_LINK_MARK = "allure_link"
 ALLURE_UNIQUE_LABELS = [
     LabelType.SEVERITY,
     LabelType.FRAMEWORK,
@@ -34,11 +34,11 @@ class ParsedPytestNodeId:
     def __init__(self, nodeid):
         filepath, *class_names, function_segment = ensure_len(nodeid.split("::"), 2)
         self.filepath = filepath
-        self.path_segments = filepath.split('/')
+        self.path_segments = filepath.split("/")
         *parent_dirs, filename = ensure_len(self.path_segments, 1)
-        self.parent_package = '.'.join(parent_dirs)
+        self.parent_package = ".".join(parent_dirs)
         self.module = filename.rsplit(".", 1)[0]
-        self.package = '.'.join(filter(None, [self.parent_package, self.module]))
+        self.package = ".".join(filter(None, [self.parent_package, self.module]))
         self.class_names = class_names
         self.test_function = function_segment.split("[", 1)[0]
 
@@ -65,7 +65,7 @@ def allure_description(item):
     description = get_marker_value(item, ALLURE_DESCRIPTION_MARK)
     if description:
         return description
-    elif hasattr(item, 'function'):
+    elif hasattr(item, "function"):
         return item.function.__doc__
 
 
@@ -103,7 +103,7 @@ def allure_links(item):
 
 
 def format_allure_link(config, url, link_type):
-    pattern = dict(config.option.allure_link_pattern).get(link_type, '{}')
+    pattern = dict(config.option.allure_link_pattern).get(link_type, "{}")
     return pattern.format(url)
 
 
@@ -203,7 +203,7 @@ def get_status_details(exception_type, exception, exception_traceback):
 
 
 def get_pytest_report_status(pytest_report):
-    pytest_statuses = ('failed', 'passed', 'skipped')
+    pytest_statuses = ("failed", "passed", "skipped")
     statuses = (Status.FAILED, Status.PASSED, Status.SKIPPED)
     for pytest_status, status in zip(pytest_statuses, statuses):
         if getattr(pytest_report, pytest_status):

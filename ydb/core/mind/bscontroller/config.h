@@ -64,7 +64,7 @@ namespace NKikimr {
             TCowHolder<TMap<THostConfigId, THostConfigInfo>> HostConfigs;
             TCowHolder<TMap<TBoxId, TBoxInfo>> Boxes;
             TCowHolder<TMap<TBoxStoragePoolId, TStoragePoolInfo>> StoragePools;
-            TCowHolder<TMultiMap<TBoxStoragePoolId, TGroupId>> StoragePoolGroups;
+            TCowHolder<std::set<std::pair<TBoxStoragePoolId, TGroupId>>> StoragePoolGroups;
             TCowHolder<TMap<TGroupId, TBlobDepotDeleteQueueInfo>> BlobDepotDeleteQueue;
 
             // system-level configuration
@@ -148,6 +148,8 @@ namespace NKikimr {
             bool PushStaticGroupsToSelfHeal = false;
 
             TBridgeInfo::TPtr BridgeInfo;
+
+            THashMap<TVSlotId, ui64> PDiskGuidsForDeletedVSlots;
 
         public:
             TConfigState(TBlobStorageController &controller, const THostRecordMap &hostRecords, TInstant timestamp,
@@ -366,6 +368,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TStopPDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMovePDisk& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TPopulatePDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TUpdateBridgeGroupInfo& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReconfigureVirtualGroup& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TRecommissionGroups& cmd, TStatus& status);
@@ -373,6 +376,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TReadDDiskPool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDeleteDDiskPool& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMoveDDisk& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& status);
         };
 
     } // NBsController

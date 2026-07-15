@@ -88,9 +88,7 @@ class build_clib(Command):
         if not self.libraries:
             return
 
-        self.compiler = new_compiler(
-            compiler=self.compiler, dry_run=self.dry_run, force=self.force
-        )
+        self.compiler = new_compiler(compiler=self.compiler, force=self.force)
         customize_compiler(self.compiler)
 
         if self.include_dirs is not None:

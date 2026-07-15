@@ -1,4 +1,5 @@
 #include "datastreams_fixture.h"
+#include "sqs_xml_ut_helpers.h"
 
 #include <ydb/core/http_proxy/auth_actors.h>
 
@@ -11,27 +12,42 @@ THttpProxyTestMock::THttpProxyTestMock() = default;
 THttpProxyTestMock::~THttpProxyTestMock() = default;
 
 void THttpProxyTestMock::TearDown(NUnitTest::TTestContext&) {
-    Monitoring->Stop();
-    GRpcServer->Stop();
+    if (Monitoring) {
+        Monitoring->Stop();
+    }
+    if (GRpcServer) {
+        GRpcServer->Stop();
+    }
 }
 
 void THttpProxyTestMock::SetUp(NUnitTest::TTestContext&) {
-    InitAll();
+    InitAll(TInitParameters{});
 }
 
-void THttpProxyTestMock::InitAll(bool yandexCloudMode, bool enableMetering, bool enableSqsTopic) {
+void THttpProxyTestMock::InitAll(const TInitParameters initParameters) {
     AccessServicePort = PortManager.GetPort(8443);
     AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
-    InitKikimr(yandexCloudMode, enableMetering);
-    InitAccessServiceService();
-    InitHttpServer(yandexCloudMode, enableSqsTopic);
+    InitKikimr(initParameters);
+    InitAccessServiceService(initParameters.EnableAccessServiceV2Interface);
+    InitHttpServer(initParameters.YandexCloudMode, initParameters.EnableSqsTopic, initParameters.EnableAccessServiceV2Interface);
 }
 
-TString THttpProxyTestMock::FormAuthorizationStr(const TString& region) {
+TString THttpProxyTestMock::FormAuthorizationStr(const TString& region) const {
+    if (!SendAuthorizationStr) {
+        return "";
+    }
     return TStringBuilder() <<
         "Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/" << region <<
         "/service/aws4_request, SignedHeaders=host;x-amz-date, Signature="
         "5da7c1a2acd57cee7505fc6676e4e544621c30862966e37dddb68e92efbe5d6b)__";
+}
+
+void THttpProxyTestMock::EnableAuthorization() {
+    SendAuthorizationStr = true;
+}
+
+void THttpProxyTestMock::DisableAuthorization() {
+    SendAuthorizationStr = false;
 }
 
 NJson::TJsonValue THttpProxyTestMock::CreateCreateStreamRequest() {
@@ -134,7 +150,7 @@ NJson::TJsonValue THttpProxyTestMock::CreateSqsCreateQueueRequest() {
 
 THttpResult THttpProxyTestMock::SendHttpRequestRaw(const TString& handler, const TString& target,
                                 const IOutputStream::TPart& body, const TString& authorizationStr,
-                                const TString& contentType) {
+                                const TString& contentType, const TString& securityToken) {
     TNetworkAddress addr("::", HttpServicePort);
     TSocket sock(addr);
     TSocketOutput so(sock);
@@ -162,6 +178,11 @@ THttpResult THttpProxyTestMock::SendHttpRequestRaw(const TString& handler, const
         parts.push_back(IOutputStream::TPart(TStringBuf(authorizationStr)));
         parts.push_back(IOutputStream::TPart::CrLf());
     }
+    if (!securityToken.empty()) {
+        parts.push_back(IOutputStream::TPart(TStringBuf("x-amz-security-token:")));
+        parts.push_back(IOutputStream::TPart(TStringBuf(securityToken)));
+        parts.push_back(IOutputStream::TPart::CrLf());
+    }
     if (!contentType.empty()) {
         parts.push_back(IOutputStream::TPart(TStringBuf("Content-Type:")));
         parts.push_back(IOutputStream::TPart(TStringBuf(contentType)));
@@ -169,6 +190,63 @@ THttpResult THttpProxyTestMock::SendHttpRequestRaw(const TString& handler, const
     }
     parts.push_back(IOutputStream::TPart::CrLf());
     parts.push_back(body);
+
+    output.Write(&parts[0], parts.size());
+    output.Finish();
+
+    TSocketInput si(sock);
+    THttpInput input(&si);
+
+    bool gotRequestId{false};
+    for (auto& header : input.Headers()) {
+        gotRequestId |= header.Name() == "x-amzn-requestid";
+    }
+    Y_ABORT_UNLESS(gotRequestId);
+    ui32 httpCode = ParseHttpRetCode(input.FirstLine());
+    TString description(StripString(TStringBuf(input.FirstLine()).After(' ').After(' ')));
+    TString responseBody = input.ReadAll();
+    Cerr << "Http output full " << responseBody << Endl;
+    return {httpCode, description, responseBody};
+}
+
+THttpResult THttpProxyTestMock::SendHttpRequestXmlRaw(const TString& handler, const IOutputStream::TPart& body,
+                                const TString& authorizationStr, const TString& securityToken) {
+    TNetworkAddress addr("::", HttpServicePort);
+    TSocket sock(addr);
+    TSocketOutput so(sock);
+    THttpOutput output(&so);
+
+    output.EnableKeepAlive(false);
+    output.EnableCompression(false);
+
+    std::vector<IOutputStream::TPart> parts = {
+            IOutputStream::TPart(TStringBuf("POST ")),
+            IOutputStream::TPart(TStringBuf(handler)),
+            IOutputStream::TPart(TStringBuf(" HTTP/1.1")),
+            IOutputStream::TPart::CrLf(),
+            IOutputStream::TPart(TStringBuf("Host:")),
+            IOutputStream::TPart(TStringBuf("example.amazonaws.com")),
+            IOutputStream::TPart::CrLf(),
+            IOutputStream::TPart(TStringBuf("X-Amz-Date:")),
+            IOutputStream::TPart(TStringBuf("20150830T123600Z")),
+            IOutputStream::TPart::CrLf()
+    };
+    if (!authorizationStr.empty()) {
+        parts.push_back(IOutputStream::TPart(TStringBuf(authorizationStr)));
+        parts.push_back(IOutputStream::TPart::CrLf());
+    }
+    if (!securityToken.empty()) {
+        parts.push_back(IOutputStream::TPart(TStringBuf("x-amz-security-token:")));
+        parts.push_back(IOutputStream::TPart(TStringBuf(securityToken)));
+        parts.push_back(IOutputStream::TPart::CrLf());
+    }
+    parts.push_back(IOutputStream::TPart(TStringBuf("Content-Type:")));
+    parts.push_back(IOutputStream::TPart(TStringBuf("application/x-www-form-urlencoded")));
+    parts.push_back(IOutputStream::TPart::CrLf());
+    parts.push_back(IOutputStream::TPart::CrLf());
+    parts.push_back(body);
+
+    Cerr << (TStringBuilder() << ">>>>> Http request BODY: " << std::string_view(static_cast<const char*>(body.buf), body.len) << Endl);
 
     output.Write(&parts[0], parts.size());
     output.Finish();
@@ -250,9 +328,30 @@ THttpResult THttpProxyTestMock::SendHttpRequestRawSpecified(const TString& handl
 
 THttpResult THttpProxyTestMock::SendHttpRequest(const TString& handler, const TString& target, NJson::TJsonValue value,
                             const TString& authorizationStr,
-                            const TString& contentType) {
+                            const TString& contentType, const TString& securityToken) {
     TString jsonStr = NJson::WriteJson(value);
-    return SendHttpRequestRaw(handler, target, {&jsonStr[0], jsonStr.size()}, authorizationStr, contentType);
+    return SendHttpRequestRaw(handler, target, {&jsonStr[0], jsonStr.size()}, authorizationStr, contentType, securityToken);
+}
+
+NJson::TJsonMap THttpProxyTestMock::CreateQueueWithSecurityToken(NJson::TJsonMap request, const TString& securityToken,
+                                                                 ui32 expectedHttpCode) {
+    auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", request, "", "application/json", securityToken);
+    UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, expectedHttpCode, res.Body);
+    NJson::TJsonMap json;
+    UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+    if (expectedHttpCode == 200) {
+        const TString url = GetByPath<TString>(json, "QueueUrl");
+        const TString queue = GetByPath<TString>(request, "QueueName");
+        if (SqsTopicMode) {
+            TStringBuf topic, consumer;
+            TStringBuf{queue}.RSplit('@', topic, consumer);
+            UNIT_ASSERT_C(url.contains(topic), LabeledOutput(url, queue, topic));
+            UNIT_ASSERT_C(url.contains(consumer), LabeledOutput(url, queue, consumer));
+        } else {
+            UNIT_ASSERT_C(url.EndsWith(queue), LabeledOutput(url, queue));
+        }
+    }
+    return json;
 }
 
 THttpResult THttpProxyTestMock::SendHttpRequestSpecified(const TString& handler, const TString& target, NJson::TJsonValue value,
@@ -278,12 +377,42 @@ THttpResult THttpProxyTestMock::SendPing() {
 NJson::TJsonMap THttpProxyTestMock::SendJsonRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode) {
     auto res = SendHttpRequest("/Root", TStringBuilder() << "AmazonSQS." << method, request, FormAuthorizationStr("ru-central1"));
     if (expectedHttpCode != 0) {
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, expectedHttpCode, TStringBuilder() << "REQUEST: " << method << " " << request.GetStringRobust() << "\nRESPONSE: " << res.Body);
     }
     NJson::TJsonMap json;
     UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
     return json;
 }
+
+
+NJson::TJsonMap THttpProxyTestMock::SendJsonRequestWithRetries(TString method, NJson::TJsonMap request, ui32 expectedHttpCode, ui32 retries) {
+    for (ui32 i = 0; i < retries; ++i) {
+        auto res = SendHttpRequest("/Root", TStringBuilder() << "AmazonSQS." << method, request, FormAuthorizationStr("ru-central1"));
+        if (expectedHttpCode != 0 && res.HttpCode != expectedHttpCode) {
+            Sleep(TDuration::Seconds(1));
+            continue;
+        }
+        NJson::TJsonMap json;
+        if (NJson::ReadJsonTree(res.Body, &json)) {
+            return json;
+        }
+        Sleep(TDuration::Seconds(1));
+    }
+
+    UNIT_FAIL("SendJsonRequestWithRetries: failed to send request after " << retries << " retries");
+    return {};
+}
+
+NJson::TJsonMap THttpProxyTestMock::SendXmlRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode) {
+    const TString body = EncodeSqsXmlRequest(method, request);
+    auto res = SendHttpRequestXmlRaw("/Root", {body.data(), body.size()}, FormAuthorizationStr("ru-central1"));
+    if (expectedHttpCode != 0) {
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, expectedHttpCode, TStringBuilder() << "REQUEST: " << method << " " << body << "\nRESPONSE: " << res.Body);
+    }
+    Cerr << (TStringBuilder() << ">>>>> Http response BODY: " << res.Body << Endl);
+    return ParseSqsXmlResponse(res.Body);
+}
+
 
 void THttpProxyTestMock::WaitQueueAttributes(TString queueUrl, size_t retries, NJson::TJsonMap attributes) {
     WaitQueueAttributes(queueUrl, retries, [&attributes](NJson::TJsonMap json) {
@@ -303,6 +432,8 @@ void THttpProxyTestMock::WaitQueueAttributes(TString queueUrl, size_t retries, s
             {"AttributeNames", NJson::TJsonArray{"All"}}
         });
 
+        Cerr << (TStringBuilder() << "WaitQueueAttributes: " << json.GetStringRobust() << Endl);
+
         if (predicate(json)) {
             return;
         }
@@ -319,6 +450,8 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
     TString endpoint = TStringBuilder() << "localhost:" << KikimrGrpcPort;
     auto driverConfig = NYdb::TDriverConfig()
         .SetEndpoint(endpoint)
+        .SetDatabase("/Root")
+        .SetAuthToken("root@builtin")
         .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
     NYdb::TDriver driver(driverConfig);
     auto tableClient = NYdb::NTable::TTableClient(driver);
@@ -343,10 +476,10 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
     return resultSet;
 }
 
-void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
+void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
     AuthFactory = std::make_shared<NKikimr::NHttpProxy::TIamAuthFactory>();
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
+    appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(initParameters.TopicsAreFirstClassCitizen);
     appConfig.MutablePQConfig()->SetEnabled(true);
     appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(128);
     appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(512);
@@ -354,14 +487,29 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
     appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
 
     appConfig.MutableFeatureFlags()->SetEnableTopicMessageLevelParallelism(true);
+    if (initParameters.EnableTopicPartitionSplitBasedOnKllSketch) {
+        appConfig.MutableFeatureFlags()->SetEnableTopicPartitionSplitBasedOnKllSketch(true);
+    }
+    if (initParameters.EnableTopicPartitionSplitBasedOnMessages) {
+        appConfig.MutableFeatureFlags()->SetEnableTopicPartitionSplitBasedOnMessages(true);
+    }
+    if (initParameters.EnableTopicMessagesBatching) {
+        appConfig.MutableFeatureFlags()->SetEnableTopicMessagesBatching(true);
+        appConfig.MutableFeatureFlags()->SetEnableTopicWriteOffsetDeltaInKeys(true);
+    }
+    if (initParameters.EnforceUserTokenRequirement) {
+        auto* securityConfig = appConfig.MutableDomainsConfig()->MutableSecurityConfig();
+        securityConfig->SetEnforceUserTokenRequirement(true);
+    }
+    appConfig.MutableFeatureFlags()->SetEnableAccessServiceV2Interface(initParameters.EnableAccessServiceV2Interface);
 
     appConfig.MutableSqsConfig()->SetEnableSqs(true);
-    appConfig.MutableSqsConfig()->SetYandexCloudMode(yandexCloudMode);
+    appConfig.MutableSqsConfig()->SetYandexCloudMode(initParameters.YandexCloudMode);
     appConfig.MutableSqsConfig()->SetEnableDeadLetterQueues(true);
 
     appConfig.MutableFeatureFlags()->SetEnableTopicMessageLevelParallelism(true);
 
-    if (enableMetering) {
+    if (initParameters.EnableMetering) {
         auto& sqsConfig = *appConfig.MutableSqsConfig();
 
         sqsConfig.SetMeteringFlushingIntervalMs(100);
@@ -388,15 +536,28 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
     limit->SetMinStorageMegabytes(50_KB);
     limit->SetMaxStorageMegabytes(1_MB);
 
+    if (!initParameters.TopicsAreFirstClassCitizen) {
+        auto* pqConfig = appConfig.MutablePQConfig();
+        pqConfig->SetRoot("/Root/PQ");
+        pqConfig->SetClusterTablePath("/Root/PQ/Config/V2/Cluster");
+        pqConfig->SetVersionTablePath("/Root/PQ/Config/V2/Versions");
+        pqConfig->SetTestDatabaseRoot("/Root/federation");
+    }
+
     NYdb::TKikimrWithGrpcAndRootSchema* server =
         new NYdb::TKikimrWithGrpcAndRootSchema(std::move(appConfig), {}, {}, false, nullptr,
-            [this](NYdb::TServerSettings& settings) -> void {
+            [this, initParameters](NYdb::TServerSettings& settings) -> void {
                 settings.SetDataStreamsAuthFactory(AuthFactory);
                 settings.CreateTicketParser = CreateTicketParser;
                 Y_ABORT_UNLESS(AccessServiceEndpoint);
                 settings.AuthConfig.SetAccessServiceEndpoint(AccessServiceEndpoint);
                 settings.AuthConfig.SetUseAccessService(true);
                 settings.AuthConfig.SetUseAccessServiceTLS(false);
+                settings.AppConfig->MutableSqsConfig()->SetUserSettingsUpdateTimeMs(100);
+                if (!initParameters.TopicsAreFirstClassCitizen) {
+                    settings.PQClusterDiscoveryConfig.SetEnabled(true);
+                    settings.PQClusterDiscoveryConfig.SetTimedCountersUpdateIntervalSeconds(1);
+                }
             }, 0, 1);
 
     server->ServerSettings->SetUseRealThreads(false);
@@ -407,12 +568,18 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
 
     ActorRuntime->SetLogPriority(NKikimrServices::GRPC_PROXY, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::HTTP_PROXY, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NActorsServices::EServiceCommon::HTTP, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
     ActorRuntime->SetLogPriority(NKikimrServices::SQS, NLog::PRI_TRACE);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_CONSUMER, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_WRITER, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_DLQ_MOVER, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_SCHEMA, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_DESCRIBER, NLog::PRI_DEBUG);
 
-    if (enableMetering) {
+    if (initParameters.EnableMetering) {
         ActorRuntime->RegisterService(
             NSQS::MakeSqsMeteringServiceID(),
             ActorRuntime->Register(NSQS::CreateSqsMeteringService())
@@ -423,12 +590,12 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
     UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
                                 client.AlterUserAttributes("/", "Root", {{"folder_id", "folder4"},
                                                                         {"cloud_id", "cloud4"},
-                                                                        {"database_id", "database4"}}));
+                                                                        {"database_id", "database4"}}, {}, {}, "root@builtin"));
     NACLib::TDiffACL acl;
     acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, "Service1_id@as");
     acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, "proxy_sa@as");
 
-    client.ModifyACL("/", "Root", acl.SerializeAsString());
+    client.ModifyACL("/", "Root", acl.SerializeAsString(), "root@builtin");
 
     client.MkDir("/Root", "SQS");
 
@@ -450,7 +617,10 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         "Columns { Name: \"DlqName\"            Type: \"Utf8\"}"
         "Columns { Name: \"TablesFormat\"       Type: \"Uint32\"}"
         "Columns { Name: \"Tags\"               Type: \"Utf8\"}"
-        "KeyColumnNames: [\"Account\", \"QueueName\"]"
+        "Columns { Name: \"TopicCreated\"       Type: \"Bool\"}"
+        "KeyColumnNames: [\"Account\", \"QueueName\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS",
@@ -466,7 +636,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         "Columns { Name: \"TablesFormat\"          Type: \"Uint32\"}"
         "Columns { Name: \"StartProcessTimestamp\" Type: \"Uint64\"}"
         "Columns { Name: \"NodeProcess\"           Type: \"Uint32\"}"
-        "KeyColumnNames: [\"RemoveTimestamp\", \"QueueIdNumber\"]"
+        "KeyColumnNames: [\"RemoveTimestamp\", \"QueueIdNumber\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.MkDir("/Root/SQS", ".STD");
@@ -479,7 +651,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         "Columns { Name: \"RandomId\"                  Type: \"Uint64\"}"
         "Columns { Name: \"SentTimestamp\"             Type: \"Uint64\"}"
         "Columns { Name: \"DelayDeadline\"             Type: \"Uint64\"}"
-        "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"Offset\"]"
+        "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"Offset\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.MkDir("/Root/SQS", ".FIFO");
@@ -495,7 +669,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         "Columns { Name: \"ReceiveCount\"          Type: \"Uint32\"}"
         "Columns { Name: \"FirstReceiveTimestamp\" Type: \"Uint64\"}"
         "Columns { Name: \"SentTimestamp\"         Type: \"Uint64\"}"
-        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Offset\"]"
+        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Offset\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS/.FIFO",
@@ -506,7 +682,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         "Columns { Name: \"Deadline\"              Type: \"Uint64\"}"
         "Columns { Name: \"Offset\"                Type: \"Uint64\"}"
         "Columns { Name: \"MessageId\"             Type: \"String\"}"
-        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"DedupId\"]"
+        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"DedupId\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS/.FIFO",
@@ -520,7 +698,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         "Columns { Name: \"Tail\"                  Type: \"Uint64\"}"
         "Columns { Name: \"ReceiveAttemptId\"      Type: \"Utf8\"}"
         "Columns { Name: \"LockTimestamp\"         Type: \"Uint64\"}"
-        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"GroupId\"]"
+        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"GroupId\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS/.FIFO",
@@ -534,7 +714,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         "Columns { Name: \"Attributes\"            Type: \"String\"}"
         "Columns { Name: \"Data\"                  Type: \"String\"}"
         "Columns { Name: \"MessageId\"             Type: \"String\"}"
-        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"RandomId\", \"Offset\"]"
+        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"RandomId\", \"Offset\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS/.FIFO",
@@ -543,7 +725,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         "Columns { Name: \"QueueIdNumber\"         Type: \"Uint64\"}"
         "Columns { Name: \"ReceiveAttemptId\"      Type: \"Utf8\"}"
         "Columns { Name: \"Deadline\"              Type: \"Uint64\"}"
-        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"ReceiveAttemptId\"]"
+        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"ReceiveAttemptId\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS",
@@ -551,14 +735,18 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         "Columns { Name: \"Account\"               Type: \"Utf8\"}"
         "Columns { Name: \"Name\"                  Type: \"Utf8\"}"
         "Columns { Name: \"Value\"                 Type: \"Utf8\"}"
-        "KeyColumnNames: [\"Account\", \"Name\"]"
+        "KeyColumnNames: [\"Account\", \"Name\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS",
         "Name: \".AtomicCounter\""
         "Columns { Name: \"counter_key\"  Type: \"Uint64\"}"
         "Columns { Name: \"value\"        Type: \"Uint64\"}"
-        "KeyColumnNames: [\"counter_key\"]"
+        "KeyColumnNames: [\"counter_key\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
     RunYqlDataQuery("INSERT INTO `/Root/SQS/.AtomicCounter` (counter_key, value) VALUES (0, 0)");
 
@@ -576,9 +764,16 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         "Columns { Name: \"DlqArn\"                        Type: \"Utf8\"}"
         "Columns { Name: \"MaxReceiveCount\"               Type: \"Uint64\"}"
         "Columns { Name: \"ShowDetailedCountersDeadline\"  Type: \"Uint64\"}"
+        "Columns { Name: \"TopicCreated\"                  Type: \"Bool\"}"
         "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\"]";
-    client.CreateTable("/Root/SQS/.STD", attributesTable);
-    client.CreateTable("/Root/SQS/.FIFO", attributesTable);
+    client.CreateTable("/Root/SQS/.STD",
+        attributesTable,
+        TDuration::Seconds(5000),
+        "root@builtin");
+    client.CreateTable("/Root/SQS/.FIFO",
+        attributesTable,
+        TDuration::Seconds(5000),
+        "root@builtin");
 
     client.CreateTable("/Root/SQS",
         "Name: \".Events\""
@@ -589,7 +784,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         "Columns { Name: \"EventTimestamp\"   Type: \"Uint64\"}"
         "Columns { Name: \"FolderId\"         Type: \"Utf8\"}"
         "Columns { Name: \"Labels\"           Type: \"Utf8\"}"
-        "KeyColumnNames: [\"Account\", \"QueueName\", \"EventType\"]"
+        "KeyColumnNames: [\"Account\", \"QueueName\", \"EventType\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     auto stateTableCommon =
@@ -610,12 +807,16 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         TStringBuilder()
             << stateTableCommon
             << "Columns { Name: \"Shard\"  Type: \"Uint32\"}"
-            << "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Shard\"]"
+            << "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"Shard\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
     client.CreateTable("/Root/SQS/.FIFO",
         TStringBuilder()
             << stateTableCommon
-            << "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\"]"
+            << "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
 
@@ -633,7 +834,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         "Columns { Name: \"SentTimestamp\"              Type: \"Uint64\"}"
         "Columns { Name: \"VisibilityDeadline\"         Type: \"Uint64\"}"
         "Columns { Name: \"DelayDeadline\"              Type: \"Uint64\"}"
-        "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"Offset\"]"
+        "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"Offset\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     auto sentTimestampIdxCommonColumns=
@@ -649,7 +852,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         TStringBuilder()
         << "Name: \"SentTimestampIdx\""
         << sentTimestampIdxCommonColumns
-        << sendTimestampIdsKeys
+        << sendTimestampIdsKeys,
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS/.FIFO",
@@ -661,7 +866,9 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         "Columns { Name: \"GroupId\"                Type: \"String\"}"
         "Columns { Name: \"RandomId\"               Type: \"Uint64\"}"
         "Columns { Name: \"DelayDeadline\"          Type: \"Uint64\"}"
-        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"SentTimestamp\", \"Offset\"]"
+        "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\", \"SentTimestamp\", \"Offset\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
 
     client.CreateTable("/Root/SQS/.STD",
@@ -675,31 +882,87 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
         "Columns { Name: \"Data\"                       Type: \"String\"}"
         "Columns { Name: \"MessageId\"                  Type: \"String\"}"
         "Columns { Name: \"SenderId\"                   Type: \"String\"}"
-        "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"RandomId\", \"Offset\"]"
+        "KeyColumnNames: [\"QueueIdNumberAndShardHash\", \"QueueIdNumber\", \"Shard\", \"RandomId\", \"Offset\"]",
+        TDuration::Seconds(5000),
+        "root@builtin"
     );
+
+    if (!initParameters.TopicsAreFirstClassCitizen) {
+        client.MkDir("/Root", "federation");
+        client.MkDir("/Root/PQ", "Config");
+        client.MkDir("/Root/PQ/Config", "V2");
+        client.CreateTable("/Root/PQ/Config/V2",
+            "Name: \"Cluster\""
+            "Columns { Name: \"name\"     Type: \"Utf8\"}"
+            "Columns { Name: \"balancer\" Type: \"Utf8\"}"
+            "Columns { Name: \"local\"    Type: \"Bool\"}"
+            "Columns { Name: \"enabled\"  Type: \"Bool\"}"
+            "Columns { Name: \"weight\"   Type: \"Uint64\"}"
+            "KeyColumnNames: [\"name\"]",
+            TDuration::Seconds(5000),
+            "root@builtin"
+        );
+        client.CreateTable("/Root/PQ/Config/V2",
+            "Name: \"Topics\""
+            "Columns { Name: \"path\" Type: \"Utf8\"}"
+            "Columns { Name: \"dc\"   Type: \"Utf8\"}"
+            "KeyColumnNames: [\"path\", \"dc\"]",
+            TDuration::Seconds(5000),
+            "root@builtin"
+        );
+        client.CreateTable("/Root/PQ/Config/V2",
+            "Name: \"Versions\""
+            "Columns { Name: \"name\"    Type: \"Utf8\"}"
+            "Columns { Name: \"version\" Type: \"Int64\"}"
+            "KeyColumnNames: [\"name\"]",
+            TDuration::Seconds(5000),
+            "root@builtin"
+        );
+        RunYqlDataQuery(
+            "UPSERT INTO `/Root/PQ/Config/V2/Cluster` (name, balancer, local, enabled, weight) "
+            "VALUES (\"dc1\", \"localhost\", true, true, 1000);"
+            "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) VALUES (\"Cluster\", 1), (\"Topics\", 0);"
+        );
+    }
+
+    client.Grant("/", "Root", "root@builtin", NACLib::EAccessRights::GenericFull);
 }
 
-void THttpProxyTestMock::InitAccessServiceService() {
+void THttpProxyTestMock::InitAccessServiceService(bool enableAccessServiceV2Interface) {
     // Service Account Service Mock
     grpc::ServerBuilder builder;
-    AccessServiceMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-    AccessServiceMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
-//        AccessServiceMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
 
-    AccessServiceMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-    AccessServiceMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
+    const auto setupAccessServiceMock = [&](auto& asMock) {
+        asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
+        asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
+        asMock.AuthenticateData["user@builtin"].Response.mutable_subject()->mutable_user_account()->set_id("user1_id");
 
-    AccessServiceMock.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-    AccessServiceMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
 
-    AccessServiceMock.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
-    AccessServiceMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-folder4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
 
-    builder.AddListeningPort(AccessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&AccessServiceMock);
+        asMock.AuthorizeData["AKIDEXAMPLE-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+    };
+
+    builder.AddListeningPort(AccessServiceEndpoint, grpc::InsecureServerCredentials());
+
+    if (!enableAccessServiceV2Interface) {
+        setupAccessServiceMock(AccessServiceMock);
+        builder.RegisterService(&AccessServiceMock);
+    }
+    // We always should setup v2, because bulkAuthorization works only in v2 and EnableBulkAuthorization=true will call it
+    setupAccessServiceMock(AccessServiceMockV2);
+    builder.RegisterService(&AccessServiceMockV2);
+
     AccessServiceServer = builder.BuildAndStart();
 }
 
-void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopic) {
+void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopic, bool enableAccessServiceV2Interface) {
     using namespace NKikimr::NHttpProxy;
     NKikimrConfig::TServerlessProxyConfig config;
     config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central1");
@@ -711,7 +974,7 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     config.SetTestMode(true);
     config.MutableHttpConfig()->SetPort(HttpServicePort);
     config.MutableHttpConfig()->SetYandexCloudMode(yandexCloudMode);
-    config.MutableHttpConfig()->SetYmqEnabled(true);
+    config.MutableHttpConfig()->SetYmqEnabled(!enableSqsTopic);
     config.MutableHttpConfig()->SetSqsTopicEnabled(enableSqsTopic);
     SqsTopicMode = enableSqsTopic;
 
@@ -744,10 +1007,10 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     auto as = ActorRuntime->GetAnyNodeActorSystem();
     opts.SetLogger(NYdbGrpc::CreateActorSystemLogger(*as, NKikimrServices::GRPC_SERVER));
 
-    TActorId actorId = as->Register(CreateAccessServiceActor(config));
+    TActorId actorId = as->Register(CreateAccessServiceActor(config, enableAccessServiceV2Interface));
     as->RegisterLocalService(MakeAccessServiceID(), actorId);
 
-    actorId = as->Register(CreateAccessServiceActor(config));
+    actorId = as->Register(CreateAccessServiceActor(config, enableAccessServiceV2Interface));
     as->RegisterLocalService(NSQS::MakeSqsAccessServiceID(), actorId);
 
     actorId = as->Register(CreateIamTokenServiceActor(config));
@@ -794,7 +1057,7 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     as->RegisterLocalService(MakeHttpProxyID(), actorId);
 
     GRpcServer = MakeHolder<NYdbGrpc::TGRpcServer>(opts);
-    GRpcServer->AddService(new NKikimr::NHttpProxy::TGRpcDiscoveryService(as, credentialsProvider, Counters));
+    GRpcServer->AddService(new NKikimr::NHttpProxy::TGRpcDiscoveryService(as, Counters));
 
     GRpcServer->Start();
 

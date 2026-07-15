@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "event.h"
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <atomic>
 #include <mutex>
 
@@ -205,7 +205,7 @@ namespace NActors {
     public:
         ui32 Hint = 0;
 
-        EActorPack ActorPack = EActorPack::Empty;
+        std::atomic<EActorPack> ActorPack{ EActorPack::Empty };
 
         static constexpr TMailboxType::EType Type = TMailboxType::LockFreeIntrusive;
 

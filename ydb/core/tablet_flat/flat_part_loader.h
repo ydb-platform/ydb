@@ -284,6 +284,11 @@ namespace NTable {
         TPageId LargeId = Max<TPageId>();
         TPageId SmallId = Max<TPageId>();
         TPageId ByKeyId = Max<TPageId>();
+        struct TByKeyPrefixMeta {
+            TPageId PageId = Max<TPageId>();
+            ui32 PrefixColumns = 0;
+        };
+        TVector<TByKeyPrefixMeta> ByKeyPrefixMetas;
         TPageId GarbageStatsId = Max<TPageId>();
         TPageId TxIdStatsId = Max<TPageId>();
         TVector<TPageId> FlatGroupIndexes;

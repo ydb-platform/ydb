@@ -1,16 +1,16 @@
 # Uuid
 
-The `Uuid` module provides generators for primary keys in row-oriented tables. Unlike [`RandomUuid()`](../../builtins/basic.md#random), which returns a uniformly random [UUID version 4](https://datatracker.ietf.org/doc/html/rfc4122#section-4.4), these functions assemble 128-bit values with a deliberate bit layout so that key order and partition spread suit {{ ydb-short-name }}'s range partitioning.
+The `Uuid` module provides generators for primary keys in {{ ydb-short-name }} tables. Unlike [`RandomUuid()`](../../builtins/basic.md#random), which returns a uniformly random [UUID version 4](https://datatracker.ietf.org/doc/html/rfc4122#section-4.4), these functions assemble 128-bit values with a deliberate bit layout so that key order and partition spread suit {{ ydb-short-name }}'s partitioning.
 
-All functions return a value of type `Uuid` in {{ ydb-short-name }}'s internal 16-byte representation (Microsoft GUID / mixed-endian layout). This is the same byte order used when comparing primary keys. Generators that target key-friendly layout write bytes directly in this order; they do not round-trip through RFC network-byte-order representation.
+All functions return a value of type `Uuid` in {{ ydb-short-name }}'s internal 16-byte representation (Microsoft GUID / mixed-endian layout). This is the same byte order used when comparing primary key values. Generators that target key-friendly layout write bytes directly in this order instead of using the RFC network-byte-order representation.
 
-When you cast a generated `Uuid` to `String`, you get a canonical GUID text representation. For key-friendly generators (`newChrono`, `newSharded`, and their `Prefix` variants), the visible string layout does not reflect how the timestamp and prefix are embedded in the stored bytes. Use the functions below for generation and extraction, not string parsing.
+When you cast a generated `Uuid` to `Text`, you get a canonical GUID text representation. For key-friendly generators (`newChrono`, `newSharded`, and their `Prefix` variants), the visible string layout does not reflect how the timestamp and prefix are embedded in the stored bytes.
 
-For general recommendations on choosing a `Uuid` primary key, see [UUID as a primary key](../../../dev/primary-key/row-oriented.md#uuid-primary-key).
+For general recommendations on using `Uuid` for primary key, see [UUID as a primary key](../../../dev/primary-key/row-oriented.md#uuid-primary-key).
 
 ## Key-friendly generators {#key-friendly}
 
-These functions produce UUID version 8 values (implementation-specific per [RFC 9562](https://datatracker.ietf.org/doc/html/rfc9562)) optimized for {{ ydb-short-name }} key sorting. Sort order is defined by comparing the stored 16 bytes (`memcmp`), not by the canonical GUID string.
+These functions produce UUID version 8 values (implementation-specific per [RFC 9562](https://datatracker.ietf.org/doc/html/rfc9562)) optimized for {{ ydb-short-name }} key sorting. Sort order is defined by comparing the stored 16 bytes, not by the canonical GUID string.
 
 ### `Uuid::newChrono` {#newchrono}
 
@@ -22,12 +22,12 @@ Optional dependency arguments work like [`RandomUuid()`](../../builtins/basic.md
 
 ### `Uuid::newChronoPrefix` {#newchronoprefix}
 
-Same chronological layout as `newChrono`, but the high bits of the key (10-bit prefix by default) are taken from the first argument instead of being random. Use this to pin a shared prefix for several rows in one transaction or batch so they typically map to a single partition.
+Same chronological layout as `newChrono`, but the high bits of the key (10-bit prefix) are taken from the first argument instead of being random. Use this to pin a shared prefix for several rows in one transaction or batch so they map to a single partition.
 
 The first argument is either:
 
-* `Uint64` — the low 10 bits are placed into the prefix field;
-* `Uuid` — the top 10 bits of the source value's MSB are reused as the prefix.
+* `Uint64` — the low 10 bits are used as the prefox;
+* `Uuid` — the high 10 bits of the source value's MSB are used as the prefix.
 
 Optional dependency arguments may follow.
 
@@ -115,12 +115,4 @@ Chronological primary key:
 ```yql
 INSERT INTO audit_log (id, message)
 VALUES (Uuid::newChrono(), "user signed in");
-```
-
-RFC v7 with timestamp round-trip:
-
-```yql
-$ts = CurrentUtcTimestamp();
-$id = Uuid::newV7At($ts);
-SELECT Uuid::extractTs($id) = $ts;  -- true
 ```

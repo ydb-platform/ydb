@@ -439,8 +439,8 @@ public:
 
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
-    ui64 PeerGenMajor = 0;
-    NActors::TActorId PeerActorId;
+    ui64 OutputNodeGenMajor = 0;
+    NActors::TActorId OutputNodeActorId;
     bool IsBound = false;
     TDqThreadSafeStats PushStats;
     TDqThreadSafeStats PopStats;
@@ -586,7 +586,7 @@ public:
     void TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
     void TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& descriptor);
     void HandleCleanup();
-    void FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
+    void FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor);
     void FailOutputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
     void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
     void SendAckWithError(ui64 cookie, const TString& message);
@@ -622,10 +622,11 @@ public:
     ui64 ReconciliationCount = 0;
     ui64 SeqNo = 0;
     std::atomic<ui64> InflightBytes = 0;
+    NActors::TActorId InputNodeActorId;
     // Receiver
-    NActors::TActorId PeerActorId;
-    std::atomic<ui64> PeerGenMajor = 0;
-    std::atomic<ui64> PeerGenMinor = 0;
+    NActors::TActorId OutputNodeActorId;
+    std::atomic<ui64> OutputNodeGenMajor = 0;
+    std::atomic<ui64> OutputNodeGenMinor = 0;
     ui64 ConfirmedSeqNo = 0;
     // ...
     const TDqChannelLimits Limits;

@@ -17,10 +17,15 @@ void AddOptimizerEstimates(NJson::TJsonValue& json, const TIntrusivePtr<IOperato
     json["E-Cost"] = TStringBuilder() << *op->Props.Cost;
 }
 
-NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 operatorId, ui32 explainFlags) {
+NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 explainFlags) {
     auto res = op->ToJson(explainFlags);
 
     AddOptimizerEstimates(res, op);
+    return res;
+}
+
+NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 operatorId, ui32 explainFlags) {
+    auto res = MakeJson(op, explainFlags);
     res["OperatorId"] = operatorId;
     return res;
 }
@@ -68,7 +73,12 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, TExplain
     result["PlanNodeId"] = ctx.NextNodeId();
     result["Node Type"] = op->GetExplainName();
     NJson::TJsonValue operatorList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    operatorList.AppendValue(MakeJson(op, ctx.OperatorIds.at(op.Get()), ctx.ExplainFlags));
+    auto operatorJson = MakeJson(op, ctx.ExplainFlags);
+    // Synthetic operators that are absent from the execution plan cannot be correlated with runtime stats.
+    if (auto operatorId = ctx.OperatorIds.find(op.Get()); operatorId != ctx.OperatorIds.end()) {
+        operatorJson["OperatorId"] = operatorId->second;
+    }
+    operatorList.AppendValue(std::move(operatorJson));
     result["Operators"] = operatorList;
 
     auto getChildJson = [&](const auto& child, ui32 childIndex) {
@@ -136,7 +146,9 @@ bool FindStageAndOpByOpId(NJson::TJsonValue& planNode, int opId, NJson::TJsonVal
             auto& operatorArray = planNode.GetMapSafe().at("Operators").GetArraySafe();
             for (size_t i=0; i<operatorArray.size(); i++) {
                 auto& item = operatorArray.at(i);
-                if (item.GetMapSafe().at("OperatorId").GetInteger() == opId) {
+                auto& itemMap = item.GetMapSafe();
+                auto itemId = itemMap.find("OperatorId");
+                if (itemId != itemMap.end() && itemId->second.GetInteger() == opId) {
                     operatorIdx = i;
                     stage = &planNode;
                     op = &item;
@@ -387,7 +399,6 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
 
     for (const auto& it : *this) {
         auto & currOp = it.Current;
-        operatorIds.insert({currOp.Get(), operatorId++});
         int stageId = *currOp->Props.StageId;
         if (!stageOpMap.contains(stageId)) {
             stageOpMap.insert({stageId, {}});
@@ -395,8 +406,9 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
 
         auto & stageOps = stageOpMap.at(stageId);
 
-        //if (currOp->Kind != EOperator::Map && currOp->Kind != EOperator::EmptySource) {
         if (currOp->Kind != EOperator::EmptySource) {
+            // This map defines which operators can be correlated across execution and simplified plans.
+            operatorIds.insert({currOp.Get(), operatorId++});
 
             YQL_CLOG(TRACE, CoreDq) << "Adding operator to explain json: " << currOp->GetExplainName() << ", stageId: " << stageId;
 

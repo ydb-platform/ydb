@@ -241,6 +241,28 @@ const NJson::TJsonValue* FindConnectionNode(const NJson::TJsonValue& node, const
     return nullptr;
 }
 
+void CollectOperatorIds(const NJson::TJsonValue& planNode, THashSet<i64>& operatorIds) {
+    if (!planNode.IsMap()) {
+        return;
+    }
+
+    const auto& planMap = planNode.GetMapSafe();
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        for (const auto& operatorNode : operators->second.GetArraySafe()) {
+            const auto& operatorMap = operatorNode.GetMapSafe();
+            if (auto operatorId = operatorMap.find("OperatorId"); operatorId != operatorMap.end()) {
+                operatorIds.insert(operatorId->second.GetIntegerSafe());
+            }
+        }
+    }
+
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (const auto& child : plans->second.GetArraySafe()) {
+            CollectOperatorIds(child, operatorIds);
+        }
+    }
+}
+
 void PrintPlan(const TString& plan, bool analyzeMode) {
     NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(
         NYdb::NConsoleClient::EDataFormat::PrettyTable,
@@ -641,6 +663,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(GetStringField(*hashShuffle, "Node Type"), "HashShuffle", plan);
         UNIT_ASSERT_C(!GetStringField(*hashShuffle, "HashFunc").empty(), plan);
         const auto& hashShuffleMap = hashShuffle->GetMapSafe();
+        UNIT_ASSERT_C(!hashShuffleMap.contains("OperatorId"), plan);
+        UNIT_ASSERT_C(!hashShuffleMap.contains("Operators"), plan);
         UNIT_ASSERT_C(hashShuffleMap.contains("KeyColumns") && hashShuffleMap.at("KeyColumns").IsArray(), plan);
         UNIT_ASSERT_C(!hashShuffleMap.at("KeyColumns").GetArraySafe().empty(), plan);
 
@@ -899,6 +923,41 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(GetBoolField(*orderedUnionOp, "Ordered"), scalarSubplanPlan);
     }
 
+    Y_UNIT_TEST(ExplainAnalyzeScalarSubquery) {
+        TExplainPlanTestContext testContext;
+        auto& session = testContext.GetSession();
+        auto plan = ExecuteExplainAnalyze(session, R"(
+            PRAGMA YqlSelect = 'force';
+            select t1.a
+            from `/Root/t1` as t1
+            where t1.a = (select max(t2.a) from `/Root/t2` as t2);
+        )");
+
+        NJson::TJsonValue planJson;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &planJson, true), plan);
+        const auto& planMap = planJson.GetMapSafe();
+        const auto& simplifiedPlan = planMap.at("SimplifiedPlan");
+
+        const auto* emptySource = FindOperatorByStringField(simplifiedPlan, "Name", "EmptySource");
+        UNIT_ASSERT_C(emptySource, plan);
+        UNIT_ASSERT_C(!emptySource->GetMapSafe().contains("OperatorId"), plan);
+
+        const auto* unionAll = FindConnectionNode(simplifiedPlan, "UnionAll");
+        UNIT_ASSERT_C(unionAll, plan);
+        UNIT_ASSERT_C(!unionAll->GetMapSafe().contains("OperatorId"), plan);
+        UNIT_ASSERT_C(!unionAll->GetMapSafe().contains("Operators"), plan);
+
+        THashSet<i64> executionOperatorIds;
+        THashSet<i64> simplifiedOperatorIds;
+        CollectOperatorIds(planMap.at("Plan"), executionOperatorIds);
+        CollectOperatorIds(simplifiedPlan, simplifiedOperatorIds);
+        UNIT_ASSERT_C(!simplifiedOperatorIds.empty(), plan);
+        for (const auto operatorId : simplifiedOperatorIds) {
+            UNIT_ASSERT_C(executionOperatorIds.contains(operatorId),
+                "OperatorId " << operatorId << " is missing from the execution plan\n" << plan);
+        }
+    }
+
     Y_UNIT_TEST(ExplainStageConnections) {
         TExplainPlanTestContext testContext;
         auto& session = testContext.GetSession();
@@ -910,8 +969,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         )");
 
         const auto simplifiedConnectionPlan = GetSimplifiedPlan(connectionPlan);
-        UNIT_ASSERT_C(FindConnectionNode(simplifiedConnectionPlan, "UnionAll"), connectionPlan);
-        UNIT_ASSERT_C(FindConnectionNode(simplifiedConnectionPlan, "Broadcast"), connectionPlan);
+        const auto* unionAll = FindConnectionNode(simplifiedConnectionPlan, "UnionAll");
+        const auto* broadcast = FindConnectionNode(simplifiedConnectionPlan, "Broadcast");
+        UNIT_ASSERT_C(unionAll, connectionPlan);
+        UNIT_ASSERT_C(broadcast, connectionPlan);
+        UNIT_ASSERT_C(!unionAll->GetMapSafe().contains("OperatorId"), connectionPlan);
+        UNIT_ASSERT_C(!unionAll->GetMapSafe().contains("Operators"), connectionPlan);
+        UNIT_ASSERT_C(!broadcast->GetMapSafe().contains("OperatorId"), connectionPlan);
+        UNIT_ASSERT_C(!broadcast->GetMapSafe().contains("Operators"), connectionPlan);
         UNIT_ASSERT_C(!FindConnectionNode(simplifiedConnectionPlan, "Map"), connectionPlan);
     }
 

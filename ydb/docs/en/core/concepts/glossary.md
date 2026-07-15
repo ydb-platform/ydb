@@ -26,7 +26,7 @@ Since {{ ydb-short-name }} uses a storage and compute separation approach, `ydbd
 
 #### Database node {#database-node}
 
-**Database nodes** (also known as **tenant nodes**, **compute nodes**) process user queries addressed to a specific logical [database](#database). Their state resides only in memory and can be restored from [distributed storage](#distributed-storage). The set of database nodes of a given [cluster {{ ydb-short-name }}](topology.md) can be considered the compute layer of that cluster. Thus, adding database nodes and allocating them additional resources (CPU and RAM) are the primary ways to increase the compute resources of a database.
+**Database nodes** (also known as **tenant nodes** or **compute nodes**) process user queries addressed to a specific logical [database](#database). Their state resides only in memory and can be restored from [distributed storage](#distributed-storage). The set of database nodes of a given [cluster {{ ydb-short-name }}](topology.md) can be considered the compute layer of that cluster. Thus, adding database nodes and allocating them additional resources (CPU and RAM) are the primary ways to increase the compute resources of a database.
 
 The primary role of database nodes is to run various [tablets](#tablet) and [actors](#actor), as well as to accept incoming network requests.
 
@@ -54,7 +54,7 @@ A number of terms related to [the implementation of distributed storage](#distri
 
 ### Storage group {#storage-group}
 
-**storage group**, or **Blob storage** is a location for reliable data storage, similar to [RAID](https://en.wikipedia.org/wiki/RAID), but using disks of multiple servers. Depending on the selected [cluster topology](#topology), storage groups employ different algorithms to ensure high availability, similar to [standard RAID levels](https://en.wikipedia.org/wiki/Standard_RAID_levels).
+**storage group**, **distributed storage group**, or **Blob storage group** is a location for reliable data storage, similar to [RAID](https://en.wikipedia.org/wiki/RAID), but using disks of multiple servers. Depending on the selected [cluster topology](#topology), storage groups employ different algorithms to ensure high availability, similar to [standard RAID levels](https://en.wikipedia.org/wiki/Standard_RAID_levels).
 
 [Distributed storage](#distributed-storage) typically manages a large number of relatively small storage groups. Each group can be assigned to a specific [database](#database) to increase the disk space capacity and I/O throughput available to that database.
 
@@ -257,7 +257,7 @@ Local Bloom index — a special case of [local index](#local-index): a probabili
 
 #### Lifetime {#ttl}
 
-**time to live**, **TTL** — this is a mechanism for automatically deleting old rows from a table asynchronously in the background. It is described in a separate article [{#T}](ttl.md).
+**time to live** or **TTL** — this is a mechanism for automatically deleting old rows from a table asynchronously in the background. It is described in a separate article [{#T}](ttl.md).
 
 ### Representation {#view}
 
@@ -364,7 +364,7 @@ A **semaphore** is an object inside a [coordination node](#coordination-node) th
 
 ### Resource pool {#resource-pool}
 
-A **resource pool** is a schema object that describes the limits imposed on resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By `default`, all queries are executed in a resource pool named , which does not impose any restrictions. For more information about using resource pools, see [{#T}](../dev/resource-consumption-management.md).
+A **resource pool** is a schema object that describes the limits imposed on resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By default, all queries are executed in a resource pool named `default`, which does not impose any restrictions. For more information about using resource pools, see [{#T}](../dev/resource-consumption-management.md).
 
 ### Resource pool classifier {#resource-pool-classifier}
 
@@ -426,15 +426,15 @@ An **auth token** is a token used for [authentication](../security/authenticatio
 
 ### Schema object {#scheme-object}
 
-A database schema consists of **schema objects**, which can be databases, [tables](#table) (including [external tables](#external-table)), [topics](#topic), [folders](#folder), etc.
+A database schema consists of **schema objects**, which can be databases, [tables](#table) (including [external tables](#external-table)), [topics](#topic), [directories](#folder), etc.
 
-For organizational convenience, schema objects form a hierarchy using [folders](#folder).
+For organizational convenience, schema objects form a hierarchy using [directories](#folder).
 
 ### Folder {#folder}
 
 As in file systems, a **folder**, **directory** is a container for [schema objects](#scheme-object).
 
-Folders can contain subfolders, and such nesting can be of arbitrary depth.
+Directories can contain subdirectories, and such nesting can be of arbitrary depth.
 
 ### Access object {#access-object}
 
@@ -452,7 +452,7 @@ An access subject can be a [user](#access-user) or a [group](#access-group).
 
 ### Access right {#access-right}
 
-[Access right](../security/authorization.md#right) — an entity that represents permission for an [access subject](#access-subject) to perform a specific set of operations in the cluster or database on a particular [access object](#access-object).
+**[Access right](../security/authorization.md#right)** — an entity that represents permission for an [access subject](#access-subject) to perform a specific set of operations in the cluster or database on a particular [access object](#access-object).
 
 ### Access rights inheritance {#access-right-inheritance}
 
@@ -460,7 +460,7 @@ An access subject can be a [user](#access-user) or a [group](#access-group).
 
 ### Access control list {#access-control-list}
 
-[Access control list](../security/authorization.md#right), **access control list**, or **ACL** — a list of all [rights](#access-right) granted to [access subjects](#access-subject) (users and groups) for a specific [access object](#access-object).
+**[Access control list](../security/authorization.md#right)**, **access control list**, or **ACL** — a list of all [rights](#access-right) granted to [access subjects](#access-subject) (users and groups) for a specific [access object](#access-object).
 
 ### Access level {#access-level}
 
@@ -603,7 +603,7 @@ Each table of the local database is stored as an [LSM tree](#lsm-tree).
 
 #### Log-structured merge-tree {#lsm-tree}
 
-**[Log-structured merge-tree](https://ru.wikipedia.org/wiki/LSM-%D0%B4%D0%B5%D1%80%D0%B5%D0%B2%D0%BE)** — is a data structure designed to optimize write and read performance in storage systems. It is used in {{ ydb-short-name }} to store tables of the [local database](#local-database) and data of [VDisks](#vdisk).
+**[Log-structured merge-tree](https://ru.wikipedia.org/wiki/LSM-%D0%B4%D0%B5%D1%80%D0%B5%D0%B2%D0%BE)** or **LSM tree** — is a data structure designed to optimize write and read performance in storage systems. It is used in {{ ydb-short-name }} to store tables of the [local database](#local-database) and data of [VDisks](#vdisk).
 
 #### MemTable {#memtable}
 
@@ -836,13 +836,13 @@ Technically, the DS proxy is implemented as an [actor service](#actor-service) l
 
 **Node warden** or `BS_NODE` — is an [actor service](#actor-service) on each cluster node, launching [PDisks](#pdisk), [VDisks](#vdisk) and [DS proxy](#ds-proxy) of [static storage groups](#static-group) when the node starts. It also interacts with the [DS controller](#ds-controller) to start PDisk, VDisk and DS proxy for [dynamic groups](#dynamic-group). The DS proxy for dynamic groups is started on demand: node warden processes “undelivered” messages to the DS proxy, starts the appropriate DS proxies, and obtains the group configuration from the DS controller.
 
-#### Failure domain {#fail-realm}
+#### Fail realm {#fail-realm}
 
 **fail realm** — is a set of [failure domains](#fail-domain) that can fail simultaneously for a common cause. A correlated failure of two [VDisks](#vdisk) in the same fail realm is more likely than a failure of two VDisks from different fail realms.
 
 An example of a failure domain is a set of equipment located in a single [data center or availability zone](#regions-az) that can fail entirely due to a natural disaster, a large‑scale power outage, or another similar event.
 
-#### Failure domain {#fail-domain}
+#### Fail domain {#fail-domain}
 
 **fail domain** is a set of equipment that can fail simultaneously. A correlated failure of two [VDisk](#vdisk) within the same fail domain is more likely than the failure of two VDisk from different fail domains. In the case of different fail domains, the probability of a simultaneous failure also depends on whether the considered domains belong to the same failure area or to different ones.
 
@@ -867,7 +867,7 @@ Distributed transactions {{ ydb-short-name }} are inspired by the research work 
 
 #### Optimistic locks {#optimistic-locking}
 
-As in many other database management systems, queries {{ ydb-short-name }} can place locks on certain data fragments, such as table rows, to ensure that concurrent modifications do not leave them in an inconsistent state. However, {{ ydb-short-name }} checks these locks not at the start of transactions but when attempting to commit them. The first approach is called **perssimistic locking** (for example, it is used in PostgreSQL), and the second is **optimistic locking** (used in {{ ydb-short-name }}).
+As in many other database management systems, queries {{ ydb-short-name }} can place locks on certain data fragments, such as table rows, to ensure that concurrent modifications do not leave them in an inconsistent state. However, {{ ydb-short-name }} checks these locks not at the start of transactions but when attempting to commit them. The first approach is called **pessimistic locking** (for example, it is used in PostgreSQL), and the second is **optimistic locking** (used in {{ ydb-short-name }}).
 
 #### Transaction lock invalidation {#tli}
 
@@ -889,11 +889,11 @@ For read-only transactions, similar to "read uncommitted" in other database mana
 
 #### Read-write set {#rw-set}
 
-A **read-write set**, **RW-set**, or **read-write set** is a set of data that will participate in the execution of a [distributed transaction](#transactions). It combines the read set data that will be read and the write set for which modifications will be made.
+A **read-write set**, **RW-set** is a set of data that will participate in the execution of a [distributed transaction](#transactions). It combines the read set data that will be read and the write set for which modifications will be made.
 
 #### Read set {#read-set}
 
-A **read set**, **ReadSet data**, or **read set** is what participating shards send during transaction execution. For data transactions, it may contain information about the state of [optimistic locks](#optimistic-locking), the shard's readiness to commit, or a decision to abort the transaction.
+A **read set**, **ReadSet data** is what participating shards send during transaction execution. For data transactions, it may contain information about the state of [optimistic locks](#optimistic-locking), the shard's readiness to commit, or a decision to abort the transaction.
 
 #### Transaction proxies {#transaction-proxy}
 
@@ -901,7 +901,7 @@ A **transaction proxy** or `TX_PROXY` is a service that orchestrates the executi
 
 #### Transaction flags {#txflags}
 
-**Transaction flags** or **TxFlags** is a bitmask of flags that modify the transaction execution in some way.
+**Transaction flags** or **TxFlags** are a bitmask of flags that modify the transaction execution in some way.
 
 #### Transaction ID {#txid}
 
@@ -913,7 +913,7 @@ A **transaction order ID** is a unique identifier assigned to each transaction d
 
 #### Plan step {#planstep}
 
-A **plan step**, **step**, or **PlanStep** is the logical time at which a set of transactions is scheduled to execute.
+A **plan step**, **step**, **PlanStep**, or **Step** is the logical time at which a set of transactions is scheduled to execute.
 
 #### Mediator time {#mediator-time}
 
@@ -925,7 +925,7 @@ During the execution of distributed transactions, **mediator time** is the logic
 
 MiniKQL is a low‑level language. End users of the system see only queries in the [YQL](#yql) language, which relies on MiniKQL in its implementation.
 
-#### Query processor {#kqp}
+#### Query Processor {#kqp}
 
 **Query Processor**, also known as **QP** (formerly **KQP**), is a {{ ydb-short-name }} component responsible for orchestrating the execution of user queries and generating the final response.
 

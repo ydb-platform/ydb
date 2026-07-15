@@ -47,7 +47,7 @@ For detailed information about transactions and the available transaction modes 
 
 ## Repeated executions (retries)
 
-In {{ ydb-short-name }}, the [optimistic locking](https://en.wikipedia.org/wiki/Optimistic_concurrency_control) mechanism is used to manage transactions. This means that a transaction can be aborted during execution if a conflict is detected and the system cannot guarantee the required isolation level — for example, if two transactions modify the same data simultaneously. In addition to conflicts, a distributed environment may experience temporary unavailability of individual nodes due to network failures, hardware faults, or maintenance work, which can also require the transaction to be retried.
+In {{ ydb-short-name }}, the [optimistic concurrency control](https://en.wikipedia.org/wiki/Optimistic_concurrency_control) mechanism is used to manage transactions. This means that a transaction can be aborted during execution if a conflict is detected and the system cannot guarantee the required isolation level — for example, if two transactions modify the same data simultaneously. In addition to conflicts, a distributed environment may experience temporary unavailability of individual nodes due to network failures, hardware faults, or maintenance work, which can also require the transaction to be retried.
 
 Retry should always be performed at the transaction level, not at the individual query level. In [interactive transactions](../glossary.md#interactive-transaction) the execution order and intermediate results of individual queries can affect subsequent actions. Therefore, if a query fails due to a conflict or a transient error, you must retry the entire transaction from the beginning to ensure data correctness and consistency.
 
@@ -63,7 +63,7 @@ YQL supports all major SQL constructs, including:
 
 - [Data Manipulation Language (DML)](https://ru.wikipedia.org/wiki/%D0%AF%D0%B7%D1%8B%D0%BA_%D0%BC%D0%B0%D0%BD%D0%B8%D0%BF%D1%83%D0%BB%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D1%8F_%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D0%BC%D0%B8): `SELECT`, `INSERT`, `REPLACE`, `UPDATE`, `DELETE`, and `UPSERT`.
 - [Data Definition Language (DDL)](https://ru.wikipedia.org/wiki/%D0%AF%D0%B7%D1%8B%D0%BA_%D0%BE%D0%BF%D1%80%D0%B5%D0%B4%D0%B5%D0%BB%D0%B5%D0%BD%D0%B8%D1%8F_%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D1%85): `CREATE`, `ALTER`, `DROP` for tables, indexes, and other schema objects.
-- Connections — all standard types of connections, as well as special connection types (for example, `LEFT SEMI`, `RIGHT SEMI`, `ANY`).
+- Joins — all standard types of joins, as well as special join types (for example, `LEFT SEMI`, `RIGHT SEMI`, `ANY`).
 - Aggregations — grouping (`GROUP BY`) and window functions.
 - [Named expressions](../../yql/reference/syntax/expressions.md#named-nodes) for structuring query text.
 - A large number of built-in functions for processing various data types and solving complex tasks directly in the query.

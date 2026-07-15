@@ -57,8 +57,8 @@ DECLARE_REFCOUNTED_CLASS(TAsyncStreamPipe)
 DECLARE_REFCOUNTED_CLASS(TBoundedAsyncStreamPipe)
 
 DEFINE_ENUM(EWaitForStrategy,
-    (WaitFor)
-    (Get)
+    (SuspendFiber)
+    (BlockThread)
 );
 
 class TAsyncSemaphore;

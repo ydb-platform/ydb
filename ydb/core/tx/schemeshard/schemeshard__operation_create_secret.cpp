@@ -254,12 +254,13 @@ public:
             * By default, secrets should not inherit permissions from their parent object, except for the DescribeSchema grant.
             * This is done to prevent users from accidentally granting permissions to such sensitive objects.
             *
-            * When the flag is not set explicitly, the default depends on the AlwaysSetSystemOwner setting:
-            * with it enabled, permissions are inherited by default (inherit_permissions = true).
+            * When the flag is not set explicitly, the default depends on the AlwaysSetSystemOwner setting
+            * (or EnableIdmPermissionsManagement flag): with it enabled, permissions are inherited
+            * by default (inherit_permissions = true).
             */
             const bool inheritPermissions = createSecretProto.HasInheritPermissions()
                 ? createSecretProto.GetInheritPermissions()
-                : AppData()->AlwaysSetSystemOwner;
+                : AppData()->AlwaysSetSystemOwner || AppData()->FeatureFlags.GetEnableIdmPermissionsManagement();
 
             if (!inheritPermissions) {
                 secretPath->ACL = InterruptInheritanceExceptDescribe(dstPath.GetEffectiveACL());

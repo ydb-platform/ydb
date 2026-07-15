@@ -423,4 +423,116 @@ Y_UNIT_TEST_SUITE(TContinuousBackupWithRebootsTests) {
             NLs::PathExist,
         });
     }
+
+    // Recovery path for local databases already corrupted by issue #33764:
+    // a Paths row exists whose parent's Paths row is missing. With the
+    // SchemeShardControls.TolerateOrphanedPaths ICB control enabled,
+    // TTxInit synthesizes an in-memory dropped placeholder parent (nothing is
+    // persisted) instead of failing to start, quarantining the orphaned
+    // subtree. Without the control such a database cannot boot at all.
+    Y_UNIT_TEST(SelfHealOrphanedPathRowViaIcb) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateContinuousBackup(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            ContinuousBackupDescription {
+                StreamName: "0_continuousBackupImpl"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto streamDesc = DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl");
+        const ui64 streamOwnerId = streamDesc.GetPathOwnerId();
+        const ui64 streamLocalId = streamDesc.GetPathId();
+        const auto implDesc = DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl/streamImpl");
+        const ui64 implLocalId = implDesc.GetPathId();
+        TestDescribeResult(implDesc, {
+            NLs::PathExist,
+        });
+
+        // Corrupt the local database the way issue #33764 did: the stream's
+        // Paths and CdcStream rows are gone (in production removed by the
+        // completed drop + premature TTxCleanDroppedPaths), while the
+        // streamImpl child's Paths row remains.
+        NKikimrMiniKQL::TResult result;
+        TString err;
+        const auto status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let pathKey '('('Id (Uint64 '%)" PRIu64 R"())))
+                (let streamKey '('('OwnerPathId (Uint64 '%)" PRIu64 R"()) '('LocalPathId (Uint64 '%)" PRIu64 R"())))
+                (return (AsList
+                    (EraseRow 'Paths pathKey)
+                    (EraseRow 'CdcStream streamKey)
+                ))
+            )
+        )", streamLocalId, streamOwnerId, streamLocalId), result, err);
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+
+        TControlBoard::SetValue(1, runtime.GetAppData().Icb->SchemeShardControls.TolerateOrphanedPaths);
+
+        // Without the control this reboot would fail TTxInit with
+        // "Parent path not found"; with it the orphaned streamImpl is
+        // quarantined under a placeholder and the tablet boots.
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist,
+            NLs::IsTable,
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl"), {
+            NLs::PathNotExist,
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/0_continuousBackupImpl/streamImpl"), {
+            NLs::PathNotExist,
+        });
+
+        // The healed schemeshard remains fully operational.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table2"), {
+            NLs::PathExist,
+            NLs::IsTable,
+        });
+
+        // Placeholder synthesis is idempotent across further reboots.
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist,
+            NLs::IsTable,
+        });
+
+        // Remediation per the runbook: force-drop the quarantined subtree by
+        // path id and let the rows drain; the placeholder then evaporates on
+        // its own once its last child row is removed.
+        TestForceDropUnsafe(runtime, ++txId, implLocalId);
+        env.TestWaitNotification(runtime, txId);
+        env.SimulateSleep(runtime, TDuration::Seconds(5));
+
+        // The database is consistent again: it boots with the control off.
+        TControlBoard::SetValue(0, runtime.GetAppData().Icb->SchemeShardControls.TolerateOrphanedPaths);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist,
+            NLs::IsTable,
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table2"), {
+            NLs::PathExist,
+            NLs::IsTable,
+        });
+    }
 } // TContinuousBackupWithRebootsTests

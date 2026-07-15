@@ -4369,6 +4369,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    template<bool LPartitionsByKeys>
     IGraphTransformer::TStatus PartitionsByKeysWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
@@ -4381,8 +4382,15 @@ namespace {
         }
 
         const TTypeAnnotationNode* itemType = nullptr;
-        if (!EnsureNewSeqType<false>(input->Head(), ctx.Expr, &itemType)) {
-            return IGraphTransformer::TStatus::Error;
+        if constexpr (LPartitionsByKeys) {
+            if (!EnsureListType(input->Head(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            itemType = input->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        } else {
+            if (!EnsureNewSeqType<false>(input->Head(), ctx.Expr, &itemType)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         auto& lambdaKeySelector = input->ChildRef(1);
@@ -4450,7 +4458,11 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!UpdateLambdaAllArgumentsTypes(lambdaFinalHandler, { input->Head().GetTypeAnn() }, ctx.Expr)) {
+        const auto lambdaFinalHandlerArgType = LPartitionsByKeys
+            ? ctx.Expr.MakeType<TStreamExprType>(itemType)
+            : input->Head().GetTypeAnn();
+
+        if (!UpdateLambdaAllArgumentsTypes(lambdaFinalHandler, { lambdaFinalHandlerArgType }, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4467,9 +4479,16 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(lambdaFinalHandler->GetTypeAnn());
+        if constexpr (LPartitionsByKeys) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(&GetSeqItemType(*lambdaFinalHandler->GetTypeAnn())));
+        } else {
+            input->SetTypeAnn(lambdaFinalHandler->GetTypeAnn());
+        }
         return IGraphTransformer::TStatus::Ok;
     }
+
+    template IGraphTransformer::TStatus PartitionsByKeysWrapper<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    template IGraphTransformer::TStatus PartitionsByKeysWrapper<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
     IGraphTransformer::TStatus ReverseWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
@@ -9595,12 +9614,13 @@ namespace {
 
     IGraphTransformer::TStatus WatermarkGeneratorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         auto source = input->Child(TCoWatermarkGenerator::idx_Input);
         auto& watermarkExtractor = input->ChildRef(TCoWatermarkGenerator::idx_WatermarkExtractor);
+        auto watermarkSettings = input->Child(TCoWatermarkGenerator::idx_WatermarkSettings);
 
         if (source->GetTypeAnn() && source->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
             input->SetTypeAnn(source->GetTypeAnn());
@@ -9628,6 +9648,28 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
         if (!EnsureSpecificDataType(*watermarkExtractor, EDataSlot::Timestamp, ctx.Expr, /* allowOptional = */ true)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureValidSettings(
+            *watermarkSettings,
+            {
+                "watermarklatearrivaldelay",
+                "watermarkgranularity",
+                "watermarkidletimeout",
+            },
+            [](TStringBuf name, TExprNode& node, TExprContext& ctx) -> bool {
+                Y_UNUSED(name);
+                if (!EnsureArgsCount(node, 2, ctx)) {
+                    return false;
+                }
+                if (!EnsureAtom(node.Tail(), ctx)) {
+                    return false;
+                }
+                return true;
+            },
+            ctx.Expr
+        )) {
             return IGraphTransformer::TStatus::Error;
         }
 

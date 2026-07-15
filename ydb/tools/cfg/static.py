@@ -1293,6 +1293,9 @@ class StaticConfigGenerator(object):
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
 
+                if drive.disk_scope is not None:
+                    drive_pb.DiskScope = drive.disk_scope
+
                 # Full support of `pdisk_config`, not just copying selected fields manually
                 # from other non-typed locations
                 if drive.pdisk_config is not None:
@@ -1372,6 +1375,9 @@ class StaticConfigGenerator(object):
 
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
+
+                if drive.disk_scope is not None:
+                    drive_pb.DiskScope = drive.disk_scope
 
             my_group = self._read_generated_bs_config(
                 group.get("erasure"),

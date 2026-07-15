@@ -52,8 +52,8 @@ public:
         : ZeroInterval_(zeroInterval)
         , EqCall_(eqCall)
         , GtCall_(gtCall)
-        , EqState_(MakeHolder<TPgResolvedCallState>(eqCall.GetArgCount(), &eqCall.GetFInfo()))
-        , GtState_(MakeHolder<TPgResolvedCallState>(gtCall.GetArgCount(), &gtCall.GetFInfo()))
+        , EqState_(MakeHolder<TPgResolvedCallState>(eqCall.GetArgCount(), &eqCall.GetFInfo(), NPg::InvalidCollationOid))
+        , GtState_(MakeHolder<TPgResolvedCallState>(gtCall.GetArgCount(), &gtCall.GetFInfo(), NPg::InvalidCollationOid))
     {
     }
 

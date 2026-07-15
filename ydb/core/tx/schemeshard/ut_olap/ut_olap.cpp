@@ -1,10 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/olap_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
->>>>>>> 871a46438f3 (notify tx has been fixed (#46455))
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
@@ -24,8 +21,6 @@ namespace {
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeInfo = NScheme::TTypeInfo;
 
-<<<<<<< HEAD
-=======
 bool IsSchemeTxCompleted(TTestBasicRuntime& runtime, ui64 txId) {
     const TActorId subscriber = NSchemeShardUT_Private::CreateNotificationSubscriber(runtime, TTestTxConfig::SchemeShard);
     const TActorId sender = runtime.AllocateEdgeActor();
@@ -41,28 +36,6 @@ bool IsSchemeTxCompleted(TTestBasicRuntime& runtime, ui64 txId) {
     return ev != nullptr;
 }
 
-// A ColumnShard test controller that can pause compaction after every single compaction wave. The shard
-// re-schedules compaction as soon as one completes, so once enabled it would normally collapse all portions
-// in one go; disabling the Compaction background from inside the completion hook breaks that cascade, letting
-// a test run compaction exactly one wave at a time (see StoreStatsSmallBlobsQuotaImpl).
-class TPauseAfterCompactionController: public NYDBTest::NColumnShard::TController {
-private:
-    using TBase = NYDBTest::NColumnShard::TController;
-
-protected:
-    bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& shard) override {
-        const bool result = TBase::DoOnWriteIndexComplete(change, shard);
-        if (PauseCompactionAfterEachWave && change.TypeString() == "CS::GENERAL") {
-            DisableBackground(EBackground::Compaction);
-        }
-        return result;
-    }
-
-public:
-    bool PauseCompactionAfterEachWave = false;
-};
-
->>>>>>> 871a46438f3 (notify tx has been fixed (#46455))
 static const TString defaultStoreSchema = R"(
     Name: "OlapStore"
     ColumnShardCount: 1

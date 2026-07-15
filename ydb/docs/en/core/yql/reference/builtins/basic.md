@@ -228,7 +228,7 @@ Generates a pseudorandom number:
 
 * `Random()`: A floating point number (Double) from 0 to 1.
 * `RandomNumber()`: An integer from the complete Uint64 range.
-* `RandomUuid()`: [Uuid version 4](https://tools.ietf.org/html/rfc4122#section-4.4).
+* `RandomUuid()`: [Uuid version 4](https://tools.ietf.org/html/rfc4122#section-4.4). For primary keys in row-oriented tables, consider the key-friendly generators in the [`Uuid` module](../udf/list/uuid.md).
 
 ### Signatures
 

@@ -30,7 +30,7 @@ void TClassifierSettings::TParser::operator()(std::optional<TRegexPredicate>* se
     if (Value.empty()) {
         setting->reset();
     } else {
-        *setting = TRegexPredicate::Compile(Value);
+        *setting = TRegexPredicate::FromGlob(Value);
     }
 }
 

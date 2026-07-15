@@ -84,7 +84,6 @@ protected:
 
         Printer->SetTestType("InterconnectLoad");
         Printer->AddResult("Duration, sec", cmd.GetDurationSeconds());
-        Printer->AddResult("DelayBeforeMeasurements, sec", cmd.GetDelayBeforeMeasurementsSeconds());
         Printer->AddResult("InFlyMax", cmd.GetInFlyMax());
         auto size = cmd.GetSizeMin() == cmd.GetSizeMax() ? std::to_string(cmd.GetSizeMin()) : (std::to_string(cmd.GetSizeMin()) + "-" + std::to_string(cmd.GetSizeMax()));
         Printer->AddResult("Size", size);

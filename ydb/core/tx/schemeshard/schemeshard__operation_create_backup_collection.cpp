@@ -190,7 +190,7 @@ public:
         }
 
         auto backupCollection = TBackupCollectionInfo::Create(desc);
-        context.SS->BackupCollections.Set(allocatedPathId, backupCollection, context.MemChanges);
+        context.SS->BackupCollections.Set({.Path = allocatedPathId, .Value = backupCollection, .Changes = context.MemChanges});
         context.SS->RegisterBackupCollectionTables(backupCollection);
 
         context.DbChanges.PersistBackupCollection(allocatedPathId, backupCollection);

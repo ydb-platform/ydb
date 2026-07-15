@@ -127,7 +127,7 @@ public:
         TPathElement::TPtr subDomain = path.Base();
 
         Y_ABORT_UNLESS(context.SS->SubDomains.contains(subDomain->PathId));
-        auto subDomainInfo = context.SS->SubDomains.at(subDomain->PathId);
+        auto& subDomainInfo = context.SS->SubDomains.Update(subDomain->PathId, context.MemChanges);
         Y_ABORT_UNLESS(subDomainInfo);
 
         if (subDomainInfo->GetAlter()) {

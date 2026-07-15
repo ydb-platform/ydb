@@ -118,7 +118,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        TKesusInfo::TPtr kesus = context.SS->KesusInfos.at(txState->TargetPathId);
+        auto kesus = context.SS->KesusInfos.at(txState->TargetPathId);
         Y_VERIFY_S(kesus, "kesus is null. PathId: " << txState->TargetPathId);
 
         TPath kesusPath = TPath::Init(txState->TargetPathId, context.SS);
@@ -182,7 +182,7 @@ public:
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
 
-        TKesusInfo::TPtr kesus = context.SS->KesusInfos.at(pathId);
+        auto& kesus = context.SS->KesusInfos.MutableUntracked(pathId);
         kesus->FinishAlter();
         context.SS->PersistKesusInfo(db, pathId, kesus);
         context.SS->PersistRemoveKesusAlter(db, pathId);
@@ -315,7 +315,7 @@ public:
             return result;
         }
 
-        TKesusInfo::TPtr kesus = context.SS->KesusInfos.at(path.Base()->PathId);
+        auto& kesus = context.SS->KesusInfos.MutableUntracked(path.Base()->PathId);
         Y_ABORT_UNLESS(kesus);
         Y_ABORT_UNLESS(path.Base()->IsCreateFinished()); // checks.NotUnderOperation checks that path not under creation
 

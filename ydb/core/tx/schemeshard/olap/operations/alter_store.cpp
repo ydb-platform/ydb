@@ -94,7 +94,7 @@ public:
             << " at tabletId# " << ssId);
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterOlapStore);
-        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(txState->TargetPathId);
+        auto storeInfo = context.SS->OlapStores.at(txState->TargetPathId);
         Y_ABORT_UNLESS(storeInfo);
         TOlapStoreInfo::TPtr alterData = storeInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
@@ -204,7 +204,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(pathId);
+        auto storeInfo = context.SS->OlapStores.at(pathId);
         Y_ABORT_UNLESS(storeInfo);
         TOlapStoreInfo::TPtr alterData = storeInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
@@ -215,7 +215,7 @@ public:
         alterData->AlterBody.Clear();
         alterData->ColumnTables = storeInfo->ColumnTables;
         alterData->ColumnTablesUnderOperation = storeInfo->ColumnTablesUnderOperation;
-        context.SS->OlapStores.Set(pathId, alterData, context.MemChanges);
+        context.SS->OlapStores.Set({.Path = pathId, .Value = alterData, .Changes = context.MemChanges});
 
         context.SS->PersistOlapStoreAlterRemove(db, pathId);
         context.SS->PersistOlapStore(db, pathId, *alterData);
@@ -338,7 +338,7 @@ public:
         if (!TablesInitialized) {
             TPathId pathId = txState->TargetPathId;
 
-            TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(pathId);
+            auto storeInfo = context.SS->OlapStores.at(pathId);
             Y_ABORT_UNLESS(storeInfo);
 
             for (TPathId tablePathId : storeInfo->ColumnTables) {
@@ -514,7 +514,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->OlapStores.contains(path->PathId));
-        TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(path->PathId);
+        auto storeInfo = context.SS->OlapStores.MutableUntracked(path->PathId);
 
         if (!storeInfo->ColumnTablesUnderOperation.empty()) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Store has unfinished table operations");

@@ -502,7 +502,7 @@ public:
         // so that next stages would get extsubdomain's hive tablet id
         // by requesting on extsubdomain's path
         {
-            auto subdomain = context.SS->SubDomains.at(txState->TargetPathId);
+            auto& subdomain = context.SS->SubDomains.Update(txState->TargetPathId, context.MemChanges);
             subdomain->AddPrivateShard(shardIdx);
             subdomain->AddInternalShard(shardIdx, context.SS);
 
@@ -620,7 +620,7 @@ public:
 
         // Get existing extsubdomain
         Y_ABORT_UNLESS(context.SS->SubDomains.contains(basenameId));
-        auto subdomainInfo = context.SS->SubDomains.at(basenameId);
+        auto& subdomainInfo = context.SS->SubDomains.Update(basenameId, context.MemChanges);
         Y_ABORT_UNLESS(subdomainInfo);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
@@ -872,7 +872,7 @@ public:
 
         // Get existing extsubdomain
         Y_ABORT_UNLESS(context.SS->SubDomains.contains(basenameId));
-        auto subdomainInfo = context.SS->SubDomains.at(basenameId);
+        auto& subdomainInfo = context.SS->SubDomains.Update(basenameId, context.MemChanges);
         Y_ABORT_UNLESS(subdomainInfo);
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
@@ -1133,7 +1133,7 @@ TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, 
     const auto& basenameId = path.Base()->PathId;
 
     Y_ABORT_UNLESS(context.SS->SubDomains.contains(basenameId));
-    auto subdomainInfo = context.SS->SubDomains.at(basenameId);
+    auto& subdomainInfo = context.SS->SubDomains.Update(basenameId, context.MemChanges);
     Y_ABORT_UNLESS(subdomainInfo);
 
     if (subdomainInfo->GetAlter()) {

@@ -65,7 +65,7 @@ struct TBackup {
     static void ProposeTableTx(const TOperationId& opId, TTxState& txState, TOperationContext& context, TVirtualTimestamp snapshotTime) {
         const auto& pathId = txState.TargetPathId;
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        auto table = context.SS->Tables.at(pathId);
         NKikimrSchemeOp::TBackupTask backup = table->BackupSettings;
         backup.SetSnapshotStep(snapshotTime.Step);
         backup.SetSnapshotTxId(snapshotTime.TxId);
@@ -140,7 +140,7 @@ struct TBackup {
         const ui64 ts = TAppData::TimeProvider->Now().Seconds();
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
+        TTableInfo::TPtr table = context.SS->Tables.MutableUntracked(txState.TargetPathId);
 
         auto& backupInfo = table->BackupHistory[opId.GetTxId()];
 
@@ -178,7 +178,7 @@ struct TBackup {
 
     static void PersistTableTask(const TPathId& pathId, const TTxTransaction& tx, TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        TTableInfo::TPtr table = context.SS->Tables.MutableUntracked(pathId);
 
         table->BackupSettings = tx.GetBackup();
 

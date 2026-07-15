@@ -186,7 +186,7 @@ public:
         TPathId pathId = txState->TargetPathId;
 
         Y_VERIFY_S(context.SS->Sequences.contains(pathId), "Sequence not found. PathId: " << pathId);
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
+        auto sequenceInfo = context.SS->Sequences.at(pathId);
         Y_ABORT_UNLESS(sequenceInfo);
         TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
         Y_ABORT_UNLESS(alterData);
@@ -196,7 +196,7 @@ public:
         txState->PlanStep = step;
         context.SS->PersistTxPlanStep(db, OperationId, step);
 
-        context.SS->Sequences.Set(pathId, alterData, context.MemChanges);
+        context.SS->Sequences.Set({.Path = pathId, .Value = alterData, .Changes = context.MemChanges});
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 
@@ -435,7 +435,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        auto sequenceInfo = context.SS->Sequences.at(pathId);
+        auto& sequenceInfo = context.SS->Sequences.Update(pathId, context.MemChanges);
         UpdateSequenceDescription(sequenceInfo->Description);
 
         context.SS->PersistSequence(db, pathId, *sequenceInfo);
@@ -978,7 +978,7 @@ public:
         txState.State = TTxState::CreateParts;
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
-        TSequenceInfo::TPtr srcSequence = context.SS->Sequences.at(srcPath.Base()->PathId);
+        auto& srcSequence = context.SS->Sequences.Update(srcPath.Base()->PathId, context.MemChanges);
         Y_ABORT_UNLESS(!srcSequence->Sharding.GetSequenceShards().empty());
 
         const auto& protoSequenceShard = *srcSequence->Sharding.GetSequenceShards().rbegin();
@@ -999,7 +999,7 @@ public:
             p->SetLocalId(ui64(sequenceShard.GetLocalId()));
         }
 
-        context.SS->Sequences.Set(dstPath.Base()->PathId, sequenceInfo, context.MemChanges);
+        context.SS->Sequences.Set({.Path = dstPath.Base()->PathId, .Value = sequenceInfo, .Changes = context.MemChanges});
 
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);

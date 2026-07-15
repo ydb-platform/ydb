@@ -685,7 +685,7 @@ public:
 
     void PrepareTableChanges(TPathElement::TPtr path, TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(path->PathId));
-        TTableInfo::TPtr& table = context.SS->Tables.at(path->PathId);
+        auto table = context.SS->Tables.at(path->PathId);
 
         path->LastTxId = OperationId.GetTxId();
         path->PathState = Lock;

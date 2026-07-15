@@ -58,7 +58,7 @@ namespace NKikimr::NSchemeShard {
                     auto path = TPath::Init(txState->TargetPathId, context.SS);
                     Y_ABORT_UNLESS(path.IsResolved());
 
-                    auto blobDepotInfo = context.SS->BlobDepots.at(path->PathId);
+                    auto& blobDepotInfo = context.SS->BlobDepots.Update(path->PathId, context.MemChanges);
                     Y_ABORT_UNLESS(blobDepotInfo);
 
                     for (auto& shard : txState->Shards) {
@@ -355,7 +355,7 @@ namespace NKikimr::NSchemeShard {
                 }
                 context.SS->PersistPath(db, dstPath->PathId);
 
-                context.SS->BlobDepots.Set(pathId, blobDepot, context.MemChanges);
+                context.SS->BlobDepots.Set({.Path = pathId, .Value = blobDepot, .Changes = context.MemChanges});
                 context.SS->PersistBlobDepot(db, pathId, *blobDepot);
 
                 context.SS->PersistTxState(db, OperationId);

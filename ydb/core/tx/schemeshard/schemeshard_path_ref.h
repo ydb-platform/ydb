@@ -31,9 +31,8 @@ public:
         Acquire();
     }
 
-    // Tag for adopting an already-counted reference: arm the handle (so
-    // destruction releases) without acquiring. For TMemoryChanges undo restore,
-    // where the DbRefCount is rolled back by the path snapshot, not this handle.
+    // Adopt an already-counted reference: arm the handle without acquiring.
+    // For undo restore, where the path snapshot owns the DbRefCount rollback.
     struct TAdopt {};
     static constexpr TAdopt Adopt{};
 

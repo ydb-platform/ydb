@@ -215,7 +215,7 @@ public:
             result->SetStatus(NKikimrScheme::StatusInvalidParameter);
             return result;
         }
-        context.SS->Views.Set(viewPathId, viewInfo, context.MemChanges);
+        context.SS->Views.Set({.Path = viewPathId, .Value = viewInfo, .Changes = context.MemChanges});
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateView, viewPathId);
         txState.State = TTxState::Propose;

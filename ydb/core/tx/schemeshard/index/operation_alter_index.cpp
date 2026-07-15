@@ -44,9 +44,9 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         Y_ABORT_UNLESS(context.SS->Indexes.contains(path->PathId));
-        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(path->PathId);
+        auto indexData = context.SS->Indexes.at(path->PathId);
         context.SS->PersistTableIndex(db, path->PathId);
-        context.SS->Indexes.Set(path->PathId, indexData->AlterData, context.MemChanges);
+        context.SS->Indexes.Set({.Path = path->PathId, .Value = indexData->AlterData, .Changes = context.MemChanges});
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
@@ -193,7 +193,7 @@ public:
         context.DbChanges.PersistAlterIndex(indexPath->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(indexPath->PathId);
+        auto& indexData = context.SS->Indexes.Update(indexPath->PathId, context.MemChanges);
         TTableIndexInfo::TPtr newIndexData = indexData->CreateNextVersion();
         Y_ABORT_UNLESS(newIndexData);
         newIndexData->State = tableIndexAlter.GetState();

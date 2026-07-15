@@ -69,11 +69,11 @@ public:
         context.SS->PersistCreateStep(db, newStreamPathId, step);
 
         context.SS->PersistCdcStream(db, newStreamPathId);
-        context.SS->CdcStreams.Set(newStreamPathId, newStream->AlterData, context.MemChanges);
+        context.SS->CdcStreams.Set({.Path = newStreamPathId, .Value = newStream->AlterData, .Changes = context.MemChanges});
         context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Add(1);
 
         context.SS->PersistCdcStream(db, oldStreamPathId);
-        context.SS->CdcStreams.at(oldStreamPathId)->FinishAlter();
+        context.SS->CdcStreams.Update(oldStreamPathId, context.MemChanges)->FinishAlter();
 
         context.SS->ClearDescribePathCaches(oldStreamPath);
         context.SS->ClearDescribePathCaches(newStreamPath);
@@ -221,7 +221,7 @@ public:
 
 
         Y_ABORT_UNLESS(context.SS->CdcStreams.contains(oldStreamPath.Base()->PathId));
-        auto oldStream = context.SS->CdcStreams.at(oldStreamPath.Base()->PathId);
+        auto& oldStream = context.SS->CdcStreams.Update(oldStreamPath.Base()->PathId, context.MemChanges);
 
         TCdcStreamInfo::EState requiredState = TCdcStreamInfo::EState::ECdcStreamStateDisabled;
         TCdcStreamInfo::EState newState = TCdcStreamInfo::EState::ECdcStreamStateInvalid;
@@ -397,7 +397,7 @@ public:
         newStreamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         newStreamPath.Base()->UserAttrs->AlterData = userAttrs;
 
-        context.SS->CdcStreams.Set(pathId, newStream, context.MemChanges);
+        context.SS->CdcStreams.Set({.Path = pathId, .Value = newStream, .Changes = context.MemChanges});
 
         newStreamPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, tablePath, context); // for correct discard of ChildrenExist prop
@@ -429,7 +429,7 @@ protected:
         auto path = context.SS->PathsById.at(pathId);
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto table = context.SS->Tables.at(pathId);
+        auto& table = context.SS->Tables.Update(pathId, context.MemChanges);
 
         auto& notice = *tx.MutableRotateCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());

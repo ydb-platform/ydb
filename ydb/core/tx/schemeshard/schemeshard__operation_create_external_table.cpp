@@ -309,7 +309,7 @@ public:
                                                 externalTable,
                                                 dstPath);
 
-        context.SS->ExternalTables.Set(newPathId, externalTableInfo, context.MemChanges);
+        context.SS->ExternalTables.Set({.Path = newPathId, .Value = externalTableInfo, .Changes = context.MemChanges});
         if (!acl.empty()) {
             externalTable->ApplyACL(acl);
         }

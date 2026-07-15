@@ -101,18 +101,18 @@ Compute `order_hash` on write and on keyed reads—the same rule as for `userhas
 
 #### UUID as a primary key {#uuid-primary-key}
 
-A `Uuid` primary key is a common alternative to monotonically increasing numeric identifiers: it spreads inserts across partitions and does not require a central sequence. The trade-off depends on how the 128 bits are arranged.
+A `Uuid` primary key is a common alternative to monotonically increasing numeric identifiers: it spreads inserts across partitions and does not require a central sequence. The effective outcome depends on how the 128 bits are arranged.
 
-{{ ydb-short-name }} stores `Uuid` values as 16 raw bytes in [Microsoft GUID mixed-endian layout](https://en.wikipedia.org/wiki/Universally_unique_identifier#Encoding). Primary keys are compared in this byte order, not as RFC 9562 network-byte-order values and not by the canonical GUID string from `CAST(Uuid AS String)`. As a result, a standard UUID version 7 generated elsewhere—or by [`Uuid::newV7`](../../yql/reference/udf/list/uuid.md#newv7)—does **not** sort chronologically in a row-oriented table even though the v7 specification embeds a timestamp. Use [`Uuid::newChrono`](../../yql/reference/udf/list/uuid.md#newchrono) or [`Uuid::newSharded`](../../yql/reference/udf/list/uuid.md#newsharded) when key sort order in {{ ydb-short-name }} matters.
+{{ ydb-short-name }} stores `Uuid` values as 16 raw bytes in [Microsoft GUID mixed-endian layout](https://en.wikipedia.org/wiki/Universally_unique_identifier#Encoding). Primary keys are compared in this byte order, not as RFC 9562 network-byte-order values and not by the canonical GUID string from `CAST(Uuid AS Text)`. As a result, a standard UUID version 7 generated externally, or by [`Uuid::newV7`](../../yql/reference/udf/list/uuid.md#newv7), does not sort chronologically in a row-oriented table or `ORDER BY` statement, even though the UUIDv7 specification embeds a timestamp. Use [`Uuid::newChrono`](../../yql/reference/udf/list/uuid.md#newchrono) when chronological key sort order in {{ ydb-short-name }} matters.
 
-[`RandomUuid()`](../../yql/reference/builtins/basic.md#random) (UUID version 4) gives uniformly random keys. That avoids hot spots on the last partition, but each new key is scattered across the full key space. Related rows and index entries rarely sit in adjacent ranges, which increases cross-partition work for time-bounded scans and secondary index maintenance.
+[`RandomUuid()`](../../yql/reference/builtins/basic.md#random) (UUID version 4) gives uniformly random keys. That avoids hot spots on the last partition, but new keys are scattered across the full key space. Related rows and index entries rarely sit in adjacent ranges, which increases cross-partition work for time-bounded scans and secondary index maintenance, and decreases the efficiency of data caching.
 
 The [`Uuid` module](../../yql/reference/udf/list/uuid.md) provides generators tuned for {{ ydb-short-name }}'s byte-level key order:
 
-* **`Uuid::newSharded`** — default choice for insert-heavy tables. Each key draws a random 10-bit prefix (about 1024 partition buckets) and embeds the current time at second granularity. Writes spread across partitions; rows created at similar times stay relatively close in key space.
-* **`Uuid::newChrono`** — stronger chronological ordering in the stored bytes. Prefer when queries often scan a time range by primary key or when index keys should follow creation time closely.
+* **`Uuid::newSharded`** — default choice for insert-heavy tables. Each key draws a random 10-bit prefix (1024 value buckets) and embeds the current time at second granularity. Writes spread across partitions; rows created at similar times stay relatively close in key space.
+* **`Uuid::newChrono`** — chronological ordering in the stored bytes. Prefer when index keys should follow creation time closely.
 * **`Uuid::newShardedPrefix` / `Uuid::newChronoPrefix`** — fix the prefix for a batch of rows (for example, all rows in one transaction). Those keys usually map to a single partition, which reduces cross-partition overhead for that operation. Use a fresh random prefix per transaction for overall table balance.
-* **`Uuid::newV7` / `Uuid::newV7At`** — standard [RFC 9562 UUID version 7](https://datatracker.ietf.org/doc/html/rfc9562). Use when you need interoperability with external v7 tools or [`Uuid::extractTs`](../../yql/reference/udf/list/uuid.md#extract-ts). For row-table performance inside {{ ydb-short-name }}, `newChrono` or `newSharded` usually fit better.
+* **`Uuid::newV7` / `Uuid::newV7At`** — standard [RFC 9562 UUID version 7](https://datatracker.ietf.org/doc/html/rfc9562). Use when you need interoperability with external tools or using function [`Uuid::extractTs`](../../yql/reference/udf/list/uuid.md#extract-ts).
 
 {% cut "Example: events table with a sharded UUID key" %}
 

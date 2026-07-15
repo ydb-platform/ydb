@@ -64,7 +64,7 @@ The first argument is either `Uint64` or `Uuid` (same rules as `newChronoPrefix`
 
 `Uuid::newV7` and `Uuid::newV7At` generate standard [RFC 9562 UUID version 7](https://datatracker.ietf.org/doc/html/rfc9562) values: a 48-bit Unix timestamp in milliseconds in the leading bits, then a random suffix. The result is stored in {{ ydb-short-name }}'s internal `Uuid` representation. Use these when you need interoperability with RFC v7 tools or to extract the embedded timestamp.
 
-Because UUIDv7 follows the RFC byte layout, its sort order in {{ ydb-short-name }} does not match chronological order. For table performance in {{ ydb-short-name }}, prefer `Uuid::newChrono` or `Uuid::newSharded` in primary keys.
+Because UUIDv7 follows the RFC byte layout, its sort order in {{ ydb-short-name }} does not match chronological order in a row-oriented table or in an `ORDER BY` clause. For table performance in {{ ydb-short-name }}, prefer `Uuid::newChrono` or `Uuid::newSharded` in primary keys.
 
 ### `Uuid::newV7` {#newv7}
 

@@ -494,7 +494,7 @@ private:
                     ColumnsToConvertInplace[name] = ci.PType;
                 }
 
-                if (isColumnTable && ci.PType.GetTypeId() == NScheme::NTypeIds::Interval) {
+                if (ci.PType.GetTypeId() == NScheme::NTypeIds::Interval) {
                     ColumnsToConvertInplace[name] = ci.PType;
                 }
             } else if (typeInProto.has_decimal_type()) {

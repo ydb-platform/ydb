@@ -493,6 +493,9 @@ private:
                 if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
                     ColumnsToConvertInplace[name] = ci.PType;
                 }
+                if (isColumnTable && ci.PType.GetTypeId() == NScheme::NTypeIds::Interval) {
+                    ColumnsToConvertInplace[name] = ci.PType;
+                }
             } else if (typeInProto.has_decimal_type()) {
                 if (typeInRequest != ci.PType) {
                 return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
@@ -779,6 +782,14 @@ private:
                     // TUploadRowsRPCPublic::ExtractBatch() - converted JsonDocument, DynNumbers, ...
                     if (!ExtractBatch(errorMessage)) {
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
+                    }
+                    if (!ColumnsToConvertInplace.empty()) {
+                        auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
+                        if (!convertResult.ok()) {
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                                TStringBuilder() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString(), ctx);
+                        }
+                        Batch = *convertResult;
                     }
                 }
                 break;

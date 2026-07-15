@@ -165,38 +165,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         }
     }
 
-    bool SkipCsvLoad(ELoadKind load, TStringBuf testName) {
-        if (load == ELoadKind::CSV) {
-            Cerr << testName << " skipped: CSV Interval support not implemented yet" << Endl;
-            return true;
-        }
-        return false;
-    }
-
-    bool SkipColumnShardFilter(ETableKind table, TStringBuf testName) {
-        if (table == ETableKind::COLUMNSHARD) {
-            Cerr << testName << " skipped for ColumnShard: duration/int64 filter pushdown not supported yet" << Endl;
-            return true;
-        }
-        return false;
-    }
-
-    bool SkipColumnShardArrowLoad(ETableKind table, ELoadKind load, TStringBuf testName) {
-        if (table == ETableKind::COLUMNSHARD && load == ELoadKind::ARROW) {
-            Cerr << testName << " skipped: Arrow bulk upsert Interval support for ColumnShard not implemented yet" << Endl;
-            return true;
-        }
-        return false;
-    }
-
-    bool SkipColumnShardScanQuery(EQueryMode scan, ETableKind table, ELoadKind load, TStringBuf testName) {
-        if (table == ETableKind::COLUMNSHARD && scan == EQueryMode::SCAN_QUERY && load == ELoadKind::YDB_VALUE) {
-            Cerr << testName << " skipped: ScanQuery Interval support for ColumnShard not implemented yet" << Endl;
-            return true;
-        }
-        return false;
-    }
-
     void PrepareBase(TTestHelper& helper, ETableKind tableKind, const TString& tableName, TTestHelper::TColumnTable* colTableOut,
         TVector<TTestHelper::TColumnSchema>* schemaOut) {
         if (tableKind == ETableKind::COLUMNSHARD) {
@@ -222,15 +190,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestSimpleQueries")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestSimpleQueries")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestSimpleQueries")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -264,18 +223,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestFilterEqual")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestFilterEqual")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestFilterEqual")) {
-            return;
-        }
-        if (SkipColumnShardFilter(Table, "TestFilterEqual")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -310,15 +257,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestFilterNulls")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestFilterNulls")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestFilterNulls")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -345,18 +283,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestFilterCompare")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestFilterCompare")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestFilterCompare")) {
-            return;
-        }
-        if (SkipColumnShardFilter(Table, "TestFilterCompare")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -398,15 +324,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestOrderByInterval")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestOrderByInterval")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestOrderByInterval")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -438,15 +355,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestGroupByInterval")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestGroupByInterval")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestGroupByInterval")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -471,15 +379,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestAggregation")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestAggregation")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestAggregation")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -517,15 +416,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestJoinById")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestJoinById")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestJoinById")) {
-            return;
-        }
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
@@ -651,15 +541,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestJoinByInterval")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestJoinByInterval")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestJoinByInterval")) {
-            return;
-        }
 
         const TString t1 = "/Root/JoinTable1";
         const TString t2 = "/Root/JoinTable2";
@@ -705,15 +586,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestOrderByWithLimit")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestOrderByWithLimit")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestOrderByWithLimit")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -752,15 +624,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestGroupByWithNulls")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestGroupByWithNulls")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestGroupByWithNulls")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -794,15 +657,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
-        if (SkipCsvLoad(Load, "TestIntervalAsPrimaryKey")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(ETableKind::COLUMNSHARD, Load, "TestIntervalAsPrimaryKey")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, ETableKind::COLUMNSHARD, Load, "TestIntervalAsPrimaryKey")) {
-            return;
-        }
 
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
 
@@ -868,9 +722,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
     }
 
     Y_UNIT_TEST(TestDmlParityAndCTAS, EQueryMode, ELoadKind) {
-        Cerr << "TestDmlParityAndCTAS skipped: duration/int64 filter pushdown not supported yet" << Endl;
-        return;
-
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
@@ -963,9 +814,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
     }
 
     Y_UNIT_TEST(TestCsv, EQueryMode, ETableKind) {
-        Cerr << "TestCsv skipped: CSV Interval support not implemented yet" << Endl;
-        return;
-
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
 

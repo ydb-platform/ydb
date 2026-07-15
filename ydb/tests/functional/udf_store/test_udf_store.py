@@ -144,7 +144,7 @@ def _upload_udf_binary():
     return yatest.common.binary_path(os.environ["YDB_UPLOAD_UDF_PATH"])
 
 
-def _run_upload_udf(endpoint, database, udf_so_path):
+def _run_upload_udf(endpoint, database, udf_file_path, udf_type="NATIVE_UNSAFE", manifest_path=""):
     """
     Invoke the upload_udf binary as a subprocess.
 
@@ -155,8 +155,11 @@ def _run_upload_udf(endpoint, database, udf_so_path):
         _upload_udf_binary(),
         "--endpoint", endpoint,
         "--database", database,
-        "--udf-file", udf_so_path,
+        "--udf-file", udf_file_path,
+        "--type", udf_type,
     ]
+    if manifest_path:
+        cmd.extend(["--manifest", manifest_path])
     # Resolve YDB_KV_VOLUME_TOOL_PATH to an absolute path so the subprocess
     # can find the binary regardless of its working directory.
     env = os.environ.copy()
@@ -294,6 +297,99 @@ def test_using_native_unsafe_udf():
         cluster.stop()
 
 
+def test_using_wasm_udf():
+    """
+    Upload a WASM UDF (.wat) with JSON manifest into wasm_source/meta tables,
+    wait for TUdfStoreService to compile and load from the artifact table, then query.
+    """
+    database = "/Root/test"
+    cluster = _make_cluster(
+        enable_udf_store=True,
+        enable_wasm_udf=True,
+    )
+    db_nodes = _create_database(cluster, database)
+    try:
+        node = cluster.nodes[1]
+        driver_config = ydb.DriverConfig(
+            endpoint="%s:%s" % (node.host, node.port),
+            database=database,
+        )
+        endpoint = "grpc://%s:%s" % (node.host, node.port)
+
+        assert _wait_for_condition(
+            lambda: _table_exists(driver_config, database),
+            timeout_seconds=60,
+            description="UDF metadata table creation at startup",
+        )
+
+        wasm_file_path = yatest.common.source_path(
+            "ydb/tests/functional/udf_store/data/wasm/local_udf.wat"
+        )
+        manifest_path = yatest.common.source_path(
+            "ydb/tests/functional/udf_store/data/wasm/local_udf_manifest.json"
+        )
+
+        assert _wait_for_condition(
+            lambda: _kv_volume_exists(endpoint, database),
+            timeout_seconds=60,
+            description="KV volume creation at startup",
+        )
+
+        udf_md5 = _run_upload_udf(
+            endpoint, database, wasm_file_path, udf_type="WASM", manifest_path=manifest_path
+        )
+
+        def _wasm_compile_ready():
+            try:
+                result = _run_query(
+                    driver_config,
+                    'SELECT compile_status FROM `{database}/{path}` WHERE md5 = "{md5}"'.format(
+                        database=database,
+                        path=UDF_TABLE_META_PATH,
+                        md5=udf_md5,
+                    ),
+                )
+                if not result or not result[0].rows:
+                    return False
+                return list(result[0].rows[0].values())[0] == "ready"
+            except Exception as e:
+                logger.debug("WASM compile status not ready yet: %s", e)
+                return False
+
+        assert _wait_for_condition(
+            _wasm_compile_ready,
+            timeout_seconds=180,
+            description="WASM UDF compile_status=ready for md5=%s" % udf_md5,
+        ), "WASM UDF was not compiled within timeout"
+
+        UDF_QUERY = "SELECT LocalUdf::udf_add(1, 2);"
+        udf_query_result = [None]
+
+        def try_wasm_query():
+            try:
+                udf_query_result[0] = _run_query(driver_config, UDF_QUERY)
+                return True
+            except Exception as e:
+                logger.debug("WASM UDF query not ready yet: %s", e)
+                return False
+
+        assert _wait_for_condition(
+            try_wasm_query,
+            timeout_seconds=120,
+            description="LocalUdf::udf_add query execution",
+        ), "WASM UDF query did not succeed within timeout"
+
+        rows = udf_query_result[0][0].rows
+        assert len(rows) == 1
+        result_value = list(rows[0].values())[0]
+        assert result_value == 3, "Expected LocalUdf::udf_add(1, 2) == 3, got %r" % result_value
+
+    finally:
+        cluster.remove_database(database)
+        cluster.unregister_and_stop_slots(db_nodes)
+        cluster.stop()
+
+
 # ---------------------------------------------------------------------------
 # Feature-flag test: parametrised over udf_store_config enabled / disabled
 # ---------------------------------------------------------------------------
@@ -302,7 +398,12 @@ _SETTLE_TIMEOUT = 60   # seconds to wait when flag is ON
 _ABSENT_TIMEOUT = 15   # seconds to confirm absence when flag is OFF
 
 
-def _make_cluster(enable_udf_store: bool, enable_native_udf: bool = False, native_udf_dir: str = ""):
+def _make_cluster(
+    enable_udf_store: bool,
+    enable_native_udf: bool = False,
+    native_udf_dir: str = "",
+    enable_wasm_udf: bool = False,
+):
     configurator = KikimrConfigGenerator(
         additional_log_configs={"METADATA_PROVIDER": 7},
     )
@@ -311,6 +412,8 @@ def _make_cluster(enable_udf_store: bool, enable_native_udf: bool = False, nativ
         if enable_native_udf:
             udf_store_config["enable_unsafe_native_udf"] = True
             udf_store_config["unsafe_native_udf_dir"] = native_udf_dir
+        if enable_wasm_udf:
+            udf_store_config["enable_wasm_udf"] = True
         configurator.yaml_config["udf_store_config"] = udf_store_config
     cluster = KiKiMR(configurator=configurator)
     cluster.start()

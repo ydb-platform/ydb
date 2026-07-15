@@ -23,7 +23,6 @@ RECURSE(
     unicode_base
     url_base
     vector
-    wasm
     yson2
 )
 

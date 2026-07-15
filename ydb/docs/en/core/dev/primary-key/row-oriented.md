@@ -103,6 +103,8 @@ Compute `order_hash` on write and on keyed reads—the same rule as for `userhas
 
 A `Uuid` primary key is a common alternative to monotonically increasing numeric identifiers: it spreads inserts across partitions and does not require a central sequence. The trade-off depends on how the 128 bits are arranged.
 
+{{ ydb-short-name }} stores `Uuid` values as 16 raw bytes in [Microsoft GUID mixed-endian layout](https://en.wikipedia.org/wiki/Universally_unique_identifier#Encoding). Primary keys are compared in this byte order, not as RFC 9562 network-byte-order values and not by the canonical GUID string from `CAST(Uuid AS String)`. As a result, a standard UUID version 7 generated elsewhere—or by [`Uuid::newV7`](../../yql/reference/udf/list/uuid.md#newv7)—does **not** sort chronologically in a row-oriented table even though the v7 specification embeds a timestamp. Use [`Uuid::newChrono`](../../yql/reference/udf/list/uuid.md#newchrono) or [`Uuid::newSharded`](../../yql/reference/udf/list/uuid.md#newsharded) when key sort order in {{ ydb-short-name }} matters.
+
 [`RandomUuid()`](../../yql/reference/builtins/basic.md#random) (UUID version 4) gives uniformly random keys. That avoids hot spots on the last partition, but each new key is scattered across the full key space. Related rows and index entries rarely sit in adjacent ranges, which increases cross-partition work for time-bounded scans and secondary index maintenance.
 
 The [`Uuid` module](../../yql/reference/udf/list/uuid.md) provides generators tuned for {{ ydb-short-name }}'s byte-level key order:
@@ -126,7 +128,7 @@ INSERT INTO events (id, payload)
 VALUES (Uuid::newSharded(), "page view");
 
 -- Multi-row transaction: shared prefix
-$prefix = Uuid::newShardedPrefix(RandomNumber(1));
+$prefix = RandomNumber(1);
 
 INSERT INTO events (id, payload)
 SELECT

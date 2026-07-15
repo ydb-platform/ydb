@@ -103,6 +103,8 @@ WHERE order_hash = Digest::NumericHash(1001)
 
 Первичный ключ типа `Uuid` — распространённая альтернатива монотонно возрастающим числовым идентификаторам: вставки распределяются по партициям и не требуют централизованной sequence. Компромисс зависит от того, как устроены 128 бит значения.
 
+{{ ydb-short-name }} хранит значения `Uuid` как 16 сырых байтов в [формате Microsoft GUID mixed-endian](https://en.wikipedia.org/wiki/Universally_unique_identifier#Encoding). Первичные ключи сравниваются именно в этом порядке байтов, а не как значения RFC 9562 в network-byte-order и не по канонической GUID-строке из `CAST(Uuid AS String)`. Поэтому стандартный UUID версии 7, сгенерированный вне {{ ydb-short-name }} или функцией [`Uuid::newV7`](../../yql/reference/udf/list/uuid.md#newv7), **не** обеспечивает хронологическую сортировку в строковой таблице, хотя спецификация v7 и включает временную метку. Если важен порядок ключей в {{ ydb-short-name }}, используйте [`Uuid::newChrono`](../../yql/reference/udf/list/uuid.md#newchrono) или [`Uuid::newSharded`](../../yql/reference/udf/list/uuid.md#newsharded).
+
 [`RandomUuid()`](../../yql/reference/builtins/basic.md#random) (UUID версии 4) даёт равномерно случайные ключи. Это снимает «горячую точку» на последней партиции, но каждый новый ключ разбрасывается по всему пространству ключей. Связанные строки и записи индексов редко оказываются в соседних диапазонах, что увеличивает межпартиционную работу при сканировании по времени и при обслуживании вторичных индексов.
 
 [Модуль `Uuid`](../../yql/reference/udf/list/uuid.md) предоставляет генераторы, настроенные под порядок байтов ключей в {{ ydb-short-name }}:
@@ -126,7 +128,7 @@ INSERT INTO events (id, payload)
 VALUES (Uuid::newSharded(), "page view");
 
 -- Многострочная транзакция: общий префикс
-$prefix = Uuid::newShardedPrefix(RandomNumber(1));
+$prefix = RandomNumber(1);
 
 INSERT INTO events (id, payload)
 SELECT

@@ -200,7 +200,7 @@ void VisitAllChunksWithBuilder(
                 [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
                     builder.FillNGrammHashes(nGrammSize, arr, filler);
                 },
-                [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
+                [&](const NArrow::NAccessor::TJsonValueView& data, const ui32 /*hashBase*/) {
                     auto view = data.GetScalarOptional();
                     if (!view.has_value()) {
                         return;
@@ -274,7 +274,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
                 [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
                     builder.FillNGrammHashes(ngramSize, arr, storage);
                 },
-                [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
+                [&](const NArrow::NAccessor::TJsonValueView& data, const ui32 /*hashBase*/) {
                     auto view = data.GetScalarOptional();
                     if (!view.has_value()) {
                         return;

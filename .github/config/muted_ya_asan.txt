@@ -986,6 +986,21 @@ ydb/tests/fq/s3 test_streaming_join.py.TestStreamingJoin.test_grace_join[v1-clie
 ydb/tests/fq/streaming test_scalar_topic_write.py.TestScalarTopicWriteInYdb.test_mixed_valid_invalid_statements[False]
 ydb/tests/fq/streaming test_scalar_topic_write.py.TestScalarTopicWriteInYdb.test_mixed_valid_invalid_statements[True]
 ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_precompute_recovery[False]
+ydb/tests/fq/streaming_optimize py3test.[test_sql_negative.py */*] chunk
+ydb/tests/fq/streaming_optimize py3test.[test_sql_streaming.py */*] chunk
+ydb/tests/fq/streaming_optimize test_sql_negative.py.test[hopping_window-GroupByHoppingWindowPolicyBad-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_negative.py.test[hopping_window-GroupByHoppingWindowTimeLimitBad-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_negative.py.test[watermarks-bad_column-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_negative.py.test[watermarks-bad_pushdown-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_negative.py.test[watermarks-bad_type-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHop-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHopPercentile-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hopping_window-GroupByHoppingWindowExprKey-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hopping_window-GroupByHoppingWindowTimeExtractorUnusedColumns-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[pq-ReadTopic-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[pq-ReadTopicWithMetadataWithFilter-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[pq-ReadWriteTopic-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[watermarks-watermark_over_unused_column-default.txt]
 ydb/tests/fq/yds test_disposition.py.TestDisposition.test_disposition_fresh[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_3_sessions
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_start_new_query

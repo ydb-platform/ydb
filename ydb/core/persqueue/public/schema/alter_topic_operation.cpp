@@ -6,8 +6,6 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT Service
-
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -39,8 +37,7 @@ public:
 
 private:
     void DoDescribe() {
-        YDB_LOG_DEBUG("DoDescribe",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("DoDescribe");
         Become(&TAlterTopicOperationActor::DescribeState);
 
         RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
@@ -55,8 +52,7 @@ private:
     }
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
 
         auto& topics = ev->Get()->Topics;
         AFL_ENSURE(topics.size() == 1)("s", topics.size());
@@ -94,16 +90,14 @@ private:
 
 private:
     void DoGetClustersList() {
-        YDB_LOG_DEBUG("DoGetClustersList",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("DoGetClustersList");
         Become(&TAlterTopicOperationActor::GetClustersListState);
         Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
     }
 
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"getClustersListResponse", (ev->Get()->Success ? ev->Get()->ClustersList->DebugString() : "error")});
+        LOG_D("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse: "
+            << (ev->Get()->Success ? ev->Get()->ClustersList->DebugString() : "error"));
 
         auto& response = *ev->Get();
         if (response.Success) {
@@ -122,8 +116,7 @@ private:
 
 private:
     void DoAlter() {
-        YDB_LOG_DEBUG("DoAlter",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("DoAlter");
 
         Become(&TAlterTopicOperationActor::AlterState);
 
@@ -185,8 +178,7 @@ private:
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle TEvSchemaOperationResponse",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("Handle TEvSchemaOperationResponse");
         auto& response = *ev->Get();
         return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
     }
@@ -200,10 +192,7 @@ private:
 
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        YDB_LOG_DEBUG("ReplyAndDie",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"errorCode", errorCode},
-            {"errorMessage", errorMessage});
+        LOG_D("ReplyAndDie " << errorCode << " '" << errorMessage << "'");
         if (errorCode == Ydb::StatusIds::SUCCESS && !Settings.PrepareOnly) {
             ModifyScheme = {};
         }

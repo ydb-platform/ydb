@@ -10,8 +10,6 @@
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 #include <ydb/library/services/services.pb.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT Service
-
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -57,9 +55,7 @@ public:
 
 private:
     void DoPropose() {
-        YDB_LOG_DEBUG("DoPropose",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"retry", ProposeBackoff.GetIteration()});
+        LOG_D("DoPropose retry: " << ProposeBackoff.GetIteration());
         Become(&TSchemaOperationActor::ProposeState);
 
         auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
@@ -80,8 +76,7 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle TEvTxUserProxy::TEvProposeTransactionStatus",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("Handle TEvTxUserProxy::TEvProposeTransactionStatus");
 
         const auto status = ev->Get()->Status();
         const auto& record = ev->Get()->Record;
@@ -115,8 +110,7 @@ private:
     }
 
     void HandleOnPropose(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        YDB_LOG_DEBUG("HandleOnPropose TEvPipeCache::TEvDeliveryProblem",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("HandleOnPropose TEvPipeCache::TEvDeliveryProblem");
         if (TPipeCacheClient::OnUndelivered(ev)) {
             return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
                 TStringBuilder() << "SchemeShard " << ev->Get()->TabletId << " is unavailable");
@@ -135,10 +129,7 @@ private:
 
 private:
     void DoWaitCompletion() {
-        YDB_LOG_DEBUG("DoWaitTxCompletion",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"schemeShardTabletId", SchemeShardTabletId},
-            {"txId", TxId});
+        LOG_D("DoWaitTxCompletion SchemeShardTabletId: " << SchemeShardTabletId << " TxId: " << TxId);
         Become(&TSchemaOperationActor::WaitCompletionState);
 
         auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(TxId);
@@ -146,14 +137,12 @@ private:
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&) {
-        YDB_LOG_DEBUG("Handle TEvSchemeShard::TEvNotifyTxCompletionResult",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("Handle TEvSchemeShard::TEvNotifyTxCompletionResult");
         ReplyOkAndDie();
     }
 
     void HandleOnWaitCompletion(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
         OnUndelivered(ev);
         if (++WaitTxCompletionRetries > MaxWaitTxCompletionRetries) {
             return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
@@ -177,17 +166,13 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        YDB_LOG_DEBUG("Dump NPQLOGPREFIX, replyErrorAndDie, errorMessage",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"replyErrorAndDie", errorCode},
-            {"errorMessage", errorMessage});
+        LOG_D("ReplyErrorAndDie: " << errorCode << " " << errorMessage);
         Send(ParentId, new TEvSchemaOperationResponse(errorCode, std::move(errorMessage)), 0, Cookie);
         PassAway();
     }
 
     void ReplyOkAndDie() {
-        YDB_LOG_DEBUG("ReplyOkAndDie",
-            {"logPrefix", NPQ_LOG_PREFIX});
+        LOG_D("ReplyOkAndDie");
         Send(ParentId, new TEvSchemaOperationResponse(), 0, Cookie);
         PassAway();
     }

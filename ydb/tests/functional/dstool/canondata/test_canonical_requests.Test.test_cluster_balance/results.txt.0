@@ -36,10 +36,6 @@ Request {
   }
 }
 
-===== http_calls =====
-GET viewer/json/vdiskinfo?... (mocked)
-GET viewer/json/vdiskinfo?... (mocked)
-
 ===== mock_base_config =====
 
 TBaseConfig {
@@ -86,6 +82,8 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 0
+    State: OK
+    Replicated: true
   }
   Status: "READY"
 }
@@ -100,6 +98,8 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 0
+    State: OK
+    Replicated: true
   }
   Status: "READY"
 }

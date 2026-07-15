@@ -1014,8 +1014,7 @@ TEST(TYsonToProtobufTest, KeepUnknownFields)
 
 TEST(TYsonToProtobufTest, RejectWireTypeMismatch)
 {
-    // Field 2 is a submessage (length-delimited) in TNestedMessage but a uint32 (varint) in TMessage,
-    // so reparsing across schemas hits a wire-type mismatch that used to abort the process.
+    // Field 2 is length-delimited in TNestedMessage and varint in TMessage.
     NYT::NYson::NProto::TNestedMessage message;
     message.mutable_nested_message()->set_int32_field(42);
     TString protobufString = message.SerializeAsString();

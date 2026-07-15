@@ -35,7 +35,7 @@ SELECT 3;          -- вернётся
 
 {% if select_command != true or select_command == "SELECT" %}
 
-### Примеры
+## Примеры
 
 ```yql
 DISCARD SELECT 1;

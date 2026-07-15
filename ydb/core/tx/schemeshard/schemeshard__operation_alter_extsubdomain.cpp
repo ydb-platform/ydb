@@ -381,8 +381,10 @@ class TCreateHive: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder() << "TCreateHive, operationId " << OperationId << ", ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCreateHive"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -399,7 +401,7 @@ public:
         auto rootHiveId = context.SS->GetGlobalHive();
 
         YDB_LOG_DEBUG_CTX(context.Ctx, "Send CreateTablet event",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"hive", rootHiveId},
             {"msg", ev->Record.DebugString()});
@@ -416,7 +418,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()});
 
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -447,7 +449,7 @@ public:
 
         } else {
             YDB_LOG_INFO_CTX(context.Ctx, "ProgressState, ExtSubDomain hive already exist",
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()},
                 {"tabletId", subdomainHiveTabletId});
             SendPublishPathRequest(txState->TargetPathId, context);
@@ -458,10 +460,10 @@ public:
 
     bool HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvCreateTabletReply",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()});
         YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply TEvCreateTabletReply",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"msg", DebugReply(ev)});
 
@@ -525,7 +527,7 @@ public:
         context.OnComplete.ActivateShardCreated(shardIdx, OperationId.GetTxId());
 
         YDB_LOG_INFO_CTX(context.Ctx, "ExtSubDomain hive created, tabletId",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"createdTabletId", createdTabletId});
 
@@ -544,10 +546,10 @@ public:
 
     bool HandleReply(TEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvCompletePublication",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()});
         YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply TEvCompletePublication",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"msg", DebugReply(ev)});
 
@@ -568,7 +570,7 @@ public:
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvPrivate:TEvCompleteBarrier",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"msg", ev->Get()->ToString()});
 
@@ -625,7 +627,7 @@ public:
         TPath path = TPath::Resolve(Transaction.GetWorkingDir(), context.SS).Dive(inputSettings.GetName());
 
         YDB_LOG_INFO_CTX(context.Ctx, "TAlterExtSubDomainCreateHive Propose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", path.PathString()});
 
@@ -663,7 +665,7 @@ public:
         TSubDomainInfo::TPtr alter = new TSubDomainInfo(*subdomainInfo, 0, 0, delta.StoragePoolsAdded);
 
         YDB_LOG_DEBUG_CTX(context.Ctx, "TAlterExtSubDomainCreateHive Propose subdomain ver alter ver",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"#_subdomainInfo->GetVersion", subdomainInfo->GetVersion()},
             {"#_alter->GetVersion", alter->GetVersion()});
@@ -702,13 +704,13 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterExtSubDomainCreateHive AbortPropose opId",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"operationId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterExtSubDomainCreateHive AbortUnsafe",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"forceDropId", forceDropTxId});
 
@@ -720,8 +722,10 @@ class TWaitHiveCreated: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder() << "TWaitHiveCreated, operationId " << OperationId << ", ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TWaitHiveCreated"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -736,7 +740,7 @@ public:
         Y_ABORT_UNLESS(txState);
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState, operation type",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"#_TTxState::TypeName(txState->TxType)", TTxState::TypeName(txState->TxType)});
 
@@ -749,7 +753,7 @@ public:
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvPrivate:TEvCompleteBarrier",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"msg", ev->Get()->ToString()});
 
@@ -768,8 +772,10 @@ class TSyncHive: public TSubOperationState {
 private:
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder() << "TSyncHive, operationId " << OperationId << ", ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TSyncHive"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -786,7 +792,7 @@ public:
         Y_ABORT_UNLESS(txState);
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"needSyncHive", txState->NeedSyncHive});
 
@@ -807,7 +813,7 @@ public:
             }
 
             YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState Syncing msg",
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()},
                 {"hive", hiveToSync},
                 {"#_event->Record", event->Record.ShortDebugString()});
@@ -825,7 +831,7 @@ public:
         const TTabletId hive = TTabletId(ev->Get()->Record.GetOrigin());
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvUpdateDomainReply",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"hive", hive});
 
@@ -890,7 +896,7 @@ public:
         TPath path = TPath::Resolve(Transaction.GetWorkingDir(), context.SS).Dive(inputSettings.GetName());
 
         YDB_LOG_INFO_CTX(context.Ctx, "TAlterExtSubDomain Propose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", path.PathString()});
 
@@ -988,7 +994,7 @@ public:
         }
 
         YDB_LOG_DEBUG_CTX(context.Ctx, "TAlterExtSubDomain Propose subdomain ver alter ver",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"#_subdomainInfo->GetVersion", subdomainInfo->GetVersion()},
             {"#_alter->GetVersion", alter->GetVersion()});
@@ -1070,7 +1076,7 @@ public:
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterExtSubDomain AbortUnsafe",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"forceDropId", forceDropTxId});
 
@@ -1108,7 +1114,7 @@ TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, 
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain || tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterSubDomain);
 
     YDB_LOG_INFO_CTX(context.Ctx, "CreateCompatibleAlterExtSubDomain, opId feature flag EnableAlterDatabaseCreateHiveFirst tx",
-        {"#_context.SS->TabletID", context.SS->TabletID()},
+        {"tabletId", context.SS->TabletID()},
         {"id", id},
         {"#_context.SS->EnableAlterDatabaseCreateHiveFirst", context.SS->EnableAlterDatabaseCreateHiveFirst},
         {"#_tx", tx.ShortDebugString()});
@@ -1118,7 +1124,7 @@ TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, 
     const TString& name = inputSettings.GetName();
 
     YDB_LOG_INFO_CTX(context.Ctx, "CreateCompatibleAlterExtSubDomain, opId path",
-        {"#_context.SS->TabletID", context.SS->TabletID()},
+        {"tabletId", context.SS->TabletID()},
         {"id", id},
         {"parentPathStr", parentPathStr},
         {"name", name});

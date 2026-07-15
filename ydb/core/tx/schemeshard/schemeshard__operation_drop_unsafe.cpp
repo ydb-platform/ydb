@@ -24,10 +24,10 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropForceUnsafe TPropose"
-                << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropForceUnsafe TPropose"},
+            {"operationId", OperationId});
     }
 public:
     TPropose(TOperationId id)

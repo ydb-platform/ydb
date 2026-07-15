@@ -15,7 +15,7 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const 
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup);
 
     YDB_LOG_DEBUG_CTX(context.Ctx, "CreateNewContinuousBackup",
-        {"#_context.SS->TabletID", context.SS->TabletID()},
+        {"tabletId", context.SS->TabletID()},
         {"opId", opId},
         {"tx", tx.ShortDebugString()});
 

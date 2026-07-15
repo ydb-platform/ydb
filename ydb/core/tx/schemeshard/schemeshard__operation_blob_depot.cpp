@@ -40,8 +40,10 @@ namespace NKikimr::NSchemeShard {
                     return txState;
                 }
 
-                TString DebugHint() const override {
-                    return TStringBuilder() << "TBlobDepot OperationId# " << OperationId;
+                NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+                    return YDB_LOG_CREATE_MESSAGE(
+                        {"operationKind", "TBlobDepot"},
+                        {"operationId", OperationId});
                 }
             };
 
@@ -96,8 +98,10 @@ namespace NKikimr::NSchemeShard {
                     return !txState->ShardsInProgress;
                 }
 
-                TString DebugHint() const override {
-                    return TStringBuilder() << "TConfigureBlobDepotParts id# " << OperationId;
+                NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+                    return YDB_LOG_CREATE_MESSAGE(
+                        {"operationKind", "TConfigureBlobDepotParts"},
+                        {"operationId", OperationId});
                 }
             };
 

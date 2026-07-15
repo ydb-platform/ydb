@@ -66,10 +66,10 @@ static constexpr TReplicationStrategy ReplicationStrategy;
 static constexpr TTransferStrategy TransferStrategy;
 
 class TConfigureParts: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterReplication TConfigureParts"
-            << " opId# " << OperationId << " ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TAlterReplication TConfigureParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -83,7 +83,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()});
 
         auto* txState = context.SS->FindTx(OperationId);
@@ -105,7 +105,7 @@ public:
 
             if (tabletId == InvalidTabletId) {
                 YDB_LOG_DEBUG_CTX(context.Ctx, "Shard is not created yet",
-                    {"#_context.SS->TabletID", context.SS->TabletID()},
+                    {"tabletId", context.SS->TabletID()},
                     {"debugHint", DebugHint()},
                     {"shardIdx", shard.Idx});
                 context.OnComplete.WaitShardCreated(shard.Idx, OperationId);
@@ -136,7 +136,7 @@ public:
                 }
 
                 YDB_LOG_DEBUG_CTX(context.Ctx, "Send TEvAlterReplication to controller",
-                    {"#_context.SS->TabletID", context.SS->TabletID()},
+                    {"tabletId", context.SS->TabletID()},
                     {"debugHint", DebugHint()},
                     {"tabletId", tabletId},
                     {"ev", ev->ToString()});
@@ -151,7 +151,7 @@ public:
 
     bool HandleReply(NReplication::TEvController::TEvAlterReplicationResult::TPtr& ev, TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"#_ev->Get()->ToString", ev->Get()->ToString()});
 
@@ -163,7 +163,7 @@ public:
             break;
         default:
             YDB_LOG_WARN_CTX(context.Ctx, "Ignoring unexpected TEvAlterReplicationResult",
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()},
                 {"tabletId", tabletId},
                 {"status", static_cast<int>(status)});
@@ -178,7 +178,7 @@ public:
         const auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
             YDB_LOG_WARN_CTX(context.Ctx, "Ignoring duplicate TEvAlterReplicationResult",
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()});
             return false;
         }
@@ -202,10 +202,10 @@ private:
 }; // TConfigureParts
 
 class TPropose: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterReplication TPropose"
-            << " opId# " << OperationId << " ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TAlterReplication TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -220,7 +220,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()});
 
         const auto* txState = context.SS->FindTx(OperationId);
@@ -235,7 +235,7 @@ public:
         const auto step = TStepId(ev->Get()->StepId);
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"step", step});
 
@@ -383,7 +383,7 @@ public:
             : InvalidPathId;
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterReplication Propose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", workingDir},
             {"name", name},
@@ -573,7 +573,7 @@ public:
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterReplication AbortUnsafe",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"txId", txId});
         context.OnComplete.DoneOperation(OperationId);

@@ -34,10 +34,10 @@ private:
     TOperationId OperationId;
     TTxState::ETxState& NextState;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TMoveTableIndex TPropose"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveTableIndex TPropose"},
+            {"operationId", OperationId});
     }
 public:
     TPropose(TOperationId id, TTxState::ETxState& nextState)
@@ -107,10 +107,10 @@ private:
 
     TPathId ActivePathId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TMoveTableIndex TWaitRenamedPathPublication"
-                << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveTableIndex TWaitRenamedPathPublication"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -185,10 +185,10 @@ class TDeleteTableBarrier: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TMoveTableIndex TDeleteTableBarrier"
-                << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveTableIndex TDeleteTableBarrier"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -253,10 +253,10 @@ class TDone: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TMoveTableIndex TDone"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveTableIndex TDone"},
+            {"operationId", OperationId});
     }
 public:
     TDone(TOperationId id)

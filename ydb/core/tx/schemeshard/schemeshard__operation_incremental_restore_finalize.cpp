@@ -42,10 +42,10 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
         TOperationId OperationId;
         TTxTransaction Transaction;
 
-        TString DebugHint() const override {
-            return TStringBuilder()
-                << "TIncrementalRestoreFinalize TConfigureParts"
-                << " operationId: " << OperationId;
+        NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+            return YDB_LOG_CREATE_MESSAGE(
+                {"operationKind", "TIncrementalRestoreFinalize TConfigureParts"},
+                {"operationId", OperationId});
         }
 
     public:
@@ -84,7 +84,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 
             if (implTablesToUpdate.empty()) {
                 YDB_LOG_INFO_CTX(context.Ctx, "No index impl tables to update, skipping ConfigureParts",
-                    {"#_context.SS->TabletID", context.SS->TabletID()},
+                    {"tabletId", context.SS->TabletID()},
                     {"debugHint", DebugHint()});
                 return true;
             }
@@ -96,7 +96,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             for (const auto& tablePathId : implTablesToUpdate) {
                 if (!context.SS->Tables.contains(tablePathId)) {
                     YDB_LOG_WARN_CTX(context.Ctx, "Table not",
-                        {"#_context.SS->TabletID", context.SS->TabletID()},
+                        {"tabletId", context.SS->TabletID()},
                         {"debugHint", DebugHint()},
                         {"found", tablePathId});
                     continue;
@@ -110,7 +110,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 context.SS->PersistAddAlterTable(db, tablePathId, table->AlterData);
 
                 YDB_LOG_INFO_CTX(context.Ctx, "Preparing ALTER for table ->",
-                    {"#_context.SS->TabletID", context.SS->TabletID()},
+                    {"tabletId", context.SS->TabletID()},
                     {"debugHint", DebugHint()},
                     {"tablePathId", tablePathId},
                     {"version", table->AlterVersion},
@@ -125,9 +125,9 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     if (!txState->ShardsInProgress.contains(shardIdx)) {
                         txState->Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
                         txState->ShardsInProgress.insert(shardIdx);
-                        
+
                         YDB_LOG_INFO_CTX(context.Ctx, "Added shard to txState",
-                            {"#_context.SS->TabletID", context.SS->TabletID()},
+                            {"tabletId", context.SS->TabletID()},
                             {"debugHint", DebugHint()},
                             {"shardIdx", shardIdx},
                             {"#_(tablet", context.SS->ShardInfos[shardIdx].TabletID});
@@ -143,14 +143,14 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 auto datashardId = context.SS->ShardInfos[shardIdx].TabletID;
 
                 YDB_LOG_INFO_CTX(context.Ctx, "Propose ALTER to datashard",
-                    {"#_context.SS->TabletID", context.SS->TabletID()},
+                    {"tabletId", context.SS->TabletID()},
                     {"debugHint", DebugHint()},
                     {"datashardId", datashardId},
                     {"shardIdx", shardIdx},
                     {"txid", OperationId});
 
                 const auto seqNo = context.SS->StartRound(*txState);
-                
+
                 // Find which table this shard belongs to
                 TPathId tablePathId;
                 for (const auto& pathId : implTablesToUpdate) {
@@ -166,7 +166,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 
                 if (!tablePathId) {
                     YDB_LOG_WARN_CTX(context.Ctx, "Could not find table for shard",
-                        {"#_context.SS->TabletID", context.SS->TabletID()},
+                        {"tabletId", context.SS->TabletID()},
                         {"debugHint", DebugHint()},
                         {"shardIdx", shardIdx});
                     continue;
@@ -195,7 +195,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 TPath path = TPath::Resolve(tablePath, context.SS);
                 if (!path.IsResolved()) {
                     YDB_LOG_WARN_CTX(context.Ctx, "CollectIndexImplTables: Table not",
-                        {"#_context.SS->TabletID", context.SS->TabletID()},
+                        {"tabletId", context.SS->TabletID()},
                         {"resolved", tablePath});
                     continue;
                 }
@@ -208,7 +208,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 if (context.SS->Tables.contains(implTablePathId)) {
                     implTables.insert(implTablePathId);
                     YDB_LOG_INFO_CTX(context.Ctx, "CollectIndexImplTables: Found index impl",
-                        {"#_context.SS->TabletID", context.SS->TabletID()},
+                        {"tabletId", context.SS->TabletID()},
                         {"table", tablePath},
                         {"pathId", implTablePathId});
                 }
@@ -221,14 +221,14 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
         TOperationId OperationId;
         TTxTransaction Transaction;
 
-        TString DebugHint() const override {
-            return TStringBuilder()
-                << "TIncrementalRestoreFinalize TPropose"
-                << " operationId: " << OperationId;
+        NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+            return YDB_LOG_CREATE_MESSAGE(
+                {"operationKind", "TIncrementalRestoreFinalize TPropose"},
+                {"operationId", OperationId});
         }
 
     public:
-        TFinalizationPropose(TOperationId id, const TTxTransaction& tx) 
+        TFinalizationPropose(TOperationId id, const TTxTransaction& tx)
             : OperationId(id), Transaction(tx) {}
 
         bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -237,7 +237,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 
         bool ProgressState(TOperationContext& context) override {
             YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()});
 
             TTxState* txState = context.SS->FindTx(OperationId);
@@ -253,7 +253,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             CollectPathsToNormalize(finalize, context, pathsToNormalize);
 
             for (const auto& pathId : pathsToNormalize) {
-                context.OnComplete.ReleasePathState(OperationId, pathId, 
+                context.OnComplete.ReleasePathState(OperationId, pathId,
                     TPathElement::EPathState::EPathStateNoChanges);
             }
 
@@ -267,11 +267,11 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
         void SyncIndexSchemaVersions(const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize,
                                      TOperationContext& context) {
             YDB_LOG_INFO_CTX(context.Ctx, "SyncIndexSchemaVersions: Starting schema version sync for restored indexes",
-                {"#_context.SS->TabletID", context.SS->TabletID()});
+                {"tabletId", context.SS->TabletID()});
             YDB_LOG_INFO_CTX(context.Ctx, "SyncIndexSchemaVersions: Processing target table paths",
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"#_finalize.GetTargetTablePaths().size", finalize.GetTargetTablePaths().size()});
-            
+
             NIceDb::TNiceDb db(context.GetDB());
             THashSet<TPathId> publishedMainTables;
 
@@ -286,7 +286,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 TPath path = TPath::Resolve(tablePath, context.SS);
                 if (!path.IsResolved()) {
                     YDB_LOG_WARN_CTX(context.Ctx, "SyncIndexSchemaVersions: Table not",
-                        {"#_context.SS->TabletID", context.SS->TabletID()},
+                        {"tabletId", context.SS->TabletID()},
                         {"resolved", tablePath});
                     continue;
                 }
@@ -298,7 +298,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 TPathId implTablePathId = path.Base()->PathId;
                 if (!context.SS->Tables.contains(implTablePathId)) {
                     YDB_LOG_WARN_CTX(context.Ctx, "SyncIndexSchemaVersions: Table not",
-                        {"#_context.SS->TabletID", context.SS->TabletID()},
+                        {"tabletId", context.SS->TabletID()},
                         {"found", implTablePathId});
                     continue;
                 }
@@ -306,7 +306,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 auto table = context.SS->Tables.at(implTablePathId);
                 if (!table->AlterData) {
                     YDB_LOG_WARN_CTX(context.Ctx, "SyncIndexSchemaVersions: No AlterData",
-                        {"#_context.SS->TabletID", context.SS->TabletID()},
+                        {"tabletId", context.SS->TabletID()},
                         {"table", implTablePathId});
                     continue;
                 }
@@ -316,7 +316,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 
                 // Finalize the alter - this commits AlterData to the main table state
                 YDB_LOG_INFO_CTX(context.Ctx, "SyncIndexSchemaVersions: Finalizing ALTER for table ->",
-                    {"#_context.SS->TabletID", context.SS->TabletID()},
+                    {"tabletId", context.SS->TabletID()},
                     {"implTablePathId", implTablePathId},
                     {"version", table->AlterVersion},
                     {"#_table->AlterData->AlterVersion", table->AlterData->AlterVersion});
@@ -334,7 +334,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 context.OnComplete.PublishToSchemeBoard(OperationId, implTablePathId);
 
                 YDB_LOG_INFO_CTX(context.Ctx, "SyncIndexSchemaVersions: Finalized schema version",
-                    {"#_context.SS->TabletID", context.SS->TabletID()},
+                    {"tabletId", context.SS->TabletID()},
                     {"for", tablePath});
 
                 // Also update the parent index version
@@ -357,7 +357,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                             context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
 
                             YDB_LOG_INFO_CTX(context.Ctx, "SyncIndexSchemaVersions: Index AlterVersion updated",
-                                {"#_context.SS->TabletID", context.SS->TabletID()},
+                                {"tabletId", context.SS->TabletID()},
                                 {"oldVersion", oldVersion},
                                 {"#_context.SS->Indexes[indexPathId]->AlterVersion", context.SS->Indexes[indexPathId]->AlterVersion});
 
@@ -371,7 +371,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                                     context.SS->ClearDescribePathCaches(mainTablePath.Base());
                                     context.OnComplete.PublishToSchemeBoard(OperationId, mainTablePathId);
                                     YDB_LOG_INFO_CTX(context.Ctx, "SyncIndexSchemaVersions: Published main",
-                                        {"#_context.SS->TabletID", context.SS->TabletID()},
+                                        {"tabletId", context.SS->TabletID()},
                                         {"table", mainTablePathId});
                                 }
                             }
@@ -381,13 +381,13 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             }
 
             YDB_LOG_INFO_CTX(context.Ctx, "SyncIndexSchemaVersions: Finished schema version sync",
-                {"#_context.SS->TabletID", context.SS->TabletID()});
+                {"tabletId", context.SS->TabletID()});
         }
 
-        void CollectPathsToNormalize(const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize, 
+        void CollectPathsToNormalize(const NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize,
                                    TOperationContext& context,
                                    TVector<TPathId>& pathsToNormalize) {
-            
+
             // Collect target table paths
             for (const auto& tablePath : finalize.GetTargetTablePaths()) {
                 TPath path = TPath::Resolve(tablePath, context.SS);
@@ -397,13 +397,13 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                         if ((*pathInfo)->PathState == NKikimrSchemeOp::EPathState::EPathStateIncomingIncrementalRestore) {
                             pathsToNormalize.push_back(pathId);
                             YDB_LOG_INFO_CTX(context.Ctx, "Adding target table path",
-                                {"#_context.SS->TabletID", context.SS->TabletID()},
+                                {"tabletId", context.SS->TabletID()},
                                 {"normalize", tablePath});
                         }
                     }
                 }
             }
-            
+
             // Collect backup table paths
             for (const auto& backupTablePath : finalize.GetBackupTablePaths()) {
                 TPath path = TPath::Resolve(backupTablePath, context.SS);
@@ -414,7 +414,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                             (*pathInfo)->PathState == NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore) {
                             pathsToNormalize.push_back(pathId);
                             YDB_LOG_INFO_CTX(context.Ctx, "Adding backup table path",
-                                {"#_context.SS->TabletID", context.SS->TabletID()},
+                                {"tabletId", context.SS->TabletID()},
                                 {"normalize", backupTablePath});
                         }
                     }
@@ -438,17 +438,17 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     static_cast<ui32>(Ydb::StatusIds::SUCCESS));
 
                 YDB_LOG_INFO_CTX(context.Ctx, "Persisted incremental restore state as Completed",
-                    {"#_context.SS->TabletID", context.SS->TabletID()},
+                    {"tabletId", context.SS->TabletID()},
                     {"operation", originalOpId});
             }
 
             YDB_LOG_INFO_CTX(context.Ctx, "Keeping IncrementalRestoreOperations entry for - will be cleaned up on FORGET",
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"operation", originalOpId});
 
             context.SS->LongIncrementalRestoreOps.erase(TOperationId(originalOpId, 0));
             YDB_LOG_INFO_CTX(context.Ctx, "Cleaned up long incremental restore ops",
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"operation", originalOpId});
 
             CleanupMappings(context.SS, originalOpId, context);
@@ -464,7 +464,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     ++txIt;
                 }
             }
-            
+
             auto opIt = ss->IncrementalRestoreOperationToState.begin();
             while (opIt != ss->IncrementalRestoreOperationToState.end()) {
                 if (opIt->second == operationId) {
@@ -474,9 +474,9 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     ++opIt;
                 }
             }
-            
+
             YDB_LOG_INFO_CTX(context.Ctx, "Cleaned up mappings",
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"operation", operationId});
         }
     };
@@ -485,10 +485,10 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
     private:
         TOperationId OperationId;
 
-        TString DebugHint() const override {
-            return TStringBuilder()
-                << "TIncrementalRestoreFinalize TDone"
-                << " operationId: " << OperationId;
+        NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+            return YDB_LOG_CREATE_MESSAGE(
+                {"operationKind", "TIncrementalRestoreFinalize TDone"},
+                {"operationId", OperationId});
         }
 
     public:
@@ -496,7 +496,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 
         bool ProgressState(TOperationContext& context) override {
             YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()});
             // Operation is already complete, nothing to do
             return true;
@@ -509,9 +509,9 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
-        
+
         YDB_LOG_INFO_CTX(context.Ctx, "TIncrementalRestoreFinalizeOp Propose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId});
 
         const auto& finalize = tx.GetIncrementalRestoreFinalize();
@@ -520,21 +520,21 @@ public:
         // Validate that we have the restore state
         auto stateIt = context.SS->IncrementalRestoreStates.find(originalOpId);
         if (stateIt == context.SS->IncrementalRestoreStates.end()) {
-            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPreconditionFailed, 
+            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPreconditionFailed,
                 ui64(OperationId.GetTxId()), ui64(schemeshardTabletId),
                 "Incremental restore state not found for operation: " + ToString(originalOpId));
         }
 
-        Y_VERIFY_S(!context.SS->FindTx(OperationId), 
+        Y_VERIFY_S(!context.SS->FindTx(OperationId),
             "TIncrementalRestoreFinalizeOp Propose: operation already exists"
             << ", opId: " << OperationId);
 
         // Use backup collection path as domain path
         TPathId backupCollectionPathId(context.SS->TabletID(), finalize.GetBackupCollectionPathId());
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxIncrementalRestoreFinalize, backupCollectionPathId);
-        
+
         txState.TargetPathId = backupCollectionPathId;
-        
+
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
 
         txState.State = TTxState::Waiting;
@@ -547,16 +547,16 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TIncrementalRestoreFinalizeOp AbortPropose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TIncrementalRestoreFinalizeOp AbortUnsafe",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"forceDropId", forceDropTxId});
-        
+
         // TODO: Handle abort if needed
     }
 };

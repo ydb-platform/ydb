@@ -121,14 +121,14 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateFullBackupOp AbortPropose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         // Do not use forceDropTxId here - the backup id == OperationId.GetTxId().
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateFullBackupOp AbortUnsafe",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"forceDropTxId", forceDropTxId});
 

@@ -14,10 +14,10 @@ class TPropose: public TSubOperationState {
 private:
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TMoveLocalIndex TPropose"
-            << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveLocalIndex TPropose"},
+            {"operationId", OperationId});
     }
 
 public:

@@ -16,10 +16,10 @@ class TConfigureParts : public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateSequence TConfigureParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCreateSequence TConfigureParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -164,10 +164,10 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateSequence TPropose"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCreateSequence TPropose"},
+            {"operationId", OperationId});
     }
 
 public:

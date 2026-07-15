@@ -16,9 +16,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
-
-
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -403,7 +400,7 @@ void TDeleteParts::DeleteShards(TOperationContext& context) {
 
 bool TDeleteParts::ProgressState(TOperationContext& context) {
     YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-        {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+        {"selfTabletId", context.SS->SelfTabletId()},
         {"debugHint", DebugHint()});
     DeleteShards(context);
 
@@ -422,7 +419,7 @@ TDeletePartsAndDone::TDeletePartsAndDone(const TOperationId& id)
 
 bool TDeletePartsAndDone::ProgressState(TOperationContext& context) {
     YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-        {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+        {"selfTabletId", context.SS->SelfTabletId()},
         {"debugHint", DebugHint()});
     DeleteShards(context);
 
@@ -502,7 +499,7 @@ bool TDone::Process(TOperationContext& context) {
 
 bool TDone::ProgressState(TOperationContext& context) {
     YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-        {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+        {"selfTabletId", context.SS->SelfTabletId()},
         {"debugHint", DebugHint()});
 
     return Process(context);

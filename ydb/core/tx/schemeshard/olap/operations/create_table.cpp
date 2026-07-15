@@ -218,10 +218,10 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateColumnTable TConfigureParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCreateColumnTable TConfigureParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -339,10 +339,10 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateColumnTable TPropose"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCreateColumnTable TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -426,10 +426,10 @@ class TProposedWaitParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateColumnTable TProposedWaitParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCreateColumnTable TProposedWaitParts"},
+            {"operationId", OperationId});
     }
 
 public:

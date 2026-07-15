@@ -15,10 +15,10 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropOlapStore TDropParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropOlapStore TDropParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -54,10 +54,10 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropOlapStore TPropose"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropOlapStore TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -138,10 +138,10 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropOlapStore TProposedWaitParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropOlapStore TProposedWaitParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -212,10 +212,10 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropOlapStore TProposedDeleteParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropOlapStore TProposedDeleteParts"},
+            {"operationId", OperationId});
     }
 
 public:

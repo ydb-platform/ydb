@@ -33,7 +33,7 @@ bool BuildLockSubOps(TOperationId opId, const TTxTransaction& tx, TOperationCont
         : NKikimrSchemeOp::EPathStateNoChanges;
 
     YDB_LOG_INFO_CTX(context.Ctx, "BuildLockSubOps for incremental restore",
-        {"#_context.SS->TabletID", context.SS->TabletID()},
+        {"tabletId", context.SS->TabletID()},
         {"opId", opId},
         {"lock", lock},
         {"workingDir", workingDir},

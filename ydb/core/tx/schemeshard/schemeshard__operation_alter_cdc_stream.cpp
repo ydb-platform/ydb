@@ -12,10 +12,10 @@ namespace NCdc {
 namespace {
 
 class TPropose: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "AlterCdcStream TPropose"
-            << " opId# " << OperationId << " ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "AlterCdcStream TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -27,7 +27,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()});
 
         const auto* txState = context.SS->FindTx(OperationId);
@@ -44,7 +44,7 @@ public:
         const auto step = TStepId(ev->Get()->StepId);
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"step", step});
 
@@ -110,7 +110,7 @@ public:
         const auto& streamName = op.GetStreamName();
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterCdcStream Propose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"stream", workingDir},
             {"streamName", streamName});
@@ -226,13 +226,13 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterCdcStream AbortPropose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterCdcStream AbortUnsafe",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"txId", txId});
         context.OnComplete.DoneOperation(OperationId);
@@ -373,7 +373,7 @@ public:
         const auto& streamName = op.GetStreamName();
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterCdcStreamAtTable Propose ",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"stream", workingDir},
             {"tableName", tableName},
@@ -488,13 +488,13 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterCdcStreamAtTable AbortPropose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterCdcStreamAtTable AbortUnsafe",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"txId", txId});
         context.OnComplete.DoneOperation(OperationId);
@@ -526,7 +526,7 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
             .NotAsyncReplicaTable();
 
         // Allow CDC operations on tables that are under incremental backup/restore
-        if (checks && tablePath.IsUnderOperation() && 
+        if (checks && tablePath.IsUnderOperation() &&
             !tablePath.IsUnderOutgoingIncrementalRestore()) {
             checks.NotUnderOperation();
         }
@@ -611,7 +611,7 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterCdcStream);
 
     YDB_LOG_DEBUG_CTX(context.Ctx, "CreateAlterCdcStream",
-        {"#_context.SS->TabletID", context.SS->TabletID()},
+        {"tabletId", context.SS->TabletID()},
         {"opId", opId},
         {"tx", tx.ShortDebugString()});
 

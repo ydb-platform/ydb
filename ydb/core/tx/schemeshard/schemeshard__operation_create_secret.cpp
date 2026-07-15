@@ -34,10 +34,10 @@ class TPropose : public TSubOperationState {
 private:
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateSecret::TPropose"
-            << ", opId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCreateSecret::TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -48,7 +48,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"debugHint", DebugHint()});
 
         const auto* txState = context.SS->FindTx(OperationId);
@@ -63,7 +63,7 @@ public:
         const auto step = TStepId(ev->Get()->StepId);
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"debugHint", DebugHint()},
             {"step", step});
 
@@ -149,7 +149,7 @@ public:
         const TString& secretName = createSecretProto.GetName();
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSecret Propose",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"path", parentPathStr},
             {"secretName", secretName},
             {"opId", OperationId});
@@ -157,7 +157,7 @@ public:
         auto secretDescrWithoutSecretParts = createSecretProto;
         secretDescrWithoutSecretParts.ClearValue();
         YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateSecret Propose / secretDescription (without secret",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"path", parentPathStr},
             {"secretName", secretName},
             {"opId", OperationId},
@@ -302,13 +302,13 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSecret AbortPropose",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSecret AbortUnsafe",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"opId", OperationId},
             {"forceDropId", forceDropTxId});
 

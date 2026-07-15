@@ -17,10 +17,10 @@ class TConfigureParts: public TSubOperationState {
 private:
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TInitializeBuildIndex TConfigureParts"
-            << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TInitializeBuildIndex TConfigureParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -126,10 +126,10 @@ class TPropose: public TSubOperationState {
 private:
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TInitializeBuildIndex TPropose"
-            << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TInitializeBuildIndex TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -212,10 +212,10 @@ class TCreateTxShards: public TSubOperationState {
 private:
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TInitializeBuildIndex TCreateTxShards"
-            << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TInitializeBuildIndex TCreateTxShards"},
+            {"operationId", OperationId});
     }
 
 public:

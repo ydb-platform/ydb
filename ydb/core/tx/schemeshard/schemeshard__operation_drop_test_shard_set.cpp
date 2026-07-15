@@ -115,10 +115,10 @@ class TDropTestShardSet : public TSubOperation {
             return false;
         }
 
-        TString DebugHint() const override {
-            return TStringBuilder()
-                << "TDropTestShardSet::TPropose"
-                << " OperationId# " << OperationId;
+        NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+            return YDB_LOG_CREATE_MESSAGE(
+                {"operationKind", "TDropTestShardSet::TPropose"},
+                {"operationId", OperationId});
         }
     };
 

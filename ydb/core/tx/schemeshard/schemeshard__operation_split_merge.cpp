@@ -17,10 +17,10 @@ class TConfigureDestination: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TSplitMerge TConfigureDestination"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TSplitMerge TConfigureDestination"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -185,10 +185,10 @@ class TTransferData: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TSplitMerge TTransferData"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TSplitMerge TTransferData"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -379,7 +379,7 @@ public:
                 {"debugHint", DebugHint()},
                 {"datashardId", datashardId},
                 {"splitOpId", OperationId},
-                {"#_context.SS->TabletID", context.SS->TabletID()});
+                {"tabletId", context.SS->TabletID()});
 
             auto event = MakeHolder<TEvDataShard::TEvSplit>(ui64(OperationId.GetTxId()));
 
@@ -398,10 +398,10 @@ class TNotifySrc: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TSplitMerge TNotifySrc"
-                << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TSplitMerge TNotifySrc"},
+            {"operationId", OperationId});
     }
 public:
     TNotifySrc(TOperationId id)
@@ -486,7 +486,7 @@ public:
                 YDB_LOG_DEBUG_CTX(context.Ctx, "Src datashard idx for is already deleted or is intended to at tablet",
                     {"#_shard.Idx", shard.Idx},
                     {"splitOp", OperationId.GetTxId()},
-                    {"#_context.SS->TabletID", context.SS->TabletID()});
+                    {"tabletId", context.SS->TabletID()});
                 continue;
             }
 
@@ -496,7 +496,7 @@ public:
             YDB_LOG_DEBUG_CTX(context.Ctx, "Notify src datashard on partitioning changed at tablet",
                 {"datashardId", datashardId},
                 {"splitOp", OperationId.GetTxId()},
-                {"#_context.SS->TabletID", context.SS->TabletID()});
+                {"tabletId", context.SS->TabletID()});
 
             THolder<TEvDataShard::TEvSplitPartitioningChanged> event = MakeHolder<TEvDataShard::TEvSplitPartitioningChanged>(ui64(OperationId.GetTxId()));
 
@@ -995,7 +995,7 @@ public:
             YDB_LOG_CRIT_CTX(context.Ctx, "Cannot start split/merge operation for table (id at tablet because the operation involves too many",
                 {"#_info.GetTablePath", info.GetTablePath()},
                 {"#_path.Base()->PathId", path.Base()->PathId},
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"parts", totalSrcPartCount});
             return result;
         }

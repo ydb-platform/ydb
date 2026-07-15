@@ -50,7 +50,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()});
 
         context.OnComplete.Barrier(OperationId, "DoneBarrier");
@@ -59,7 +59,7 @@ public:
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvCompleteBarrier",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()});
 
         if (!TDone::Process(context)) {
@@ -78,7 +78,7 @@ public:
         auto itOp = context.SS->LongIncrementalRestoreOps.find(OperationId);
         if (itOp == context.SS->LongIncrementalRestoreOps.end()) {
             YDB_LOG_ERROR_CTX(context.Ctx, "Failed to find long incremental restore operation",
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()});
             return false;
         }
@@ -99,7 +99,7 @@ public:
         }
 
         YDB_LOG_INFO_CTX(context.Ctx, "Found incremental backups to restore",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"#_incrementalBackupNames.size", incrementalBackupNames.size()});
 
@@ -109,10 +109,10 @@ public:
     }
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDoneWithIncrementalRestore"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDoneWithIncrementalRestore"},
+            {"operationId", OperationId});
     }
 
 }; // TDoneWithIncrementalRestore
@@ -121,10 +121,10 @@ class TPropose: public TSubOperationState {
 private:
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateRestoreOpControlPlane::TPropose"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCreateRestoreOpControlPlane::TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -152,7 +152,7 @@ public:
         }
 
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateLongIncrementalRestoreOp);
- 
+
         // NIceDb::TNiceDb db(context.GetDB());
         // TODO
 
@@ -224,7 +224,7 @@ public:
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         YDB_LOG_INFO_CTX(context.Ctx, "TCreateRestoreOpControlPlane Propose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId});
 
         TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()});
@@ -314,13 +314,13 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateRestoreOpControlPlane AbortPropose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateRestoreOpControlPlane AbortUnsafe",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"forceDropId", forceDropTxId});
 
@@ -491,7 +491,7 @@ bool CreateIncrementalBackupPathStateOps(
             // Check if the incremental backup path exists
             TString incrBackupPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), incrBackupName, relativeItemPath});
             const TPath& incrBackupPath = TPath::Resolve(incrBackupPathStr, context.SS);
-            
+
             // Only create path state change operation if the path exists
             if (incrBackupPath.IsResolved()) {
                 // Create transaction for path state change

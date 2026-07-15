@@ -16,8 +16,10 @@ class TDeleteSubdomainSystemShards: public TSubOperationState {
 protected:
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder() << "TDeleteSubdomainSystemShards" << " opId# " << OperationId << " ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDeleteSubdomainSystemShards"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -29,7 +31,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"debugHint", DebugHint()});
 
         const auto* txState = context.SS->FindTx(OperationId);
@@ -60,10 +62,10 @@ class TDeleteExternalShards: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropExtSubdomain TDeleteExternalShards"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropExtSubdomain TDeleteExternalShards"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -170,10 +172,10 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropExtSubdomain TPropose"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropExtSubdomain TPropose"},
+            {"operationId", OperationId});
     }
 public:
     TPropose(TOperationId id)

@@ -12,6 +12,7 @@
 #include <ydb/core/util/source_location.h>
 
 #include <ydb/library/actors/core/event.h>  // for TEventHandler
+#include <ydb/library/actors/struct_log/create_message.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
@@ -200,10 +201,10 @@ public:
 };
 
 class TSubOperationState: public ISubOperationState {
-    TString LogHint;
+    NActors::NStructuredLog::TStructuredMessage LogHint;
     TSet<ui32> MsgToIgnore;
 
-    virtual TString DebugHint() const = 0;
+    virtual NActors::NStructuredLog::TStructuredMessage DebugHint() const = 0;
 
 public:
     using TPtr = THolder<TSubOperationState>;
@@ -214,7 +215,7 @@ public:
     SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
 #undef DefaultHandleReply
 
-    void IgnoreMessages(TString debugHint, TSet<ui32> mgsIds);
+    void IgnoreMessages(NActors::NStructuredLog::TStructuredMessage debugHint, TSet<ui32> mgsIds);
 };
 
 class ISubOperation: public TSimpleRefCount<ISubOperation>, public ISubOperationState {

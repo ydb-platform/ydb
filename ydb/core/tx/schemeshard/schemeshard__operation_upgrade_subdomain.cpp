@@ -18,10 +18,10 @@ class TWait: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TWaiting"
-            << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TWaiting"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -90,10 +90,10 @@ private:
     TTabletId TenantSchemeShardId = InvalidTabletId;
     THashSet<TPathId> PathsInside;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TConfigure"
-            << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TConfigure"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -461,10 +461,10 @@ private:
     TOperationId OperationId;
     TTabletId TenantSchemeShardId = InvalidTabletId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TPublishTenantReadOnly"
-            << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TPublishTenantReadOnly"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -533,10 +533,10 @@ private:
 
     TPathElement::TChildrenCont HiddenChildren;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TPublishGlobal"
-            << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TPublishGlobal"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -700,10 +700,10 @@ class TDeleteTenantSS: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDeleteTenantSS"
-            << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDeleteTenantSS"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -753,10 +753,10 @@ private:
     TTabletId TenantSchemeShardId = InvalidTabletId;
     TSet<TTabletId> DatashardsInside;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TRewriteOwner"
-            << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TRewriteOwner"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -902,10 +902,10 @@ class TPublishTenant: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TPublishTenant"
-            << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TPublishTenant"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -964,10 +964,10 @@ private:
 
     bool IsInited = false;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDoneMigrateTree"
-            << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDoneMigrateTree"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -1299,9 +1299,10 @@ class TDecisionDone: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDecisionDone operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDecisionDone"},
+            {"operationId", OperationId});
     }
 
 public:

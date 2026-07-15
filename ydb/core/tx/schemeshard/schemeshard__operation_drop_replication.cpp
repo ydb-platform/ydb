@@ -40,10 +40,10 @@ static constexpr TReplicationStrategy ReplicationStrategy;
 static constexpr TTransferStrategy TransferStrategy;
 
 class TDropParts: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropReplication TDropParts"
-            << " opId# " << OperationId << " ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropReplication TDropParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -55,7 +55,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()});
 
         auto* txState = context.SS->FindTx(OperationId);
@@ -78,7 +78,7 @@ public:
             ev->Record.SetCascade(txState->TxType == TTxState::TxDropReplicationCascade);
 
             YDB_LOG_DEBUG_CTX(context.Ctx, "Send TEvDropReplication to controller",
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()},
                 {"tabletId", tabletId},
                 {"ev", ev->ToString()});
@@ -92,7 +92,7 @@ public:
 
     bool HandleReply(NReplication::TEvController::TEvDropReplicationResult::TPtr& ev, TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"#_ev->Get()->ToString", ev->Get()->ToString()});
 
@@ -105,7 +105,7 @@ public:
             break;
         default:
             YDB_LOG_WARN_CTX(context.Ctx, "Ignoring unexpected TEvDropReplicationResult",
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()},
                 {"tabletId", tabletId},
                 {"status", static_cast<int>(status)});
@@ -120,7 +120,7 @@ public:
         const auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
             YDB_LOG_WARN_CTX(context.Ctx, "Ignoring duplicate TEvDropReplicationResult",
-                {"#_context.SS->TabletID", context.SS->TabletID()},
+                {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()});
             return false;
         }
@@ -155,10 +155,10 @@ public:
 };
 
 class TPropose: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropReplication TPropose"
-            << " opId# " << OperationId << " ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropReplication TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -172,7 +172,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()});
 
         const auto* txState = context.SS->FindTx(OperationId);
@@ -187,7 +187,7 @@ public:
         const auto step = TStepId(ev->Get()->StepId);
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"step", step});
 
@@ -290,7 +290,7 @@ public:
         const auto& name = op.GetName();
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "TDropReplication Propose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", workingDir},
             {"name", name});

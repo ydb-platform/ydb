@@ -15,10 +15,10 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropColumnTable TDropParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropColumnTable TDropParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -94,10 +94,10 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropColumnTable TPropose"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropColumnTable TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -183,10 +183,10 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropColumnTable TProposedWaitParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropColumnTable TProposedWaitParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -257,10 +257,10 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropColumnTable TProposedDeleteParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropColumnTable TProposedDeleteParts"},
+            {"operationId", OperationId});
     }
 
     std::optional<TPathId> FindNewShardOwner(TOperationContext& context, const TTxState& txState) const {

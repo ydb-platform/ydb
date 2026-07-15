@@ -20,10 +20,10 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TUpdateMainTableOnIndexMove TConfigureParts"
-            << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TUpdateMainTableOnIndexMove TConfigureParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -158,10 +158,10 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TMoveIndex TPropose"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveIndex TPropose"},
+            {"operationId", OperationId});
     }
 public:
     TPropose(TOperationId id)
@@ -239,10 +239,10 @@ class TDeleteTableBarrier: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TMoveIndex TDeleteTableBarrier"
-                << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveIndex TDeleteTableBarrier"},
+            {"operationId", OperationId});
     }
 
 public:

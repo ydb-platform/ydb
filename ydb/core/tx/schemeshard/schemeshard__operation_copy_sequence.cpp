@@ -18,10 +18,10 @@ class TConfigureParts : public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCopySequence TConfigureParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCopySequence TConfigureParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -132,10 +132,10 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCopySequence TPropose"
-            << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCopySequence TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -214,10 +214,10 @@ class TCopyTableBarrier: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCopySequence TCopyTableBarrier"
-                << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCopySequence TCopyTableBarrier"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -265,10 +265,10 @@ private:
     TOperationId OperationId;
     NKikimrTxSequenceShard::TEvGetSequenceResult GetSequenceResult;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCopySequence TProposedCopySequence"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCopySequence TProposedCopySequence"},
+            {"operationId", OperationId});
     }
 
     void UpdateSequenceDescription(NKikimrSchemeOp::TSequenceDescription& descr) {

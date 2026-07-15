@@ -15,10 +15,10 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TMoveTable TConfigureParts"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveTable TConfigureParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -199,10 +199,10 @@ private:
     TOperationId OperationId;
     TTxState::ETxState& NextState;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TMoveTable TPropose"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveTable TPropose"},
+            {"operationId", OperationId});
     }
 public:
     TPropose(TOperationId id, TTxState::ETxState& nextState)
@@ -355,10 +355,10 @@ private:
 
     TPathId ActivePathId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TMoveTable TWaitRenamedPathPublication"
-                << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveTable TWaitRenamedPathPublication"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -448,10 +448,10 @@ class TDeleteTableBarrier: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TMoveTable TDeleteTableBarrier"
-                << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveTable TDeleteTableBarrier"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -557,9 +557,10 @@ class TMoveTableProposedWaitParts : public TSubOperationState {
 private:
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder() << "TMoveTable TProposedWaitParts"
-                                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveTable TProposedWaitParts"},
+            {"operationId", OperationId});
     }
 
     template <typename TEvent>
@@ -671,10 +672,10 @@ class TDone: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TMoveTable TDone"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveTable TDone"},
+            {"operationId", OperationId});
     }
 public:
     TDone(TOperationId id)

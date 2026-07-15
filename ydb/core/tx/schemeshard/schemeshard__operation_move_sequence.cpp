@@ -34,10 +34,10 @@ class TConfigureParts : public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TMoveSequence TConfigureParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveSequence TConfigureParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -147,10 +147,10 @@ private:
     TOperationId OperationId;
     TTxState::ETxState& NextState;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TMoveSequence TPropose"
-            << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveSequence TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -232,10 +232,10 @@ private:
 
     TPathId ActivePathId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TMoveSequence TWaitRenamedPathPublication"
-                << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveSequence TWaitRenamedPathPublication"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -300,10 +300,10 @@ class TDeleteTableBarrier: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TMoveSequence TDeleteTableBarrier"
-                << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveSequence TDeleteTableBarrier"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -357,10 +357,10 @@ class TProposedMoveSequence : public TSubOperationState {
 private:
     TOperationId OperationId;
     NKikimrTxSequenceShard::TEvGetSequenceResult GetSequenceResult;
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TMoveSequence TProposedMoveSequence"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveSequence TProposedMoveSequence"},
+            {"operationId", OperationId});
     }
     void UpdateSequenceDescription(NKikimrSchemeOp::TSequenceDescription& descr) {
         descr.SetStartValue(GetSequenceResult.GetStartValue());
@@ -526,10 +526,10 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TMoveSequence TDropParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveSequence TDropParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -647,10 +647,10 @@ class TDone: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TMoveSequence TDone"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TMoveSequence TDone"},
+            {"operationId", OperationId});
     }
 public:
     TDone(TOperationId id)

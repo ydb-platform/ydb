@@ -122,8 +122,8 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
     SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
 #undef DefaultHandleReply
 
-void TSubOperationState::IgnoreMessages(TString debugHint, TSet<ui32> mgsIds) {
-    LogHint = debugHint;
+void TSubOperationState::IgnoreMessages(NActors::NStructuredLog::TStructuredMessage debugHint, TSet<ui32> mgsIds) {
+    LogHint = std::move(debugHint);
     MsgToIgnore.swap(mgsIds);
 }
 

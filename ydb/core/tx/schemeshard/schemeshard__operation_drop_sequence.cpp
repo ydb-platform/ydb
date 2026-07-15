@@ -15,10 +15,10 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropSequence TDropParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropSequence TDropParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -127,10 +127,10 @@ private:
     TOperationId OperationId;
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropSequence TPropose"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropSequence TPropose"},
+            {"operationId", OperationId});
     }
 
 public:

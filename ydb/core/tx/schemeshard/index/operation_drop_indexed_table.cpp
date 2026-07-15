@@ -59,10 +59,10 @@ private:
     TOperationId OperationId;
     TTxState::ETxState& NextState;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropTableIndex TPropose"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropTableIndex TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -121,10 +121,10 @@ private:
 
     TPathId ActivePathId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropTableIndex TWaitRenamedPathPublication"
-                << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropTableIndex TWaitRenamedPathPublication"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -189,10 +189,10 @@ class TDeletePathBarrier: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropTableIndex TDeletePathBarrier"
-                << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropTableIndex TDeletePathBarrier"},
+            {"operationId", OperationId});
     }
 
 public:

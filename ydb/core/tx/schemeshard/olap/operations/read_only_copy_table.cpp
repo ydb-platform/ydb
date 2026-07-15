@@ -14,10 +14,10 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TReadOnlyCopyColumnTable TConfigureParts"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TReadOnlyCopyColumnTable TConfigureParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -95,10 +95,10 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TReadOnlyCopyColumnTable TPropose"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TReadOnlyCopyColumnTable TPropose"},
+            {"operationId", OperationId});
     }
 public:
     TPropose(TOperationId id)
@@ -169,10 +169,10 @@ class TProposedWaitParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TReadOnlyCopyColumnTable TProposedWaitParts"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TReadOnlyCopyColumnTable TProposedWaitParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -236,10 +236,10 @@ private:
 
     TPathId ActivePathId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TReadOnlyCopyColumnTable TWaitCopiedPathPublication"
-                << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TReadOnlyCopyColumnTable TWaitCopiedPathPublication"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -309,10 +309,10 @@ class TDone: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TReadOnlyCopyColumnTable TDone"
-            << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TReadOnlyCopyColumnTable TDone"},
+            {"operationId", OperationId});
     }
 public:
     TDone(TOperationId id)

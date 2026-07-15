@@ -2,8 +2,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
-
 namespace NKikimr::NSchemeShard {
 
 NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TShardCompactionInfo& info) {
@@ -179,7 +177,7 @@ void TSchemeShard::EnqueueBackgroundCompaction(
             {"searchHeight", stats.SearchHeight},
             {"lastFullCompaction", TInstant::Seconds(stats.FullCompactionTs)},
             {"tabletID", TabletID()});
-        
+
         UpdateBackgroundCompactionQueueMetrics();
     } else {
         YDB_LOG_TRACE_CTX(ctx, "[BackgroundCompaction] [Enqueue] Skipped or already exists with at schemeshard",

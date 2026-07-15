@@ -21,7 +21,7 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
             {"step", step});
 
@@ -45,7 +45,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()});
 
         const TTxState* txState = context.SS->FindTx(OperationId);
@@ -57,8 +57,10 @@ public:
     }
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder() << "TCreateStreamingQuery TPropose, operationId: " << OperationId << ", ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCreateStreamingQuery TPropose"},
+            {"operationId", OperationId});
     }
 
 private:
@@ -233,7 +235,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetCreateStreamingQuery().GetName();
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateStreamingQuery Propose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", parentPathStr},
             {"name", name});
@@ -263,13 +265,13 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateStreamingQuery AbortPropose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateStreamingQuery AbortUnsafe",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"txId", forceDropTxId});
         context.OnComplete.DoneOperation(OperationId);
@@ -302,7 +304,7 @@ ISubOperation::TPtr CreateNewStreamingQuery(TOperationId id, const TTxTransactio
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateStreamingQuery);
 
     YDB_LOG_INFO_CTX(context.Ctx, "CreateNewStreamingQuery",
-        {"#_context.SS->TabletID", context.SS->TabletID()},
+        {"tabletId", context.SS->TabletID()},
         {"opId", id},
         {"tx", tx.ShortDebugString()});
 

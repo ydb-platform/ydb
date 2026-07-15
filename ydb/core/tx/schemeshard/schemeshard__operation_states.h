@@ -13,8 +13,10 @@ class TEmptyPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder() << "TEmptyPropose, operationId " << OperationId << ", ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TEmptyPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -48,10 +50,10 @@ private:
     TString OperationName;
     TTxState::ETxState NextState;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << OperationName << "::TWaitCopyTableBarrier"
-                << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", TStringBuilder() << OperationName << "::TWaitCopyTableBarrier"},
+            {"operationId", OperationId});
     }
 
 public:

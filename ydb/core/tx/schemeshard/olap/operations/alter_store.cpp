@@ -72,10 +72,10 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterOlapStore TConfigureParts"
-            << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TAlterOlapStore TConfigureParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -176,10 +176,10 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterOlapStore TPropose"
-            << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TAlterOlapStore TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -270,10 +270,10 @@ private:
     TDeque<TPathId> TablesToUpdate;
     bool TablesInitialized = false;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterOlapStore TProposedWaitParts"
-            << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TAlterOlapStore TProposedWaitParts"},
+            {"operationId", OperationId});
     }
 
 public:

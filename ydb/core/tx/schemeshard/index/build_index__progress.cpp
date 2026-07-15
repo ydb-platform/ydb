@@ -23,9 +23,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
-
-
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -428,7 +425,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         {"count", count},
         {"parts", parts},
         {"step", step},
-        {"#_buildInfo.DebugString", buildInfo.DebugString()});
+        {"buildInfo", buildInfo.DebugString()});
     if (parts > 1) {
         const auto from = buildInfo.KMeans.ChildBegin;
         for (auto i = from + step, e = from + count; i < e; i += step) {
@@ -1882,14 +1879,14 @@ private:
         if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
             YDB_LOG_DEBUG("FillVectorIndex FilterBorders",
                 {"logPrefix", LogPrefix},
-                {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                {"buildInfo", buildInfo.DebugString()});
             buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
             SendUploadKMeansBordersRequest(buildInfo);
             Progress(BuildId);
         } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
             YDB_LOG_DEBUG("FillVectorIndex FilterBorders Done",
                 {"logPrefix", LogPrefix},
-                {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                {"buildInfo", buildInfo.DebugString()});
             NIceDb::TNiceDb db{txc.DB};
             buildInfo.SubState = TIndexBuildInfo::ESubState::None;
             Self->PersistBuildIndexState(db, buildInfo);
@@ -2011,7 +2008,7 @@ private:
     bool FillPrefixedVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         YDB_LOG_DEBUG("FillPrefixedVectorIndex Start",
             {"logPrefix", LogPrefix},
-            {"#_buildInfo.DebugString", buildInfo.DebugString()});
+            {"buildInfo", buildInfo.DebugString()});
 
         if (buildInfo.KMeans.Level == 1) {
             if (buildInfo.KMeans.NeedVectorAutodetect) {
@@ -2025,7 +2022,7 @@ private:
             }
             YDB_LOG_DEBUG("FillPrefixedVectorIndex DoneLevel",
                 {"logPrefix", LogPrefix},
-                {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                {"buildInfo", buildInfo.DebugString()});
 
             const ui64 doneShards = buildInfo.DoneShards.size();
             ClearDoneShards(txc, buildInfo);
@@ -2035,7 +2032,7 @@ private:
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
             YDB_LOG_DEBUG("FillPrefixedVectorIndex PrefixIndexDone",
                 {"logPrefix", LogPrefix},
-                {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                {"buildInfo", buildInfo.DebugString()});
 
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
@@ -2072,7 +2069,7 @@ private:
             if (buildInfo.KMeans.OverlapClusters > 1) {
                 YDB_LOG_DEBUG("FillPrefixedVectorIndex Filter",
                     {"logPrefix", LogPrefix},
-                    {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                    {"buildInfo", buildInfo.DebugString()});
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Filter;
                 PersistKMeansState(txc, buildInfo);
                 ClearDoneShards(txc, buildInfo);
@@ -2087,7 +2084,7 @@ private:
 
         YDB_LOG_DEBUG("FillPrefixedVectorIndex DoneLevel",
             {"logPrefix", LogPrefix},
-            {"#_buildInfo.DebugString", buildInfo.DebugString()});
+            {"buildInfo", buildInfo.DebugString()});
 
         ClearDoneShards(txc, buildInfo);
         const bool needsAnotherLevel = buildInfo.KMeans.NextLevel();
@@ -2097,7 +2094,7 @@ private:
         }
         YDB_LOG_DEBUG("FillPrefixedVectorIndex NextLevel",
             {"logPrefix", LogPrefix},
-            {"#_buildInfo.DebugString", buildInfo.DebugString()});
+            {"buildInfo", buildInfo.DebugString()});
 
         PersistKMeansState(txc, buildInfo);
         NIceDb::TNiceDb db{txc.DB};
@@ -2105,7 +2102,7 @@ private:
         if (!needsAnotherLevel) {
             YDB_LOG_DEBUG("FillPrefixedVectorIndex Done",
                 {"logPrefix", LogPrefix},
-                {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                {"buildInfo", buildInfo.DebugString()});
             return true;
         }
         ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
@@ -2116,7 +2113,7 @@ private:
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         YDB_LOG_DEBUG("FillVectorIndex Start",
             {"logPrefix", LogPrefix},
-            {"#_buildInfo.DebugString", buildInfo.DebugString()});
+            {"buildInfo", buildInfo.DebugString()});
 
         // (Sample -> Recompute* -> Reshuffle)* -> MultiLocal -> (Filter)? -> NextLevel
         if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample) {
@@ -2140,14 +2137,14 @@ private:
                 // Cluster generation completed, save clusters
                 YDB_LOG_DEBUG("FillVectorIndex SendUploadClusters",
                     {"logPrefix", LogPrefix},
-                    {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                    {"buildInfo", buildInfo.DebugString()});
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
                 SendUploadSampleKRequest(buildInfo);
             }
             YDB_LOG_DEBUG("FillVectorIndex NextState",
                 {"logPrefix", LogPrefix},
-                {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                {"buildInfo", buildInfo.DebugString()});
             PersistKMeansState(txc, buildInfo);
             Progress(BuildId);
             return false;
@@ -2216,7 +2213,7 @@ private:
                 // Otherwise, we collect samples
                 YDB_LOG_DEBUG("FillVectorIndex Samples",
                     {"logPrefix", LogPrefix},
-                    {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                    {"buildInfo", buildInfo.DebugString()});
             }
 
             if (buildInfo.KMeans.NeedVectorAutodetect) {
@@ -2290,7 +2287,7 @@ private:
             if (buildInfo.KMeans.Rounds > 1) {
                 YDB_LOG_DEBUG("FillVectorIndex Recompute",
                     {"logPrefix", LogPrefix},
-                    {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                    {"buildInfo", buildInfo.DebugString()});
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Recompute;
                 buildInfo.KMeans.Round = 1;
                 // Initialize Clusters
@@ -2303,7 +2300,7 @@ private:
             } else {
                 YDB_LOG_DEBUG("FillVectorIndex SendUploadSampleKRequest",
                     {"logPrefix", LogPrefix},
-                    {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                    {"buildInfo", buildInfo.DebugString()});
                 SendUploadSampleKRequest(buildInfo);
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
             }
@@ -2319,7 +2316,7 @@ private:
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Reshuffle;
             YDB_LOG_DEBUG("FillVectorIndex NextState",
                 {"logPrefix", LogPrefix},
-                {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                {"buildInfo", buildInfo.DebugString()});
             PersistKMeansState(txc, buildInfo);
             Progress(BuildId);
             return false;
@@ -2332,7 +2329,7 @@ private:
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
             YDB_LOG_DEBUG("FillVectorIndex NextParent",
                 {"logPrefix", LogPrefix},
-                {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                {"buildInfo", buildInfo.DebugString()});
             PersistKMeansState(txc, buildInfo);
             Progress(BuildId);
             return false;
@@ -2344,7 +2341,7 @@ private:
             if (!buildInfo.ToUploadShards.empty()) {
                 YDB_LOG_DEBUG("FillVectorIndex MultiKMeans",
                     {"logPrefix", LogPrefix},
-                    {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                    {"buildInfo", buildInfo.DebugString()});
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
                 PersistKMeansState(txc, buildInfo);
                 Progress(BuildId);
@@ -2359,7 +2356,7 @@ private:
         if (!buildInfo.KMeans.IsEmpty && buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1) {
             YDB_LOG_DEBUG("FillVectorIndex Filter",
                 {"logPrefix", LogPrefix},
-                {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                {"buildInfo", buildInfo.DebugString()});
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Filter;
             ClearDoneShards(txc, buildInfo);
             NIceDb::TNiceDb db(txc.DB);
@@ -2380,7 +2377,7 @@ private:
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
             YDB_LOG_DEBUG("FillVectorIndex NextLevel",
                 {"logPrefix", LogPrefix},
-                {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                {"buildInfo", buildInfo.DebugString()});
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexShardStatusReset(db, buildInfo);
@@ -2403,7 +2400,7 @@ private:
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
                 YDB_LOG_DEBUG("FillVectorIndex UploadEmpty",
                     {"logPrefix", LogPrefix},
-                    {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                    {"buildInfo", buildInfo.DebugString()});
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
                 SendUploadSampleKRequest(buildInfo);
                 return false;
@@ -2419,7 +2416,7 @@ private:
 
         YDB_LOG_DEBUG("FillVectorIndex Done",
             {"logPrefix", LogPrefix},
-            {"#_buildInfo.DebugString", buildInfo.DebugString()});
+            {"buildInfo", buildInfo.DebugString()});
         return true;
     }
 
@@ -2485,14 +2482,14 @@ private:
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
                 YDB_LOG_DEBUG("FillFulltextIndex SendUploadStats",
                     {"logPrefix", LogPrefix},
-                    {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                    {"buildInfo", buildInfo.DebugString()});
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
                 SendUploadFulltextStatsRequest(buildInfo);
                 Progress(BuildId);
             } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
                 YDB_LOG_DEBUG("FillFulltextIndex UploadStats Done",
                     {"logPrefix", LogPrefix},
-                    {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                    {"buildInfo", buildInfo.DebugString()});
                 ClearDoneShards(txc, buildInfo);
                 NIceDb::TNiceDb db{txc.DB};
                 buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexDictionary;
@@ -2534,14 +2531,14 @@ private:
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
                 YDB_LOG_DEBUG("FillFulltextIndex SendUploadBorders",
                     {"logPrefix", LogPrefix},
-                    {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                    {"buildInfo", buildInfo.DebugString()});
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
                 SendUploadFulltextBordersRequest(buildInfo);
                 Progress(BuildId);
             } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
                 YDB_LOG_DEBUG("FillFulltextIndex UploadBorders Done",
                     {"logPrefix", LogPrefix},
-                    {"#_buildInfo.DebugString", buildInfo.DebugString()});
+                    {"buildInfo", buildInfo.DebugString()});
                 ClearDoneShards(txc, buildInfo);
                 NIceDb::TNiceDb db{txc.DB};
                 buildInfo.SubState = TIndexBuildInfo::ESubState::None;
@@ -3200,7 +3197,7 @@ public:
     bool InitiateShards(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
         YDB_LOG_DEBUG("InitiateShards",
             {"logPrefix", LogPrefix},
-            {"#_buildInfo.DebugString", buildInfo.DebugString()});
+            {"buildInfo", buildInfo.DebugString()});
 
         Y_ENSURE(buildInfo.Shards.empty());
         Y_ENSURE(buildInfo.ToUploadShards.empty());

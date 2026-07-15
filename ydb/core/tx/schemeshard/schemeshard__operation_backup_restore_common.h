@@ -18,10 +18,10 @@ class TConfigurePart: public TSubOperationState {
     const TTxState::ETxType TxType;
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << TKind::Name() << " TConfigurePart"
-                << ", opId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", TStringBuilder() << TKind::Name() << " TConfigurePart"},
+            {"operationId", OperationId});
     }
 
     static TVirtualTimestamp GetSnapshotTime(const TSchemeShard* ss, const TPathId& pathId) {
@@ -102,10 +102,10 @@ protected:
     const TOperationId OperationId;
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << TKind::Name() << " TProposedWaitParts"
-                << ", opId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", TStringBuilder() << TKind::Name() << " TProposedWaitParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -387,10 +387,10 @@ class TAborting: public TProposedWaitParts<TKind> {
     using TProposedWaitParts<TKind>::OperationId;
     using TProposedWaitParts<TKind>::TxType;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << TKind::Name() << " TAborting"
-                << ", opId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", TStringBuilder() << TKind::Name() << " TAborting"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -464,10 +464,10 @@ class TPropose: public TSubOperationState {
     const TTxState::ETxType TxType;
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << TKind::Name() << " TPropose"
-                << ", opId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", TStringBuilder() << TKind::Name() << " TPropose"},
+            {"operationId", OperationId});
     }
 
 public:

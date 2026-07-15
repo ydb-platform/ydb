@@ -12,10 +12,10 @@ using namespace NSchemeShard;
 class TPropose: public TSubOperationState {
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TDropView TPropose"
-            << ", opId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDropView TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -25,7 +25,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"debugHint", DebugHint()});
 
         const auto* txState = context.SS->FindTx(OperationId);
@@ -40,7 +40,7 @@ public:
         const auto step = TStepId(ev->Get()->StepId);
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"debugHint", DebugHint()},
             {"step", step});
 
@@ -116,7 +116,7 @@ public:
         const TString& name = drop.GetName();
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "TDropView Propose",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"opId", OperationId},
             {"path", workingDir},
             {"name", name});
@@ -189,13 +189,13 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TDropView AbortPropose",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TDropView AbortUnsafe",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"opId", OperationId},
             {"txId", forceDropTxId});
 

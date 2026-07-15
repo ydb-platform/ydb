@@ -124,13 +124,13 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateLongIncrementalBackupOp AbortPropose",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateLongIncrementalBackupOp AbortUnsafe",
-            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"txId", txId});
         context.OnComplete.DoneOperation(OperationId);
@@ -191,13 +191,13 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                 .IsResolved()
                 .NotDeleted()
                 .IsTable();
-            
+
             if (!checks) {
                 result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
                 return result;
             }
         }
-        
+
         std::pair<TString, TString> paths;
         TString err;
         if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
@@ -245,7 +245,7 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                 if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
                     continue;
                 }
-                
+
                 // Skip deleted indexes
                 if (childPath->Dropped()) {
                     continue;

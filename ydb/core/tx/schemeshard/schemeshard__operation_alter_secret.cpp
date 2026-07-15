@@ -13,10 +13,10 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterSecret TPropose"
-            << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TAlterSecret TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -27,7 +27,7 @@ public:
 
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"debugHint", DebugHint()});
 
         const auto* txState = context.SS->FindTx(OperationId);
@@ -42,7 +42,7 @@ public:
         const auto step = TStepId(ev->Get()->StepId);
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"debugHint", DebugHint()},
             {"step", step});
 
@@ -111,7 +111,7 @@ public:
         const TString& secretName = alterSecretProto.GetName();
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterSecret Propose",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"path", parentPathStr},
             {"secretName", secretName},
             {"opId", OperationId});
@@ -205,13 +205,13 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterSecret AbortPropose",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterSecret AbortUnsafe",
-            {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()},
+            {"selfTabletId", context.SS->SelfTabletId()},
             {"opId", OperationId},
             {"forceDropId", forceDropTxId});
 

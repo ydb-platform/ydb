@@ -93,10 +93,10 @@ private:
     TOperationId OperationId;
     const TTxState::ETxState NextState;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "NTableState::TProposedWaitParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "NTableState::TProposedWaitParts"},
+            {"operationId", OperationId});
     }
     template<typename TEvent>
     bool HandleReplyImpl(const TEvent& ev, TOperationContext& context);
@@ -114,9 +114,10 @@ public:
 class TCreateParts: public TSubOperationState {
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder() << "TCreateParts"
-            << " opId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCreateParts"},
+            {"operationId", OperationId});
     }
 
     THolder<TEvHive::TEvAdoptTablet> AdoptRequest(TShardIdx shardIdx, TOperationContext& context);
@@ -134,9 +135,10 @@ protected:
     const TOperationId OperationId;
     const TTxState::ETxState NextState;
 
-    TString DebugHint() const override {
-        return TStringBuilder() << "TDeleteParts"
-            << " opId# " << OperationId << " ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDeleteParts"},
+            {"operationId", OperationId});
     }
 
     void DeleteShards(TOperationContext& context);
@@ -159,9 +161,10 @@ protected:
     const TOperationId OperationId;
     const TMaybe<TPathElement::EPathState> TargetState;
 
-    TString DebugHint() const override {
-        return TStringBuilder() << "TDone"
-            << " opId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TDone"},
+            {"operationId", OperationId});
     }
 
     bool Process(TOperationContext& context);
@@ -182,10 +185,10 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "NPQState::TConfigureParts"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "NPQState::TConfigureParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -200,10 +203,10 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "NPQState::TPropose"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "NPQState::TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -237,10 +240,10 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "NBSVState::TConfigureParts"
-            << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "NBSVState::TConfigureParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -254,10 +257,10 @@ class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "NBSVState::TPropose"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "NBSVState::TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -272,10 +275,10 @@ public:
 namespace NCdcStreamState {
 
 class TConfigurePartsAtTable: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "NCdcStreamState::TConfigurePartsAtTable"
-            << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "NCdcStreamState::TConfigurePartsAtTable"},
+            {"operationId", OperationId});
     }
 
 protected:
@@ -292,10 +295,10 @@ protected:
 }; // TConfigurePartsAtTable
 
 class TProposeAtTable: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "NCdcStreamState::TProposeAtTable"
-            << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "NCdcStreamState::TProposeAtTable"},
+            {"operationId", OperationId});
     }
 
 public:

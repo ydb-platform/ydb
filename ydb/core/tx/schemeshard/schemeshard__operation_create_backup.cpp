@@ -49,7 +49,7 @@ struct TBackup {
             YDB_LOG_DEBUG_CTX(context.Ctx, "Propose backup to columnshard txid at schemeshard",
                 {"columnShardId", columnShardId},
                 {"opId", opId},
-                {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()});
+                {"selfTabletId", context.SS->SelfTabletId()});
 
             NKikimrTxColumnShard::TBackupTxBody txBodyBackup;
             *txBodyBackup.MutableBackupTask() = backup;
@@ -79,7 +79,7 @@ struct TBackup {
             YDB_LOG_DEBUG_CTX(context.Ctx, "Propose backup to datashard txid at schemeshard",
                 {"datashardId", datashardId},
                 {"opId", opId},
-                {"#_context.SS->SelfTabletId", context.SS->SelfTabletId()});
+                {"selfTabletId", context.SS->SelfTabletId()});
 
             const auto txBody = context.SS->FillBackupTxBody(pathId, backup, i, seqNo);
             auto event = context.SS->MakeDataShardProposal(pathId, opId, txBody, context.Ctx);

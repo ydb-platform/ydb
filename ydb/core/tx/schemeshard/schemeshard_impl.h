@@ -228,6 +228,17 @@ public:
 
     static const TSchemeLimits DefaultLimits;
 
+    struct TLifetimeToken {};
+
+    // Actors registered with the same mailbox may keep raw pointers to this
+    // SchemeShard. Die() resets this token before tearing the tablet state down,
+    // allowing those actors to stop before accessing a stale pointer.
+    std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();
+
+    std::weak_ptr<TLifetimeToken> GetLifetimeToken() const {
+        return LifetimeToken;
+    }
+
     TIntrusivePtr<TChannelProfiles> ChannelProfiles;
 
     TTableProfiles TableProfiles;

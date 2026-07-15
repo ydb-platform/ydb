@@ -5629,6 +5629,10 @@ bool TSchemeShard::IsSchemeShardConfigured() const {
 }
 
 void TSchemeShard::Die(const TActorContext &ctx) {
+    // Invalidate raw SchemeShard pointers held by same-mailbox helper actors
+    // before any tablet state is torn down.
+    LifetimeToken.reset();
+
     ctx.Send(SchemeBoardPopulator, new TEvents::TEvPoisonPill());
     ctx.Send(TxAllocatorClient, new TEvents::TEvPoisonPill());
     ctx.Send(SysPartitionStatsCollector, new TEvents::TEvPoisonPill());

@@ -5,6 +5,11 @@ from devtools.yamaker import pathutil
 from devtools.yamaker.modules import Linkable, Switch
 from devtools.yamaker.project import NixProject
 
+QUICTLS_SRCS = [
+    "ssl/ssl_quic.c",
+    "ssl/statem_quic.c",
+]
+
 
 def post_build(self):
     os.remove(f"{self.dstdir}/libssl.map")
@@ -19,6 +24,9 @@ def post_build(self):
 def post_install(self):
     def d(s):
         return self.dstdir + "/" + s
+
+    with self.yamakes["."] as openssl:
+        openssl.SRCS |= set(QUICTLS_SRCS)
 
     # Move asm sources to asm/linux.
     fileutil.subcopy(self.dstdir, d("asm/linux"), ["**/*.s"], move=True)
@@ -146,6 +154,7 @@ openssl = NixProject(
         "include/crypto/dso_conf.h",
         "include/openssl/opensslconf.h",
     ],
+    # fmt: off
     keep_paths=[
         # This asm files were generated manually
         "asm/aarch64/",
@@ -161,7 +170,8 @@ openssl = NixProject(
         "crypto/ubsan.supp",
         "redef.h",
         "system_openssl.ya.inc",
-    ],
+    ] + QUICTLS_SRCS,
+    # fmt: on
     post_build=post_build,
     post_install=post_install,
 )

@@ -170,9 +170,9 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         conf.SetListeningPort(FromString<ui16>(res.Get("kafka-port")));
     }
 
-    if (res.Has("kafka-listen-address")) {
+    if (res.Has("kafka-address")) {
         auto& conf = *Config.AppConfig.MutableKafkaProxyConfig();
-        conf.SetListeningAddress(res.Get("kafka-listen-address"));
+        conf.SetListeningAddress(res.Get("kafka-address"));
     }
 
     if (res.Has("grpc-public-host")) {

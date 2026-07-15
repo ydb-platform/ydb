@@ -1,6 +1,7 @@
 #include "structured_token_credentials.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
@@ -25,9 +26,16 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateKikimrIamAuthCredential
     TString resourceId;
     parser.GetIamAuth(serviceAccountId, resourceId);
 
+    NYdb::TIamHost vmMetadataParams;
+    if (appData->AuthConfig.HasLocalMetadataService()) {
+        vmMetadataParams.Host = appData->AuthConfig.GetLocalMetadataService().GetHost();
+        vmMetadataParams.Port = appData->AuthConfig.GetLocalMetadataService().GetPort();
+    }
+
     NYdb::TIamServiceParams iamParams;
-    iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory();
+    iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory(vmMetadataParams);
     iamParams.Endpoint = serviceControl.GetEndpoint();
+    iamParams.EnableSsl = serviceControl.GetEnableSsl();
     iamParams.ServiceId = serviceControl.GetServiceId();
     iamParams.MicroserviceId = serviceControl.GetMicroserviceId();
     iamParams.ResourceType = serviceControl.GetResourceType();

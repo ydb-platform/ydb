@@ -2730,7 +2730,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     event->Record.SetDeadline(deadline);
     event->Record.SetClientId(InternalClientId);
 
-    YDB_LOG_DEBUG_CTX(ctx, "Wait data in partition inited, cookie",
+    YDB_LOG_DEBUG_CTX(ctx, "Wait data in partition inited",
         {"PQLOGPREFIX", PQ_LOG_PREFIX},
         {"topic", Topic->GetPrintableString()},
         {"partition", Partition},

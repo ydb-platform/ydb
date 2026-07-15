@@ -36,7 +36,7 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: main
 
@@ -67,7 +67,7 @@ jobs:
           echo "BASE_BRANCH=${{ matrix.BASE_BRANCH }}" >> $GITHUB_ENV
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ env.BASE_BRANCH }}
 
@@ -233,7 +233,7 @@ jobs:
             --body="${{ env.PR_BODY_PATH }}"
         
       - name: Comment PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         if: env.changes == 'true'
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
@@ -273,7 +273,7 @@ jobs:
           
       - name: Enable auto-merge (squash)
         if: env.changes == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |

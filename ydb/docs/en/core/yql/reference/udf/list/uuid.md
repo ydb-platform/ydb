@@ -1,0 +1,132 @@
+# Uuid
+
+{% note warning "Experimental feature" %}
+
+The `Uuid` module is an experimental feature. Its API and behavior may change in future releases.
+
+{% endnote %}
+
+The `Uuid` module provides generators for primary keys in row-oriented tables. Unlike [`RandomUuid()`](../../builtins/basic.md#random), which returns a uniformly random [UUID version 4](https://datatracker.ietf.org/doc/html/rfc4122#section-4.4), these functions assemble 128-bit values with a deliberate bit layout so that key order and partition spread suit {{ ydb-short-name }}'s range partitioning.
+
+All functions return a value of type `Uuid` in {{ ydb-short-name }}'s internal 16-byte representation (Microsoft GUID / mixed-endian layout). This is the same byte order used when comparing primary keys. Generators that target key-friendly layout write bytes directly in this order; they do not round-trip through RFC network-byte-order representation.
+
+When you cast a generated `Uuid` to `String`, you get a canonical GUID text representation. For key-friendly generators (`newChrono`, `newSharded`, and their `Prefix` variants), the visible string layout does not reflect how the timestamp and prefix are embedded in the stored bytes. Use the functions below for generation and extraction, not string parsing.
+
+For general recommendations on choosing a `Uuid` primary key, see [UUID as a primary key](../../../dev/primary-key/row-oriented.md#uuid-primary-key).
+
+## Key-friendly generators {#key-friendly}
+
+These functions produce UUID version 8 values (implementation-specific per [RFC 9562](https://datatracker.ietf.org/doc/html/rfc9562)) optimized for {{ ydb-short-name }} key sorting. Sort order is defined by comparing the stored 16 bytes (`memcmp`), not by the canonical GUID string.
+
+### `Uuid::newChrono` {#newchrono}
+
+Generates a key whose sort order follows creation time at millisecond precision, then random suffix bits. Rows inserted close together in time tend to land in adjacent key ranges, which improves locality for time-bounded scans and index maintenance compared to fully random keys.
+
+Optional dependency arguments work like [`RandomUuid()`](../../builtins/basic.md#random): they control when the function is evaluated per row, not the generated value.
+
+* `Uuid::newChrono([T1[, T2, ...]]) -> Uuid`
+
+### `Uuid::newChronoPrefix` {#newchronoprefix}
+
+Same chronological layout as `newChrono`, but the high bits of the key (10-bit prefix by default) are taken from the first argument instead of being random. Use this to pin a shared prefix for several rows in one transaction or batch so they typically map to a single partition.
+
+The first argument is either:
+
+* `Uint64` — the low 10 bits are placed into the prefix field;
+* `Uuid` — the top 10 bits of the source value's MSB are reused as the prefix.
+
+Optional dependency arguments may follow.
+
+* `Uuid::newChronoPrefix(Uint64{Flags:AutoMap}[, T1[, T2, ...]]) -> Uuid`
+* `Uuid::newChronoPrefix(Uuid{Flags:AutoMap}[, T1[, T2, ...]]) -> Uuid`
+
+### `Uuid::newSharded` {#newsharded}
+
+Generates a key that balances partition spread and time locality. Each call leaves the high prefix bits random (by default, about 2<sup>10</sup> ≈ 1024 partition buckets), embeds the current Unix time at second granularity in the following bit field, and fills the remaining bits with randomness. This spreads write load across partitions while keeping rows created at similar times relatively close in key space.
+
+Optional dependency arguments work like [`RandomUuid()`](../../builtins/basic.md#random).
+
+* `Uuid::newSharded([T1[, T2, ...]]) -> Uuid`
+
+### `Uuid::newShardedPrefix` {#newshardedprefix}
+
+Same sharded layout as `newSharded`, but the prefix is fixed from the first argument. Rows that share a prefix usually belong to one partition, which simplifies multi-row transactions, while the embedded timestamp still groups nearby writes inside the prefix bucket.
+
+The first argument is either `Uint64` or `Uuid` (same rules as `newChronoPrefix`). Optional dependency arguments may follow.
+
+* `Uuid::newShardedPrefix(Uint64{Flags:AutoMap}[, T1[, T2, ...]]) -> Uuid`
+* `Uuid::newShardedPrefix(Uuid{Flags:AutoMap}[, T1[, T2, ...]]) -> Uuid`
+
+### Choosing between `newChrono` and `newSharded` {#key-friendly-choice}
+
+| Goal | Function |
+| --- | --- |
+| Maximum time ordering in the primary key; time-range scans by key | `newChrono` |
+| Even partition spread for single-row inserts with some time locality | `newSharded` |
+| Several rows in one transaction should share a partition | `newChronoPrefix` or `newShardedPrefix` with the same prefix |
+| Unstructured random IDs without sort semantics | [`RandomUuid()`](../../builtins/basic.md#random) |
+
+## RFC UUID version 7 {#rfc-v7}
+
+These functions generate standard [RFC 9562 UUID version 7](https://datatracker.ietf.org/doc/html/rfc9562) values: a 48-bit Unix timestamp in milliseconds in the leading bits, then random bits. The result is stored in {{ ydb-short-name }} internal `Uuid` layout. Use these when you need interoperability with RFC v7 tools or when extracting the embedded timestamp.
+
+Because v7 follows the RFC field layout, its sort order in {{ ydb-short-name }} keys does not match chronological order as closely as `newChrono`. Prefer `newChrono` or `newSharded` when the primary goal is row-table performance in {{ ydb-short-name }}.
+
+### `Uuid::newV7` {#newv7}
+
+Generates a v7 UUID from the current timestamp.
+
+* `Uuid::newV7([T1[, T2, ...]]) -> Uuid`
+
+### `Uuid::newV7At` {#newv7at}
+
+Generates a v7 UUID from an explicit timestamp. Accepts `Timestamp` or `Timestamp64`.
+
+* `Uuid::newV7At(Timestamp{Flags:AutoMap}[, T1[, T2, ...]]) -> Uuid`
+* `Uuid::newV7At(Timestamp64{Flags:AutoMap}[, T1[, T2, ...]]) -> Uuid`
+
+### `Uuid::extractTs` and `Uuid::extractTs64` {#extract-ts}
+
+Extract the timestamp embedded in a v7 UUID. Returns `NULL` if the argument is not a v7 value (for example, a key from `newChrono` or `newSharded`).
+
+* `Uuid::extractTs(Uuid{Flags:AutoMap}) -> Timestamp?`
+* `Uuid::extractTs64(Uuid{Flags:AutoMap}) -> Timestamp64?`
+
+## Examples {#examples}
+
+Single-row insert with sharded keys (default: random prefix per row):
+
+```yql
+INSERT INTO events (id, payload)
+SELECT
+    Uuid::newSharded(TableRow()) AS id,
+    payload
+FROM AS_TABLE($rows);
+```
+
+Multi-row transaction with a shared prefix (rows typically land in one partition):
+
+```yql
+$prefix = Uuid::newShardedPrefix(RandomNumber(1));
+
+INSERT INTO events (id, payload)
+SELECT
+    Uuid::newShardedPrefix($prefix, TableRow()) AS id,
+    payload
+FROM AS_TABLE($rows);
+```
+
+Chronological primary key:
+
+```yql
+INSERT INTO audit_log (id, message)
+VALUES (Uuid::newChrono(), "user signed in");
+```
+
+RFC v7 with timestamp round-trip:
+
+```yql
+$ts = CurrentUtcTimestamp();
+$id = Uuid::newV7At($ts);
+SELECT Uuid::extractTs($id) = $ts;  -- true
+```

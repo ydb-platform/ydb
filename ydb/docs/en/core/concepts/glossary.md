@@ -98,7 +98,7 @@ Technically, tablets are [actors](#actor) with state reliably stored in [distrib
 
 ### Transactions {#transactions}
 
-{{ ydb-short-name }} implements **transactions** (**transactions**) at two primary levels:
+{{ ydb-short-name }} implements **transactions** at two primary levels:
 
 * [Local database](#local-database) and the rest of the [tablet infrastructure](#tablet-implementation) allow [tablets](#tablet) to manipulate their state using **local transactions** with [serializable isolation level](https://en.wikipedia.org/wiki/%D0%A3%D1%80%D0%BE%D0%B2%D0%B5%D0%BD%D1%8C_%D0%B8%D0%B7%D0%BE%D0%BB%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%BD%D0%BE%D1%81%D1%82%D0%B8_%D1%82%D1%80%D0%B0%D0%BD%D0%B7%D0%B0%D0%BA%D1%86%D0%B8%D0%B9#Serializable_(%D1%83%D0%BF%D0%BE%D1%80%D1%8F%D0%B4%D0%BE%D1%87%D0%B8%D0%B2%D0%B0%D0%B5%D0%BC%D0%BE%D1%81%D1%82%D1%8C)). Technically they are not local to a single node, because this state is stored remotely in [distributed storage](#distributed-storage).
 * In the context of {{ ydb-short-name }}, the term **distributed transactions** usually refers to transactions that span multiple tablets. For example, transactions between tables or even rows of a single table are often distributed.
@@ -124,11 +124,11 @@ If the client timeout is shorter than the query execution time on the {{ ydb-sho
 
 ### Transaction retry {#transaction-retry}
 
-**Transaction retry** (**transaction retry**) — a client practice of re‑executing a [transaction](#transactions) from the beginning when an error that allows a retry occurs (for example, a temporary network failure or an optimistic lock conflict). In {{ ydb-short-name }}, retries should be performed at the transaction level, not at the level of individual queries inside it. Built‑in retry policies in SDK {{ ydb-short-name }} and integrations (for example, [spring-ydb-retry](../integrations/spring/spring-retry.md)) implement this approach. See [{#T}](../reference/ydb-sdk/error_handling.md) for more details.
+**Transaction retry** — a client practice of re‑executing a [transaction](#transactions) from the beginning when an error that allows a retry occurs (for example, a temporary network failure or an optimistic lock conflict). In {{ ydb-short-name }}, retries should be performed at the transaction level, not at the level of individual queries inside it. Built‑in retry policies in SDK {{ ydb-short-name }} and integrations (for example, [spring-ydb-retry](../integrations/spring/spring-retry.md)) implement this approach. See [{#T}](../reference/ydb-sdk/error_handling.md) for more details.
 
 ### Exponential backoff {#exponential-backoff}
 
-**Exponential backoff** (**exponential backoff**, **backoff**) — a pause strategy between [transaction retry](#transaction-retry) attempts: the wait interval grows exponentially with each attempt, usually with an upper bound. SDK {{ ydb-short-name }} often uses two backoff levels — fast and slow — depending on the error type. See [{#T}](../reference/ydb-sdk/error_handling.md#handling-retryable-errors) for more details.
+**Exponential backoff** (**backoff**) — a pause strategy between [transaction retry](#transaction-retry) attempts: the wait interval grows exponentially with each attempt, usually with an upper bound. SDK {{ ydb-short-name }} often uses two backoff levels — fast and slow — depending on the error type. See [{#T}](../reference/ydb-sdk/error_handling.md#handling-retryable-errors) for more details.
 
 ### Jitter {#jitter}
 
@@ -208,13 +208,13 @@ The guide for choosing primary keys is presented in [{#T}](../dev/primary-key/in
 
 #### Primary index {#primary-index}
 
-**Primary index**, **primary key index**, **primary index** or **primary key index** — this is the main data structure used to locate rows in a table. It is created based on the selected [primary key](#primary-key) and determines the physical order of rows in the table; thus, each table can have only one primary index. The primary index is unique.
+**Primary index**, **primary index**, **primary key index** or **primary key index** — this is the main data structure used to locate rows in a table. It is created based on the selected [primary key](#primary-key) and determines the physical order of rows in the table; thus, each table can have only one primary index. The primary index is unique.
 
 #### Secondary index {#secondary-index}
 
 **Secondary index** or **secondary index** — this is an additional data structure used to locate rows in a table, typically when it cannot be done efficiently with the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently of the table's main data. Thus, a table can have multiple secondary indexes for different scenarios. {{ ydb-short-name }} capabilities regarding secondary indexes are described in a separate article [{#T}](query_execution/secondary_indexes.md). A secondary index can be either unique or non-unique.
 
-Special types of secondary indexes are highlighted separately — [vector index](#vector-index), [full-text index](#fulltext-index) and [JSON index](#json-index).
+Special types of secondary indexes are highlighted separately — [vector index (**vector index**)](#vector-index), [full-text index (**full-text index**)](#fulltext-index) and [JSON index (**JSON‑index**)](#json-index).
 
 #### Vector index {#vector-index}
 
@@ -255,11 +255,11 @@ Local Bloom index — a special case of the [local index](#local-index): a proba
 
 **Column encoding** or **column encoding** — is a mechanism for optimizing storage of data in table columns, which reduces the amount of disk space used and speeds up some operations.
 
-#### Lifetime {#ttl}
+#### Time to live {#ttl}
 
 **Time to live**, **time to live** or **TTL** — it is a mechanism for automatically deleting old rows from a table asynchronously in the background. It is described in a separate article [{#T}](ttl.md).
 
-### Representation {#view}
+### View {#view}
 
 **View** or **view** — this is a way to save a query and refer to its results as a real table. The view itself does not store data, except the query text. The query stored in the view is executed on each SELECT from it, generating the returned result. Any changes to the tables that the view references are immediately reflected in the read results from it.
 
@@ -293,7 +293,7 @@ However, subsets of data managed by a single [data shard](#data-shard) or [colum
 
 #### Offset {#offset}
 
-**Offset** or **offset** — this is a sequential number that identifies a message within a [partition](#partition).
+**offset**, **offset** — this is a sequential number that identifies a message within a [partition](#partition).
 
 #### Writer {#producer}
 
@@ -364,7 +364,7 @@ See more details in [{#T}](datamodel/backup-collection.md).
 
 ### Resource pool {#resource-pool}
 
-**Resource pool** is a schema object that describes the limits imposed on resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By `default`, all queries are executed in the resource pool named , which does not impose any limits. Learn more about using resource pools in the [{#T}](../dev/resource-consumption-management.md) article.
+**Resource pool** is a schema object that describes the limits imposed on resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By default, all queries are executed in the resource pool named `default`, which does not impose any limits. Learn more about using resource pools in the [{#T}](../dev/resource-consumption-management.md) article.
 
 ### Resource pool classifier {#resource-pool-classifier}
 
@@ -426,15 +426,15 @@ Several terms related to federated queries are explained below. How federated qu
 
 ### Schema object {#scheme-object}
 
-A database schema consists of **schema objects** or **schema objects**, which can be databases, [tables](#table) (including [external tables](#external-table)), [topics](#topic), [folders](#folder), etc.
+A database schema consists of **schema objects** or **schema objects**, which can be databases, [tables](#table) (including [external tables](#external-table)), [topics](#topic), [directories](#folder), etc.
 
-For organizational convenience, schema objects form a hierarchy using [folders](#folder).
+For organizational convenience, schema objects form a hierarchy using [directories](#folder).
 
-### Folder {#folder}
+### Directory {#folder}
 
 As in file systems, **folder**, **directory**, **folder** or **directory** is a container for [schema objects](#scheme-object).
 
-Folders can contain subfolders, and such nesting can be of arbitrary depth.
+Directories can contain subdirectories, and such nesting can be of arbitrary depth.
 
 ### Access object {#access-object}
 
@@ -601,9 +601,9 @@ Since a tablet stores its state in [distributed storage](#distributed-storage), 
 
 Each table of the local database is stored as an [LSM tree](#lsm-tree).
 
-#### Log-structured merge tree {#lsm-tree}
+#### Log-structured merge-tree {#lsm-tree}
 
-**[Log-structured merge tree](https://en.wikipedia.org/wiki/LSM-%D0%B4%D0%B5%D1%80%D0%B5%D0%B2%D0%BE)** or **LSM tree** — it is a data structure designed to optimize write and read performance in storage systems. It is used in {{ ydb-short-name }} to store tables of the [local database](#local-database) and data of [VDisks](#vdisk).
+**[Log-structured merge-tree](https://en.wikipedia.org/wiki/LSM-%D0%B4%D0%B5%D1%80%D0%B5%D0%B2%D0%BE)** or **LSM tree** — it is a data structure designed to optimize write and read performance in storage systems. It is used in {{ ydb-short-name }} to store tables of the [local database](#local-database) and data of [VDisks](#vdisk).
 
 #### MemTable {#memtable}
 
@@ -667,7 +667,7 @@ In addition, there is a **root SchemeShard** that stores information about datab
 
 #### TxAllocator {#txallocator}
 
-**TxAllocator**, **transaction allocator** or **transaction allocator** is a system tablet that allocates unique transaction identifiers ( [TxID](#txid)) in a cluster. Usually a cluster has several such tablets, from which the [transaction proxy](#transaction-proxy) pre‑allocates and caches ranges for local issuance within a single process.
+**TxAllocator**, **transaction allocator** is a system tablet that allocates unique transaction identifiers ([TxID](#txid)) in a cluster. Usually a cluster has several such tablets, from which the [transaction proxy](#transaction-proxy) pre‑allocates and caches ranges for local issuance within a single process.
 
 #### Coordinator {#coordinator}
 
@@ -683,7 +683,7 @@ In addition, there is a **root SchemeShard** that stores information about datab
 
 #### CMS {#cms}
 
-**CMS**, **cluster management system** or **cluster management system** is a system tablet responsible for managing information about the current state of the [cluster {{ ydb-short-name }}](#cluster). This information is used to perform gradual cluster restarts without affecting user workloads, maintenance, cluster reconfiguration, etc.
+**CMS**, **cluster management system** is a system tablet responsible for managing information about the current state of the [cluster {{ ydb-short-name }}](#cluster). This information is used to perform gradual cluster restarts without affecting user workloads, maintenance, cluster reconfiguration, etc.
 
 #### NodeBroker {#node-broker}
 
@@ -766,7 +766,7 @@ More details about the design of SchemeBoard and related subsystems are in the [
 
 #### gRPC proxy {#grpc-proxy}
 
-**gRPC proxy** or **gRPC proxy** — is a proxy system for external client requests. Client requests arrive in the system via the [gRPC](https://grpc.io) protocol, after which the proxy component translates them into internal calls to execute these requests, which are passed through the [interconnect](#actor-system-interconnect). This proxy provides an interface for both request‑response and bidirectional streaming.
+**gRPC‑proxy** or **gRPC proxy** — is a proxy system for external client requests. Client requests arrive in the system via the [gRPC](https://grpc.io) protocol, after which the proxy component translates them into internal calls to execute these requests, which are passed through the [interconnect](#actor-system-interconnect). This proxy provides an interface for both request‑response and bidirectional streaming.
 
 ### Distributed configuration {#distributed-configuration}
 
@@ -885,7 +885,7 @@ In some cases, instead of [preparation](#prepare-stage) and execution, the trans
 
 #### Dirty operations {#dirty-operations}
 
-For read‑only transactions, similar to "read uncommitted" in other database management systems, it may be necessary to read data that has not yet been persisted to disk. This is called **dirty operations** or **dirty operations**.
+For read‑only transactions, similar to "read uncommitted" in other database management systems, it may be necessary to read data that has not yet been persisted to disk. This is called **dirty operations**.
 
 #### Read‑write set {#rw-set}
 
@@ -917,7 +917,7 @@ For read‑only transactions, similar to "read uncommitted" in other database ma
 
 #### Mediator time {#mediator-time}
 
-During the execution of distributed transactions, **mediator time**, **mediator time** or **mediator time** — this is the logical time up to which (inclusive) a shard participant must know the entire execution plan. It is used to advance time when there are no transactions on a particular shard, to determine whether it can read from a snapshot.
+During the execution of distributed transactions, **mediator time** — this is the logical time up to which (inclusive) a shard participant must know the entire execution plan. It is used to advance time when there are no transactions on a particular shard, to determine whether it can read from a snapshot.
 
 #### MiniKQL {#minikql}
 

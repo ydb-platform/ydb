@@ -253,7 +253,6 @@ bool TWriterActor::OnUnhandledException(const std::exception& exc) {
         {"logPrefix", NPQ_LOG_PREFIX},
         {"exceptionType", TypeName(exc)},
         {"exceptionMessage", exc.what()},
-        {"endl", Endl},
         {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 
     PendingRequests = 0;

@@ -102,13 +102,6 @@ TString GetValidJoinKind(const TString& joinKind) {
     return joinKind;
 }
 
-bool ShouldUseBlockHashJoin(bool enabled, NKqp::EJoinAlgoType joinAlgo, const TString& joinKind) {
-    const auto validJoinKind = GetValidJoinKind(joinKind);
-    return enabled
-        && (joinAlgo == NKqp::EJoinAlgoType::GraceJoin || joinAlgo == NKqp::EJoinAlgoType::ReverseBlockJoin)
-        && (validJoinKind == "Inner" || validJoinKind == "Left" || validJoinKind == "LeftSemi" || validJoinKind == "LeftOnly");
-}
-
 TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {
     TVector<TInfoUnit> res;
     for (const auto& unit : left) {

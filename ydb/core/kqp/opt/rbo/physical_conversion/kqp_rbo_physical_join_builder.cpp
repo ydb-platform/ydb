@@ -416,7 +416,6 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
     }
     Y_ENSURE(props.JoinAlgo.has_value());
     const auto joinAlgo = *(props.JoinAlgo);
-    useBlockHashJoin = ShouldUseBlockHashJoin(useBlockHashJoin, joinAlgo, joinType);
 
     const auto leftInputType = Join->GetLeftInput()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     const auto rightInputType = Join->GetRightInput()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();

@@ -2,7 +2,6 @@
 #include "kqp_expression.h"
 #include "kqp_rbo_utils.h"
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
-#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
 #include <algorithm>
@@ -52,10 +51,9 @@ void IOperator::ReplaceChild(const TIntrusivePtr<IOperator> oldChild, const TInt
     Y_ENSURE(false, "Did not find a child to replace");
 }
 
-NJson::TJsonValue IOperator::ToJson(ui32 explainFlags, const TKikimrConfiguration& config)
+NJson::TJsonValue IOperator::ToJson(ui32 explainFlags)
 {
     Y_UNUSED(explainFlags);
-    Y_UNUSED(config);
     auto res = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
     res["Name"] = GetExplainName();
     return res;
@@ -172,8 +170,8 @@ TString StripAliasPrefix(const TString& column) {
     return (dot != TString::npos) ? column.substr(dot + 1) : column;
 }
 
-NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TKikimrConfiguration& config) {
-    auto res = IOperator::ToJson(explainFlags, config);
+NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
 
     // Tables are usually named in a path-like fashion, like "/<path>/<name>".
     // In such case we extract the name of a table from a path,
@@ -510,8 +508,8 @@ TString TOpMap::ToString(TExprContext& ctx) {
     return res;
 }
 
-NJson::TJsonValue TOpMap::ToJson(ui32 explainFlags, const TKikimrConfiguration& config) {
-    auto res = IOperator::ToJson(explainFlags, config);
+NJson::TJsonValue TOpMap::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
 
     TStringBuilder name;
     name << "Map [";
@@ -648,8 +646,8 @@ TString TOpFilter::ToString(TExprContext& ctx) {
     return TStringBuilder() << "Filter :" << FilterExpr.ToString();
 }
 
-NJson::TJsonValue TOpFilter::ToJson(ui32 explainFlags, const TKikimrConfiguration& config) {
-    auto res = IOperator::ToJson(explainFlags, config);
+NJson::TJsonValue TOpFilter::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
     res["Predicate"] = FilterExpr.ToExplainString();
     return res;
 }
@@ -756,10 +754,15 @@ TString GetJoinAlgoName(NKqp::EJoinAlgoType joinAlgo) {
     return "Unknown";
 }
 
-TString GetExplainJoinAlgoName(NKqp::EJoinAlgoType joinAlgo, const TString& joinKind, const TKikimrConfiguration& config) {
-    if (ShouldUseBlockHashJoin(config.GetUseBlockHashJoin(), joinAlgo, joinKind)) {
+TString GetExplainJoinAlgoName(const TPhysicalOpProps& props) {
+    Y_ENSURE(props.JoinAlgo.has_value(), "Join algorithm has not been selected");
+    Y_ENSURE(props.UseBlockHashJoin.has_value(), "Physical join implementation has not been selected");
+
+    if (*props.UseBlockHashJoin) {
         return "BlockHash";
     }
+
+    const auto joinAlgo = *props.JoinAlgo;
     if (joinAlgo == NKqp::EJoinAlgoType::GraceJoin || joinAlgo == NKqp::EJoinAlgoType::ReverseBlockJoin) {
         return "Grace";
     }
@@ -805,10 +808,9 @@ static TString FormatJoinKeys(const TVector<std::pair<TInfoUnit, TInfoUnit>>& jo
     return result;
 }
 
-NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags, const TKikimrConfiguration& config) {
-    auto res = IOperator::ToJson(explainFlags, config);
-    const auto joinAlgo = Props.JoinAlgo.value_or(NKqp::EJoinAlgoType::Undefined);
-    const auto joinAlgoName = GetExplainJoinAlgoName(joinAlgo, JoinKind, config);
+NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    const auto joinAlgoName = GetExplainJoinAlgoName(Props);
 
     if (JoinKind == "Cross") {
         res["Name"] = "CrossJoin";
@@ -853,8 +855,8 @@ TString TOpUnionAll::ToString(TExprContext& ctx) {
     return "UnionAll";
 }
 
-NJson::TJsonValue TOpUnionAll::ToJson(ui32 explainFlags, const TKikimrConfiguration& config) {
-    auto res = IOperator::ToJson(explainFlags, config);
+NJson::TJsonValue TOpUnionAll::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
     res["Ordered"] = Ordered;
     TStringBuilder columns;
     columns << "{";
@@ -926,8 +928,8 @@ TString TOpLimit::ToString(TExprContext& ctx) {
     return builder;
 }
 
-NJson::TJsonValue TOpLimit::ToJson(ui32 explainFlags, const TKikimrConfiguration& config) {
-    auto res = IOperator::ToJson(explainFlags, config);
+NJson::TJsonValue TOpLimit::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
     res["Limit"] = LimitCond.ToExplainString();
     if (OffsetCond) {
         res["Offset"] = OffsetCond->ToExplainString();
@@ -1005,8 +1007,8 @@ TString TOpSort::ToString(TExprContext& ctx) {
     return res;
 }
 
-NJson::TJsonValue TOpSort::ToJson(ui32 explainFlags, const TKikimrConfiguration& config) {
-    auto res = IOperator::ToJson(explainFlags, config);
+NJson::TJsonValue TOpSort::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
     if (IsTopSort()) {
         res["TopSortBy"] = FormatSortElements(SortElements);
         if (LimitCond) {
@@ -1112,8 +1114,8 @@ static TString FormatInfoUnits(const TVector<TInfoUnit>& infoUnits) {
     return result;
 }
 
-NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags, const TKikimrConfiguration& config) {
-    auto res = IOperator::ToJson(explainFlags, config);
+NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
 
     if (!KeyColumns.empty()) {
         res["GroupBy"] = FormatInfoUnits(KeyColumns);

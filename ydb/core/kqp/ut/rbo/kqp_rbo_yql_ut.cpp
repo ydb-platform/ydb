@@ -1091,8 +1091,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {filter}
         );
 
-        NYql::TKikimrConfiguration config;
-        const auto joinJson = join.ToJson(0, config);
+        join.Props.JoinAlgo = NKqp::EJoinAlgoType::GraceJoin;
+        join.Props.UseBlockHashJoin = false;
+        const auto joinJson = join.ToJson(0);
         const auto condition = GetStringField(joinJson, "Condition");
         UNIT_ASSERT_C(condition.Contains("t1.id = t2.id"), condition);
         const auto& joinOpMap = joinJson.GetMapSafe();
@@ -8196,6 +8197,9 @@ PRAGMA ydb.OptimizerHints = '
         const auto plan = TString{*result.GetStats()->GetPlan()};
         NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
         queryPlanPrinter.Print(plan);
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "JoinAlgo", "BlockHash"), plan);
 
         const auto hashShuffles = CollectHashShuffleDescriptions(plan);
 

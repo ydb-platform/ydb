@@ -17,8 +17,8 @@ void AddOptimizerEstimates(NJson::TJsonValue& json, const TIntrusivePtr<IOperato
     json["E-Cost"] = TStringBuilder() << *op->Props.Cost;
 }
 
-NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 operatorId, ui32 explainFlags, const NYql::TKikimrConfiguration& config) {
-    auto res = op->ToJson(explainFlags, config);
+NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 operatorId, ui32 explainFlags) {
+    auto res = op->ToJson(explainFlags);
 
     AddOptimizerEstimates(res, op);
     res["OperatorId"] = operatorId;
@@ -30,7 +30,6 @@ struct TExplainJsonContext {
     ui64& NodeCounter;
     const THashMap<IOperator*, ui32>& OperatorIds;
     ui32 ExplainFlags;
-    const NYql::TKikimrConfiguration& Config;
 
     ui64 NextNodeId() {
         return NodeCounter++;
@@ -69,7 +68,7 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, TExplain
     result["PlanNodeId"] = ctx.NextNodeId();
     result["Node Type"] = op->GetExplainName();
     NJson::TJsonValue operatorList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    operatorList.AppendValue(MakeJson(op, ctx.OperatorIds.at(op.Get()), ctx.ExplainFlags, ctx.Config));
+    operatorList.AppendValue(MakeJson(op, ctx.OperatorIds.at(op.Get()), ctx.ExplainFlags));
     result["Operators"] = operatorList;
 
     auto getChildJson = [&](const auto& child, ui32 childIndex) {
@@ -364,7 +363,9 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
 
 } // anonymous namespace
 
-NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags, const NYql::TKikimrConfiguration& config) {
+NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
+    Y_UNUSED(explainFlags);
+
     // First construct the ResultSet
     NJson::TJsonValue result;
     result["PlanNodeId"] = nodeCounter++;
@@ -421,7 +422,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
                 stageName = stageName + "-" + op->GetExplainName();
             }
 
-            operatorList.AppendValue(MakeJson(op, operatorIds.at(op.Get()), explainFlags, config));
+            operatorList.AppendValue(MakeJson(op, operatorIds.at(op.Get()), explainFlags));
         }
 
         // Build a list of subplans - these are connection objects of input stages
@@ -484,14 +485,14 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, THashMap<IOperato
 }
 
 // For explain JSON we recurse over the operators of the plan
-NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags, const NYql::TKikimrConfiguration& config) {
+NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags) {
     NJson::TJsonValue result;
     result["PlanNodeId"] = nodeCounter++;
     result["PlanNodeType"] = "ResultSet";
     result["Node Type"] = "ResultSet";
 
     NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    TExplainJsonContext ctx{PlanProps.StageGraph, nodeCounter, operatorIds, explainFlags, config};
+    TExplainJsonContext ctx{PlanProps.StageGraph, nodeCounter, operatorIds, explainFlags};
     plans.AppendValue(GetExplainJsonRec(GetInput(), ctx));
     result["Plans"] = plans;
 

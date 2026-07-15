@@ -1409,7 +1409,7 @@ namespace NKikimr {
                 // as the sender (the common pattern) emitting the result right after the
                 // reply is the closest faithful approximation. Tests that don't expect
                 // this event should simply drop it.
-                ctx.Send(ev->Sender, new TEvHive::TEvTabletCreationResult(status, it->second.TabletId), 0, ev->Cookie);
+                ctx.Send(ev->Sender, new TEvHive::TEvTabletCreationResult(status, it->second.TabletId));
             }
         }
 

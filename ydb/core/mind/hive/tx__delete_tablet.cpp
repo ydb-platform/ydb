@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -16,11 +18,15 @@ public:
     {}
 
     void DeleteTablet(TTabletId tabletId, NIceDb::TNiceDb& db) {
-        BLOG_D("THive::TTxDeleteTablet::Execute Tablet " << tabletId);
+        YDB_LOG_DEBUG("THive::TTxDeleteTablet::Execute deleting tablet",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", tabletId});
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
         if (tablet != nullptr) {
             if (tablet->SeizedByChild) {
-                BLOG_W("THive::TTxDeleteTablet tablet " << tabletId << " seized by child");
+                YDB_LOG_WARN("THive::TTxDeleteTablet tablet seized by child, delete skipped",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tabletId", tabletId});
                 return;
             }
             if (tablet->State != ETabletState::Deleting) {
@@ -50,10 +56,14 @@ public:
                 }
                 Self->BlockStorageForDelete(tabletId, SideEffects);
             } else {
-                BLOG_D("THive::TTxDeleteTablet::Execute Tablet " << tabletId << " already in ETabletState::Deleting");
+                YDB_LOG_DEBUG("THive::TTxDeleteTablet::Execute tablet already in Deleting state, skipping",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tabletId", tabletId});
             }
         } else {
-            BLOG_W("THive::TTxDeleteTablet tablet " << tabletId << " wasn't found");
+            YDB_LOG_WARN("THive::TTxDeleteTablet tablet not found",
+                {"logPrefix", GetLogPrefix()},
+                {"tabletId", tabletId});
         }
     }
 };
@@ -73,14 +83,18 @@ public:
         if (forwardRequest.GetHiveTabletId() != 0) {
             response->Record.MutableForwardRequest()->CopyFrom(forwardRequest);
         }
-        BLOG_D("THive::TTxDeleteTablet::Execute() result " << response->Record.ShortDebugString());
+        YDB_LOG_DEBUG("THive::TTxDeleteTablet::Execute sending delete tablet reply",
+            {"logPrefix", GetLogPrefix()},
+            {"response", response->Record.ShortDebugString()});
         SideEffects.Send(Event->Sender, response.Release(), 0, Event->Cookie);
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SideEffects.Reset(Self->SelfId());
         const NKikimrHive::TEvDeleteTablet& rec = Event->Get()->Record;
-        BLOG_D("THive::TTxDeleteTablet::Execute() " << rec.ShortDebugString());
+        YDB_LOG_DEBUG("THive::TTxDeleteTablet::Execute processing delete tablet request",
+            {"logPrefix", GetLogPrefix()},
+            {"request", rec.ShortDebugString()});
         // resolving ownerid:owneridx to tabletids
         std::vector<TTabletId> tablets;
         tablets.reserve(rec.ShardLocalIdxSize());
@@ -94,14 +108,21 @@ public:
             } else {
                 if (pos < rec.TabletIDSize()) {
                     TTabletId tabletId = rec.GetTabletID(pos);
-                    BLOG_W("THive::TTxDeleteTablet tablet " << ownerIdx << " wasn't found - using supplied " << tabletId);
+                    YDB_LOG_WARN("THive::TTxDeleteTablet tablet not found by owner index, using supplied tablet id",
+                        {"logPrefix", GetLogPrefix()},
+                        {"ownerIdx", ownerIdx},
+                        {"tabletId", tabletId});
                     tablets.push_back(tabletId);
                 } else {
-                    BLOG_W("THive::TTxDeleteTablet tablet " << ownerIdx << " wasn't found");
+                    YDB_LOG_WARN("THive::TTxDeleteTablet tablet not found by owner index",
+                        {"logPrefix", GetLogPrefix()},
+                        {"ownerIdx", ownerIdx});
                 }
             }
             if (Self->PendingCreateTablets.erase({owner, idx}) != 0) {
-                BLOG_NOTICE("THive::TTxDeleteTablet tablet " << ownerIdx << " was cleared from pending creates");
+                YDB_LOG_NOTICE("THive::TTxDeleteTablet cleared tablet from pending creates",
+                    {"logPrefix", GetLogPrefix()},
+                    {"ownerIdx", ownerIdx});
             }
         }
         // checking for possible forwards
@@ -110,7 +131,8 @@ public:
             TTabletId prevForwardHiveTabletId = forwardRequest.GetHiveTabletId();
             if (Self->CheckForForwardTabletRequest(tabletId, forwardRequest)) {
                 if (prevForwardHiveTabletId != 0 && prevForwardHiveTabletId != forwardRequest.GetHiveTabletId()) {
-                    BLOG_ERROR("Forward of DeleteTablet is not possible - different owners of tablets");
+                    YDB_LOG_ERROR("THive::TTxDeleteTablet cannot forward delete request, tablets have different owners",
+                        {"logPrefix", GetLogPrefix()});
                     RespondToSender(NKikimrProto::ERROR);
                     return true; // abort transaction
                 }
@@ -127,7 +149,9 @@ public:
            TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
             if (tablet != nullptr) {
                 if (tablet->SeizedByChild) {
-                    BLOG_W("THive::TTxDeleteTablet tablet " << tabletId << " seized by child");
+                    YDB_LOG_WARN("THive::TTxDeleteTablet tablet seized by child, delete skipped",
+                        {"logPrefix", GetLogPrefix()},
+                        {"tabletId", tabletId});
                     RespondToSender(NKikimrProto::ERROR);
                     return true; // abort transaction
                 }
@@ -142,7 +166,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxDeleteTablet::Complete() SideEffects: " << SideEffects);
+        YDB_LOG_DEBUG("THive::TTxDeleteTablet::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"sideEffects", SideEffects});
         SideEffects.Complete(ctx);
     }
 };
@@ -159,14 +185,18 @@ public:
     void RespondToSender(NKikimrProto::EReplyStatus status) {
         const NKikimrHive::TEvDeleteOwnerTablets& rec = Event->Get()->Record;
         auto response = MakeHolder<TEvHive::TEvDeleteOwnerTabletsReply>(status, Self->TabletID(), rec.GetOwner(), rec.GetTxId());
-        BLOG_D("THive::TTxDeleteOwnerTablets::Execute() result " << response->Record.ShortDebugString());
+        YDB_LOG_DEBUG("THive::TTxDeleteOwnerTablets::Execute sending delete owner tablets reply",
+            {"logPrefix", GetLogPrefix()},
+            {"response", response->Record.ShortDebugString()});
         SideEffects.Send(Event->Sender, response.Release(), 0, Event->Cookie);
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SideEffects.Reset(Self->SelfId());
         const NKikimrHive::TEvDeleteOwnerTablets& rec = Event->Get()->Record;
-        BLOG_D("THive::TEvDeleteOwnerTablets::Execute() " << rec.ShortDebugString());
+        YDB_LOG_DEBUG("THive::TTxDeleteOwnerTablets::Execute processing delete owner tablets request",
+            {"logPrefix", GetLogPrefix()},
+            {"request", rec.ShortDebugString()});
         // resolving owner to tabletids
         std::vector<TTabletId> tablets;
         ui64 owner = rec.GetOwner();
@@ -176,8 +206,9 @@ public:
             }
             tablets.push_back(tabletId);
             if (Self->PendingCreateTablets.erase(ownerIdx) != 0) {
-                auto id = ownerIdx;
-                BLOG_NOTICE("THive::TTxDeleteOwnerTablets tablet " << id << " was cleared from pending creates");
+                YDB_LOG_NOTICE("THive::TTxDeleteOwnerTablets cleared tablet from pending creates",
+                    {"logPrefix", GetLogPrefix()},
+                    {"ownerIdx", ownerIdx});
             }
         }
         // checking for possible migration
@@ -185,7 +216,9 @@ public:
            TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
             if (tablet != nullptr) {
                 if (tablet->SeizedByChild) {
-                    BLOG_W("THive::TTxDeleteTablet tablet " << tabletId << " seized by child");
+                    YDB_LOG_WARN("THive::TTxDeleteOwnerTablets tablet seized by child, delete aborted",
+                        {"logPrefix", GetLogPrefix()},
+                        {"tabletId", tabletId});
                     RespondToSender(NKikimrProto::ERROR);
                     return true; // abort transaction
                 }
@@ -202,7 +235,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TEvDeleteOwnerTablets::Complete(" << Event->Get()->Record.GetOwner() << ") SideEffects: " << SideEffects);
+        YDB_LOG_DEBUG("THive::TTxDeleteOwnerTablets::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"ownerId", Event->Get()->Record.GetOwner()},
+            {"sideEffects", SideEffects});
         SideEffects.Complete(ctx);
     }
 };

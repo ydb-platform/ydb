@@ -1,0 +1,44 @@
+commit 66fb01b49acbf49aa2837bf81ec83af01bba7312 (wavm-fix-c-api, arcadia/users/dtorilov/wavm-fix-c-api)
+author: dtorilov
+date: 2023-05-18T21:01:23+03:00
+
+    YT-17640: Fix C Api
+
+--- a/Lib/LLVMJIT/EmitContext.h	(c990858ff97a0b30b99c559e7c4e7efba1aa5e35)
++++ b/Lib/LLVMJIT/EmitContext.h	(66fb01b49acbf49aa2837bf81ec83af01bba7312)
+@@ -186,8 +186,6 @@ namespace WAVM { namespace LLVMJIT {
+ 			llvm::Value* resultsArray = nullptr;
+ 			if(callingConvention == IR::CallingConvention::cAPICallback)
+ 			{
+-				std::abort(); // NB: This branch is not covered by test suite.
+-
+ 				// Pass in pointers to argument and result arrays.
+ 				auto argsArray = irBuilder.CreateAlloca(
+ 					llvmContext.i8Type,
+@@ -197,7 +195,7 @@ namespace WAVM { namespace LLVMJIT {
+ 					storeToUntypedPointer(
+ 						args[argIndex],
+ 						irBuilder.CreateInBoundsGEP(
+-							nullptr,  // TODO(dtorilov): Type needed.
++							llvmContext.i8Type,
+ 							argsArray,
+ 							{emitLiteral(llvmContext,
+ 										 Uptr(argIndex * sizeof(IR::UntaggedValue)))}));
+@@ -316,8 +314,6 @@ namespace WAVM { namespace LLVMJIT {
+ 				break;
+ 			}
+ 			case IR::CallingConvention::cAPICallback: {
+-				std::abort(); // NB: This branch is not covered by test suite.
+-
+ 				// Check whether the call returned an Exception.
+ 				auto exception = returnValue;
+ 				auto function = irBuilder.GetInsertBlock()->getParent();
+@@ -351,7 +347,7 @@ namespace WAVM { namespace LLVMJIT {
+ 				{
+ 					results.push_back(loadFromUntypedPointer(
+ 						irBuilder.CreateInBoundsGEP(
+-							nullptr,  // TODO(dtorilov): Type needed.
++							llvmContext.i8Type,
+ 							resultsArray,
+ 							{emitLiteral(llvmContext, resultIndex * sizeof(IR::UntaggedValue))}),
+ 						asLLVMType(llvmContext, calleeType.results()[resultIndex])));

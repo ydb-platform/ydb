@@ -1,0 +1,13 @@
+diff --git a/dynlink.h b/dynlink.h
+index de668f4..8a9e542 100644
+--- a/system/lib/libc/musl/src/internal/dynlink.h
++++ b/system/lib/libc/musl/src/internal/dynlink.h
+@@ -87,8 +87,6 @@
+        struct fdpic_loadseg segs[1];
+ };
+ 
+-#include "reloc.h"
+-
+ #ifndef FDPIC_CONSTDISP_FLAG
+ #define FDPIC_CONSTDISP_FLAG 0
+ #endif

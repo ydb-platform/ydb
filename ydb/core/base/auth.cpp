@@ -1,7 +1,9 @@
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include "auth.h"
+#include "appdata.h"
 
 namespace NKikimr {
 
@@ -86,6 +88,29 @@ bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::
         return false;
     }
     return userToken->IsExist(databaseOwner);
+}
+
+TString ChooseAppropriateOwner(const NKikimrScheme::TEvModifySchemeTransaction& record,
+    const TAppData* appData, const std::optional<NACLib::TUserToken>& userToken)
+{
+    const bool alwaysSetSystemOwner = appData->AlwaysSetSystemOwner
+        || appData->FeatureFlags.GetEnableIdmPermissionsManagement();
+
+    if (!alwaysSetSystemOwner) {
+        if (userToken) {
+            return userToken->GetUserSID();
+        } else {
+            return record.GetOwner();
+        }
+    } else {
+        if ((userToken && userToken->GetUserSID() == BUILTIN_ACL_METADATA)
+            || record.GetOwner() == BUILTIN_ACL_METADATA)
+        {
+            return BUILTIN_ACL_METADATA;
+        } else {
+            return BUILTIN_ACL_BASIC_OWNER;
+        }
+    }
 }
 
 } // namespace NKikimr

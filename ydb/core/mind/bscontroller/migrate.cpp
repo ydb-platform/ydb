@@ -90,10 +90,25 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
 
     class TTxUpdateSchemaVersion : public TTxBase {
     public:
+        TTxUpdateSchemaVersion(bool setCompatibilityInfo)
+            : SetCompatibilityInfo(setCompatibilityInfo)
+        {}
+
+    public:
         bool Execute(TTransactionContext& txc) override {
+            if (SetCompatibilityInfo) {
+                TString currentCompatibilityInfo;
+                auto componentId = NKikimrConfig::TCompatibilityRule::BlobStorageController;
+                bool success = CompatibilityInfo.MakeStored(componentId).SerializeToString(&currentCompatibilityInfo);
+                Y_ABORT_UNLESS(success);
+                NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(true).Update<Schema::State::CompatibilityInfo>(currentCompatibilityInfo);
+            }
             NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(true).Update<Schema::State::SchemaVersion>(Schema::CurrentSchemaVersion);
             return true;
         }
+
+    private:
+        bool SetCompatibilityInfo = false;
     };
 
     class TTxGenerateInstanceId : public TTxBase {
@@ -198,7 +213,8 @@ public:
             return false;
         }
         bool hasInstanceId = false;
-        if (state.IsValid()) {
+        bool emptyState = !state.IsValid();
+        if (!emptyState) {
             std::optional<NKikimrConfig::TStoredCompatibilityInfo> stored;
             if (state.HaveValue<Schema::State::CompatibilityInfo>()) {
                 stored.emplace();
@@ -224,7 +240,14 @@ public:
         Queue.emplace_back(new TTxTrimUnusedSlots);
 
         // update schema version to current value
-        Queue.emplace_back(new TTxUpdateSchemaVersion);
+        Queue.emplace_back(new TTxUpdateSchemaVersion(emptyState));
+
+        if (AppData()->FeatureFlags.GetBsControllerRestartBeforeCompatibilityInfoUpdate()) {
+            YDB_LOG_CRIT("BSController migration was interrupted, this should only occur in specific tests",
+                {"marker", "BSCTXM05"});
+            AppData()->FeatureFlags.SetBsControllerRestartBeforeCompatibilityInfoUpdate(false);
+            return true;
+        }
 
         // generate cluster instance id
         if (!hasInstanceId) {
@@ -237,7 +260,9 @@ public:
 
         Queue.emplace_back(new TTxDropDriveStatus);
 
-        Queue.emplace_back(new TTxUpdateCompatibilityInfo);
+        if (!emptyState) {
+            Queue.emplace_back(new TTxUpdateCompatibilityInfo);
+        }
 
         return true;
     }

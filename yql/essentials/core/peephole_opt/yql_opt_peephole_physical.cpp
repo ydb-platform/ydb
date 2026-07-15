@@ -3143,6 +3143,30 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
     return ctx.ReplaceNode(node->Tail().TailPtr(), node->Tail().Head().Head(), std::move(sort));
 }
 
+TExprNode::TPtr ExpandLPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+    return ctx.Builder(node->Pos())
+        .Callable("Block")
+            .Lambda(0)
+                .Param("parent")
+                .Callable("Collect")
+                    .Callable(0, "PartitionsByKeys")
+                        .Callable(0, "Iterator")
+                            .Add(0, node->HeadPtr())
+                            .Callable(1, "DependsOn")
+                                .Arg(0, "parent")
+                            .Seal()
+                        .Seal()
+                        .Add(1, node->ChildPtr(1))
+                        .Add(2, node->ChildPtr(2))
+                        .Add(3, node->ChildPtr(3))
+                        .Add(4, node->ChildPtr(4))
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal().Build();
+}
+
 TExprNode::TPtr ExpandIsKeySwitch(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     return ctx.Builder(node->Pos())
@@ -6453,7 +6477,8 @@ private:
         const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "NoPush", "Likely"});
         bool isSuitableGuess = NKikimr::NMiniKQL::RuntimeVersion >= 79 && node->IsCallable("Guess");
         bool isSuitableWay = NKikimr::NMiniKQL::RuntimeVersion >= 80 && node->IsCallable("Way");
-        if (node->IsList() || rewriteAsIs || isSuitableGuess || isSuitableWay ||
+        bool isSuitableVariant = NKikimr::NMiniKQL::RuntimeVersion >= 81 && node->IsCallable("Variant");
+        if (node->IsList() || rewriteAsIs || isSuitableGuess || isSuitableWay || isSuitableVariant ||
             node->IsCallable({"DecimalMul", "DecimalDiv", "DecimalMod", "And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"})) {
             if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), Ctx_, Types_, /*reportUnspported=*/true)) {
                 YQL_CLOG(TRACE, CorePeepHole) << Log(node) << "Type are not supported";
@@ -9348,6 +9373,7 @@ struct TPeepHoleRules {
         {"Fold1Map", &CleckClosureOnUpperLambdaOverList<1U, 2U>},
         {"Chain1Map", &CleckClosureOnUpperLambdaOverList<1U, 2U>},
         {"PartitionsByKeys", &ExpandPartitionsByKeys},
+        {"LPartitionsByKeys", &ExpandLPartitionsByKeys},
         {"DictItems", &MapForOptionalContainer},
         {"DictKeys", &MapForOptionalContainer},
         {"DictPayloads", &MapForOptionalContainer},

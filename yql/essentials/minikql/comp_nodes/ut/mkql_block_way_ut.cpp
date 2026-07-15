@@ -136,7 +136,7 @@ Y_UNIT_TEST(StructVariant_LongNames_ChunkedOutput) {
 
     helper.WithScopedFuzzers([&] {
         size_t randomSize = rng->GenRand() % ItemsPerIteration;
-        const TVector<TVariant> data = GenerateRandomData<TVariant>(rng, randomSize);
+        const TVector<TVariant> data = NYql::GenerateRandomData<TVariant>(rng, randomSize);
 
         TVector<TUtf8> expected;
         expected.reserve(data.size());
@@ -169,7 +169,7 @@ Y_UNIT_TEST(StructVariant_LongNames_ChunkedOutput_Optional) {
 
     helper.WithScopedFuzzers([&] {
         size_t randomSize = rng->GenRand() % ItemsPerIteration;
-        const TVector<TVariant> data = GenerateRandomData<TVariant>(rng, randomSize);
+        const TVector<TVariant> data = NYql::GenerateRandomData<TVariant>(rng, randomSize);
 
         TVector<TMaybe<TUtf8>> expected;
         expected.reserve(data.size());
@@ -207,7 +207,7 @@ Y_UNIT_TEST(StructVariant_Scalar) {
     using TVariant = NTest::TStructVariant<TMemberAlpha, TMemberBeta>;
 
     TBlockHelper().RunNodeOverWideStream(
-        TUtf8("beta_member_longer_than_sixteen_bytes"),
+        TUtf8(TString("beta_member_longer_than_sixteen_bytes")),
         [](TSetup<false>& setup, TRuntimeNode variantBlock) {
             return setup.PgmBuilder->BlockWay(variantBlock);
         },

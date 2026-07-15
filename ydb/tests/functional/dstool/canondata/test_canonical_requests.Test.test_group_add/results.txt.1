@@ -1,13 +1,5 @@
 dstool -e <endpoint> --mon-port <mon_port> group add --pool-name dynamic_storage_pool:1 --groups 1
 Exit Status: 0
-===== stdout =====
-┌──────────────┬────────────────────────┬─────────────────┬───────────────────────┬────────────────────────┬───────────────────────┬───────────┐
-│ BoxId:PoolId │ PoolName               │ Affected PDisks │ Static slots on PDisk │ VSlots on PDisk before │ VSlots on PDisk after │ Result    │
-├──────────────┼────────────────────────┼─────────────────┼───────────────────────┼────────────────────────┼───────────────────────┼───────────┤
-│ [1:1]        │ dynamic_storage_pool:1 │ 8               │ 1                     │ 1                      │ 1                     │ unchanged │
-│ [1:1]        │ dynamic_storage_pool:1 │ 8               │ 0                     │ 3                      │ 4                     │ increased │
-└──────────────┴────────────────────────┴─────────────────┴───────────────────────┴────────────────────────┴───────────────────────┴───────────┘
-
 ===== grpc_calls =====
 === Invoke BlobStorageConfig ===
 Domain: 1

@@ -1527,4 +1527,9 @@ void DoGetStorageChannelStatusKeyValueV2(std::unique_ptr<IRequestNoOpCtx> p, con
     TActivationContext::AsActorContext().Register(new TGetStorageChannelStatusRequest<false>(p.release()));
 }
 
+template<>
+IActor* TEvCreateVolumeKeyValueRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TCreateVolumeRequest(msg);
+}
+
 } // namespace NKikimr::NGRpcService

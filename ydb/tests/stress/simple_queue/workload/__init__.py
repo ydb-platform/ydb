@@ -542,7 +542,7 @@ class Workload:
         # very first scheme call races the connection setup and fails with
         # ConnectionLost, which is easy to hit when many workloads start at once.
         self.driver.wait(timeout=30, fail_fast=True)
-        self.pool = InstrumentedQuerySessionPool(self.driver, size=10)
+        self.pool = InstrumentedQuerySessionPool(self.driver, size=10, unique_suffix=mode)
         self.round_size = 1000
         self.duration = duration
         self.delayed_events = queue.Queue()

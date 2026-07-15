@@ -10,7 +10,7 @@ namespace NYT::NApi {
 TMockTableReader::TMockTableReader(NTableClient::TTableSchemaPtr schema)
     : Schema_(std::move(schema))
     , NameTable_(NTableClient::TNameTable::FromSchema(*Schema_))
-{}
+{ }
 
 const NTableClient::TNameTablePtr& TMockTableReader::GetNameTable() const
 {

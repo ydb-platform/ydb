@@ -2049,6 +2049,7 @@ private:
             if (const auto disposition = requestContext->StreamingDisposition) {
                 state->Disposition = *disposition;
             }
+            state->WatermarkLateEventsPolicy = requestContext->WatermarkLateEventsPolicy;
         }
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));

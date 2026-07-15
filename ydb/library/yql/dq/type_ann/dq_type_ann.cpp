@@ -1479,13 +1479,14 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 5, ctx)) {
+    if (!EnsureArgsCount(*input, 6, ctx)) {
         return TStatus::Error;
     }
 
     auto stream = input->Child(TDqPhyWatermarkGenerator::idx_Input);
     auto& watermarkExtractor = input->ChildRef(TDqPhyWatermarkGenerator::idx_WatermarkExtractor);
     auto& partitionKeyExtractor = input->ChildRef(TDqPhyWatermarkGenerator::idx_PartitionKeyExtractor);
+    auto& writeTimeExtractor = input->ChildRef(TDqPhyWatermarkGenerator::idx_WriteTimeExtractor);
     auto watermarkSettings = input->Child(TDqPhyWatermarkGenerator::idx_WatermarkSettings);
     auto partitionKeys = input->Child(TDqPhyWatermarkGenerator::idx_PartitionKeys);
 
@@ -1506,13 +1507,15 @@ TStatus AnnotateDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext&
     }();
 
     bool isUniversal1;
-    bool isUniversal2;
     auto status = ConvertToLambda(watermarkExtractor, ctx, isUniversal1, 1);
+    bool isUniversal2;
     status = status.Combine(ConvertToLambda(partitionKeyExtractor, ctx, isUniversal2, 1));
+    bool isUniversal3;
+    status = status.Combine(ConvertToLambda(writeTimeExtractor, ctx, isUniversal3, 1));
     if (status.Level != TStatus::Ok) {
         return status;
     }
-    if (isUniversal1 || isUniversal2) {
+    if (isUniversal1 || isUniversal2 || isUniversal3) {
         input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
         return TStatus::Ok;
     }
@@ -1534,6 +1537,16 @@ TStatus AnnotateDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext&
         return TStatus::Repeat;
     }
     if (!EnsureStructType(*partitionKeyExtractor, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(writeTimeExtractor, {itemType}, ctx)) {
+        return TStatus::Error;
+    }
+    if (!writeTimeExtractor->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+    if (!EnsureSpecificDataType(*writeTimeExtractor, EDataSlot::Timestamp, ctx)) {
         return TStatus::Error;
     }
 

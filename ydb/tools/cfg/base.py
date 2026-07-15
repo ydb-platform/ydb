@@ -63,13 +63,14 @@ def merge_with_default(dft, override):
 
 
 class KiKiMRDrive(object):
-    def __init__(self, type, path, shared_with_os=False, expected_slot_count=None, kind=None, pdisk_config=None):
+    def __init__(self, type, path, shared_with_os=False, expected_slot_count=None, kind=None, pdisk_config=None, disk_scope=None):
         self.type = type
         self.path = path
         self.shared_with_os = shared_with_os
         self.pdisk_config = pdisk_config
         self.expected_slot_count = expected_slot_count
         self.kind = kind
+        self.disk_scope = disk_scope
 
     def __eq__(self, other):
         return (
@@ -79,10 +80,11 @@ class KiKiMRDrive(object):
             and self.expected_slot_count == other.expected_slot_count
             and self.kind == other.kind
             and self.pdisk_config == other.pdisk_config
+            and self.disk_scope == other.disk_scope
         )
 
     def __hash__(self):
-        return hash("\0".join(map(str, (self.type, self.path, self.shared_with_os, self.expected_slot_count, self.kind, self.pdisk_config))))
+        return hash("\0".join(map(str, (self.type, self.path, self.shared_with_os, self.expected_slot_count, self.kind, self.pdisk_config, self.disk_scope))))
 
 
 Domain = collections.namedtuple(

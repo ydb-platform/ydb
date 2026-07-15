@@ -6,6 +6,8 @@
 
 #include <ydb/library/actors/core/actor.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <memory>
 
 namespace NFq {
@@ -15,6 +17,7 @@ namespace NFq {
 std::unique_ptr<NActors::IActor> NewGC(
     const TCheckpointStorageSettings::TGcSettings& config,
     const TCheckpointStoragePtr& checkpointStorage,
-    const TStateStoragePtr& stateStorage);
+    const TStateStoragePtr& stateStorage,
+    const ::NMonitoring::TDynamicCounterPtr& counters);
 
 } // namespace NFq

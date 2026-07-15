@@ -3453,10 +3453,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeLocalBloomFilter:
             case EIndexTypeLocalBloomNgramFilter:
             case EIndexTypeLocalMinMax:
+            case EIndexTypeLocalCountMinSketch:
             case EIndexTypeInvalid:
                 break; // not applicable
-            default:
-                UNIT_FAIL("Client backup/restore were not implemented for this index type");
         }
     }
 
@@ -3991,7 +3990,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         TDataShardExportFactory DataShardExportFactory;
 
     public:
-        TS3TestEnv()
+        explicit TS3TestEnv(bool alwaysSetSystemOwner = false)
             : Server([&] {
                     NKikimrConfig::TAppConfig appConfig;
                     appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
@@ -4001,6 +4000,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     appConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
                     appConfig.MutableFeatureFlags()->SetEnableColumnStatistics(true);
                     appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+                    appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetAlwaysSetSystemOwner(alwaysSetSystemOwner);
                     return appConfig;
                 }())
             , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())).SetDatabase("/Root"))
@@ -4447,8 +4447,18 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     // TO DO: test view restoration to a different database
 
-    void TestTableBackupRestore() {
-        TS3TestEnv testEnv;
+    void CheckObjectOwnerIsSystem(const TDriver& driver, const TString& path, bool alwaysSetSystemOwner) {
+        if (!alwaysSetSystemOwner) {
+            return;
+        }
+        TSchemeClient schemeClient(driver);
+        auto result = schemeClient.DescribePath(path).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetEntry().Owner, BUILTIN_ACL_BASIC_OWNER, "unexpected owner for " << path);
+    }
+
+    void TestTableBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         constexpr const char* table = "/Root/table";
 
         TestTableContentIsPreserved(
@@ -4458,10 +4468,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
             false
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), table, alwaysSetSystemOwner);
     }
 
-    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
-        TS3TestEnv testEnv;
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false, bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact ||
             indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance ||
             indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact) {
@@ -4479,10 +4490,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), table, alwaysSetSystemOwner);
     }
 
-    void TestTableWithSerialBackupRestore() {
-        TS3TestEnv testEnv;
+    void TestTableWithSerialBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         constexpr const char* table = "/Root/table";
 
         TestRestoreTableWithSerial(
@@ -4491,6 +4503,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), table, alwaysSetSystemOwner);
     }
 
     void TestTableWithMultiColumnStatisticsBackupRestore() {
@@ -4505,8 +4518,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
-    void TestViewBackupRestore() {
-        TS3TestEnv testEnv;
+    void TestViewBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         constexpr const char* view = "/Root/view";
 
         TestViewOutputIsPreserved(
@@ -4515,6 +4528,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view" })
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), view, alwaysSetSystemOwner);
     }
 
     void TestSystemViewBackupRestore() {
@@ -4531,8 +4545,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
-    void TestChangefeedBackupRestore() {
-        TS3TestEnv testEnv;
+    void TestChangefeedBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         NTopic::TTopicClient topicClient(testEnv.GetDriver());
 
         constexpr const char* table = "/Root/table";
@@ -4547,10 +4561,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
             {"a", "b", "c"}
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), table, alwaysSetSystemOwner);
     }
 
-    void TestReplicationBackupRestore( const TMaybe<ESecretType>& tokenSecretType) {
-        TS3TestEnv testEnv;
+    void TestReplicationBackupRestore(const TMaybe<ESecretType>& tokenSecretType, bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
         featureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
 
@@ -4581,11 +4596,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), {"replication"}),
             tokenSecretType
         );
-
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), "/Root/replication", alwaysSetSystemOwner);
     }
 
-    void TestTransferBackupRestore(const TMaybe<ESecretType>& tokenSecretType) {
-        TS3TestEnv testEnv;
+    void TestTransferBackupRestore(const TMaybe<ESecretType>& tokenSecretType, bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
         featureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
 
@@ -4622,10 +4637,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             tempDir.Path(),
             config
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), "/Root/test_transfer", alwaysSetSystemOwner);
     }
 
-    void TestExternalTableBackupRestore() {
-        TS3TestEnv testEnv;
+    void TestExternalTableBackupRestore(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
         featureFlags.SetEnableExternalDataSources(true);
 
@@ -4646,10 +4662,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(driver, testEnv.GetS3Port()),
             CreateRestoreLambda(driver, testEnv.GetS3Port(), {"externalTable", "externalDataSource"})
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), "/Root/externalTable", alwaysSetSystemOwner);
     }
 
-    void TestExternalDataSourceBackupRestore(const TMaybe<ESecretType>& secretType, EAuthType authType) {
-        TS3TestEnv testEnv;
+    void TestExternalDataSourceBackupRestore(const TMaybe<ESecretType>& secretType, EAuthType authType, bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
         featureFlags.SetEnableExternalDataSources(true);
         featureFlags.SetEnableSchemaSecrets(secretType == ESecretType::SecretTypeScheme);
@@ -4685,10 +4702,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             secretType,
             authType
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), "/Root/externalDataSource", alwaysSetSystemOwner);
     }
 
-    void TestTopicBackupRestoreWithoutData() {
-        TS3TestEnv testEnv;
+    void TestTopicBackupRestoreWithoutData(bool alwaysSetSystemOwner = false) {
+        TS3TestEnv testEnv(alwaysSetSystemOwner);
         NTopic::TTopicClient topicClient(testEnv.GetDriver());
         constexpr const char* topic = "/Root/topic";
 
@@ -4699,54 +4717,59 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "topic" })
         );
+        CheckObjectOwnerIsSystem(testEnv.GetDriver(), topic, alwaysSetSystemOwner);
     }
 
-    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
+    Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES_WITH_FLAG(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType, AlwaysSetSystemOwner) {
         using namespace NKikimrSchemeOp;
 
         switch (Value) {
             case EPathTypeTable:
-                TestTableBackupRestore();
+                TestTableBackupRestore(AlwaysSetSystemOwner);
                 break;
             case EPathTypeTableIndex:
-                TestTableWithIndexBackupRestore();
+                TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobal, false, AlwaysSetSystemOwner);
                 break;
             case EPathTypeSequence:
-                TestTableWithSerialBackupRestore();
+                TestTableWithSerialBackupRestore(AlwaysSetSystemOwner);
                 break;
             case EPathTypeDir:
                 break; // https://github.com/ydb-platform/ydb/issues/10430
             case EPathTypePersQueueGroup:
-                TestTopicBackupRestoreWithoutData();
+                TestTopicBackupRestoreWithoutData(AlwaysSetSystemOwner);
                 break;
             case EPathTypeSubDomain:
             case EPathTypeExtSubDomain:
                 break; // https://github.com/ydb-platform/ydb/issues/10432
             case EPathTypeView:
-                TestViewBackupRestore();
+                TestViewBackupRestore(AlwaysSetSystemOwner);
                 break;
             case EPathTypeCdcStream:
-                TestChangefeedBackupRestore();
+                TestChangefeedBackupRestore(AlwaysSetSystemOwner);
                 break;
             case EPathTypeReplication:
-                TestReplicationBackupRestore(ESecretType::SecretTypeOld);
-                TestReplicationBackupRestore(ESecretType::SecretTypeScheme);
+                if (!AlwaysSetSystemOwner) { // Replications with old secrets don't support the owner change
+                    TestReplicationBackupRestore(ESecretType::SecretTypeOld, AlwaysSetSystemOwner);
+                }
+                TestReplicationBackupRestore(ESecretType::SecretTypeScheme, AlwaysSetSystemOwner);
                 return;
             case EPathTypeTransfer:
-                TestTransferBackupRestore(ESecretType::SecretTypeOld);
-                TestTransferBackupRestore(ESecretType::SecretTypeScheme);
+                if (!AlwaysSetSystemOwner) { // Transfers with old secrets don't support the owner change
+                    TestTransferBackupRestore(ESecretType::SecretTypeOld, AlwaysSetSystemOwner);
+                }
+                TestTransferBackupRestore(ESecretType::SecretTypeScheme, AlwaysSetSystemOwner);
                 break;
             case EPathTypeSysView:
                 TestSystemViewBackupRestore();
                 break;
             case EPathTypeExternalTable:
-                return TestExternalTableBackupRestore();
+                return TestExternalTableBackupRestore(AlwaysSetSystemOwner);
             case EPathTypeExternalDataSource: {
-                TestExternalDataSourceBackupRestore(/* secretType */ Nothing(), EAuthType::AuthTypeNone);
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeToken);
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken);
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeAws);
-                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeAws);
+                TestExternalDataSourceBackupRestore(/* secretType */ Nothing(), EAuthType::AuthTypeNone, AlwaysSetSystemOwner);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeToken, AlwaysSetSystemOwner);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken, AlwaysSetSystemOwner);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeAws, AlwaysSetSystemOwner);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeAws, AlwaysSetSystemOwner);
                 return;
             }
             case EPathTypeResourcePool:
@@ -4794,10 +4817,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeLocalBloomFilter:
             case EIndexTypeLocalBloomNgramFilter:
             case EIndexTypeLocalMinMax:
+            case EIndexTypeLocalCountMinSketch:
             case EIndexTypeInvalid:
                 break; // not applicable
-            default:
-                UNIT_FAIL("S3 backup/restore were not implemented for this index type");
         }
     }
 

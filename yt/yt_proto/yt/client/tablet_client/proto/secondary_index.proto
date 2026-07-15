@@ -22,6 +22,7 @@ message TIndexInfo
     optional int32 index_correspondence = 6; // NTabletClient::NTabletClient::ETableToIndexCorrespondence
     optional NYT.NApi.NRpcProxy.NProto.TTableSchema evaluated_columns_schema = 7;
     optional TUnfoldedColumns unfolded_columns = 8;
+    optional uint64 backfill_timestamp = 9 [default = 0];
 }
 
 ////////////////////////////////////////////////////////////////////////////////

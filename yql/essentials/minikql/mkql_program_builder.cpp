@@ -6185,23 +6185,59 @@ TRuntimeNode TProgramBuilder::PgConst(TPgType* pgType, const std::string_view& v
 
 TRuntimeNode TProgramBuilder::PgResolvedCall(bool useContext, const std::string_view& name,
                                              ui32 id, const TArrayRef<const TRuntimeNode>& args,
-                                             TType* returnType, bool rangeFunction) {
-    TCallableBuilder callableBuilder(Env_, __func__, returnType);
-    callableBuilder.Add(NewDataLiteral(useContext));
-    callableBuilder.Add(NewDataLiteral(rangeFunction));
-    callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
-    callableBuilder.Add(NewDataLiteral(id));
-    for (const auto& arg : args) {
-        callableBuilder.Add(arg);
+                                             TType* returnType, bool rangeFunction, ui32 collationOid) {
+    // On old runtimes, always use the "PgResolvedCall" callable exactly as before (and
+    // explicit COLLATE, which needs the collation oid slot, isn't representable at all).
+    // Once the runtime is new enough, ALWAYS use the distinct "PgResolvedCall2" callable -
+    // with an extra collation oid slot right after `id` - even when collationOid is 0, so
+    // that "PgResolvedCall" stops being emitted entirely once the whole fleet is upgraded
+    // past this version, and its read-side support can eventually be deleted. The two
+    // shapes are told apart by callable name rather than input count/type, since an arg's
+    // own static type can legitimately be non-Pg (e.g. a NULL literal).
+    if constexpr (RuntimeVersion < 81U) {
+        Y_ENSURE(collationOid == 0, "Explicit COLLATE requires minikql runtime version >= 81, current: " << RuntimeVersion);
+        TCallableBuilder callableBuilder(Env_, "PgResolvedCall", returnType);
+        callableBuilder.Add(NewDataLiteral(useContext));
+        callableBuilder.Add(NewDataLiteral(rangeFunction));
+        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
+        callableBuilder.Add(NewDataLiteral(id));
+        for (const auto& arg : args) {
+            callableBuilder.Add(arg);
+        }
+        return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+    } else {
+        TCallableBuilder callableBuilder(Env_, "PgResolvedCall2", returnType);
+        callableBuilder.Add(NewDataLiteral(useContext));
+        callableBuilder.Add(NewDataLiteral(rangeFunction));
+        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
+        callableBuilder.Add(NewDataLiteral(id));
+        callableBuilder.Add(NewDataLiteral(collationOid));
+        for (const auto& arg : args) {
+            callableBuilder.Add(arg);
+        }
+        return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
     }
-    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 TRuntimeNode TProgramBuilder::BlockPgResolvedCall(const std::string_view& name, ui32 id,
-                                                  const TArrayRef<const TRuntimeNode>& args, TType* returnType) {
-    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+                                                  const TArrayRef<const TRuntimeNode>& args, TType* returnType,
+                                                  ui32 collationOid) {
+    // Mirrors TProgramBuilder::PgResolvedCall - see the comment there.
+    if constexpr (RuntimeVersion < 81U) {
+        Y_ENSURE(collationOid == 0, "Explicit COLLATE requires minikql runtime version >= 81, current: " << RuntimeVersion);
+        TCallableBuilder callableBuilder(Env_, "BlockPgResolvedCall", returnType);
+        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
+        callableBuilder.Add(NewDataLiteral(id));
+        for (const auto& arg : args) {
+            callableBuilder.Add(arg);
+        }
+        return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+    }
+
+    TCallableBuilder callableBuilder(Env_, "BlockPgResolvedCall2", returnType);
     callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(name));
     callableBuilder.Add(NewDataLiteral(id));
+    callableBuilder.Add(NewDataLiteral(collationOid));
     for (const auto& arg : args) {
         callableBuilder.Add(arg);
     }
@@ -6351,6 +6387,38 @@ TRuntimeNode TProgramBuilder::BlockWay(TRuntimeNode variant) {
 
     TCallableBuilder callableBuilder(Env_, __func__, returnType);
     callableBuilder.Add(variant);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BlockVariant(TRuntimeNode item, ui32 tupleIndex, TType* variantType) {
+    if constexpr (RuntimeVersion < 81) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto itemBlockType = AS_TYPE(TBlockType, item.GetStaticType());
+    auto varType = AS_TYPE(TVariantType, variantType);
+    auto underlying = AS_TYPE(TTupleType, varType->GetUnderlyingType());
+    MKQL_ENSURE(tupleIndex < underlying->GetElementsCount(), "Wrong tuple index");
+
+    auto returnType = NewBlockType(variantType, itemBlockType->GetShape());
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(NewDataLiteral<ui32>(tupleIndex));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
+TRuntimeNode TProgramBuilder::BlockVariant(TRuntimeNode item, const std::string_view& memberName, TType* variantType) {
+    if constexpr (RuntimeVersion < 81) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto itemBlockType = AS_TYPE(TBlockType, item.GetStaticType());
+    auto varType = AS_TYPE(TVariantType, variantType);
+    auto underlying = AS_TYPE(TStructType, varType->GetUnderlyingType());
+    auto structIndex = underlying->GetMemberIndex(memberName);
+
+    auto returnType = NewBlockType(variantType, itemBlockType->GetShape());
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(NewDataLiteral<ui32>(structIndex));
     return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 

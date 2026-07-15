@@ -30,6 +30,9 @@ std::vector<TString> DeserializeSetColumnConstraintColumnNames(const TString& se
 
 namespace {
 
+using EState = TSetColumnConstraintOperationInfo::EOperationState;
+using ProtoState = Ydb::Table::SetNotNullState;
+
 float CalcSetColumnConstraintValidationProgress(const TSetColumnConstraintOperationInfo& operationInfo) {
     const ui64 total = operationInfo.ValidationShards.size();
     if (total == 0) {
@@ -37,6 +40,22 @@ float CalcSetColumnConstraintValidationProgress(const TSetColumnConstraintOperat
     }
     const ui64 done = operationInfo.DoneValidationShards.size();
     return static_cast<float>(done) / static_cast<float>(total) * 100.0f;
+}
+
+float CalcProgress(const TSetColumnConstraintOperationInfo& operationInfo) {
+    switch (operationInfo.OperationState) {
+    case EState::Invalid:
+    case EState::Locking:
+    case EState::LockingNullWrites:
+        return 0.0f;
+    case EState::Validating:
+        return CalcSetColumnConstraintValidationProgress(operationInfo);
+    case EState::Finishing:
+    case EState::Unlocking:
+        return 99.9f;
+    case EState::Done:
+        return 100.0f;
+    }
 }
 
 }
@@ -59,32 +78,33 @@ void FillSetColumnConstraint(
     }
 
     // Map internal state to proto state
-    using EState = TSetColumnConstraintOperationInfo::EOperationState;
-    using ProtoState = Ydb::Table::SetNotNullState;
-    switch (operationInfo.OperationState) {
-    case EState::Locking:
-    case EState::LockingNullWrites:
-        proto.SetState(ProtoState::STATE_PREPARING);
-        proto.SetProgress(0.0f);
-        break;
-    case EState::Validating:
-        proto.SetState(ProtoState::STATE_VALIDATING);
-        proto.SetProgress(CalcSetColumnConstraintValidationProgress(operationInfo));
-        break;
-    case EState::Finishing:
-    case EState::Unlocking:
-        proto.SetState(ProtoState::STATE_APPLYING);
-        proto.SetProgress(99.9f);
-        break;
-    case EState::Done:
-        proto.SetState(operationInfo.ValidationFailed
-            ? ProtoState::STATE_CANCELLED
-            : ProtoState::STATE_DONE);
-        proto.SetProgress(100.0f);
-        break;
-    case EState::Invalid:
-        proto.SetState(ProtoState::STATE_UNSPECIFIED);
-        break;
+    proto.SetProgress(CalcProgress(operationInfo));
+
+    if (operationInfo.IsCancelled) {
+        proto.SetState(ProtoState::STATE_CANCELLED);
+    } else {
+        switch (operationInfo.OperationState) {
+        case EState::Locking:
+        case EState::LockingNullWrites:
+            proto.SetState(ProtoState::STATE_PREPARING);
+            break;
+        case EState::Validating:
+            proto.SetState(ProtoState::STATE_VALIDATING);
+            break;
+        case EState::Finishing:
+        case EState::Unlocking:
+            proto.SetState(ProtoState::STATE_APPLYING);
+            break;
+        case EState::Done:
+            // There is no way when IsValidationFailed equals `true`,
+            // because IsValidationFailed is true exactly when IsCancelled is true.
+            // Therefore, there cannot be STATE_CANCELLED.
+            proto.SetState(ProtoState::STATE_DONE);
+            break;
+        case EState::Invalid:
+            proto.SetState(ProtoState::STATE_UNSPECIFIED);
+            break;
+        }
     }
 
     auto* settings = proto.MutableSettings();
@@ -213,6 +233,16 @@ void TSchemeShard::PersistSetColumnConstraintValidationFailedValue(
     );
 }
 
+void TSchemeShard::PersistSetColumnConstraintCancellation(
+    NIceDb::TNiceDb& db,
+    const TSetColumnConstraintOperationInfo& operationInfo)
+{
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::IsCancelled>(operationInfo.IsCancelled),
+        NIceDb::TUpdate<Schema::SetColumnConstraint::CancellationReason>(operationInfo.CancellationReason)
+    );
+}
+
 void TSchemeShard::PersistSetColumnConstraintShardDone(
     NIceDb::TNiceDb& db,
     TIndexBuildId operationId,
@@ -267,6 +297,10 @@ void TSchemeShard::Handle(TEvSetColumnConstraint::TEvGetRequest::TPtr& ev, const
 
 void TSchemeShard::Handle(TEvSetColumnConstraint::TEvListRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxListSetColumnConstraint(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvSetColumnConstraint::TEvCancelRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxCancelSetColumnConstraint(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx) {

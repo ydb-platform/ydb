@@ -17,6 +17,7 @@ END()
 
 RECURSE(
     aggregator
+    common
     database
     service
     ut_common

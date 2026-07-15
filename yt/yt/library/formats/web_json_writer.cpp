@@ -566,7 +566,7 @@ TWriterForWebJson<TValueWriter>::TWriterForWebJson(
     // completely reworked.
     , UnderlyingOutput_(CreateBufferedSyncAdapter(
         std::move(output),
-        EWaitForStrategy::WaitFor,
+        EWaitForStrategy::SuspendFiber,
         ContextBufferCapacity))
     , Output_(UnderlyingOutput_.get())
     , ResponseBuilder_(CreateJsonWriter(&Output_))

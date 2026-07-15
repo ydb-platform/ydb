@@ -30,21 +30,40 @@ struct TContext : public TThrRefBase {
     TCheckpointStoragePtr CheckpointStorage;
     TStateStoragePtr StateStorage;
 
-    TString GraphId;
+    NActors::TActorId CheckpointCoordinatorId;
+    TCoordinatorId CoordinatorId;
     TCheckpointId UpperBound;
+    TActorId StorageProxy;
+    ui64 Cookie;
 
     EStage Stage = StageOk;
 
+    ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Success;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Inflight;
+
     TContext(TActorSystem* actorSystem,
-             const TCheckpointStoragePtr& checkpointStorage,
-             const TStateStoragePtr& stateStorage,
-             const TString& graphId,
-             const TCheckpointId& upperBound)
+            const TCheckpointStoragePtr& checkpointStorage,
+            const TStateStoragePtr& stateStorage,
+            NActors::TActorId checkpointCoordinatorId,
+            const TCoordinatorId& coordinatorId,
+            const TCheckpointId& upperBound,
+            const TActorId& storageProxy,
+            ui64 cookie,
+            const ::NMonitoring::TDynamicCounters::TCounterPtr& Errors,
+            const ::NMonitoring::TDynamicCounters::TCounterPtr& Success,
+            const ::NMonitoring::TDynamicCounters::TCounterPtr& inflight)
         : ActorSystem(actorSystem)
         , CheckpointStorage(checkpointStorage)
         , StateStorage(stateStorage)
-        , GraphId(graphId)
+        , CheckpointCoordinatorId(checkpointCoordinatorId)
+        , CoordinatorId(coordinatorId)
         , UpperBound(upperBound)
+        , StorageProxy(storageProxy)
+        , Cookie(cookie)
+        , Errors(Errors)
+        , Success(Success)
+        , Inflight(inflight)
     {
     }
 };
@@ -56,9 +75,14 @@ using TContextPtr = TIntrusivePtr<TContext>;
 class TActorGC : public TActorBootstrapped<TActorGC> {
     TCheckpointStoragePtr CheckpointStorage;
     TStateStoragePtr StateStorage;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Success;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Inflight;
 
 public:
-    TActorGC(const TCheckpointStoragePtr& checkpointStorage, const TStateStoragePtr& stateStorage);
+    TActorGC(const TCheckpointStoragePtr& checkpointStorage,
+             const TStateStoragePtr& stateStorage,
+             const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Bootstrap();
 
@@ -70,11 +94,17 @@ private:
     )
 
     void Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev);
+    static void SendGcFinished(TIntrusivePtr<TContext> context);
 };
 
-TActorGC::TActorGC(const TCheckpointStoragePtr& checkpointStorage, const TStateStoragePtr& stateStorage)
+TActorGC::TActorGC(const TCheckpointStoragePtr& checkpointStorage,
+                   const TStateStoragePtr& stateStorage,
+                   const ::NMonitoring::TDynamicCounterPtr& counters)
     : CheckpointStorage(checkpointStorage)
     , StateStorage(stateStorage)
+    , Errors(counters->GetCounter("Errors", true))
+    , Success(counters->GetCounter("Success", true))
+    , Inflight(counters->GetCounter("Inflight"))
 {
 }
 
@@ -96,11 +126,7 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
         {"checkpointUpperBound", checkpointUpperBound},
         {"graphId", graphId});
 
-    if (event->Type != NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT) {
-        YDB_LOG_DEBUG("GC skip increment checkpoint for graph",
-            {"graphId", graphId});
-        return;
-    }
+    const TActorId storageProxy = ev->Sender;
 
     // we need to:
     // 1. Mark checkpoints as GC and continue only if succeeded
@@ -111,70 +137,94 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
         TActivationContext::ActorSystem(),
         CheckpointStorage,
         StateStorage,
-        graphId,
-        checkpointUpperBound);
+        event->CheckpointCoordinatorId,
+        event->CoordinatorId,
+        checkpointUpperBound,
+        storageProxy,
+        event->Cookie,
+        Errors,
+        Success,
+        Inflight);
+
+    Inflight->Inc();
+
+    if (event->Type != NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT) {
+        YDB_LOG_DEBUG("GC skip increment checkpoint for graph",
+            {"graphId", graphId});
+        SendGcFinished(context);
+        return;
+    }
 
     // 1-2.
-    auto future = CheckpointStorage->MarkCheckpointsGC(graphId, checkpointUpperBound).Apply(
-        [context] (const TFuture<TIssues>& future) {
-            auto issues = future.GetValue();
-            if (!issues.Empty()) {
-                TStringStream ss;
-                ss << "GC failed to mark checkpoints of graph '" << context->GraphId
-                   << "' up to " << context->UpperBound << ", issues:";
-                issues.PrintTo(ss);
-                YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
-                context->Stage = TContext::StageFailed;
-                return future;
-            }
+    CheckpointStorage->MarkCheckpointsGC(graphId, checkpointUpperBound)
+        .Apply(
+            [context] (const TFuture<TIssues>& future) {
+                auto issues = future.GetValue();
+                if (!issues.Empty()) {
+                    TStringStream ss;
+                    ss << "GC failed to mark checkpoints of graph '" << context->CoordinatorId.GraphId
+                        << "' up to " << context->UpperBound << ", issues:";
+                    issues.PrintTo(ss);
+                    YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
+                    context->Stage = TContext::StageFailed;
+                    return future;
+                }
 
-            return context->StateStorage->DeleteCheckpoints(context->GraphId, context->UpperBound);
-        });
+                return context->StateStorage->DeleteCheckpoints(context->CoordinatorId.GraphId, context->UpperBound);
+            })
+        .Apply(         // 2-3. check StateStorage->DeleteCheckpoints and if OK DeleteMarkedCheckpoints
+            [context] (const TFuture<TIssues>& future) {
+                if (context->Stage == TContext::StageFailed) {
+                    return future;
+                }
+                auto issues = future.GetValue();
+                if (!issues.Empty()) {
+                    TStringStream ss;
+                    ss << "GC failed to delete states of checkpoints of graph '" << context->CoordinatorId.GraphId
+                        << "' up to " << context->UpperBound << ", issues:";
+                    issues.PrintTo(ss);
+                    YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
+                    context->Stage = TContext::StageFailed;
+                    return future;
+                }
+                return context->CheckpointStorage->DeleteMarkedCheckpoints(context->CoordinatorId.GraphId, context->UpperBound);
+            })
+        .Subscribe(         // Final step: log result and always notify StorageProxy that GC cycle is done.
+            [context] (const TFuture<TIssues>& future) {
+                if (context->Stage == TContext::StageFailed) {
+                    context->Errors->Inc();
+                    SendGcFinished(context);
+                    return;
+                }
 
-    // 2-3. check StateStorage->DeleteCheckpoints and if OK DeleteMarkedCheckpoints
-    future.Apply(
-        [context] (const TFuture<TIssues>& future) {
-            if (context->Stage == TContext::StageFailed) {
-                return future;
-            }
+                auto issues = future.GetValue();
+                if (!issues.Empty()) {
+                    TStringStream ss;
+                    ss << "GC failed to delete marked checkpoints of graph '" << context->CoordinatorId.GraphId
+                        << "' up to " << context->UpperBound << ", issues:";
+                    issues.PrintTo(ss);
+                    YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
+                    context->Errors->Inc();
+                    SendGcFinished(context);
+                    return;
+                }
+                YDB_LOG_DEBUG_CTX(*context->ActorSystem, 
+                    "GC deleted checkpoints of graph '" << context->CoordinatorId.GraphId << "' up to " << context->UpperBound);
+                context->Success->Inc();
+                SendGcFinished(context);
+            });
+}
 
-            auto issues = future.GetValue();
-            if (!issues.Empty()) {
-                TStringStream ss;
-                ss << "GC failed to delete states of checkpoints of graph '" << context->GraphId
-                   << "' up to " << context->UpperBound << ", issues:";
-                issues.PrintTo(ss);
-                YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
-                context->Stage = TContext::StageFailed;
-                return future;
-            }
-
-            return context->CheckpointStorage->DeleteMarkedCheckpoints(context->GraphId, context->UpperBound);
-         });
-
-    // this one just to debug log result
-    future.Apply(
-        [context] (const TFuture<TIssues>& future) {
-            if (context->Stage == TContext::StageFailed) {
-                return future;
-            }
-
-            auto issues = future.GetValue();
-            if (!issues.Empty()) {
-                TStringStream ss;
-                ss << "GC failed to delete marked checkpoints of graph '" << context->GraphId
-                   << "' up to " << context->UpperBound << ", issues:";
-                issues.PrintTo(ss);
-                YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
-                context->Stage = TContext::StageFailed;
-                return future;
-            }
-            TStringStream ss;
-            ss << "GC deleted checkpoints of graph '" << context->GraphId
-               << "' up to " << context->UpperBound;
-            YDB_LOG_DEBUG_CTX(*context->ActorSystem, ss.Str());
-            return future;
-        });
+void TActorGC::SendGcFinished(TIntrusivePtr<TContext> context) {
+    YDB_LOG_DEBUG("Send TEvGcFinished to StorageProxy",
+        {"graphId", context->CoordinatorId.GraphId});
+    context->ActorSystem->Send(context->StorageProxy,
+        new TEvCheckpointStorage::TEvGcFinished(
+            context->CheckpointCoordinatorId,
+            context->CoordinatorId,
+            context->UpperBound,
+            context->Cookie));
+    context->Inflight->Dec();
 }
 
 } // anonymous namespace
@@ -184,9 +234,10 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
 std::unique_ptr<NActors::IActor> NewGC(
     const TCheckpointStorageSettings::TGcSettings&,
     const TCheckpointStoragePtr& checkpointStorage,
-    const TStateStoragePtr& stateStorage)
+    const TStateStoragePtr& stateStorage,
+    const ::NMonitoring::TDynamicCounterPtr& counters)
 {
-    return std::unique_ptr<NActors::IActor>(new TActorGC(checkpointStorage, stateStorage));
+    return std::unique_ptr<NActors::IActor>(new TActorGC(checkpointStorage, stateStorage, counters));
 }
 
 } // namespace NFq

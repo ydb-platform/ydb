@@ -1647,6 +1647,17 @@ message TEvControllerAllocateDDiskBlockGroup {
             repeated uint32 PreferredNodeIds = 2; // in order of descending preference
         }
         repeated TReassignPersistentBuffer ReassignPersistentBuffers = 5;
+
+        message TDeletePersistentBuffer {
+            optional NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferId = 1;
+        }
+        repeated TDeletePersistentBuffer DeletePersistentBuffers = 6;
+
+        message TDeleteDDisk {
+            optional NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 1;
+        }
+        repeated TDeleteDDisk DeleteDDisks = 7;
+
     }
     repeated TDirectBlockGroupOperation DirectBlockGroupOperations = 5;
 }

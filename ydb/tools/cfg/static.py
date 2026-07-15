@@ -1293,6 +1293,9 @@ class StaticConfigGenerator(object):
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
 
+                if drive.disk_scope is not None:
+                    drive_pb.DiskScope = drive.disk_scope
+
                 # Full support of `pdisk_config`, not just copying selected fields manually
                 # from other non-typed locations
                 if drive.pdisk_config is not None:
@@ -1372,6 +1375,9 @@ class StaticConfigGenerator(object):
 
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
+
+                if drive.disk_scope is not None:
+                    drive_pb.DiskScope = drive.disk_scope
 
             my_group = self._read_generated_bs_config(
                 group.get("erasure"),
@@ -2049,7 +2055,7 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.use_new_style_kikimr_cfg:
             domain = ""
             if len(self.__cluster_details.domains) == 1:
-                domain = "/" + self.__cluster_details.domains[0].domain_name
+                domain = self.__cluster_details.domains[0].domain_name
             return dynamic_cfg_new_style(self._enable_cores, use_auth_token_file=self.__use_auth_token_file, domain=domain)
         return kikimr_cfg_for_dynamic_slot(
             self._enable_cores, cert_params=self.__cluster_details.ic_cert_params

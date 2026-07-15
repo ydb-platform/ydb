@@ -14,7 +14,7 @@ namespace NActors::NStructuredLog {
 // 3. YDB_LOG_UPDATE_MESSAGE doesn't return message, but it should be usable inside another macro parameters too.
 
 #define YDB_LOG_CREATE_MESSAGE(...)                                                                \
-    ([&]() -> TStructuredMessage {                                                                 \
+    ([&]() -> NActors::NStructuredLog::TStructuredMessage {                                        \
         NActors::NStructuredLog::TCreateMessageGuard ydblogGuard;                                  \
         std::initializer_list<NActors::NStructuredLog::TCreateMessageArg> ydblogArgs{__VA_ARGS__}; \
         Y_UNUSED(ydblogArgs);                                                                      \

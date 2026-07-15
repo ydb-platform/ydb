@@ -625,6 +625,23 @@ private:
     TMetadata Metadata_;
 };
 
+class TSetNotNullOperation : public TOperation {
+public:
+    using TOperation::TOperation;
+    TSetNotNullOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    struct TMetadata {
+        ESetNotNullState State = ESetNotNullState::Unspecified;
+        float Progress = 0;
+        std::string Path;
+        std::vector<std::string> Columns;
+    };
+
+    const TMetadata& Metadata() const;
+private:
+    TMetadata Metadata_;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Represents changefeed description

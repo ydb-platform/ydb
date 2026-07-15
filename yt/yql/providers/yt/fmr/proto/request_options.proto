@@ -300,6 +300,11 @@ message TReduceTaskParams {
     repeated TFmrTableOutputRef Output = 2;
     bytes SerializedReduceJobState = 3;
     TReduceOperationSpec ReduceOperationSpec = 4;
+    // Whether Input's rows are sorted by [_yql_key_hash, ...ReduceOperationSpec.SortBy] (true for
+    // a MapReduce operation's reduce stage, which shuffles via a synthetic hash column) or by
+    // ReduceOperationSpec.SortBy alone (a plain Reduce operation, which reads real YT-sorted
+    // input with no hash column at all).
+    bool SortByHasKeyHashPrefix = 5;
 }
 
 message TSortOperationParams {

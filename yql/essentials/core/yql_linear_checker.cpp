@@ -60,7 +60,7 @@ public:
         : Ctx_(ctx)
     {}
 
-    void Visit(const TExprNode& node, const TExprNode* parent) {
+    void Visit(const TExprNode& node, const TExprNode* parent, const bool noSecondUsageCheck = false) {
         auto [it, inserted] = Visited_.emplace(&node, TUsage{});
         if (node.GetTypeAnn()->HasStaticLinear()) {
             auto scope = node.GetDependencyScope();
@@ -75,8 +75,12 @@ public:
             if (node.GetTypeAnn()->IsLinear()) {
                 it->second.resize(1);
                 if (it->second[0]) {
-                    AddError(*it->second[0], parent->Pos(), node.Pos());
-                    return;
+                    if (noSecondUsageCheck) {
+                        // Allow re-usage in If nodes, will validate symmetry later
+                    } else {
+                        AddError(*it->second[0], parent->Pos(), node.Pos());
+                        return;
+                    }
                 } else {
                     it->second[0] = parent->Pos();
                 }
@@ -165,8 +169,80 @@ public:
                 Visit(*node.Child(i), parent);
             }
         } else {
-            for (const auto& child : node.Children()) {
-                Visit(*child, &node);
+            if (node.IsCallable("If")) {
+                Visit(*node.Child(1), &node);
+                Visit(*node.Child(2), &node, /*noSecondUsageCheck=*/true);
+                Visit(*node.Child(0), &node);
+                HandleIfNode(node, parent);
+            }
+            else {
+                for (const auto& child : node.Children()) {
+                    Visit(*child, &node, noSecondUsageCheck);
+                }
+            }
+        }
+    }
+
+    bool GetLinearObjects(const TExprNode& node, TNodeMap<TUsage>& result) {
+
+        const bool isLiteral = (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple && node.IsList()) ||
+                               node.IsCallable("AsStruct");
+
+        if (!isLiteral) {
+            return false;
+        }
+
+        for (const auto& child : node.Children()) {
+            if (child->GetTypeAnn()->IsLinear()) {
+                TUsage usage;
+                usage.resize(1);
+                usage[0] = node.Pos();
+                auto [it, inserted] = result.try_emplace(child.Get(), usage);
+                if (!inserted) {
+                    AddError(*it->second[0], node.Pos(), child.Get()->Pos());
+                }
+            }
+        }
+
+        return true;
+
+    }
+
+    void HandleIfNode(const TExprNode& node, const TExprNode* /*parent*/) {
+        auto thenType = node.Child(1)->GetTypeAnn();
+        auto elseType = node.Child(2)->GetTypeAnn();
+
+        if (!thenType->HasStaticLinear() && !elseType->HasStaticLinear()) {
+            return;
+        }
+
+        if ((thenType->IsLinear() || elseType->IsLinear()) &&
+            node.Child(1) != node.Child(2)) {
+            AddError(node.Pos(), "If expression with a linear result requires identical true and false branches to guarantee exactly-once consumption; consider using DynamicLinear.");
+        }
+
+        if (thenType->HasStaticLinear() && !elseType->HasStaticLinear()) {
+            AddError(node.Pos(), "The THEN branch of the If expression has a static linear type, whereas the ELSE branch does not. Consider using DynamicLinear.");
+        }
+        if (elseType->HasStaticLinear() && !thenType->HasStaticLinear()) {
+            AddError(node.Pos(), "The ELSE branch of the If expression has a static linear type, whereas the THEN branch does not. Consider using DynamicLinear.");
+        }
+
+        TNodeMap<TUsage> linearObjectsInTrue;
+        TNodeMap<TUsage> linearObjectsInFalse;
+        if (!GetLinearObjects(*node.Child(1), linearObjectsInTrue) ||
+            !GetLinearObjects(*node.Child(2), linearObjectsInFalse)) {
+            return;
+        }
+
+        for (const auto& [obj, _] : linearObjectsInTrue) {
+            if (linearObjectsInFalse.find(obj) == linearObjectsInFalse.end()) {
+                AddIfError(obj->Pos(), node.Pos());
+            }
+        }
+        for (const auto& [obj, _] : linearObjectsInFalse) {
+            if (linearObjectsInTrue.find(obj) == linearObjectsInTrue.end()) {
+                AddIfError(obj->Pos(), node.Pos());
             }
         }
     }
@@ -225,6 +301,14 @@ private:
         HasErrors_ = true;
         auto inner = MakeIntrusive<TIssue>(Ctx_.GetPosition(produced), "Linear value is produced here");
         auto main = TIssue(Ctx_.GetPosition(parent), "The linear value changed lambda scope");
+        main.AddSubIssue(inner);
+        Ctx_.AddError(main);
+    }
+
+    void AddIfError(TPositionHandle produced, TPositionHandle parent) {
+        HasErrors_ = true;
+        auto inner = MakeIntrusive<TIssue>(Ctx_.GetPosition(produced), "Cannot guarantee single use in static analysis, consider using DynamicLinear. Linear objects have to be symmetric used in both branches.");
+        auto main = TIssue(Ctx_.GetPosition(parent), "The linear value did not pass static analysis");
         main.AddSubIssue(inner);
         Ctx_.AddError(main);
     }

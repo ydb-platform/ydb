@@ -161,6 +161,7 @@ DRIVE_SCHEMA = {
             "properties": {},
         },
         "kind": dict(type="integer"),
+        "disk_scope": dict(type="string"),
     },
     "required": ["type", "path"],
     "additionalProperties": False,

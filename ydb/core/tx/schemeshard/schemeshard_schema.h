@@ -2641,6 +2641,9 @@ struct Schema : NIceDb::Schema {
         struct StartTime :              Column<12, NScheme::NTypeIds::Uint64> {};
         struct EndTime :                Column<13, NScheme::NTypeIds::Uint64> {};
 
+        struct IsCancelled :            Column<14, NScheme::NTypeIds::Bool>   { static constexpr bool Default = false; };
+        struct CancellationReason :     Column<15, NScheme::NTypeIds::Utf8>   {};
+
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
             OperationId,
@@ -2655,7 +2658,9 @@ struct Schema : NIceDb::Schema {
             LockTxId,
             UserSID,
             StartTime,
-            EndTime
+            EndTime,
+            IsCancelled,
+            CancellationReason
         >;
     };
 
@@ -2838,7 +2843,7 @@ struct Schema : NIceDb::Schema {
     static constexpr ui64 SysParam_TenantInitState = 9;
     static constexpr ui64 SysParam_ServerlessStorageLastBillTime = 10;
     static constexpr ui64 SysParam_MaxIncompatibleChange = 11;
-    static constexpr ui64 SysParam_IsOldArgonHashFormatMigrationCompleted = 12;
+    // static constexpr ui64 SysParam_IsOldArgonHashFormatMigrationCompleted = 12; deprecated
     static constexpr ui64 SysParam_TablePartitionsFormatSweepStatus = 13;
     static constexpr ui64 SysParam_TablePartitionsFormatSweepTarget = 14;
 

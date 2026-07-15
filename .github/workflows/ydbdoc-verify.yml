@@ -59,8 +59,8 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
-              labels: ['ok-to-test', 'rebuild_docs'],
+              labels: ['ok-to-test'],
             });
             core.info(
-              `Added ok-to-test and rebuild_docs to translation PR #${prNumber}`
+              `Added ok-to-test to translation PR #${prNumber}`
             );

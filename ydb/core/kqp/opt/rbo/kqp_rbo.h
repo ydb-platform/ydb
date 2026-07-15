@@ -10,13 +10,14 @@ namespace NKqp {
 using namespace NOpt;
 
 enum ERuleProperties: ui32 {
-    RequireParents = 0x01,
-    RequireTypes = 0x02,
-    RequireMetadata = 0x04,
-    RequireStatistics = 0x08,
-    RequireLiveness = 0x10,
-    RequireNameConstraints = 0x20,
-    RequireAliases = 0x40
+    RequireParents         = 0x01,
+    RequireOutputIUs       = 0x02,
+    RequireTypes           = 0x04 | RequireOutputIUs,
+    RequireMetadata        = 0x08 | RequireOutputIUs,
+    RequireStatistics      = 0x10 | RequireTypes | RequireMetadata,
+    RequireLiveness        = 0x20 | RequireOutputIUs,
+    RequireNameConstraints = 0x40 | RequireOutputIUs,
+    RequireAliases         = 0x80 | RequireOutputIUs
   };
 
 /**

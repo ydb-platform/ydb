@@ -112,7 +112,7 @@ void TColumnShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev
 
 void TColumnShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
-    YDB_LOG_CRIT("",
+    YDB_LOG_DEBUG("",
         {"event", "scheme shard unavailable, will restart to try again"},
         {"pathId", msg->PathId});
     // This event may arrive while the tablet is still in StateInit, with init transactions

@@ -14,6 +14,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/library/wilson_ids/wilson.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/guid.h>
@@ -168,6 +169,25 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
     bool IsKafkaTransactionWriter() {
         return Opts.KafkaTransactionalId.has_value();
+    }
+
+    bool IsDeferredPublishWriter() const {
+        return Opts.DeferredPublish.has_value();
+    }
+
+    TWriteId MakeDeferredWriteIdFromOpts() const {
+        Y_ENSURE(Opts.DeferredPublish);
+        NKikimrPQ::TWriteId proto;
+        auto* deferred = proto.MutableDeferredPublicationApi();
+        deferred->SetIntPublicationId(Opts.DeferredPublish->IntPublicationId);
+        deferred->SetExtPublicationId(Opts.DeferredPublish->ExtPublicationId);
+        return TWriteId(std::move(proto));
+    }
+
+    void SetTopic(NKikimrClient::TPersQueuePartitionRequest& request) const {
+        if (!Opts.TopicPath.empty()) {
+            request.SetTopic(Opts.TopicPath);
+        }
     }
 
     void BecomeZombie(EErrorCode errorCode, const TString& error) {
@@ -367,21 +387,74 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         cmd.SetForce(true);
 
         SetWriteId(request);
+        SetTopic(request);
         SetNeedSupportivePartition(request, true);
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
         Become(&TThis::StateGetOwnership);
     }
 
+    void AbortDeferredStaging() {
+        Y_ENSURE(HasWriteId());
+
+        auto ev = MakeRequest(PartitionId, PipeClient);
+        auto& request = *ev->Record.MutablePartitionRequest();
+        request.MutableCmdAbortDeferredStaging();
+        SetWriteId(request);
+        SetTopic(request);
+
+        NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
+        Become(&TThis::StateAbortDeferredStaging);
+    }
+
+    STATEFN(StateAbortDeferredStaging) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPersQueue::TEvResponse, HandleAbortDeferredStagingResponse);
+            hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
+            hFunc(TEvPartitionWriter::TEvAbortDeferredStaging, IgnoreDuplicateAbort);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void HandleAbortDeferredStagingResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+
+        TString error;
+        if (!BasicCheck(record, error)) {
+            ERROR("CmdAbortDeferredStaging failed: " << error);
+        } else if (!record.GetPartitionResponse().HasCmdAbortDeferredStagingResult()) {
+            ERROR("CmdAbortDeferredStaging: absent result");
+        }
+
+        if (UpsertRollbackPending) {
+            NKikimrClient::TResponse response;
+            response.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+            response.SetErrorCode(NPersQueue::NErrorCode::BAD_REQUEST);
+            response.SetErrorReason("Failed to upsert deferred publish destination");
+            return InitResult("Failed to upsert deferred publish destination", std::move(response));
+        }
+
+        BecomeZombie(EErrorCode::InternalError, "Deferred staging aborted");
+    }
+
+    void IgnoreDuplicateAbort(TEvPartitionWriter::TEvAbortDeferredStaging::TPtr&) {
+    }
+
     STATEFN(StateGetOwnership) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPersQueue::TEvResponse, HandleOwnership);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
+            hFunc(TEvPartitionWriter::TEvAbortDeferredStaging, HandleAbortDeferredStagingEvent);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, HandlePartitionIdSaved);
             SFunc(TEvents::TEvWakeup, SavePartitionIdToKqpTxn);
         default:
             return StateBase(ev);
         }
+    }
+
+    void HandleAbortDeferredStagingEvent(TEvPartitionWriter::TEvAbortDeferredStaging::TPtr&) {
+        AbortDeferredStaging();
     }
 
     void HandleOwnership(TEvPersQueue::TEvResponse::TPtr& ev) {
@@ -408,11 +481,52 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         }
 
         // we do not save partition id to KQP in Kafka transaction, because we do not have KQP transaction during write request in Kafka API
-        if (HasWriteId() && !IsKafkaTransactionWriter()) {
+        if (IsDeferredPublishWriter()) {
+            StartUpsertDestination();
+        } else if (HasWriteId() && !IsKafkaTransactionWriter()) {
             SavePartitionIdToKqpTxn(ActorContext());
         } else {
             GetMaxSeqNo();
         }
+    }
+
+    void StartUpsertDestination() {
+        Y_ENSURE(IsDeferredPublishWriter());
+        Y_ENSURE(!Opts.Database.empty());
+
+        auto* event = new TEvPartitionWriter::TEvRequestDeferredDestinationUpsert;
+        event->IntPublicationId = Opts.DeferredPublish->IntPublicationId;
+        event->TopicPath = Opts.TopicPath;
+        event->Database = Opts.Database;
+        event->PartitionId = PartitionId;
+        event->TabletId = TabletId;
+        Send(Client, event);
+        Become(&TThis::StateUpsertDestination);
+    }
+
+    void HandleUpsertPermanentFailure(const TString& reason) {
+        UpsertRollbackPending = true;
+        ERROR("Upsert destination failed: " << reason);
+        AbortDeferredStaging();
+    }
+
+    STATEFN(StateUpsertDestination) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPartitionWriter::TEvDeferredDestinationUpsertResult, HandleDeferredDestinationUpsertResult);
+            hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
+            hFunc(TEvPartitionWriter::TEvAbortDeferredStaging, HandleAbortDeferredStagingEvent);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void HandleDeferredDestinationUpsertResult(TEvPartitionWriter::TEvDeferredDestinationUpsertResult::TPtr& ev) {
+        if (ev->Get()->Success) {
+            GetMaxSeqNo();
+            return;
+        }
+
+        HandleUpsertPermanentFailure(ev->Get()->Reason);
     }
 
     void SavePartitionIdToKqpTxn(const TActorContext& ctx) {
@@ -452,8 +566,10 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
     void GetMaxSeqNo() {
         auto ev = MakeRequest(PartitionId, PipeClient);
 
-        auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetMaxSeqNo();
+        auto& request = *ev->Record.MutablePartitionRequest();
+        auto& cmd = *request.MutableCmdGetMaxSeqNo();
         cmd.AddSourceId(NSourceIdEncoding::EncodeSimple(SourceId));
+        SetTopic(request);
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
         Become(&TThis::StateGetMaxSeqNo);
@@ -463,6 +579,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvResponse, HandleMaxSeqNo);
             hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
+            hFunc(TEvPartitionWriter::TEvAbortDeferredStaging, HandleAbortDeferredStagingEvent);
         default:
             return StateBase(ev);
         }
@@ -563,6 +680,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPartitionWriter::TEvWriteRequest, Handle);
             hFunc(TEvPersQueue::TEvResponse, Handle);
+            hFunc(TEvPartitionWriter::TEvAbortDeferredStaging, HandleAbortDeferredStagingEvent);
             HFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
@@ -636,6 +754,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
             auto& request = *ev->Record.MutablePartitionRequest();
             request.SetMessageNo(MessageNo++);
+            SetTopic(request);
 
             SetWriteId(request);
 
@@ -763,6 +882,8 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         }
 
         SetWriteId(request);
+        SetTopic(request);
+        SetNeedSupportivePartition(request, true);
 
         if (!Opts.UseDeduplication) {
             request.SetPartition(PartitionId);
@@ -947,7 +1068,10 @@ public:
 
         PipeClient = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), TabletId, config));
 
-        if (Opts.Database && Opts.SessionId && Opts.TxId) {
+        if (IsDeferredPublishWriter()) {
+            WriteId = MakeDeferredWriteIdFromOpts();
+            GetOwnership();
+        } else if (Opts.Database && Opts.SessionId && Opts.TxId) {
             GetWriteId(ctx);
         } else {
             if (Opts.KafkaTransactionalId) {
@@ -1012,6 +1136,8 @@ private:
 
     TMaybe<NPQ::TWriteId> WriteId;
     ui32 SupportivePartitionId = INVALID_PARTITION_ID;
+
+    bool UpsertRollbackPending = false;
 
     using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
     using IRetryState = IRetryPolicy::IRetryState;

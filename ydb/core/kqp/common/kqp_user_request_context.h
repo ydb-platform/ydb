@@ -26,6 +26,7 @@ namespace NKikimr::NKqp {
         bool IsStreamingQuery = false;
         TString CheckpointId;
         TString StreamingQueryPath;
+        TString WatermarkLateEventsPolicy;
         std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
 
         TUserRequestContext() = default;

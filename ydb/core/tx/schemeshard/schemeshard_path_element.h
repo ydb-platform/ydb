@@ -61,6 +61,8 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     TTxId DropTxId = InvalidTxId;
     TTxId LastTxId = InvalidTxId;
 
+    bool IsOrphanPlaceholder = false; // in-memory only, never persisted
+
     ui64 DirAlterVersion = 0;
     ui64 ACLVersion = 0;
 

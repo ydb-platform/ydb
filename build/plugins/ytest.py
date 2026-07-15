@@ -815,7 +815,7 @@ def _REGISTER_NO_CHECK_IMPORTS(unit: ymake.Unit):
         unit.onresource(['DONT_COMPRESS', '-', 'py/no_check_imports/{}="{}"'.format(_common.pathid(s), s)])
 
 
-@ymake.macro
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     (
         df.TestedProjectName.normalized_basename,
@@ -853,7 +853,7 @@ def ADD_CHECK_PY_IMPORTS(fields: typing.Any, unit: ymake.Unit, *args: tuple[str,
         unit.set_property(["DART_DATA", data])
 
 
-@ymake.macro
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     PY_EXEC_FIELDS_BASE
     + (
@@ -894,7 +894,7 @@ def ADD_PYTEST_BIN(fields: typing.Any, unit: ymake.Unit, *args: tuple[str, ...])
         unit.set_property(["DART_DATA", data])
 
 
-@ymake.macro
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     (
         df.SourceFolderPath.normalized,
@@ -957,7 +957,7 @@ def JAVA_TEST(fields: typing.Any, unit: ymake.Unit, *args: tuple[str, ...]):
         unit.set_property(['DART_DATA', data])
 
 
-@ymake.macro
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     (
         df.SourceFolderPath.normalized,
@@ -1004,7 +1004,7 @@ def RUN(unit: ymake.Unit, *args: tuple[str, ...]):
     unit.set(["EXECTEST_COMMAND_VALUE", exectest_cmd])
 
 
-@ymake.macro
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     PY_EXEC_FIELDS_BASE
     + (
@@ -1050,7 +1050,7 @@ def SETUP_RUN_PYTHON(unit: ymake.Unit):
         unit.ondepends('contrib/tools/python')
 
 
-@ymake.macro
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     (
         df.TestFiles.cpp_linter_files,
@@ -1092,7 +1092,7 @@ def _ADD_CPP_LINTER_CHECK(fields: typing.Any, unit: ymake.Unit, *args: tuple[str
         unit.set_property(["DART_DATA", data])
 
 
-@ymake.macro
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     (
         df.TestFiles.py_linter_files,
@@ -1135,7 +1135,7 @@ def _ADD_PY_LINTER_CHECK(fields: typing.Any, unit: ymake.Unit, *args: tuple[str,
         unit.set_property(["DART_DATA", data])
 
 
-@ymake.macro
+@ymake.macro(ignored_args={'fields'})
 @df.with_fields(
     (
         df.TestFiles.from_macro_args,

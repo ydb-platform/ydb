@@ -36,6 +36,7 @@ public:
         static inline constexpr char StreamingDisposition[] = "streaming_disposition";
         static inline constexpr char StreamingDispositionFromTime[] = "from_time";
         static inline constexpr char StreamingDispositionTimeAgo[] = "time_ago";
+        static inline constexpr char WatermarkLateEventsPolicy[] = "watermark_late_events_policy";
 
         // Internal query info
         static inline constexpr char QueryTextRevision[] = "__query_text_revision";
@@ -56,6 +57,7 @@ public:
     bool Run = false;
     TString ResourcePool;
     ui64 QueryTextRevision = 0;
+    TString WatermarkLateEventsPolicy;
     std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
 };
 

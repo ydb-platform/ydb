@@ -1,3 +1,4 @@
+import datetime
 import logging
 import pytest
 import time
@@ -93,3 +94,174 @@ class TestWatermarksInYdb(StreamingTestBase):
 
         sql = f'''DROP STREAMING QUERY `{query_name}`;'''
         kikimr.ydb_client.query(sql)
+
+    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
+    @pytest.mark.parametrize("tasks", [1, 2])
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_early_events_are_dropped(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, local_topics: bool) -> None:
+        if local_topics and shared_reading:
+            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
+
+        endpoint = self.get_endpoint(kikimr, local_topics)
+        query_name = f"wm_early_{shared_reading}{tasks}{local_topics}"
+        source_name = entity_name(query_name)
+        self.init_topics(source_name, partitions_count=tasks, endpoint=endpoint)
+        self.create_source(kikimr, source_name, shared_reading)
+
+        cluster = f"{source_name}." if not local_topics else ""
+        idleness_clause = ', WATERMARK_IDLE_TIMEOUT = "PT5S"' if tasks > 1 else ''
+
+        sql = f'''
+            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
+            PRAGMA ydb.MaxTasksPerStage = '{tasks}';
+
+            $input = (
+                SELECT
+                    input.*,
+                    CAST(ts AS Timestamp) AS event_time,
+                FROM
+                    {cluster}{self.input_topic} WITH (
+                        FORMAT = json_each_row,
+                        SCHEMA (ts String, pass Uint64),
+                        WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S')
+                        {idleness_clause}
+                    ) AS input
+            );
+
+            $output = (
+                SELECT
+                    CAST(HOP_END() AS String) AS event_time,
+                    AGGREGATE_LIST(ts) AS ts
+                FROM $input
+                WHERE
+                    pass > 0
+                GROUP BY
+                    HoppingWindow(CAST(event_time AS Timestamp), 'PT1S', 'PT1S')
+            );
+
+            INSERT INTO {cluster}{self.output_topic}
+            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(ts))))
+            FROM $output;
+            END DO;
+        '''
+        kikimr.ydb_client.query(sql)
+        self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+
+        now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+
+        def time_format(time: datetime.datetime, delta: int) -> str:
+            return (time + datetime.timedelta(minutes=delta)).isoformat().replace("+00:00", "Z")
+
+        self.write_stream(
+            data=[
+                f'{{"ts": "{time_format(now,  0)}", "pass": 1}}',
+                f'{{"ts": "{time_format(now, 10)}", "pass": 1}}',
+                f'{{"ts": "{time_format(now,  4)}", "pass": 0}}',
+            ],
+            endpoint=endpoint,
+            partition_key=b'1',
+        )
+        if shared_reading and tasks > 1:
+            time.sleep(10)  # leave a bit more time to fire up idle timeout
+
+        actual = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)
+        assert actual == [f'["{time_format(now, 0)}"]']
+
+        kikimr.ydb_client.query(f'''DROP STREAMING QUERY `{query_name}`;''')
+
+    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
+    @pytest.mark.parametrize("tasks", [1, 2])
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("policy,expected", [
+        ("DROP", ['["1970-01-01T00:00:50Z"]']),
+        ("ADJUST", ['["1970-01-01T00:00:50Z"]', '["1970-01-01T00:00:40Z"]']),
+    ])
+    def test_late_events_policy(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        shared_reading: bool,
+        tasks: int,
+        local_topics: bool,
+        policy: str,
+        expected: list[str],
+    ) -> None:
+        if local_topics and shared_reading:
+            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
+
+        endpoint = self.get_endpoint(kikimr, local_topics)
+        query_name = f"wm_late_{policy.lower()}_{shared_reading}{tasks}{local_topics}"
+        source_name = entity_name(query_name)
+        self.init_topics(source_name, partitions_count=tasks, endpoint=endpoint)
+        self.create_source(kikimr, source_name, shared_reading)
+
+        cluster = f"{source_name}." if not local_topics else ""
+        idleness_clause = ', WATERMARK_IDLE_TIMEOUT = "PT5S"' if tasks > 1 else ''
+        sql = f'''
+            CREATE STREAMING QUERY `{query_name}` WITH (
+                WATERMARK_LATE_EVENTS_POLICY = {policy}
+            ) AS DO BEGIN
+            PRAGMA ydb.MaxTasksPerStage = '{tasks}';
+
+            $input = (
+                SELECT
+                    input.*,
+                    CAST(ts AS Timestamp) AS event_time,
+                FROM
+                    {cluster}{self.input_topic} WITH (
+                        FORMAT = json_each_row,
+                        SCHEMA (ts String, pass Uint64),
+                        WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S')
+                        {idleness_clause}
+                    ) AS input
+            );
+
+            $output = (
+                SELECT
+                    CAST(HOP_END() AS String) AS event_time,
+                    AGGREGATE_LIST(ts) AS ts
+                FROM $input
+                WHERE
+                    pass > 0
+                GROUP BY
+                    HoppingWindow(CAST(event_time AS Timestamp), 'PT1S', 'PT1S')
+            );
+
+            INSERT INTO {cluster}{self.output_topic}
+            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(ts))))
+            FROM $output;
+            END DO;
+        '''
+        kikimr.ydb_client.query(sql)
+        self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+
+        self.write_stream(
+            data=[
+                '{"ts": "1970-01-01T00:00:50Z", "pass": 1}',
+                '{"ts": "1970-01-01T00:01:00Z", "pass": 0}',
+            ],
+            endpoint=endpoint,
+            partition_key=b'1',
+        )
+        if shared_reading and tasks > 1:
+            time.sleep(10)  # leave a bit more time to fire up idle timeout
+
+        actual = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)
+
+        self.write_stream(
+            data=[
+                '{"ts": "1970-01-01T00:00:40Z", "pass": 1}',
+                '{"ts": "1970-01-01T00:01:10Z", "pass": 0}',
+            ],
+            endpoint=endpoint,
+            partition_key=b'1',
+        )
+        if shared_reading and tasks > 1:
+            time.sleep(10)  # leave a bit more time to fire up idle timeout
+
+        if len(expected) > len(actual):
+            actual += self.read_stream(len(expected) - len(actual), topic_path=self.output_topic, endpoint=endpoint)
+
+        assert sorted(actual) == sorted(expected)
+
+        kikimr.ydb_client.query(f'''DROP STREAMING QUERY `{query_name}`;''')

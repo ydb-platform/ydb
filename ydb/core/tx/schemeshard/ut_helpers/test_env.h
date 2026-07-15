@@ -93,6 +93,7 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnableDataShardSplitHistogramSorting, false);
         OPTION(bool, EnableDataShardSplitKeySelection, false);
         OPTION(bool, EnableDataShardSplitHistogramOmission, false);
+        OPTION(bool, DisableFileStoreSSDSystemSpaceAccounting, false);
 
         #undef OPTION
     };

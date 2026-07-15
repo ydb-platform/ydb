@@ -1,0 +1,11 @@
+--- a/system/lib/libc/musl/include/limits.h
++++ b/system/lib/libc/musl/include/limits.h
+@@ -1,6 +1,8 @@
+ #ifndef _LIMITS_H
+ #define _LIMITS_H
+
++#pragma GCC system_header
++
+ #include <features.h>
+
+ #include <bits/alltypes.h> /* __LONG_MAX */

@@ -1,13 +1,24 @@
 LIBRARY()
 
 SRCS(
+    delete_publication_query.cpp
+    describe_publication_query.cpp
+    destination_blob.cpp
+    finalize_publication_actor.cpp
+    get_destination_blob_query.cpp
     insert_publication_query.cpp
+    list_destinations_query.cpp
+    list_publications_query.cpp
+    query_utils.cpp
     registry_actor.cpp
     tables_creator.cpp
+    upsert_destination_query.cpp
 )
 
 PEERDIR(
     ydb/core/base
+    ydb/core/kqp/common
+    ydb/core/kqp/common/simple
     ydb/core/protos
     ydb/library/aclib
     ydb/library/actors/core

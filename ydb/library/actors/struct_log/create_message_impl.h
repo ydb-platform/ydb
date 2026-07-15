@@ -186,7 +186,9 @@ public:
     // Native types support
     template <typename T, typename K = TKeyName>
     TCreateMessageArg(K&& name, const T& value) {
-        if constexpr (std::is_same<T, TStructuredMessage>::value) {
+        if constexpr (std::is_function<T>::value) {
+            static_assert(false, "It is not allowed to pass function into structured message");
+        } else if constexpr (std::is_same<T, TStructuredMessage>::value) {
             TCreateMessageGuard::GetBuildMessage().AppendSubMessage({std::move(name)}, value);
         } else if constexpr (THasToStructuredMessageMethod<std::decay_t<T>>::value) {
             auto message = value.ToStructuredMessage();

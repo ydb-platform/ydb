@@ -1,6 +1,6 @@
 # ALTER STREAMING QUERY
 
-`ALTER STREAMING QUERY` изменяет настройки{% if alter_streaming_query == true %} и текст {% endif %} [потоковых запросов](../../../concepts/streaming-query.md), а также управляет их состоянием: запуском и остановкой.
+`ALTER STREAMING QUERY` изменяет настройки{% if alter_streaming_query == true %} и текст {% endif %} [потоковых запросов](../../../concepts/streaming-query/streaming-query.md), а также управляет их состоянием: запуском и остановкой.
 
 ## Синтаксис
 
@@ -79,7 +79,7 @@ END DO
 
 Где:
 
-* `<query_statement>` — новый текст потокового запроса. Ограничения приведены в [{#T}](../../../concepts/streaming-query.md#limitations), примеры — [ниже](#text-changing-examples).
+* `<query_statement>` — новый текст потокового запроса. Ограничения приведены в [{#T}](../../../concepts/streaming-query/streaming-query.md#limitations), примеры — [ниже](#text-changing-examples).
 
 {% note warning %}
 
@@ -180,10 +180,10 @@ FROM
 
 Гарантируется, что на момент успешного завершения DDL для создания или изменения потокового запроса, статус будет `CREATED`, `STARTING`, `RUNNING`, `STOPPED` или `SUSPENDED` в зависимости от настройки `RUN = (TRUE|FALSE)` и успешности запуска запроса.
 
-Примеры обработки данных в других форматах приведены в статье [{#T}](../../../dev/streaming-query/streaming-query-formats.md). Подробнее о возможностях и ограничениях потоковых запросов [см. в документации](../../../concepts/streaming-query.md).
+Примеры обработки данных в других форматах приведены в статье [{#T}](../../../dev/streaming-query/streaming-query-formats.md). Подробнее о возможностях и ограничениях потоковых запросов [см. в документации](../../../concepts/streaming-query/streaming-query.md).
 
 ## См. также
 
-* [{#T}](../../../concepts/streaming-query.md)
+* [{#T}](../../../concepts/streaming-query/streaming-query.md)
 * [{#T}](create-streaming-query.md)
 * [{#T}](drop-streaming-query.md)

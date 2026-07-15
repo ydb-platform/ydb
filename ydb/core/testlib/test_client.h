@@ -345,7 +345,6 @@ namespace Tests {
         TServerSettings& operator=(const TServerSettings& settings) = default;
     private:
         YDB_FLAG_ACCESSOR(EnableMetadataProvider, true);
-        YDB_FLAG_ACCESSOR(EnableExternalIndex, false);
     };
 
     class TServer : public TThrRefBase, TMoveOnly {

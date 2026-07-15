@@ -860,7 +860,35 @@ public:
         }
 
         Args_[0] = BuildQuotedAtom(Args_[0]->GetPos(), Args_[0]->GetLiteralValue());
-        Args_.insert(Args_.begin() + 1, RangeFunction ? Q(Y(Q(Y(Q("range"))))) : Q(Y()));
+
+        TNodePtr settingsList = Y();
+        if (RangeFunction) {
+            settingsList = L(settingsList, Q(Y(Q("range"))));
+        }
+
+        // Optional named argument: PgCall("upper", x, "de-DE-x-icu" as Collation)
+        for (size_t i = 1; i < Args_.size();) {
+            const auto& label = Args_[i]->GetLabel();
+            if (label.empty()) {
+                ++i;
+                continue;
+            }
+
+            if (label != "Collation") {
+                ctx.Error(Args_[i]->GetPos()) << "PgCall: unsupported named argument: " << label << "; expected: Collation";
+                return false;
+            }
+
+            auto arg = Args_[i];
+            if (!arg->Init(ctx, src)) {
+                return false;
+            }
+
+            settingsList = L(settingsList, Q(Y(Q("collation"), MakeAtomFromExpression(Pos_, ctx, arg).Build())));
+            Args_.erase(Args_.begin() + i);
+        }
+
+        Args_.insert(Args_.begin() + 1, Q(settingsList));
         return TCallNode::DoInit(ctx, src);
     }
 
@@ -4216,6 +4244,28 @@ TNodeResult BuildBuiltinFunc(
         }
         if (aggMode == EAggregateMode::Distinct || aggMode == EAggregateMode::OverWindowDistinct) {
             return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions")));
+        }
+
+        if ((normalizedName == "pgcall" || normalizedName == "pgrangecall") && mustUseNamed && *mustUseNamed) {
+            // PgCall/PgRangeCall support one named argument (collation => ...); TYqlPgCall::DoInit
+            // finds it by label, so just flatten the (positional tuple, named struct) pair that
+            // named-arg calls get reshaped into back into a single labeled arg list.
+            *mustUseNamed = false;
+            YQL_ENSURE(args.size() == 2);
+            auto positional = args[0]->GetTupleNode();
+            YQL_ENSURE(positional);
+            auto named = args[1]->GetStructNode();
+            YQL_ENSURE(named);
+
+            TVector<TNodePtr> flatArgs(positional->Elements());
+            for (const auto& arg : named->GetExprs()) {
+                flatArgs.push_back(arg);
+            }
+
+            const bool isRange = (normalizedName == "pgrangecall");
+            return TNonNull(isRange
+                                ? TNodePtr(new TYqlPgCall<true>(pos, flatArgs))
+                                : TNodePtr(new TYqlPgCall<false>(pos, flatArgs)));
         }
 
         auto builtinCallback = builtinFuncs.find(normalizedName);

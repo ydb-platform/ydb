@@ -156,11 +156,31 @@ public:
         return KeyIndex;
     }
 
-    // The ordered iterator (compaction's reader) expects BinaryJson. BinaryJson columns pass their
-    // bytes through directly; native columns are re-encoded into an owned buffer.
-    NBinaryJson::TBinaryJson GetValueAsBinaryJson() {
+    // Re-encode the current value to BinaryJson.
+    NBinaryJson::TBinaryJson GetValueAsBinaryJson() const {
         AFL_VERIFY(IsValidFlag);
         return ArrayElementToBinaryJson(*CurrentArray, LocalIndex, ValueType);
+    }
+
+    EValueType GetValueType() const {
+        return ValueType;
+    }
+    const arrow::Array& GetArray() const {
+        AFL_VERIFY(IsValidFlag);
+        return *CurrentArray;
+    }
+    i64 GetLocalIndex() const {
+        return LocalIndex;
+    }
+    ui32 GetValueSize() const {
+        AFL_VERIFY(IsValidFlag);
+        return ArrayElementSize(*CurrentArray, LocalIndex, ValueType);
+    }
+    TStringBuf GetStorageView() const {
+        AFL_VERIFY(IsValidFlag);
+        AFL_VERIFY(ValueType == EValueType::String || ValueType == EValueType::BinaryJson)("value_type", (ui32)ValueType);
+        const auto view = static_cast<const arrow::BinaryArray&>(*CurrentArray).GetView(LocalIndex);
+        return TStringBuf(view.data(), view.size());
     }
 
     NJson::TJsonValue GetValue() const;
@@ -334,7 +354,7 @@ public:
             while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() == recordIndex) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
                 auto& itColumn = *SortedIterators.back();
-                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn.GetValueAsBinaryJson(), itColumn.IsColumnKey());
+                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn, itColumn.IsColumnKey());
                 if (!itColumn.Next()) {
                     SortedIterators.pop_back();
                 } else {

@@ -53,6 +53,19 @@ Y_UNIT_TEST_SUITE(AnalyzeDatashard) {
         ValidateCountMinSketch(runtime, pathId);
     }
 
+    Y_UNIT_TEST(AnalyzeMultiColumnStatistics) {
+        TTestEnv env(1, 1);
+
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareMultiColumnUniformTable(env, "Database", "Table");
+
+        Analyze(runtime, tableInfo.SaTabletId, {{tableInfo.PathId}});
+
+        CheckMultiColumnStatisticsProbes(env, runtime, tableInfo.PathId, {2, 3});
+    }
+
     Y_UNIT_TEST(AnalyzeTwoTables) {
         TTestEnv env(1, 1);
 

@@ -18,6 +18,7 @@ namespace NKikimr::NMiniKQL {
 namespace {
 
 const TStatKey WatermarkGenerator_EmptyTimeCount("WatermarkGenerator_EmptyTimeCount", true);
+const TStatKey WatermarkGenerator_EarlyEventsDropped("WatermarkGenerator_EarlyEventsDropped", true);
 
 class TDqWatermarkGenerator : public TStatefulSourceComputationNode<TDqWatermarkGenerator/* , true */> {
     using TSelf = TDqWatermarkGenerator;
@@ -49,57 +50,70 @@ public:
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
             i64 emptyTimeCountStat = 0;
+            i64 earlyEventsDroppedStat = 0;
 
             Y_DEFER {
                 MKQL_ADD_STAT(Ctx_.Stats, WatermarkGenerator_EmptyTimeCount, emptyTimeCountStat);
+                MKQL_ADD_STAT(Ctx_.Stats, WatermarkGenerator_EarlyEventsDropped, earlyEventsDroppedStat);
             };
 
             NUdf::TUnboxedValue value;
-            const auto status = Stream_.Fetch(value);
-            const auto now = TInstant::Now();
-            if (Self_->WatermarkTracker_) {
-                if (const auto idleWatermark = Self_->WatermarkTracker_->HandleIdleness(now)) {
-                    Self_->Watermark_.WatermarkIn = idleWatermark;
-                }
-            }
-
-            if (status != NUdf::EFetchStatus::Ok) {
-                return status;
-            }
-
-            {
-                auto newValue = value;
-                Self_->ItemArg_->SetValue(Ctx_, std::move(newValue));
-            }
-
-            const auto watermarkValue = Self_->WatermarkExtractor_->GetValue(Ctx_);
-            if (watermarkValue) {
-                const auto watermark = TInstant::MicroSeconds(watermarkValue.Get<ui64>());
-
-                const auto partitionKeyValue = Self_->PartitionKeyExtractor_->GetValue(Ctx_);
-
-                const auto clusterValue = partitionKeyValue.GetElement(0);
-                const auto cluster = TString(clusterValue.AsStringRef());
-
-                const auto partitionIdValue = partitionKeyValue.GetElement(1);
-                const auto partitionId = partitionIdValue.Get<ui64>();
-
-                const auto partitionKey = NYql::NDq::TPartitionKey{
-                    .Cluster = cluster,
-                    .PartitionId = partitionId,
-                };
-
+            while (true) {
+                const auto status = Stream_.Fetch(value);
+                const auto now = TInstant::Now();
                 if (Self_->WatermarkTracker_) {
-                    if (const auto newWatermark = Self_->WatermarkTracker_->NotifyNewPartitionTime(partitionKey, watermark, now)) {
-                        Self_->Watermark_.WatermarkIn = newWatermark;
+                    if (const auto idleWatermark = Self_->WatermarkTracker_->HandleIdleness(now)) {
+                        Self_->Watermark_.WatermarkIn = idleWatermark;
                     }
                 }
-            } else {
-                ++emptyTimeCountStat;
-            }
 
-            result = value;
-            return NUdf::EFetchStatus::Ok;
+                if (status != NUdf::EFetchStatus::Ok) {
+                    return status;
+                }
+
+                {
+                    auto newValue = value;
+                    Self_->ItemArg_->SetValue(Ctx_, std::move(newValue));
+                }
+
+                const auto watermarkValue = Self_->WatermarkExtractor_->GetValue(Ctx_);
+                if (watermarkValue) {
+                    const auto watermark = TInstant::MicroSeconds(watermarkValue.Get<ui64>());
+
+                    const auto partitionKeyValue = Self_->PartitionKeyExtractor_->GetValue(Ctx_);
+
+                    const auto clusterValue = partitionKeyValue.GetElement(0);
+                    const auto cluster = TString(clusterValue.AsStringRef());
+
+                    const auto partitionIdValue = partitionKeyValue.GetElement(1);
+                    const auto partitionId = partitionIdValue.Get<ui64>();
+
+                    const auto partitionKey = NYql::NDq::TPartitionKey{
+                        .Cluster = cluster,
+                        .PartitionId = partitionId,
+                    };
+
+                    const auto writeTimeValue = Self_->WriteTimeExtractor_->GetValue(Ctx_);
+
+                    const auto writeTime = TInstant::MicroSeconds(writeTimeValue.Get<ui64>());
+
+                    if (watermark > writeTime && watermark - writeTime > Self_->EarlyArrivalDelay_) {
+                        ++earlyEventsDroppedStat;
+                        continue;
+                    }
+
+                    if (Self_->WatermarkTracker_) {
+                        if (const auto newWatermark = Self_->WatermarkTracker_->NotifyNewPartitionTime(partitionKey, watermark, now)) {
+                            Self_->Watermark_.WatermarkIn = newWatermark;
+                        }
+                    }
+                } else {
+                    ++emptyTimeCountStat;
+                }
+
+                result = value;
+                return NUdf::EFetchStatus::Ok;
+            }
         }
 
     private:
@@ -114,8 +128,10 @@ public:
         IComputationExternalNode* itemArg,
         IComputationNode* watermarkExtractor,
         IComputationNode* partitionKeyExtractor,
+        IComputationNode* writeTimeExtractor,
         IComputationNode* partitionKeys,
         TDuration lateArrivalDelay,
+        TDuration earlyArrivalDelay,
         TDuration granularity,
         TDuration idleTimeout,
         TWatermark& watermark,
@@ -126,8 +142,10 @@ public:
         , ItemArg_(itemArg)
         , WatermarkExtractor_(watermarkExtractor)
         , PartitionKeyExtractor_(partitionKeyExtractor)
+        , WriteTimeExtractor_(writeTimeExtractor)
         , Partitions_(partitionKeys)
         , LateArrivalDelay_(lateArrivalDelay)
+        , EarlyArrivalDelay_(earlyArrivalDelay)
         , Granularity_(granularity)
         , IdleTimeout_(idleTimeout)
         , Watermark_(watermark)
@@ -160,6 +178,7 @@ private:
         Own(ItemArg_);
         DependsOn(WatermarkExtractor_);
         DependsOn(PartitionKeyExtractor_);
+        DependsOn(WriteTimeExtractor_);
         DependsOn(Partitions_);
     }
 
@@ -196,9 +215,11 @@ private:
     IComputationExternalNode* const ItemArg_;
     IComputationNode* const WatermarkExtractor_;
     IComputationNode* const PartitionKeyExtractor_;
+    IComputationNode* const WriteTimeExtractor_;
     IComputationNode* const Partitions_;
 
     TDuration LateArrivalDelay_;
+    TDuration EarlyArrivalDelay_;
     TDuration Granularity_;
     TDuration IdleTimeout_;
     TWatermark& Watermark_;
@@ -220,10 +241,12 @@ IComputationNode* WrapDqWatermarkGenerator(
     auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1);
     auto watermarkExtractor = LocateNode(ctx.NodeLocator, callable, 2);
     auto partitionKeyExtractor = LocateNode(ctx.NodeLocator, callable, 3);
-    auto watermarkSettings = AS_VALUE(TListLiteral, callable.GetInput(4));
-    auto partitionKeys = LocateNode(ctx.NodeLocator, callable, 5);
+    auto writeTimeExtractor = LocateNode(ctx.NodeLocator, callable, 4);
+    auto watermarkSettings = AS_VALUE(TListLiteral, callable.GetInput(5));
+    auto partitionKeys = LocateNode(ctx.NodeLocator, callable, 6);
 
     auto lateArrivalDelay = TDuration::Seconds(5);
+    auto earlyArrivalDelay = TDuration::Minutes(5);
     auto granularity = TDuration::Seconds(1);
     auto idleTimeout = TDuration::Seconds(5);
     for (ui32 i = 0; i + 2 <= watermarkSettings->GetItemsCount(); i += 2) {
@@ -240,7 +263,7 @@ IComputationNode* WrapDqWatermarkGenerator(
     }
 
     if (watermarkTracker) {
-        watermarkTracker->SetSettings(granularity, true, TDuration::Zero(), idleTimeout);
+        watermarkTracker->SetSettings(granularity, true, lateArrivalDelay, idleTimeout);
     }
 
     return new TDqWatermarkGenerator(
@@ -249,8 +272,10 @@ IComputationNode* WrapDqWatermarkGenerator(
         itemArg,
         watermarkExtractor,
         partitionKeyExtractor,
+        writeTimeExtractor,
         partitionKeys,
         lateArrivalDelay,
+        earlyArrivalDelay,
         granularity,
         idleTimeout,
         watermark,

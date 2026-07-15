@@ -299,6 +299,7 @@ SRCS(
     yson/attributes_stripper.cpp
 
     ytree/attribute_consumer.cpp
+    ytree/composite_map.cpp
     ytree/helpers.cpp
     ytree/attributes.cpp
     ytree/attribute_filter.cpp

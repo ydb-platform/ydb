@@ -2712,7 +2712,7 @@ Y_UNIT_TEST_LLVM(TestToStringTemporarryUtf8) {
 
     const auto data0 = NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{"long prefix "});
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<NTest::TUtf8>{
-                                                               {"01234567890 long string"}, {"01234567890 very long string"}});
+                                                               NTest::TUtf8{"01234567890 long string"}, NTest::TUtf8{"01234567890 very long string"}});
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
                                       return pb.ToString(pb.Concat(data0, item));

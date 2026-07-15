@@ -38,9 +38,9 @@ template <CFuture TFuture>
 TErrorOr<typename TFuture::TValueType> WaitForWithStrategy(TFuture future, EWaitForStrategy strategy)
 {
     switch (strategy) {
-        case EWaitForStrategy::WaitFor:
+        case EWaitForStrategy::SuspendFiber:
             return WaitFor(future);
-        case EWaitForStrategy::Get:
+        case EWaitForStrategy::BlockThread:
             return future.BlockingGet();
         default:
             YT_ABORT();

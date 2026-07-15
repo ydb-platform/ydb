@@ -284,20 +284,3 @@ class TestCreate(object):
         assert rows[1]['id'] == 1
         assert rows[1]['v0'] == b'abc'
         assert rows[1]['v1'] == 'xyz'
-
-    def test_dy_number_not_supported(self):
-        table_path = self.get_table_path() + "_7"
-        try:
-            self.ydb_client.query(
-                f"""
-                CREATE TABLE `{table_path}` (
-                    id Uint64 NOT NULL,
-                    v0 DyNumber,
-                    PRIMARY KEY(id),
-                )
-                WITH (STORE = COLUMN);
-                """
-            )
-            assert False, "Should Fail"
-        except ydb.issues.SchemeError as ex:
-            assert "Type \\'DyNumber\\' specified for column \\'v0\\' is not supported" in ex.message

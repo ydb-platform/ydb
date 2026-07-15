@@ -302,7 +302,6 @@ public:
                 // values allocated on another allocator and should be released
                 Converter.ClearCache();
                 WorkerHolder->Invalidate();
-                WorkerHolder->GetGraph().Invalidate();
             };
 
             TUnboxedValue result;
@@ -340,11 +339,6 @@ void TInputSpecTraits<TMessageInputSpec>::PreparePullStreamWorker(
     THolder<IStream<TMessage*>> stream
 ) {
     with_lock(worker->GetScopedAlloc()) {
-        Y_DEFER {
-            worker->Invalidate();
-            worker->GetGraph().Invalidate();
-        };
-
         worker->SetInput(
             worker->GetGraph().GetHolderFactory().Create<TMessageListValue>(inputSpec, std::move(stream), worker), 0);
     }
@@ -356,11 +350,6 @@ void TInputSpecTraits<TMessageInputSpec>::PreparePullListWorker(
     THolder<IStream<TMessage*>> stream
 ) {
     with_lock(worker->GetScopedAlloc()) {
-        Y_DEFER {
-            worker->Invalidate();
-            worker->GetGraph().Invalidate();
-        };
-
         worker->SetInput(
             worker->GetGraph().GetHolderFactory().Create<TMessageListValue>(inputSpec, std::move(stream), worker), 0);
     }

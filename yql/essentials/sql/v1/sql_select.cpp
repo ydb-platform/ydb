@@ -630,11 +630,28 @@ TSourcePtr TSqlSelect::HintedSingleSource(
     }
 
     TNodePtr watermarkLambda;
-    if (auto it = hints.find("watermark"); it != hints.end() && !ret->IsTableSource()) {
-        auto& exprs = it->second;
-        YQL_ENSURE(exprs.size() == 1);
-        watermarkLambda = std::move(exprs[0]);
-        hints.erase(it);
+    TTableHints watermarkHints;
+    if (!ret->IsTableSource()) {
+        for (auto it = hints.begin(); it != hints.end();) {
+            auto& [name, value] = *it;
+            auto normalizedName = name;
+            auto normalizeError = NormalizeName(Ctx_.Pos(), normalizedName);
+            if (!normalizeError.Empty()) {
+                YQL_ENSURE(value.empty() || value.front());
+                const auto pos = value ? value.front()->GetPos() : Ctx_.Pos();
+                Ctx_.Error(pos) << normalizeError->GetMessage();
+                return nullptr;
+            } else if (normalizedName == "watermark") {
+                YQL_ENSURE(value.size() == 1);
+                watermarkLambda = std::move(value[0]);
+                it = hints.erase(it);
+            } else if (normalizedName.StartsWith("watermark")) {
+                watermarkHints.emplace(normalizedName, std::move(value));
+                it = hints.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 
     if (hints || contextHints) {
@@ -649,7 +666,12 @@ TSourcePtr TSqlSelect::HintedSingleSource(
 
     if (watermarkLambda) {
         auto pos = watermarkLambda->GetPos();
-        ret = BuildWatermarkSource(std::move(pos), std::move(ret), std::move(watermarkLambda));
+        auto watermarkSettings = BuildInputOptions(pos, watermarkHints);
+        if (!watermarkSettings) {
+            watermarkSettings = BuildList(pos);
+        }
+        watermarkSettings = BuildQuote(pos, watermarkSettings);
+        ret = BuildWatermarkSource(std::move(pos), std::move(ret), std::move(watermarkLambda), std::move(watermarkSettings));
     }
 
     return ret;

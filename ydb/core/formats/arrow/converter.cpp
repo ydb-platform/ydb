@@ -91,6 +91,13 @@ static arrow::Status ConvertColumn(
     switch (colType.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber: {
             for (i32 i = 0; i < binaryArray.length(); ++i) {
+                if (binaryArray.IsNull(i)) {
+                    auto appendResult = builder.AppendNull();
+                    if (!appendResult.ok()) {
+                        return appendResult;
+                    }
+                    continue;
+                }
                 auto value = binaryArray.Value(i);
                 const auto dyNumber = NDyNumber::ParseDyNumberString(TStringBuf(value.data(), value.size()));
                 if (!dyNumber.Defined()) {
@@ -105,6 +112,13 @@ static arrow::Status ConvertColumn(
         }
         case NScheme::NTypeIds::JsonDocument: {
             for (i32 i = 0; i < binaryArray.length(); ++i) {
+                if (binaryArray.IsNull(i)) {
+                    auto appendResult = builder.AppendNull();
+                    if (!appendResult.ok()) {
+                        return appendResult;
+                    }
+                    continue;
+                }
                 auto value = binaryArray.Value(i);
                 if (!value.size()) {
                     Y_ABORT_UNLESS(builder.AppendNull().ok());
@@ -270,6 +284,7 @@ bool TArrowToYdbConverter::NeedInplaceConversion(const NScheme::TTypeInfo& typeI
                 return true;
             }
             [[fallthrough]];
+        case NScheme::NTypeIds::Interval:
         case NScheme::NTypeIds::Timestamp64:
         case NScheme::NTypeIds::Interval64:
         case NScheme::NTypeIds::Datetime64:

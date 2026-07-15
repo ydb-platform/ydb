@@ -192,12 +192,16 @@ struct TPDiskConfig : public TThrRefBase {
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
     {}
 
-    TPDiskConfig(TString path, ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
+    TPDiskConfig(TString path, ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory,
+            const NKikimrConfig::TFeatureFlags* featureFlags = nullptr)
         : Path(path)
         , PDiskGuid(pDiskGuid)
         , PDiskId(pdiskId)
         , PDiskCategory(pDiskCategory)
     {
+        if (featureFlags) {
+            FeatureFlags = *featureFlags;
+        }
         Initialize();
     }
 

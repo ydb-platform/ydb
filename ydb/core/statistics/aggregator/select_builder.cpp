@@ -77,9 +77,24 @@ TString TSelectBuilder::Build(const TStringBuf& table, std::optional<ui64> table
             res << ",";
         }
         if (agg.UdafFactory) {
-            Y_ABORT_UNLESS(agg.ColumnName);
-            res << "AGGREGATE_BY(" << TEscapedId{*agg.ColumnName}
-                << "," << "$f" << *agg.UdafFactory << "(" << agg.Params << "))";
+            res << "AGGREGATE_BY(";
+            if (agg.TupleColumnNames) {
+                res << "StablePickle(AsTuple(";
+                bool firstCol = true;
+                for (const auto& columnName : *agg.TupleColumnNames) {
+                    if (firstCol) {
+                        firstCol = false;
+                    } else {
+                        res << ",";
+                    }
+                    res << TEscapedId{columnName};
+                }
+                res << "))";
+            } else {
+                Y_ABORT_UNLESS(agg.ColumnName);
+                res << TEscapedId{*agg.ColumnName};
+            }
+            res << "," << "$f" << *agg.UdafFactory << "(" << agg.Params << "))";
         } else {
             Y_ABORT_UNLESS(agg.AggName);
             res << *agg.AggName;

@@ -116,7 +116,7 @@ TCommandStorageConfigReplace::TCommandStorageConfigReplace()
 
 void TCommandStorageConfigReplace::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption('f', "filename", "Filename of the file containing whole configuration in single-config mode")
+    config.Opts->AddLongOption('f', "filename", "Path to the file containing whole configuration in single-config mode")
         .RequiredArgument("[config.yaml]").StoreResult(&Filename);
     config.Opts->AddLongOption("dedicated-cluster-yaml", "Path to dedicated cluster section of configuration")
         .RequiredArgument("[cluster.yaml]").StoreResult(&ClusterYamlPath);

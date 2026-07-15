@@ -455,6 +455,7 @@ public:
     }
 
     void ShouldPendingAndCompleteCheckpoint() {
+        Init(true);
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
         PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
@@ -464,36 +465,27 @@ public:
         CompleteCheckpoint(GraphId, Generation, CheckpointId2, false);
 
         auto checkpoints = GetCheckpoints(GraphId);
-        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 2UL);
-
-        for (const auto& checkpoint: checkpoints) {
-            if (checkpoint.CheckpointId == CheckpointId1) {
-                UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::PendingCommit);
-            } else if (checkpoint.CheckpointId == CheckpointId2) {
-                UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Completed);
-            } else {
-                UNIT_ASSERT(false);
-            }
-        }
+        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 1UL);
+        UNIT_ASSERT(checkpoints[0].Status == ECheckpointStatus::Completed);
     }
 
     void ShouldAbortCheckpoint() {
+        Init(true);
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
         PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
+        AbortCheckpoint(GraphId, Generation, CheckpointId1, false);
 
         CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
         PendingCommitCheckpoint(GraphId, Generation, CheckpointId2, false);
         CompleteCheckpoint(GraphId, Generation, CheckpointId2, false);
-
-        AbortCheckpoint(GraphId, Generation, CheckpointId1, false);
         AbortCheckpoint(GraphId, Generation, CheckpointId2, false);
 
         auto checkpoints = GetCheckpoints(GraphId);
-        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 2UL);
+        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 1UL);
 
         for (const auto& checkpoint: checkpoints) {
-            UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Aborted);
+            UNIT_ASSERT_C(checkpoint.Status == ECheckpointStatus::Aborted, "checkpoint.Status " << checkpoint.Status);
         }
     }
 

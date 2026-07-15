@@ -450,7 +450,9 @@ namespace {
         if (auto paramName = TString(createSecret.ValueParamName())) {
             settings.ValueParamName = std::move(paramName);
         }
-        settings.InheritPermissions = FromString<bool>(TString(createSecret.InheritPermissions()));
+        if (auto inheritPermissions = TString(createSecret.InheritPermissions())) {
+            settings.InheritPermissions = FromString<bool>(inheritPermissions);
+        }
         return settings;
     }
 

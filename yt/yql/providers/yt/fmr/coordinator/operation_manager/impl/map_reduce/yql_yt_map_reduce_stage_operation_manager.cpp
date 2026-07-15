@@ -255,6 +255,9 @@ private:
             reduceTaskParams.Input = taskInput;
             reduceTaskParams.SerializedReduceJobState = operationParams.SerializedReduceJobState;
             reduceTaskParams.ReduceOperationSpec = operationParams.ReduceOperationSpec;
+            // The map stage above always shuffles via a synthetic _yql_key_hash prefix (see
+            // GenerateIntermediateTable), unlike a plain Reduce operation's real YT-sorted input.
+            reduceTaskParams.SortByHasKeyHashPrefix = true;
 
             std::vector<TFmrTableOutputRef> outputRefs;
             std::transform(

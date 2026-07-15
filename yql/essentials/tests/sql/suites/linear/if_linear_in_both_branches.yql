@@ -1,0 +1,11 @@
+PRAGMA config.flags('OptimizerFlags', 'DisableSameBranchesCollapse');
+
+$x = ToMutDict({1: 2}, 0);
+
+$y = IF(
+            Opaque(true),
+            $x,
+            $x
+        );
+
+SELECT FromMutDict($y);

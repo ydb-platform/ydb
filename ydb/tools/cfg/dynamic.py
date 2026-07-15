@@ -189,6 +189,8 @@ class DynamicConfigGenerator(object):
                 Type=drive.type,
                 Kind=drive.kind,
             )
+            if drive.disk_scope is not None:
+                kwargs.update(DiskScope=drive.disk_scope)
             if drive.pdisk_config is not None:
                 pc = pdisk_config.TPDiskConfig()
                 utils.wrap_parse_dict(drive.pdisk_config, pc)

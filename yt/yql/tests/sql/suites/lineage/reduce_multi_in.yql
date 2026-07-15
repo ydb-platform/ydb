@@ -1,0 +1,21 @@
+USE plato;
+
+$udf = YQL::@@
+(lambda '(key stream)
+    (PartitionByKey stream
+        (lambda '(item) (Way item))
+        (Void)
+        (Void)
+        (lambda '(listOfPairs)
+            (FlatMap listOfPairs
+                (lambda '(pair) (Just (AsStruct '('key key) '('src (Nth pair '0)) '('cnt (Unwrap (Head (Collect (Condense (Nth pair '1) (Uint64 '0) (lambda '(item state) (Bool 'false)) (lambda '(item state) (+ state (Uint64 '1)))))))))))
+            )
+        )
+    )
+)
+@@;
+
+$r = (REDUCE Input, Input ON key USING $udf(TableRow()));
+
+INSERT INTO Output
+SELECT key, src, cnt FROM $r ORDER BY key, src, cnt;

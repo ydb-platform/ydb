@@ -27,6 +27,8 @@ public:
         , Promise(promise) {
     }
 
+    static constexpr char ActorName[] = "FQ_LOCAL_TABLE_CREATOR";
+
     void Bootstrap() {
         Become(&TTableCreator::StateFunc);
 

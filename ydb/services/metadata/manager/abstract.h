@@ -23,6 +23,8 @@ namespace NKikimr::NMetadata::NModifications {
 
 using TOperationParsingResult = TConclusion<NInternal::TTableRecord>;
 
+const TString& GetOldSecretCreationDisabledMessage();
+
 class TAlterOperationContext {
 private:
     YDB_READONLY_DEF(TString, SessionId);

@@ -1,15 +1,10 @@
--- For full reload via data_mart_executor_by_month.py. Issues on a daily timeline: for each date, which issues are open at end of day and which were closed that day.
--- Run: python3 .github/scripts/analytics/data_mart_executor_by_month.py --query_path .github/scripts/analytics/data_mart_queries/datalens_ds_queries/github_issues_timeline_full.sql --table_path test_results/analytics/github_issues_timeline --store_type column --partition_keys date --primary_keys date issue_number project_item_id
--- Optional: --by_month 12 (default)
--- FULL WINDOW: use with data_mart_executor (full 365-day window) or data_mart_executor_by_month (per-month).
--- Dates come from tests_monitor (date_window), no ListFromRange/FLATTEN BY.
--- In BI: filter by date, owner_team; for issue list per day — filter by date; for counts — GROUP BY date, SUM(is_open_at_end_of_day), SUM(closed_on_this_day).
+-- For full reload via data_mart_executor.py. Issues on a daily timeline: for each date, which issues are open at end of day and which were closed that day.
+-- Open/closed state and SLA start from github_data/issue_open_periods (exported with issues).
+-- No query CTEs (DataLens-compatible): only scalar params + inline subqueries.
+-- Run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/datalens_ds_queries/github_issues_timeline_full.sql --table_path test_results/analytics/github_issues_timeline --store_type column --partition_keys date --primary_keys date issue_number project_item_id --cleanup_window_key date --cleanup_window_interval '365 * Interval("P1D")'
+-- FULL WINDOW: 365-day reload; $month_start/$month_end can be narrowed manually if the query times out.
 --
--- Windows (change here or override via script):
---   $timeline_days   — date dimension and "open in window": include issues open on at least one day in [now - timeline_days, now].
---   Include: created_date <= today and (still open or closed within window: closed_at >= now - timeline_days).
 $timeline_days = 365;
--- For by_month wrapper: script overwrites these to restrict to one month (avoids connection timeouts)
 $month_start = Date("1970-01-01");
 $month_end = Date("2100-01-01");
 
@@ -53,11 +48,12 @@ SELECT
     i.releaseblocker_state AS releaseblocker_state,
     i.branch AS branch,
     i.area AS area,
+    p.sla_start_date AS sla_start_date,
     CAST(
-        (i.closed_at IS NULL OR Cast(i.closed_at AS Date) > dt.d) AS Uint8
+        (p.sla_start_date IS NOT NULL) AS Uint8
     ) AS is_open_at_end_of_day,
     CAST(
-        (i.closed_at IS NOT NULL AND Cast(i.closed_at AS Date) = dt.d) AS Uint8
+        (c.issue_number IS NOT NULL) AS Uint8
     ) AS closed_on_this_day
 FROM (
     SELECT DISTINCT date_window AS d
@@ -105,10 +101,116 @@ CROSS JOIN (
         COALESCE(JSON_VALUE(t.info, "$.branch"), '-') AS branch,
         COALESCE(JSON_VALUE(t.info, "$.area"), 'area/-') AS area
     FROM `github_data/issues` AS t
+    INNER JOIN (
+        SELECT DISTINCT
+            ip.project_item_id AS project_item_id,
+            ip.issue_number AS issue_number
+        FROM (
+            SELECT
+                p.project_item_id AS project_item_id,
+                p.issue_number AS issue_number,
+                p.period_start AS period_start,
+                p.period_end AS period_end
+            FROM `github_data/issue_open_periods` AS p
+            UNION ALL
+            SELECT
+                t2.project_item_id AS project_item_id,
+                t2.issue_number AS issue_number,
+                t2.created_date AS period_start,
+                Cast(t2.closed_at AS Date) AS period_end
+            FROM `github_data/issues` AS t2
+            LEFT JOIN (
+                SELECT DISTINCT
+                    ep.project_item_id AS project_item_id,
+                    ep.issue_number AS issue_number
+                FROM `github_data/issue_open_periods` AS ep
+            ) AS has_periods
+                ON has_periods.issue_number = t2.issue_number
+                AND has_periods.project_item_id = t2.project_item_id
+            WHERE has_periods.issue_number IS NULL
+        ) AS ip
+        WHERE ip.period_start <= CurrentUtcDate()
+          AND (ip.period_end IS NULL OR ip.period_end >= CurrentUtcDate() - $timeline_days * Interval("P1D"))
+    ) AS w
+        ON w.project_item_id = t.project_item_id AND w.issue_number = t.issue_number
     LEFT JOIN `test_results/analytics/area_to_owner_mapping` AS m
         ON m.area = COALESCE(JSON_VALUE(t.info, "$.area"), 'area/-')
     WHERE t.created_date <= CurrentUtcDate()
-      AND (t.closed_at IS NULL OR Cast(t.closed_at AS Date) >= CurrentUtcDate() - $timeline_days * Interval("P1D"))
 ) AS i
+LEFT JOIN (
+    SELECT
+        dt_open.d AS date,
+        ip.project_item_id AS project_item_id,
+        ip.issue_number AS issue_number,
+        ip.period_start AS sla_start_date
+    FROM (
+        SELECT DISTINCT date_window AS d
+        FROM `test_results/analytics/tests_monitor`
+        WHERE date_window >= CurrentUtcDate() - $timeline_days * Interval("P1D")
+    ) AS dt_open
+    CROSS JOIN (
+        SELECT
+            p.project_item_id AS project_item_id,
+            p.issue_number AS issue_number,
+            p.period_start AS period_start,
+            p.period_end AS period_end
+        FROM `github_data/issue_open_periods` AS p
+        UNION ALL
+        SELECT
+            t2.project_item_id AS project_item_id,
+            t2.issue_number AS issue_number,
+            t2.created_date AS period_start,
+            Cast(t2.closed_at AS Date) AS period_end
+        FROM `github_data/issues` AS t2
+        LEFT JOIN (
+            SELECT DISTINCT
+                ep.project_item_id AS project_item_id,
+                ep.issue_number AS issue_number
+            FROM `github_data/issue_open_periods` AS ep
+        ) AS has_periods
+            ON has_periods.issue_number = t2.issue_number
+            AND has_periods.project_item_id = t2.project_item_id
+        WHERE has_periods.issue_number IS NULL
+    ) AS ip
+    WHERE ip.period_start <= dt_open.d
+      AND (ip.period_end IS NULL OR ip.period_end > dt_open.d)
+) AS p
+    ON p.date = dt.d
+    AND p.project_item_id = i.project_item_id
+    AND p.issue_number = i.issue_number
+LEFT JOIN (
+    SELECT DISTINCT
+        ip.period_end AS date,
+        ip.project_item_id AS project_item_id,
+        ip.issue_number AS issue_number
+    FROM (
+        SELECT
+            p.project_item_id AS project_item_id,
+            p.issue_number AS issue_number,
+            p.period_start AS period_start,
+            p.period_end AS period_end
+        FROM `github_data/issue_open_periods` AS p
+        UNION ALL
+        SELECT
+            t2.project_item_id AS project_item_id,
+            t2.issue_number AS issue_number,
+            t2.created_date AS period_start,
+            Cast(t2.closed_at AS Date) AS period_end
+        FROM `github_data/issues` AS t2
+        LEFT JOIN (
+            SELECT DISTINCT
+                ep.project_item_id AS project_item_id,
+                ep.issue_number AS issue_number
+            FROM `github_data/issue_open_periods` AS ep
+        ) AS has_periods
+            ON has_periods.issue_number = t2.issue_number
+            AND has_periods.project_item_id = t2.project_item_id
+        WHERE has_periods.issue_number IS NULL
+    ) AS ip
+    WHERE ip.period_end IS NOT NULL
+) AS c
+    ON c.date = dt.d
+    AND c.project_item_id = i.project_item_id
+    AND c.issue_number = i.issue_number
 WHERE i.created_date <= dt.d
   AND dt.d >= $month_start AND dt.d < $month_end;

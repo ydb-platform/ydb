@@ -985,11 +985,11 @@ Y_UNIT_TEST_LLVM(TestFromUtf8ToFloat) {
 
     const auto list = NTest::ConvertValueToLiteralNode(pb,
                                                        TVector<NTest::TUtf8>{
-                                                           {TStringBuf("0")},
-                                                           {TStringBuf("+24.75")},
-                                                           {TStringBuf("-24.75")},
-                                                           {TStringBuf("+42.42")},
-                                                           {TStringBuf("-42.42")},
+                                                           NTest::TUtf8{TString("0")},
+                                                           NTest::TUtf8{TString("+24.75")},
+                                                           NTest::TUtf8{TString("-24.75")},
+                                                           NTest::TUtf8{TString("+42.42")},
+                                                           NTest::TUtf8{TString("-42.42")},
                                                        });
 
     const auto pgmReturn = pb.Map(list,

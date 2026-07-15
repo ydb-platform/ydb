@@ -21,6 +21,8 @@ TStreamingQuerySettings& TStreamingQuerySettings::FromProto(const NKikimrSchemeO
             Run = value == "true";
         } else if (name == TStreamingQueryMeta::TProperties::ResourcePool) {
             ResourcePool = value;
+        } else if (name == TStreamingQueryMeta::TProperties::WatermarkLateEventsPolicy) {
+            WatermarkLateEventsPolicy = value;
         } else if (name == TStreamingQueryMeta::TProperties::QueryTextRevision) {
             QueryTextRevision = TryFromString<ui64>(value).GetOrElse(0);
         } else if (name == TStreamingQueryMeta::TProperties::StreamingDisposition) {

@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    kqp_has_full_scan_matcher.cpp
+    kqp_has_path_matcher.cpp
     kqp_query_classifier.cpp
     kqp_workload_service.cpp
 )
@@ -21,6 +23,7 @@ PEERDIR(
 
     ydb/library/actors/interconnect
     ydb/library/aclib
+    ydb/library/yql/providers/pq/proto
 
     ydb/public/api/protos
 )

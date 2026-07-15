@@ -18,12 +18,12 @@ namespace NYT::NConcurrency {
  */
 std::unique_ptr<IInputStream> CreateSyncAdapter(
     IAsyncInputStreamPtr underlyingStream,
-    EWaitForStrategy strategy = EWaitForStrategy::WaitFor);
+    EWaitForStrategy strategy = EWaitForStrategy::SuspendFiber);
 
 //! Creates a synchronous adapter from a given asynchronous zero-copy stream.
 std::unique_ptr<IZeroCopyInput> CreateSyncAdapter(
     IAsyncZeroCopyInputStreamPtr underlyingStream,
-    EWaitForStrategy strategy = EWaitForStrategy::WaitFor);
+    EWaitForStrategy strategy = EWaitForStrategy::SuspendFiber);
 
 //! Creates an asynchronous adapter from a given synchronous stream.
 /*!
@@ -41,7 +41,7 @@ IAsyncInputStreamPtr CreateAsyncAdapter(
  */
 std::unique_ptr<IZeroCopyOutput> CreateBufferedSyncAdapter(
     IAsyncOutputStreamPtr underlyingStream,
-    EWaitForStrategy strategy = EWaitForStrategy::WaitFor,
+    EWaitForStrategy strategy = EWaitForStrategy::SuspendFiber,
     size_t bufferSize = 8_KB);
 
 //! Creates an asynchronous adapter from a given synchronous stream.

@@ -113,7 +113,7 @@ class TestBase:
             assert vslot.VDiskMetrics.State == EVDiskState.OK
 
     def _trace(self, *args, with_grpc_calls=False, with_response=False, canonize_columns=None,
-               mock_base_config=None, allow_http_fetch=False, fake_grpc_handler=None):
+               mock_base_config=None, allow_http_fetch=False, fake_grpc_handler=None, suppress_table_dump=False):
         random.seed(42)
         common.cache.clear()
         common.name_cache.clear()
@@ -212,7 +212,10 @@ class TestBase:
         patches.enter_context(patch('sys.stdout', captured_stdout))
         patches.enter_context(patch('sys.stderr', captured_stderr))
         patches.enter_context(patch('shutil.get_terminal_size', side_effect=mock_get_terminal_size))
-        patches.enter_context(patch.object(table.TableOutput, 'dump', mock_table_dump))
+        if suppress_table_dump:
+            patches.enter_context(patch.object(table.TableOutput, 'dump', lambda *args, **kwargs: None))
+        else:
+            patches.enter_context(patch.object(table.TableOutput, 'dump', mock_table_dump))
 
         with patches:
             try:
@@ -343,9 +346,9 @@ class Test(TestBase):
         retry_assertions(self.check_vdisks_state_ok)
         pool_name = 'dynamic_storage_pool:1'
         return [
-            self._trace('--dry-run', 'group', 'add', '--pool-name', pool_name, '--groups', '1', '--size-in-units', '4', with_grpc_calls=True),
-            self._trace('group', 'add', '--pool-name', pool_name, '--groups', '1', '--size-in-units', '2', with_grpc_calls=True),
-            self._trace('group', 'add', '--pool-name', pool_name, '--groups', '1', with_grpc_calls=True),
+            self._trace('--dry-run', 'group', 'add', '--pool-name', pool_name, '--groups', '1', '--size-in-units', '4', with_grpc_calls=True, suppress_table_dump=True),
+            self._trace('group', 'add', '--pool-name', pool_name, '--groups', '1', '--size-in-units', '2', with_grpc_calls=True, suppress_table_dump=True),
+            self._trace('group', 'add', '--pool-name', pool_name, '--groups', '1', with_grpc_calls=True, suppress_table_dump=True),
             self._trace('group', 'list', '--columns', 'GroupId', 'PoolName', 'SizeInUnits'),
         ]
 

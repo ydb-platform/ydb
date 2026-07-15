@@ -100,6 +100,7 @@ private:
         userRequestContext->IsStreamingQuery = settings.SaveQueryPhysicalGraph;
         userRequestContext->CheckpointId = settings.CheckpointId;
         userRequestContext->StreamingQueryPath = settings.StreamingQueryPath;
+        userRequestContext->WatermarkLateEventsPolicy = settings.WatermarkLateEventsPolicy;
         userRequestContext->StreamingDisposition = settings.StreamingDisposition;
 
         return std::make_shared<TScriptExecutionContext>(TScriptExecutionContext{

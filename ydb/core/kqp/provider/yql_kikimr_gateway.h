@@ -603,6 +603,14 @@ struct TColumnEncoding {
 
 using TColumnEncodingsList = TVector<TColumnEncoding>;
 
+struct TGeneratedColumnInfo {
+    TString Context;
+    TString ExprText;
+    NYql::TExprNode::TPtr Expr;
+    bool Stored = false;
+    TVector<TString> Dependencies;
+};
+
 struct TKikimrColumnMetadata {
 
     TString Name;
@@ -620,6 +628,7 @@ struct TKikimrColumnMetadata {
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
     TMaybe<TColumnEncodingsList> Encoding;
+    TMaybe<TGeneratedColumnInfo> Generated;
 
     TKikimrColumnMetadata() = default;
 
@@ -685,6 +694,15 @@ struct TKikimrColumnMetadata {
                     break;
             }
         }
+
+        if (IsDefaultFromGenerated()) {
+            const auto& generated = message->GetGenerated();
+            Generated = TGeneratedColumnInfo{};
+            Generated->Context = generated.GetContext();
+            Generated->ExprText = generated.GetExprText();
+            Generated->Stored = generated.GetStored();
+            Generated->Dependencies.assign(generated.GetDependencies().begin(), generated.GetDependencies().end());
+        }
     }
 
     void SetDefaultFromSequence() {
@@ -695,12 +713,21 @@ struct TKikimrColumnMetadata {
         DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
     }
 
+
+    void SetDefaultFromGenerated() {
+        DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_GENERATED;
+    }
+
     bool IsDefaultFromSequence() const {
         return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE;
     }
 
     bool IsDefaultFromLiteral() const {
         return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+    }
+
+    bool IsDefaultFromGenerated() const {
+        return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_GENERATED;
     }
 
     bool IsDefaultKindDefined() const {
@@ -720,6 +747,15 @@ struct TKikimrColumnMetadata {
         message->SetDefaultKind(DefaultKind);
         message->MutableDefaultFromLiteral()->CopyFrom(DefaultFromLiteral);
         message->SetIsBuildInProgress(IsBuildInProgress);
+        if (Generated) {
+            auto& generated = *message->MutableGenerated();
+            generated.SetContext(Generated->Context);
+            generated.SetExprText(Generated->ExprText);
+            generated.SetStored(Generated->Stored);
+            for (const auto& dep : Generated->Dependencies) {
+                generated.AddDependencies(dep);
+            }
+        }
         if (columnType.TypeInfo) {
             *message->MutableTypeInfo() = *columnType.TypeInfo;
         }

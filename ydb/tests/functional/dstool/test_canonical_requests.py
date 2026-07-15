@@ -527,8 +527,6 @@ class Test(TestBase):
             builder.update_group(group_id=0x80000001, group_size_in_units=8) and None,
             _trace_cluster_balance('--only-from-overpopulated-pdisks', pending_reassigns={0x80000002: (1, 1002, 1000)}),
         ]
-<<<<<<< HEAD
-=======
 
     def test_cluster_balance_mismatching_size_in_units(self):
         def make_builder(pu, vu_list):
@@ -565,4 +563,3 @@ class Test(TestBase):
                 builder=make_builder(2, [2, 2, 2, 2, 1, 2, 2, 2, 2]),
                 pending_reassigns={0x80000005: (1, 1002, 1000)}),
         ]
->>>>>>> 9b22d249591 (Run dstool cluster balance using grpc only (#46335))

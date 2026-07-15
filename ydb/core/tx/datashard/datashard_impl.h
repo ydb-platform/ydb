@@ -1921,6 +1921,7 @@ public:
     void OnRejectProbabilityRelaxed() override;
     void OnFollowersCountChanged() override;
     ui64 GetMemoryUsage() const override;
+    const NTabletFlatExecutor::NFlatExecutorSetup::TTabletTableInfo* GetTableInfo() const override;
 
     bool HasPipeServer(const TActorId& pipeServerId);
     bool AddOverloadSubscriber(const TActorId& pipeServerId, const TActorId& actorId, ui64 seqNo, ERejectReasons reasons);
@@ -2882,6 +2883,7 @@ private:
     TInstant StopKeyAccessSamplingAt;
 
     TUserTable::TTableInfos TableInfos;  // tableId -> local table info
+    mutable NTabletFlatExecutor::NFlatExecutorSetup::TTabletTableInfo TableInfoCache;
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;

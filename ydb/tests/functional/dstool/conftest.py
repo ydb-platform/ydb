@@ -1,6 +1,7 @@
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bsbase3
 import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
+from ydb.core.protos.whiteboard_disk_states_pb2 import EVDiskState
 from ydb.tests.library.common.msgbus_types import MessageBusStatus
 
 # XXX: setting of pytest_plugins should work if specified directly in test modules
@@ -56,6 +57,9 @@ class BaseConfigBuilder:
         vslot.Status = status
         vslot.VDiskMetrics.AllocatedSize = allocated_size
         vslot.VDiskMetrics.AvailableSize = available_size
+        if status == 'READY':
+            vslot.VDiskMetrics.Replicated = True
+            vslot.VDiskMetrics.State = EVDiskState.OK
         return self
 
     def add_group(self, group_id, erasure_species='none',

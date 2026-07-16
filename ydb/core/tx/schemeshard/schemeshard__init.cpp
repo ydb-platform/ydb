@@ -6551,9 +6551,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         DbChanges.Apply(Self, txc, ctx);
 
 #ifndef NDEBUG
-        // Init has rebuilt every path, self-ref, tx-state and shard reference from
-        // the DB; their DbRefCounts must reconcile exactly. Checking here catches
-        // restoration drift (and guards the still-manual shard refs) at load time.
+        // After init rebuilds all references, DbRefCounts must reconcile —
+        // catches restoration drift at load time.
         Self->DebugCheckSelfRefIntegrity();
 #endif
         return true;

@@ -2214,7 +2214,6 @@ void TTableInfo::ApplySplitMerge(
         ExpectedPartitionCount = newPartitionCount;
     }
 
-    // Partitioning->Store: erase src, insert dst
     for (const TShardIdx& s : removedShards) {
         Partitioning->Store.erase(s);
     }
@@ -2238,7 +2237,6 @@ void TTableInfo::ApplySplitMerge(
         }
     }
 
-    // Partitioning->Order (pointer vector): erase src ptrs, insert dst ptrs
     // Moving raw pointers is cheap and does not affect the pointed-to objects.
     // Update Position for newly-inserted dst shards and all right-shifted survivors.
     Partitioning->Order.erase(Partitioning->Order.begin() + splitFirstIdx, Partitioning->Order.begin() + splitEndIdx);

@@ -110,11 +110,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardCheckProposeSize) {
         }
     }
 
-    // create_pq once snapshotted its freshly-materialized path with GrabPath
-    // (restore) instead of GrabNewPath (erase), so a propose-abort left a phantom
-    // path with a leaked DbRefCount. A redo overflow aborts after MaterializeLeaf,
-    // exercising create_pq's AbortPropose + UnDo (the DbRefCount reconciliation
-    // fires here in debug builds if the path is not fully rolled back).
+    // A redo overflow aborts create_pq after MaterializeLeaf, exercising its
+    // propose-abort rollback. Regression: the fresh path was snapshotted with
+    // GrabPath (restore) not GrabNewPath (erase), leaking a phantom path.
     Y_UNIT_TEST(CreatePQGroupAbortRollback) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -149,12 +147,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardCheckProposeSize) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/pqgroup"), {NLs::PathExist});
     }
 
-    // A copy snapshots the source table via TSelfRefMap::Update. TTableInfo::Partitions
-    // are raw pointers into PartitionStore, so the snapshot must be a DeepCopy: a shallow
-    // copy-ctor snapshot, once restored into the source by UnDo, leaves them dangling and
-    // the next op on the source aborts at ShardInfos.contains. Force a redo-overflow abort
-    // of a copy (CopyTable aborts propose gracefully), then alter the source to walk its
-    // partitions.
+    // A redo-overflow abort of a copy restores the source table's undo snapshot,
+    // then an alter walks its partitions. Regression: a shallow snapshot dangled
+    // the source's partition ptrs (crash at ShardInfos.contains).
     Y_UNIT_TEST(CopyTableAbortRollbackPreservesSourcePartitions) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

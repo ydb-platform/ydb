@@ -81,21 +81,17 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     // repeated Update() on the same object doesn't re-copy it.
     THashMap<const void*, THashSet<TPathId>> UpdateSnapshotted;
 
-    // Only the propose transaction can roll back: UnDo() has a single caller,
-    // AbortOperationPropose, reached only through IgniteOperation (which calls
-    // Arm()). Progress/plan/reply txs never abort, so recording their self-ref
-    // undos — the TTableInfo::DeepCopy in Update() above all — is dead weight.
+    // Only the propose tx can roll back (UnDo runs only from AbortOperationPropose),
+    // so only it records undos; other txs would just accumulate dead weight.
     bool Armed = false;
 
 public:
     ~TMemoryChanges() = default;
 
-    // Marks this as the propose tx, so self-ref undos (and their snapshot copies)
-    // are actually recorded. Called once at the top of IgniteOperation.
+    // Called from IgniteOperation.
     void Arm() { Armed = true; }
 
-    // True the first time this (map, path) is snapshotted for Update this tx —
-    // and only when armed, so a disarmed tx skips the snapshot copy entirely.
+    // True the first time this (map, path) needs a snapshot; false when disarmed.
     bool NeedsUpdateSnapshot(const void* map, const TPathId& id) {
         return Armed && UpdateSnapshotted[map].insert(id).second;
     }

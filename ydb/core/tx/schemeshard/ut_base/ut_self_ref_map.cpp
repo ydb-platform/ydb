@@ -37,12 +37,8 @@ Y_UNIT_TEST_SUITE(TSelfRefMapTest) {
             std::shared_ptr<const TOlapStoreInfo>>);
     }
 
-    // The Update() undo snapshot of a TTableInfo must be a DEEP copy: its
-    // Partitions are raw pointers into PartitionStore, so a shallow copy would
-    // leave them aliasing the original's store and a restored snapshot would
-    // dangle (the TCdcStreamTests::ReplicationAttribute crash). The partitioning
-    // is now copy-on-write, so the clone shares it in O(1) and only detaches on
-    // mutation — the shared store keeps Order's raw ptrs valid without a fixup.
+    // The undo clone shares the immutable partitioning copy-on-write (O(1), no
+    // fixup); a shallow copy would dangle Order's raw ptrs (the ReplicationAttribute crash).
     Y_UNIT_TEST(UndoCloneSharesPartitioning) {
         TTableInfo::TPtr orig(new TTableInfo());
         orig->SetPartitioning(MakeShards(3));

@@ -125,9 +125,8 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         if (elem) {
             ss->PathsById[id] = elem;
         } else {
-            // Counter rollback is owned by the Paths snapshots. The parent ref
-            // dies with the erased element (ParentRefHeld, not released here);
-            // SelfDbRef is dropped disarmed, not released.
+            // Paths snapshots own the counter rollback: the parent ref dies with
+            // the erased element; SelfDbRef is dropped disarmed, not released.
             if (auto refIt = ss->SelfDbRefs.find(id); refIt != ss->SelfDbRefs.end()) {
                 refIt->second.Disarm();
                 ss->SelfDbRefs.erase(refIt);

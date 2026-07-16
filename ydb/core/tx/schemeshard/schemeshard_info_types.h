@@ -963,11 +963,9 @@ private:
     using TPartitionsVec = TVector<TTableShardInfo*>;
     void CalculateColumnIdByName() const;
 
-    // Immutable partition set, shared copy-on-write. Store is a stable-address map
-    // (THashMap chaining keeps element refs valid across insert; also the O(1)
-    // ShardIdx index) and Order holds raw ptrs into it. A DeepCopy (undo snapshot)
-    // shares this shared_ptr in O(1); structural changes build a fresh one, and the
-    // execute-time in-place cond-erase update calls EnsureUniquePartitioning first.
+    // Partition set, shared copy-on-write. Store is a stable-address map, Order
+    // holds raw ptrs into it. DeepCopy shares this O(1); mutations build a fresh
+    // one (or EnsureUniquePartitioning for the in-place cond-erase update).
     struct TPartitioning {
         THashMap<TShardIdx, TTableShardInfo> Store;
         TPartitionsVec Order; // ordered by EndOfRange; raw ptrs into Store
@@ -1001,8 +999,7 @@ private:
     TAggregatedStats Stats;
     bool ShardsStatsDetached = false;
 
-    // Returns a ptr into the (possibly shared) store — read-only unless the caller
-    // has first called EnsureUniquePartitioning().
+    // Ptr into the (possibly shared) store; read-only unless EnsureUniquePartitioning was called.
     TTableShardInfo* FindPartition(const TShardIdx& shardIdx) {
         return Partitioning->Store.FindPtr(shardIdx);
     }
@@ -1023,9 +1020,8 @@ public:
     }
 
     static TTableInfo::TPtr DeepCopy(const TTableInfo& other) {
-        // The copy shares other's immutable Partitioning shared_ptr in O(1); the
-        // next structural change on either side builds a fresh one (copy-on-write),
-        // so the raw ptrs in Order never dangle across the shared store.
+        // Shares other's Partitioning in O(1); the next structural change
+        // copies-on-write, so Order's raw ptrs never dangle.
         TTableInfo::TPtr copy(new TTableInfo(other));
 
         copy->VerifyConsistency();
@@ -1136,10 +1132,9 @@ public:
 #endif
 
     void SetPartitioning(TVector<TTableShardInfo>&& newPartitioning);
-    // Rebuild Partitioning->Store/Partitioning->Order from newPartitioning; Stats are already correct
-    // (caller is a DeepCopy of a table with the same physical shard set).
+    // Keeps existing Stats (caller is a DeepCopy of a table with the same physical shard set).
     void MovePartitioning(TVector<TTableShardInfo>&& newPartitioning);
-    // Rebuild Partitioning->Store/Partitioning->Order and Stats from scratch for all-new shard IDs
+    // Rebuilds Stats from scratch for all-new shard IDs
     // (caller is a fresh dst table whose old placeholder shards had zero stats).
     void CopyPartitioning(TVector<TTableShardInfo>&& newPartitioning);
 

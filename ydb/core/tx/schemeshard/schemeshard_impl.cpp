@@ -850,10 +850,8 @@ void TSchemeShard::DebugCheckSelfRefIntegrity() const {
         selfRefMap->DebugCheckConsistency(pathExists);
     }
 
-    // Reconcile every path's DbRefCount against its actual references: each armed
-    // TPathRef (self-ref maps, parent/self refs, tx states, publications) plus each
-    // shard on the path (shards are the only non-TPathRef counter source). A
-    // mismatch means a rollback disarmed/adopted against the wrong path snapshot.
+    // Reconcile each path's DbRefCount against its actual references (self-ref maps,
+    // parent/self refs, tx states, publications, shards). A mismatch means a bad rollback.
     THashMap<TPathId, ui64> counted;
     auto bumpId = [&](const TPathId& id) {
         ++counted[id];
@@ -2509,10 +2507,8 @@ void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TP
         }
     }
 
-    // Release the parent reference last: DecrementPathDbRefCount's subdomain
-    // cleanup trigger checks DbRefCount and AllChildrenCount together, so the
-    // child's AllChildrenCount decrement above must be visible first.
-    // Not held by orphan placeholders (TolerateOrphanedPathsOnInit).
+    // Release the parent ref last: the subdomain-cleanup trigger checks DbRefCount
+    // and AllChildrenCount together, so the child's AllChildrenCount decrement must land first.
     if (path->ParentRefHeld) {
         DecrementPathDbRefCount(path->ParentPathId, "child path row");
         path->ParentRefHeld = false;
@@ -5641,7 +5637,6 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
             .AttemptResetDuration = AppData()->AuthConfig.GetAccountLockout().GetAttemptResetDuration()
         })
 {
-    // Self-ref maps register themselves into SelfRefMaps from their constructors.
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
                             ECumulativeCounters_descriptor,

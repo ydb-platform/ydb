@@ -2819,14 +2819,17 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         bool rangeFunction = false;
+        ui32 collationOid = 0;
         for (const auto& child : node.Child(2)->Children()) {
             if (child->Head().Content() == "range") {
                 rangeFunction = true;
+            } else if (child->Head().Content() == "collation_oid") {
+                collationOid = FromString<ui32>(child->Tail().Content());
             }
         }
 
         auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
-        return ctx.ProgramBuilder.PgResolvedCall(node.IsCallable("PgResolvedCallCtx"), name, id, args, returnType, rangeFunction);
+        return ctx.ProgramBuilder.PgResolvedCall(node.IsCallable("PgResolvedCallCtx"), name, id, args, returnType, rangeFunction, collationOid);
     });
 
     AddCallable("PgResolvedOp", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2840,7 +2843,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
-        return ctx.ProgramBuilder.PgResolvedCall(/*useContext=*/false, procName, procId, args, returnType, /*rangeFunction=*/false);
+        return ctx.ProgramBuilder.PgResolvedCall(/*useContext=*/false, procName, procId, args, returnType, /*rangeFunction=*/false, NPg::InvalidCollationOid);
     });
 
     AddCallable("BlockPgResolvedCall", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2852,8 +2855,15 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
         }
 
+        ui32 collationOid = 0;
+        for (const auto& child : node.Child(2)->Children()) {
+            if (child->Head().Content() == "collation_oid") {
+                collationOid = FromString<ui32>(child->Tail().Content());
+            }
+        }
+
         auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
-        return ctx.ProgramBuilder.BlockPgResolvedCall(name, id, args, returnType);
+        return ctx.ProgramBuilder.BlockPgResolvedCall(name, id, args, returnType, collationOid);
     });
 
     AddCallable("BlockPgResolvedOp", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2867,7 +2877,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
-        return ctx.ProgramBuilder.BlockPgResolvedCall(procName, procId, args, returnType);
+        return ctx.ProgramBuilder.BlockPgResolvedCall(procName, procId, args, returnType, NPg::InvalidCollationOid);
     });
 
     AddCallable("PgCast", [](const TExprNode& node, TMkqlBuildContext& ctx) {

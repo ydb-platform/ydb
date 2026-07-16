@@ -288,7 +288,8 @@ public:
     TRuntimeNode BlockToPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockPgResolvedCall(const std::string_view& name, ui32 id,
-                                     const TArrayRef<const TRuntimeNode>& args, TType* returnType);
+                                     const TArrayRef<const TRuntimeNode>& args, TType* returnType,
+                                     ui32 collationOid);
     TRuntimeNode BlockStorage(TRuntimeNode list, TType* returnType);
     TRuntimeNode BlockMapJoinIndex(TRuntimeNode blockStorage, TType* listItemType, const TArrayRef<const ui32>& keyColumns, bool any, TType* returnType);
     TRuntimeNode BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightBlockStorage, TType* rightListItemType, EJoinKind joinKind,
@@ -750,7 +751,8 @@ public:
 
     TRuntimeNode PgConst(TPgType* pgType, const std::string_view& value, TRuntimeNode typeMod = {});
     TRuntimeNode PgResolvedCall(bool useContext, const std::string_view& name, ui32 id,
-                                const TArrayRef<const TRuntimeNode>& args, TType* returnType, bool rangeFunction);
+                                const TArrayRef<const TRuntimeNode>& args, TType* returnType, bool rangeFunction,
+                                ui32 collationOid);
     TRuntimeNode PgCast(TRuntimeNode input, TType* returnType, TRuntimeNode typeMod = {});
     TRuntimeNode FromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode ToPg(TRuntimeNode input, TType* returnType);

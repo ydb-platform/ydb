@@ -1489,6 +1489,30 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             Y_DEBUG_ABORT_UNLESS(IsSorted(pathRows.begin(), pathRows.end()));
 
             for (auto& rec: pathRows) {
+                if (Self->TolerateOrphanedPaths) {
+                    const TPathId pathId = std::get<0>(rec);
+                    const TPathId parentPathId = std::get<1>(rec);
+                    if (pathId != Self->RootPathId() && !Self->PathsById.contains(parentPathId)) {
+                        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "TTxInit: parent path row is missing from the local database"
+                                << ", synthesizing an in-memory dropped placeholder parent"
+                                << ", pathId: " << pathId
+                                << ", parentPathId: " << parentPathId);
+                        TPathElement::TPtr placeholder = new TPathElement(
+                            parentPathId, Self->RootPathId(), Self->RootPathId(),
+                            TStringBuilder() << "__orphan_placeholder_"
+                                << parentPathId.OwnerId << "_" << parentPathId.LocalPathId,
+                            TString());
+                        placeholder->PathType = TPathElement::EPathType::EPathTypeDir;
+                        placeholder->StepCreated = TStepId(1);
+                        placeholder->CreateTxId = TTxId(1);
+                        placeholder->SetDropped(TStepId(1), TTxId(1));
+                        placeholder->IsOrphanPlaceholder = true;
+                        Self->PathsById[parentPathId] = placeholder;
+                        Self->HasOrphanPlaceholders = true;
+                    }
+                }
+
                 TPathElement::TPtr path = MakePathElement(rec);
 
                 Y_ABORT_UNLESS(path->PathId != Self->RootPathId());
@@ -3890,6 +3914,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         TVector<TOperationId> splitOpIds;
         TVector<TOperationId> forceDropOpIds;
         THashSet<TPathId> pathsUnderOperation;
+        // Orphaned in-flight txs skipped under TolerateOrphanedPaths: their
+        // rows are removed so recovery converges and the control can be
+        // disabled afterwards
+        THashSet<TOperationId> skippedOrphanTxs;
+        THashSet<TTxId> skippedOrphanTxIds;
+
         // Read in-flight txid
         {
             auto txInFlightRowset = db.Table<Schema::TxInFlightV2>().Range().Select();
@@ -3924,6 +3954,27 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                                 txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::SourceLocalPathId>());
                 txState.NeedUpdateObject = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedUpdateObject>(false);
                 txState.NeedSyncHive = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedSyncHive>(false);
+
+                if (Self->TolerateOrphanedPaths) {
+                    const bool orphanTarget = !Self->PathsById.contains(txState.TargetPathId);
+                    const bool orphanSource = bool(txState.SourcePathId) && !Self->PathsById.contains(txState.SourcePathId);
+                    if (orphanTarget || orphanSource) {
+                        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "TTxInit for TxInFlight: " << (orphanTarget ? "target" : "source")
+                                << " path element not found, skipping tx restore and removing its rows"
+                                << ", txId: " << operationId.GetTxId()
+                                << ", partId: " << operationId.GetSubTxId()
+                                << ", TxType: " << TTxState::TypeName(txState.TxType)
+                                << ", pathId: " << (orphanTarget ? txState.TargetPathId : txState.SourcePathId));
+                        Self->PersistRemoveTx(db, operationId, txState);
+                        skippedOrphanTxs.insert(operationId);
+                        skippedOrphanTxIds.insert(operationId.GetTxId());
+                        Self->TxInFlight.erase(operationId);
+                        if (!txInFlightRowset.Next())
+                            return false;
+                        continue;
+                    }
+                }
 
                 if ((txState.TxType == TTxState::TxCopyTable || txState.TxType == TTxState::TxReadOnlyCopyColumnTable) && txState.SourcePathId) {
                     Y_ABORT_UNLESS(txState.SourcePathId);
@@ -4285,6 +4336,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TTxState::ETxState operation = std::get<2>(rec);
 
                 TTxState* txState = Self->FindTx(operationId);
+                if (!txState && skippedOrphanTxs.contains(operationId)) {
+                    Self->PersistRemoveTxShard(db, operationId, shardIdx);
+                    continue;
+                }
                 Y_VERIFY_S(txState, "There's shard for unknown Operation"
                                << ", shardIdx: " << shardIdx
                                << ", txId: " << operationId.GetTxId());
@@ -4399,6 +4454,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             while (!txDependenciesRowset.EndOfSet()) {
                 auto txId = txDependenciesRowset.GetValue<Schema::TxDependencies::TxId>();
                 auto dependentTxId = txDependenciesRowset.GetValue<Schema::TxDependencies::DependentTxId>();
+
+                if ((!Self->Operations.contains(txId) && skippedOrphanTxIds.contains(txId))
+                    || (!Self->Operations.contains(dependentTxId) && skippedOrphanTxIds.contains(dependentTxId)))
+                {
+                    Self->PersistRemoveTxDependency(db, txId, dependentTxId);
+                    if (!txDependenciesRowset.Next())
+                        return false;
+                    continue;
+                }
 
                 Y_VERIFY_S(Self->Operations.contains(txId), "Parent operation is not found"
                                                             << ", parent txId " << txId

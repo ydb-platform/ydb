@@ -1377,10 +1377,24 @@ IGraphTransformer::TStatus BlockPgCallWrapper(const TExprNode::TPtr& input, TExp
         }
 
         auto content = setting->Head().Content();
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-            TStringBuilder() << "Unexpected setting " << content << " in function " << name));
+        if (content == "collation_oid") {
+            // BlockPgResolvedCall is only ever built by rewriting an already-resolved
+            // PgResolvedCall (see the peephole rewrite in yql_opt_peephole_physical.cpp),
+            // so its settings never carry a raw "collation" name - only the already-resolved
+            // "collation_oid", trusted as-is here, same as the analogous case in PgCallWrapper.
+            if (!EnsureTupleSize(*setting, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
 
-        return IGraphTransformer::TStatus::Error;
+            if (!EnsureAtom(setting->Tail(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Unexpected setting " << content << " in function " << name));
+
+            return IGraphTransformer::TStatus::Error;
+        }
     }
 
     TVector<ui32> argTypes;

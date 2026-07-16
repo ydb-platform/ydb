@@ -706,6 +706,8 @@ TMessageSeqNo TSchemeShard::NextRound() {
 }
 
 void TSchemeShard::Clear() {
+    HasOrphanPlaceholders = false;
+
     PathsById.clear();
 
     Tables.clear();
@@ -2426,9 +2428,12 @@ void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TP
     Y_DEBUG_ABORT_UNLESS(itParent != PathsById.end());
     if (itParent != PathsById.end()) {
         itParent->second->RemoveChild(path->Name, path->PathId);
-        Y_ABORT_UNLESS(itParent->second->AllChildrenCount > 0);
-        --itParent->second->AllChildrenCount;
-        DecrementPathDbRefCount(path->ParentPathId, "remove path");
+        // placeholders are never attached to their parent and never counted
+        if (!path->IsOrphanPlaceholder) {
+            Y_ABORT_UNLESS(itParent->second->AllChildrenCount > 0);
+            --itParent->second->AllChildrenCount;
+            DecrementPathDbRefCount(path->ParentPathId, "remove path");
+        }
     }
 }
 
@@ -5534,6 +5539,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     , AllowServerlessStorageBilling(0, 0, 1)
     , DisablePublicationsOfDropping(0, 0, 1)
     , FillAllocatePQ(0, 0, 1)
+    , TolerateOrphanedPaths(0, 0, 1)
     , SplitSettings()
     , IsReadOnlyMode(false)
     , ParentDomainLink(this)
@@ -5742,6 +5748,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     TControlBoard::RegisterSharedControl(AllowConditionalEraseOperations, icb.SchemeShardControls.AllowConditionalEraseOperations);
     TControlBoard::RegisterSharedControl(DisablePublicationsOfDropping, icb.SchemeShardControls.DisablePublicationsOfDropping);
     TControlBoard::RegisterSharedControl(FillAllocatePQ, icb.SchemeShardControls.FillAllocatePQ);
+    TControlBoard::RegisterSharedControl(TolerateOrphanedPaths, icb.SchemeShardControls.TolerateOrphanedPaths);
 
     TControlBoard::RegisterSharedControl(MaxCommitRedoMB, icb.TabletControls.MaxCommitRedoMB);
 

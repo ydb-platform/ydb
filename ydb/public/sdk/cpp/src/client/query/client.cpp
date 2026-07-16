@@ -377,6 +377,49 @@ public:
         return promise.GetFuture();
     }
 
+    TAsyncStatus DeleteSession(const std::string& sessionId, const NYdb::NQuery::TDeleteSessionSettings& settings) {
+        auto request = MakeRequest<Ydb::Query::DeleteSessionRequest>();
+        request.set_session_id(TStringType{sessionId});
+
+        auto promise = NThreading::NewPromise<TStatus>();
+
+        auto obs = MakeObservation("DeleteSession");
+
+        auto responseCb = [promise, obs]
+            (Ydb::Query::DeleteSessionResponse* response, TPlainStatus status) mutable {
+                try {
+                    if (response) {
+                        NYdb::NIssue::TIssues opIssues;
+                        NYdb::NIssue::IssuesFromMessage(response->issues(), opIssues);
+                        TStatus deleteSessionStatus(TPlainStatus{static_cast<EStatus>(response->status()), std::move(opIssues),
+                            status.Endpoint, std::move(status.Metadata)});
+
+                        obs->End(deleteSessionStatus.GetStatus(), deleteSessionStatus.GetEndpoint());
+
+                        promise.SetValue(std::move(deleteSessionStatus));
+                    } else {
+                        obs->End(status.Status, status.Endpoint);
+                        promise.SetValue(TStatus(std::move(status)));
+                    }
+                } catch (...) {
+                    obs->EndWithClientInternalError();
+                    promise.SetException(std::current_exception());
+                }
+            };
+
+        auto rpcSettings = TRpcRequestSettings::Make(settings);
+        rpcSettings.PreferredEndpoint = TEndpointKey(GetNodeIdFromSession(sessionId));
+
+        Connections_->Run<Ydb::Query::V1::QueryService, Ydb::Query::DeleteSessionRequest, Ydb::Query::DeleteSessionResponse>(
+            std::move(request),
+            responseCb,
+            &Ydb::Query::V1::QueryService::Stub::AsyncDeleteSession,
+            DbDriverState_,
+            rpcSettings);
+
+        return promise.GetFuture();
+    }
+
     void DeleteSession(TKqpSessionCommon* sessionImpl) override {
         if (sessionImpl->IsOwnedBySessionPool()) {
             if (SessionPool_.CheckAndFeedWaiterNewSession(sessionImpl->NeedUpdateActiveCounter())) {
@@ -811,6 +854,24 @@ TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const NKikimr::N
 TAsyncCreateSessionResult TQueryClient::GetSession(const TCreateSessionSettings& settings)
 {
     return Impl_->GetSession(settings);
+}
+
+TAsyncStatus TQueryClient::DeleteSession(const std::string& sessionId, const TDeleteSessionSettings& settings)
+{
+    const auto resolvedRetrySettings = NRetry::ResolveRetrySettings(
+        Impl_->Settings_.RetrySettings_,
+        settings.RetrySettings_,
+        settings.ClientTimeout_,
+        NRetry::ERetryIdempotentDefault::True);
+
+    return NRetry::RunUnaryWithRetry(*this, resolvedRetrySettings,
+        [this, sessionId, settings](TDuration timeout) {
+            auto opSettings = settings;
+            if (timeout != TDuration::Max()) {
+                opSettings.ClientTimeout(timeout);
+            }
+            return Impl_->DeleteSession(sessionId, opSettings);
+        });
 }
 
 int64_t TQueryClient::GetActiveSessionCount() const {

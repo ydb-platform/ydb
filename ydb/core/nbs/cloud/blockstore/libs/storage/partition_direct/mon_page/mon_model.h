@@ -71,21 +71,10 @@ struct TDbgSnapshot
     TVector<TConnectionSnapshot> Connections;
 };
 
-struct TVChunkHostRole
-{
-    THostIndex HostIndex = InvalidHostIndex;
-    EHostRole PBufferRole = EHostRole::None;
-    EHostRole DDiskRole = EHostRole::None;
-    bool Enabled = false;
-    std::optional<ui64> Watermark;
-};
-
 struct TVChunkSnapshot
 {
-    ui32 Index = 0;
-    ui32 DbgIndex = 0;
+    TVChunkConfig VChunkConfig;
     std::optional<ui64> SafeBarrier;
-    TVector<TVChunkHostRole> HostRoles;
     TString DirtyMapDump;
 };
 

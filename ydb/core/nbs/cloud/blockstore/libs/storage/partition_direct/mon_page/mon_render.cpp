@@ -550,9 +550,10 @@ void RenderVChunk(IOutputStream& str, const TMonPageData& data)
     }
 
     const TVChunkSnapshot& vchunk = *data.VChunk;
+    const TVChunkConfig& config = vchunk.VChunkConfig;
     HTML (str) {
         TAG (TH3) {
-            str << "VChunk #" << vchunk.Index;
+            str << "VChunk #" << config.GetVChunkIndex();
         }
         TABLE_CLASS ("table table-condensed") {
             TABLEBODY () {
@@ -562,8 +563,8 @@ void RenderVChunk(IOutputStream& str, const TMonPageData& data)
                     }
                     TABLED () {
                         str << "<a href='?TabletID=" << data.TabletInfo.TabletId
-                            << "&page=dbg&dbg=" << vchunk.DbgIndex << "'>#"
-                            << vchunk.DbgIndex << "</a>";
+                            << "&page=dbg&dbg=" << config.GetDBGIndex() << "'>#"
+                            << config.GetDBGIndex() << "</a>";
                     }
                 }
                 TABLER () {
@@ -604,23 +605,26 @@ void RenderVChunk(IOutputStream& str, const TMonPageData& data)
                 }
             }
             TABLEBODY () {
-                for (const auto& role: vchunk.HostRoles) {
+                const auto disabled = config.GetDisabledHosts();
+                for (THostIndex host = 0; host < config.GetHostCount(); ++host)
+                {
                     TABLER () {
                         TABLED () {
-                            str << PrintHostIndex(role.HostIndex);
+                            str << PrintHostIndex(host);
                         }
                         TABLED () {
-                            str << ToString(role.PBufferRole);
+                            str << ToString(config.GetPBufferRole(host));
                         }
                         TABLED () {
-                            str << ToString(role.DDiskRole);
+                            str << ToString(config.GetDDiskRole(host));
                         }
                         TABLED () {
-                            str << (role.Enabled ? "yes" : "no");
+                            str << (disabled.Get(host) ? "no" : "yes");
                         }
                         TABLED () {
-                            if (role.Watermark) {
-                                str << *role.Watermark;
+                            const auto watermark = config.GetWatermark(host);
+                            if (watermark) {
+                                str << *watermark;
                             } else {
                                 str << "-";
                             }

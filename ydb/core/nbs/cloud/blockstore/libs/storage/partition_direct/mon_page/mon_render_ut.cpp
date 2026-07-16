@@ -195,29 +195,20 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
 
     Y_UNIT_TEST(VChunkPageShowsSnapshot)
     {
-        const TVChunkHostRole primaryHost{
-            .HostIndex = 0,
-            .PBufferRole = EHostRole::Primary,
-            .DDiskRole = EHostRole::Primary,
-            .Enabled = true,
-            .Watermark = 7,
-        };
-        const TVChunkHostRole handOffHost{
-            .HostIndex = 1,
-            .PBufferRole = EHostRole::HandOff,
-            .DDiskRole = EHostRole::None,
-            .Enabled = false,
-        };
+        auto config = TVChunkConfig::MakeDefault(
+            /*vChunkIndex*/ 5,
+            /*hostCount*/ 3,
+            /*primaryCount*/ 1);
+        config.SetDBGIndex(1);
+        config.SetWatermark(0, 7);
         const TMonPageData data{
             .Page = EMonPage::VChunk,
             .TabletInfo = {.TabletId = 42},
             .SelectedVChunk = 5,
             .VChunk =
                 TVChunkSnapshot{
-                    .Index = 5,
-                    .DbgIndex = 1,
+                    .VChunkConfig = config,
                     .SafeBarrier = 100,
-                    .HostRoles = {primaryHost, handOffHost},
                     .DirtyMapDump = "DDiskStates: dump-text",
                 },
         };
@@ -229,6 +220,8 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "<td>H0</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Primary");
         UNIT_ASSERT_STRING_CONTAINS(html, "HandOff");
+        // Host 0's watermark set above renders in its row.
+        UNIT_ASSERT_STRING_CONTAINS(html, "<td>7</td>");
         UNIT_ASSERT_STRING_CONTAINS(html, "DDiskStates: dump-text");
     }
 

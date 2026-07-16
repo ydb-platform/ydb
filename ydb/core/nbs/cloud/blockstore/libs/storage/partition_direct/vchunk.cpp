@@ -307,24 +307,9 @@ TVChunkSnapshot TVChunk::BuildMonSnapshot()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    const auto disabled = VChunkConfig.GetDisabledHosts();
-    TVector<TVChunkHostRole> hostRoles;
-    hostRoles.reserve(VChunkConfig.GetHostCount());
-    for (THostIndex host = 0; host < VChunkConfig.GetHostCount(); ++host) {
-        hostRoles.push_back({
-            .HostIndex = host,
-            .PBufferRole = VChunkConfig.GetPBufferRole(host),
-            .DDiskRole = VChunkConfig.GetDDiskRole(host),
-            .Enabled = !disabled.Get(host),
-            .Watermark = VChunkConfig.GetWatermark(host),
-        });
-    }
-
     return {
-        .Index = VChunkConfig.GetVChunkIndex(),
-        .DbgIndex = VChunkConfig.GetDBGIndex(),
+        .VChunkConfig = VChunkConfig,
         .SafeBarrier = GetSafeBarrierForErase(),
-        .HostRoles = std::move(hostRoles),
         .DirtyMapDump = DebugPrintDirtyMap(),
     };
 }

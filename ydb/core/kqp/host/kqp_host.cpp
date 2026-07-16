@@ -1928,6 +1928,9 @@ private:
         state->EnableTopicsPredicatePushdown = Config->FeatureFlags.GetEnableTopicsPredicatePushdown();
         state->ForbidYqlSysColumnsAndSystemMetadata = QueryServiceConfig.GetStreamingQueries().GetForbidYqlSysColumnsAndSystemMetadata();
         state->EnablePqConstraintsTransformer = Config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false);
+        state->EnableWatermarks = Config->GetEnableWatermarks();
+        state->EnableWatermarksAdvanced = Config->GetEnableWatermarksAdvanced();
+        state->EnableStreamingPartitionBalancing = Config->GetEnableStreamingPartitionBalancing();
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;

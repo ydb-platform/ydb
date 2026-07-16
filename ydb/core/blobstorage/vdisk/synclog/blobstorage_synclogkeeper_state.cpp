@@ -312,8 +312,9 @@ namespace NKikimr {
         }
 
         TMemRecLogSnapshotPtr TSyncLogKeeperState::BuildSwapSnap() {
+            const ui32 pagesInMemory = SyncLogPtr->GetNumberOfPagesInMemory();
             // find mem pages to write to disk
-            const bool stillMemOverflow = SyncLogPtr->GetNumberOfPagesInMemory() > MaxMemPages;
+            const bool stillMemOverflow = pagesInMemory > MaxMemPages;
             const ui64 firstLsnToKeep = CalculateFirstLsnToKeep();
             const bool wantToCutRecoveryLog = FreeUpToLsn > firstLsnToKeep;
 
@@ -322,8 +323,13 @@ namespace NKikimr {
                 // we write those records, that are not written to disk yet
                 const ui64 diskLastLsn = SyncLogPtr->GetDiskLastLsn();
                 // free pages in case of memory overflow
-                const ui32 freeNPages = stillMemOverflow ?
-                    SyncLogPtr->GetNumberOfPagesInMemory() - MaxMemPages : 0;
+                ui32 freeNPages;
+                if (stillMemOverflow) {
+                    const ui32 leavePages = Max<ui32>(1, MaxMemPages / 2);
+                    freeNPages = pagesInMemory - leavePages;
+                } else {
+                    freeNPages = 0;
+                }
 
                 // if wantToCutRecoveryLog, then FreeUpToLsn must > 0
                 Y_ABORT_UNLESS(!wantToCutRecoveryLog || (FreeUpToLsn > 0));

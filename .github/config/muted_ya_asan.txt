@@ -593,6 +593,7 @@ ydb/core/persqueue/ut/ut_with_sdk WithSDK.DescribeConsumer
 ydb/core/quoter/ut QuoterWithKesusTest.AllocationStatistics
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
+ydb/core/tablet_flat/ut TIterator.GetKeyWithVersionSkips
 ydb/core/tablet_flat/ut TLegacy.StatsIter
 ydb/core/tablet_flat/ut TPageHandleTest.PinnedRef
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local

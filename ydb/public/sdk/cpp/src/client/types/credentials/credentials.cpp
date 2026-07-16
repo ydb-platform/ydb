@@ -1,6 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <util/string/cast.h>
 
+#include <condition_variable>
 #include <mutex>
 #include <unordered_map>
 
@@ -12,6 +13,8 @@ namespace {
 
 struct TCredentialsProviderCacheEntry {
     std::mutex Mutex;
+    std::condition_variable Initialized;
+    bool Initializing = false;
     std::weak_ptr<ICredentialsProvider> Provider;
 };
 
@@ -32,13 +35,40 @@ public:
             entry = it->second;
         }
 
-        std::lock_guard guard(entry->Mutex);
-        if (auto provider = entry->Provider.lock()) {
-            return provider;
+        std::unique_lock entryLock(entry->Mutex);
+        while (true) {
+            if (auto provider = entry->Provider.lock()) {
+                return provider;
+            }
+
+            if (!entry->Initializing) {
+                entry->Initializing = true;
+                break;
+            }
+
+            entry->Initialized.wait(entryLock, [&entry] {
+                return !entry->Initializing;
+            });
         }
 
-        auto provider = createProvider();
+        entryLock.unlock();
+
+        TCredentialsProviderPtr provider;
+        try {
+            provider = createProvider();
+        } catch (...) {
+            entryLock.lock();
+            entry->Initializing = false;
+            entryLock.unlock();
+            entry->Initialized.notify_all();
+            throw;
+        }
+
+        entryLock.lock();
         entry->Provider = provider;
+        entry->Initializing = false;
+        entryLock.unlock();
+        entry->Initialized.notify_all();
         return provider;
     }
 

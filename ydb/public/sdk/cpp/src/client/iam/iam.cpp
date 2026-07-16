@@ -143,6 +143,11 @@ public:
             });
     }
 
+    // Keep the facility-taking path driver-scoped; only the no-arg path is process-wide cached.
+    TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility>) const final {
+        return std::make_shared<TIAMCredentialsProvider>(Params_);
+    }
+
     std::string GetClientIdentity() const final {
         return TStringBuilder() <<
                 "TIamCredentialsProviderFactory" << '\t' <<

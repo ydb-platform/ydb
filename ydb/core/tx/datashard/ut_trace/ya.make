@@ -28,6 +28,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     datashard_ut_trace.cpp
+    kqp_user_facing_trace_ut.cpp
 )
 
 END()

@@ -2104,6 +2104,7 @@ public:
             Y_ENSURE(QueryState);
             request.Orbit = std::move(QueryState->Orbit);
             request.TraceId = QueryState->KqpSessionSpan.GetTraceId();
+            request.UserFacingTraceId = QueryState->UserSpan.GetTraceId();
             auto response = ExecuteLiteral(std::move(request), RequestCounters, SelfId(), QueryState->UserRequestContext);
             ++QueryState->CurrentTx;
             ProcessExecuterResult(response.get());
@@ -2268,6 +2269,7 @@ public:
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
+        request.UserFacingTraceId = QueryState ? QueryState->UserSpan.GetTraceId() : NWilson::TTraceId();
         request.QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0;
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
@@ -2388,6 +2390,7 @@ public:
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
+        request.UserFacingTraceId = QueryState ? QueryState->UserSpan.GetTraceId() : NWilson::TTraceId();
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
 

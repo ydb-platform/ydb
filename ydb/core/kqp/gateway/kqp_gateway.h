@@ -166,6 +166,7 @@ public:
 
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;
+        NWilson::TTraceId UserFacingTraceId; // user-facing tree root (Execute parent); empty unless sampled
         TString UserTraceId;
         ui64 QuerySpanId = 0;  // QuerySpanId of the current query being executed
 

@@ -875,7 +875,7 @@ private:
                 {"ctx", *GetUserRequestContext()},
                 {"traceId", TraceId()});
             Become(&TKqpDataExecuter::WaitSnapshotState);
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterAcquireSnapshot, ExecuterSpan.GetTraceId(), "WaitForSnapshot");
+            ExecuterStateSpan = ExecuterSpan.CreateChild(TWilsonKqp::DataExecuterAcquireSnapshot, TWilsonKqp::KqpSession, "WaitForSnapshot", "Snapshot", NWilson::EFlags::NONE);
 
             return;
         }
@@ -939,7 +939,8 @@ private:
             return;
         }
 
-        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
+        ExecuterStateSpan = ExecuterSpan.CreateChild(TWilsonKqp::DataExecuterRunTasks, TWilsonKqp::KqpSession, "RunTasks", "RunTasks");
+        UserRunTasksTraceId = ExecuterStateSpan.User().GetTraceId();
         YDB_LOG_DEBUG("Become ExecuteState",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},

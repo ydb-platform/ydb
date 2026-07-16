@@ -211,7 +211,6 @@ from -292277 years to +292277 years
 |
 8
 |
-Not supported in columnar tables
 ||
 
 ||

@@ -100,7 +100,7 @@ str << "<style>.my-table th { text-align: center; }</style>";
 str << "<div class='mon-warning'>...</div>";
 ```
 
-When a stricter `style-src` is eventually added to the header, do **not** weaken it with `'unsafe-eval'` or external domains.
+When a stricter `style-src` is eventually added to the header, do **not** weaken it with `'unsafe-inline'` or external domains.
 
 ## 2. No External Resources
 
@@ -150,7 +150,7 @@ out << "<script src='https://code.jquery.com/jquery-3.6.0.min.js'></script>\n";
 out << "<link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet'>\n";
 ```
 
-**✅ CORRECT — use only resources served from the same origin**
+**✅ CORRECT — use only resources served from the same origin:**
 
 Bootstrap, jQuery, and tablesorter are already bundled and served by the monitoring page wrapper. Page-specific C++ renderers normally must not emit additional `<script>`/`<link>` tags for them.
 

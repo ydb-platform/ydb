@@ -816,8 +816,8 @@ template <typename TNodeSet> TBestJoin TDPHypSolverShuffleElimination<TNodeSet>:
     return {.Stats = std::move(bestJoinStats), .Algo = bestAlgo, .IsReversed = bestJoinIsReversed };
 }
 
-// TODO: this isn't used as of now (runtime needs to shuffle at least one side)
-//       i.e. beware, this is completely untested
+// Runtime currently cannot execute a join with map connections on both inputs, but
+// the optimizer can still build such a plan when both inputs are already shuffled.
 template <typename TNodeSet> std::shared_ptr<IBaseOptimizerNode> TDPHypSolverShuffleElimination<TNodeSet>::PickBestJoinBothSidesShuffled(
     const std::shared_ptr<IBaseOptimizerNode>& left,
     const std::shared_ptr<IBaseOptimizerNode>& right,
@@ -1130,20 +1130,17 @@ template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitC
 
             // TODO: we can remove shuffle from here, joinkeys.size() == getshufflehashargscount() isn't nescesary condition. GetShuffleHashFuncArgsCount must be equal, otherwise we will reshuffle.
             // bool sameHashFuncArgCount = (lhsHashFuncArgCnt == rhsHashFuncArgCnt);
-            if (lhsShuffled && rhsShuffled /* we don't support not shuffling two inputs in the execution, so we must shuffle at least one*/) {
-                if (leftNode->Stats.Nrows < rightNode->Stats.Nrows) {
-                    lhsShuffled = false;
-                } else {
-                    rhsShuffled = false;
-                }
-            }
-
-            // TODO: don't add shuffle, if it won't be used
-            /* if (lhsShuffled && rhsShuffled) { // we don't support not shuffling two inputs in the execution
-                ++bothSidesShuffled;
-                auto bestJoin = PickBestJoinBothSidesShuffled(leftNode, rightNode, *csgCmpEdge, maybeCardHint, maybeJoinAlgoHint);
-                AddNodeToDpTableEntries(std::move(bestJoin), DpTable_[joined]);
-            }  else */ if (!lhsShuffled && !rhsShuffled) {
+            if (lhsShuffled && rhsShuffled) {
+                auto bestJoin = PickBestJoinBothSidesShuffled(
+                    leftNode,
+                    rightNode,
+                    *csgCmpEdge,
+                    maybeCardHint,
+                    maybeJoinAlgoHint,
+                    maybeBytesHint
+                );
+                AddNodeToDpTableEntries(std::move(bestJoin), this->DpTable_[joined]);
+            } else if (!lhsShuffled && !rhsShuffled) {
                 auto trees = PickBestJoinNoSidesShuffled(leftNode, rightNode, *csgCmpEdge, maybeCardHint, maybeJoinAlgoHint, maybeBytesHint);
                 for (std::size_t i = 0; i < trees.size() && trees[i] != nullptr; ++i) {
                     AddNodeToDpTableEntries(std::move(trees[i]), this->DpTable_[joined]);

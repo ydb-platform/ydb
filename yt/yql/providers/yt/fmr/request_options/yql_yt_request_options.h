@@ -538,6 +538,11 @@ struct TReduceTaskParams {
     std::vector<TFmrTableOutputRef> Output;
     TString SerializedReduceJobState;
     TReduceOperationSpec ReduceOperationSpec;
+    // Whether Input's rows are sorted by [_yql_key_hash, ...ReduceOperationSpec.SortBy] (true for
+    // a MapReduce operation's reduce stage, which shuffles via a synthetic hash column) or by
+    // ReduceOperationSpec.SortBy alone (a plain Reduce operation, which reads real YT-sorted
+    // input with no hash column at all).
+    bool SortByHasKeyHashPrefix = false;
 };
 
 // Service column added by map stage to hash-route rows to the correct reducer.

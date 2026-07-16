@@ -1,5 +1,6 @@
 #include "kqp_rbo_physical_join_builder.h"
 #include "kqp_rbo_physical_convertion_utils.h"
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
@@ -7,18 +8,6 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-
-TString TPhysicalJoinBuilder::GetValidJoinKind(const TString& joinKind) const {
-    const auto joinKindLowered = to_lower(joinKind);
-    if (joinKindLowered == "left") {
-        return "Left";
-    } else if (joinKindLowered == "inner") {
-        return "Inner";
-    } else if (joinKindLowered == "cross") {
-        return "Cross";
-    }
-    return joinKind;
-}
 
 TExprNode::TPtr TPhysicalJoinBuilder::BuildCrossJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) {
     TCoArgument leftArg{Ctx.NewArgument(Pos, "_kqp_left")};
@@ -427,10 +416,6 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
     }
     Y_ENSURE(props.JoinAlgo.has_value());
     const auto joinAlgo = *(props.JoinAlgo);
-
-    useBlockHashJoin = useBlockHashJoin &&
-                       (joinAlgo == NKikimr::NKqp::EJoinAlgoType::GraceJoin || joinAlgo == NKikimr::NKqp::EJoinAlgoType::ReverseBlockJoin) &&
-                       (joinType == "Inner"sv || joinType == "Left"sv || joinType == "LeftSemi"sv || joinType == "LeftOnly"sv);
 
     const auto leftInputType = Join->GetLeftInput()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     const auto rightInputType = Join->GetRightInput()->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();

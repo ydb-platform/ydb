@@ -155,6 +155,12 @@ public:
 
     TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
         if (const auto& maybePqReadTopic = TMaybeNode<TPqReadTopic>(read)) {
+            if (wrSettings.WatermarksMode.Defined()) { // fq only
+                const auto& watermarksMode = *wrSettings.WatermarksMode;
+                State_->EnableWatermarks = watermarksMode == "default";
+                State_->EnableWatermarksAdvanced = watermarksMode == "advanced";
+            }
+
             const auto& pqReadTopic = maybePqReadTopic.Cast();
             YQL_ENSURE(pqReadTopic.Ref().GetTypeAnn(), "No type annotation for node " << pqReadTopic.Ref().Content());
 
@@ -182,6 +188,7 @@ public:
                 return {};
             }
             const auto settings = maybeSettings.Cast();
+
             const bool useSharedReading = AnyOf(settings, [](const TCoNameValueTuple& setting) {
                 return Name(setting) == SharedReading && FromString<bool>(Value(setting));
             });
@@ -232,10 +239,10 @@ public:
                 .Settings(BuildDqSourceWrapSettings(pqReadTopic, pos, ctx))
                 .Done();
 
-            if (maybeWatermark && "advanced" == wrSettings.WatermarksMode.GetOrElse("disable") && !useSharedReading) {
+            if (maybeWatermark && State_->EnableWatermarksAdvanced && !useSharedReading) {
                 const auto watermark = maybeWatermark.Cast();
 
-                const auto eventTimeAndDelay = SplitWatermarkExpr(ctx.GetPosition(pqReadTopic.Pos()), ctx, watermark, wrSettings);
+                const auto eventTimeAndDelay = SplitWatermarkExpr(watermark, *State_, ctx);
                 if (!eventTimeAndDelay) {
                     return {};
                 }
@@ -495,7 +502,7 @@ public:
                     } else if (name == WatermarksIdleTimeoutUsSetting) {
                         srcDesc.MutableWatermarks()->SetIdleTimeoutUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksIdlePartitionsSetting) {
-                        srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
+                        srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(FromString<bool>(Value(setting)));
                     } else if (name == SkipJsonErrors) {
                         skipErrors = FromString<bool>(Value(setting));
                     } else if (name == StreamingTopicRead) {
@@ -710,84 +717,6 @@ public:
         return Nothing();
     }
 
-private:
-    // Extract watermark delay from fixed-format expression:
-    // WITH ( ...
-    //   WATERMARK = SystemMetadata('write_time') - Interval('PT5S')
-    // Only used (and useful) for non-shared-reading pq source
-    // (in this case, flexible watermark expression is not implemented)
-    static TMaybe<std::pair<TCoLambda, ui64>> SplitWatermarkExpr(
-        const TPosition pos,
-        TExprContext& ctx,
-        const TCoLambda& watermark,
-        const IDqIntegration::TWrapReadSettings& wrSettings
-    ) {
-        const auto watermarksMode = wrSettings.WatermarksMode.GetOrElse("disable");
-        if ("disable" == watermarksMode) {
-            ctx.AddError(TIssue(pos, "Watermarks are disabled"));
-            return Nothing();
-        }
-
-        static constexpr std::string_view message = "Incorrect watermark expression";
-        const auto args = watermark.Args();
-        if (args.Size() != 1) {
-            ctx.AddError(TIssue(pos, message));
-            return Nothing();
-        }
-        const auto arg = args.Arg(0);
-        const auto body = watermark.Body();
-        const auto maybeSub = body.Maybe<TCoSub>();
-        if (!maybeSub) {
-            ctx.AddError(TIssue(pos, message));
-            return Nothing();
-        }
-        const auto sub = maybeSub.Cast();
-        if ("default" == watermarksMode) {
-            static constexpr std::string_view defaultMessage = "Unrecognized watermark expression, please use WATERMARK = SystemMetadata('write_time') - Interval('PT5S')";
-            const auto maybeMember = sub.Left().Maybe<TCoMember>();
-            if (!maybeMember) {
-                ctx.AddError(TIssue(pos, defaultMessage));
-                return Nothing();
-            }
-            const auto member = maybeMember.Cast();
-            if (const auto& maybeArg = member.Struct().Maybe<TCoArgument>()) {
-                if (maybeArg.Cast().Name() != arg.Name()) {
-                    ctx.AddError(TIssue(pos, defaultMessage));
-                    return Nothing();
-                }
-            }
-            if (!IsIn({"_yql_sys_tsp_write_time", "_yql_sys_write_time", "__ydb_write_time"}, member.Name())) {
-                ctx.AddError(TIssue(pos, defaultMessage));
-                return Nothing();
-            }
-        }
-        {
-            auto maybeInterval = sub.Right().Maybe<TCoInterval>();
-            if (!maybeInterval) {
-                ctx.AddError(TIssue(pos, message));
-                return Nothing();
-            }
-            auto interval = maybeInterval.Cast();
-            auto delay = TryFromString<ui64>(interval.Literal().Value());
-            if (!delay) {
-                ctx.AddError(TIssue(pos, message));
-                return Nothing();
-            }
-
-            const auto newArg = Build<TCoArgument>(ctx, arg.Pos())
-                .Name(arg.Name())
-                .Done();
-
-            return std::pair{
-                Build<TCoLambda>(ctx, watermark.Pos())
-                    .Args({newArg})
-                    .Body(ctx.ReplaceNode(sub.Left().Ptr(), arg.Ref(), newArg.Ptr()))
-                    .Done(),
-                *delay
-            };
-        }
-    }
-
 public:
     TMaybeNode<TCoNameValueTupleList> BuildTopicReadSettings(
         const TPqReadTopic& pqReadTopic,
@@ -830,7 +759,7 @@ public:
         if (!useSharedReading && maybeWatermark) {
             const auto watermark = maybeWatermark.Cast();
 
-            const auto eventTimeAndDelay = SplitWatermarkExpr(ctx.GetPosition(pqReadTopic.Pos()), ctx, watermark, wrSettings);
+            const auto eventTimeAndDelay = SplitWatermarkExpr(watermark, *State_, ctx);
             if (!eventTimeAndDelay) {
                 return {};
             }
@@ -917,7 +846,7 @@ public:
             Add(props, StreamingTopicRead, ToString(streamingTopicReadEnabled), pos, ctx);
         }
 
-        if (State_->Configuration->MaxPartitionReadSkew.Get() && !wrSettings.EnableStreamingPartitionBalancing) {
+        if (State_->Configuration->MaxPartitionReadSkew.Get() && !State_->EnableStreamingPartitionBalancing) {
             ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Streaming partition balancing is disabled. Please contact your system administrator to enable it"));
             return {};
         }
@@ -930,9 +859,8 @@ public:
             Add(props, PartitionsBalancingIdleTimeoutUsSetting, ToString(watermarksIdleTimeoutUs.GetOrElse(TDuration::Minutes(1).MicroSeconds())), pos, ctx);
         }
 
-        if (const auto watermarksMode = wrSettings.WatermarksMode.GetOrElse("disable");
-            watermarksMode != "disable" && maybeWatermark) {
-            Add(props, WatermarksEnableSetting, ToString("default" == watermarksMode || useSharedReading), pos, ctx);
+        if ((State_->EnableWatermarks || State_->EnableWatermarksAdvanced) && maybeWatermark) {
+            Add(props, WatermarksEnableSetting, ToString((State_->EnableWatermarks && !State_->EnableWatermarksAdvanced) || useSharedReading), pos, ctx);
             Add(props, WatermarksGranularityUsSetting,
                 ToString(watermarksGranularityUs.GetOrElse(TDuration::MilliSeconds(wrSettings.WatermarksGranularityMs.GetOrElse(TDqSettings::TDefault::WatermarksGranularityMs)).MicroSeconds())), pos, ctx);
             Add(props, WatermarksLateArrivalDelayUsSetting,
@@ -1119,13 +1047,13 @@ public:
         }
         if (offsetPredicates.ItemSize() > 0) {
             const auto& item = offsetPredicates.GetItem(0);
-            properties["Offsets"] = TStringBuilder() << "[" 
-                << (item.HasBegin() ? ToString(item.GetBegin()) : "_") << ", " 
+            properties["Offsets"] = TStringBuilder() << "["
+                << (item.HasBegin() ? ToString(item.GetBegin()) : "_") << ", "
                 << (item.HasEnd() ? ToString(item.GetEnd()) : "_") << ")";
         }
         if (writeTimePredicate.ItemSize() > 0) {
             const auto& item = writeTimePredicate.GetItem(0);
-            properties["WriteTime"] = TStringBuilder() << "[" 
+            properties["WriteTime"] = TStringBuilder() << "["
                 << (item.HasBegin() ? ToString(TInstant::MicroSeconds(item.GetBegin())) : "_") << ", "
                 << (item.HasEnd() ? ToString(TInstant::MicroSeconds(item.GetEnd())) : "_") << ")";
         }

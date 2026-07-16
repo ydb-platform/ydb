@@ -1,6 +1,6 @@
 # Потоковое чтение данных из топика
 
-Можно выполнять чтение данных из [топика](../../../../concepts/datamodel/topic.md) обычным `SELECT` без создания [потокового запроса](../../../../concepts/streaming-query/streaming-query.md). Для этого необходимо указать `STREAMING = TRUE` в блоке `WITH` и задать ограничение на количество выходных строк через `LIMIT`, иначе запрос не завершится.
+Можно выполнять чтение данных из [топика](../../../../concepts/datamodel/topic.md) обычным `SELECT` без создания [потокового запроса](../../../../concepts/streaming-query/streaming-query.md). Для этого необходимо указать `STREAMING = "TRUE"` в блоке `WITH` и задать ограничение на количество выходных строк через `LIMIT`, иначе запрос не завершится.
 
 {% note warning %}
 
@@ -12,10 +12,10 @@
 
 В примерах:
 
-- `ext_source` — это заранее созданный [внешний источник данных](../../../../concepts/datamodel/external_data_source.md);
+- `ext_source` — заранее созданный [`external data source`](../../../../concepts/datamodel/external_data_source.md);
 - `input_topic` — локальный или внешний топик.
 
-Подробнее — [локальные и внешние топики в потоковых запросах](../../../../dev/streaming-query/local-and-external-topics.md).
+Подробнее — [локальные и внешние топики](../../../../concepts/query_execution/topics.md#local-external-topics).
 
 {% endnote %}
 
@@ -31,13 +31,13 @@ WITH (
     SCHEMA = (
         Data String
     ),
-    STREAMING = TRUE
+    STREAMING = "TRUE"
 )
 LIMIT 1
 ```
 
 ## См. также
 
-* [{#T}](../../../../recipes/streaming_queries/debug-read.md) — рецепт с дополнительными примерами
+* [{#T}](../../../../concepts/query_execution/topics.md#streaming-read) — описание потокового чтения из топика
 * [{#T}](../../../../concepts/streaming-query/streaming-query.md)
 * [{#T}](../create-streaming-query.md)

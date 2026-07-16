@@ -257,6 +257,10 @@ struct TReplicationReaderConfig
     //! beforehand if this timeout is reached and this number of peers have responded.
     std::vector<std::pair<int, TDuration>> PartialPeerProbingTimeouts;
 
+    //! Sliding window over which the job's recently consumed I/O is reported to
+    //! data nodes via the io_consumed request field.
+    TDuration IoConsumedReportWindow;
+
     REGISTER_YSON_STRUCT(TReplicationReaderConfig);
 
     static void Register(TRegistrar registrar);
@@ -390,6 +394,10 @@ struct TReplicationWriterConfig
 
     //! If |true| data node will preallocate disk space before writing.
     bool PreallocateDiskSpace;
+
+    //! Sliding window over which the job's recently consumed I/O is reported to
+    //! data nodes via the io_consumed request field.
+    TDuration IoConsumedReportWindow;
 
     int GetDirectUploadNodeCount();
 

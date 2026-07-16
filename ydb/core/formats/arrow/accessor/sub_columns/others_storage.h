@@ -2,7 +2,7 @@
 
 #include "stats.h"
 
-#include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
+#include <ydb/core/formats/arrow/accessor/common/json_value_view.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/container/container.h>
@@ -128,7 +128,7 @@ public:
             return CurrentIndex;
         }
 
-        NArrow::NAccessor::TBinaryJsonValueView GetValue() const;
+        NArrow::NAccessor::TJsonValueView GetValue() const;
 
         bool HasValue() const {
             AFL_VERIFY(IsValid());

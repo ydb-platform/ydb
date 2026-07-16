@@ -1,6 +1,7 @@
 #include "kqp_run_script_actor_impl.h"
 
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
+#include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -417,7 +418,7 @@ private:
                     meta.set_enabled_runtime_results(true);
                     *meta.mutable_columns() = resultSet.columns();
 
-                    if (const auto& issues = NKikimr::NKqp::ValidateResultSetColumns(meta.columns())) {
+                    if (const auto& issues = NFq::ValidateResultSetColumns(meta.columns())) {
                         meta.clear_columns();
                         Finish(Ydb::StatusIds::INTERNAL_ERROR, AddRootIssue(TStringBuilder() << "Invalid result set " << resultSetIndex << " columns, please contact internal support", issues));
                         return;
@@ -501,7 +502,7 @@ private:
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(response.GetQueryIssues(), issues);
-        issues = TruncateIssues(issues);
+        issues = NFq::TruncateIssues(issues);
 
         const auto status = record.GetYdbStatus();
         if (status == Ydb::StatusIds::SUCCESS) {

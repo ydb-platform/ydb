@@ -1,6 +1,7 @@
 #include "kqp_run_script_actor.h"
 #include "kqp_run_script_actor_impl.h"
 
+#include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>

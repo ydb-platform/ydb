@@ -29,7 +29,6 @@ PEERDIR(
     ydb/library/yql/providers/dq/api/grpc
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/common
-    ydb/library/yql/providers/dq/config
     ydb/library/yql/providers/dq/counters
     ydb/library/yql/providers/dq/interface
     ydb/library/yql/providers/dq/planner
@@ -43,6 +42,7 @@ PEERDIR(
     ydb/public/lib/yson_value
     yql/essentials/core
     yql/essentials/providers/common/metrics
+    yql/essentials/public/issue
     yql/essentials/utils/failure_injector
     yql/essentials/utils/log
 )

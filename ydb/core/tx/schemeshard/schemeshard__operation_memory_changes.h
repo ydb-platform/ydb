@@ -81,12 +81,23 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     // repeated Update() on the same object doesn't re-copy it.
     THashMap<const void*, THashSet<TPathId>> UpdateSnapshotted;
 
+    // Only the propose transaction can roll back: UnDo() has a single caller,
+    // AbortOperationPropose, reached only through IgniteOperation (which calls
+    // Arm()). Progress/plan/reply txs never abort, so recording their self-ref
+    // undos — the TTableInfo::DeepCopy in Update() above all — is dead weight.
+    bool Armed = false;
+
 public:
     ~TMemoryChanges() = default;
 
-    // True the first time this (map, path) is snapshotted for Update this tx.
+    // Marks this as the propose tx, so self-ref undos (and their snapshot copies)
+    // are actually recorded. Called once at the top of IgniteOperation.
+    void Arm() { Armed = true; }
+
+    // True the first time this (map, path) is snapshotted for Update this tx —
+    // and only when armed, so a disarmed tx skips the snapshot copy entirely.
     bool NeedsUpdateSnapshot(const void* map, const TPathId& id) {
-        return UpdateSnapshotted[map].insert(id).second;
+        return Armed && UpdateSnapshotted[map].insert(id).second;
     }
 
     void GrabNewTxState(TSchemeShard* ss, const TOperationId& op);
@@ -134,7 +145,9 @@ public:
     // TSelfRefMap::Set records its own rollback closure here (undone LIFO),
     // replacing the per-map GrabNew*/Grab* + UnDo branches.
     void RecordSelfRefUndo(std::function<void()> undo) {
-        SelfRefUndos.push(std::move(undo));
+        if (Armed) {
+            SelfRefUndos.push(std::move(undo));
+        }
     }
 
     void UnDo(TSchemeShard* ss);

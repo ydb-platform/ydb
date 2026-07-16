@@ -40,8 +40,10 @@ Y_UNIT_TEST_SUITE(TSelfRefMapTest) {
     // The Update() undo snapshot of a TTableInfo must be a DEEP copy: its
     // Partitions are raw pointers into PartitionStore, so a shallow copy would
     // leave them aliasing the original's store and a restored snapshot would
-    // dangle (the TCdcStreamTests::ReplicationAttribute crash).
-    Y_UNIT_TEST(UndoCloneTableIsDeepCopy) {
+    // dangle (the TCdcStreamTests::ReplicationAttribute crash). The partitioning
+    // is now copy-on-write, so the clone shares it in O(1) and only detaches on
+    // mutation — the shared store keeps Order's raw ptrs valid without a fixup.
+    Y_UNIT_TEST(UndoCloneSharesPartitioning) {
         TTableInfo::TPtr orig(new TTableInfo());
         orig->SetPartitioning(MakeShards(3));
 
@@ -51,28 +53,30 @@ Y_UNIT_TEST_SUITE(TSelfRefMapTest) {
         UNIT_ASSERT_UNEQUAL(clone.Get(), orig.Get());
         UNIT_ASSERT_VALUES_EQUAL(clone->GetPartitions().size(), 3u);
 
-        // Every raw partition pointer resolves inside the clone's OWN store...
-        for (const auto* p : clone->GetPartitions()) {
-            UNIT_ASSERT_EQUAL(p, clone->GetPartitionStore().FindPtr(p->ShardIdx));
-        }
-        // ...and is a distinct object from the original's (a shallow copy aliases).
-        UNIT_ASSERT_UNEQUAL(clone->GetPartitions()[0], orig->GetPartitions()[0]);
+        // Shared: same store and the very same partition objects (no deep copy).
+        UNIT_ASSERT_EQUAL(&clone->GetPartitionStore(), &orig->GetPartitionStore());
+        UNIT_ASSERT_EQUAL(clone->GetPartitions()[0], orig->GetPartitions()[0]);
 
         clone->VerifyConsistency();
     }
 
-    // The clone owns a separate PartitionStore, so the two tables share no
-    // partition state (a shallow copy would alias one store between them).
-    Y_UNIT_TEST(UndoCloneTableHasSeparateStore) {
+    // An in-place mutation on one side detaches it (copy-on-write): the two tables
+    // then own separate stores and neither sees the other's change.
+    Y_UNIT_TEST(UndoCloneCopiesOnWrite) {
         TTableInfo::TPtr orig(new TTableInfo());
         orig->SetPartitioning(MakeShards(2));
 
         TTableInfo::TPtr clone = SelfRefUndoClone(orig);
+        UNIT_ASSERT_EQUAL(&clone->GetPartitionStore(), &orig->GetPartitionStore()); // shared
+
+        // Mutate orig's cond-erase in place — must copy-on-write away from the clone.
+        const TShardIdx shardIdx = orig->GetPartitions()[0]->ShardIdx;
+        orig->UpdateNextCondErase(shardIdx, TInstant::Seconds(100), TDuration::Seconds(10));
 
         UNIT_ASSERT_UNEQUAL(&clone->GetPartitionStore(), &orig->GetPartitionStore());
-        for (const auto* p : orig->GetPartitions()) {
-            UNIT_ASSERT_UNEQUAL(p, clone->GetPartitionStore().FindPtr(p->ShardIdx));
-        }
+        UNIT_ASSERT_VALUES_EQUAL(clone->GetPartitions().size(), 2u);
+        clone->VerifyConsistency();
+        orig->VerifyConsistency();
     }
 
     Y_UNIT_TEST(UndoCloneNullIsNull) {

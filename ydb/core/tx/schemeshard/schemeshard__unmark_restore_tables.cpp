@@ -26,7 +26,7 @@ struct TSchemeShard::TTxUnmarkRestoreTables : public TTransactionBase<TSchemeSha
         while (UnmarkedCount < BucketSize && RestoreTablesToUnmark) {
             TPathId tableId = RestoreTablesToUnmark.back();
             if (Self->Tables.contains(tableId)) {
-                auto table = Self->Tables.MutableUntracked(tableId);
+                auto table = Self->Tables.UpdateUntracked(tableId);
                 table->IsRestore = false;
                 Self->PersistTableIsRestore(db, tableId, table);        
             }

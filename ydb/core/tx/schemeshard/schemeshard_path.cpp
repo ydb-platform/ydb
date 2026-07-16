@@ -2149,8 +2149,8 @@ EAttachChildResult TPath::MaterializeImpl(const TString& owner, const TPathId& n
 
     auto attachResult = SS->AttachChild(newPath);
 
-    const bool inserted = SS->ParentDbRefs.emplace(newPathId, TPathRef(SS, Base()->PathId, "child path row")).second;
-    Y_ABORT_UNLESS(inserted);
+    SS->IncrementPathDbRefCount(Base()->PathId, "child path row");
+    newPath->ParentRefHeld = true;
     Base()->AllChildrenCount++;
 
     Y_VERIFY_S(!SS->PathsById.contains(newPathId), "There's another path with PathId: " << newPathId);

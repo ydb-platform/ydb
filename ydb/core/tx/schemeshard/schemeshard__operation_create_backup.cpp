@@ -140,7 +140,7 @@ struct TBackup {
         const ui64 ts = TAppData::TimeProvider->Now().Seconds();
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-        TTableInfo::TPtr table = context.SS->Tables.MutableUntracked(txState.TargetPathId);
+        TTableInfo::TPtr table = context.SS->Tables.UpdateUntracked(txState.TargetPathId);
 
         auto& backupInfo = table->BackupHistory[opId.GetTxId()];
 
@@ -178,7 +178,7 @@ struct TBackup {
 
     static void PersistTableTask(const TPathId& pathId, const TTxTransaction& tx, TOperationContext& context) {
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        TTableInfo::TPtr table = context.SS->Tables.MutableUntracked(pathId);
+        TTableInfo::TPtr table = context.SS->Tables.UpdateUntracked(pathId);
 
         table->BackupSettings = tx.GetBackup();
 

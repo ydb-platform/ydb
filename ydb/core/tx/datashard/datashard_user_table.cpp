@@ -325,6 +325,11 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 
     TableSchemaVersion = descr.GetTableSchemaVersion();
     IsBackup = descr.GetIsBackup();
+    // descr is the full merged table description (not a delta), so an absent
+    // Configured status means the override was never set or was dropped.
+    DetailedMetricsLevel = descr.GetDetailedMetricsSettings().HasConfigured()
+        ? descr.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel()
+        : NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
     if (descr.GetPartitionConfig().HasUniqueIndexKeySize()) {

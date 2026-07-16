@@ -536,4 +536,5 @@ enum ETxTypes {
     TXTYPE_COMPLETE_VACUUM = 86                           [(TxTypeOpts) = {Name: "TxCompleteVacuum"}];
     TXTYPE_LOCK_ROWS = 87                                 [(TxTypeOpts) = {Name: "TxLockRows"}];
     TXTYPE_S3_DIRECT_WRITE_FINISH = 88                    [(TxTypeOpts) = {Name: "TxS3DirectWriteFinish"}];
+    TXTYPE_PERSIST_SUBDOMAIN_TABLES_METRICS_LEVEL = 89    [(TxTypeOpts) = {Name: "TxPersistSubDomainTablesMetricsLevel"}];
 }

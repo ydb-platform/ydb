@@ -87,6 +87,17 @@ void FillColumnsMeta(const NKqpProto::TKqpPhyQuery& phyQuery, NKikimrKqp::TQuery
     }
 }
 
+TMaybe<ui64> GetExplicitRowsLimit(const TKqpQueryState& queryState, size_t resultIndex) {
+    if (auto requestRowsLimit = queryState.GetRowsLimit()) {
+        return *requestRowsLimit;
+    }
+    if (queryState.PreparedQuery && resultIndex < queryState.PreparedQuery->ResultsSize()
+            && queryState.PreparedQuery->GetResults(resultIndex).GetRowsLimit()) {
+        return queryState.PreparedQuery->GetResults(resultIndex).GetRowsLimit();
+    }
+    return Nothing();
+}
+
 template<typename TSinkProto>
 bool FillTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const TSinkProto& sink) {
     if (sink.GetTypeCase() == TSinkProto::kInternalSink
@@ -338,6 +349,8 @@ public:
             Settings.TableService, Settings.QueryService, SessionId, AppData()->MonotonicTimeProvider->Now(), Settings.MutableExecuterConfig->RuntimeParameterSizeLimit.load());
         if (auto rowsLimit = QueryState->GetRowsLimit()) {
             FillSettings.RowsLimitPerWrite = *rowsLimit;
+        } else {
+            FillSettings.RowsLimitPerWrite = Config->_ResultRowsLimit.Get();
         }
         if (QueryState->UserRequestContext->TraceId.empty()) {
             QueryState->UserRequestContext->TraceId = UlidGen.Next().ToString();
@@ -3106,17 +3119,9 @@ public:
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
                 if (QueryState->IsStreamResult()) {
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
-                        TMaybe<ui64> effectiveRowsLimit = FillSettings.RowsLimitPerWrite;
-                        if (i < QueryState->PreparedQuery->ResultsSize()
-                                && QueryState->PreparedQuery->GetResults(i).GetRowsLimit()) {
-                            effectiveRowsLimit = QueryState->PreparedQuery->GetResults(i).GetRowsLimit();
-                        } else if (auto requestRowsLimit = QueryState->GetRowsLimit()) {
-                            effectiveRowsLimit = *requestRowsLimit;
-                        }
-
                         auto ydbResult = QueryState->QueryData->GetYdbTxResult(
                             phyQuery.GetResultBindings(i), response->GetArena(),
-                            QueryState->GetFormatsSettings(), effectiveRowsLimit);
+                            QueryState->GetFormatsSettings(), GetExplicitRowsLimit(*QueryState, i));
 
                         YQL_ENSURE(ydbResult);
                         ++trailingResultsCount;
@@ -3127,11 +3132,9 @@ public:
                     continue;
                 }
 
-                TMaybe<ui64> effectiveRowsLimit = FillSettings.RowsLimitPerWrite;
-                if (QueryState->PreparedQuery->GetResults(i).GetRowsLimit()) {
-                    effectiveRowsLimit = QueryState->PreparedQuery->GetResults(i).GetRowsLimit();
-                } else if (auto requestRowsLimit = QueryState->GetRowsLimit()) {
-                    effectiveRowsLimit = *requestRowsLimit;
+                TMaybe<ui64> effectiveRowsLimit = GetExplicitRowsLimit(*QueryState, i);
+                if (!effectiveRowsLimit) {
+                    effectiveRowsLimit = FillSettings.RowsLimitPerWrite;
                 }
 
                 auto* ydbResult = QueryState->QueryData->GetYdbTxResult(

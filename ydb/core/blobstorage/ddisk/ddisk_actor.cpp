@@ -408,12 +408,12 @@ namespace {
     }
 
     void TDDiskActor::HandlePoison() {
-        if (IsPersistentBufferActor || !PersistentBufferActorId) {
-            PassAway();
-        } else {
+        if (!IsPersistentBufferActor && PersistentBufferActorId) {
             Become(&TThis::StateFuncShutdown);
             Send(PersistentBufferActorId, new NActors::TEvents::TEvPoison());
+            return;
         }
+        PassAway();
     }
 
     void TDDiskActor::HandlePersistentBufferGone(TEvents::TEvGone::TPtr ev) {

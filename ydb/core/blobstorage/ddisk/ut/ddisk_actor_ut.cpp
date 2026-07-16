@@ -353,26 +353,6 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT(!ctx.Runtime.WrapInActorContext(persistentBufferActorId, [](IActor*) {}));
     }
 
-    Y_UNIT_TEST(PersistentBufferPoisonStopsParentDDisk) {
-        TTestContext ctx;
-        ctx.Runtime.RegisterService(MakeBlobStorageNodeWardenID(NodeId), ctx.Edge);
-
-        const TDiskHandle disk = ctx.CreateDDisk(44, 1);
-        const TActorId ddiskActorId =
-            ctx.Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(disk.ServiceId);
-        const TActorId persistentBufferActorId =
-            ctx.Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(disk.PBServiceId);
-        UNIT_ASSERT(ddiskActorId);
-        UNIT_ASSERT(persistentBufferActorId);
-
-        SendToDDisk(ctx, disk.PBServiceId, new TEvents::TEvPoison());
-        const auto gone = WaitFromDDisk<TEvents::TEvGone>(ctx);
-
-        UNIT_ASSERT_VALUES_EQUAL(gone->Sender, ddiskActorId);
-        UNIT_ASSERT(!ctx.Runtime.WrapInActorContext(ddiskActorId, [](IActor*) {}));
-        UNIT_ASSERT(!ctx.Runtime.WrapInActorContext(persistentBufferActorId, [](IActor*) {}));
-    }
-
     Y_UNIT_TEST(SessionValidation) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(1, 1);

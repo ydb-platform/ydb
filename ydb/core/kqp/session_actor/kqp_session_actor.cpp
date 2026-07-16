@@ -3107,7 +3107,8 @@ public:
                 if (QueryState->IsStreamResult()) {
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
                         TMaybe<ui64> effectiveRowsLimit = FillSettings.RowsLimitPerWrite;
-                        if (QueryState->PreparedQuery->GetResults(i).GetRowsLimit()) {
+                        if (i < QueryState->PreparedQuery->ResultsSize()
+                                && QueryState->PreparedQuery->GetResults(i).GetRowsLimit()) {
                             effectiveRowsLimit = QueryState->PreparedQuery->GetResults(i).GetRowsLimit();
                         } else if (auto requestRowsLimit = QueryState->GetRowsLimit()) {
                             effectiveRowsLimit = *requestRowsLimit;

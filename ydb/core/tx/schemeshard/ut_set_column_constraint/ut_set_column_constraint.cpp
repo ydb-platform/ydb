@@ -4,6 +4,7 @@
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -1086,8 +1087,8 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             Ydb::Table::SetNotNullState::STATE_PREPARING,
             Ydb::Table::SetNotNullState::STATE_PREPARING,
             Ydb::Table::SetNotNullState::STATE_VALIDATING,
-            Ydb::Table::SetNotNullState::STATE_APPLYING,
-            Ydb::Table::SetNotNullState::STATE_APPLYING,
+            (isShouldBeFailed ? Ydb::Table::SetNotNullState::STATE_CANCELLED : Ydb::Table::SetNotNullState::STATE_APPLYING),
+            (isShouldBeFailed ? Ydb::Table::SetNotNullState::STATE_CANCELLED : Ydb::Table::SetNotNullState::STATE_APPLYING),
             (isShouldBeFailed ? Ydb::Table::SetNotNullState::STATE_CANCELLED : Ydb::Table::SetNotNullState::STATE_DONE)
         };
 
@@ -1585,4 +1586,802 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
     }
+
+    Y_UNIT_TEST(ForgetNonExistentOperation) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+
+        auto forgetResponse = TestForgetSetColumnConstraint(
+            runtime, ++txId, root, 999999, Ydb::StatusIds::NOT_FOUND);
+
+        Cerr << "FORGET RESPONSE: " << forgetResponse.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(forgetResponse.GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT(forgetResponse.IssuesSize() > 0);
+    }
+
+    Y_UNIT_TEST(ForgetOperationInProgress) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        THolder<IEventHandle> delayedValidateRequest;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!delayedValidateRequest && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+                delayedValidateRequest.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        ui64 setConstraintTxId = ++txId;
+        auto createResponse = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        ui64 operationId = setConstraintTxId;
+
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayedValidateRequest](IEventHandle&) -> bool {
+                return bool(delayedValidateRequest);
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        UNIT_ASSERT_C(delayedValidateRequest, "Failed to intercept TEvValidateRowConditionRequest");
+
+        auto forgetResponse = TestForgetSetColumnConstraint(
+            runtime, ++txId, root, operationId, Ydb::StatusIds::PRECONDITION_FAILED);
+
+        Cerr << "FORGET IN PROGRESS RESPONSE: " << forgetResponse.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(forgetResponse.GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT(forgetResponse.IssuesSize() > 0);
+
+        runtime.SetObserverFunc(prevObserver);
+        runtime.Send(delayedValidateRequest.Release(), 0, true);
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+    }
+
+    Y_UNIT_TEST(ForgetCompletedOperation) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 setConstraintTxId = ++txId;
+        auto createResponse = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        ui64 operationId = setConstraintTxId;
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+
+        // check that operation exists
+        DoGetRequest(operationId, runtime, root, Ydb::StatusIds::SUCCESS);
+
+        auto forgetResponse = TestForgetSetColumnConstraint(
+            runtime, ++txId, root, operationId, Ydb::StatusIds::SUCCESS);
+
+        Cerr << "FORGET COMPLETED RESPONSE: " << forgetResponse.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(forgetResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+
+        DoGetRequest(operationId, runtime, root, Ydb::StatusIds::NOT_FOUND);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+    }
+
+    Y_UNIT_TEST(ForgetOperationPersistsAfterReboot) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 setConstraintTxId = ++txId;
+        auto createResponse = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        ui64 operationId = setConstraintTxId;
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        auto forgetResponse = TestForgetSetColumnConstraint(
+            runtime, ++txId, root, operationId, Ydb::StatusIds::SUCCESS);
+
+        UNIT_ASSERT_VALUES_EQUAL(forgetResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        DoGetRequest(operationId, runtime, root, Ydb::StatusIds::NOT_FOUND);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+    }
+
+    Y_UNIT_TEST(ForgetOperationTwice) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 setConstraintTxId = ++txId;
+        auto createResponse = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        ui64 operationId = setConstraintTxId;
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        auto forgetResponse1 = TestForgetSetColumnConstraint(
+            runtime, ++txId, root, operationId, Ydb::StatusIds::SUCCESS);
+
+        UNIT_ASSERT_VALUES_EQUAL(forgetResponse1.GetStatus(), Ydb::StatusIds::SUCCESS);
+
+        auto forgetResponse2 = TestForgetSetColumnConstraint(
+            runtime, ++txId, root, operationId, Ydb::StatusIds::NOT_FOUND);
+
+        UNIT_ASSERT_VALUES_EQUAL(forgetResponse2.GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT(forgetResponse2.IssuesSize() > 0);
+    }
+
+    Y_UNIT_TEST(ForgetOperationWrongDatabase) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 setConstraintTxId = ++txId;
+        auto createResponse = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        ui64 operationId = setConstraintTxId;
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        auto forgetResponse = TestForgetSetColumnConstraint(
+            runtime, ++txId, "/WrongRoot", operationId, Ydb::StatusIds::NOT_FOUND);
+
+        UNIT_ASSERT_VALUES_EQUAL(forgetResponse.GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT(forgetResponse.IssuesSize() > 0);
+    }
+
+    Y_UNIT_TEST(CancelGetListForgetIntegration) {
+        // ========================================
+        // Preparing
+
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // ========================================
+        // Create operation and cancel it
+
+        TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest> blocker(runtime);
+
+        ui64 setConstraintTxId = ++txId;
+        AsyncSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        runtime.WaitFor("block validation", [&]{ return blocker.size() > 0; });
+
+        blocker.Stop();
+
+        auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, 0, root, setConstraintTxId);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            cancelResponse.GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            cancelResponse.ShortDebugString());
+
+        blocker.Unblock();
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        // ========================================
+        // Check schema
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+
+        // ========================================
+        // List
+
+        auto listResponse = TestListSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, root);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            listResponse.GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            listResponse.ShortDebugString());
+        UNIT_ASSERT_C(
+            listResponse.GetEntries().size() >= 1,
+            "Expected at least one operation in list");
+
+        bool foundOperation = false;
+        for (const auto& entry : listResponse.GetEntries()) {
+            if (entry.GetId() == setConstraintTxId) {
+                foundOperation = true;
+
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    entry.GetId(),
+                    setConstraintTxId,
+                    "TxId mismatch in list response");
+
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    static_cast<int>(entry.GetState()),
+                    static_cast<int>(Ydb::Table::SetNotNullState::STATE_CANCELLED),
+                    TStringBuilder() << "Expected STATE_CANCELLED, got: " << Ydb::Table::SetNotNullState_State_Name(entry.GetState()));
+
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    entry.GetSettings().GetNotNullColumns().size(),
+                    1,
+                    "Expected one column in settings");
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    entry.GetSettings().GetNotNullColumns().Get(0),
+                    "value",
+                    "Column name mismatch");
+
+                break;
+            }
+        }
+
+        UNIT_ASSERT_C(foundOperation, "Operation not found in list response");
+
+        // ========================================
+        // Get
+
+        // Get full response to check issues
+        auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender,
+            new TEvSetColumnConstraint::TEvGetRequest(root, setConstraintTxId));
+
+        TAutoPtr<IEventHandle> handle;
+        auto* getEvent = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvGetResponse>(handle);
+        UNIT_ASSERT(getEvent);
+        
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            getEvent->Record.GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            getEvent->Record.ShortDebugString());
+
+        const auto& getResponse = getEvent->Record.GetSetColumnConstraint();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            static_cast<int>(getResponse.GetState()),
+            static_cast<int>(Ydb::Table::SetNotNullState::STATE_CANCELLED),
+            TStringBuilder() << "Expected STATE_CANCELLED in Get, got: " << Ydb::Table::SetNotNullState_State_Name(getResponse.GetState()));
+
+        UNIT_ASSERT_C(
+            getEvent->Record.IssuesSize() > 0,
+            "Expected issues with error message in cancelled operation");
+        UNIT_ASSERT_STRING_CONTAINS(
+            getEvent->Record.GetIssues(0).message(),
+            "Cancelled by user request");
+        
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            getEvent->Record.GetIssues(0).message(),
+            "Cancelled",
+            "Error message should mention cancellation");
+
+        UNIT_ASSERT_C(
+            getResponse.HasSettings(),
+            "Expected settings in Get response");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            getResponse.GetSettings().GetNotNullColumns().size(),
+            1,
+            "Expected one column in Get settings");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            getResponse.GetSettings().GetNotNullColumns().Get(0),
+            "value",
+            "Column name mismatch in Get");
+
+        // ========================================
+        // Forget
+
+        auto forgetResponse = TestForgetSetColumnConstraint(
+            runtime, ++txId, root, setConstraintTxId, Ydb::StatusIds::SUCCESS);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            forgetResponse.GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            forgetResponse.ShortDebugString());
+
+        DoGetRequest(setConstraintTxId, runtime, root, Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(CancelNonExistentOperation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        TString root = "/MyRoot";
+
+        auto cancelResponse = TestCancelSetColumnConstraint(
+            runtime, TTestTxConfig::SchemeShard, 0, root, 999999);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            cancelResponse.GetStatus(),
+            Ydb::StatusIds::NOT_FOUND,
+            cancelResponse.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            cancelResponse.GetIssues().size(),
+            1,
+            cancelResponse.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            cancelResponse.GetIssues(0).message(),
+            "not found",
+            cancelResponse.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(CancelOperationInNonExistentDatabase) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        TString wrongRoot = "/NonExistentDB";
+
+        auto cancelResponse = TestCancelSetColumnConstraint(
+            runtime, TTestTxConfig::SchemeShard, 0, wrongRoot, 100);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            cancelResponse.GetStatus(),
+            Ydb::StatusIds::NOT_FOUND,
+            cancelResponse.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            cancelResponse.GetIssues().size(),
+            1,
+            cancelResponse.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            cancelResponse.GetIssues(0).message(),
+            "Database",
+            cancelResponse.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            cancelResponse.GetIssues(0).message(),
+            "not found",
+            cancelResponse.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(CancelAtFinishingUnlockingOrDoneStages) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+
+        struct TStageTest {
+            TString StageName;
+            std::function<THolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(TTestActorRuntime&)> CreateBlocker;
+        };
+
+        TVector<TStageTest> stages = {
+            {
+                "Finishing",
+                [](TTestActorRuntime& runtime) {
+                    return MakeHolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(runtime, [](const auto& ev) {
+                        if (ev->Get()->Record.TransactionSize() > 0) {
+                            const auto& tx = ev->Get()->Record.GetTransaction(0);
+                            if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterTable &&
+                                tx.HasAlterTable() && tx.GetAlterTable().ColumnsSize() > 0) {
+                                for (const auto& col : tx.GetAlterTable().GetColumns()) {
+                                    if (col.HasSetNotNullInProgress() && !col.GetSetNotNullInProgress()) {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                        return false;
+                    });
+                }
+            },
+            {
+                "Unlocking",
+                [](TTestActorRuntime& runtime) {
+                    return MakeHolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(runtime, [](const auto& ev) {
+                        if (ev->Get()->Record.TransactionSize() > 0) {
+                            const auto& tx = ev->Get()->Record.GetTransaction(0);
+                            return tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpDropLock;
+                        }
+                        return false;
+                    });
+                }
+            },
+            {
+                "Done",
+                nullptr  // No blocker needed, operation will complete fully
+            }
+        };
+
+        for (size_t i = 0; i < stages.size(); ++i) {
+            const auto& stage = stages[i];
+            Cerr << "=== Testing cancel rejection at stage: " << stage.StageName << " ===" << Endl;
+
+            // Create a new table for this stage
+            TString tableName = TStringBuilder() << "Table_" << stage.StageName;
+            TString tablePath = root + "/" + tableName;
+
+            TestCreateTable(runtime, ++txId, root, TStringBuilder() << R"(
+                  Name: ")" << tableName << R"("
+                  Columns { Name: "key"   Type: "Uint32" }
+                  Columns { Name: "value" Type: "Utf8"   }
+                  KeyColumnNames: ["key"]
+            )");
+            env.TestWaitNotification(runtime, txId);
+
+            THolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>> blocker;
+            if (stage.CreateBlocker) {
+                blocker = stage.CreateBlocker(runtime);
+            }
+
+            ui64 setConstraintTxId = ++txId;
+            AsyncSetColumnConstraint(
+                runtime, setConstraintTxId,
+                TTestTxConfig::SchemeShard,
+                root,
+                tablePath,
+                {"value"});
+
+            if (blocker) {
+                runtime.WaitFor("block event at " + stage.StageName, [&]{ return blocker->size() > 0; });
+
+                // Try to cancel while at this stage - should be rejected
+                auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, 0, root, setConstraintTxId);
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    cancelResponse.GetStatus(),
+                    Ydb::StatusIds::PRECONDITION_FAILED,
+                    "Cancel should be rejected at stage: " + stage.StageName);
+                UNIT_ASSERT_C(
+                    cancelResponse.GetIssues().size() > 0,
+                    "Expected error message for cancel at " + stage.StageName);
+                UNIT_ASSERT_STRING_CONTAINS_C(
+                    cancelResponse.GetIssues(0).message(),
+                    "finished",
+                    cancelResponse.ShortDebugString());
+
+                blocker->Stop().Unblock();
+            } else {
+                env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+                auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, 0, root, setConstraintTxId);
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    cancelResponse.GetStatus(),
+                    Ydb::StatusIds::PRECONDITION_FAILED,
+                    "Cancel should be rejected at stage: " + stage.StageName);
+                UNIT_ASSERT_C(
+                    cancelResponse.GetIssues().size() > 0,
+                    "Expected error message for cancel at " + stage.StageName);
+                UNIT_ASSERT_STRING_CONTAINS_C(
+                    cancelResponse.GetIssues(0).message(),
+                    "finished",
+                    cancelResponse.ShortDebugString());
+            }
+
+            if (blocker) {
+                env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+            }
+
+            TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+
+            Cerr << "=== Cancel correctly rejected at stage: " << stage.StageName << " ===" << Endl;
+        }
+    }
+
+    Y_UNIT_TEST(CancelAlreadyCanceledOperation) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        THolder<IEventHandle> delayedValidateRequest;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!delayedValidateRequest && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+                delayedValidateRequest.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        ui64 setConstraintTxId = ++txId;
+        auto response = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            response.ShortDebugString());
+
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayedValidateRequest](IEventHandle&) -> bool {
+                return bool(delayedValidateRequest);
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        UNIT_ASSERT_C(delayedValidateRequest, "Failed to intercept TEvValidateRowConditionRequest");
+
+        auto cancelResponse1 = TestCancelSetColumnConstraint(
+            runtime, TTestTxConfig::SchemeShard, 0, root, setConstraintTxId);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            cancelResponse1.GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            cancelResponse1.ShortDebugString());
+
+        auto cancelResponse2 = TestCancelSetColumnConstraint(
+            runtime, TTestTxConfig::SchemeShard, 0, root, setConstraintTxId);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            cancelResponse2.GetStatus(),
+            Ydb::StatusIds::PRECONDITION_FAILED,
+            cancelResponse2.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            cancelResponse2.GetIssues().size(),
+            1,
+            cancelResponse2.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            cancelResponse2.GetIssues(0).message(),
+            "already cancelled",
+            cancelResponse2.ShortDebugString());
+
+        runtime.SetObserverFunc(prevObserver);
+        runtime.Send(delayedValidateRequest.Release(), 0, true);
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+    }
+
+    Y_UNIT_TEST(CancelAtLockingStage) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+        TString root = "/MyRoot";
+
+        ui64 txId = 100;
+        TString tableName = "Table";
+        TString tablePath = root + "/" + tableName;
+
+        TestCreateTable(runtime, ++txId, root, TStringBuilder() << R"(
+              Name: ")" << tableName << R"("
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        struct TStageTest {
+            TString StageName;
+            std::function<THolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(TTestActorRuntime&)> CreateModifySchemeBlocker;
+            std::function<THolder<TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest>>(TTestActorRuntime&)> CreateDataShardBlocker;
+        };
+
+        TVector<TStageTest> stages = {
+            {
+                "Locking",
+                [](TTestActorRuntime& runtime) {
+                    return MakeHolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(runtime, [](const auto& ev) {
+                        if (ev->Get()->Record.TransactionSize() > 0) {
+                            const auto& tx = ev->Get()->Record.GetTransaction(0);
+                            return tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateLock;
+                        }
+                        return false;
+                    });
+                },
+                nullptr
+            },
+            {
+                "LockingNullWrites",
+                [](TTestActorRuntime& runtime) {
+                    return MakeHolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(runtime, [](const auto& ev) {
+                        if (ev->Get()->Record.TransactionSize() > 0) {
+                            const auto& tx = ev->Get()->Record.GetTransaction(0);
+                            if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterTable &&
+                                tx.HasAlterTable() && tx.GetAlterTable().ColumnsSize() > 0) {
+                                for (const auto& col : tx.GetAlterTable().GetColumns()) {
+                                    if (col.HasSetNotNullInProgress() && col.GetSetNotNullInProgress()) {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                        return false;
+                    });
+                },
+                nullptr
+            },
+            {
+                "Validating",
+                nullptr,
+                [](TTestActorRuntime& runtime) {
+                    return MakeHolder<TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest>>(runtime);
+                }
+            }
+        };
+
+        for (const auto& stage : stages) {
+            Cerr << "=== Testing cancel at stage: " << stage.StageName << " ===" << Endl;
+
+            THolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>> modifySchemeBlocker;
+            THolder<TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest>> dataShardBlocker;
+
+            if (stage.CreateModifySchemeBlocker) {
+                modifySchemeBlocker = stage.CreateModifySchemeBlocker(runtime);
+            }
+            if (stage.CreateDataShardBlocker) {
+                dataShardBlocker = stage.CreateDataShardBlocker(runtime);
+            }
+
+            ui64 setConstraintTxId = ++txId;
+            AsyncSetColumnConstraint(
+                runtime, setConstraintTxId,
+                TTestTxConfig::SchemeShard,
+                root,
+                tablePath,
+                {"value"});
+
+            if (modifySchemeBlocker) {
+                runtime.WaitFor("block event at " + stage.StageName, [&]{ return modifySchemeBlocker->size() > 0; });
+                modifySchemeBlocker->Stop();
+            }
+            if (dataShardBlocker) {
+                runtime.WaitFor("block event at " + stage.StageName, [&]{ return dataShardBlocker->size() > 0; });
+                dataShardBlocker->Stop();
+            }
+
+            auto cancelResponse = TestCancelSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, 0, root, setConstraintTxId);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                cancelResponse.GetStatus(),
+                Ydb::StatusIds::SUCCESS,
+                "Failed to cancel at stage: " + stage.StageName);
+
+            if (modifySchemeBlocker) {
+                modifySchemeBlocker->Unblock();
+            }
+            if (dataShardBlocker) {
+                dataShardBlocker->Unblock();
+            }
+
+            env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+            TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+
+            Cerr << "=== Successfully cancelled at stage: " << stage.StageName << " ===" << Endl;
+        }
+    }
 } // Y_UNIT_TEST_SUITE(SetNotNullTest)
+

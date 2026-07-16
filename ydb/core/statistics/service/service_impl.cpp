@@ -686,7 +686,7 @@ private:
             LoadQueriesInFlight[queryId] = std::make_pair(requestId, reqIndex);
 
             DispatchLoadStatisticsQuery(
-                SelfId(), queryId, database, req.PathId, request.StatType, req.ColumnTag);
+                SelfId(), queryId, database, req.PathId, request.StatType, req.ColumnTags);
 
             ++request.ReplyCounter;
             ++reqIndex;

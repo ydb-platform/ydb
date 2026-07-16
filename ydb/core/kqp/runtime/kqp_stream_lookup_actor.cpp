@@ -58,6 +58,7 @@ TKqpStreamLockSettings BuildStreamLockSettings(
     lockSettings.Database = database;
     lockSettings.Snapshot.SetStep(settings.GetSnapshot().GetStep());
     lockSettings.Snapshot.SetTxId(settings.GetSnapshot().GetTxId());
+    lockSettings.SkipAbsent = true; // For UPDATE/DELETE WHERE and SELECT FOR UPDATE
     lockSettings.QuerySpanId = querySpanId;
     return lockSettings;
 }
@@ -102,6 +103,7 @@ public:
         , MaxRowsProcessing(MaxRowsProcessingStreamLookup())
         , MaxInFlightReads(MaxInFlightReadsStreamLookup())
         , MaxBytesPerFetch(MaxBytesPerFetchStreamLookup())
+        , MaxInFlightLocks(MaxInFlightLocksStreamLookup())
         , Counters(counters)
         , VectorIndexLevelsCache(std::move(vectorIndexLevelsCache))
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
@@ -449,6 +451,10 @@ private:
             Counters->MaxInFlightLockTimeOnExit->Collect(maxInFlightTime.MilliSeconds());
         }
 
+        for (const auto& [lockId, lockState] : Reads.Locks) {
+            ReleaseLockQuota(lockId);
+        }
+
         {
             auto alloc = BindAllocator();
             Input.Clear();
@@ -484,14 +490,19 @@ private:
         while (!UnmodifiedOutputRows.empty() && (i64)replyResultStats.ResultBytesCount <= freeSpace) {
             auto row = std::move(UnmodifiedOutputRows.front());
             UnmodifiedOutputRows.pop_front();
-            const i64 rowSize = 0; // TODO: calculate row size
+            i64 rowSize = 0;
+            const auto& columnTypes = StreamLockWorker->GetColumnTypes();
+            for (size_t colIdx = 0; colIdx < columnTypes.size(); ++colIdx) {
+                auto elem = row.GetElement(colIdx);
+                rowSize += NMiniKQL::GetUnboxedValueSize(elem, columnTypes[colIdx]).AllocatedBytes;
+            }
             batch.push_back(std::move(row));
             replyResultStats.ResultRowsCount += 1;
             replyResultStats.ResultBytesCount += rowSize;
         }
 
         // Fetch input rows if we have less than max in flight reads in the scheduled queue.
-        if (StreamLookupWorker->ScheduledRequestsCount() < MaxInFlightReads) {
+        if (StreamLookupWorker->ScheduledRequestsCount() < MaxInFlightReads && !IsLockWorkerOverloaded()) {
             FetchInputRows();
         }
 
@@ -504,11 +515,12 @@ private:
         const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed() && (!StreamLockWorker || StreamLockWorker->AllRowsProcessed()) && UnmodifiedOutputRows.empty();
         const bool hasPendingResults = StreamLookupWorker->HasPendingResults();
 
-        // If we have no new reads and no pending results, we can fetch input rows again.
+        // If we have no new reads, no pending results and lock worker is not overloaded,
+        // we can fetch input rows again.
         bool noNewReads = (
             Partitioning && Reads.InFlightReads() + StreamLookupWorker->ScheduledRequestsCount() == 0
             && LastFetchStatus == NUdf::EFetchStatus::Ok);
-        if (hasPendingResults || noNewReads) {
+        if (hasPendingResults || (noNewReads && !IsLockWorkerOverloaded())) {
             // has more results
             if (!SentResultsAvailable) {
                 Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
@@ -854,11 +866,10 @@ private:
         if (lock.State == TLockState::EState::Running || lock.State == TLockState::EState::Blocked) {
             if (ev->Get()->InstantStart) {
                 auto guard = BindAllocator();
-                auto requests = StreamLockWorker->RebuildLockRequest(lock.Id, OperationId);
-                for (auto& [shardId, request] : requests) {
-                    SendLockRequest(shardId, std::move(request));
-                }
+                ReleaseLockQuota(lock.Id);
+                StreamLockWorker->RebuildLockRequest(lock.Id, OperationId);
                 Reads.eraseLock(lock);
+                DrainPendingLocks();
             } else {
                 RetryLock(lock);
             }
@@ -921,11 +932,36 @@ private:
             AFL_ENSURE(LockMode
                 && *LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
                 && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_COMMITTED_RW);
-            auto lockRequests = StreamLockWorker->BuildLockRequests(Partitioning, OperationId);
-            for (auto& [shardId, request] : lockRequests) {
-                SendLockRequest(shardId, std::move(request));
-            }
+
+            StreamLockWorker->BuildLockRequests(Partitioning, OperationId);
+            DrainPendingLocks();
         }
+    }
+
+    void DrainPendingLocks() {
+        while (!IsLockWorkerOverloaded()) {
+            auto [shardId, request] = StreamLockWorker->PopNextLockRequest();
+            if (!request) {
+                break;
+            }
+            SendLockRequest(shardId, std::move(request));
+        }
+    }
+
+    void ReleaseLockQuota(ui64 lockId) {
+        auto bytes = StreamLockWorker ? StreamLockWorker->GetBatchBytes(lockId) : std::nullopt;
+        if (bytes) {
+            const size_t clamped = Min(TotalBytesQuota, *bytes);
+            TotalBytesQuota -= clamped;
+            Counters->StreamLookupLockTotalQuotaBytesInFlight->Sub(clamped);
+        }
+    }
+
+    bool IsLockWorkerOverloaded() const {
+        if (!StreamLockWorker) {
+            return false;
+        }
+        return Reads.InFlightLocks() >= MaxInFlightLocks;
     }
 
     void SendLockRequest(ui64 shardId, THolder<NEvents::TDataEvents::TEvLockRows> request) {
@@ -933,6 +969,13 @@ private:
         Counters->SentLocks->Inc();
 
         ui64 requestId = request->Record.GetRequestId();
+
+        size_t requestBytes = StreamLockWorker ? StreamLockWorker->GetBatchBytes(requestId).value_or(0) : 0;
+        TotalBytesQuota += requestBytes;
+        Counters->StreamLookupLockTotalQuotaBytesInFlight->Add(requestBytes);
+        if (TotalBytesQuota > MaxTotalBytesQuota) {
+            Counters->StreamLookupLockTotalQuotaBytesExceeded->Inc();
+        }
 
         const bool needToCreatePipe = Reads.NeedToCreatePipe(shardId);
 
@@ -1043,18 +1086,30 @@ private:
 
         StreamLockWorker->AddLockResult(requestId, ev->Get());
 
+        ReleaseLockQuota(requestId);
+
+        auto lockIt = Reads.findLock(requestId);
+        if (lockIt != Reads.endLocks()) {
+            Reads.eraseLock(lockIt->second);
+        }
+
         bool hasModifiedRows = false;
         bool hasUnmodifiedRows = false;
+        bool hasSkippedRows = false;
         {
             TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard = BindAllocator();
             StreamLockWorker->ProcessRowsByLockResult(requestId,
-                [&](NUdf::TUnboxedValue row, bool modified) {
-                    if (modified) {
+                [&](NUdf::TUnboxedValue row, bool locked, bool modified) {
+                    if (locked && modified) {
                         StreamLookupWorker->AddInputRow(std::move(row));
                         hasModifiedRows = true;
-                    } else {
+                    } else if (locked) {
                         UnmodifiedOutputRows.emplace_back(std::move(row));
                         hasUnmodifiedRows = true;
+                    } else {
+                        // skipped absent row
+                        AFL_ENSURE(!modified);
+                        hasSkippedRows = true;
                     }
                 });
         }
@@ -1062,14 +1117,10 @@ private:
         if (hasModifiedRows) {
             ProcessInputRows();
         }
+        DrainPendingLocks();
 
-        if (hasUnmodifiedRows) {
+        if (hasUnmodifiedRows || hasSkippedRows) {
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
-        }
-
-        auto lockIt = Reads.findLock(requestId);
-        if (lockIt != Reads.endLocks()) {
-            Reads.eraseLock(lockIt->second);
         }
     }
 
@@ -1209,6 +1260,7 @@ private:
         ++TotalRetryAttempts;
 
         if (Reads.CheckShardRetriesExceededLock(failedLock)) {
+            ReleaseLockQuota(failedLock.Id);
             Reads.eraseLock(failedLock);
             return ResolveTableShards();
         }
@@ -1216,11 +1268,10 @@ private:
         auto delay = Reads.CalcDelayForShardLock(failedLock, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             auto guard = BindAllocator();
-            auto requests = StreamLockWorker->RebuildLockRequest(failedLock.Id, OperationId);
-            for (auto& [shardId, request] : requests) {
-                SendLockRequest(shardId, std::move(request));
-            }
+            ReleaseLockQuota(failedLock.Id);
+            StreamLockWorker->RebuildLockRequest(failedLock.Id, OperationId);
             Reads.eraseLock(failedLock);
+            DrainPendingLocks();
         } else {
             CA_LOG_D("Schedule retry for lockId: " << failedLock.Id << " after " << delay);
             TlsActivationContext->Schedule(
@@ -1340,6 +1391,7 @@ private:
     ui64 MaxBytesPerFetch = 256_MB;
     size_t MaxBytesDefaultQuota = 0;
     size_t MaxRowsDefaultQuota = 0;
+    ui64 MaxInFlightLocks = 50;
 
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<TVectorIndexLevelsCache> VectorIndexLevelsCache;

@@ -466,12 +466,12 @@ std::vector<TStageEdge> CollectStageEdges(const TStageGraph& graph) {
 }
 
 std::string FormatConnectionLabel(const TConnection& connection) {
-    return ToStdString(connection.GetExplainName());
+    return ToStdString(connection.Type) + " connection";
 }
 
 std::string FormatConnectionDetails(const TConnection& connection) {
     std::vector<std::string> details = {
-        "type=" + ToStdString(connection.GetExplainName()),
+        "type=" + ToStdString(connection.Type),
         "outputIndex=" + std::to_string(connection.GetOutputIndex())
     };
 

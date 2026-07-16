@@ -55,13 +55,20 @@ public:
         int Destination = 0;
     };
 
+    struct TInterconnectTransport
+    {
+        TString DiskId;
+        size_t DBGIndex = 0;
+    };
+
 private:
     using TData = std::variant<
         TVolume,
         TPartitionDirect,
         TDirectBlockGroup,
         TVChunk,
-        TDDiskDataCopier>;
+        TDDiskDataCopier,
+        TInterconnectTransport>;
 
     ui64 StartTime = 0;
     TData Data;

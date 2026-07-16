@@ -261,10 +261,7 @@ public:
         const TVector<ui64>& eraseOk,
         const TVector<ui64>& eraseFailed);
 
-    void UpdateBelatedEraseQueue(
-        THostMask completedWrites,
-        ui64 lsn,
-        TBlockRange64 range);
+    void UpdateBelatedEraseQueue(THostMask completedWrites, ui64 lsn);
 
     // Sets a mark on the ddisk to which offset it contains data and can be read
     // from it.
@@ -361,7 +358,6 @@ private:
     {
         ui64 Lsn{};
         THostMask Hosts;
-        TBlockRange64 Range;
 
         bool operator<(const TInfoEraseBelated& other) const;
     };

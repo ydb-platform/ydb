@@ -4,13 +4,21 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/data_extractor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+
+#include "ut_helpers.h"
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
 
 #include <regex>
+
+using NKikimr::NArrow::NAccessor::NSubColumns::NTesting::PrintBinaryJsons;
 
 Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     using namespace NKikimr::NArrow::NAccessor;
@@ -19,29 +27,6 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
 
     std::string PrepareToCompare(const std::string& str) {
         return std::regex_replace(str, std::regex(" |\\n"), "");
-    }
-
-    TString PrintBinaryJsons(const std::shared_ptr<arrow::ChunkedArray>& array) {
-        TStringBuilder sb;
-        sb << "[";
-        for (auto&& i : array->chunks()) {
-            sb << "[";
-            AFL_VERIFY(i->type()->id() == arrow::binary()->id());
-            auto views = std::static_pointer_cast<arrow::BinaryArray>(i);
-            for (ui32 r = 0; r < views->length(); ++r) {
-                if (views->IsNull(r)) {
-                    sb << "null";
-                } else {
-                    sb << NBinaryJson::SerializeToJson(TStringBuf(views->GetView(r).data(), views->GetView(r).size()));
-                }
-                if (r + 1 != views->length()) {
-                    sb << ",";
-                }
-            }
-            sb << "]";
-        }
-        sb << "]";
-        return sb;
     }
 
     Y_UNIT_TEST(EmptyOthers){
@@ -97,31 +82,31 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
             {
                 auto arrSlice = arrData->ISlice(0, 0);
                 UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(arrSlice->GetChunkedArray()), R"([])");
-                UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["columns_data"]["stats"].GetStringRobust(), R"({"accessor":[],"size":[],"key_names":[],"records":[]})");
-                UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["others_data"]["stats"].GetStringRobust(), R"({"accessor":[],"size":[],"key_names":[],"records":[]})");
+                UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["columns_data"]["stats"].GetStringRobust(), R"({"accessor":[],"value_type":[],"size":[],"key_names":[],"records":[]})");
+                UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["others_data"]["stats"].GetStringRobust(), R"({"accessor":[],"value_type":[],"size":[],"key_names":[],"records":[]})");
             }
             {
                 auto arrSlice = arrData->ISlice(0, 2);
                 UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(arrSlice->GetChunkedArray()), R"([[{"a":1,"b":1,"c":"1111"},null]])");
                 if (colsCount == 1) {
-                    UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["columns_data"]["stats"].GetStringRobust(), R"({"accessor":[1],"size":[34],"key_names":["\"c\""],"records":[1]})");
-                    UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["others_data"]["stats"].GetStringRobust(), R"({"accessor":[1,1],"size":[24,24],"key_names":["\"a\"","\"b\""],"records":[1,1]})");
+                    UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["columns_data"]["stats"].GetStringRobust(), R"({"accessor":[1],"value_type":[0],"size":[34],"key_names":["\"c\""],"records":[1]})");
+                    UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["others_data"]["stats"].GetStringRobust(), R"({"accessor":[1,1],"value_type":[0,0],"size":[24,24],"key_names":["\"a\"","\"b\""],"records":[1,1]})");
                 }
             }
             {
                 auto arrSlice = arrData->ISlice(0, 3);
                 UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(arrSlice->GetChunkedArray()), R"([[{"a":1,"b":1,"c":"1111"},null,{"a1":2,"b":2,"c":"2222"}]])");
                 if (colsCount == 1) {
-                    UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["columns_data"]["stats"].GetStringRobust(), R"({"accessor":[1],"size":[63],"key_names":["\"c\""],"records":[2]})");
-                    UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["others_data"]["stats"].GetStringRobust(), R"({"accessor":[1,1,1],"size":[24,24,48],"key_names":["\"a\"","\"a1\"","\"b\""],"records":[1,1,2]})");
+                    UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["columns_data"]["stats"].GetStringRobust(), R"({"accessor":[1],"value_type":[0],"size":[63],"key_names":["\"c\""],"records":[2]})");
+                    UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["others_data"]["stats"].GetStringRobust(), R"({"accessor":[1,1,1],"value_type":[0,0,0],"size":[24,24,48],"key_names":["\"a\"","\"a1\"","\"b\""],"records":[1,1,2]})");
                 }
             }
             {
                 auto arrSlice = arrData->ISlice(3, 3);
                 UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(arrSlice->GetChunkedArray()), R"([[{"a":3,"b":3,"c":"3333"},null,{"a":5,"b1":5}]])");
                 if (colsCount == 1) {
-                    UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["columns_data"]["stats"].GetStringRobust(), R"({"accessor":[1],"size":[38],"key_names":["\"c\""],"records":[1]})");
-                    UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["others_data"]["stats"].GetStringRobust(), R"({"accessor":[1,1,1],"size":[48,24,24],"key_names":["\"a\"","\"b\"","\"b1\""],"records":[2,1,1]})");
+                    UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["columns_data"]["stats"].GetStringRobust(), R"({"accessor":[1],"value_type":[0],"size":[38],"key_names":["\"c\""],"records":[1]})");
+                    UNIT_ASSERT_VALUES_EQUAL(arrSlice->DebugJson()["internal"]["others_data"]["stats"].GetStringRobust(), R"({"accessor":[1,1,1],"value_type":[0,0,0],"size":[48,24,24],"key_names":["\"a\"","\"b\"","\"b1\""],"records":[2,1,1]})");
                 }
             }
         }
@@ -557,3 +542,84 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         }
     }
 };
+
+Y_UNIT_TEST_SUITE(SubColumnsDictStats) {
+    using namespace NKikimr;
+    using namespace NKikimr::NArrow;
+    using namespace NKikimr::NArrow::NAccessor;
+    using namespace NKikimr::NArrow::NAccessor::NSubColumns;
+
+    struct TStatsRow {
+        TString Name;
+        ui32 Records;
+        ui32 Size;
+        IChunkedArray::EType Accessor;
+        EValueType ValueType;
+    };
+
+    void AssertStatsMatch(const TDictStats& stats, const std::vector<TStatsRow>& expected) {
+        UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnsCount(), expected.size());
+        for (ui32 i = 0; i < expected.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnNameString(i), expected[i].Name);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnRecordsCount(i), expected[i].Records);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetColumnSize(i), expected[i].Size);
+            UNIT_ASSERT_VALUES_EQUAL((ui32)stats.GetAccessorType(i), (ui32)expected[i].Accessor);
+            UNIT_ASSERT_VALUES_EQUAL((ui32)stats.GetValueType(i), (ui32)expected[i].ValueType);
+        }
+    }
+
+    Y_UNIT_TEST(ValueTypeCodesArePersistent) {
+        UNIT_ASSERT_VALUES_EQUAL((ui32)EValueType::BinaryJson, 0u);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)EValueType::Double, 1u);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)EValueType::Bool, 2u);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)EValueType::String, 3u);
+    }
+
+    // The current format (5-column, with value_type) round-trips through serialization, preserving every field.
+    Y_UNIT_TEST(NewFormatRoundTrip) {
+        const std::vector<TStatsRow> rows = {
+            { "a", 3, 30, IChunkedArray::EType::Array, EValueType::String },
+            { "b", 5, 40, IChunkedArray::EType::Dictionary, EValueType::BinaryJson },
+            { "c", 2, 16, IChunkedArray::EType::SparsedArray, EValueType::Double },
+            { "d", 1, 8, IChunkedArray::EType::Array, EValueType::Bool },
+        };
+        auto builder = TDictStats::MakeBuilder();
+        for (const auto& r : rows) {
+            builder.Add(r.Name, r.Records, r.Size, r.Accessor, r.ValueType);
+        }
+        auto stats = builder.Finish();
+        auto restored = TDictStats::DeserializeFromBlob(stats.SerializeAsString(nullptr));
+        AssertStatsMatch(restored, rows);
+    }
+
+    Y_UNIT_TEST(LegacyFourColumnFormatDeserializes) {
+        const std::vector<TStatsRow> rows = {
+            { "a", 3, 30, IChunkedArray::EType::Array, EValueType::BinaryJson },
+            { "b", 5, 40, IChunkedArray::EType::Dictionary, EValueType::BinaryJson },
+            { "c", 2, 16, IChunkedArray::EType::SparsedArray, EValueType::BinaryJson },
+        };
+        auto legacySchema = std::make_shared<arrow::Schema>(arrow::FieldVector{
+            std::make_shared<arrow::Field>("name", arrow::binary()), std::make_shared<arrow::Field>("count", arrow::uint32()),
+            std::make_shared<arrow::Field>("size", arrow::uint32()), std::make_shared<arrow::Field>("accessor_type", arrow::uint8()) });
+
+        arrow::BinaryBuilder names;
+        arrow::UInt32Builder count;
+        arrow::UInt32Builder size;
+        arrow::UInt8Builder acc;
+        for (const auto& r : rows) {
+            UNIT_ASSERT(names.Append(r.Name.data(), r.Name.size()).ok());
+            UNIT_ASSERT(count.Append(r.Records).ok());
+            UNIT_ASSERT(size.Append(r.Size).ok());
+            UNIT_ASSERT(acc.Append((ui8)r.Accessor).ok());
+        }
+        std::shared_ptr<arrow::Array> namesArr, countArr, sizeArr, accArr;
+        UNIT_ASSERT(names.Finish(&namesArr).ok());
+        UNIT_ASSERT(count.Finish(&countArr).ok());
+        UNIT_ASSERT(size.Finish(&sizeArr).ok());
+        UNIT_ASSERT(acc.Finish(&accArr).ok());
+        auto legacyBatch = arrow::RecordBatch::Make(legacySchema, rows.size(), { namesArr, countArr, sizeArr, accArr });
+
+        auto restored = TDictStats::DeserializeFromBlob(NArrow::SerializeBatchNoCompression(legacyBatch));
+        AssertStatsMatch(restored, rows);
+    }
+}

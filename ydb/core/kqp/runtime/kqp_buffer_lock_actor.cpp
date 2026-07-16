@@ -64,6 +64,7 @@ public:
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
             << "SessionActorId: " << Settings.SessionActorId)
         , LockActorSpan(TWilsonKqp::LockActor, std::move(Settings.ParentTraceId), "LockActor") {
+        AFL_ENSURE(Settings.MvccSnapshot); // Read Committed tx always acquires snapshot.
     }
 
     void Bootstrap() {
@@ -151,7 +152,8 @@ public:
 
     void SetLockSettings(
             ui64 cookie,
-            TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns) override
+            TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
+            bool skipAbsent) override
     {
         TKqpStreamLockSettings lockSettings(Settings.HolderFactory);
         lockSettings.Table.SetOwnerId(Settings.TableId.PathId.OwnerId);
@@ -166,11 +168,9 @@ public:
         lockSettings.LockTxId = Settings.LockTxId;
         lockSettings.LockNodeId = Settings.LockNodeId;
         lockSettings.LockMode = Settings.LockMode;
+        lockSettings.SkipAbsent = skipAbsent;
         lockSettings.QuerySpanId = Settings.QuerySpanId;
-
-        if (Settings.MvccSnapshot) {
-            lockSettings.Snapshot = *Settings.MvccSnapshot;
-        }
+        lockSettings.Snapshot = *Settings.MvccSnapshot;
 
         if (KeyColumnTypes.empty()) {
             for (const auto& keyColumn : keyColumns) {
@@ -205,9 +205,13 @@ public:
 
     void StartLockTask(ui64 cookie, TLockState& state) {
         auto& worker = state.Worker;
-        auto requests = worker->BuildLockRequests(Partitioning, LockRequestId);
+        worker->BuildLockRequests(Partitioning, LockRequestId);
 
-        for (auto& [shardId, lockRequest] : requests) {
+        while (true) {
+            auto [shardId, lockRequest] = worker->PopNextLockRequest();
+            if (!lockRequest) {
+                break;
+            }
             ++state.LocksInflight;
             StartLockRequest(cookie, shardId, std::move(lockRequest));
         }
@@ -251,7 +255,6 @@ public:
             << ", shardId: " << shardId);
 
         Settings.TxManager->AddShard(shardId, false, Settings.TablePath);
-        Settings.TxManager->AddAction(shardId, IKqpTransactionManager::EAction::WRITE);
 
         auto& shardState = ShardToState[shardId];
         const bool needToCreatePipe = !shardState.HasPipe;
@@ -402,8 +405,13 @@ public:
         lockState.Worker->AddLockResult(record.GetRequestId(), ev->Get());
 
         lockState.Worker->ProcessRowsByLockResult(record.GetRequestId(),
-            [&](const TOwnedCellVec& row, bool modified) {
-                lockState.CollectedRows.emplace_back(row, modified);
+            [&](const TOwnedCellVec& row, bool locked, bool modified) {
+                if (locked) {
+                    lockState.CollectedRows.emplace_back(row, modified);
+                } else {
+                    // skipped absent row
+                    AFL_ENSURE(!modified);
+                }
             });
 
         --lockState.LocksInflight;
@@ -478,11 +486,15 @@ public:
         AFL_ENSURE(failedRequest.Blocked);
         --lockState.LocksInflight;
         const auto guard = Settings.TypeEnv.BindAllocator();
-        auto requests = lockState.Worker->RebuildLockRequest(failedRequestId, LockRequestId);
-        for (auto& request : requests) {
-            const ui64 newRequestId = request.second->Record.GetRequestId();
+        lockState.Worker->RebuildLockRequest(failedRequestId, LockRequestId);
+        while (true) {
+            auto [shardId, lockRequest] = lockState.Worker->PopNextLockRequest();
+            if (!lockRequest) {
+                break;
+            }
+            const ui64 newRequestId = lockRequest->Record.GetRequestId();
             ++lockState.LocksInflight;
-            StartLockRequest(failedRequest.LockCookie, failedRequest.ShardId, std::move(request.second));
+            StartLockRequest(failedRequest.LockCookie, failedRequest.ShardId, std::move(lockRequest));
             LockIdToState.at(newRequestId).RetryAttempts = failedRequest.RetryAttempts;
         }
         LockIdToState.erase(failedRequestId);

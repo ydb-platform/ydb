@@ -27,6 +27,10 @@ struct TEvSetColumnConstraint {
         EvGetResponse,
         EvListRequest,
         EvListResponse,
+        EvForgetRequest,
+        EvForgetResponse,
+        EvCancelRequest,
+        EvCancelResponse,
 
         EvEnd
     };
@@ -81,6 +85,50 @@ struct TEvSetColumnConstraint {
 
     struct TEvListResponse: public TEventPB<TEvListResponse, NKikimrSetColumnConstraint::TEvListResponse, EvListResponse> {
         TEvListResponse() = default;
+    };
+
+    struct TEvForgetRequest: public TEventPB<TEvForgetRequest, NKikimrSetColumnConstraint::TEvForgetRequest, EvForgetRequest> {
+        TEvForgetRequest() = default;
+
+        explicit TEvForgetRequest(
+            const ui64 txId,
+            const TString& dbName,
+            ui64 operationId)
+        {
+            Record.SetTxId(txId);
+            Record.SetDatabaseName(dbName);
+            Record.SetOperationId(operationId);
+        }
+    };
+
+    struct TEvForgetResponse: public TEventPB<TEvForgetResponse, NKikimrSetColumnConstraint::TEvForgetResponse, EvForgetResponse> {
+        TEvForgetResponse() = default;
+
+        explicit TEvForgetResponse(const ui64 txId) {
+            Record.SetTxId(txId);
+        }
+    };
+
+    struct TEvCancelRequest: public TEventPB<TEvCancelRequest, NKikimrSetColumnConstraint::TEvCancelRequest, EvCancelRequest> {
+        TEvCancelRequest() = default;
+
+        explicit TEvCancelRequest(
+            const ui64 txId,
+            const TString& dbName,
+            ui64 operationId)
+        {
+            Record.SetTxId(txId);
+            Record.SetDatabaseName(dbName);
+            Record.SetOperationId(operationId);
+        }
+    };
+
+    struct TEvCancelResponse: public TEventPB<TEvCancelResponse, NKikimrSetColumnConstraint::TEvCancelResponse, EvCancelResponse> {
+        TEvCancelResponse() = default;
+
+        explicit TEvCancelResponse(const ui64 txId) {
+            Record.SetTxId(txId);
+        }
     };
 }; // TEvSetColumnConstraint
 

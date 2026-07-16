@@ -33,6 +33,7 @@ Scramp supports the following mechanisms:
 * [OpenSSF Scorecard](#openssf-scorecard)
 * [Doing A Release Of Scramp](#doing-a-release-of-scramp)
 * [Release Notes](#release-notes)
+  * [Version 1.4.10, 2026-06-27](#version-1410-2026-06-27)
   * [Version 1.4.9, 2026-06-19](#version-149-2026-06-19)
   * [Version 1.4.8, 2026-01-06](#version-148-2026-01-06)
   * [Version 1.4.7, 2026-01-04](#version-147-2026-01-04)
@@ -362,6 +363,15 @@ Run `tox` to make sure all tests pass, then update the release notes, then do:
 
 
 ## Release Notes
+
+### Version 1.4.10, 2026-06-27
+
+- Implement max and min guards for iteration count.
+- The xor() function should fail if the two values are of unequal lengths
+- Handle the case of an error in first server message
+- Fix formatting in channel binding error message
+- SHA3-512 didn't work, but it should do now
+
 
 ### Version 1.4.9, 2026-06-19
 

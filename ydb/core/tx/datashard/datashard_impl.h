@@ -217,6 +217,7 @@ class TDataShard
     class TTxGetS3DownloadInfo;
     class TTxStoreS3DownloadInfo;
     class TTxS3UploadRows;
+    class TTxS3DirectWriteFinish;
     class TTxObjectStorageListing;
     class TTxGetRemovedRowVersions;
     class TTxCompactBorrowed;
@@ -1387,6 +1388,9 @@ class TDataShard
     void Handle(TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvS3DirectWriteBegin::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvS3DirectWriteFinish::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvS3DirectWriteAbort::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
@@ -2837,6 +2841,9 @@ private:
     TLoanReturnTracker LoanReturnTracker;
     TFollowerState FollowerState;
 
+    // Non-persistent flag that is set just after we waited for all pending transactions to finish
+    // and are starting the split.
+    bool SplitStarted = false;
     bool SplitSnapshotStarted;      // Non-persistent flag that is used to restart snapshot in case of datashard restart
     TSplitSrcSnapshotSender SplitSrcSnapshotSender;
     // TODO: make this persitent
@@ -3370,6 +3377,9 @@ protected:
             HFuncTraced(TEvDataShard::TEvGetS3DownloadInfo, Handle);
             HFuncTraced(TEvDataShard::TEvStoreS3DownloadInfo, Handle);
             HFuncTraced(TEvDataShard::TEvS3UploadRowsRequest, Handle);
+            HFuncTraced(TEvDataShard::TEvS3DirectWriteBegin, Handle);
+            HFuncTraced(TEvDataShard::TEvS3DirectWriteFinish, Handle);
+            HFuncTraced(TEvDataShard::TEvS3DirectWriteAbort, Handle);
             HFuncTraced(TEvDataShard::TEvObjectStorageListingRequest, Handle);
             HFuncTraced(TEvDataShard::TEvMigrateSchemeShardRequest, Handle);
             HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);

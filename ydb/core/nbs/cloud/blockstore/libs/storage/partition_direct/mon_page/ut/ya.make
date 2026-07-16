@@ -4,4 +4,9 @@ SRCS(
     mon_render_ut.cpp
 )
 
+PEERDIR(
+    yql/essentials/public/udf/service/stub
+    yql/essentials/sql/pg_dummy
+)
+
 END()

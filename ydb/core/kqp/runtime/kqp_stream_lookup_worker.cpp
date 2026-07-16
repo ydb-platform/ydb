@@ -1056,8 +1056,8 @@ public:
         while (!FlushedResultRows.empty()) {
             TResultBatch::TResultRow& row = FlushedResultRows.front();
             batch.emplace_back(std::move(row.Data));
-            FlushedResultRows.pop_front();
             resultStats.Add(row.Stats);
+            FlushedResultRows.pop_front();
         }
 
         return resultStats;

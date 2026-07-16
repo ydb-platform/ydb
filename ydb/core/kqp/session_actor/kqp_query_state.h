@@ -192,6 +192,8 @@ public:
     bool Commit = false;
     bool Commited = false;
 
+    std::optional<std::pair<ui64, ui64>> CommitTimestamp;
+
     NTopic::TTopicOperations TopicOperations;
     TDuration CpuTime;
     std::optional<NCpuTime::TCpuTimer> CurrentTimer;

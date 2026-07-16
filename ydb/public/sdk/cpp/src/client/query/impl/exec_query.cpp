@@ -88,6 +88,7 @@ public:
 
                 std::optional<TExecStats> stats;
                 std::optional<TTransaction> tx;
+                std::optional<NScheme::TVirtualTimestamp> commitTimestamp;
                 if (self->Response_.has_exec_stats()) {
                     stats = TExecStats(std::move(*self->Response_.mutable_exec_stats()));
                 }
@@ -96,16 +97,21 @@ public:
                     tx = TTransaction(self->Session_.value(), self->Response_.tx_meta().id());
                 }
 
+                if (self->Response_.has_commit_timestamp()) {
+                    commitTimestamp = NScheme::TVirtualTimestamp(self->Response_.commit_timestamp());
+                }
+
                 if (self->Response_.has_result_set()) {
                     promise.SetValue({
                         std::move(status),
                         TResultSet(std::move(*self->Response_.mutable_result_set())),
                         self->Response_.result_set_index(),
                         std::move(stats),
-                        std::move(tx)
+                        std::move(tx),
+                        std::move(commitTimestamp)
                     });
                 } else {
-                    promise.SetValue({std::move(status), std::move(stats), std::move(tx)});
+                    promise.SetValue({std::move(status), std::move(stats), std::move(tx), std::move(commitTimestamp)});
                 }
             }
         };
@@ -160,6 +166,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
     std::vector<Ydb::ResultSet> ResultSets_;
     std::optional<TExecStats> Stats_;
     std::optional<TTransaction> Tx_;
+    std::optional<NScheme::TVirtualTimestamp> CommitTimestamp_;
     std::vector<std::string> ArrowSchemas_;
     std::vector<std::vector<std::string>> BytesData_;
     std::vector<bool> ResultSetSeen_;
@@ -174,6 +181,10 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 self->Stats_ = st;
             }
 
+            if (const auto& ct = part.GetCommitTimestamp()) {
+                self->CommitTimestamp_ = ct;
+            }
+
             if (!part.IsSuccess()) {
                 std::optional<TExecStats> stats;
                 std::swap(self->Stats_, stats);
@@ -182,12 +193,14 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                     std::vector<NYdb::NIssue::TIssue> issues;
                     std::vector<Ydb::ResultSet> resultProtos;
                     std::optional<TTransaction> tx;
+                    std::optional<NScheme::TVirtualTimestamp> commitTimestamp;
                     std::vector<std::string> arrowSchemas;
                     std::vector<std::vector<std::string>> bytesData;
 
                     std::swap(self->Issues_, issues);
                     std::swap(self->ResultSets_, resultProtos);
                     std::swap(self->Tx_, tx);
+                    std::swap(self->CommitTimestamp_, commitTimestamp);
                     std::swap(self->ArrowSchemas_, arrowSchemas);
                     std::swap(self->BytesData_, bytesData);
 
@@ -204,7 +217,8 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                         TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues(std::move(issues))),
                         std::move(resultSets),
                         std::move(stats),
-                        std::move(tx)
+                        std::move(tx),
+                        std::move(commitTimestamp)
                     ));
                 } else {
                     self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}, std::move(stats), {}));

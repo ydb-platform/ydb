@@ -32,6 +32,7 @@ struct TEvKqpExecuter {
 
         NLWTrace::TOrbit Orbit;
         IKqpGateway::TKqpSnapshot Snapshot;
+        std::optional<std::pair<ui64, ui64>> CommitTimestamp;
         std::optional<NYql::TKikimrPathId> BrokenLockPathId;
         std::optional<ui64> BrokenLockShardId;
         std::optional<ui64> BrokenLockQuerySpanId;

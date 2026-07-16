@@ -34,8 +34,12 @@ struct TEvTerminate : public TEventLocal<TEvTerminate, TKqpBufferWriterEvents::E
 struct TEvResult : public TEventLocal<TEvResult, TKqpBufferWriterEvents::EvResult> {
     TEvResult() = default;
     TEvResult(NYql::NDqProto::TDqTaskStats&& stats) : Stats(std::move(stats)) {}
+    TEvResult(NYql::NDqProto::TDqTaskStats&& stats, std::optional<std::pair<ui64, ui64>>&& commitTimestamp)
+        : Stats(std::move(stats))
+        , CommitTimestamp(std::move(commitTimestamp)) {}
 
     std::optional<NYql::NDqProto::TDqTaskStats> Stats;
+    std::optional<std::pair<ui64, ui64>> CommitTimestamp;
 };
 
 struct TEvError : public TEventLocal<TEvError, TKqpBufferWriterEvents::EvError> {

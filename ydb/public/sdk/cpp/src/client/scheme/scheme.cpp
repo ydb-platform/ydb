@@ -11,6 +11,8 @@
 
 #include <util/string/join.h>
 
+#include <tuple>
+
 namespace NYdb::inline Dev {
 namespace NScheme {
 
@@ -52,19 +54,19 @@ void TVirtualTimestamp::Out(IOutputStream& out) const {
 }
 
 bool TVirtualTimestamp::operator<(const TVirtualTimestamp& rhs) const {
-    return PlanStep < rhs.PlanStep && TxId < rhs.TxId;
+    return std::tie(PlanStep, TxId) < std::tie(rhs.PlanStep, rhs.TxId);
 }
 
 bool TVirtualTimestamp::operator<=(const TVirtualTimestamp& rhs) const {
-    return PlanStep <= rhs.PlanStep && TxId <= rhs.TxId;
+    return std::tie(PlanStep, TxId) <= std::tie(rhs.PlanStep, rhs.TxId);
 }
 
 bool TVirtualTimestamp::operator>(const TVirtualTimestamp& rhs) const {
-    return PlanStep > rhs.PlanStep && TxId > rhs.TxId;
+    return std::tie(PlanStep, TxId) > std::tie(rhs.PlanStep, rhs.TxId);
 }
 
 bool TVirtualTimestamp::operator>=(const TVirtualTimestamp& rhs) const {
-    return PlanStep >= rhs.PlanStep && TxId >= rhs.TxId;
+    return std::tie(PlanStep, TxId) >= std::tie(rhs.PlanStep, rhs.TxId);
 }
 
 bool TVirtualTimestamp::operator==(const TVirtualTimestamp& rhs) const {

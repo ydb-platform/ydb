@@ -868,6 +868,116 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT(foundInsertWithImmediate);
         UNIT_ASSERT(foundPrepare);
     }
+
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_ExecuteQuery) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (200u, "Commit1");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetCommitTimestamp().has_value(), "Commit timestamp should be present for StrictSerializableRW write commit");
+        const auto& ts1 = *result.GetCommitTimestamp();
+        UNIT_ASSERT_C(ts1.PlanStep > 0, "PlanStep should be nonzero");
+        UNIT_ASSERT_C(ts1.TxId > 0, "TxId should be nonzero");
+
+        auto result2 = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (201u, "Commit2");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+        UNIT_ASSERT_C(result2.GetCommitTimestamp().has_value(), "Commit timestamp should be present for StrictSerializableRW write commit");
+        const auto& ts2 = *result2.GetCommitTimestamp();
+        UNIT_ASSERT_C(ts2.PlanStep > 0, "PlanStep should be nonzero");
+        UNIT_ASSERT_C(ts2.TxId > 0, "TxId should be nonzero");
+
+        UNIT_ASSERT_C(ts1 < ts2, "Second commit timestamp should be greater than first (lexicographic order)");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_ExplicitCommit) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto beginResult = session.BeginTransaction(NYdb::NQuery::TTxSettings::StrictSerializableRW()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(beginResult.GetStatus(), EStatus::SUCCESS, beginResult.GetIssues().ToString());
+        auto tx = beginResult.GetTransaction();
+
+        auto execResult = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (300u, "Explicit");
+        )", NYdb::NQuery::TTxControl::Tx(tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+
+        auto commitResult = tx.Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+        UNIT_ASSERT_C(commitResult.GetCommitTimestamp().has_value(), "Commit timestamp should be present for StrictSerializableRW write commit");
+        const auto& ts = *commitResult.GetCommitTimestamp();
+        UNIT_ASSERT_C(ts.PlanStep > 0, "PlanStep should be nonzero");
+        UNIT_ASSERT_C(ts.TxId > 0, "TxId should be nonzero");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_ReadOnly) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 100u;
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(!result.GetCommitTimestamp().has_value(), "Commit timestamp should not be present for read-only query");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_SerializableRW) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (400u, "Serializable");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(!result.GetCommitTimestamp().has_value(), "Commit timestamp should not be present for non-StrictSerializableRW isolation");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_Order) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result1 = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (500u, "Distinct1");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result1.GetStatus(), EStatus::SUCCESS, result1.GetIssues().ToString());
+        UNIT_ASSERT_C(result1.GetCommitTimestamp().has_value(), "Commit timestamp should be present");
+        const auto& ts1 = *result1.GetCommitTimestamp();
+
+        auto result2 = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (501u, "Distinct2");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+        UNIT_ASSERT_C(result2.GetCommitTimestamp().has_value(), "Commit timestamp should be present");
+        const auto& ts2 = *result2.GetCommitTimestamp();
+
+        UNIT_ASSERT_C(ts1 < ts2, "Commit timestamps must be ordered and distinct");
+    }
 }
 
 } // namespace NKqp

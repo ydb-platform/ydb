@@ -25,7 +25,7 @@
 | --- | --- |
 | psql, pgAdmin или драйверы PostgreSQL | [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), [встроенный UI](../reference/embedded-ui/index.md), [{{ ydb-short-name }} SDK](../reference/ydb-sdk/index.md) или [JDBC-драйвер](https://github.com/ydb-platform/ydb-jdbc-driver) |
 | Синтаксис SQL PostgreSQL | [YQL](../yql/reference/index.md) — собственный SQL-диалект {{ ydb-short-name }} |
-| Импорт через `pg_dump` + `pg-convert` | [YDB tools dump/restore](../reference/ydb-cli/export-import/tools-dump.md) или [интеграции для миграции данных](../integrations/data-migration/index.md) |
+| Импорт через `pg_dump` + `pg-convert` | [YDB tools dump/restore](../reference/ydb-cli/export-import/tools-dump.md) или интеграции для миграции данных |
 | BI-инструменты через pgwire (например, FineBI) | Нативные коннекторы: [Superset](../integrations/visualization/superset.md), [Grafana](../integrations/visualization/grafana.md) или драйвер, поддерживаемый вашим инструментом |
 
 Пошаговый обзор поддерживаемых клиентских опций — в разделе [Начало работы](../dev/getting-started.md).

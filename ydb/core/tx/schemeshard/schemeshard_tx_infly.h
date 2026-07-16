@@ -138,8 +138,8 @@ struct TTxState {
     }
 
     void DisarmPathRefs() {
-        TargetPathRef.Disarm();
-        SourcePathRef.Disarm();
+        TargetPathRef.DetachWithoutRelease();
+        SourcePathRef.DetachWithoutRelease();
     }
 
     void AcceptPendingSchemeNotification() {

@@ -714,17 +714,17 @@ void TSchemeShard::Clear() {
     }
     // ParentRefHeld bits die with their path elements below; nothing to disarm.
     for (auto& [pathId, ref] : SelfDbRefs) {
-        ref.Disarm();
+        ref.DetachWithoutRelease();
     }
     SelfDbRefs.clear();
     for (auto& [txId, pub] : Publications) {
         for (auto& [key, ref] : pub.Paths) {
-            ref.Disarm();
+            ref.DetachWithoutRelease();
         }
     }
     for (auto& [txId, operation] : Operations) {
         for (auto& [key, ref] : operation->Publications) {
-            ref.Disarm();
+            ref.DetachWithoutRelease();
         }
     }
 

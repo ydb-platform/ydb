@@ -22,12 +22,9 @@ private:
     const char* Str;
 };
 
-// Owning handle for a DbRefCount reference on a path element (issue #33764).
-// Construction acquires, destruction releases: the inc/dec pairing that was a
-// convention across CreateTx/RemoveTx/init becomes structural, so a restored
-// object holds the same refs as a fresh one and can't leak or double-release.
-// Copying re-acquires, moving transfers; Disarm() drops the handle without
-// releasing (rollback where Paths snapshots own the counter, and shutdown).
+// Owning handle for a path's DbRefCount reference: ctor acquires, dtor releases,
+// copy re-acquires, move transfers. DetachWithoutRelease() drops it without
+// releasing (a Paths snapshot owns the counter, or at shutdown).
 class TPathRef {
 public:
     TPathRef() = default;
@@ -94,7 +91,7 @@ public:
         Acquire();
     }
 
-    void Disarm() {
+    void DetachWithoutRelease() {
         SS = nullptr;
     }
 

@@ -1932,13 +1932,14 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                     NConsole::CreateJaegerTracingConfigurator(appData->TracingConfigurator, Config.GetTracingConfig()),
                     TMailboxType::ReadAsFilled,
                     appData->UserPoolId)));
-        // Independent user-facing tracing channel configurator (bootstrap config).
-        // TODO (@anely-d): CMS live-reconfig reads GetTracingConfig() — parameterize the actor to read
-        //       GetUserFacingTracingConfig() before enabling live reconfig of this channel.
+        // Independent user-facing tracing channel: subscribes to its own CMS item and reads the
+        // user-facing config field, so live reconfig of this channel is honored independently.
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
                 TActorId(),
                 TActorSetupCmd(
-                    NConsole::CreateJaegerTracingConfigurator(appData->UserFacingTracingConfigurator, Config.GetUserFacingTracingConfig()),
+                    NConsole::CreateJaegerTracingConfigurator(
+                        appData->UserFacingTracingConfigurator, Config.GetUserFacingTracingConfig(),
+                        static_cast<ui32>(NKikimrConsole::TConfigItem::UserFacingTracingConfigItem), /*userFacing*/ true),
                     TMailboxType::ReadAsFilled,
                     appData->UserPoolId)));
     }

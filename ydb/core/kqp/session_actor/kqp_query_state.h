@@ -2,6 +2,7 @@
 
 #include "kqp_query_stats.h"
 #include "kqp_worker_common.h"
+#include "kqp_user_facing_tracing.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -110,8 +111,8 @@ public:
         if (userTraceId && AppData()) {
             UserSpan = NWilson::TSpan(
                 TWilsonKqp::KqpSession, std::move(userTraceId),
-                // TODO: OTel-convention name "<verb> <table>" from the plan
-                NKikimrKqp::EQueryAction_Name(QueryAction), NWilson::EFlags::AUTO_END);
+                UserFacingRootSpanName(RequestEv->GetQuery(), NKikimrKqp::EQueryAction_Name(QueryAction)),
+                NWilson::EFlags::AUTO_END);
             if (UserSpan) {
                 UserSpan.Attribute("ydb.tracing.layer", TString("user"));
                 UserSpan.Attribute("db.system.name", TString("ydb"));

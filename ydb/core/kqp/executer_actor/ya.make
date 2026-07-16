@@ -6,6 +6,7 @@ SRCS(
     kqp_scheme_executer.cpp
     kqp_executer_impl.cpp
     kqp_executer_stats.cpp
+    kqp_executer_user_trace.cpp
     kqp_literal_executer.cpp
     kqp_locks_helper.cpp
     kqp_partition_helper.cpp

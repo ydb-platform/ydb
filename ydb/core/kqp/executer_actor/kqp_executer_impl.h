@@ -3,6 +3,8 @@
 #include "kqp_executer.h"
 #include "kqp_executer_stats.h"
 #include "kqp_planner.h"
+#include <ydb/core/kqp/common/kqp_tracing_span.h>
+#include "kqp_executer_user_trace.h"
 #include "kqp_table_resolver.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -144,7 +146,9 @@ public:
         , UserToken(userToken)
         , FormatsSettings(std::move(formatsSettings))
         , Counters(counters)
-        , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), spanName)
+        , ExecuterSpan(
+            NWilson::TSpan(spanVerbosity, std::move(Request.TraceId), spanName),
+            NWilson::TSpan(TWilsonKqp::KqpSession, std::move(Request.UserFacingTraceId), "Execute", NWilson::EFlags::AUTO_END))
         , Planner(nullptr)
         , ExecuterRetriesConfig(executerConfig.TableServiceConfig.GetExecuterRetriesConfig())
         , AggregationSettings(executerConfig.TableServiceConfig.GetAggregationConfig())
@@ -160,6 +164,11 @@ public:
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
+
+        // Captured now because the live Execute span is ended before stage stats finalize (in PassAway).
+        UserExecuteTraceId = ExecuterSpan.User().GetTraceId();
+        // User-only "Prepare" groups the pre-run operational phases; the dev tree keeps them flat.
+        UserPrepareSpan = ExecuterSpan.User().CreateChild(TWilsonKqp::KqpSession, "Prepare", NWilson::EFlags::AUTO_END);
 
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().RequestIsolationLevel = Request.IsolationLevel;
@@ -325,7 +334,7 @@ protected:
             KQP_STLOG_D(KQPDATA, "Start resolving tablets nodes...",
                     (shard_ids_count, shardIds.size()),
                     (trace_id, TraceId()));
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+            ExecuterStateSpan = MakePrepareChild(TWilsonKqp::ExecuterShardsResolve, TWilsonKqp::KqpSession, "WaitForShardsResolve", "ResolveShards");
 
             auto kqpShardsResolver = CreateKqpShardsResolver(this->SelfId(), TxId, static_cast<TDerived*>(this)->GetSimplifiedUseFollowers(), std::move(shardIds));
 
@@ -1092,7 +1101,7 @@ protected:
             co_return;
         }
 
-        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterSpan.GetTraceId(), "WaitForTableResolve", NWilson::EFlags::AUTO_END);
+        ExecuterStateSpan = MakePrepareChild(TWilsonKqp::ExecuterTableResolve, TWilsonKqp::KqpSession, "WaitForTableResolve", "ResolveTables");
 
         auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false);
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
@@ -1416,7 +1425,7 @@ protected:
             .StatsMode = Request.StatsMode,
             .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero(),
             .RlPath = Request.RlPath,
-            .ExecuterSpan =  ExecuterSpan,
+            .ExecuterSpan =  ExecuterSpan.Dev(),
             .ResourcesSnapshot = std::move(ResourcesSnapshot),
             .ExecuterRetriesConfig = ExecuterRetriesConfig,
             .MkqlMemoryLimit = Request.MkqlMemoryLimit,
@@ -1649,6 +1658,15 @@ protected:
     }
 
 protected:
+    // Operational phase whose dev span stays under Execute but whose user span nests under the
+    // user-only "Prepare" group (keeps engine-jargon phases one drill-down deeper for the user).
+    TSpanBundle MakePrepareChild(ui8 devVerbosity, ui8 userVerbosity, const TString& devName,
+            const TString& userName, NWilson::TFlags flags = NWilson::EFlags::AUTO_END) {
+        return TSpanBundle(
+            ExecuterSpan.Dev().CreateChild(devVerbosity, devName, flags),
+            UserPrepareSpan.CreateChild(userVerbosity, userName, flags));
+    }
+
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
         return TasksGraph.GetMeta().Snapshot;
     }
@@ -1680,6 +1698,9 @@ protected:
             {
                 ui64 cycleCount = GetCycleCountFast();
                 Stats->ExportExecStats(*response.MutableResult()->MutableStats());
+
+                EmitUserStagePhases(UserRunTasksTraceId ? UserRunTasksTraceId : UserExecuteTraceId,
+                    response.GetResult().GetStats());
 
                 if (CollectFullStats(Request.StatsMode)) {
                     ui64 jsonSize = 0;
@@ -1899,8 +1920,11 @@ protected:
 
     std::unordered_map<ui64, IActor*> ResultChannelProxies;
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
-    NWilson::TSpan ExecuterSpan;
-    NWilson::TSpan ExecuterStateSpan;
+    TSpanBundle ExecuterSpan;
+    TSpanBundle ExecuterStateSpan;
+    NWilson::TTraceId UserExecuteTraceId;  // user Execute span context (fallback parent for stage spans)
+    NWilson::TTraceId UserRunTasksTraceId; // user Run span context; stage spans nest under it as a category
+    NWilson::TSpan UserPrepareSpan;        // user-only grouping of the pre-run phases (resolve/snapshot)
     THashMap<ui32, std::shared_ptr<NYql::NDq::IChannelBuffer>> ResultInputBuffers;
 
     ui64 LastTaskId = 0;

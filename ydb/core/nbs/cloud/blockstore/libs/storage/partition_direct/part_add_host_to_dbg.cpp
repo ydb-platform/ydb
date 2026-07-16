@@ -282,10 +282,10 @@ void TPartitionActor::HandleAddHostToDBG(
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "%s Handle AddHostToDBG dbgId=%lu newHostIndex=%lu",
+        "%s Handle AddHost %s to dbgId=%lu",
         LogTitle.GetWithTime().c_str(),
-        dbgId,
-        newHostIndex);
+        PrintHostIndex(newHostIndex).c_str(),
+        dbgId);
 
     // The request always carries a DBG's own index so an out-of-range dbgId is
     // a bug, not a bad request.
@@ -350,13 +350,13 @@ bool TPartitionActor::ValidateAddHostToDBGRequest(
         return false;
     }
 
-    if (newHostIndex < currentSize) {
+    if (newHostIndex != currentSize) {
         RejectAddHost(
             ctx,
             dbgId,
             TStringBuilder()
                 << "AddHost " << PrintHostIndex(newHostIndex)
-                << " to DBG that is already contains it. Size=" << currentSize);
+                << " must append at the end. Current size=" << currentSize);
         return false;
     }
 

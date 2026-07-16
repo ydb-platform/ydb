@@ -482,33 +482,31 @@ namespace {
                 && SendData(data.data(), data.size(), Sprintf("Send%sData", what).data(), error);
         }
 
-        template <typename TProto>
-        bool ReceiveTcpProto(
-                TProto& proto,
+        std::optional<TString> Y_NO_INLINE ReceiveTcpMsg(
                 ESyncTcpMessageType expectedMessageType,
                 const char* what,
                 TString& error,
-                ui64* checksum = nullptr)
+                ui64* checksum)
         {
             TSyncMsgHeader header;
             if (!ReceiveData(&header, sizeof(header), Sprintf("Receive%sHeader", what).data(), error)) {
-                return false;
+                return {};
             }
 
             if (header.Size > TSyncMsgHeader::MaxSize) {
                 error = Sprintf("%s protobuf size is too large: %" PRIu32, what, header.Size);
-                return false;
+                return {};
             }
 
             TString data;
             data.resize(header.Size);
             if (!ReceiveData(data.Detach(), data.size(), Sprintf("Receive%sData", what).data(), error)) {
-                return false;
+                return {};
             }
 
             if (!header.Check(data.data(), data.size())) {
                 error = Sprintf("%s protobuf checksum mismatch", what);
-                return false;
+                return {};
             }
             if (checksum) {
                 *checksum = header.Checksum;
@@ -518,24 +516,37 @@ namespace {
                 NActorsInterconnect::TRdmaErrSync errSync;
                 if (!errSync.ParseFromString(data)) {
                     error = "unable to parse TRdmaErrSync protobuf";
-                    return false;
+                    return {};
                 }
                 error = Sprintf("peer RDMA sync error: Code# %" PRIu32 " Text# %s",
                     static_cast<ui32>(errSync.GetCode()), errSync.GetText().data());
-                return false;
+                return {};
             }
 
             if (header.MessageType != static_cast<ui32>(expectedMessageType)) {
                 error = Sprintf("unexpected %s message type: %" PRIu32, what, header.MessageType);
-                return false;
+                return {};
             }
 
-            if (!proto.ParseFromString(data)) {
-                error = Sprintf("unable to parse %s protobuf", what);
-                return false;
-            }
+            return data;
+        }
 
-            return true;
+        template <typename TProto>
+        bool ReceiveTcpProto(
+                ESyncTcpMessageType expectedMessageType,
+                const char* what,
+                TString& error,
+                ui64* checksum,
+                TProto& proto)
+        {
+            if (auto maybeData = ReceiveTcpMsg(expectedMessageType, what, error, checksum)) {
+                if (!proto.ParseFromString(*maybeData)) {
+                    error = Sprintf("unable to parse %s protobuf", what);
+                    return false;
+                }
+                return true;
+            }
+            return false;
         }
 
         bool SendErrSync(NActorsInterconnect::ERdmaSyncErrorCode code, const TString& text, TString& error) {
@@ -868,9 +879,8 @@ namespace {
             return finSync;
         }
 
-        template <typename TProto>
-        bool PostRdmaProto(
-                const TProto& proto,
+        bool Y_NO_INLINE PostRdmaProto(
+                const google::protobuf::MessageLite& proto,
                 ESyncRdmaMessageType messageType,
                 const char* what,
                 TString& error,
@@ -952,7 +962,7 @@ namespace {
                 return false;
             }
 
-            if (!ReceiveTcpProto(peerStartSync, ESyncTcpMessageType::StartSync, "TRdmaStartSync", error, &peerStartSyncChecksum)) {
+            if (!ReceiveTcpProto(ESyncTcpMessageType::StartSync, "TRdmaStartSync", error, &peerStartSyncChecksum, peerStartSync)) {
                 return false;
             }
 
@@ -1064,7 +1074,7 @@ namespace {
                 finSync = std::move(PendingFinSync->Sync);
                 PendingFinSync.reset();
             } else {
-                if (!ReceiveTcpProto(finSync, ESyncTcpMessageType::FinSync, "TRdmaFinSync", error)) {
+                if (!ReceiveTcpProto(ESyncTcpMessageType::FinSync, "TRdmaFinSync", error, nullptr, finSync)) {
                     return false;
                 }
             }

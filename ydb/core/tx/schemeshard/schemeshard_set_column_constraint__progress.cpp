@@ -389,7 +389,6 @@ public:
         }
 
         auto oldValidationFailedValue = operationInfo.ValidationFailed;
-        TString cancellationReason;
 
         auto& shardStatus = operationInfo.ValidationShards.at(shardIdx);
         shardStatus.ValidateStatus = record.GetStatus();
@@ -409,7 +408,6 @@ public:
             if (!record.GetIsValid()) {
                 LOG_N("TTxReplyValidateRowCondition: validation failed on shard# " << shardIdx);
                 operationInfo.ValidationFailed = true;
-                cancellationReason = "Validation failed: found NULL values in column(s) being set to NOT NULL";
             }
 
             operationInfo.InProgressValidationShards.erase(shardIdx);
@@ -422,7 +420,6 @@ public:
                 << ", status# " << record.GetStatus());
 
             operationInfo.ValidationFailed = true;
-            cancellationReason = "Validation failed: internal error";
 
             operationInfo.InProgressValidationShards.erase(shardIdx);
             operationInfo.DoneValidationShards.insert(shardIdx);

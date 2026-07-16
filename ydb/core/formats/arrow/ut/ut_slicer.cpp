@@ -23,9 +23,9 @@ Y_UNIT_TEST_SUITE(Slicer) {
         auto arr = BuildArray();
         NKikimr::NArrow::NAccessor::TChunkConstructionData info(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
-        auto serialized = NKikimr::NArrow::NAccessor::NPlain::TConstructor().SerializeToString(arr, info);
+        auto serialized = NKikimr::NArrow::NAccessor::NPlain::TConstructor().SerializeToBlobAndMeta(arr, info).Blob;
         const auto predSaver = [&](const std::shared_ptr<NKikimr::NArrow::NAccessor::IChunkedArray>& arr) {
-            return NKikimr::NArrow::NAccessor::NPlain::TConstructor().SerializeToString(arr, info);
+            return NKikimr::NArrow::NAccessor::NPlain::TConstructor().SerializeToBlobAndMeta(arr, info).Blob;
         };
         
         NKikimr::NArrow::NSerialization::TNativeSerializer serializer;

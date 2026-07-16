@@ -85,11 +85,11 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
             auto newArray = DataAccessorConstructor->Construct(chunkedArray, loadContext).DetachResult();
             rawBytes = newArray->GetRawSizeVerified();
             if (targetIsDictionary) {
-                auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(newArray, loadContext);
+                auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor().SerializeToBlobAndMeta(newArray, loadContext);
                 result.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
                     std::move(blobAndMeta.Blob), newArray, TChunkAddress(ColumnId, idx), *this, std::move(blobAndMeta.Meta)));
             } else {
-                data = DataAccessorConstructor.SerializeToString(newArray, loadContext);
+                data = DataAccessorConstructor.SerializeToBlobAndMeta(newArray, loadContext).Blob;
                 result.emplace_back(s->CopyWithAnotherBlob(std::move(data), rawBytes, *this));
             }
         } else {
@@ -100,11 +100,11 @@ std::vector<std::shared_ptr<NKikimr::NOlap::IPortionDataChunk>> TSimpleColumnInf
             auto arr = DataAccessorConstructor.DeserializeFromString(s->GetData(), sourceLoadContext).DetachResult();
             rawBytes = arr->GetRawSizeVerified();
             if (targetIsDictionary) {
-                auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(arr, loadContext);
+                auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor().SerializeToBlobAndMeta(arr, loadContext);
                 result.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
                     std::move(blobAndMeta.Blob), arr, TChunkAddress(ColumnId, idx), *this, std::move(blobAndMeta.Meta)));
             } else {
-                data = DataAccessorConstructor.SerializeToString(arr, loadContext);
+                data = DataAccessorConstructor.SerializeToBlobAndMeta(arr, loadContext).Blob;
                 result.emplace_back(s->CopyWithAnotherBlob(std::move(data), rawBytes, *this));
             }
         }

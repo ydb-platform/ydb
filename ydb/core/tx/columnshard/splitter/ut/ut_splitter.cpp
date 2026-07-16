@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         TChunkConstructionData info(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
-        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         return std::make_shared<NKikimr::NOlap::NChunks::TChunkPreparation>(
             blobAndMeta.Blob, dict, address, colInfo, std::move(blobAndMeta.Meta));
     }
@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         TChunkConstructionData info(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
-        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         const auto field = std::make_shared<arrow::Field>("message", arrow::utf8(), true);
         const auto colInfo = MakeUtf8ColumnInfo();
         auto chunk = std::make_shared<NKikimr::NOlap::NChunks::TChunkPreparation>(

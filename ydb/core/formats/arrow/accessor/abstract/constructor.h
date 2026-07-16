@@ -27,7 +27,9 @@ private:
         return "";
     }
     virtual bool DoIsEqualWithSameTypeTo(const IConstructor& item) const = 0;
-    virtual TString DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const = 0;
+
+    virtual TBlobWithAdditionalAccessorData DoSerializeToBlobAndMeta(
+        const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const = 0;
 
     virtual TConclusion<std::shared_ptr<IChunkedArray>> DoConstruct(
         const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& originalArray, const TChunkConstructionData& externalInfo) const = 0;
@@ -43,7 +45,8 @@ public:
 
     virtual ~IConstructor() = default;
 
-    TString SerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const;
+    TBlobWithAdditionalAccessorData SerializeToBlobAndMeta(
+        const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const;
 
     bool IsEqualWithSameTypeTo(const IConstructor& item) const {
         return DoIsEqualWithSameTypeTo(item);
@@ -113,9 +116,10 @@ public:
         }
     }
 
-    TString SerializeToString(const std::shared_ptr<IChunkedArray>& batch, const TChunkConstructionData& externalInfo) const {
+    TBlobWithAdditionalAccessorData SerializeToBlobAndMeta(
+        const std::shared_ptr<IChunkedArray>& batch, const TChunkConstructionData& externalInfo) const {
         AFL_VERIFY(!!GetObjectPtr());
-        return GetObjectPtr()->SerializeToString(batch, externalInfo);
+        return GetObjectPtr()->SerializeToBlobAndMeta(batch, externalInfo);
     }
 
     TConclusion<std::shared_ptr<IChunkedArray>> DeserializeFromString(

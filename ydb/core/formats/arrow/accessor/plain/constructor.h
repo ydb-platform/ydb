@@ -23,7 +23,7 @@ private:
     virtual TConclusion<std::shared_ptr<IChunkedArray>> DoConstruct(
         const std::shared_ptr<IChunkedArray>& originalArray, const TChunkConstructionData& externalInfo) const override;
 
-    virtual TString DoSerializeToString(
+    virtual TBlobWithAdditionalAccessorData DoSerializeToBlobAndMeta(
         const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const override;
     virtual TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> DoDeserializeFromString(
         const TString& originalData, const TChunkConstructionData& externalInfo) const override;

@@ -313,6 +313,20 @@ namespace NKikimr::NStorage {
                     it->first.NodeId == LocalNodeId && it->first.PDiskId == pdiskId; ++it) {
                 it->second.UnderlyingPDiskDestroyed = true;
             }
+
+            // A pending slay no longer needs an acknowledgement from a PDisk which has itself been removed.
+            // Complete it here so that a lost TEvSlayResult can't keep the VSlot state forever.
+            for (auto it = SlayInFlight.lower_bound({LocalNodeId, pdiskId, 0});
+                    it != SlayInFlight.end() && it->first.NodeId == LocalNodeId && it->first.PDiskId == pdiskId; ) {
+                const auto current = it++;
+                const TVSlotId vslotId = current->first;
+                const TSlayInFlight slay = current->second;
+                SlayInFlight.erase(current);
+                SendVDiskReport(vslotId, slay.VDiskId,
+                    slay.Action == ESlayAction::DESTROY
+                        ? NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED
+                        : NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
+            }
         }
 
         if (pending) {
@@ -414,16 +428,22 @@ namespace NKikimr::NStorage {
             bool first = true;
             vdisks << "{";
             for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
-                auto& [key, value] = *it;
+                auto& value = it->second;
 
                 PoisonLocalVDisk(value);
                 vdisks << (std::exchange(first, false) ? "" : ", ") << value.GetVDiskId().ToString();
-                if (const auto it = SlayInFlight.find(key); it != SlayInFlight.end()) {
-                    const ui64 round = NextLocalPDiskInitOwnerRound();
-                    Send(MakeBlobStoragePDiskID(key.NodeId, key.PDiskId), new NPDisk::TEvSlay(value.GetVDiskId(), round,
-                        key.PDiskId, key.VDiskSlotId));
-                    it->second = round;
-                } else {
+            }
+
+            // Slay state owns the original VDisk identity, so it can be replayed even when a deleted VDisk
+            // has already been removed from LocalVDisks.
+            for (auto it = SlayInFlight.lower_bound(from); it != SlayInFlight.end() && it->first <= to; ++it) {
+                it->second.RetryDelay = TDuration::Seconds(5);
+                IssueSlay(it->first, it->second);
+            }
+
+            for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
+                auto& [key, value] = *it;
+                if (!SlayInFlight.contains(key)) {
                     StartLocalVDiskActor(value);
                 }
             }

@@ -516,19 +516,28 @@ namespace NKikimr::NStorage {
             }
         }
 
+        const TPDiskKey pdiskKey(vslotId.NodeId, vslotId.PDiskId);
+        const bool pdiskMissing = !LocalPDisks.contains(pdiskKey);
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
-            if (record.UnderlyingPDiskDestroyed) {
+            if (record.UnderlyingPDiskDestroyed || pdiskMissing) {
                 PoisonLocalVDisk(record);
+                SlayInFlight.erase(vslotId);
                 SendVDiskReport(vslotId, record.GetVDiskId(), NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED);
                 record.UnderlyingPDiskDestroyed = false;
             } else {
-                Slay(record);
+                Slay(record, ESlayAction::DESTROY);
             }
             DestroyLocalVDisk(record);
             LocalVDisks.erase(it);
             ApplyServiceSetPDisks(); // destroy unneeded PDisk actors
         } else if (vdisk.GetDoWipe()) {
-            Slay(record);
+            if (pdiskMissing) {
+                PoisonLocalVDisk(record);
+                SlayInFlight.erase(vslotId);
+                SendVDiskReport(vslotId, record.GetVDiskId(), NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
+            } else {
+                Slay(record, ESlayAction::WIPE);
+            }
         } else if (!record.RuntimeData) {
             StartLocalVDiskActor(record);
         } else if (record.RuntimeData->DonorMode < record.Config.HasDonorMode() || record.RuntimeData->ReadOnly != record.Config.GetReadOnly()) {
@@ -537,21 +546,50 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TNodeWarden::Slay(TVDiskRecord& vdisk) {
+    void TNodeWarden::Slay(TVDiskRecord& vdisk, ESlayAction action) {
         const TVSlotId vslotId = vdisk.GetVSlotId();
+        const TVDiskID vdiskId = vdisk.GetVDiskId();
         YDB_LOG_INFO("Slay",
             {"marker", "NW33"},
-            {"VDiskId", vdisk.GetVDiskId()},
-            {"VSlotId", vdisk.GetVSlotId()},
+            {"VDiskId", vdiskId},
+            {"VSlotId", vslotId},
+            {"action", action == ESlayAction::DESTROY ? "destroy" : "wipe"},
             {"slayInFlight", SlayInFlight.contains(vslotId)});
-        if (!SlayInFlight.contains(vslotId)) {
+
+        if (auto it = SlayInFlight.find(vslotId); it != SlayInFlight.end()) {
+            Y_DEBUG_ABORT_UNLESS(it->second.VDiskId.SameExceptGeneration(vdiskId));
+            if (it->second.VDiskId.SameExceptGeneration(vdiskId)) {
+                const bool upgradeToDestroy = action == ESlayAction::DESTROY &&
+                    it->second.Action != ESlayAction::DESTROY;
+                it->second.VDiskId = vdiskId;
+                if (action == ESlayAction::DESTROY) {
+                    it->second.Action = ESlayAction::DESTROY;
+                }
+                if (upgradeToDestroy) {
+                    it->second.RetryDelay = TDuration::Seconds(5);
+                    IssueSlay(vslotId, it->second);
+                }
+            }
+        } else {
             PoisonLocalVDisk(vdisk);
-            const TVSlotId vslotId = vdisk.GetVSlotId();
-            const TActorId pdiskServiceId = MakeBlobStoragePDiskID(vslotId.NodeId, vslotId.PDiskId);
-            const ui64 round = NextLocalPDiskInitOwnerRound();
-            Send(pdiskServiceId, new NPDisk::TEvSlay(vdisk.GetVDiskId(), round, vslotId.PDiskId, vslotId.VDiskSlotId));
-            SlayInFlight.emplace(vslotId, round);
+            auto [insertedIt, inserted] = SlayInFlight.emplace(vslotId, TSlayInFlight{
+                .VDiskId = vdiskId,
+                .Action = action,
+            });
+            Y_ABORT_UNLESS(inserted);
+            IssueSlay(vslotId, insertedIt->second);
         }
+    }
+
+    void TNodeWarden::IssueSlay(const TVSlotId& vslotId, TSlayInFlight& slay) {
+        const ui64 round = NextLocalPDiskInitOwnerRound();
+        slay.Round = round;
+
+        Send(MakeBlobStoragePDiskID(vslotId.NodeId, vslotId.PDiskId),
+            new NPDisk::TEvSlay(slay.VDiskId, round, vslotId.PDiskId, vslotId.VDiskSlotId));
+        Schedule(slay.RetryDelay,
+            new TEvPrivate::TEvRetrySlay(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId, round));
+        slay.RetryDelay = Min(slay.RetryDelay * 2, TDuration::Minutes(1));
     }
 
     void TNodeWarden::Handle(TEvBlobStorage::TEvAskRestartVDisk::TPtr ev) {

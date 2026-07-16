@@ -1119,7 +1119,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
         if (req.Deadline != TDuration::Max() && !ResourceInResolvingState(reqId)) {
             const TInstant now = TActivationContext::Now();
             TryTickSchedule(now);
-            ScheduleRequestDeadline(reqId, TimeToGranularity(now + req.Deadline));
+            ScheduleRequestDeadline(reqId, TimeToGranularity(now + req.Deadline)); // Can invalidate req
         }
     }
 

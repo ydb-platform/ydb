@@ -17,6 +17,7 @@ items:
 - { name: VIEW,                 href: view.md,                  when: feature_mapreduce       }
 - { name: VIEW SECONDARY INDEX, href: secondary_index.md,       when: feature_secondary_index }
 - { name: VIEW VECTOR INDEX,    href: vector_index.md,          when: feature_secondary_index }
+- { name: VIEW FULLTEXT INDEX,  href: fulltext_index.md,        when: feature_secondary_index }
 - { name: WITH,                 href: with.md                                                 }
 - { name: WITHOUT,              href: without.md                                              }
 - { name: WHERE,                href: where.md                                                }

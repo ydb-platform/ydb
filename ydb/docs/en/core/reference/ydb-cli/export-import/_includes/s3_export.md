@@ -16,6 +16,7 @@ The export feature is available only for objects of the following types:
 - [Row-oriented table](../../../../concepts/datamodel/table.md#row-oriented-tables)
 - [Secondary index](../../../../concepts/glossary.md#secondary-index)
 - [Vector index](../../../../concepts/glossary.md#vector-index)
+- [Fulltext index](../../../../concepts/glossary.md#fulltext-index)
 - [Topic](../../../../concepts/datamodel/topic.md) (schema only)
 
 {% endnote %}

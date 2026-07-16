@@ -389,6 +389,13 @@ ui64 TFastPathService::GenerateLsn()
     return lsn;
 }
 
+void TFastPathService::StopTablet(const TString& reason)
+{
+    // Just forward the signal to the actor thread.
+    auto event = std::make_unique<TEvPartitionDirectPrivate::TEvPoison>(reason);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
 TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
     const ui64 vchunkSize = StorageConfig->GetVChunkSize();

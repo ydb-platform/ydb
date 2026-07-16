@@ -1438,6 +1438,50 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "partition_direct tablet");
         UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
     }
+
+    Y_UNIT_TEST(ShouldSuicideOnPoisonByBlockedGeneration)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        const ui64 tabletId = CreatePartitionTablet(env);
+
+        const TActorId edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        // Observe the tablet death via TEvTabletDead.
+        bool tabletDead = false;
+        runtime->FilterFunction =
+            [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
+        {
+            Y_UNUSED(nodeId);
+            if (ev->GetTypeRewrite() == TEvTablet::TEvTabletDead::EventType) {
+                tabletDead = true;
+            }
+            if (ev->GetRecipientRewrite() == edge) {
+                return false;
+            }
+            return true;
+        };
+
+        runtime->SendToPipe(
+            tabletId,
+            edge,
+            std::make_unique<TEvPartitionDirectPrivate::TEvPoison>("test")
+                .release(),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+
+        env.Sim(TDuration::Seconds(1));
+
+        UNIT_ASSERT(tabletDead);
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

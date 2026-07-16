@@ -20,6 +20,9 @@ namespace NYdb::NBS::NBlockStore {
 class TTestPartitionDirectService final: public IPartitionDirectService
 {
 public:
+    ui64 LsnGenerator = 0;
+    size_t BlockedGenerationCount = 0;
+
     // IPartitionDirectService implementation
     TVolumeConfigPtr GetVolumeConfig() const override
     {
@@ -52,11 +55,15 @@ public:
         Y_UNUSED(directBlockGroupId);
     }
 
-    ui64 LsnGenerator = 0;
-
     ui64 GenerateLsn() override
     {
         return ++LsnGenerator;
+    }
+
+    void StopTablet(const TString& reason) override
+    {
+        Y_UNUSED(reason);
+        ++BlockedGenerationCount;
     }
 };
 

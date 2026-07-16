@@ -434,6 +434,22 @@ void TPartitionActor::HandleFastPathServiceStopped(
         LogTitle.GetWithTime().c_str());
 }
 
+void TPartitionActor::HandlePoisonByBlockedGeneration(
+    const TEvPartitionDirectPrivate::TEvPoison::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const auto* msg = ev->Get();
+
+    LOG_CRIT(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s SUICIDE by BLOCKED generation. Reason: %s",
+        LogTitle.GetWithTime().c_str(),
+        msg->Reason.c_str());
+
+    ctx.Send(Tablet(), std::make_unique<TEvents::TEvPoisonPill>().release());
+}
+
 void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -693,6 +709,10 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceStopped,
             HandleFastPathServiceStopped);
+
+        HFunc(
+            TEvPartitionDirectPrivate::TEvPoison,
+            HandlePoisonByBlockedGeneration);
 
         HFunc(NMon::TEvRemoteHttpInfo, HandleHttpInfo);
 

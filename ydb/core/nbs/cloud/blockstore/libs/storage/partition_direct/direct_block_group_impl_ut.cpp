@@ -730,8 +730,9 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,
                     range,
                     MakeSgList(pendingBuffer),
-                    NWilson::TTraceId());
+                    CreateTraceId());
             });
+
         auto inFlightRead = WaitFuture(executor, pendingRead, WaitTimeout);
         DoAllExecutorAndRuntimeWork(executor);
         UNIT_ASSERT(!inFlightRead.HasValue());
@@ -741,11 +742,9 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             1,
             NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED));
 
-        auto response = WaitFuture(executor, inFlightRead, WaitTimeout);
         // The suspended read is rejected once the session becomes Broken.
-        UNIT_ASSERT_VALUES_EQUAL(
-            E_REJECTED,
-            response.Error.GetCode());
+        auto response = WaitFuture(executor, inFlightRead, WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(E_REJECTED, response.Error.GetCode());
 
         const auto state = GetBlockedDetected(executor, dbg, 0, WaitTimeout);
         UNIT_ASSERT(state.DDiskSessionBroken);
@@ -789,7 +788,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,
                     range,
                     MakeSgList(writeBuffer),
-                    NWilson::TTraceId());
+                    CreateTraceId());
             });
         UNIT_ASSERT_VALUES_EQUAL(
             E_REJECTED,
@@ -828,7 +827,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,
                     range,
                     MakeSgList(readBuffer),
-                    NWilson::TTraceId());
+                    CreateTraceId());
             });
         UNIT_ASSERT_VALUES_EQUAL(
             E_REJECTED,
@@ -873,7 +872,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     pbufferHost,
                     ddiskHost,
                     segments,
-                    NWilson::TTraceId());
+                    CreateTraceId());
             });
         auto flushResponse =
             pendingFlush.GetValue(WaitTimeout).GetValue(WaitTimeout);
@@ -917,7 +916,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                         host,
                         range,
                         MakeSgList(writeBuffer),
-                        NWilson::TTraceId());
+                        CreateTraceId());
                 });
             UNIT_ASSERT_VALUES_EQUAL(
                 E_REJECTED,
@@ -1022,7 +1021,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
-                    NWilson::TTraceId(),
+                    CreateTraceId(),
                     cb);
                 return future;
             });

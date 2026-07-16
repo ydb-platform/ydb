@@ -260,6 +260,13 @@ namespace NPage {
         }
     };
 
+    /** Equality predicate for TPageLocation — compares only Offset */
+    struct TPageLocationByOffsetEq {
+        bool operator()(const TPageLocation& a, const TPageLocation& b) const noexcept {
+            return a.Offset == b.Offset;
+        }
+    };
+
 }
 }
 }

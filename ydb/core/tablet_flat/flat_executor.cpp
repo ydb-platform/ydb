@@ -101,7 +101,7 @@ public:
         return nullptr;
     }
 
-    using THashSetOfLocation = THashSet<TPageLocation, NTable::NPage::TPageLocationByOffsetHash>;
+    using THashSetOfLocation = THashSet<TPageLocation, NTable::NPage::TPageLocationByOffsetHash, NTable::NPage::TPageLocationByOffsetEq>;
 
     THashMap<TLogoBlobID, THashSetOfLocation> Misses;
 

@@ -153,7 +153,7 @@ namespace NTest {
             }
 
             auto loadMeta = [](const NProto::TBTreeIndexMeta& proto) -> NPage::TBtreeIndexMeta {
-                auto rootType = proto.GetLevelCount() == 0 ? NPage::EPage::DataPage : NPage::EPage::BTreeIndex;
+                auto rootType = proto.GetLevelCount() == 0 ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
                 auto v1Root = proto.HasRootPageId()
                     ? proto.GetRootPageId()
                     : Max<TPageId>();

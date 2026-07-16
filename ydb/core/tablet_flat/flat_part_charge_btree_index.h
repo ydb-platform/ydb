@@ -89,7 +89,7 @@ public:
         TPageRef key2Ref = key2 ? BuildRootChildState(meta).Ref : NPage::TPageLocation::Max();
         TChildState firstChild = BuildRootChildState(meta);
 
-        const auto iterateLevel = [&](const auto& tryHandleChild, bool isLeafLevel) {
+        const auto iterateLevel = [&](const auto& tryHandleChild, bool isLeafLevel, bool isDataBelow) {
             // tryHandleChild may update them, copy for simplicity
             const TRowId levelBeginRowId = beginRowId, levelEndRowId = endRowId;
 
@@ -114,7 +114,7 @@ public:
                         endRowId = Min(endRowId, childState.BeginRowId);
                         return;
                     }
-                    ready &= tryHandleChild(childState, isLeafLevel);
+                    ready &= tryHandleChild(childState, isDataBelow);
                 }
             }
         };
@@ -131,13 +131,13 @@ public:
             }
         };
 
-        const auto tryHandleNode = [&](const TChildState& child, bool isLeafLevel) -> bool {
-            if (child.Ref == firstChild.Ref || (child.Ref == key1Ref) || (child.Ref == key2Ref)) {
+        const auto tryHandleNode = [&](const TChildState& child, bool isDataBelow) -> bool {
+            if (child.Ref == firstChild.Ref || child.Ref == key1Ref || child.Ref == key2Ref) {
                 if (TryLoadNode(child, nextLevel)) {
                     const auto& node = nextLevel.back();
                     if (child.Ref == key1Ref) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        key1Ref = BuildPageRef(node, pos, isLeafLevel);
+                        key1Ref = BuildPageRef(node, pos, isDataBelow);
                         if (pos) {
                             beginRowId = Max(beginRowId, node.GetChildRowCount(pos - 1)); // move beginRowId to the first key >= key1
                         }
@@ -145,7 +145,7 @@ public:
                     if (child.Ref == key2Ref) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
                         TRowId key2ChildRowCount = node.GetChildRowCount(pos);
-                        key2Ref = BuildPageRef(node, pos, isLeafLevel);
+                        key2Ref = BuildPageRef(node, pos, isDataBelow);
                         endRowId = Min(endRowId, key2ChildRowCount + 1); // move endRowId - 1 to the first key > key2
                         if (key2ChildRowCount <= sliceBeginRowId) {
                             hasValidRowsRange = false; // key2 is before current slice
@@ -167,10 +167,10 @@ public:
         //       the size of each data page in the number of bytes precharged.
         ui64 prechargedBytes = 0;
 
-        const auto tryHandleDataPage = [&](const TChildState& child, bool /*isLeafLevel*/) -> bool {
+        const auto tryHandleDataPage = [&](const TChildState& child, bool /*isDataBelow*/ = false) -> bool {
             prechargedBytes += child.Bytes - child.PrevBytes;
 
-            if (hasValidRowsRange && ((child.Ref == key1Ref) || (child.Ref == key2Ref))) {
+            if (hasValidRowsRange && (child.Ref == key1Ref || child.Ref == key2Ref)) {
                 auto location = NTable::ResolvePageLocation(Part, child.Ref, {});
                 const auto page = TryGetDataPage(location, { });
                 if (page) {
@@ -195,11 +195,11 @@ public:
         };
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            bool isLeafLevel = (height + 1 == meta.LevelCount);
+            const bool isDataBelow = (height + 1 == meta.LevelCount);
             if (height == 0) {
-                ready &= tryHandleNode(BuildRootChildState(meta), isLeafLevel);
+                ready &= tryHandleNode(BuildRootChildState(meta), isDataBelow);
             } else {
-                iterateLevel(tryHandleNode, isLeafLevel);
+                iterateLevel(tryHandleNode, /*isLeafLevel=*/false, isDataBelow);
             }
             level.swap(nextLevel);
             nextLevel.clear();
@@ -214,9 +214,9 @@ public:
         overshot &= endRowId == sliceEndRowId;
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(BuildRootChildState(meta), false);
+            ready &= tryHandleDataPage(BuildRootChildState(meta), 0);
         } else {
-            iterateLevel(tryHandleDataPage, true);
+            iterateLevel(tryHandleDataPage, /*isLeafLevel=*/true, 0);
         }
 
         // NOTE: Column groups are precharged for the same set of rows, but the overall
@@ -259,8 +259,7 @@ public:
         TPageRef key1Ref = key1 ? BuildRootChildState(meta).Ref : NPage::TPageLocation::Max();
         TPageRef key2Ref = key2 ? BuildRootChildState(meta).Ref : NPage::TPageLocation::Max();
         TChildState lastChild = BuildRootChildState(meta);
-
-        const auto iterateLevel = [&](const auto& tryHandleChild, bool isLeafLevel) {
+        const auto iterateLevel = [&](const auto& tryHandleChild, bool isLeafLevel, bool isDataBelow) {
             // tryHandleChild may update them, copy for simplicity
             const TRowId levelBeginRowId = beginRowId, levelEndRowId = endRowId;
 
@@ -285,7 +284,7 @@ public:
                         beginRowId = Max(beginRowId, childState.EndRowId);
                         return;
                     }
-                    ready &= tryHandleChild(childState, isLeafLevel);
+                    ready &= tryHandleChild(childState, isDataBelow);
                 }
             }
         };
@@ -302,21 +301,22 @@ public:
             }
         };
 
-        const auto tryHandleNode = [&](const TChildState& child, bool isLeafLevel) -> bool {
-            if (child.Ref == lastChild.Ref || (child.Ref == key1Ref) || (child.Ref == key2Ref)) {
+        const auto tryHandleNode = [&](const TChildState& child, bool isDataBelow) -> bool {
+            if (child.Ref == lastChild.Ref || child.Ref == key1Ref || child.Ref == key2Ref) {
                 if (TryLoadNode(child, nextLevel)) {
                     const auto& node = nextLevel.back();
                     if (child.Ref == key1Ref) {
                         TRecIdx pos = node.SeekReverse(ESeek::Lower, key1, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        key1Ref = BuildPageRef(node, pos, isLeafLevel);
+                        key1Ref = BuildPageRef(node, pos, isDataBelow);
                         endRowId = Min(endRowId, node.GetChildRowCount(pos)); // move endRowId - 1 to the last key <= key1
                     }
                     if (child.Ref == key2Ref) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, Scheme.Groups[0].ColsKeyIdx, &keyDefaults);
-                        key2Ref = BuildPageRef(node, pos, isLeafLevel);
+                        key2Ref = BuildPageRef(node, pos, isDataBelow);
                         if (pos) {
-                            beginRowId = Max(beginRowId, node.GetChildRowCount(pos - 1) - 1); // move beginRowId to the last key < key2
-                            if (node.GetChildRowCount(pos - 1) >= sliceEndRowId) {
+                            auto prevKey2ChildRowCount = node.GetChildRowCount(pos - 1);
+                            beginRowId = Max(beginRowId, prevKey2ChildRowCount - 1); // move beginRowId to the last key < key2
+                            if (prevKey2ChildRowCount >= sliceEndRowId) {
                                 hasValidRowsRange = false; // key2 is after current slice
                                 beginRowId = Min(beginRowId, sliceEndRowId - 1); // always load endRowId - 1 regardless of keys
                             }
@@ -337,10 +337,10 @@ public:
         //       the size of each data page in the number of bytes precharged.
         ui64 prechargedBytes = 0;
 
-        const auto tryHandleDataPage = [&](const TChildState& child, bool /*isLeafLevel*/) -> bool {
+        const auto tryHandleDataPage = [&](const TChildState& child, bool /*isDataBelow*/ = false) -> bool {
             prechargedBytes += child.Bytes - child.PrevBytes;
 
-            if (hasValidRowsRange && ((child.Ref == key1Ref) || (child.Ref == key2Ref))) {
+            if (hasValidRowsRange && (child.Ref == key1Ref || child.Ref == key2Ref)) {
                 auto location = NTable::ResolvePageLocation(Part, child.Ref, {});
                 const auto page = TryGetDataPage(location, { });
                 if (page) {
@@ -375,11 +375,11 @@ public:
         };
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            bool isLeafLevel = (height + 1 == meta.LevelCount);
+            const bool isDataBelow = (height + 1 == meta.LevelCount);
             if (height == 0) {
-                ready &= tryHandleNode(BuildRootChildState(meta), isLeafLevel);
+                ready &= tryHandleNode(BuildRootChildState(meta), isDataBelow);
             } else {
-                iterateLevel(tryHandleNode, isLeafLevel);
+                iterateLevel(tryHandleNode, /*isLeafLevel=*/false, isDataBelow);
             }
             level.swap(nextLevel);
             nextLevel.clear();
@@ -394,9 +394,9 @@ public:
         overshot &= beginRowId == sliceBeginRowId;
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(BuildRootChildState(meta), false);
+            ready &= tryHandleDataPage(BuildRootChildState(meta), 0);
         } else {
-            iterateLevel(tryHandleDataPage, true);
+            iterateLevel(tryHandleDataPage, /*isLeafLevel=*/true, 0);
         }
 
         // NOTE: Column groups are precharged for the same set of rows, but the overall
@@ -496,7 +496,7 @@ private:
         TVector<TNodeState> level, nextLevel(::Reserve(3));
         ui64 firstChildPrevBytes = bytesLimit ? GetPrevBytes(meta, groupId, firstChildBeginRowId) : 0;
 
-        const auto iterateLevel = [&](const auto& tryHandleChild, bool isLeafLevel) {
+        const auto iterateLevel = [&](const auto& tryHandleChild, bool isLeafLevel, bool isDataBelow) {
             for (const auto &node : level) {
                 TRecIdx from = 0, to = node.GetChildrenCount();
                 if (node.BeginRowId < beginRowId) {
@@ -511,38 +511,35 @@ private:
                     if (LimitExceeded(firstChildPrevBytes, childState.PrevBytes, bytesLimit)) {
                         return;
                     }
-                    ready &= tryHandleChild(childState);
+                    ready &= tryHandleChild(childState, isDataBelow);
                 }
             }
         };
 
-        const auto tryHandleNode = [&](const TChildState& child) -> bool {
-            // B-tree index pages for ALL groups are stored in the main page
-            // collection (room 0), not in the column group's page collection.
+        const auto tryHandleNode = [&](const TChildState& child, bool /*isDataBelow*/) -> bool {
             return TryLoadNode(child, nextLevel);
         };
 
-        const auto tryHandleDataPage = [&](const TChildState& child) -> bool {
-            // Data pages ARE per-group, so use the column group's groupId.
+        const auto tryHandleDataPage = [&](const TChildState& child, bool /*isDataBelow*/ = false) -> bool {
             auto location = NTable::ResolvePageLocation(Part, child.Ref, groupId);
             return HasDataPage(location, groupId);
         };
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            bool isLeafLevel = (height + 1 == meta.LevelCount);
+            const bool isDataBelow = (height + 1 == meta.LevelCount);
             if (height == 0) {
-                ready &= tryHandleNode(BuildRootChildState(meta));
+                ready &= tryHandleNode(BuildRootChildState(meta), isDataBelow);
             } else {
-                iterateLevel(tryHandleNode, isLeafLevel);
+                iterateLevel(tryHandleNode, /*isLeafLevel=*/false, isDataBelow);
             }
             level.swap(nextLevel);
             nextLevel.clear();
         }
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(BuildRootChildState(meta));
+            ready &= tryHandleDataPage(BuildRootChildState(meta), 0);
         } else {
-            iterateLevel(tryHandleDataPage, true);
+            iterateLevel(tryHandleDataPage, /*isLeafLevel=*/true, 0);
         }
 
         return ready;
@@ -556,7 +553,7 @@ private:
         TVector<TNodeState> level, nextLevel(::Reserve(3));
         ui64 lastChildBytes = bytesLimit ? GetBytes(meta, groupId, lastChildEndRowId - 1) : 0;
 
-        const auto iterateLevel = [&](const auto& tryHandleChild, bool isLeafLevel) {
+        const auto iterateLevel = [&](const auto& tryHandleChild, bool isLeafLevel, bool isDataBelow) {
             for (const auto &node : level) {
                 TRecIdx from = 0, to = node.GetKeysCount();
                 if (node.BeginRowId < beginRowId) {
@@ -570,38 +567,35 @@ private:
                     if (LimitExceeded(childState.Bytes, lastChildBytes, bytesLimit)) {
                         return;
                     }
-                    ready &= tryHandleChild(childState);
+                    ready &= tryHandleChild(childState, isDataBelow);
                 }
             }
         };
 
-        const auto tryHandleNode = [&](const TChildState& child) -> bool {
-            // B-tree index pages for ALL groups are stored in the main page
-            // collection (room 0), not in the column group's page collection.
+        const auto tryHandleNode = [&](const TChildState& child, bool /*isDataBelow*/) -> bool {
             return TryLoadNode(child, nextLevel);
         };
 
-        const auto tryHandleDataPage = [&](const TChildState& child) -> bool {
-            // Data pages ARE per-group, so use the column group's groupId.
+        const auto tryHandleDataPage = [&](const TChildState& child, bool /*isDataBelow*/ = false) -> bool {
             auto location = NTable::ResolvePageLocation(Part, child.Ref, groupId);
             return HasDataPage(location, groupId);
         };
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            bool isLeafLevel = (height + 1 == meta.LevelCount);
+            const bool isDataBelow = (height + 1 == meta.LevelCount);
             if (height == 0) {
-                ready &= tryHandleNode(BuildRootChildState(meta));
+                ready &= tryHandleNode(BuildRootChildState(meta), isDataBelow);
             } else {
-                iterateLevel(tryHandleNode, isLeafLevel);
+                iterateLevel(tryHandleNode, /*isLeafLevel=*/false, isDataBelow);
             }
             level.swap(nextLevel);
             nextLevel.clear();
         }
 
         if (meta.LevelCount == 0) {
-            ready &= tryHandleDataPage(BuildRootChildState(meta));
+            ready &= tryHandleDataPage(BuildRootChildState(meta), 0);
         } else {
-            iterateLevel(tryHandleDataPage, true);
+            iterateLevel(tryHandleDataPage, /*isLeafLevel=*/true, 0);
         }
 
         return ready;
@@ -644,7 +638,7 @@ private:
         TPageRef key1Ref = BuildRootChildState(meta).Ref;
         TPageRef key2Ref = BuildRootChildState(meta).Ref;
 
-        const auto iterateLevel = [&](const auto& tryHandleChild, bool isLeafLevel) {
+        const auto iterateLevel = [&](const auto& tryHandleChild, bool isLeafLevel, bool isDataBelow) {
             for (const auto &node : level) {
                 TRecIdx from = 0, to = node.GetChildrenCount();
                 if (node.BeginRowId < beginRowId) {
@@ -655,7 +649,7 @@ private:
                 }
                 for (TRecIdx pos : xrange(from, to)) {
                     auto childState = BuildChildState(node, pos, isLeafLevel);
-                    ready &= tryHandleChild(childState, isLeafLevel);
+                    ready &= tryHandleChild(childState, isDataBelow);
                 }
             }
         };
@@ -669,14 +663,13 @@ private:
             }
         };
 
-        const auto tryHandleNode = [&](const TChildState& child, bool isLeafLevel) -> bool {
-            if ((child.Ref == key1Ref)
-                || (child.Ref == key2Ref)) {
+        const auto tryHandleNode = [&](const TChildState& child, bool isDataBelow) -> bool {
+            if (child.Ref == key1Ref || child.Ref == key2Ref) {
                 if (TryLoadNode(child, nextLevel)) {
                     const auto& node = nextLevel.back();
                     if (child.Ref == key1Ref) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key1, scheme.ColsKeyIdx, keyDefaults);
-                        key1Ref = BuildPageRef(node, pos, isLeafLevel);
+                        key1Ref = BuildPageRef(node, pos, isDataBelow);
                         if (pos) {
                             beginRowId = Max(beginRowId, node.GetChildRowCount(pos - 1)); // move beginRowId to the first key >= key1
                         }
@@ -684,7 +677,7 @@ private:
                     if (child.Ref == key2Ref) {
                         TRecIdx pos = node.Seek(ESeek::Lower, key2, scheme.ColsKeyIdx, keyDefaults);
                         TRowId key2ChildRowCount = node.GetChildRowCount(pos);
-                        key2Ref = BuildPageRef(node, pos, isLeafLevel);
+                        key2Ref = BuildPageRef(node, pos, isDataBelow);
                         endRowId = Min(endRowId, key2ChildRowCount); // move endRowId to the first key > key2
                     }
                     return true;
@@ -697,8 +690,8 @@ private:
             }
         };
 
-        const auto tryHandleDataPage = [&](const TChildState& child, bool /*isLeafLevel*/) -> bool {
-            if (Groups && ((child.Ref == key1Ref) || (child.Ref == key2Ref))) {
+        const auto tryHandleDataPage = [&](const TChildState& child, bool /*isDataBelow*/ = false) -> bool {
+            if (Groups && (child.Ref == key1Ref || child.Ref == key2Ref)) {
                 auto location = NTable::ResolvePageLocation(Part, child.Ref, groupId);
                 const auto page = TryGetDataPage(location, groupId);
                 if (page) {
@@ -723,11 +716,11 @@ private:
         };
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            bool isLeafLevel = (height + 1 == meta.LevelCount);
+            const bool isDataBelow = (height + 1 == meta.LevelCount);
             if (height == 0) {
-                ready &= tryHandleNode(BuildRootChildState(meta), isLeafLevel);
+                ready &= tryHandleNode(BuildRootChildState(meta), isDataBelow);
             } else {
-                iterateLevel(tryHandleNode, isLeafLevel);
+                iterateLevel(tryHandleNode, /*isLeafLevel=*/false, isDataBelow);
             }
             level.swap(nextLevel);
             nextLevel.clear();
@@ -736,7 +729,7 @@ private:
         if (meta.LevelCount == 0) {
             ready &= tryHandleDataPage(BuildRootChildState(meta), false);
         } else {
-            iterateLevel(tryHandleDataPage, true);
+            iterateLevel(tryHandleDataPage, /*isLeafLevel=*/true, false);
         }
 
         ready &= DoHistoricGroups(beginRowId, endRowId); // precharge historic groups using the latest row bounds
@@ -764,14 +757,14 @@ private:
         ui64 result = 0;
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            bool isLeafLevel = (height + 1 == meta.LevelCount);
+            bool isDataPage = (height + 1 == meta.LevelCount);
             auto page = Env->TryGetPage(Part, location, {});
             if (!page) {
                 return result;
             }
             auto node = TBtreeIndexNode(*page);
             auto pos = node.Seek(rowId);
-            location = ResolvePageLocation(Part, BuildPageRef(node, pos, isLeafLevel), isLeafLevel ? groupId : TGroupId{});
+            location = ResolvePageLocation(Part, BuildPageRef(node, pos, isDataPage), isDataPage ? groupId : TGroupId{});
             if (pos) {
                 result = node.GetChildDataSize(pos - 1);
             }
@@ -787,14 +780,14 @@ private:
         ui64 result = meta.GetDataSize();
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            bool isLeafLevel = (height + 1 == meta.LevelCount);
+            bool isDataPage = (height + 1 == meta.LevelCount);
             auto page = Env->TryGetPage(Part, location, {});
             if (!page) {
                 return result;
             }
             auto node = TBtreeIndexNode(*page);
             auto pos = node.Seek(rowId);
-            location = ResolvePageLocation(Part, BuildPageRef(node, pos, isLeafLevel), isLeafLevel ? groupId : TGroupId{});
+            location = ResolvePageLocation(Part, BuildPageRef(node, pos, isDataPage), isDataPage ? groupId : TGroupId{});
             result = node.GetChildDataSize(pos);
         }
 
@@ -852,16 +845,16 @@ private:
     }
 
     /// V2 nodes produce byte-offset TPageLocation; V1 nodes produce TPageId
-    static TPageRef BuildPageRef(const TBtreeIndexNode& node, TRecIdx pos, bool isLeafLevel) {
+    static TPageRef BuildPageRef(const TBtreeIndexNode& node, TRecIdx pos, bool isDataPage) {
         if (node.GetStoredVersion() == TBtreeIndexNode::FormatVersionV2) {
-            auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
+            auto type = isDataPage ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
             return node.GetChildLocationV2(pos, type);
         }
         return node.GetChildPageId(pos);
     }
 
     // Version-aware child state builder
-    TChildState BuildChildState(const TNodeState& parent, TRecIdx curPos, bool isLeafLevel) const {
+    TChildState BuildChildState(const TNodeState& parent, TRecIdx curPos, bool isDataPage) const {
         auto prevPos = curPos - 1;
         bool hasPrev = prevPos != Max<TRecIdx>();
         TRowId beginRowId = hasPrev ? parent.GetChildRowCount(prevPos) : parent.BeginRowId;
@@ -870,7 +863,7 @@ private:
         TRowId items = parent.GetChildNonErasedRowCount(curPos);
         ui64 prevBytes = hasPrev ? parent.GetChildDataSize(prevPos) : parent.PrevBytes;
         ui64 bytes = parent.GetChildDataSize(curPos);
-        return TChildState(BuildPageRef(parent, curPos, isLeafLevel), beginRowId, endRowId, prevItems, items, prevBytes, bytes);
+        return TChildState(BuildPageRef(parent, curPos, isDataPage), beginRowId, endRowId, prevItems, items, prevBytes, bytes);
     }
 
     bool LimitExceeded(ui64 prev, ui64 current, ui64 limit) const {

@@ -70,16 +70,21 @@ namespace NTabletFlatExecutor {
         }
 
         ui64 MissingReferencesSize() const
-        { 
+        {
             return MissingReferencesSize_;
         }
 
     private:
+        using THashSetOfLocation = THashSet<TPageLocation, NTable::NPage::TPageLocationByOffsetHash, NTable::NPage::TPageLocationByOffsetEq>;
+
         void ToLoadPage(TPageLocation location, TPageCollection *pageCollection) {
-            if (ToLoad[pageCollection->Id].insert(location).second) {
+            auto res = ToLoad[pageCollection->Id].insert(location);
+            if (res.second) {
                 Stats.ToLoadPages++;
                 Y_ASSERT(!pageCollection->IsStickyPage(location.Offset));
                 Stats.ToLoadBytes += location.Size;
+            } else {
+                Y_ASSERT((res.first->Type == location.Type && res.first->Size == location.Size && res.first->Crc32 == location.Crc32));
             }
         }
 
@@ -125,13 +130,11 @@ namespace NTabletFlatExecutor {
         }
 
     private:
-        using THashSetOfLocation = THashSet<TPageLocation, NTable::NPage::TPageLocationByOffsetHash>;
-
         TPrivatePageCache& Cache;
         TSeat& Seat;
 
         THashMap<TLogoBlobID, THashSetOfLocation> ToLoad;
-    
+
         bool ReadMissingReferences = false;
         ui64 MissingReferencesSize_ = 0;
 

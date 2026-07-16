@@ -309,6 +309,72 @@ namespace {
         UNIT_ASSERT_C(false,  error);
         return EReady::Page;
     }
+
+    // V2 twin of TTouchEnv: offset-keyed and Type-aware, mirroring production
+    // TPageCollectionReadEnv. TTouchEnv keys on TPageId and ignores location.Type,
+    // so it cannot see the offset/Type collision that the V2 charger produces
+    // when it mis-tags the deepest index level as EPage::DataPage. This env keys
+    // by byte offset (within room, since the same offset names different pages
+    // in room 0 vs a column-group room) and validates the requested Type against
+    // the store's truth on every miss — the bug is caught on the first miss.
+    struct TTouchEnvV2 : public NTest::TTestEnv {
+        const TPartStore* Part = nullptr;
+
+        // room -> loaded page bodies keyed by byte offset within that room
+        THashMap<ui32, THashMap<NPage::TPageOffset, TSharedData>> Loaded;
+        // room -> this round's outstanding misses
+        THashMap<ui32, TVector<NPage::TPageLocation>> Touched;
+
+        explicit TTouchEnvV2(const TPartStore* part)
+            : Part(part) {}
+
+        const TSharedData* TryGetPage(const TPart* part, NPage::TPageLocation location,
+                NPage::TGroupId groupId) override {
+            Y_UNUSED(part);
+            const ui32 room = groupId.Index;
+            auto& loaded = Loaded[room];
+            if (auto* p = loaded.FindPtr(location.Offset)) {
+                return p;
+            }
+            // Type-aware: the store knows the true page type for this offset/room.
+            // Resolve the byte offset to a page id within this room, then compare
+            // the charger's requested Type with the store's recorded page type.
+            // The buggy charger asks for the deepest index page as EPage::DataPage;
+            // the store says it is EPage::BTreeIndexV2 -> this assert fails on the
+            // first miss, exactly where production asserts at flat_executor_tx_env.h:87.
+            auto pageId = Part->Store->ResolveByteOffset(room, location.Offset.AsByteOffset());
+            auto trueType = Part->GetPageType(pageId, groupId);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                static_cast<ui16>(location.Type), static_cast<ui16>(trueType),
+                "Wrong Type for offset " << location.Offset.AsByteOffset()
+                << " room " << room
+                << ": charger asked " << static_cast<ui16>(location.Type)
+                << " store says " << static_cast<ui16>(trueType));
+            Touched[room].push_back(location);
+            return nullptr;
+        }
+
+        // Simulate ObtainToLoad -> fetch -> save: every miss becomes available.
+        void LoadTouched() {
+            for (auto& [room, locs] : Touched) {
+                auto& loaded = Loaded[room];
+                for (auto& loc : locs) {
+                    const auto* data = Part->Store->GetPage(room, loc.Offset);
+                    UNIT_ASSERT_C(data, "no page at offset " << loc.Offset.AsByteOffset()
+                        << " room " << room);
+                    loaded[loc.Offset] = TSharedData::Copy(*data);
+                }
+            }
+            Touched.clear();
+        }
+
+        bool TouchedEmpty() const {
+            for (const auto& [room, locs] : Touched) {
+                if (!locs.empty()) return false;
+            }
+            return true;
+        }
+    };
 }
 
 Y_UNIT_TEST_SUITE(TPartGroupBtreeIndexIter) {
@@ -1608,6 +1674,132 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndexV2) {
     Y_UNIT_TEST(FewNodes_Groups_History_Sticky_V2) {
         CheckV2ChargeBasic({.Levels = 3, .Groups = true, .History = true, .StickSomePages = true});
         CheckV2VsV1Charge({.Levels = 3, .Groups = true, .History = true, .StickSomePages = true});
+    }
+
+    // -- V2 resume twins -----------------------------------------------------
+    // Drive a V2 part through a miss -> load -> re-Do() resume loop on an
+    // offset-keyed, Type-aware env (TTouchEnvV2). This is the production
+    // executor reschedule/resume flow that the V1/Type-blind TTouchEnv cannot
+    // exercise. The env's GetPageType check fails on the first miss if the
+    // charger mis-tags the deepest index level as EPage::DataPage.
+
+    ui32 GetV2FailsAllowed(TTestParams params) {
+        ui32 result = (params.Levels + 1) * 2;
+        if (params.History) result *= 2;
+        if (params.Groups) result *= 2;
+        return result;
+    }
+
+    ICharge::TResult DoV2Resume(TPartEggs& eggs, TTestParams params, bool reverse,
+            bool useKeys, ui64 itemsLimit, ui64 bytesLimit, const TString& message) {
+        const auto part = *eggs.Lone();
+        auto tags = TVector<TTag>();
+        for (auto c : eggs.Scheme->Cols) {
+            tags.push_back(c.Tag);
+        }
+        const auto& keyDefaults = *eggs.Scheme->Keys.Get();
+
+        TTouchEnvV2 env(&part);
+        TChargeBTreeIndex charge(&env, part, tags, true);
+
+        // A couple of in-range keys to drive the key1/key2 path (which hits the
+        // key-path BuildPageRef(remLevel<=0) that must stay correct, plus the
+        // data-page key-resolution branch). For row-id charge pass empty keys.
+        TCell k1c[2] = { TCell::Make<ui32>(0), TCell::Make<ui32>(3) };
+        TCell k2c[2] = { TCell::Make<ui32>(5), TCell::Make<ui32>(8) };
+        TCells key1{k1c, 2};
+        TCells key2{k2c, 2};
+        const TRowId lastRow = part.Stat.Rows - 1;
+
+        ICharge::TResult result;
+        const ui32 failsAllowed = GetV2FailsAllowed(params);
+        for (ui32 attempt = 0; attempt <= failsAllowed; attempt++) {
+            env.LoadTouched();
+            result = (useKeys
+                ? (reverse
+                    ? charge.DoReverse(key1, key2, lastRow, 0, keyDefaults, itemsLimit, bytesLimit)
+                    : charge.Do(key1, key2, 0, lastRow, keyDefaults, itemsLimit, bytesLimit))
+                : (reverse
+                    ? charge.DoReverse(TCells{}, TCells{}, lastRow, 0, keyDefaults, itemsLimit, bytesLimit)
+                    : charge.Do(TCells{}, TCells{}, 0, lastRow, keyDefaults, itemsLimit, bytesLimit)));
+            if (result.Ready) {
+                break;
+            }
+        }
+        UNIT_ASSERT_C(result.Ready,
+            "V2 resume did not become ready: " << message);
+        UNIT_ASSERT_C(env.TouchedEmpty(),
+            "V2 resume left unresolved misses: " << message);
+        return result;
+    }
+
+    void CheckV2Resume(TTestParams params) {
+        TPartEggs eggs = MakeV2Part(params);
+        const TString base = TStringBuilder()
+            << "Levels=" << params.Levels
+            << " Groups=" << params.Groups
+            << " History=" << params.History;
+        // Primary reproducer: forward row-id charge on a multi-level tree.
+        DoV2Resume(eggs, params, /*reverse=*/false, /*useKeys=*/false, 0, 0,
+            "row-id fwd " + base);
+        // Reverse row-id charge (DoReverse iterateLevel index-walk).
+        DoV2Resume(eggs, params, /*reverse=*/true, /*useKeys=*/false, 0, 0,
+            "row-id rev " + base);
+        // Keys charge: exercises the key1/key2 path + data-page resolution.
+        DoV2Resume(eggs, params, /*reverse=*/false, /*useKeys=*/true, 0, 0,
+            "keys fwd " + base);
+        // Items limit on the row-id path.
+        DoV2Resume(eggs, params, /*reverse=*/false, /*useKeys=*/false, 5, 0,
+            "row-id fwd limit " + base);
+    }
+
+    Y_UNIT_TEST(NoNodes_V2_Resume) {
+        // LevelCount == 0: root is a single data page; the index loop never
+        // runs, so the mis-tagging path is unreachable. Guards small-tree fix.
+        CheckV2Resume({.Levels = 0});
+    }
+
+    Y_UNIT_TEST(OneNode_V2_Resume) {
+        // LevelCount == 1: root is the only index level, children are data.
+        // iterateLevel's index-walk path (isLeafLevel=false) is never taken;
+        // the post-loop data pass tags children DataPage. Guards small-tree fix.
+        CheckV2Resume({.Levels = 1});
+    }
+
+    Y_UNIT_TEST(FewNodes_V2_Resume) {
+        // PRIMARY REPRODUCER. LevelCount == 3: root -> index -> index -> data.
+        // The index-walk iterateLevel builds the deepest index level's children
+        // (still index nodes). With the bug they are tagged EPage::DataPage;
+        // TTouchEnvV2's GetPageType check fails on the first miss.
+        CheckV2Resume({.Levels = 3});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_V2_Resume) {
+        // Column groups: DoGroup()/DoGroupReverse() index-walk path, room-keyed.
+        CheckV2Resume({.Levels = 3, .Groups = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_History_V2_Resume) {
+        // History: DoHistory() index-walk path.
+        CheckV2Resume({.Levels = 3, .History = true});
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History_V2_Resume) {
+        // Groups + history: DoHistoricGroups -> DoGroup(true) index-walk.
+        CheckV2Resume({.Levels = 3, .Groups = true, .History = true});
+    }
+
+    Y_UNIT_TEST(ChargeWithLimit_V2_Resume) {
+        // Items limit under resume (row-id path, multi-level).
+        CheckV2Resume({.Levels = 3});
+        CheckV2Resume({.Levels = 1});
+    }
+
+    Y_UNIT_TEST(FewNodes_Sticky_V2_Resume) {
+        // StickSomePages is a V1-only concept (page-id sticky sets in TTouchEnv);
+        // here we just re-run the multi-level resume to keep parity with the V1
+        // suite's sticky coverage. The Type-correctness is what matters.
+        CheckV2Resume({.Levels = 3, .StickSomePages = true});
     }
 }
 

@@ -2552,7 +2552,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
         // supports per-group room lookups via TStore.
         struct TPreloadMockPages : public IPages {
             const TStore* Store;
-            THashSet<TPageLocation, NPage::TPageLocationByOffsetHash> Needs;
+            THashSet<TPageLocation, NPage::TPageLocationByOffsetHash, NPage::TPageLocationByOffsetEq> Needs;
             THashMap<TPageOffset, TSharedData> Cache;
 
             TPreloadMockPages(const TStore* store)
@@ -2698,7 +2698,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
             // room -> cached page bodies keyed by byte offset within that room
             THashMap<ui32, THashMap<TPageOffset, TSharedData>> Cache;
             // room -> outstanding misses in that room
-            THashMap<ui32, THashSet<TPageLocation, NPage::TPageLocationByOffsetHash>> Needs;
+            THashMap<ui32, THashSet<TPageLocation, NPage::TPageLocationByOffsetHash, NPage::TPageLocationByOffsetEq>> Needs;
 
             TStickyMockPages(const TStore* store)
                 : Store(store) {}

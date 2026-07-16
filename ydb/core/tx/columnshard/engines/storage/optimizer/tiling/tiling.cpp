@@ -18,6 +18,8 @@
 #include <util/generic/hash_set.h>
 #include <util/system/types.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 struct TSettings {
@@ -438,7 +440,9 @@ struct TLevel {
                 }
                 const auto& p = it->second;
                 if (locksManager->IsLocked(*p, NDataLocks::ELockCategory::Compaction)) {
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: skipping level (portions locked)")("level", Level);
+                    YDB_LOG_DEBUG("",
+                        {"message", "tiling compaction: skipping level (portions locked)"},
+                        {"level", Level});
                     CheckCompactions = false;
                     return {};
                 }
@@ -693,7 +697,10 @@ private:
             return nullptr;
         }
 
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: compacting level")("level", level)("count", portions.size());
+        YDB_LOG_DEBUG("",
+            {"message", "tiling compaction: compacting level"},
+            {"level", level},
+            {"count", portions.size()});
 
         ui32 targetLevel = level + 1;
         if (targetLevel >= MaxLevels) {
@@ -730,8 +737,10 @@ private:
             return nullptr;
         }
 
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: compacting accumulator")("level", level)(
-            "count", portions.size());
+        YDB_LOG_DEBUG("",
+            {"message", "tiling compaction: compacting accumulator"},
+            {"level", level},
+            {"count", portions.size()});
 
         ui32 targetLevel = level + 1;
         if (targetLevel >= MaxLevels) {
@@ -846,7 +855,8 @@ private:
     }
 
     void DoActualize(const TInstant currentInstant) override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: actualize called");
+        YDB_LOG_DEBUG("",
+            {"message", "tiling compaction: actualize called"});
         for (size_t level = 0; level < Accumulator.size(); ++level) {
             Accumulator[level].Actualize(*this, currentInstant);
         }
@@ -933,14 +943,16 @@ private:
 
     bool DoDeserializeFromProto(const TProto& proto) override {
         if (!proto.HasTiling()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling compaction optimizer from proto")(
-                "proto", proto.DebugString());
+            YDB_LOG_ERROR("",
+                {"error", "cannot parse tiling compaction optimizer from proto"},
+                {"proto", proto.DebugString()});
             return false;
         }
         auto status = Settings.DeserializeFromProto(proto.GetTiling());
         if (!status.IsSuccess()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling compaction optimizer from proto")(
-                "description", status.GetErrorDescription());
+            YDB_LOG_ERROR("",
+                {"error", "cannot parse tiling compaction optimizer from proto"},
+                {"description", status.GetErrorDescription()});
             return false;
         }
         Settings.NodePortionsCountLimit = GetNodePortionsCountLimit();
@@ -965,7 +977,8 @@ private:
     }
 
     TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "creating tiling compaction optimizer");
+        YDB_LOG_DEBUG("",
+            {"message", "creating tiling compaction optimizer"});
         return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings);
     }
 

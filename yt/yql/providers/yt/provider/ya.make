@@ -88,6 +88,7 @@ PEERDIR(
     yql/essentials/public/langver
     yql/essentials/public/udf
     yql/essentials/sql
+    yql/essentials/sql/settings/flags
     yql/essentials/sql/v1
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi

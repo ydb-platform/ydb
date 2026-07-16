@@ -86,8 +86,13 @@ public:
                 return TFmrTableOutputRef(fmrTableRef);
             });
 
-            TString newPartId = GenerateId();
+            // Each output table needs its own distinct PartId, even though they're all written by
+            // the same job run: the coordinator's PartIdStats_ is keyed by bare PartId (not
+            // (TableId, PartId)), so reusing one PartId across several output tables would let one
+            // table's chunk stats silently clobber another's whenever they're reported together in
+            // a worker heartbeat.
             for (auto& fmrTableOutputRef: fmrTableOutputRefs) {
+                TString newPartId = GenerateId();
                 fmrTableOutputRef.PartId = newPartId;
                 result.PartIdsToUpdate[fmrTableOutputRef.TableId].emplace_back(newPartId);
             }

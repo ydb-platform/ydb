@@ -103,7 +103,7 @@ protected:
 
 class TFunctionCallInfo {
 public:
-    TFunctionCallInfo(ui32 numArgs, const FmgrInfo* finfo);
+    TFunctionCallInfo(ui32 numArgs, const FmgrInfo* finfo, ui32 collationOid);
     ~TFunctionCallInfo();
 
     TFunctionCallInfo(const TFunctionCallInfo&) = delete;
@@ -119,7 +119,7 @@ private:
 };
 
 struct TPgResolvedCallState {
-    TPgResolvedCallState(ui32 numArgs, const FmgrInfo* finfo);
+    TPgResolvedCallState(ui32 numArgs, const FmgrInfo* finfo, ui32 collationOid);
 
     TFunctionCallInfo CallInfo;
     NKikimr::NMiniKQL::TUnboxedValueVector Args;
@@ -205,8 +205,8 @@ extern template class TPgResolvedCall<false>;
 
 struct TPgCastState {
     TPgCastState(const FmgrInfo* finfo1, const FmgrInfo* finfo2)
-        : CallInfo1(3, finfo1)
-        , CallInfo2(1, finfo2)
+        : CallInfo1(3, finfo1, NPg::InvalidCollationOid)
+        , CallInfo2(1, finfo2, NPg::InvalidCollationOid)
     {
     }
 

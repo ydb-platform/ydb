@@ -184,6 +184,7 @@ public:
     using TEnumToDerived = typename TMapping::template TDerivedToEnum<key>;
 
     using TImplementsYsonStructField = void;
+    using TImplementsYsonStructPostprocess = void;
 
     TPolymorphicYsonStruct();
 
@@ -199,6 +200,8 @@ public:
         std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy = {});
 
     void Save(NYson::IYsonConsumer* consumer) const;
+
+    void Postprocess(const std::function<NYPath::TYPath()>& pathGetter = {});
 
     //! Empty if empty or the type is wrong.
     template <std::derived_from<TBase> TConcrete>

@@ -38,6 +38,7 @@
 #include "channel_scheduler.h"
 #include "outgoing_stream.h"
 #include "interconnect_session_iface.h"
+#include "interconnect_direct_session.h"
 
 #include <unordered_set>
 #include <unordered_map>
@@ -187,6 +188,11 @@ namespace NActors {
         std::unordered_map<ui16, TPerChannelContext> ChannelMap;
         ui64 LastProcessedSerial = 0;
         bool Terminated = false;
+
+        // Direct send/receive handle shared with users via TEvNodeConnected. The input session
+        // consults it before dispatching an incoming event into the actor system; if a receiver is
+        // registered for the recipient, the event is delivered directly instead.
+        std::shared_ptr<TDirectSessionV1> DirectSession;
 
         TReceiveContext() {
             GetTimeFast(&StartTime);
@@ -504,10 +510,10 @@ namespace NActors {
         using TSubscriberHistory = std::unordered_map<TSubscriberHistoryKey, ui64, TSubscriberHistoryKeyHash>;
         static constexpr ui64 MaxSubscriberHistoryEntries = 1000;
 
-        TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params);
+        explicit TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy);
         ~TInterconnectSessionTCP();
 
-        void Init() override;
+        void Init(const TSessionParams& params) override;
         void CloseInputSession() override;
         bool IsRdmaInUse() override;
         bool HasRdmaState() const override;
@@ -580,6 +586,7 @@ namespace NActors {
                 hFunc(TEvUringRegisterFailed, Handle)
                 hFunc(TEvUringWriteComplete, Handle)
                 hFunc(TEvUringSendZcNotif, Handle)
+                cFunc(static_cast<ui32>(ENetwork::EvProcessDirectSessionQueue), HandleProcessDirectSessionQueue)
             )
             UpdateUtilization();
         }
@@ -681,7 +688,7 @@ namespace NActors {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        const TSessionParams Params; // stable session template used for continuation handshakes
+        TSessionParams Params; // stable session template used for continuation handshakes
         // Runtime mode negotiated for the current socket; may differ from Params on reconnect.
         bool KernelLivenessMode = false;
         std::unique_ptr<TEventHolderPool> Pool;
@@ -794,6 +801,14 @@ namespace NActors {
         TIntrusivePtr<TReceiveContext> ReceiveContext;
         TActorId ReceiverId;
         TDuration Ping;
+
+        // Direct send/receive handle handed out to subscribers via TEvNodeConnected; also published
+        // into ReceiveContext so the input session can intercept incoming events.
+        std::shared_ptr<TDirectSessionV1> DirectSession;
+
+        // Drains the direct session's lock-free registration queue on the session/input-session mailbox
+        // thread (woken via EvProcessDirectSessionQueue by producers).
+        void HandleProcessDirectSessionQueue();
 
         ui64 ConfirmPacketsForcedBySize = 0;
         ui64 ConfirmPacketsForcedByTimeout = 0;

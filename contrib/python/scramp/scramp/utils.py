@@ -14,7 +14,7 @@ def h(hf, msg):
 
 
 def xor(bytes1, bytes2):
-    return bytes(a ^ b for a, b in zip(bytes1, bytes2))
+    return bytes(a ^ b for a, b in zip(bytes1, bytes2, strict=True))
 
 
 def b64enc(binary):

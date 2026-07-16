@@ -289,8 +289,9 @@ bool TVChunkConfig::IsValid() const
 TString TVChunkConfig::DebugPrint() const
 {
     TStringBuilder result;
-    result << "[" << VChunkIndex << "] PBuffer{" << PBufferHosts.DebugPrint()
-           << "} DDisk{" << DDiskHosts.DebugPrint() << "} Enabled{";
+    result << "[" << DBGIndex << "/" << VChunkIndex << "] PBuffer{"
+           << PBufferHosts.DebugPrint() << "} DDisk{" << DDiskHosts.DebugPrint()
+           << "} Enabled{";
     for (THostIndex hostIndex = 0; hostIndex < PBufferHosts.HostCount();
          ++hostIndex)
     {

@@ -131,6 +131,26 @@ Y_UNIT_TEST_TWIN(AddIndexCompactRelevance, Covered) {
     ])", NYdb::FormatResultSetYson(index));
 }
 
+Y_UNIT_TEST_TWIN(FulltextCompactUpdateRequiresStreamWrite, WithRelevance) {
+    auto kikimr = KikimrWithCompact(false);
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, WithRelevance ? "fulltext_relevance" : "fulltext_plain");
+
+    TVector<TString> queries = {
+        "INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES (150, \"Foxes love cats.\", \"foxes data\")",
+        "UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES (150, \"Foxes love cats.\", \"foxes data\")",
+        "UPDATE `/Root/Texts` SET Text=\"Foxes love cats\" WHERE Key=100",
+        "DELETE FROM `/Root/Texts` WHERE Key=100"
+    };
+    for (auto& query: queries) {
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+    }
+}
+
 Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
     auto settings = TKikimrSettings().SetWithSampleTables(false);
     auto kikimr = KikimrWithCompact();
@@ -1174,6 +1194,32 @@ Y_UNIT_TEST(JsonCompactCompaction) {
 
     NYdb::TResultSetParser parser(ReadIndex(db));
     UNIT_ASSERT(parser.RowsCount() > 0);
+}
+
+Y_UNIT_TEST(JsonCompactUpdateRequiresStreamWrite) {
+    auto kikimr = KikimrWithCompact(false);
+    auto db = kikimr.GetQueryClient();
+
+    ExecuteQuery(db, R"sql(
+        CREATE TABLE `/Root/Texts` (
+            Key Uint64,
+            Text Json,
+            Data String,
+            PRIMARY KEY (Key),
+            INDEX json_idx GLOBAL USING json ON (Text)
+        );
+    )sql");
+
+    TVector<TString> queries = {
+        "INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES (150, '{\"nested\":\"value\"}', \"data3\")",
+        "UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES (150, '{\"nested\":\"value\"}', \"data3\")",
+        "UPDATE `/Root/Texts` SET Text='{\"nested\":\"value\"}' WHERE Key=150",
+        "DELETE FROM `/Root/Texts` WHERE Key=150"
+    };
+    for (auto& query: queries) {
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+    }
 }
 
 } // Y_UNIT_TEST_SUITE(KqpJsonCompact)

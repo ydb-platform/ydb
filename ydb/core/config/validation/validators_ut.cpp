@@ -414,7 +414,6 @@ Y_UNIT_TEST_SUITE(ConfigValidation) {
 Y_UNIT_TEST_SUITE(DatabaseConfigValidation) {
     Y_UNIT_TEST(AllowedFields) {
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnablePgSyntax(true);
         config.MutableTableServiceConfig()->SetEnableStreamWrite(true);
 
         std::vector<TString> err;

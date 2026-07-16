@@ -17,7 +17,8 @@ public:
 
     virtual void SetLockSettings(
         ui64 cookie,
-        TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns) = 0;
+        TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
+        bool skipAbsent) = 0;
 
     virtual void AddLockTask(
         ui64 cookie,

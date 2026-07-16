@@ -1195,7 +1195,6 @@ public:
 
     void UpdateShards() {
         for (const auto& shardInfo : ShardedWriteController->ExtractShardUpdates()) {
-            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
             IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
             if (shardInfo.HasRead) {
                 flags |= IKqpTransactionManager::EAction::READ;
@@ -1204,6 +1203,7 @@ public:
             // This ensures TxManager tracks the correct per-query SpanId even when
             // FlushBuffers() flushes batches from multiple queries at once.
             const ui64 spanId = shardInfo.QuerySpanId != 0 ? shardInfo.QuerySpanId : CurrentQuerySpanId;
+            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
             TxManager->AddAction(shardInfo.ShardId, flags, spanId);
         }
     }
@@ -1268,7 +1268,7 @@ public:
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
 
-            if (MvccSnapshot) {
+            if (MvccSnapshot && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
                 *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
             }
         }
@@ -1309,7 +1309,7 @@ public:
         if (MvccSnapshot && (isPrepare || isImmediateCommit)) {
             // Commit in snapshot isolation must validate writes against a snapshot
             bool needMvccSnapshot = LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
-            if (!needMvccSnapshot && isPrepare) {
+            if (!needMvccSnapshot && isPrepare && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
                 for (const auto& operation : evWrite->Record.GetOperations()) {
                     if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
                         // This operation may fail with an incorrect unique constraint violation otherwise
@@ -1319,6 +1319,7 @@ public:
                 }
             }
             if (needMvccSnapshot) {
+                AFL_ENSURE(LockMode != NKikimrDataEvents::PESSIMISTIC_NONE);
                 *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
             }
         }
@@ -1936,6 +1937,42 @@ private:
             return false;
         }
 
+        // Filter out absent rows based on lock result (SkipAbsent).
+        std::vector<TOwnedCellVec> lockedKeyStorage;
+        lockInfo.LockActor->ExtractResult(Cookie, [&](const TOwnedCellVec& row, bool /*modified*/) {
+            lockedKeyStorage.emplace_back(row);
+        });
+
+        TPrimaryKeysSet lockedKeys;
+        for (const auto& key : lockedKeyStorage) {
+            lockedKeys.insert(TConstArrayRef<TCell>(key));
+        }
+
+        auto rowsBatcher = CreateRowsBatcher(ProcessCells[0].size(), Alloc);
+        for (const auto& processCells : ProcessCells) {
+            const auto key = processCells.first(KeyColumnTypes.size());
+            if (lockedKeys.contains(key)) {
+                for (const auto& cell : processCells) {
+                    rowsBatcher->AddCell(cell);
+                }
+                rowsBatcher->AddRow();
+            } else {
+                Memory -= EstimateSize(processCells);
+            }
+        }
+
+        ProcessBatches.clear();
+        auto filteredBatch = rowsBatcher->Flush();
+        ProcessBatches.push_back(std::move(filteredBatch));
+        ProcessCells.clear();
+        KeyToIndexes.clear();
+
+        if (ProcessBatches.back()->GetRowsCount() == 0) {
+            ProcessBatches.clear();
+            State = EState::WRITING;
+            return true;
+        }
+
         if (NeedLookup()) {
             return StartMainTableLookup();
         }
@@ -1962,6 +1999,8 @@ private:
 
     bool StartMainTableLock() {
         AFL_ENSURE(NeedLock());
+        AFL_ENSURE(ProcessCells.empty());
+        AFL_ENSURE(KeyToIndexes.empty());
         TPrimaryKeysSet primaryKeysSet = PrepareProcessCellsAndKeys();
         AFL_ENSURE(!ProcessCells.empty());
 
@@ -1975,6 +2014,8 @@ private:
 
     bool StartMainTableLookup() {
         AFL_ENSURE(NeedLookup());
+        AFL_ENSURE(ProcessCells.empty());
+        AFL_ENSURE(KeyToIndexes.empty());
         AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
         AFL_ENSURE(PathLookupInfo.at(PathId).KeyIndexes.empty());
 
@@ -3802,7 +3843,8 @@ public:
 
                     lockActor->SetLockSettings(
                         token.Cookie,
-                        indexSettings.KeyColumns);
+                        indexSettings.KeyColumns,
+                        /* skipAbsent */ false);
                 }
 
                 {
@@ -3904,9 +3946,13 @@ public:
                 .LockActor = lockActor,
             });
 
+            const bool skipAbsent = settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
+                || settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE;
+
             lockActor->SetLockSettings(
                 token.Cookie,
-                settings.KeyColumns);
+                settings.KeyColumns,
+                skipAbsent);
         }
 
         // Main table lookup
@@ -4555,6 +4601,7 @@ public:
         }
         const auto& topicOps = TxManager->GetTopicOperations();
         const bool kafkaTransaction = topicOps.HasKafkaOperations();
+        const bool deferredPublication = topicOps.HasDeferredPublicationOperations();
 
         THashSet<ui64> topicTabletPeers;
         bool omitPeerTopicTablets = false;
@@ -4575,7 +4622,16 @@ public:
 
             FillTopicsCommit(isImmediateCommit, transaction, TxManager, tabletId, omitPeerTopicTablets, topicTabletPeers);
 
-            if (t.hasWrite && writeId.Defined() && !kafkaTransaction) {
+            if (t.hasWrite && deferredPublication) {
+                NKikimrPQ::TWriteId proto;
+                auto* deferred = proto.MutableDeferredPublicationApi();
+                deferred->SetIntPublicationId(topicOps.GetDeferredPublicationIntId());
+                const auto& extPublicationId = topicOps.GetDeferredPublicationExtId();
+                if (!extPublicationId.empty()) {
+                    deferred->SetExtPublicationId(extPublicationId);
+                }
+                NPQ::SetWriteId(transaction, NPQ::TWriteId{std::move(proto)});
+            } else if (t.hasWrite && writeId.Defined() && !kafkaTransaction) {
                 NPQ::SetWriteId(transaction, NPQ::TWriteId{SelfId().NodeId(), *writeId});
             } else if (t.hasWrite && kafkaTransaction) {
                 NPQ::SetWriteId(transaction, NPQ::TWriteId{topicOps.GetKafkaProducerInstanceId()});

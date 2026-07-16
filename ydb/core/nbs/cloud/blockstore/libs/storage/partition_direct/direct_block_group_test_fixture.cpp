@@ -65,6 +65,58 @@ void TDBGFixture::DrainRuntime() const
     }
 }
 
+TBlockedDetectedState TDBGFixture::GetBlockedDetected(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    THostIndex hostIndex,
+    TDuration waitTimeout)
+{
+    return RunOnExecutor(
+               executor,
+               [dbg, hostIndex]
+               {
+                   return TBlockedDetectedState{
+                       .DDiskSessionBroken =
+                           dbg->DDiskConnections[hostIndex].SessionState ==
+                           EDDiskSessionState::Broken,
+                       .BlockedGenerationDetected =
+                           dbg->BlockedGenerationDetected};
+               })
+        .GetValue(waitTimeout);
+}
+
+TVector<ui64> TDBGFixture::ReadAllDDiskSeqNos(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    TDuration waitTimeout)
+{
+    return RunOnExecutor(
+               executor,
+               [&]
+               {
+                   TVector<ui64> result;
+                   for (size_t i = 0; i < DirectBlockGroupHostCount; ++i) {
+                       result.push_back(
+                           dbg->DDiskConnections[i].ConfirmedSessionSeqNo);
+                   }
+                   return result;
+               })
+        .GetValue(waitTimeout);
+}
+
+ui64 TDBGFixture::GetDDiskSessionSeqNo(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    size_t index,
+    TDuration waitTimeout)
+{
+    return RunOnExecutor(
+               executor,
+               [&]
+               { return dbg->DDiskConnections[index].ConfirmedSessionSeqNo; })
+        .GetValue(waitTimeout);
+}
+
 TExecutorPtr TDBGFixture::MakeExecutor()
 {
     auto executor = TExecutor::Create("DBG_TEST");

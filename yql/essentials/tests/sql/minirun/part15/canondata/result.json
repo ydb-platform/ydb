@@ -304,7 +304,7 @@
         {
             "checksum": "6fcabdb0c5f77c3b905a9f978ea9ca1d",
             "size": 2420,
-            "uri": "https://{canondata_backend}/1817427/c18651bc495886827ae93a38105dcaa87d7201dd/resource.tar.gz#test.test_combine-YQL-16277_dds_example-default.txt-Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1942525/8d0b2a987b2073b5eadfcff0b1c34362339c8005/resource.tar.gz#test.test_combine-YQL-16277_dds_example-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[combine-YQL-16277_dds_example-default.txt-Results]": [

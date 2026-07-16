@@ -8,7 +8,7 @@
 
 namespace NYql {
 
-TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool supportRtmrMode, bool useYtflowEngine) {
+TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, bool supportRtmrMode, bool useYtflowEngine) {
     return [gateway, credentialsFactory, supportRtmrMode, useYtflowEngine] (
         const TString& userName,
         const TString& sessionId,

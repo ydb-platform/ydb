@@ -18,7 +18,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
     TInstant startTransactionTime = TInstant::Now();
     TMemoryProfileGuard mpg("TTxBlobsWritingFinished::Execute");
     txc.DB.NoMoreReadsForTx();
-    CommitSnapshot = Self->GetCurrentSnapshotForInternalModification();
+    CommitSnapshot = Self->GetSnapshotForNoTxWrites();
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS,
         {"tabletId", Self->TabletID()},
         {"txState", "execute"});

@@ -221,7 +221,7 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) = 0;
 
     // Builds this DBG's monitoring snapshot on the executor thread (like Dump).
-    virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() = 0;
+    virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const = 0;
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;

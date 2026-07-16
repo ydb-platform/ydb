@@ -71,9 +71,11 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "page=overview");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg");
         UNIT_ASSERT_STRING_CONTAINS(html, "page=localdb");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=vchunk");
         UNIT_ASSERT_STRING_CONTAINS(html, "DirectBlockGroups");
         UNIT_ASSERT_STRING_CONTAINS(html, "VChunks (total)");
         UNIT_ASSERT_STRING_CONTAINS(html, "LSN counter");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Last safe barrier");
         UNIT_ASSERT_STRING_CONTAINS(html, "vol-1");
     }
 
@@ -174,6 +176,65 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
 
         const TString html = RenderMonPage(data);
         UNIT_ASSERT_STRING_CONTAINS(html, "not found");
+    }
+
+    Y_UNIT_TEST(VChunkPageShowsInputForm)
+    {
+        const TMonPageData data{
+            .Page = EMonPage::VChunk,
+            .TabletInfo = {.TabletId = 42},
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "name='vchunk'");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<input type='hidden' name='page' value='vchunk'/>");
+        UNIT_ASSERT(!html.Contains("not found"));
+    }
+
+    Y_UNIT_TEST(VChunkPageShowsSnapshot)
+    {
+        auto config = TVChunkConfig::MakeDefault(
+            /*vChunkIndex*/ 5,
+            /*hostCount*/ 3,
+            /*primaryCount*/ 1);
+        config.SetDBGIndex(1);
+        config.SetWatermark(0, 7);
+        const TMonPageData data{
+            .Page = EMonPage::VChunk,
+            .TabletInfo = {.TabletId = 42},
+            .SelectedVChunk = 5,
+            .VChunk =
+                TVChunkSnapshot{
+                    .VChunkConfig = config,
+                    .SafeBarrier = 100,
+                    .DirtyMapDump = "DDiskStates: dump-text",
+                },
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "VChunk #5");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg&dbg=1");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Safe barrier");
+        UNIT_ASSERT_STRING_CONTAINS(html, "<td>H0</td>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "Primary");
+        UNIT_ASSERT_STRING_CONTAINS(html, "HandOff");
+        // Host 0's watermark set above renders in its row.
+        UNIT_ASSERT_STRING_CONTAINS(html, "<td>7</td>");
+        UNIT_ASSERT_STRING_CONTAINS(html, "DDiskStates: dump-text");
+    }
+
+    Y_UNIT_TEST(VChunkPageNotFound)
+    {
+        const TMonPageData data{
+            .Page = EMonPage::VChunk,
+            .TabletInfo = {.TabletId = 42},
+            .SelectedVChunk = 999,
+        };
+
+        const TString html = RenderMonPage(data);
+        UNIT_ASSERT_STRING_CONTAINS(html, "VChunk #999 not found");
     }
 
     Y_UNIT_TEST(LocalDbShowsPersistedState)

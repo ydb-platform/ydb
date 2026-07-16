@@ -179,7 +179,7 @@ private:
         size_t dbgId,
         const TString& message);
 
-    TTabletInfo MakeMonTabletInfo();
+    [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
 
     void Start(
         const NActors::TActorContext& ctx,

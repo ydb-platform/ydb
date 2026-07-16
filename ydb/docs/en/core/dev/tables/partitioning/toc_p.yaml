@@ -9,7 +9,4 @@ items:
 - name: Choosing the number of partitions
   href: choosing-partition-count.md
 - name: Anti-patterns
-  href: anti-patterns/index.md
-  include:
-    mode: link
-    path: anti-patterns/toc_p.yaml
+  href: anti-patterns.md

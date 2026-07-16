@@ -8,7 +8,7 @@ In this subsection:
 
 * [{#T}](auto/index.md) — **size-based** and **load-based** modes, plus limits of automatic partitioning;
 * [{#T}](choosing-partition-count.md) — choosing minimum and maximum partition counts;
-* [{#T}](anti-patterns/index.md) — common schema and configuration mistakes.
+* [{#T}](anti-patterns.md) — common schema and configuration mistakes.
 
 {% note info %}
 

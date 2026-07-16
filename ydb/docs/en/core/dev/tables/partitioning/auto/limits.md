@@ -16,7 +16,7 @@ While the partition count stays inside [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`
 
 ## Load-based adaptation speed
 
-With [`AUTO_PARTITIONING_BY_LOAD`](by-load.md) enabled:
+With [`AUTO_PARTITIONING_BY_LOAD`](index.md#auto-by-load) enabled:
 
 * the decision to split a partition by load takes **at least about two minutes**;
 * each split produces **at most two** child partitions.

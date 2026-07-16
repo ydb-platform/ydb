@@ -791,9 +791,9 @@ void TSchemeShard::Clear() {
     TabletCounters->Percentile()[COUNTER_SHARDS_WITH_ROW_DELETES].Clear();
 }
 
-void TSchemeShard::AcquireSelfDbRef(const TPathId& pathId, const char* reason) {
+void TSchemeShard::AcquireSelfDbRef(const TPathId& pathId, TRefLabel reason) {
     const bool inserted = SelfDbRefs.emplace(pathId, TPathRef(this, pathId, reason)).second;
-    Y_VERIFY_S(inserted, "Duplicate self db ref, pathId: " << pathId << ", reason: " << reason);
+    Y_VERIFY_S(inserted, "Duplicate self db ref, pathId: " << pathId << ", reason: " << reason.c_str());
 }
 
 void TSchemeShard::ReleaseSelfDbRef(const TPathId& pathId) {

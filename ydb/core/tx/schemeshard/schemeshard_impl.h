@@ -319,6 +319,7 @@ public:
     TSelfRefMap<TTopicInfo::TPtr> Topics{"Topics", this, SelfRefMaps};
     TSelfRefMap<TRtmrVolumeInfo::TPtr> RtmrVolumes{"RtmrVolumes", this, SelfRefMaps};
     TSelfRefMap<TSolomonVolumeInfo::TPtr> SolomonVolumes{"SolomonVolumes", this, SelfRefMaps};
+    // Also mutated untracked in armed propose in a few places (extsubdomain dual-tracking).
     TSelfRefMap<TSubDomainInfo::TPtr> SubDomains{"SubDomains", this, SelfRefMaps};
     TSelfRefMap<TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes{"BlockStoreVolumes", this, SelfRefMaps};
     TSelfRefMap<TFileStoreInfo::TPtr> FileStoreInfos{"FileStoreInfos", this, SelfRefMaps};
@@ -812,7 +813,7 @@ public:
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, TString& value, TString defValue = TString());
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, ui64& value, ui64 defVal = 0);
 
-    void AcquireSelfDbRef(const TPathId& pathId, const char* reason);
+    void AcquireSelfDbRef(const TPathId& pathId, TRefLabel reason);
     void ReleaseSelfDbRef(const TPathId& pathId);
     void IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
     void DecrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());

@@ -69,6 +69,8 @@ public:
 
 // THashMap<TPathId, V> holding a DbRefCount self-ref per entry: insert acquires,
 // erase releases. No operator[], so a missing-key read can't silently acquire.
+// Set/Update record undo and belong to the armed propose phase; SetUntracked/
+// UpdateUntracked/erase are for other phases (init, plan-step, progress, stats).
 template <class V>
 class TSelfRefMap : public ISelfRefMap {
     using TInner = THashMap<TPathId, V>;
@@ -88,7 +90,7 @@ public:
 
     // Self-registers at construction (registration can't be missed); `reason`
     // is the map's name, logged on each DbRefCount change.
-    TSelfRefMap(const char* reason, TSchemeShard* ss, TVector<ISelfRefMap*>& registry)
+    TSelfRefMap(TRefLabel reason, TSchemeShard* ss, TVector<ISelfRefMap*>& registry)
         : Reason(reason)
         , SS(ss)
     {
@@ -111,11 +113,11 @@ public:
     // Insert/assign (acquires on new key) and record the matching undo.
     V& Set(TSetArgs args) {
         Y_VERIFY_DEBUG_S(args.Changes.IsArmed(),
-            "tracked Set on " << Reason << " outside an armed propose; use SetUntracked");
+            "tracked Set on " << Reason.c_str() << " outside an armed propose; use SetUntracked");
         auto it = Map.find(args.Path);
         if (it == Map.end()) {
             Y_VERIFY_DEBUG_S(args.Changes.IsPathTracked(args.Path),
-                "Set(" << Reason << ") acquires a ref on " << args.Path
+                "Set(" << Reason.c_str() << ") acquires a ref on " << args.Path
                 << " but the path was not grabbed in this tx; GrabNewPath/GrabPath it first");
             args.Changes.RecordSelfRefUndo([this, id = args.Path]() { UndoErase(id); });
             it = Map.emplace(args.Path, std::move(args.Value)).first;
@@ -154,7 +156,7 @@ public:
     // reseated (Update(id,mc) = newPtr won't compile), which would desync the undo.
     const V& Update(const TPathId& id, TMemoryChanges& changes) {
         Y_VERIFY_DEBUG_S(changes.IsArmed(),
-            "tracked Update on " << Reason << " outside an armed propose; use UpdateUntracked");
+            "tracked Update on " << Reason.c_str() << " outside an armed propose; use UpdateUntracked");
         V& slot = Map.at(id);
         if (changes.NeedsUpdateSnapshot(this, id)) {
             changes.RecordSelfRefUndo([this, id, snap = SelfRefUndoClone(slot)]() {
@@ -239,7 +241,7 @@ private:
         Map.erase(id);
     }
 
-    const char* Reason;
+    TRefLabel Reason;
     TSchemeShard* SS = nullptr;
     TInner Map;
 };

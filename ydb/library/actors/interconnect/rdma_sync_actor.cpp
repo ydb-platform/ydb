@@ -69,7 +69,7 @@ namespace {
         ui32 Size = 0;
         ui32 MessageType = 0;
 
-        ui64 CalculateChecksum(const void* data, size_t len) const {
+        ui64 Y_NO_INLINE CalculateChecksum(const void* data, size_t len) const {
             XXH3_state_t state;
             XXH3_64bits_reset(&state);
             XXH3_64bits_update(&state, &Size, sizeof(Size));
@@ -456,9 +456,8 @@ namespace {
             return true;
         }
 
-        template <typename TProto>
         bool SendTcpProto(
-                const TProto& proto,
+                const google::protobuf::MessageLite& proto,
                 ESyncTcpMessageType messageType,
                 const char* what,
                 TString& error,
@@ -568,23 +567,54 @@ namespace {
             return false;
         }
 
-        bool HandleRdmaEvent(THolder<IEventHandle> ev, TString& error) {
-            if (ev->GetTypeRewrite() == TEvRdmaIoDone::EventType) {
-                if (PendingIoDone) {
-                    error = "duplicate RDMA SEND completion";
+        bool Y_NO_INLINE HandleEvent(THolder<IEventHandle> ev, TString& error) {
+            if (!ev) {
+                error = "unable to wait RDMA sync event";
+                return false;
+            }
+
+            switch (ev->GetTypeRewrite()) {
+                case TEvRdmaIoDone::EventType:
+                    if (PendingIoDone) {
+                        error = "duplicate RDMA SEND completion";
+                        return false;
+                    }
+                    PendingIoDone.Reset(static_cast<TEvRdmaIoDone::THandle*>(ev.Release()));
+                    return true;
+                case TEvRdmaIoReceiveDone::EventType:
+                    return HandleRdmaReceiveEvent(
+                        THolder<TEvRdmaIoReceiveDone::THandle>(static_cast<TEvRdmaIoReceiveDone::THandle*>(ev.Release())),
+                        error);
+                case TEvPollerReady::EventType:
+                    TcpControlRead.ReadRequested = false;
+                    return TryReadTcpControlNoWait(error);
+                default:
+                    error = Sprintf("unexpected RDMA sync event: 0x%08" PRIx32, ev->GetTypeRewrite());
+                    return false;
+            }
+        }
+
+        template <typename TReady>
+        bool PumpUntil(TReady ready, TString& error) {
+            for (;;) {
+                if (ready()) {
+                    return true;
+                }
+
+                // Arm TCP read notification before sleeping, so peer ErrSync/FinSync
+                // can wake us while we are waiting for an RDMA event.
+                if (!TryReadTcpControlNoWait(error)) {
                     return false;
                 }
-                PendingIoDone.Reset(static_cast<TEvRdmaIoDone::THandle*>(ev.Release()));
-                return true;
-            }
 
-            if (ev->GetTypeRewrite() == TEvRdmaIoReceiveDone::EventType) {
-                return HandleRdmaReceiveEvent(
-                    THolder<TEvRdmaIoReceiveDone::THandle>(static_cast<TEvRdmaIoReceiveDone::THandle*>(ev.Release())),
-                    error);
-            }
+                if (ready()) {
+                    return true;
+                }
 
-            return false;
+                if (!HandleEvent(TActorCoroImpl::WaitForEvent(), error)) {
+                    return false;
+                }
+            }
         }
 
         bool ProcessTcpControlMessage(TString& error) {
@@ -629,7 +659,7 @@ namespace {
             return false;
         }
 
-        bool TryReadTcpControlNoWait(TString& error) {
+        bool Y_NO_INLINE TryReadTcpControlNoWait(TString& error) {
             if (!Socket) {
                 error = "TCP control socket is not initialized";
                 return false;
@@ -685,6 +715,7 @@ namespace {
                 } else if (-nbytes == EAGAIN || -nbytes == EWOULDBLOCK) {
                     if (!TcpControlRead.ReadRequested) {
                         if (PollerToken->RequestReadNotificationAfterWouldBlock()) {
+                            // Read readiness raced with arming the notification; try recv again.
                             continue;
                         }
                         TcpControlRead.ReadRequested = true;
@@ -702,77 +733,11 @@ namespace {
         }
 
         THolder<TEvRdmaIoDone::THandle> WaitRdmaIoDone(TString& error) {
-            for (;;) {
-                if (PendingIoDone) {
-                    return std::move(PendingIoDone);
-                }
-
-                if (!TryReadTcpControlNoWait(error)) {
-                    return nullptr;
-                }
-
-                auto ev = TActorCoroImpl::WaitForEvent();
-                if (!ev) {
-                    return nullptr;
-                }
-
-                if (ev->GetTypeRewrite() == TEvRdmaIoDone::EventType) {
-                    return THolder<TEvRdmaIoDone::THandle>(static_cast<TEvRdmaIoDone::THandle*>(ev.Release()));
-                }
-
-                if (ev->GetTypeRewrite() == TEvRdmaIoReceiveDone::EventType) {
-                    TString parseError;
-                    if (!HandleRdmaReceiveEvent(
-                            THolder<TEvRdmaIoReceiveDone::THandle>(static_cast<TEvRdmaIoReceiveDone::THandle*>(ev.Release())),
-                            parseError))
-                    {
-                        error = std::move(parseError);
-                        return nullptr;
-                    }
-                    continue;
-                }
-
-                if (ev->GetTypeRewrite() == TEvPollerReady::EventType) {
-                    TcpControlRead.ReadRequested = false;
-                    if (!TryReadTcpControlNoWait(error)) {
-                        return nullptr;
-                    }
-                }
+            if (!PumpUntil([this] { return static_cast<bool>(PendingIoDone); }, error)) {
+                return nullptr;
             }
-        }
 
-        bool WaitRdmaReceivePacket(TString& error) {
-            for (;;) {
-                if (!TryReadTcpControlNoWait(error)) {
-                    return false;
-                }
-
-                auto ev = TActorCoroImpl::WaitForEvent();
-                if (!ev) {
-                    error = "unable to wait RDMA sync receive";
-                    return false;
-                }
-
-                if (ev->GetTypeRewrite() == TEvRdmaIoReceiveDone::EventType) {
-                    return HandleRdmaReceiveEvent(
-                        THolder<TEvRdmaIoReceiveDone::THandle>(static_cast<TEvRdmaIoReceiveDone::THandle*>(ev.Release())),
-                        error);
-                }
-
-                if (ev->GetTypeRewrite() == TEvRdmaIoDone::EventType) {
-                    if (!HandleRdmaEvent(std::move(ev), error)) {
-                        return false;
-                    }
-                    continue;
-                }
-
-                if (ev->GetTypeRewrite() == TEvPollerReady::EventType) {
-                    TcpControlRead.ReadRequested = false;
-                    if (!TryReadTcpControlNoWait(error)) {
-                        return false;
-                    }
-                }
-            }
+            return std::move(PendingIoDone);
         }
 
         bool ParseRdmaPacket(const TRcBuf& received, TRdmaSyncPacket& packet, TString& error) {
@@ -1025,10 +990,8 @@ namespace {
                 ui64& dataSyncChecksum,
                 TString& error)
         {
-            while (!PendingDataSync) {
-                if (!WaitRdmaReceivePacket(error)) {
-                    return ReportRdmaReceiveError(NActorsInterconnect::SYNC_ERR_RDMA_FAILED, error);
-                }
+            if (!PumpUntil([this] { return PendingDataSync.has_value(); }, error)) {
+                return ReportRdmaReceiveError(NActorsInterconnect::SYNC_ERR_RDMA_FAILED, error);
             }
 
             dataSync = std::move(PendingDataSync->Sync);
@@ -1070,10 +1033,8 @@ namespace {
                 TMonotonic& receivedAt,
                 TString& error)
         {
-            while (!PendingAckSync) {
-                if (!WaitRdmaReceivePacket(error)) {
-                    return ReportRdmaReceiveError(NActorsInterconnect::SYNC_ERR_RDMA_FAILED, error);
-                }
+            if (!PumpUntil([this] { return PendingAckSync.has_value(); }, error)) {
+                return ReportRdmaReceiveError(NActorsInterconnect::SYNC_ERR_RDMA_FAILED, error);
             }
 
             ackSync = std::move(PendingAckSync->Sync);

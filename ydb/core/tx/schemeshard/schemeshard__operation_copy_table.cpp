@@ -672,7 +672,8 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(srcPath.Base()->PathId));
-        auto& srcTableInfo = context.SS->Tables.Update(srcPath.Base()->PathId, context.MemChanges);
+        // Copy, not a reference: Tables.Set() below can rehash and invalidate a slot ref.
+        auto srcTableInfo = context.SS->Tables.Update(srcPath.Base()->PathId, context.MemChanges);
 
         {
             const NKikimrSchemeOp::TPartitionConfig &srcPartitionConfig = srcTableInfo->PartitionConfig();

@@ -38,6 +38,22 @@ inline TIntrusivePtr<TTableInfo> SelfRefUndoClone(const TIntrusivePtr<TTableInfo
     return p ? TTableInfo::DeepCopy(*p) : TIntrusivePtr<TTableInfo>();
 }
 
+// Restore an Update() snapshot on abort. Default: swap the pointer back.
+// TTableInfo restores contents into the still-live object instead, because
+// TTLEnabledTables aliases that object by raw pointer and must stay in sync;
+// operator= on the TSimpleRefCount base is a no-op, so the live refcount is kept.
+template <class V>
+void SelfRefUndoRestoreSlot(V& slot, const V& snap) {
+    slot = snap;
+}
+inline void SelfRefUndoRestoreSlot(TIntrusivePtr<TTableInfo>& slot, const TIntrusivePtr<TTableInfo>& snap) {
+    if (slot && snap) {
+        *slot = *snap;
+    } else {
+        slot = snap;
+    }
+}
+
 // Teardown interface: maps self-register so Clear() iterates one registry.
 class ISelfRefMap {
 public:
@@ -133,7 +149,7 @@ public:
         V& slot = Map.at(id);
         if (changes.NeedsUpdateSnapshot(this, id)) {
             changes.RecordSelfRefUndo([this, id, snap = SelfRefUndoClone(slot)]() {
-                UndoRestore(id, snap);
+                UndoRestoreInPlace(id, snap);
             });
         }
         return slot;
@@ -197,11 +213,22 @@ private:
     // Undo is driven only by TMemoryChanges; ops must never call these.
     friend class TMemoryChanges;
 
-    // Restore a snapshot value without acquiring (the Paths snapshot owns the counter).
+    // Set-undo: bring back the replaced value's original pointer (the Paths snapshot
+    // owns the counter). Used when Set() overwrote an existing entry.
     V& UndoRestore(const TPathId& id, V value) {
         auto& slot = Map[id];
         slot = std::move(value);
         return slot;
+    }
+
+    // Update-undo: restore pre-mutation contents into the SAME live object rather than
+    // swapping the pointer, so secondary aliases of it (e.g. TTLEnabledTables) don't
+    // desync. Falls back to a pointer restore if either side is null.
+    void UndoRestoreInPlace(const TPathId& id, const V& snap) {
+        auto it = Map.find(id);
+        if (it != Map.end()) {
+            SelfRefUndoRestoreSlot(it->second, snap);
+        }
     }
 
     // Drop a tx-created entry without releasing (Paths owns the counter).

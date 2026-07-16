@@ -508,10 +508,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestFilter(ColumnStore);
     }
 
-    NKikimrConfig::TAppConfig CreateExplainPlanTestAppConfig() {
+    NKikimrConfig::TAppConfig CreateExplainPlanTestAppConfig(bool inlineJoinFiltersAfterCBO = true) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(inlineJoinFiltersAfterCBO);
         return appConfig;
     }
 
@@ -590,8 +591,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     class TExplainPlanTestContext {
     public:
-        TExplainPlanTestContext()
-            : AppConfig(CreateExplainPlanTestAppConfig())
+        explicit TExplainPlanTestContext(bool inlineJoinFiltersAfterCBO = true)
+            : AppConfig(CreateExplainPlanTestAppConfig(inlineJoinFiltersAfterCBO))
             , Kikimr(NKqp::TKikimrSettings(AppConfig).SetWithSampleTables(false))
             , Session(CreateSession())
         {
@@ -2723,6 +2724,32 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST_TWIN(BasicHashJoin, UseBlockHashJoin) {
         BasicHashJoinTest(UseBlockHashJoin);
+    }
+
+    Y_UNIT_TEST(InlineJoinFiltersAfterCBOChangesJoinTree) {
+        for (const bool inlineJoinFiltersAfterCBO : {false, true}) {
+            TExplainPlanTestContext testContext(inlineJoinFiltersAfterCBO);
+            const auto plan = ExecuteExplain(testContext.GetSession(), R"(
+                PRAGMA YqlSelect = 'force';
+                PRAGMA ydb.CostBasedOptimizationLevel = '4';
+                PRAGMA ydb.OptimizerHints = 'JoinOrder(l (m r))';
+
+                SELECT count(*)
+                FROM `/Root/t1` AS l
+                INNER JOIN `/Root/t2` AS m
+                    ON l.a = m.a AND l.b < m.c
+                INNER JOIN `/Root/t1` AS r
+                    ON m.a = r.a;
+            )");
+
+            const auto joinOrder = GetJoinOrder(plan).GetStringRobust();
+            // Early inlining lets CBO apply the hinted order to all three
+            // inputs. Late inlining keeps the first join as a boundary.
+            const TString expectedJoinOrder = inlineJoinFiltersAfterCBO
+                ? R"([["t1","t2"],"t1"])"
+                : R"(["t1",["t2","t1"]])";
+            UNIT_ASSERT_VALUES_EQUAL_C(joinOrder, expectedJoinOrder, plan);
+        }
     }
 
     Y_UNIT_TEST(JoinFilters) {

@@ -85,6 +85,23 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_path"]), "/Root/db/archive/*");
     }
 
+    Y_UNIT_TEST(OptionalStringEmptyResets) {
+        TClassifierSettings settings;
+        auto propertiesMap = settings.GetPropertiesMap();
+
+        std::visit(TClassifierSettings::TParser{"my_app"}, propertiesMap["has_app_name"]);
+        UNIT_ASSERT(settings.HasAppName.has_value());
+
+        std::visit(TClassifierSettings::TParser{""}, propertiesMap["has_app_name"]);
+        UNIT_ASSERT(!settings.HasAppName.has_value());
+
+        std::visit(TClassifierSettings::TParser{"test@user"}, propertiesMap["member_name"]);
+        UNIT_ASSERT(settings.MemberName.has_value());
+
+        std::visit(TClassifierSettings::TParser{""}, propertiesMap["member_name"]);
+        UNIT_ASSERT(!settings.MemberName.has_value());
+    }
+
     Y_UNIT_TEST(PredicateExtractingEmpty) {
         TClassifierSettings settings;
         auto propertiesMap = settings.GetPropertiesMap();

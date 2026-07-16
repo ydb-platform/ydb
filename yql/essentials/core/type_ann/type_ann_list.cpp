@@ -2663,7 +2663,7 @@ namespace {
                 input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
                 return IGraphTransformer::TStatus::Ok;
             }
-            auto commonType = CommonType<false>(input->Pos(), input->Child(idx1)->GetTypeAnn(), input->Child(idx2)->GetTypeAnn(), ctx.Expr);
+            auto commonType = CommonType<false>(input->Pos(), input->Child(idx1)->GetTypeAnn(), input->Child(idx2)->GetTypeAnn(), ctx.Expr, ctx.Types);
             if (!commonType)
                 return IGraphTransformer::TStatus::Error;
             if (ETypeAnnotationKind::Optional == commonType->GetKind()) {
@@ -2729,7 +2729,7 @@ namespace {
                 return status;
             }
         } else {
-            commonType = CommonType<false>(input->Pos(), input->Child(0U)->GetTypeAnn(), input->Child(1U)->GetTypeAnn(), ctx.Expr);
+            commonType = CommonType<false>(input->Pos(), input->Child(0U)->GetTypeAnn(), input->Child(1U)->GetTypeAnn(), ctx.Expr, ctx.Types);
             if (!commonType)
                 return IGraphTransformer::TStatus::Error;
 
@@ -3164,7 +3164,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus SelectOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus SelectOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         const bool checkHashes = !input->IsCallable("UnionAll") && !input->IsCallable("UnionMerge");
         switch (input->ChildrenSize()) {
             case 0U:
@@ -3253,7 +3253,7 @@ namespace {
         TPositionHandle pos,
         const TExprNode::TListType& children,
         const TStructExprType*& resultStructType,
-        TContext& ctx,
+        TExtContext& ctx,
         const bool areHashesChecked,
         bool& isUniversal)
     {
@@ -3292,7 +3292,7 @@ namespace {
                     }
 
 
-                    if (const auto commonType = CommonType<false, true>(input.Pos(), p.first, item->GetItemType(), ctx.Expr)) {
+                    if (const auto commonType = CommonType<false, true>(input.Pos(), p.first, item->GetItemType(), ctx.Expr, ctx.Types)) {
                         p.first = commonType;
                         ++p.second;
                         continue;
@@ -3413,7 +3413,7 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
                 for (size_t i = 0; i < childTypes.size(); ++i) {
-                    if (const auto commonType = CommonType<false>(child->Pos(), resultTypes[i], childTypes[i], ctx.Expr))
+                    if (const auto commonType = CommonType<false>(child->Pos(), resultTypes[i], childTypes[i], ctx.Expr, ctx.Types))
                         resultTypes[i] = commonType;
                     else
                         return IGraphTransformer::TStatus::Error;
@@ -3549,7 +3549,7 @@ namespace {
         }
 
         if constexpr (!IsStrict) {
-            if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr)) {
+            if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr, ctx.Types)) {
                 if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr, ctx.Types); status != IGraphTransformer::TStatus::Ok)
                     return status;
             } else
@@ -9770,7 +9770,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus SqlCombineWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus SqlCombineWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -9816,7 +9816,7 @@ namespace {
 
         const auto leftKeyType = leftInput->Child(3U)->GetTypeAnn();
         const auto rightKeyType = rightInput->Child(3U)->GetTypeAnn();
-        const auto commonKeyType = CommonType<false>(input->Pos(), leftKeyType, rightKeyType, ctx.Expr, /*warn=*/true);
+        const auto commonKeyType = CommonType<false>(input->Pos(), leftKeyType, rightKeyType, ctx.Expr, ctx.Types, /*warn=*/true);
         if (!commonKeyType) {
             return IGraphTransformer::TStatus::Error;
         }

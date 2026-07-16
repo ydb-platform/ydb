@@ -150,6 +150,14 @@ namespace NInterconnect {
         ui64 NumDropped = 0;
         std::shared_ptr<std::atomic_uint64_t> Traffic;
 
+        // Warm-up: samples generated before MeasurementStartTime are excluded from
+        // the reported throughput/RTT statistics (see Params.DelayBeforeMeasurements).
+        TMonotonic MeasurementStartTime = TMonotonic::Zero();
+
+        bool IsMeasuring(TMonotonic when) const {
+            return when >= MeasurementStartTime;
+        }
+
 
     public:
         static constexpr IActor::EActivityType ActorActivityType() {
@@ -181,6 +189,7 @@ namespace NInterconnect {
 
             Become(&TLoadActor::StateFunc);
             NextMessageTimestamp = ctx.Monotonic();
+            MeasurementStartTime = NextMessageTimestamp + Params.DelayBeforeMeasurements;
             ResetThroughput(NextMessageTimestamp, *Traffic);
             GenerateMessages(ctx);
             ctx.Schedule(Params.Duration, new TEvents::TEvPoisonPill);
@@ -212,7 +221,9 @@ namespace NInterconnect {
                     }
                     ev.Reset(new TEvLoadMessage(Hops, id, payload ? &payload : nullptr));
                 }
-                UpdateThroughput(ev->CalculateSerializedSizeCached());
+                if (IsMeasuring(ctx.Monotonic())) {
+                    UpdateThroughput(ev->CalculateSerializedSizeCached());
+                }
                 ctx.Send(FirstHop, ev.Release(), IEventHandle::MakeFlags(Params.Channel, 0), cookie);
 
                 // register in the map
@@ -240,12 +251,15 @@ namespace NInterconnect {
             const auto& record = ev->Get()->Record;
             auto it = InFly.find(record.GetId());
             if (it != InFly.end()) {
-                // record message rtt
-                const TDuration rtt = ctx.Monotonic() - it->second.SendTimestamp;
-                UpdateHistogram(ctx.Monotonic(), rtt);
+                const TMonotonic now = ctx.Monotonic();
+                if (IsMeasuring(now)) {
+                    // record message rtt
+                    const TDuration rtt = now - it->second.SendTimestamp;
+                    UpdateHistogram(now, rtt);
 
-                // update throughput
-                UpdateThroughput(ev->Get()->CalculateSerializedSizeCached());
+                    // update throughput
+                    UpdateThroughput(ev->Get()->CalculateSerializedSizeCached());
+                }
 
                 // remove message from the in fly map
                 InFly.erase(it);
@@ -330,6 +344,13 @@ namespace NInterconnect {
 
         const TDuration ResultPublishPeriod = TDuration::Seconds(15);
 
+        // Full-run accumulators (independent of the rolling ThroughputBytes/Samples
+        // window that gets reset on every PublishResults() call), used to compute the
+        // average throughput reported to the finish callback.
+        ui64 TotalThroughputBytes = 0;
+        ui64 TotalThroughputSamples = 0;
+        TMonotonic RunFirstSample = TMonotonic::Zero();
+
         void SchedulePublishResults(const TActorContext& ctx) {
             ctx.Schedule(ResultPublishPeriod, new TEvPublishResults);
         }
@@ -350,6 +371,13 @@ namespace NInterconnect {
                 << " b/s# " << ui64(ThroughputBytes * 1000000 / duration.MicroSeconds())
                 << " common# " << ui64((traffic - TrafficAtBegin) * 1000000 / duration.MicroSeconds())
                 << "}";
+
+            if (RunFirstSample == TMonotonic::Zero()) {
+                RunFirstSample = ThroughputFirstSample;
+            }
+            TotalThroughputBytes += ThroughputBytes;
+            TotalThroughputSamples += ThroughputSamples;
+
             ResetThroughput(now, traffic);
 
             msg << " RTT# ";
@@ -384,6 +412,44 @@ namespace NInterconnect {
             }
         }
 
+        // Computes the aggregated run statistics directly from the actor's internal
+        // counters (no log parsing). Called once, right before the finish callback,
+        // after the final PublishResults(ctx, /* schedule */ false) has folded the
+        // last window into the full-run accumulators.
+        TLoadActorStats ComputeStats(const TActorContext& ctx) const {
+            TLoadActorStats stats;
+
+            const TMonotonic now = ctx.Monotonic();
+            const TMonotonic firstSample = RunFirstSample != TMonotonic::Zero() ? RunFirstSample : ThroughputFirstSample;
+            stats.ThroughputWindow = now - firstSample;
+            stats.ThroughputBytes = TotalThroughputBytes;
+            stats.ThroughputSamples = TotalThroughputSamples;
+            if (stats.ThroughputWindow != TDuration::Zero()) {
+                stats.BytesPerSecond = stats.ThroughputBytes * 1000000 / stats.ThroughputWindow.MicroSeconds();
+            }
+
+            if (Histogram) {
+                stats.RttWindow = Histogram.back().first - Histogram.front().first;
+                stats.RttSamples = Histogram.size();
+
+                TVector<TDuration> v;
+                v.reserve(Histogram.size());
+                for (const auto& item : Histogram) {
+                    v.push_back(item.second);
+                }
+                std::sort(v.begin(), v.end());
+                stats.LatencyPercentilesUs.reserve(6);
+                for (double q : {0.5, 0.9, 0.99, 0.999, 0.9999, 1.0}) {
+                    const size_t pos = q * (v.size() - 1);
+                    stats.LatencyPercentilesUs.emplace_back(q, v[pos].MicroSeconds());
+                }
+            }
+
+            stats.NumDropped = NumDropped;
+
+            return stats;
+        }
+
         STRICT_STFUNC(QueryTrafficCounter,
             HFunc(TEvTrafficCounter, Handle);
         )
@@ -403,8 +469,10 @@ namespace NInterconnect {
 
         void Die(const TActorContext& ctx) override {
             PublishResults(ctx, false);
-            if (FinishCallback)
-                FinishCallback(ctx, RenderHTML(true, ctx));
+            if (FinishCallback) {
+                const TLoadActorStats stats = ComputeStats(ctx);
+                FinishCallback(ctx, RenderHTML(true, ctx), stats);
+            }
             TActorBootstrapped::Die(ctx);
         }
 

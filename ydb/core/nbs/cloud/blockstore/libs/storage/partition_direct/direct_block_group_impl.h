@@ -15,6 +15,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
 
@@ -144,7 +145,7 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
-    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
 
     // IHostStateController implementation
     void SetHostState(
@@ -154,10 +155,8 @@ public:
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
     void QueryAddHost() override;
 
-    // Own methods (not part of any interface).
-    ui64 GetDDiskSessionSeqNo(size_t index) const;
-
 private:
+    friend struct TDBGFixture;
     using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
     using EConnectionType = NTransport::THostConnection::EConnectionType;
     using TDDiskIdToHostIndex =
@@ -218,6 +217,7 @@ private:
         TDuration executionTime);
 
     TDBGFlushResponse HandleSyncWithPBufferResponse(
+        THostIndex ddiskHostIndex,
         const TEvSyncResult& response,
         size_t segmentCount);
 
@@ -251,9 +251,11 @@ private:
 
     [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
 
-    TDBGDumpResponse DoDebugPrintDirtyMap();
+    void HandleBlockedGeneration(THostIndex hostIndex, TStringBuf context);
 
-    TDbgSnapshot DoBuildMonSnapshot();
+    [[nodiscard]] TDBGDumpResponse DoDebugPrintDirtyMap() const;
+
+    [[nodiscard]] TDbgSnapshot DoBuildMonSnapshot() const;
 
     [[nodiscard]] TConnectionSnapshot MakeConnectionSnapshot(
         size_t hostIndex) const;
@@ -274,6 +276,8 @@ private:
     TDDiskIdToHostIndex PBufferIdToHostIndex;
     TVector<TVChunkWeakPtr> VChunks;
     TOracle Oracle;
+
+    bool BlockedGenerationDetected = false;
 
     // One-shot signal of the FIRST time the locked quorum was reached. Used
     // ONLY to gate the synchronous tablet start (wait for readiness before

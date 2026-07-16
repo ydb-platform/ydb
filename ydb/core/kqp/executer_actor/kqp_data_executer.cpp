@@ -817,7 +817,7 @@ private:
             KQP_STLOG_T(KQPDATA, "Create temporary mvcc snapshot, become WaitSnapshotState",
                 (trace_id, TraceId()));
             Become(&TKqpDataExecuter::WaitSnapshotState);
-            ExecuterStateSpan = ExecuterSpan.CreateChild(TWilsonKqp::DataExecuterAcquireSnapshot, TWilsonKqp::KqpSession, "WaitForSnapshot", "Snapshot", NWilson::EFlags::NONE);
+            ExecuterStateSpan = this->MakePrepareChild(TWilsonKqp::DataExecuterAcquireSnapshot, TWilsonKqp::KqpSession, "WaitForSnapshot", "Snapshot", NWilson::EFlags::NONE);
 
             return;
         }
@@ -877,7 +877,10 @@ private:
             return;
         }
 
-        ExecuterStateSpan = ExecuterSpan.CreateChild(TWilsonKqp::DataExecuterRunTasks, TWilsonKqp::KqpSession, "RunTasks", "RunTasks");
+        if (UserPrepareSpan) {
+            UserPrepareSpan.EndOk();
+        }
+        ExecuterStateSpan = ExecuterSpan.CreateChild(TWilsonKqp::DataExecuterRunTasks, TWilsonKqp::KqpSession, "RunTasks", "Run");
         UserRunTasksTraceId = ExecuterStateSpan.User().GetTraceId();
         KQP_STLOG_D(KQPDATA, "become ExecuteState",
             (current_state, CurrentStateFuncName()),

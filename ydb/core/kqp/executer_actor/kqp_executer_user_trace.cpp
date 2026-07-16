@@ -25,7 +25,7 @@ TString StageDisplayName(const NYql::NDqProto::TDqStageStats& stage) {
         const auto& table = stage.GetTables(0);
         return TStringBuilder() << (table.GetWriteRows().GetSum() > 0 ? "Write " : "Read ") << table.GetTablePath();
     }
-    return TStringBuilder() << "Stage " << stage.GetStageId();
+    return TStringBuilder() << "Step " << stage.GetStageId();
 }
 
 } // namespace
@@ -35,14 +35,16 @@ void EmitUserStagePhases(const NWilson::TTraceId& parent, const NYql::NDqProto::
         return;
     }
     for (const auto& stage : stats.GetStages()) {
+        // Stage start/finish are offsets from BaseTimeMs (absolute epoch ms); base 0 => untimed stage.
+        const ui64 base = stage.GetBaseTimeMs();
         const ui64 startMs = stage.GetStartTimeMs().GetMin();
         const ui64 finishMs = stage.GetFinishTimeMs().GetMax();
-        if (startMs == 0 || finishMs == 0 || finishMs < startMs) {
+        if (base == 0 || finishMs < startMs) {
             continue;
         }
         NWilson::TSpan span = NWilson::TSpan::ConstructTerminated(
             parent, parent.Span(TWilsonKqp::KqpSession),
-            TInstant::MilliSeconds(startMs), TInstant::MilliSeconds(finishMs),
+            TInstant::MilliSeconds(base + startMs), TInstant::MilliSeconds(base + finishMs),
             NWilson::NTraceProto::Status::STATUS_CODE_OK, StageDisplayName(stage));
         if (!span) {
             continue;

@@ -36,7 +36,7 @@ TKqpReadRangesSource* AddSource(TKqpPhyQuery& phy, const TString& path) {
 const auto Matches = [](auto builder, auto configure) {
     TKqpPhyQuery phy;
     configure(builder(phy, TString("/Root/t")));
-    return NWorkload::MatchesFullScan(TRegexPredicate::Compile("/Root/t"), phy);
+    return NWorkload::MatchesFullScan(TRegexPredicate::FromGlob("/Root/t"), phy);
 };
 
 const auto AssertHasFullScan       = [](auto c) { UNIT_ASSERT( Matches(AddOp,     c)); };
@@ -55,21 +55,21 @@ Y_UNIT_TEST_SUITE(TFullScanMatcherPredicate) {
     }
 
     Y_UNIT_TEST(NonMatchingPathIsIgnored) {
-        auto pred = TRegexPredicate::Compile("/Root/critical");
+        auto pred = TRegexPredicate::FromGlob("/Root/critical");
         TKqpPhyQuery phy;
         AddOp(phy, "/Root/other")->MutableReadRange()->MutableKeyRange();
         UNIT_ASSERT(!NWorkload::MatchesFullScan(pred, phy));
     }
 
-    Y_UNIT_TEST(RegexPatternMatches) {
-        auto pred = TRegexPredicate::Compile("/Root/db/orders_archive.*");
+    Y_UNIT_TEST(GlobPatternMatches) {
+        auto pred = TRegexPredicate::FromGlob("/Root/db/orders_archive*");
         TKqpPhyQuery phy;
         AddOp(phy, "/Root/db/orders_archive_2024")->MutableReadRange()->MutableKeyRange();
         UNIT_ASSERT(NWorkload::MatchesFullScan(pred, phy));
     }
 
     Y_UNIT_TEST(MixedOpsReturnTrueOnAnyMatch) {
-        auto pred = TRegexPredicate::Compile("/Root/t");
+        auto pred = TRegexPredicate::FromGlob("/Root/t");
         TKqpPhyQuery phy;
         AddOp(phy, "/Root/other")->MutableReadRange()->MutableKeyRange();
         AddOp(phy, "/Root/t")->MutableReadRange()->MutableKeyRange();

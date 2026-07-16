@@ -425,10 +425,10 @@ public:
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
             case EType::GlobalJson:
-                return true;
             case EType::GlobalFulltextCompact:
             case EType::GlobalFulltextCompactRelevance:
             case EType::GlobalJsonCompact:
+                return true;
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
             case EType::LocalMinMax:

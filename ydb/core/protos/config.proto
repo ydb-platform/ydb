@@ -415,6 +415,7 @@ message TBlobStorageFormatConfig {
         optional uint64 RoomId = 9;
         optional uint64 BodyId = 10;
         optional NKikimrBlobStorage.TPDiskConfig PDiskConfig = 11;
+        optional string DiskScope = 12;
     }
 
     repeated TDrive Drive = 1;
@@ -1622,6 +1623,11 @@ message TImmediateControlsConfig {
             MinValue: -1,
             MaxValue: 604800,
             DefaultValue: 86400 }];
+        optional uint64 TolerateOrphanedPaths = 19 [(ControlOptions) = {
+            Description: "Emergency recovery only: tolerate SchemeShard local database inconsistencies (orphaned paths, references to missing paths) instead of failing fast. Enable to boot and repair a broken SchemeShard, then disable again",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TTCMallocControls {

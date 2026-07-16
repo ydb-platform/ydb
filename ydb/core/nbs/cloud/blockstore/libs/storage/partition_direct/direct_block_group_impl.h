@@ -255,6 +255,9 @@ private:
 
     TDbgSnapshot DoBuildMonSnapshot();
 
+    [[nodiscard]] TConnectionSnapshot MakeConnectionSnapshot(
+        size_t hostIndex) const;
+
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;
     const TExecutorPtr Executor;

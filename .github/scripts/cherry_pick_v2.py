@@ -538,6 +538,11 @@ def process_branch(
     ahead_result = run_git(
         repo_path, ['rev-list', '--count', f'{target_branch}..HEAD'], logger, check=False
     )
+    if ahead_result.returncode != 0:
+        raise RuntimeError(
+            f"Failed to count commits ahead of {target_branch}: "
+            f"{(ahead_result.stderr or ahead_result.stdout or '').strip()}"
+        )
     commits_ahead = int((ahead_result.stdout or '0').strip() or 0)
     if commits_ahead == 0:
         raise ChangesAlreadyAppliedError(

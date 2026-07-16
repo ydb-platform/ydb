@@ -250,15 +250,11 @@ bool TReadSession::Close(TDuration timeout) {
             dumpCountersContextToCancel = DumpCountersContext;
         }
     }
-    auto clearPendingEvents = [&] {
-        ClearAllEvents();
-        session->ClearAllPartitionStreamEvents();
-    };
-    clearPendingEvents();
     if (!session->WaitAllDecompressionTasks(TInstant::Now() + timeout)) {
         LOG_LAZY(Log, TLOG_WARNING, GetLogPrefix() << "Some decompression tasks are still running after read session close timeout");
     }
-    clearPendingEvents();
+    ClearAllEvents();
+    session->ClearAllPartitionStreamEvents();
     if (cbContextToCancel) {
         cbContextToCancel->Cancel();
     }

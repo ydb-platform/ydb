@@ -165,38 +165,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         }
     }
 
-    bool SkipCsvLoad(ELoadKind load, TStringBuf testName) {
-        if (load == ELoadKind::CSV) {
-            Cerr << testName << " skipped: CSV Interval support not implemented yet" << Endl;
-            return true;
-        }
-        return false;
-    }
-
-    bool SkipColumnShardFilter(ETableKind table, TStringBuf testName) {
-        if (table == ETableKind::COLUMNSHARD) {
-            Cerr << testName << " skipped for ColumnShard: duration/int64 filter pushdown not supported yet" << Endl;
-            return true;
-        }
-        return false;
-    }
-
-    bool SkipColumnShardArrowLoad(ETableKind table, ELoadKind load, TStringBuf testName) {
-        if (table == ETableKind::COLUMNSHARD && load == ELoadKind::ARROW) {
-            Cerr << testName << " skipped: Arrow bulk upsert Interval support for ColumnShard not implemented yet" << Endl;
-            return true;
-        }
-        return false;
-    }
-
-    bool SkipColumnShardScanQuery(EQueryMode scan, ETableKind table, ELoadKind load, TStringBuf testName) {
-        if (table == ETableKind::COLUMNSHARD && scan == EQueryMode::SCAN_QUERY && load == ELoadKind::YDB_VALUE) {
-            Cerr << testName << " skipped: ScanQuery Interval support for ColumnShard not implemented yet" << Endl;
-            return true;
-        }
-        return false;
-    }
-
     void PrepareBase(TTestHelper& helper, ETableKind tableKind, const TString& tableName, TTestHelper::TColumnTable* colTableOut,
         TVector<TTestHelper::TColumnSchema>* schemaOut) {
         if (tableKind == ETableKind::COLUMNSHARD) {
@@ -215,6 +183,76 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
             CreateDataShardTable(helper, tableName);
         }
     }
+
+    void CreateIntervalPkDataShardTable(TTestHelper& helper, const TString& name) {
+        auto& session = helper.GetSession();
+        auto res = session
+                       .ExecuteSchemeQuery(TStringBuilder() << R"(
+                CREATE TABLE `)" << name << R"(` (
+                    ival Interval NOT NULL,
+                    val Int64,
+                    PRIMARY KEY (ival)
+                );
+            )")
+                       .ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SUCCESS);
+    }
+
+    void PrepareIntervalPkTable(TTestHelper& helper, ETableKind tableKind, const TString& tableName,
+        TTestHelper::TColumnTable* colTableOut, TVector<TTestHelper::TColumnSchema>* schemaOut) {
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("ival").SetType(NScheme::NTypeIds::Interval).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("val").SetType(NScheme::NTypeIds::Int64),
+        };
+
+        *schemaOut = schema;
+        if (tableKind == ETableKind::COLUMNSHARD) {
+            TTestHelper::TColumnTable col;
+            col.SetName(tableName).SetPrimaryKey({ "ival" }).SetSharding({ "ival" }).SetSchema(schema);
+            helper.CreateTable(col);
+            *colTableOut = col;
+        } else {
+            CreateIntervalPkDataShardTable(helper, tableName);
+        }
+    }
+
+    void LoadIntervalPkData(TTestHelper& helper, ETableKind table, ELoadKind load, const TString& name,
+        TTestHelper::TColumnTable* col) {
+        if (load == ELoadKind::ARROW) {
+            using namespace NKikimr::NKqp::NTestArrow;
+            auto ivalArr = MakeInt64Array({ -7000000, -3000000, 0, 4000000, 9000000 });
+            auto valArr = MakeInt64ArrayNullable({ (i64)1, (i64)2, std::nullopt, (i64)4, (i64)5 });
+            auto batch = MakeBatch(
+                { arrow::field("ival", arrow::int64(), false),
+                  arrow::field("val", arrow::int64()) },
+                { ivalArr, valArr });
+            if (table == ETableKind::COLUMNSHARD) {
+                Y_ABORT_UNLESS(col);
+                helper.BulkUpsert(*col, batch);
+            } else {
+                TString strBatch = NArrow::SerializeBatchNoCompression(batch);
+                TString strSchema = NArrow::SerializeSchema(*batch->schema());
+                auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, NYdb::NTable::EDataFormat::ApacheArrow, strBatch, strSchema).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        } else if (load == ELoadKind::YDB_VALUE) {
+            TValueBuilder builder;
+            builder.BeginList();
+            builder.AddListItem().BeginStruct().AddMember("ival").Interval(-7000000).AddMember("val").BeginOptional().Int64(1).EndOptional().EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("ival").Interval(-3000000).AddMember("val").BeginOptional().Int64(2).EndOptional().EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("ival").Interval(0).AddMember("val").EmptyOptional(EPrimitiveType::Int64).EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("ival").Interval(4000000).AddMember("val").BeginOptional().Int64(4).EndOptional().EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("ival").Interval(9000000).AddMember("val").BeginOptional().Int64(5).EndOptional().EndStruct();
+            builder.EndList();
+            auto res = helper.GetKikimr().GetTableClient().BulkUpsert(name, builder.Build()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        } else {
+            TStringBuilder csv;
+            csv << "-7000000,1\n-3000000,2\n0,\n4000000,4\n9000000,5\n";
+            auto res = helper.GetKikimr().GetTableClient().BulkUpsert(name, EDataFormat::CSV, csv).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+    }
     }   // namespace
 
     Y_UNIT_TEST(TestSimpleQueries, EQueryMode, ETableKind, ELoadKind) {
@@ -222,15 +260,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestSimpleQueries")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestSimpleQueries")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestSimpleQueries")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -264,18 +293,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestFilterEqual")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestFilterEqual")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestFilterEqual")) {
-            return;
-        }
-        if (SkipColumnShardFilter(Table, "TestFilterEqual")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -310,15 +327,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestFilterNulls")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestFilterNulls")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestFilterNulls")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -345,18 +353,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestFilterCompare")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestFilterCompare")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestFilterCompare")) {
-            return;
-        }
-        if (SkipColumnShardFilter(Table, "TestFilterCompare")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -398,15 +394,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestOrderByInterval")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestOrderByInterval")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestOrderByInterval")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -438,15 +425,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestGroupByInterval")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestGroupByInterval")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestGroupByInterval")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -471,15 +449,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestAggregation")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestAggregation")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestAggregation")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -517,15 +486,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestJoinById")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestJoinById")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestJoinById")) {
-            return;
-        }
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
@@ -651,15 +611,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestJoinByInterval")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestJoinByInterval")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestJoinByInterval")) {
-            return;
-        }
 
         const TString t1 = "/Root/JoinTable1";
         const TString t2 = "/Root/JoinTable2";
@@ -705,15 +656,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestOrderByWithLimit")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestOrderByWithLimit")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestOrderByWithLimit")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -752,15 +694,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestGroupByWithNulls")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(Table, Load, "TestGroupByWithNulls")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, Table, Load, "TestGroupByWithNulls")) {
-            return;
-        }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
@@ -790,87 +723,44 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
             "[[[-100];[200]]]", Scan);
     }
 
-    Y_UNIT_TEST(TestIntervalAsPrimaryKey, EQueryMode, ELoadKind) {
+    Y_UNIT_TEST(TestIntervalAsPrimaryKey, EQueryMode, ETableKind, ELoadKind) {
         const auto Scan = Arg<0>();
-        const auto Load = Arg<1>();
+        const auto Table = Arg<1>();
+        const auto Load = Arg<2>();
 
-        if (SkipCsvLoad(Load, "TestIntervalAsPrimaryKey")) {
-            return;
-        }
-        if (SkipColumnShardArrowLoad(ETableKind::COLUMNSHARD, Load, "TestIntervalAsPrimaryKey")) {
-            return;
-        }
-        if (SkipColumnShardScanQuery(Scan, ETableKind::COLUMNSHARD, Load, "TestIntervalAsPrimaryKey")) {
-            return;
-        }
-
+        const TString tableName = "/Root/Table1";
         TTestHelper helper(CreateKikimrSettingsWithIntervalSupport());
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("ival").SetType(NScheme::NTypeIds::Interval).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("val").SetType(NScheme::NTypeIds::Int64)
-        };
-
         TTestHelper::TColumnTable col;
-        col.SetName("/Root/ColumnTableTest").SetPrimaryKey({"ival"}).SetSharding({"ival"}).SetSchema(schema);
-        helper.CreateTable(col);
+        TVector<TTestHelper::TColumnSchema> schema;
+        PrepareIntervalPkTable(helper, Table, tableName, &col, &schema);
+        LoadIntervalPkData(helper, Table, Load, tableName, &col);
 
-        if (Load == ELoadKind::ARROW) {
-            using namespace NKikimr::NKqp::NTestArrow;
-            auto ivalArr = MakeInt64Array({-7000000, -3000000, 0, 4000000, 9000000});
-            auto valArr = MakeInt64ArrayNullable({(i64)1, (i64)2, std::nullopt, (i64)4, (i64)5});
-            auto batch = MakeBatch(
-                { arrow::field("ival", arrow::int64(), false),
-                  arrow::field("val", arrow::int64()) },
-                { ivalArr, valArr });
-            helper.BulkUpsert(col, batch);
-        } else if (Load == ELoadKind::YDB_VALUE) {
-            TValueBuilder builder;
-            builder.BeginList();
-            builder.AddListItem().BeginStruct().AddMember("ival").Interval(-7000000).AddMember("val").BeginOptional().Int64(1).EndOptional().EndStruct();
-            builder.AddListItem().BeginStruct().AddMember("ival").Interval(-3000000).AddMember("val").BeginOptional().Int64(2).EndOptional().EndStruct();
-            builder.AddListItem().BeginStruct().AddMember("ival").Interval(0).AddMember("val").EmptyOptional(EPrimitiveType::Int64).EndStruct();
-            builder.AddListItem().BeginStruct().AddMember("ival").Interval(4000000).AddMember("val").BeginOptional().Int64(4).EndOptional().EndStruct();
-            builder.AddListItem().BeginStruct().AddMember("ival").Interval(9000000).AddMember("val").BeginOptional().Int64(5).EndOptional().EndStruct();
-            builder.EndList();
-            auto res = helper.GetKikimr().GetTableClient().BulkUpsert("/Root/ColumnTableTest", builder.Build()).GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-        } else {
-            TStringBuilder csv;
-            csv << "-7000000,1\n-3000000,2\n0,\n4000000,4\n9000000,5\n";
-            auto res = helper.GetKikimr().GetTableClient().BulkUpsert("/Root/ColumnTableTest", EDataFormat::CSV, csv).GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-        }
+        CheckOrExec(helper, "SELECT * FROM `" + tableName + "` WHERE ival = CAST(0 AS Interval)", "[[0;#]]", Scan);
+        CheckOrExec(helper, "SELECT * FROM `" + tableName + "` WHERE ival = CAST(4000000 AS Interval)", "[[4000000;[4]]]", Scan);
+        CheckOrExec(helper, "SELECT * FROM `" + tableName + "` WHERE ival = CAST(-7000000 AS Interval)", "[[-7000000;[1]]]", Scan);
 
-        CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival = CAST(0 AS Interval)", "[[0;#]]", Scan);
-        CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival = CAST(4000000 AS Interval)", "[[4000000;[4]]]", Scan);
-        CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival = CAST(-7000000 AS Interval)", "[[-7000000;[1]]]", Scan);
-
-        CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival < CAST(0 AS Interval)",
+        CheckOrExec(helper, "SELECT * FROM `" + tableName + "` WHERE ival < CAST(0 AS Interval)",
             "[[-7000000;[1]];[-3000000;[2]]]", Scan);
 
-        CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival > CAST(0 AS Interval)",
+        CheckOrExec(helper, "SELECT * FROM `" + tableName + "` WHERE ival > CAST(0 AS Interval)",
             "[[4000000;[4]];[9000000;[5]]]", Scan);
 
-        CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival <= CAST(0 AS Interval)",
+        CheckOrExec(helper, "SELECT * FROM `" + tableName + "` WHERE ival <= CAST(0 AS Interval)",
             "[[-7000000;[1]];[-3000000;[2]];[0;#]]", Scan);
 
-        CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival >= CAST(0 AS Interval)",
+        CheckOrExec(helper, "SELECT * FROM `" + tableName + "` WHERE ival >= CAST(0 AS Interval)",
             "[[0;#];[4000000;[4]];[9000000;[5]]]", Scan);
 
-        CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival != CAST(0 AS Interval)",
+        CheckOrExec(helper, "SELECT * FROM `" + tableName + "` WHERE ival != CAST(0 AS Interval)",
             "[[-7000000;[1]];[-3000000;[2]];[4000000;[4]];[9000000;[5]]]", Scan);
 
-        CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival > CAST(-3000000 AS Interval) AND ival < CAST(9000000 AS Interval)",
+        CheckOrExec(helper, "SELECT * FROM `" + tableName + "` WHERE ival > CAST(-3000000 AS Interval) AND ival < CAST(9000000 AS Interval)",
             "[[0;#];[4000000;[4]]]", Scan);
 
-        CheckOrExec(helper, "SELECT * FROM `/Root/ColumnTableTest` WHERE ival = CAST(999 AS Interval)", "[]", Scan);
+        CheckOrExec(helper, "SELECT * FROM `" + tableName + "` WHERE ival = CAST(999 AS Interval)", "[]", Scan);
     }
 
     Y_UNIT_TEST(TestDmlParityAndCTAS, EQueryMode, ELoadKind) {
-        Cerr << "TestDmlParityAndCTAS skipped: duration/int64 filter pushdown not supported yet" << Endl;
-        return;
-
         const auto Scan = Arg<0>();
         const auto Load = Arg<1>();
 
@@ -963,9 +853,6 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
     }
 
     Y_UNIT_TEST(TestCsv, EQueryMode, ETableKind) {
-        Cerr << "TestCsv skipped: CSV Interval support not implemented yet" << Endl;
-        return;
-
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
 

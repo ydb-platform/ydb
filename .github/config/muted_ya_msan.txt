@@ -42,7 +42,6 @@ ydb/library/actors/interconnect/ut Interconnect.RdmaXdcCatchReplayAfterPartialPa
 ydb/library/actors/interconnect/ut Interconnect.RdmaXdcCatchReplayAfterPartialRdmaRead
 ydb/library/actors/interconnect/ut Interconnect.RdmaXdcCatchReplayAfterPartialRdmaReadOnPeerSocketClose
 ydb/library/actors/interconnect/ut Interconnect.SetupRdmaSession
-ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_prestable-26-3_to_stable-26-2-1-row]
 ydb/tests/compatibility/common test_data_type.py.TestDataType.test_data_type[restart_prestable-26-3_to_prestable-26-3-COLUMN]
 ydb/tests/compatibility/common test_data_type.py.TestDataType.test_data_type[restart_prestable-26-3_to_prestable-26-3-ROW]
 ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_prestable-26-3_to_prestable-26-3-COLUMN]
@@ -278,6 +277,7 @@ ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnothe
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-3-1_to_stable-26-2-1-True]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3-True]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-3_and_stable-26-2-1]
+ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-4_and_stable-26-3-1]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_stable-26-3-1_and_stable-26-2-1]
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/nbs py3test.sole chunk

@@ -1169,7 +1169,7 @@ bool RewriteYtMergeJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoin
         return true;
     }
 
-    auto outputKeyType = UnifyJoinKeyType(pos, inputKeyTypeLeft, inputKeyTypeRight, ctx);
+    auto outputKeyType = UnifyJoinKeyType(pos, inputKeyTypeLeft, inputKeyTypeRight, ctx, *state->Types);
 
     TExprNode::TListType leftMembersNodes;
     TExprNode::TListType rightMembersNodes;
@@ -1757,7 +1757,7 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
 
     auto inputKeyTypeLeft = BuildJoinKeyType(mainLabel, *leftKeyColumns);
     auto inputKeyTypeRight = BuildJoinKeyType(smallLabel, *rightKeyColumns);
-    auto outputKeyType = UnifyJoinKeyType(pos, inputKeyTypeLeft, inputKeyTypeRight, ctx);
+    auto outputKeyType = UnifyJoinKeyType(pos, inputKeyTypeLeft, inputKeyTypeRight, ctx, *state->Types);
 
     TMap<TStringBuf, TVector<TStringBuf>> renameMap;
     if (!op.Parent) {
@@ -2605,7 +2605,7 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
     } else {
         inputKeyTypeLeft = BuildJoinKeyType(labels.Inputs[0], *leftKeyColumns);
         inputKeyTypeRight = BuildJoinKeyType(labels.Inputs[1], *rightKeyColumns);
-        outputKeyType = UnifyJoinKeyType(pos, inputKeyTypeLeft, inputKeyTypeRight, ctx);
+        outputKeyType = UnifyJoinKeyType(pos, inputKeyTypeLeft, inputKeyTypeRight, ctx, *state->Types);
     }
 
     TVector<TString> ytReduceByColumns;

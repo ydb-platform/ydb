@@ -24,6 +24,7 @@ DEFINE_ENUM(ETransactionState,
     (Aborted)
     (AbortFailed)
     (Detached)
+    (Abandoned)
 );
 
 class TTransaction
@@ -326,6 +327,8 @@ private:
     TFuture<void> DoAbort(
         TGuard<NThreading::TSpinLock>* guard,
         const TTransactionAbortOptions& options = {});
+
+    void Abandon(TGuard<NThreading::TSpinLock>* guard);
 
     void ValidateActive();
     void DoValidateActive();

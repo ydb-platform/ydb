@@ -2390,7 +2390,7 @@ private:
 
         const TStructExprType* resultType = nullptr;
         status = EquiJoinAnnotation(input->Pos(), resultType, labels,
-            *input->Child(TYtEquiJoin::idx_Joins), joinOptions, ctx);
+            *input->Child(TYtEquiJoin::idx_Joins), joinOptions, ctx, *State_->Types);
         if (status != TStatus::Ok) {
             return status;
         }

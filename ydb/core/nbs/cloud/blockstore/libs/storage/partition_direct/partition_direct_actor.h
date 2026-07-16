@@ -160,6 +160,10 @@ private:
         const TEvPartitionDirectPrivate::TEvFastPathServiceStopped::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandlePoisonByBlockedGeneration(
+        const TEvPartitionDirectPrivate::TEvPoison::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleAddHostToDBG(
         const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -175,7 +179,7 @@ private:
         size_t dbgId,
         const TString& message);
 
-    TTabletInfo MakeMonTabletInfo();
+    [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
 
     void Start(
         const NActors::TActorContext& ctx,

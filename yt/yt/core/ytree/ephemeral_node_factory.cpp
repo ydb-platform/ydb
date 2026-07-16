@@ -58,33 +58,7 @@ public:
             return;
         }
 
-        const auto& attributes = Attributes();
-
-        auto pairs = attributes.ListPairs();
-        if (stable) {
-            std::sort(pairs.begin(), pairs.end(), [] (const auto& lhs, const auto& rhs) {
-                return lhs.first < rhs.first;
-            });
-        }
-
-        TAttributeFilter::TKeyToFilter keyToFilter;
-        if (attributeFilter) {
-            keyToFilter = attributeFilter.Normalize();
-        }
-
-        for (const auto& [key, value] : pairs) {
-            if (!attributeFilter) {
-                // A fast path for taking the whole attribute.
-                consumer->OnKeyedItem(key);
-                consumer->OnRaw(value);
-            } else if (auto it = keyToFilter.find(key); it != keyToFilter.end()) {
-                const auto& pathFilter = it->second;
-                TAttributeValueConsumer valueConsumer(consumer, key);
-                auto filteringConsumer = TAttributeFilter::CreateFilteringConsumer(&valueConsumer, pathFilter);
-                filteringConsumer->GetConsumer()->OnRaw(value);
-                filteringConsumer->Finish();
-            }
-        }
+        WriteAttributeDictionaryFragment(consumer, Attributes(), attributeFilter, stable);
     }
 
 protected:

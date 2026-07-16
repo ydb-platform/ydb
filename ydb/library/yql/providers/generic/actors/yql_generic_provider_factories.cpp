@@ -8,9 +8,9 @@
 namespace NYql::NDq {
 
     void RegisterGenericProviderFactories(TDqAsyncIoFactory& factory,
-                                          ISecuredServiceAccountCredentialsFactory::TPtr securedServiceAccountCredentialsFactory,
+                                          IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
                                           NYql::NConnector::IClient::TPtr genericClient) {
-        auto readActorFactory = [securedServiceAccountCredentialsFactory, genericClient](
+        auto readActorFactory = [credentialsFactory, genericClient](
                                     Generic::TSource&& settings,
                                     IDqAsyncIoFactory::TSourceArguments&& args) {
             return CreateGenericReadActor(
@@ -23,15 +23,15 @@ namespace NYql::NDq {
                 args.TaskParams,
                 args.ReadRanges,
                 args.ComputeActorId,
-                securedServiceAccountCredentialsFactory,
+                credentialsFactory,
                 args.HolderFactory,
                 std::move(args.Alloc));
         };
 
-        auto lookupActorFactory = [securedServiceAccountCredentialsFactory, genericClient](Generic::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
+        auto lookupActorFactory = [credentialsFactory, genericClient](Generic::TLookupSource&& lookupSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
             return CreateGenericLookupActor(
                 genericClient,
-                securedServiceAccountCredentialsFactory,
+                credentialsFactory,
                 std::move(args.ParentId),
                 std::move(args.TaskCounters),
                 std::move(args.Alloc),

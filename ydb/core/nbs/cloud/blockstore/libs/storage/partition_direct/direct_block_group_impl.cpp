@@ -306,18 +306,28 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
 
-                    NProto::TError error = TranslateError(f.GetValue());
                     if (auto self = weakSelf.lock()) {
+                        NProto::TError error = TranslateError(f.GetValue());
+
+                        if (IsSessionBlockedError(error)) {
+                            self->HandleBlockedGeneration(
+                                hostIndex,
+                                "ReadFromDDisk");
+                        }
+
                         self->OnResponse(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::ReadFromDDisk,
                             true,
                             error);
-                    }
 
-                    promise.SetValue(
-                        TDBGReadBlocksResponse{.Error = std::move(error)});
+                        promise.SetValue(
+                            TDBGReadBlocksResponse{.Error = std::move(error)});
+                    } else {
+                        promise.SetValue(TDBGReadBlocksResponse{
+                            .Error = MakeError(E_CANCELLED)});
+                    }
                 });
         });
     return result;
@@ -458,19 +468,27 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
 
-                    NProto::TError error = TranslateError(f.GetValue());
-
                     if (auto self = weakSelf.lock()) {
+                        NProto::TError error = TranslateError(f.GetValue());
+
+                        if (IsSessionBlockedError(error)) {
+                            self->HandleBlockedGeneration(
+                                hostIndex,
+                                "WriteToDDisk");
+                        }
                         self->OnResponse(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::WriteToDDisk,
                             true,
                             error);
-                    }
 
-                    promise.SetValue(
-                        TDBGWriteBlocksResponse{.Error = std::move(error)});
+                        promise.SetValue(
+                            TDBGWriteBlocksResponse{.Error = std::move(error)});
+                    } else {
+                        promise.SetValue(TDBGWriteBlocksResponse{
+                            .Error = MakeError(E_CANCELLED)});
+                    }
                 });
         });
     return result;
@@ -790,6 +808,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 
                     if (auto self = weakSelf.lock()) {
                         flushResponse = self->HandleSyncWithPBufferResponse(
+                            ddiskHostIndex,
                             f.GetValue(),
                             segmentCount);
                         self->OnMultiFlushResponse(
@@ -812,6 +831,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 }
 
 TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
+    THostIndex ddiskHostIndex,
     const TEvSyncResult& response,
     size_t segmentCount)
 {
@@ -829,6 +849,7 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
                 ETranslateFlags::TreatOutdatedAsSuccess));
         }
     } else {
+        NProto::TError error = TranslateError(response);
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
@@ -836,11 +857,14 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
             LogTitle.GetWithTime().c_str(),
             segmentCount,
             response.ShortUtf8DebugString().c_str(),
-            FormatError(TranslateError(response)).c_str());
+            FormatError(error).c_str());
+
+        if (IsSessionBlockedError(error)) {
+            HandleBlockedGeneration(ddiskHostIndex, "SyncWithPBuffer");
+        }
 
         for (size_t i = 0; i < segmentCount; ++i) {
-            result.Errors.push_back(
-                MakeError(E_FAIL, response.GetErrorReason()));
+            result.Errors.push_back(error);
         }
     }
 
@@ -1128,7 +1152,7 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
     return future;
 }
 
-NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot()
+NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot() const
 {
     auto promise = NewPromise<TDbgSnapshot>();
     auto future = promise.GetFuture();
@@ -1298,13 +1322,6 @@ ui64 TDirectBlockGroup::GetHostPBufferUsedSize(THostIndex hostIndex) const
     return result;
 }
 
-ui64 TDirectBlockGroup::GetDDiskSessionSeqNo(size_t index) const
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    Y_ABORT_UNLESS(index < DDiskConnections.size());
-    return DDiskConnections[index].ConfirmedSessionSeqNo;
-}
-
 void TDirectBlockGroup::DoEstablishConnections()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -1422,6 +1439,14 @@ void TDirectBlockGroup::OnConnectionEstablished(
             Oracle.OnDDiskConnected(index, TInstant::Now());
         }
         // INVARIANT: PBuffer does NOT require a session/lock
+    } else if (IsSessionBlockedError(error)) {
+        // Terminal: our tablet generation is stale. Suicide, no reconnect.
+        HandleBlockedGeneration(index, "Connect");
+        // Unblock waiters on ConnectFuture with the error.
+        connection.ConnectPromise.SetValue(error);
+        return;
+        // TODO (future phase): handle non-BLOCKED connect errors
+        // (ERROR/unavailability) via reconnect.
     } else if (IsInitialized()) {
         LOG_ERROR(
             *ActorSystem,
@@ -1431,8 +1456,6 @@ void TDirectBlockGroup::OnConnectionEstablished(
             PrintHostIndex(static_cast<THostIndex>(index)).c_str(),
             FormatError(error).c_str());
     } else {
-        // TODO (future phase): handle the error code/BLOCKED, transition to
-        // Broken/suicide.
         Y_ABORT("Unhandled branch of connect error");
     }
 
@@ -1456,6 +1479,15 @@ void TDirectBlockGroup::ReEstablishDDiskConnection(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(index < DDiskConnections.size());
+
+    if (BlockedGenerationDetected) {
+        LOG_WARN(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s reconnect suppressed: blocked generation, suicide in progress",
+            LogTitle.GetWithTime().c_str());
+        return;
+    }
 
     DDiskConnections[index].ResetSession();
     Schedule(
@@ -1713,7 +1745,36 @@ bool TDirectBlockGroup::WaitForSessionLock(THostIndex hostIndex)
     return true;
 }
 
-TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
+void TDirectBlockGroup::HandleBlockedGeneration(
+    THostIndex hostIndex,
+    TStringBuf context)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (BlockedGenerationDetected) {
+        return;
+    }
+    BlockedGenerationDetected = true;
+
+    DDiskConnections[hostIndex].SessionState = EDDiskSessionState::Broken;
+    const TString reason = TStringBuilder()
+                           << "DDisk returned BLOCKED (stale tablet generation "
+                           << TabletGeneration << "); context: " << context
+                           << "; " << PrintHostIndex(hostIndex)
+                           << "; DBGIndex: " << DirectBlockGroupIndex;
+
+    LOG_ERROR(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s SUICIDE: %s",
+        LogTitle.GetWithTime().c_str(),
+        reason.c_str());
+
+    // No retry/reconnect: signal the actor to suicide.
+    Service->StopTablet(reason);
+}
+
+TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -1743,7 +1804,7 @@ TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
     return result;
 }
 
-TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot()
+TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 

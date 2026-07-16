@@ -40,9 +40,8 @@ namespace {
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const std::vector<ui32>& initPersistentBufferChunks,
             ui64 persistentBufferUniqueId, TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat,
-            TFileHandle&& diskFd, TActorId parentDDiskActorId)
-        : TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat), std::move(ddiskConfig), counters, true,
-            parentDDiskActorId)
+            TFileHandle&& diskFd)
+        : TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat), std::move(ddiskConfig), counters, true)
     {
         PersistentBufferUniqueId = persistentBufferUniqueId;
         PDiskParams = pDiskParams;
@@ -67,15 +66,13 @@ namespace {
 
     TDDiskActor::TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor,
-            TActorId parentDDiskActorId)
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor)
         : BaseInfo(std::move(baseInfo))
         , Config(std::move(ddiskConfig))
         , Info(std::move(info))
         , CountersParent(std::move(counters))
         , CountersBase(GetServiceCounters(CountersParent, "ddisks"))
         , IsPersistentBufferActor(isPersistentBufferActor)
-        , ParentDDiskActorId(parentDDiskActorId)
         , SegmentManager(DDiskInstanceGuid)
         , PersistentBufferFormat(std::move(pbFormat))
     {
@@ -314,7 +311,7 @@ namespace {
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
             hFunc(TEvents::TEvGone, HandlePersistentBufferGone)
-            cFunc(TEvents::TSystem::Poison, HandlePoison)
+            hFunc(TEvents::TEvPoison, HandlePoison)
         )
     }
 
@@ -348,7 +345,7 @@ namespace {
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
-            cFunc(TEvents::TSystem::Poison, HandlePoison)
+            hFunc(TEvents::TEvPoison, HandlePoison)
 
             case TEvReadThenWritePersistentBuffers::EventType:
             case TEvWritePersistentBuffers::EventType: {
@@ -367,7 +364,7 @@ namespace {
         // to send TEvPoison and start a replacement DDisk actor with a fresh OwnerRound.
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, HandlePersistentBufferGone)
-            cFunc(TEvents::TSystem::Poison, HandlePoison)
+            hFunc(TEvents::TEvPoison, HandlePoison)
             default:
                 break;
         }
@@ -407,11 +404,18 @@ namespace {
         }
     }
 
-    void TDDiskActor::HandlePoison() {
+    void TDDiskActor::HandlePoison(TEvents::TEvPoison::TPtr& ev) {
         if (!IsPersistentBufferActor && PersistentBufferActorId) {
             Become(&TThis::StateFuncShutdown);
             Send(PersistentBufferActorId, new NActors::TEvents::TEvPoison());
             return;
+        }
+        if (IsPersistentBufferActor) {
+            Y_ABORT_UNLESS(ev->Sender);
+            if (WritePersistentBuffersActor) {
+                Send(WritePersistentBuffersActor, new NActors::TEvents::TEvPoison());
+            }
+            Send(ev->Sender, new TEvents::TEvGone());
         }
         PassAway();
     }
@@ -426,9 +430,6 @@ namespace {
     }
 
     void TDDiskActor::PassAway() {
-        if (IsPersistentBufferActor && WritePersistentBuffersActor) {
-            Send(WritePersistentBuffersActor, new NActors::TEvents::TEvPoison());
-        }
 #if defined(__linux__)
         if (UringRouter) {
             for (int i = 0; i < 1000 && UringRouter->GetInflight() > 0; ++i) {
@@ -439,10 +440,7 @@ namespace {
         }
 #endif
         CountersBase->RemoveSubgroupChain(CountersChain);
-        if (IsPersistentBufferActor) {
-            Y_ABORT_UNLESS(ParentDDiskActorId);
-            Send(ParentDDiskActorId, new TEvents::TEvGone());
-        } else {
+        if (!IsPersistentBufferActor) {
             Y_ABORT_UNLESS(!PersistentBufferActorId);
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvents::TEvGone());
         }

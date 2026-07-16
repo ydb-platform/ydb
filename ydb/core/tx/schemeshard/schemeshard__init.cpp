@@ -3980,17 +3980,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
 
+                // Orphaned sources are skipped above when TolerateOrphanedPaths is on,
+                // so a missing source here means the control is off: fail fast.
                 const bool sourceExists = !txState.SourcePathId || Self->PathsById.contains(txState.SourcePathId);
                 if (txState.SourcePathId && !sourceExists) {
                     Y_VERIFY_S(Self->TolerateOrphanedPaths, "Source path element not found for in-flight tx"
                         << ", txId: " << operationId.GetTxId()
                         << ", TxType: " << TTxState::TypeName(txState.TxType)
                         << ", pathId: " << txState.SourcePathId);
-                    LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Source path element not found for in-flight tx, skipping its reference"
-                            << ", txId: " << operationId.GetTxId()
-                            << ", TxType: " << TTxState::TypeName(txState.TxType)
-                            << ", pathId: " << txState.SourcePathId);
                 }
                 txState.AcquirePathRefs(Self, sourceExists);
 

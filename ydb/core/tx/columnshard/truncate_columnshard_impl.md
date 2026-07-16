@@ -28,8 +28,14 @@
 ## 2. Обмен сообщениями со SchemeShard
 
 ColumnShard участвует в TRUNCATE как обычный участник распределённой схемной
-транзакции. Со стороны ColumnShard всё взаимодействие сводится к приёму нескольких
-сообщений и ответам на них (внутренняя логика SchemeShard здесь не рассматривается):
+транзакции (`TxTruncateColumnTable = 127`). Со стороны ColumnShard всё
+взаимодействие сводится к приёму нескольких сообщений и ответам на них.
+Перед рассылкой в шарды SchemeShard сам отклоняет операцию
+(`StatusPreconditionFailed`), если выключен feature flag
+`EnableTruncateColumnTable` (proto field **303**, default `false`) или
+`ColumnShardConfig.GenerateInternalPathId`, либо путь не проходит проверки
+(`IsColumnTable`, `NotReadOnlyColumnTable`, locks и т.д.) —
+см. `schemeshard/olap/operations/truncate_table.cpp`.
 
 ```mermaid
 sequenceDiagram
@@ -38,9 +44,10 @@ sequenceDiagram
     participant CO as Coordinator
     participant CS as ColumnShard(ы)
 
-    Note over SS,CS: 1. Propose схемной транзакции
+    Note over SS: Локальный Propose: FF / GenerateInternalPathId / path checks
+    Note over SS,CS: 1. ConfigureParts — рассылка propose в шарды
     SS->>CS: TEvProposeTransaction (TX_KIND_SCHEMA, TruncateTable{PathId}, SeqNo)
-    CS->>CS: DoStartProposeOnExecute: reject, если таблица read-only
+    CS->>CS: DoStartProposeOnExecute: SeqNo + reject read-only
     CS-->>SS: TEvProposeTransactionResult (PREPARED, Min/MaxStep)
 
     Note over CO,CS: 2. Применение на назначенном шаге плана
@@ -55,11 +62,13 @@ sequenceDiagram
 ### Сообщения и реакция ColumnShard
 
 1. **`TEvProposeTransaction` (`TX_KIND_SCHEMA`, тело `TruncateTable{PathId}`,
-   `SeqNo`)** — propose схемной транзакции. ColumnShard выполняет
-   `DoStartProposeOnExecute` (раздел 4): резервирует транзакцию и проверяет, что
-   путь не read-only. Ответ — **`TEvProposeTransactionResult`** со статусом
-   `PREPARED` и допустимым диапазоном `planStep` (`Min/MaxStep`); для read-only —
-   `SCHEMA_ERROR`.
+   `SeqNo`)** — propose схемной транзакции (приходит на фазе ConfigureParts,
+   уже после локальных проверок SS). ColumnShard выполняет
+   `DoStartProposeOnExecute` (раздел 4): проверка глобального SeqNo и read-only.
+   Ответ — **`TEvProposeTransactionResult`** со статусом `PREPARED` и диапазоном
+   `planStep` (`Min/MaxStep`); для устаревшего SeqNo — `SCHEMA_CHANGED`, для
+   read-only — `SCHEMA_ERROR`. Если путь на шарде неизвестен, propose проходит,
+   а применение на плане будет no-op.
 2. **`TEvPlanStep` (`planStep`)** — назначенный координатором шаг плана. На этом
    шаге ColumnShard исполняет транзакцию `RunSchemaTx → RunTruncateTable`
    (раздел 5) — собственно усечение: старый `InternalPathId` помечается dropped и
@@ -69,8 +78,11 @@ sequenceDiagram
    `txId` исполнен, ColumnShard отвечает **`TEvNotifyTxCompletionResult(origin)`**.
 
 Повторная доставка сообщений и повтор плана для ColumnShard идемпотентны:
-`DoOnTabletInit` для `kTruncateTable` — пустой; `RunTruncateTable` для уже
-усечённого либо неизвестного пути — no-op (раздел 5).
+`DoOnTabletInit` для `kTruncateTable` — пустой; `RunTruncateTable` для
+неизвестного/незамапленного пути или отсутствующей записи таблицы — no-op
+(раздел 5). «Уже усечённый» живой путь при этом **не** no-op: маппинг указывает
+на новый `InternalPathId`, и повторный TRUNCATE снова дропнет его и аллоцирует
+следующий.
 
 ## 3. Транспорт схемной транзакции
 
@@ -79,7 +91,13 @@ sequenceDiagram
   `TSchemaTxBody` (`ydb/core/protos/tx_columnshard.proto`).
 - Сериализация id пути: специализации
   `TSchemeShardLocalPathId::FromProto/ToProto` для `TTruncateTable`
-  (`common/path_id.cpp`).
+  (`ydb/core/tx/columnshard/common/path_id.cpp`).
+- Идентификаторы после rebase на `main` (занятые ранее номера сдвинуты):
+  - `TxTruncateColumnTable = 127` (`schemeshard_subop_types.h`);
+  - `EnableTruncateColumnTable = 303` (`feature_flags.proto`);
+  - счётчики `COUNTER_IN_FLIGHT_OPS_TxTruncateColumnTable = 239`,
+    `COUNTER_FINISHED_OPS_TxTruncateColumnTable = 151`
+    (`counters_schemeshard.proto`).
 
 ## 4. Обработка в операторе схемной транзакции
 
@@ -90,11 +108,12 @@ sequenceDiagram
     (`LastSchemaSeqNo`), а не по per-path счётчику — `kTruncateTable` не входит в
     `switch`, который задаёт `targetPathId` (там только `kDropTable` и
     `kCopyTable`). То есть TRUNCATE сериализуется относительно всех схемных
-    операций шарда.
-  - Единственная содержательная проверка: если целевая таблица **read-only**
-    (например, backup-копия, созданная через `CopyTable`), возвращается
-    `SCHEMA_ERROR` («Cannot truncate read-only table ...»). Read-only определяется
-    как `TablesManager.GetTable(internalPathId).IsReadOnly(schemeShardLocalPathId)`.
+    операций шарда; устаревший SeqNo → `SCHEMA_CHANGED`.
+  - Содержательная проверка: если путь резолвится и таблица **read-only**
+    (например, backup-копия через `CopyTable`), возвращается `SCHEMA_ERROR`
+    («Cannot truncate read-only table ...»). Read-only —
+    `TablesManager.GetTable(internalPathId).IsReadOnly(schemeShardLocalPathId)`.
+    Если путь на шарде неизвестен, проверка пропускается (propose успешен).
   - Никаких изменений состояния маппинга на propose не делается, ожидания
     in-flight транзакций нет.
 - **`DoOnTabletInit`**, ветка `kTruncateTable`: пустая (`break`). При рестарте
@@ -125,11 +144,13 @@ sequenceDiagram
    `MaxInternalPathId`. Здесь стоит инвариант: операция имеет смысл только при
    включённом `GenerateInternalPathId` (иначе внутренний id обязан совпадать с
    внешним, а счётчик `MaxInternalPathId` не персистится между рестартами).
-   На уровне ColumnShard это защищено `AFL_VERIFY(GenerateInternalPathId)`
-   (а отказ для пользователя выдаётся выше, на propose в SchemeShard).
-4. Регистрирует свежую пустую `TTableInfo` под новым `InternalPathId`
-   (`RegisterTable`), что также сохраняет записи `TableInfo`/`TableInfoV1` в БД и
-   при `GenerateInternalPathId` персистит `MaxInternalPathId`.
+   На уровне ColumnShard это защищено `AFL_VERIFY(GenerateInternalPathId)`;
+   отказ пользователю — на propose в SchemeShard
+   (`StatusPreconditionFailed`, см. раздел 2).
+  4. Регистрирует свежую пустую `TTableInfo` под новым `InternalPathId`
+   (`RegisterTable`): пишет `TableInfo`/`TableInfoV1`, персистит
+   `MaxInternalPathId`, и при наличии индекса вызывает
+   `PrimaryIndex->RegisterTable`.
 
 ### 5.1. Восстановление маппинга после рестарта
 
@@ -333,10 +354,13 @@ in-flight транзакций шарда перед завершением prop
 - **Зависимость от фоновой очистки.** Физическое удаление старых портаций
   асинхронно (`PathsToDrop`/GC); до завершения данные занимают место. Для больших
   таблиц очистка может быть длительной.
-- **Требование `GenerateInternalPathId`.** Операция корректна только в этом режиме
-  (защита: reject на propose в SchemeShard + `AFL_VERIFY` в ColumnShard). В режиме
-  без генерации внутренний id обязан совпадать с внешним, а `MaxInternalPathId` не
-  персистится — повторные TRUNCATE после рестарта могли бы переиспользовать
+- **Требование `GenerateInternalPathId` и feature flag.** На SchemeShard propose
+  отклоняется с `StatusPreconditionFailed`, если выключен
+  `EnableTruncateColumnTable` («TRUNCATE TABLE is not supported for column
+  tables») или `GenerateInternalPathId` («... requires GenerateInternalPathId to
+  be enabled»). В ColumnShard остаётся `AFL_VERIFY(GenerateInternalPathId)`.
+  Без генерации внутренний id обязан совпадать с внешним, а `MaxInternalPathId`
+  не персистится — повторные TRUNCATE после рестарта могли бы переиспользовать
   внутренние id.
 - **Неоднозначность маппинга после рестарта** (исторически): из-за двух записей с
   одним `SchemeShardLocalPathId`. Закрыто детерминированным выбором живой таблицы в

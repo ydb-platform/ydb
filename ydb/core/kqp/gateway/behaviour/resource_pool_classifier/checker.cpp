@@ -361,8 +361,9 @@ private:
         const auto& externalContext = Context.GetExternalData();
         const auto userToken = externalContext.GetUserToken() ? MakeIntrusive<NACLib::TUserToken>(*externalContext.GetUserToken()) : nullptr;
         const TString& databaseId = externalContext.GetDatabaseId();
+        const auto& workloadManagerConfig = AppData()->WorkloadManagerConfig;
         for (const auto& poolId : poolIds) {
-            Register(NWorkload::CreatePoolFetcherActor(SelfId(), databaseId, poolId, userToken, {}));
+            Register(NWorkload::CreatePoolFetcherActor(SelfId(), databaseId, poolId, userToken, workloadManagerConfig));
         }
     }
 

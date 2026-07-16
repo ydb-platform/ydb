@@ -460,8 +460,8 @@ void TQuoterService::ForgetRequest(TRequest &request, TRequestId reqIdx) {
             break;
         case EResourceState::ResolveResource:
             if (TQuoterState *quoter = Quoters.FindPtr(leaf.QuoterId))
-                if (TSet<TRequestId> *resWaitMap = quoter->WaitingResource.FindPtr(leaf.ResourceName))
-                    resWaitMap->erase(reqIdx);
+                if (TResourceResolve *resolve = quoter->WaitingResource.FindPtr(leaf.ResourceName))
+                    resolve->Requests.erase(reqIdx);
             break;
         }
 
@@ -579,6 +579,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
             QuotersIndex.emplace(leaf.Quoter, quoterId);
 
             quoter = &Quoters.emplace(quoterId, TQuoterState(leaf.Quoter, Counters.ServiceCounters)).first->second;
+            quoter->ResolveStartTime = TActivationContext::Now();
             Counters.ActiveQuoterProxies->Inc();
 
             THolder<NSchemeCache::TSchemeCacheNavigate> req(new NSchemeCache::TSchemeCacheNavigate());
@@ -632,8 +633,11 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
         }
 
         if (resHolder == nullptr) {
-            auto rIndxIt = quoter->WaitingResource.emplace(leaf.Resource, TSet<TRequestId>());
-            rIndxIt.first->second.emplace(reqIdx);
+            auto rIndxIt = quoter->WaitingResource.emplace(leaf.Resource, TResourceResolve());
+            if (rIndxIt.second) {
+                rIndxIt.first->second.StartTime = TActivationContext::Now();
+            }
+            rIndxIt.first->second.Requests.emplace(reqIdx);
 
             const TResourceLeafId resLeafIdx = ResState.Allocate(nullptr, leaf.Amount, leaf.IsUsedAmount, reqIdx);
             TResourceLeaf& resLeaf = ResState.Get(resLeafIdx);
@@ -1034,13 +1038,25 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
     if (quoter.ProxyId != ev->Sender)
         return;
 
-    auto resIt = quoter.WaitingResource.find(resourceName);
-    Y_ABORT_UNLESS(resIt != quoter.WaitingResource.end());
-
-    TSet<TRequestId> waitingRequests = std::move(resIt->second);
-    quoter.WaitingResource.erase(resIt);
-
     const bool isError = msg->Result != msg->Success;
+
+    // Collect the requests waiting for this resolve. The entry can be gone if the
+    // resolve hung and was cancelled by the cleanup: then there are no waiters,
+    // but for a successful session the proxy still considers it established, so
+    // we register the resource anyway to keep both views consistent (a future
+    // request reuses it, and idle cleanup closes it later) — unless we already
+    // track it, which would break the "no duplicating resources" invariant below.
+    TSet<TRequestId> waitingRequests;
+    if (auto resIt = quoter.WaitingResource.find(resourceName); resIt != quoter.WaitingResource.end()) {
+        waitingRequests = std::move(resIt->second.Requests);
+        quoter.WaitingResource.erase(resIt);
+    } else if (!isError && quoter.Resources.contains(msg->ResourceId)) {
+        YDB_LOG_INFO("Ignoring duplicate resource session",
+            {"quoterName", quoter.QuoterName},
+            {"resourceName", resourceName});
+        return;
+    }
+
     if (isError) {
         YDB_LOG_INFO("Resource session failed",
             {"quoterName", quoter.QuoterName},
@@ -1223,6 +1239,27 @@ void TQuoterService::HandleCleanup() {
             continue;
         }
 
+        // A quoter that hasn't been resolved for too long is considered hung:
+        // drop it and cancel its waiting requests (guards against a resolve that
+        // never gets an answer).
+        if (!quoterIt->second.ProxyId
+            && now - quoterIt->second.ResolveStartTime > CleanupPeriod)
+        {
+            CancelTimedOutQuoterResolve(quoterIt);
+            continue; // quoter erased, iterator is invalid
+        }
+
+        // Likewise, drop resource resolves that hung for too long.
+        TVector<TString> resolvesToCancel;
+        for (const auto& [resourceName, resolve] : quoterIt->second.WaitingResource) {
+            if (now - resolve.StartTime > CleanupPeriod) {
+                resolvesToCancel.push_back(resourceName);
+            }
+        }
+        for (const TString& resourceName : resolvesToCancel) {
+            CancelTimedOutResourceResolve(quoterIt->second, resourceName);
+        }
+
         TVector<ui64> resourcesToEvict;
         for (const auto& [resourceId, resHolder] : quoterIt->second.Resources) {
             ++resourcesProcessed;
@@ -1252,6 +1289,46 @@ void TQuoterService::HandleCleanup() {
     }
 
     ScheduleNextCleanupPass();
+}
+
+void TQuoterService::CancelTimedOutQuoterResolve(decltype(Quoters)::iterator quoterIt) {
+    TQuoterState& quoter = quoterIt->second;
+    YDB_LOG_WARN("Cancel hanging quoter resolve",
+        {"quoterName", quoter.QuoterName});
+
+    // Fail every request waiting for the quoter to be resolved. ForgetRequest
+    // removes each request from WaitingQueueResolve, so iterate over a copy.
+    TSet<TRequestId> waiting(std::move(quoter.WaitingQueueResolve));
+    for (TRequestId reqIdx : waiting) {
+        TRequest& req = ReqState.Get(reqIdx);
+        req.EndWaitSpan("ResolveTimeout", false);
+        FailRequest(req, reqIdx);
+    }
+
+    // A still-resolving quoter has no proxy and no resources, so BreakQuoter
+    // just drops the (now empty) quoter state and its index entry.
+    BreakQuoter(quoterIt, "ResolveTimeout");
+}
+
+void TQuoterService::CancelTimedOutResourceResolve(TQuoterState& quoter, const TString& resourceName) {
+    auto resIt = quoter.WaitingResource.find(resourceName);
+    if (resIt == quoter.WaitingResource.end()) {
+        return;
+    }
+
+    YDB_LOG_WARN("Cancel hanging resource resolve",
+        {"quoterName", quoter.QuoterName},
+        {"resourceName", resourceName});
+
+    // Take the requests out and drop the resolve entry before failing them, so
+    // ForgetRequest (which looks the entry up) sees it already gone.
+    TSet<TRequestId> waiting(std::move(resIt->second.Requests));
+    quoter.WaitingResource.erase(resIt);
+    for (TRequestId reqIdx : waiting) {
+        TRequest& req = ReqState.Get(reqIdx);
+        req.EndWaitSpan("ResolveTimeout", false);
+        FailRequest(req, reqIdx);
+    }
 }
 
 void TQuoterService::EvictResource(TQuoterState& quoter, ui64 resourceId, TStringBuf reason) {
@@ -1352,8 +1429,11 @@ void TQuoterService::CreateKesusQuoter(NSchemeCache::TSchemeCacheNavigate::TEntr
                 leaf.State = EResourceState::ResolveResource;
                 req.StartWaitSpan(leaf, "QuoterService.ResolveResource");
 
-                auto itpair = quoter.WaitingResource.emplace(leaf.ResourceName, TSet<TRequestId>());
-                itpair.first->second.emplace(reqIdx);
+                auto itpair = quoter.WaitingResource.emplace(leaf.ResourceName, TResourceResolve());
+                if (itpair.second) {
+                    itpair.first->second.StartTime = TActivationContext::Now();
+                }
+                itpair.first->second.Requests.emplace(reqIdx);
 
                 if (itpair.second) { // new resolve entry, request
                     YDB_LOG_INFO("Resolve resource on quoter",
@@ -1387,9 +1467,9 @@ void TQuoterService::BreakQuoter(decltype(QuotersIndex)::iterator indexIt, declt
         DeclineRequest(req, reqIdx);
     }
 
-    TMap<TString, TSet<TRequestId>> waitingResource(std::move(quoter.WaitingResource));
+    TMap<TString, TResourceResolve> waitingResource(std::move(quoter.WaitingResource));
     for (auto &xpair : waitingResource) {
-        for (TRequestId reqIdx : xpair.second) {
+        for (TRequestId reqIdx : xpair.second.Requests) {
             auto& req = ReqState.Get(reqIdx);
             req.EndWaitSpan(waitStatus, false);
             DeclineRequest(req, reqIdx);

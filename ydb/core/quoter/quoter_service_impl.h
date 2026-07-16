@@ -223,15 +223,25 @@ struct TScheduleTick {
     ui32 ActivationHead = Max<ui32>();
 };
 
+// Requests waiting for a resource session to be resolved, plus the moment the
+// resolve started (used to detect and clean up hung resolves).
+struct TResourceResolve {
+    TInstant StartTime;
+    TSet<TRequestId> Requests;
+};
+
 struct TQuoterState {
     const TString QuoterName;
     TActorId ProxyId;
+    // When the quoter resolve started (meaningful only while ProxyId is empty).
+    // Used to detect a hung quoter resolve during cleanup.
+    TInstant ResolveStartTime;
 
     THashMap<ui64, THolder<TResource>> Resources;
     THashMap<TString, ui64> ResourcesIndex;
 
     TSet<TRequestId> WaitingQueueResolve; // => requests
-    TMap<TString, TSet<TRequestId>> WaitingResource; // => requests
+    TMap<TString, TResourceResolve> WaitingResource; // resource name => resolve
 
     struct {
         ::NMonitoring::TDynamicCounterPtr QuoterCounters;
@@ -338,6 +348,10 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     void StartCleanupPass();
     void ScheduleNextCleanupPass();
     void HandleCleanup();
+    // Cleanup of resolves that hung longer than CleanupPeriod: cancels the
+    // waiting requests and drops the resolving quoter / resource.
+    void CancelTimedOutQuoterResolve(decltype(Quoters)::iterator quoterIt);
+    void CancelTimedOutResourceResolve(TQuoterState& quoter, const TString& resourceName);
     void EvictResource(TQuoterState& quoter, ui64 resourceId, TStringBuf reason);
     bool CloseQuoterIfEmpty(decltype(Quoters)::iterator quoterIt, TStringBuf reason);
 

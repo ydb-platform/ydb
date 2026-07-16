@@ -61,14 +61,14 @@ Y_UNIT_TEST(Materialize) {
         {"use plato;materialize Input into $result;",
          "USE plato;\n\nMATERIALIZE Input INTO $result;\n"},
 
-        {"materialize plato.Input on plato into $result;",
-         "MATERIALIZE plato.Input ON plato INTO $result;\n"},
+        {"materialize plato.Input into $result on plato;",
+         "MATERIALIZE plato.Input INTO $result ON plato;\n"},
 
         {"use plato;materialize Input into $result;select * from $result;",
          "USE plato;\n\nMATERIALIZE Input INTO $result;\n\nSELECT\n\t*\nFROM\n\t$result\n;\n"},
 
-        {"materialize (select * from plato.Input) on plato into $result;",
-         "MATERIALIZE (\n\tSELECT\n\t\t*\n\tFROM\n\t\tplato.Input\n) ON plato INTO $result;\n"},
+        {"materialize (select * from plato.Input) into $result on plato;",
+         "MATERIALIZE (\n\tSELECT\n\t\t*\n\tFROM\n\t\tplato.Input\n) INTO $result ON plato;\n"},
     };
 
     TSetup setup;

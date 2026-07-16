@@ -1,8 +1,8 @@
+#include "mkql_block_serializer_test_utils.h"
 #include "mkql_block_test_helper.h"
 #include "mkql_computation_node_ut.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_datum_validate.h>
 #include <yql/essentials/minikql/computation/mkql_block_transport.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_block_trimmer.h>
@@ -74,7 +74,7 @@ Y_UNIT_TEST(OptionalTupleVariantRoundtrip) {
     auto rng = CreateDeterministicRandomProvider(11);
     for (size_t iter = 0; iter < IterationsCount; ++iter) {
         const TVector<TMaybe<TVar>> data =
-            GenerateRandomData<TMaybe<TVar>>(rng, TGeneratorSettings<TMaybe<TVar>>{.NullProbability = 0.3}, 5);
+            NYql::GenerateRandomData<TMaybe<TVar>>(rng, NYql::TGeneratorSettings<TMaybe<TVar>>{.NullProbability = 0.3}, 5);
         TBlockHelper().TestKernelFuzzied(data, data, [](TSetup<false>&, TRuntimeNode node) { return node; }, /*iterations=*/1);
     }
 }
@@ -88,7 +88,7 @@ Y_UNIT_TEST(StructVariantRoundtrip) {
 
     auto rng = CreateDeterministicRandomProvider(13);
     for (size_t iter = 0; iter < IterationsCount; ++iter) {
-        const auto values = GenerateRandomData<ui32>(rng, TGeneratorSettings<ui32>{}, 5);
+        const auto values = NYql::GenerateRandomData<ui32>(rng, NYql::TGeneratorSettings<ui32>{}, 5);
 
         TVector<TRuntimeNode> items;
         for (auto v : values) {
@@ -96,7 +96,7 @@ Y_UNIT_TEST(StructVariantRoundtrip) {
         }
 
         auto list = pb.NewList(varType, items);
-        auto flow = pb.ToFlow(list);
+        auto flow = pb.ToFlow(list, {});
         auto pgmReturn = pb.ForwardList(pb.FromBlocks(pb.ToBlocks(flow)));
         auto graph = setup.BuildGraph(pgmReturn);
         auto iterator = graph->GetValue().GetListIterator();
@@ -115,7 +115,7 @@ Y_UNIT_TEST(SingleAlternativeOnlyRoundtrip) {
     auto rng = CreateDeterministicRandomProvider(14);
     for (size_t iter = 0; iter < IterationsCount; ++iter) {
         const TVector<TVar> data =
-            GenerateRandomData<TVar>(rng, TGeneratorSettings<TVar>{.Weights = {0.0, 1.0}}, 5);
+            NYql::GenerateRandomData<TVar>(rng, NYql::TGeneratorSettings<TVar>{.Weights = {0.0, 1.0}}, 5);
         TBlockHelper().TestKernelFuzzied(data, data, [](TSetup<false>&, TRuntimeNode node) { return node; }, /*iterations=*/1);
     }
 }
@@ -140,9 +140,9 @@ Y_UNIT_TEST(AsScalarSameArrowTypeAlternatives) {
         auto rng = CreateDeterministicRandomProvider(15);
         helper.WithScopedFuzzers([&]() {
             const TVector<TVar> alt0 =
-                GenerateRandomData<TVar>(rng, TGeneratorSettings<TVar>{.Weights = {1.0, 0.0}}, 1);
+                NYql::GenerateRandomData<TVar>(rng, NYql::TGeneratorSettings<TVar>{.Weights = {1.0, 0.0}}, 1);
             const TVector<TVar> alt1 =
-                GenerateRandomData<TVar>(rng, TGeneratorSettings<TVar>{.Weights = {0.0, 1.0}}, 1);
+                NYql::GenerateRandomData<TVar>(rng, NYql::TGeneratorSettings<TVar>{.Weights = {0.0, 1.0}}, 1);
             TVector<TVar> data = {alt0[0], alt1[0]};
 
             auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
@@ -178,44 +178,17 @@ Y_UNIT_TEST(TypeBuilderRejectsTooManyAlternatives) {
     UNIT_ASSERT_C(!ok, "Expected ConvertArrowType to fail for >127 alternatives");
 }
 
-namespace {
-
-std::shared_ptr<arrow::ArrayData> DoSerializerRoundtrip(
-    const std::shared_ptr<arrow::ArrayData>& arrayData, TType* itemType, TType* blockType)
-{
-    const ui64 blockLen = static_cast<ui64>(arrayData->length);
-    auto* pool = arrow::default_memory_pool();
-    TBlockSerializerParams params(pool, Nothing(), /*shouldSerializeOffset=*/true);
-    auto serializer = MakeBlockSerializer(TTypeInfoHelper(), itemType, params);
-    auto deserializer = MakeBlockDeserializer(TTypeInfoHelper(), itemType, params);
-
-    TVector<ui64> metadata;
-    serializer->StoreMetadata(*arrayData, [&](ui64 meta) { metadata.push_back(meta); });
-    NYql::TChunkedBuffer buffer;
-    serializer->StoreArray(*arrayData, buffer);
-
-    size_t metaIdx = 0;
-    deserializer->LoadMetadata([&]() -> ui64 { return metadata[metaIdx++]; });
-    auto restored = deserializer->LoadArray(buffer, blockLen, TMaybe<size_t>(0));
-
-    TBlockHelper().ValidateDatum(restored, Nothing(), blockType);
-    UNIT_ASSERT_VALUES_EQUAL(restored->length, arrayData->length);
-    return restored;
-}
-
-} // namespace
-
 Y_UNIT_TEST(SerializerRoundtrip) {
     using TVar = std::variant<ui32, ui64>;
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(19);
     helper.WithScopedFuzzers([&]() {
-        size_t dataSize = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 1, .Max = 1024}, 1)[0];
-        const TVector<TVar> input = GenerateRandomData<TVar>(rng, dataSize);
+        size_t dataSize = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 1, .Max = 1024}, 1)[0];
+        const TVector<TVar> input = NYql::GenerateRandomData<TVar>(rng, dataSize);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(input);
         auto arrayData = TArrowBlock::From(value).GetDatum().array();
-        const size_t startOffset = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, 1)[0];
-        const size_t subsize = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize - startOffset + 1}, 1)[0];
+        const size_t startOffset = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, 1)[0];
+        const size_t subsize = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize - startOffset + 1}, 1)[0];
         arrayData = DeepSlice(*arrayData, startOffset, static_cast<i64>(subsize));
         auto restored = DoSerializerRoundtrip(arrayData, itemType, blockType);
 
@@ -231,9 +204,9 @@ Y_UNIT_TEST(SerializerRoundtripOptional) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(21);
     helper.WithScopedFuzzers([&]() {
-        size_t dataSize = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 1, .Max = 1024}, 1)[0];
+        size_t dataSize = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 1, .Max = 1024}, 1)[0];
         const TVector<TMaybe<TVar>> input =
-            GenerateRandomData<TMaybe<TVar>>(rng, TGeneratorSettings<TMaybe<TVar>>{.NullProbability = 0.3}, dataSize);
+            NYql::GenerateRandomData<TMaybe<TVar>>(rng, NYql::TGeneratorSettings<TMaybe<TVar>>{.NullProbability = 0.3}, dataSize);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(input);
         auto restored = DoSerializerRoundtrip(TArrowBlock::From(value).GetDatum().array(), itemType, blockType);
 
@@ -250,7 +223,7 @@ Y_UNIT_TEST(SerializerRoundtripOneChildEmpty) {
     auto rng = CreateDeterministicRandomProvider(22);
     helper.WithScopedFuzzers([&]() {
         const TVector<TVar> input =
-            GenerateRandomData<TVar>(rng, TGeneratorSettings<TVar>{.Weights = {0.0, 1.0}}, 4);
+            NYql::GenerateRandomData<TVar>(rng, NYql::TGeneratorSettings<TVar>{.Weights = {0.0, 1.0}}, 4);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(input);
         auto arrayData = TArrowBlock::From(value).GetDatum().array();
         UNIT_ASSERT_VALUES_EQUAL(arrayData->child_data[0]->length, 0);
@@ -269,7 +242,7 @@ Y_UNIT_TEST(SerializerRoundtripEmpty) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(23);
     helper.WithScopedFuzzers([&]() {
-        const TVector<TVar> seed = GenerateRandomData<TVar>(rng, 1);
+        const TVector<TVar> seed = NYql::GenerateRandomData<TVar>(rng, 1);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(seed);
         UNIT_ASSERT(itemType->IsVariant());
         auto arrayData = TArrowBlock::From(value).GetDatum().array();
@@ -286,10 +259,10 @@ Y_UNIT_TEST(TrimmerCompactsChildren) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(30);
     helper.WithScopedFuzzers([&]() {
-        size_t dataSize = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 1, .Max = 12}, 1)[0];
-        const TVector<TVar> data = GenerateRandomData<TVar>(rng, dataSize);
-        const size_t startOffset = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, 1)[0];
-        const size_t subsize = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize - startOffset + 1}, 1)[0];
+        size_t dataSize = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 1, .Max = 12}, 1)[0];
+        const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, dataSize);
+        const size_t startOffset = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, 1)[0];
+        const size_t subsize = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize - startOffset + 1}, 1)[0];
 
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto arrayData = TArrowBlock::From(value).GetDatum().array();
@@ -311,7 +284,7 @@ Y_UNIT_TEST(ComparatorEqual) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(40);
     helper.WithScopedFuzzers([&]() {
-        const TVector<TVar> data = GenerateRandomData<TVar>(rng, 1);
+        const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, 1);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto arrayData = TArrowBlock::From(value).GetDatum().array();
         auto reader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
@@ -328,8 +301,8 @@ Y_UNIT_TEST(ComparatorByIndexFirst) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(41);
     helper.WithScopedFuzzers([&]() {
-        const auto alt0 = GenerateRandomData<TVar>(rng, TGeneratorSettings<TVar>{.Weights = {1.0, 0.0}}, 1);
-        const auto alt1 = GenerateRandomData<TVar>(rng, TGeneratorSettings<TVar>{.Weights = {0.0, 1.0}}, 1);
+        const auto alt0 = NYql::GenerateRandomData<TVar>(rng, NYql::TGeneratorSettings<TVar>{.Weights = {1.0, 0.0}}, 1);
+        const auto alt1 = NYql::GenerateRandomData<TVar>(rng, NYql::TGeneratorSettings<TVar>{.Weights = {0.0, 1.0}}, 1);
         const TVector<TVar> data = {alt0[0], alt1[0]};
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto arrayData = TArrowBlock::From(value).GetDatum().array();
@@ -349,7 +322,7 @@ Y_UNIT_TEST(ComparatorWithinSameAlternative) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(42);
     helper.WithScopedFuzzers([&]() {
-        const auto alt0 = GenerateRandomData<TVar>(rng, TGeneratorSettings<TVar>{.Weights = {1.0, 0.0}}, 1);
+        const auto alt0 = NYql::GenerateRandomData<TVar>(rng, NYql::TGeneratorSettings<TVar>{.Weights = {1.0, 0.0}}, 1);
         const ui32 v = std::get<0>(alt0[0]);
         const TVector<TVar> data = {TVar{v}, TVar{v + 1}};
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
@@ -373,7 +346,7 @@ Y_UNIT_TEST(HasherStable) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(43);
     helper.WithScopedFuzzers([&]() {
-        const TVector<TVar> data = GenerateRandomData<TVar>(rng, 1);
+        const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, 1);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto arrayData = TArrowBlock::From(value).GetDatum().array();
         auto reader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
@@ -405,7 +378,7 @@ Y_UNIT_TEST(HasherDifferentForDifferentIndex) {
 Y_UNIT_TEST(VariantRoundtripFuzzied) {
     using TVar = std::variant<ui32, ui64>;
     auto rng = CreateDeterministicRandomProvider(50);
-    const TVector<TVar> input = GenerateRandomData<TVar>(rng, 7);
+    const TVector<TVar> input = NYql::GenerateRandomData<TVar>(rng, 7);
     TBlockHelper().TestKernelFuzzied(input, input,
                                      [](TSetup<false>&, TRuntimeNode node) { return node; });
 }
@@ -414,7 +387,7 @@ Y_UNIT_TEST(OptionalVariantRoundtripFuzzied) {
     using TVar = std::variant<ui32, ui64>;
     auto rng = CreateDeterministicRandomProvider(51);
     const TVector<TMaybe<TVar>> input =
-        GenerateRandomData<TMaybe<TVar>>(rng, TGeneratorSettings<TMaybe<TVar>>{.NullProbability = 0.3}, 6);
+        NYql::GenerateRandomData<TMaybe<TVar>>(rng, NYql::TGeneratorSettings<TMaybe<TVar>>{.NullProbability = 0.3}, 6);
     TBlockHelper().TestKernelFuzzied(input, input,
                                      [](TSetup<false>&, TRuntimeNode node) { return node; });
 }
@@ -425,14 +398,14 @@ Y_UNIT_TEST(VariantStringUi32ChopRoundtrip) {
 
     TBlockHelper helper;
     helper.WithScopedFuzzers([&]() {
-        const TGeneratorSettings<TVar> settings{
+        const NYql::TGeneratorSettings<TVar> settings{
             .Weights = {1.0, 2.0},
             .InnerSettings = {
-                TGeneratorSettings<TString>{.MinSize = 0, .MaxSize = LargeStringLength},
+                NYql::TGeneratorSettings<TString>{.MinSize = 0, .MaxSize = LargeStringLength},
                 {},
             },
         };
-        const auto data = GenerateRandomData<TVar>(rng, settings, 50);
+        const auto data = NYql::GenerateRandomData<TVar>(rng, settings, 50);
         auto [graph, listValue] = helper.BuildAndRunListFuzzied(data);
         NYql::NUdf::AssertUnboxedValueElementEqual(listValue, data);
     });
@@ -443,17 +416,17 @@ Y_UNIT_TEST(OptionalVariantStringUi32ChopRoundtrip) {
     auto rng = CreateDeterministicRandomProvider(1);
     TBlockHelper helper;
     helper.WithScopedFuzzers([&]() {
-        const TGeneratorSettings<TMaybe<TVar>> settings{
+        const NYql::TGeneratorSettings<TMaybe<TVar>> settings{
             .NullProbability = 1.0 / 7.0,
             .Inner = {
                 .Weights = {1.0, 1.0},
                 .InnerSettings = {
-                    TGeneratorSettings<TString>{.MinSize = 0, .MaxSize = LargeStringLength},
+                    NYql::TGeneratorSettings<TString>{.MinSize = 0, .MaxSize = LargeStringLength},
                     {},
                 },
             },
         };
-        const auto data = GenerateRandomData<TMaybe<TVar>>(rng, settings, 50);
+        const auto data = NYql::GenerateRandomData<TMaybe<TVar>>(rng, settings, 50);
         auto [graph, listValue] = helper.BuildAndRunListFuzzied(data);
         NYql::NUdf::AssertUnboxedValueElementEqual(listValue, data);
     });
@@ -464,13 +437,13 @@ Y_UNIT_TEST(OptionalVariantOptionalStringUi32ChopRoundtrip) {
     auto rng = CreateDeterministicRandomProvider(2);
     TBlockHelper helper;
     helper.WithScopedFuzzers([&]() {
-        const size_t dataSize = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 1, .Max = 101}, 1)[0];
-        const TGeneratorSettings<TMaybe<TVar>> settings{
+        const size_t dataSize = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 1, .Max = 101}, 1)[0];
+        const NYql::TGeneratorSettings<TMaybe<TVar>> settings{
             .NullProbability = 0.2,
             .Inner = {
                 .Weights = {4.0, 1.0},
                 .InnerSettings = {
-                    TGeneratorSettings<TMaybe<TString>>{
+                    NYql::TGeneratorSettings<TMaybe<TString>>{
                         .NullProbability = 0.2,
                         .Inner = {.MinSize = 0, .MaxSize = LargeStringLength},
                     },
@@ -478,7 +451,7 @@ Y_UNIT_TEST(OptionalVariantOptionalStringUi32ChopRoundtrip) {
                 },
             },
         };
-        const auto data = GenerateRandomData<TMaybe<TVar>>(rng, settings, dataSize);
+        const auto data = NYql::GenerateRandomData<TMaybe<TVar>>(rng, settings, dataSize);
         auto [graph, listValue] = helper.BuildAndRunListFuzzied(data);
         NYql::NUdf::AssertUnboxedValueElementEqual(listValue, data);
     });
@@ -489,18 +462,18 @@ Y_UNIT_TEST(VariantBothOptionalChopRoundtrip) {
     auto rng = CreateDeterministicRandomProvider(3);
     TBlockHelper helper;
     helper.WithScopedFuzzers([&]() {
-        const size_t dataSize = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 1, .Max = 101}, 1)[0];
-        const TGeneratorSettings<TVar> settings{
+        const size_t dataSize = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 1, .Max = 101}, 1)[0];
+        const NYql::TGeneratorSettings<TVar> settings{
             .Weights = {4.0, 1.0},
             .InnerSettings = {
-                TGeneratorSettings<TMaybe<TString>>{
+                NYql::TGeneratorSettings<TMaybe<TString>>{
                     .NullProbability = 0.2,
                     .Inner = {.MinSize = 0, .MaxSize = LargeStringLength},
                 },
-                TGeneratorSettings<TMaybe<ui32>>{.NullProbability = 0.2},
+                NYql::TGeneratorSettings<TMaybe<ui32>>{.NullProbability = 0.2},
             },
         };
-        const auto data = GenerateRandomData<TVar>(rng, settings, dataSize);
+        const auto data = NYql::GenerateRandomData<TVar>(rng, settings, dataSize);
         auto [graph, listValue] = helper.BuildAndRunListFuzzied(data);
         NYql::NUdf::AssertUnboxedValueElementEqual(listValue, data);
     });
@@ -612,7 +585,7 @@ Y_UNIT_TEST(DataWeightArray) {
     using TVar = std::variant<ui32, ui64>;
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(60);
-    const TVector<TVar> data = GenerateRandomData<TVar>(rng, 3);
+    const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, 3);
     auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
     auto arrayData = TArrowBlock::From(value).GetDatum().array();
     auto reader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
@@ -626,8 +599,8 @@ Y_UNIT_TEST(DataWeightItem) {
     using TVar = std::variant<ui32, ui64>;
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(61);
-    const auto alt0 = GenerateRandomData<TVar>(rng, TGeneratorSettings<TVar>{.Weights = {1.0, 0.0}}, 1);
-    const auto alt1 = GenerateRandomData<TVar>(rng, TGeneratorSettings<TVar>{.Weights = {0.0, 1.0}}, 1);
+    const auto alt0 = NYql::GenerateRandomData<TVar>(rng, NYql::TGeneratorSettings<TVar>{.Weights = {1.0, 0.0}}, 1);
+    const auto alt1 = NYql::GenerateRandomData<TVar>(rng, NYql::TGeneratorSettings<TVar>{.Weights = {0.0, 1.0}}, 1);
     const TVector<TVar> data = {alt0[0], alt1[0]};
     auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
     auto arrayData = TArrowBlock::From(value).GetDatum().array();
@@ -644,7 +617,7 @@ Y_UNIT_TEST(DefaultValueWeight) {
     using TVar = std::variant<ui32, ui64>;
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(62);
-    const TVector<TVar> data = GenerateRandomData<TVar>(rng, 1);
+    const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, 1);
     auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
     auto reader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
 
@@ -674,10 +647,10 @@ Y_UNIT_TEST(SaveItemAndAddFromInputBuffer) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(70);
     helper.WithScopedFuzzers([&]() {
-        size_t dataSize = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 1, .Max = 12}, 1)[0];
-        const TVector<TVar> data = GenerateRandomData<TVar>(rng, dataSize);
-        const size_t startOffset = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, 1)[0];
-        const size_t subsize = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 1, .Max = dataSize - startOffset + 1}, 1)[0];
+        size_t dataSize = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 1, .Max = 12}, 1)[0];
+        const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, dataSize);
+        const size_t startOffset = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, 1)[0];
+        const size_t subsize = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 1, .Max = dataSize - startOffset + 1}, 1)[0];
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto arrayData = TArrowBlock::From(value).GetDatum().array();
         arrayData = DeepSlice(*arrayData, static_cast<i64>(startOffset), static_cast<i64>(subsize));
@@ -707,10 +680,10 @@ Y_UNIT_TEST(NestedTupleDeepSliceReaderEquality) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(71);
     helper.WithScopedFuzzers([&]() {
-        size_t dataSize = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 1, .Max = 12}, 1)[0];
-        const TVector<TVar> data = GenerateRandomData<TVar>(rng, dataSize);
-        const size_t startOffset = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, 1)[0];
-        const size_t subsize = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize - startOffset + 1}, 1)[0];
+        size_t dataSize = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 1, .Max = 12}, 1)[0];
+        const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, dataSize);
+        const size_t startOffset = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, 1)[0];
+        const size_t subsize = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize - startOffset + 1}, 1)[0];
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto arrayData = TArrowBlock::From(value).GetDatum().array();
         auto sliced = DeepSlice(*arrayData, static_cast<i64>(startOffset), static_cast<i64>(subsize));
@@ -751,7 +724,7 @@ Y_UNIT_TEST(BuilderAddDefault) {
     using TVar = std::variant<ui32, ui64>;
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(71);
-    const TVector<TVar> data = GenerateRandomData<TVar>(rng, 1);
+    const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, 1);
     auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
     auto sourceData = TArrowBlock::From(value).GetDatum().array();
     auto reader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
@@ -782,14 +755,14 @@ Y_UNIT_TEST(BuilderAddManyContiguous) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(72);
     helper.WithScopedFuzzers([&]() {
-        const size_t dataSize = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 2, .Max = 11}, 1)[0];
-        const TVector<TVar> data = GenerateRandomData<TVar>(rng, dataSize);
+        const size_t dataSize = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 2, .Max = 11}, 1)[0];
+        const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, dataSize);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto sourceData = TArrowBlock::From(value).GetDatum().array();
         auto reader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
 
-        const size_t beginIndex = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, 1)[0];
-        const size_t count = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize - beginIndex + 1}, 1)[0];
+        const size_t beginIndex = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, 1)[0];
+        const size_t count = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize - beginIndex + 1}, 1)[0];
 
         NYql::NUdf::IArrayBuilder::TArrayDataItem item = {.Data = sourceData.get(), .StartOffset = 0};
         auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), dataSize, nullptr);
@@ -811,13 +784,13 @@ Y_UNIT_TEST(BuilderAddManySparseBitmap) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(73);
     helper.WithScopedFuzzers([&]() {
-        const size_t dataSize = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 1, .Max = 11}, 1)[0];
-        const TVector<TVar> data = GenerateRandomData<TVar>(rng, dataSize);
+        const size_t dataSize = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 1, .Max = 11}, 1)[0];
+        const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, dataSize);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto sourceData = TArrowBlock::From(value).GetDatum().array();
         auto reader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
 
-        const TVector<bool> bitmapBools = GenerateRandomData<bool>(rng, dataSize);
+        const TVector<bool> bitmapBools = NYql::GenerateRandomData<bool>(rng, dataSize);
         const TVector<ui8> bitmap(bitmapBools.begin(), bitmapBools.end());
         const size_t popCount = static_cast<size_t>(std::ranges::count(bitmapBools, true));
 
@@ -843,14 +816,14 @@ Y_UNIT_TEST(BuilderAddManyIndexed) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(74);
     helper.WithScopedFuzzers([&]() {
-        const size_t dataSize = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 1, .Max = 11}, 1)[0];
-        const size_t indexCount = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, 1)[0];
-        const TVector<TVar> data = GenerateRandomData<TVar>(rng, dataSize);
+        const size_t dataSize = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 1, .Max = 11}, 1)[0];
+        const size_t indexCount = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, 1)[0];
+        const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, dataSize);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto sourceData = TArrowBlock::From(value).GetDatum().array();
         auto reader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
 
-        TVector<ui64> indexes = GenerateRandomData<ui64>(rng, TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, indexCount);
+        TVector<ui64> indexes = NYql::GenerateRandomData<ui64>(rng, NYql::TGeneratorSettings<ui64>{.Min = 0, .Max = dataSize}, indexCount);
         indexes.reserve(dataSize);
         NYql::NUdf::IArrayBuilder::TArrayDataItem item = {.Data = sourceData.get(), .StartOffset = 0};
         auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), itemType, *arrow::default_memory_pool(), dataSize, nullptr);
@@ -872,7 +845,7 @@ Y_UNIT_TEST(ComparatorOptionalVariantNullOrdering) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(80);
     helper.WithScopedFuzzers([&]() {
-        const auto nonNullData = GenerateRandomData<TVar>(rng, 1);
+        const auto nonNullData = NYql::GenerateRandomData<TVar>(rng, 1);
         const TVector<TMaybe<TVar>> data = {TMaybe<TVar>{}, nonNullData[0], TMaybe<TVar>{}};
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto arrayData = TArrowBlock::From(value).GetDatum().array();
@@ -896,7 +869,7 @@ Y_UNIT_TEST(HasherOptionalVariantNullIsStable) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(81);
     helper.WithScopedFuzzers([&]() {
-        const auto nonNullData = GenerateRandomData<TVar>(rng, 1);
+        const auto nonNullData = NYql::GenerateRandomData<TVar>(rng, 1);
         const TVector<TMaybe<TVar>> data = {TMaybe<TVar>{}, nonNullData[0]};
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto arrayData = TArrowBlock::From(value).GetDatum().array();
@@ -918,7 +891,7 @@ Y_UNIT_TEST(TrimmerAllSameAlternative) {
     auto rng = CreateDeterministicRandomProvider(90);
     helper.WithScopedFuzzers([&]() {
         const TVector<TVar> data =
-            GenerateRandomData<TVar>(rng, TGeneratorSettings<TVar>{.Weights = {0.0, 1.0}}, 3);
+            NYql::GenerateRandomData<TVar>(rng, NYql::TGeneratorSettings<TVar>{.Weights = {0.0, 1.0}}, 3);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto arrayData = TArrowBlock::From(value).GetDatum().array();
 
@@ -944,7 +917,7 @@ Y_UNIT_TEST(TrimmerEmptySlice) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(91);
     helper.WithScopedFuzzers([&]() {
-        const TVector<TVar> data = GenerateRandomData<TVar>(rng, 2);
+        const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, 2);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto arrayData = TArrowBlock::From(value).GetDatum().array();
 
@@ -964,7 +937,7 @@ Y_UNIT_TEST(NestedOptionalVariantRoundtrip) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(100);
     helper.WithScopedFuzzers([&]() {
-        const TVector<TOuter> data = GenerateRandomData<TOuter>(rng, 5);
+        const TVector<TOuter> data = NYql::GenerateRandomData<TOuter>(rng, 5);
         helper.TestKernelFuzzied(data, data, [](TSetup<false>&, TRuntimeNode node) { return node; }, /*iterations=*/1);
     });
 }
@@ -975,7 +948,7 @@ Y_UNIT_TEST(NestedTupleRoundtrip) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(100);
     helper.WithScopedFuzzers([&]() {
-        const TVector<TOuter> data = GenerateRandomData<TOuter>(rng, 5);
+        const TVector<TOuter> data = NYql::GenerateRandomData<TOuter>(rng, 5);
         helper.TestKernelFuzzied(data, data, [](TSetup<false>&, TRuntimeNode node) { return node; }, /*iterations=*/1);
     });
 }
@@ -984,7 +957,7 @@ Y_UNIT_TEST(SerializerRoundtripNoOffsetAdjust) {
     using TVar = std::variant<ui32, ui64>;
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(102);
-    const TVector<TVar> data = GenerateRandomData<TVar>(rng, 8);
+    const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, 8);
     auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
     auto arrayData = TArrowBlock::From(value).GetDatum().array();
     MKQL_ENSURE(AllOf(NYql::NUdf::CalculateDenseUnionChildrenUsage(*arrayData),
@@ -1002,7 +975,7 @@ Y_UNIT_TEST(SerializerRoundtripTupleInsideVariant) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(103);
     helper.WithScopedFuzzers([&]() {
-        const TVector<TVar> data = GenerateRandomData<TVar>(rng, 5);
+        const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, 5);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto restored = DoSerializerRoundtrip(TArrowBlock::From(value).GetDatum().array(), itemType, blockType);
         auto reader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType);
@@ -1018,7 +991,7 @@ Y_UNIT_TEST(SerializerBufferSizeIsProportionalToSlice) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(104);
     helper.WithScopedFuzzers([&]() {
-        const TVector<TVar> data = GenerateRandomData<TVar>(rng, 20000);
+        const TVector<TVar> data = NYql::GenerateRandomData<TVar>(rng, 20000);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);
         auto fullArray = TArrowBlock::From(value).GetDatum().array();
         auto slicedArray = NYql::NUdf::DeepSlice(*fullArray, 10000, 5);
@@ -1039,15 +1012,15 @@ Y_UNIT_TEST(SerializerRoundtripDoubleUnion) {
     using TOuter = std::variant<TInner, TString>;
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(101);
-    const TGeneratorSettings<TOuter> settings{
+    const NYql::TGeneratorSettings<TOuter> settings{
         .Weights = {1.0, 1.0},
         .InnerSettings = {
-            TGeneratorSettings<TInner>{.Weights = {1.0, 1.0}},
-            TGeneratorSettings<TString>{.MinSize = 0, .MaxSize = 20000},
+            NYql::TGeneratorSettings<TInner>{.Weights = {1.0, 1.0}},
+            NYql::TGeneratorSettings<TString>{.MinSize = 0, .MaxSize = 20000},
         },
     };
     helper.WithScopedFuzzers([&]() {
-        const TVector<TOuter> input = GenerateRandomData<TOuter>(rng, settings, 6);
+        const TVector<TOuter> input = NYql::GenerateRandomData<TOuter>(rng, settings, 6);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(input);
         auto restored = DoSerializerRoundtrip(TArrowBlock::From(value).GetDatum().array(), itemType, blockType);
 
@@ -1062,9 +1035,9 @@ Y_UNIT_TEST(SerializerRoundtripMiddleChildEmpty) {
     using TVar = std::variant<ui32, ui64, i32>;
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(102);
-    const TGeneratorSettings<TVar> settings{.Weights = {1.0, 0.0, 1.0}};
+    const NYql::TGeneratorSettings<TVar> settings{.Weights = {1.0, 0.0, 1.0}};
     helper.WithScopedFuzzers([&]() {
-        const TVector<TVar> input = GenerateRandomData<TVar>(rng, settings, 4);
+        const TVector<TVar> input = NYql::GenerateRandomData<TVar>(rng, settings, 4);
         auto [graph, value, itemType, blockType] = helper.GetArrowBlock(input);
         auto arrayData = TArrowBlock::From(value).GetDatum().array();
         UNIT_ASSERT_VALUES_EQUAL(arrayData->child_data[1]->length, 0);
@@ -1084,8 +1057,8 @@ Y_UNIT_TEST(VariantBlockItemConverter) {
     TBlockHelper helper;
     auto rng = CreateDeterministicRandomProvider(200);
 
-    const auto alt0 = GenerateRandomData<TVar>(rng, TGeneratorSettings<TVar>{.Weights = {1.0, 0.0}}, 2);
-    const auto alt1 = GenerateRandomData<TVar>(rng, TGeneratorSettings<TVar>{.Weights = {0.0, 1.0}}, 2);
+    const auto alt0 = NYql::GenerateRandomData<TVar>(rng, NYql::TGeneratorSettings<TVar>{.Weights = {1.0, 0.0}}, 2);
+    const auto alt1 = NYql::GenerateRandomData<TVar>(rng, NYql::TGeneratorSettings<TVar>{.Weights = {0.0, 1.0}}, 2);
     const TVector<TVar> data = {alt0[0], alt1[0], alt0[1], alt1[1]};
 
     auto [graph, value, itemType, blockType] = helper.GetArrowBlock(data);

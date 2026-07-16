@@ -1135,7 +1135,7 @@ message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2 [(Ydb.sensitive) = true];
     optional bool CanLogin = 3 [default = true];
-    optional bool IsHashedPassword = 4 [default = false, deprecated = true];
+    reserved 4; reserved "IsHashedPassword";
     optional string HashedPassword = 5 [(Ydb.sensitive) = true];
 }
 
@@ -1143,7 +1143,7 @@ message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2 [(Ydb.sensitive) = true];
     optional bool CanLogin = 3;
-    optional bool IsHashedPassword = 4 [default = false, deprecated = true];
+    reserved 4; reserved "IsHashedPassword";
     optional string HashedPassword = 5 [(Ydb.sensitive) = true];
 }
 
@@ -1383,6 +1383,7 @@ enum EIndexType {
     EIndexTypeGlobalFulltextCompact = 11;
     EIndexTypeGlobalFulltextCompactRelevance = 12;
     EIndexTypeGlobalJsonCompact = 13;
+    EIndexTypeLocalCountMinSketch = 14;
 }
 
 enum EIndexState {
@@ -2268,6 +2269,7 @@ enum EPathSubType {
     EPathSubTypeLocalBloomFilterIndex = 7;
     EPathSubTypeLocalBloomNgramFilterIndex = 8;
     EPathSubTypeLocalMinMaxIndex = 9;
+    EPathSubTypeLocalCountMinSketchIndex = 10;
 }
 
 enum EPathState {

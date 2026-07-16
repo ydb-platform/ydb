@@ -485,6 +485,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::Small:
         case EYtSettingType::Pruned:
         case EYtSettingType::Transparent:
+        case EYtSettingType::PruneUnusedColumns:
             if (!EnsureTupleSize(*setting, 1, ctx)) {
                 return false;
             }

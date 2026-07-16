@@ -4,6 +4,9 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+
+#include <ydb/core/mind/bscontroller/types.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -19,6 +22,7 @@ enum class EMonPage
 {
     Overview,
     Dbg,
+    LocalDb,
 };
 
 struct TTabletInfo
@@ -46,11 +50,32 @@ struct THostSnapshot
     ui64 PBufferUsedSize = 0;
 };
 
+struct TConnectionSnapshot
+{
+    THostIndex HostIndex = InvalidHostIndex;
+    NKikimr::NBsController::TDDiskId DDiskId;
+    std::optional<NKikimr::NBsController::TDDiskId> PBufferId;
+    TString DDiskSession;
+    bool PBufferConnected = false;
+};
+
 struct TDbgSnapshot
 {
     size_t Index = 0;
     size_t VChunkCount = 0;
     TVector<THostSnapshot> Hosts;
+    TVector<TConnectionSnapshot> Connections;
+};
+
+// Persisted tablet state (local DB). Protos are pre-dumped to text; an absent
+// value means the row was never persisted.
+struct TLocalDbContents
+{
+    std::optional<TString> VolumeConfig;
+    std::optional<TString> DirectBlockGroupsConnections;
+    std::optional<TString> AddHostInProgress;
+    // Persisted per-vchunk overrides.
+    TVector<TVChunkConfig> VChunkConfigs;
 };
 
 struct TMonPageData
@@ -64,6 +89,8 @@ struct TMonPageData
     TVector<TDbgSnapshot> Dbgs;
     // DBG detail index (absent => list view).
     std::optional<ui32> SelectedDbg;
+    // Local DB tab.
+    std::optional<TLocalDbContents> LocalDb;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

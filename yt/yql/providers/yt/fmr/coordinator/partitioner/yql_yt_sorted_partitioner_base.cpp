@@ -4,7 +4,6 @@
 
 namespace NYql::NFmr {
 
-
 void TChunkContainer::Push(TChunkUnit chunk) {
     Chunks_.push_back(std::move(chunk));
 }
@@ -96,14 +95,12 @@ void TFmrTablesChunkPool::InitTableInputs(const std::vector<TFmrTableRef>& input
         TableOrder_.push_back(tableId);
 
         std::vector<TChunkUnit> chunks;
-        ui64 tableChunkCount = 0;
         for (const auto& partId : partIds) {
             Y_ENSURE(
                 PartIdStats_.contains(partId),
                 "No chunk stats found for partId: " << partId << " (table: " << tableId << ")");
 
             const auto& stats = PartIdStats_.at(partId);
-            tableChunkCount += stats.size();
             for (ui64 chunkIdx = 0; chunkIdx < stats.size(); ++chunkIdx) {
                 const auto& chunk = stats[chunkIdx];
                 Y_ENSURE(chunk.SortedChunkStats.IsSorted, "Every FMR chunk inside SortedPartitioner must be sorted");
@@ -131,9 +128,12 @@ void TFmrTablesChunkPool::InitTableInputs(const std::vector<TFmrTableRef>& input
                 });
             }
         }
-        Y_ENSURE(
-            tableChunkCount > 0,
-            "SortedPartitioner requires at least one chunk for input table: " << tableId);
+        // An input table can legitimately have zero chunks: e.g. a MapReduce map task whose rows
+        // were all routed to a direct (map-bypass) output — such as NULL join keys in a FULL JOIN,
+        // which can never match and so skip the shuffle/reduce stage entirely — produces an empty
+        // reduce-bound intermediate table. Leave it registered with an empty chunk queue rather
+        // than failing the whole operation; IsNotEmpty()/ReadNextChunk already treat an empty deque
+        // as "this table has nothing left to contribute."
 
         std::stable_sort(chunks.begin(), chunks.end(), [](const TChunkUnit& a, const TChunkUnit& b) {
             if (*a.KeyRange.FirstKeysBound != *b.KeyRange.FirstKeysBound) {
@@ -410,7 +410,7 @@ TTaskTableInputRef TSortedPartitionerBase::CreateTaskInputFromSlicesImpl(
 
         TFmrTableKeysBoundary rightKey = *chunks.back().KeyRange.LastKeysBound;
         bool rightInclusive = taskRange.IsLastBoundInclusive;
-        ChangeRightKeyBoundaryIfNeeded(rightKey, taskLastKey);
+        ChangeRightKeyBoundaryIfNeeded(rightKey, rightInclusive, taskLastKey);
 
         TFmrTableInputRef inputRef{
             .TableId = tableId,

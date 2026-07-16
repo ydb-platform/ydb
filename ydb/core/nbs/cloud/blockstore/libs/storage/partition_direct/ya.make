@@ -1,6 +1,7 @@
 LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(ddisk_data_copier.h)
+GENERATE_ENUM_SERIALIZATION(direct_block_group_impl.h)
 
 SRCS(
     ddisk_data_copier.cpp

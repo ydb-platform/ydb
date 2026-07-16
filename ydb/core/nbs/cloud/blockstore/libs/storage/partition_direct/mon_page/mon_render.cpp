@@ -1,11 +1,15 @@
 #include "mon_render.h"
 
+#include <ydb/core/base/services/blobstorage_service_id.h>
+
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/generic/map.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/string/printf.h>
 #include <util/string/subst.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -31,6 +35,8 @@ const char* PageParam(EMonPage page)
             return "overview";
         case EMonPage::Dbg:
             return "dbg";
+        case EMonPage::LocalDb:
+            return "localdb";
     }
     return "overview";
 }
@@ -42,8 +48,53 @@ const char* PageTitle(EMonPage page)
             return "Overview";
         case EMonPage::Dbg:
             return "DBGs";
+        case EMonPage::LocalDb:
+            return "Local DB";
     }
     return "";
+}
+
+// Mon page of the DDisk actor behind the id; the "/node/<id>" prefix makes the
+// link work from any node's mon. The path format mirrors
+// TDDiskActor::RegisterMonPage.
+TString MakeDDiskMonPageUrl(const NKikimr::NBsController::TDDiskId& ddiskId)
+{
+    return TStringBuilder()
+           << "/node/" << ddiskId.NodeId
+           << Sprintf(
+                  "/actors/ddisks/ddisk_p%09" PRIu32 "_s%09" PRIu32,
+                  ddiskId.PDiskId,
+                  ddiskId.DDiskSlotId);
+}
+
+void RenderDDiskLink(
+    IOutputStream& str,
+    const NKikimr::NBsController::TDDiskId& ddiskId)
+{
+    str << "<a href='" << MakeDDiskMonPageUrl(ddiskId) << "'>"
+        << HtmlEscape(ddiskId.ToString()) << "</a>";
+}
+
+// Mon page of the persistent buffer behind the id: the node's "Persistent
+// Buffer" page filtered to this pbuffer's service actor (its "pb" filter
+// matches ToString of the well-known service id).
+TString MakePBufferMonPageUrl(const NKikimr::NBsController::TDDiskId& pbufferId)
+{
+    const auto serviceId = NKikimr::MakeBlobStoragePersistentBufferId(
+        pbufferId.NodeId,
+        pbufferId.PDiskId,
+        pbufferId.DDiskSlotId);
+    return TStringBuilder()
+           << "/node/" << pbufferId.NodeId << "/actors/persistent_buffer?pb="
+           << CGIEscapeRet(serviceId.ToString());
+}
+
+void RenderPBufferLink(
+    IOutputStream& str,
+    const NKikimr::NBsController::TDDiskId& pbufferId)
+{
+    str << "<a href='" << MakePBufferMonPageUrl(pbufferId) << "'>"
+        << HtmlEscape(pbufferId.ToString()) << "</a>";
 }
 
 // "6 Online" or "4 Online / 2 Sufferer".
@@ -114,6 +165,7 @@ void RenderMenu(
     static const EMonPage pages[] = {
         EMonPage::Overview,
         EMonPage::Dbg,
+        EMonPage::LocalDb,
     };
     str << "<div style='margin:0.5em 0 1em;'>";
     for (EMonPage page: pages) {
@@ -255,6 +307,25 @@ void RenderDbgDetail(
 {
     str << "<div style='margin-bottom:0.5em;'><a href='?TabletID="
         << tabletInfo.TabletId << "&page=dbg'>&larr; back to DBGs</a></div>";
+    // POST, not a link: link prefetching must not add hosts.
+    //
+    // The same parameters go into both the action URL and the hidden fields
+    // because the request has two readers, each looking at one place only:
+    // the mon proxy picks the target tablet from the POST body, while the
+    // tablet's Cgi() reads the URL query.
+    str << "<form method='post' action='?TabletID=" << tabletInfo.TabletId
+        << "&page=dbg&dbg=" << dbg.Index
+        << "&action=addhost' style='margin-bottom:0.5em;'>"
+           "<input type='hidden' name='TabletID' value='"
+        << tabletInfo.TabletId
+        << "'/>"
+           "<input type='hidden' name='page' value='dbg'/>"
+           "<input type='hidden' name='dbg' value='"
+        << dbg.Index
+        << "'/>"
+           "<input type='hidden' name='action' value='addhost'/>"
+           "<button type='submit' class='btn btn-default'>Add host</button>"
+           "</form>";
     HTML (str) {
         TAG (TH3) {
             str << "DBG #" << dbg.Index;
@@ -293,7 +364,7 @@ void RenderDbgDetail(
                 for (const auto& host: dbg.Hosts) {
                     TABLER () {
                         TABLED () {
-                            str << (int)host.Index;
+                            str << PrintHostIndex(host.Index);
                         }
                         TABLED () {
                             str << ToString(host.State);
@@ -316,6 +387,112 @@ void RenderDbgDetail(
                             TABLED () {
                                 str << host.InflightByOperation[operation];
                             }
+                        }
+                    }
+                }
+            }
+        }
+        TAG (TH4) {
+            str << "Connections";
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLEHEAD () {
+                TABLER () {
+                    TABLEH () {
+                        str << "Host";
+                    }
+                    TABLEH () {
+                        str << "DDisk id";
+                    }
+                    TABLEH () {
+                        str << "PBuffer id";
+                    }
+                    TABLEH () {
+                        str << "DDisk session";
+                    }
+                    TABLEH () {
+                        str << "PBuffer connected";
+                    }
+                }
+            }
+            TABLEBODY () {
+                for (const auto& connection: dbg.Connections) {
+                    TABLER () {
+                        TABLED () {
+                            str << PrintHostIndex(connection.HostIndex);
+                        }
+                        TABLED () {
+                            RenderDDiskLink(str, connection.DDiskId);
+                        }
+                        TABLED () {
+                            if (connection.PBufferId) {
+                                RenderPBufferLink(str, *connection.PBufferId);
+                            }
+                        }
+                        TABLED () {
+                            str << connection.DDiskSession;
+                        }
+                        TABLED () {
+                            str << (connection.PBufferConnected ? "yes" : "no");
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void RenderProtoDump(
+    IOutputStream& str,
+    const char* name,
+    const std::optional<TString>& dump)
+{
+    if (!dump) {
+        str << "<div style='margin-bottom:0.5em;'>" << name << " (none)</div>";
+        return;
+    }
+    // display:list-item brings back the fold triangle that the page CSS
+    // hides; the pointer marks the line as clickable.
+    str << "<details style='margin-bottom:0.5em;'>"
+           "<summary style='display:list-item; cursor:pointer;'>"
+        << name << "</summary><pre>" << HtmlEscape(*dump) << "</pre></details>";
+}
+
+void RenderLocalDb(IOutputStream& str, const TLocalDbContents& db)
+{
+    HTML (str) {
+        TAG (TH3) {
+            str << "Local DB";
+        }
+        RenderProtoDump(str, "VolumeConfig", db.VolumeConfig);
+        RenderProtoDump(
+            str,
+            "DirectBlockGroupsConnections",
+            db.DirectBlockGroupsConnections);
+        RenderProtoDump(str, "AddHostInProgress", db.AddHostInProgress);
+        TAG (TH4) {
+            str << "VChunkConfigs (persisted overrides)";
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLEHEAD () {
+                TABLER () {
+                    TABLEH () {
+                        str << "VChunkIndex";
+                    }
+                    TABLEH () {
+                        str << "Config";
+                    }
+                }
+            }
+            TABLEBODY () {
+                for (const auto& config: db.VChunkConfigs) {
+                    TABLER () {
+                        TABLED () {
+                            str << config.GetVChunkIndex();
+                        }
+                        TABLED () {
+                            str << "<pre>" << HtmlEscape(config.DebugPrint())
+                                << "</pre>";
                         }
                     }
                 }
@@ -371,6 +548,11 @@ TString RenderMonPage(const TMonPageData& data)
             break;
         case EMonPage::Dbg:
             RenderDbg(str, data);
+            break;
+        case EMonPage::LocalDb:
+            if (data.LocalDb) {
+                RenderLocalDb(str, *data.LocalDb);
+            }
             break;
     }
     return str.Str();

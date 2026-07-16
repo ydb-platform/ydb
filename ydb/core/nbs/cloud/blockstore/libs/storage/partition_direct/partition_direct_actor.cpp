@@ -434,6 +434,22 @@ void TPartitionActor::HandleFastPathServiceStopped(
         LogTitle.GetWithTime().c_str());
 }
 
+void TPartitionActor::HandlePoisonByBlockedGeneration(
+    const TEvPartitionDirectPrivate::TEvPoison::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const auto* msg = ev->Get();
+
+    LOG_CRIT(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s SUICIDE by BLOCKED generation. Reason: %s",
+        LogTitle.GetWithTime().c_str(),
+        msg->Reason.c_str());
+
+    ctx.Send(Tablet(), std::make_unique<TEvents::TEvPoisonPill>().release());
+}
+
 void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -508,8 +524,9 @@ void TPartitionActor::HandleAddHostToDBG(
         LogTitle.GetWithTime().c_str(),
         dbgId);
 
-    // TEvAddHostToDBG is only sent by a running FastPathService, so it (and the
-    // allocated DBGs) is alive by the time we handle the request.
+    // TEvAddHostToDBG is only sent via a running FastPathService (by a DBG or
+    // by the mon page button), so it (and the allocated DBGs) is alive by the
+    // time we handle the request.
     Y_ABORT_UNLESS(FastPathService);
 
     if (!ValidateAddHostToDBGRequest(ctx, dbgId)) {
@@ -692,6 +709,10 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceStopped,
             HandleFastPathServiceStopped);
+
+        HFunc(
+            TEvPartitionDirectPrivate::TEvPoison,
+            HandlePoisonByBlockedGeneration);
 
         HFunc(NMon::TEvRemoteHttpInfo, HandleHttpInfo);
 

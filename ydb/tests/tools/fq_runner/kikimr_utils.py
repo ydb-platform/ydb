@@ -153,7 +153,6 @@ class YQv2Extension(ExtensionPoint):
         extra_feature_flags = [
             'enable_external_data_sources',
             'enable_script_execution_operations',
-            'enable_pg_syntax',
         ]
         disabled_feature_flags = []
         if self.enable_schema_inference:

@@ -130,9 +130,6 @@
 #include <ydb/core/fq/libs/mock/yql_mock.h>
 #include <ydb/services/metadata/ds_table/service.h>
 #include <ydb/services/metadata/service.h>
-#include <ydb/services/ext_index/common/config.h>
-#include <ydb/services/ext_index/common/service.h>
-#include <ydb/services/ext_index/service/executor.h>
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
@@ -593,6 +590,7 @@ namespace Tests {
             auto& securityConfig = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig();
             appData.EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
             appData.EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
+            appData.AlwaysSetSystemOwner = securityConfig.GetAlwaysSetSystemOwner();
             TVector<TString> administrationAllowedSIDs(securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
             appData.AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
             TVector<TString> registerDynamicNodeAllowedSIDs(securityConfig.GetRegisterDynamicNodeAllowedSIDs().cbegin(), securityConfig.GetRegisterDynamicNodeAllowedSIDs().cend());
@@ -1253,11 +1251,6 @@ namespace Tests {
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NMetadata::NProvider::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
-        if (Settings->IsEnableExternalIndex()) {
-            auto* actor = NCSIndex::CreateService(NCSIndex::TConfig());
-            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NCSIndex::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
-        }
         {
             auto* actor = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(NOlap::NGroupedMemoryManager::TConfig(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
@@ -1422,7 +1415,7 @@ namespace Tests {
 
                 auto uniqueDriver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
                 FederatedQuerySetupDriver_ = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
-                auto pqGatewayFactory = NKqp::MakePqGatewayFactory(FederatedQuerySetupDriver_, NKqp::TLocalTopicClientSettings{
+                auto pqGatewayFactory = NKqp::MakePqGatewayFactory(FederatedQuerySetupDriver_, Settings->CredentialsFactory, NKqp::TLocalTopicClientSettings{
                     .ActorSystem = Runtime->GetActorSystem(nodeIdx),
                     .ChannelBufferSize = rmConfig.GetChannelBufferSize(),
                 });
@@ -2428,15 +2421,36 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
-    NKikimrScheme::TEvLoginResult TClient::Login(TTestActorRuntime& runtime, const TString& user, const TString& password) {
+    NKikimrScheme::TEvLoginResult TClient::Login(TTestActorRuntime& runtime,
+        const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech,
+        NLoginProto::EHashType::HashType hashType, const TString& hash, const TString& authMessage)
+    {
         TActorId sender = runtime.AllocateEdgeActor();
         TAutoPtr<NSchemeShard::TEvSchemeShard::TEvLogin> evLogin(new NSchemeShard::TEvSchemeShard::TEvLogin());
         evLogin->Record.SetUser(user);
-        evLogin->Record.SetPassword(password);
+        auto& hashesToValidate = *evLogin->Record.MutableHashToValidate();
+        hashesToValidate.SetAuthMech(authMech);
+        hashesToValidate.SetHashType(hashType);
+        hashesToValidate.SetHash(hash);
+        hashesToValidate.SetAuthMessage(authMessage);
 
-        if (auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain(); user.EndsWith("@" + ldapDomain)) {
-            evLogin->Record.SetExternalAuth(ldapDomain);
-        }
+        const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect);
+        ForwardToTablet(runtime, schemeRoot, sender, evLogin.Release());
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<NSchemeShard::TEvSchemeShard::TEvLoginResult>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
+    }
+
+    NKikimrScheme::TEvLoginResult TClient::LoginExternal(TTestActorRuntime& runtime, const TString& user) {
+        // External (LDAP) authentication: the password is verified by LDAP, not by YDB, so it is passed through as is.
+        const auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<NSchemeShard::TEvSchemeShard::TEvLogin> evLogin(new NSchemeShard::TEvSchemeShard::TEvLogin());
+        evLogin->Record.SetUser(user);
+        evLogin->Record.SetExternalAuth(ldapDomain);
+
         const ui64 schemeRoot = GetPatchedSchemeRoot(SchemeRoot, Domain, SupportsRedirect);
         ForwardToTablet(runtime, schemeRoot, sender, evLogin.Release());
         TAutoPtr<IEventHandle> handle;

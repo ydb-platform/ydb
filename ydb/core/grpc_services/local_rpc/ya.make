@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    local_rpc.h
+    local_rpc.cpp
 )
 
 PEERDIR(

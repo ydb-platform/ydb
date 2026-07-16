@@ -273,7 +273,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::TemporaryOffline);
                     ready.SetValue();
@@ -328,7 +330,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::Online);
                     ready.SetValue();
@@ -387,7 +391,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->OnHostAppended(DirectBlockGroupHostCount + 1);
                     ready.SetValue();
@@ -495,7 +501,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::Offline);
                     ready.SetValue();
@@ -551,7 +559,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::Online);
                     ready.SetValue();

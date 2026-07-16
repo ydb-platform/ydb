@@ -77,17 +77,18 @@ class TestStreamingCompatibility(StreamingTestBase):
                 assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
                 self.wait_completed_checkpoints(kikimr, query.get_path())
 
-            # tmp_queries = [SimpleTest("test_compatibility_")]
-            # for query in tmp_queries:
-            #     logger.debug(f"Start new query  {query.get_name()}")
-            #     kikimr.ydb_client.query(query.get_query_text(inp, out))
-            #     self.wait_completed_checkpoints(kikimr, query.get_path())
-            #     data, expected_data = query.get_test_data()
-            #     self.write_stream(data, endpoint=endpoint)
-            #     assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
-            #     logger.debug(f"Stoping {query.get_name()}...")
-            #     kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query.get_name()}`;")
-            #     logger.debug(f"Query {query.get_name()} no longer exists)")
+            kikimr.recreate_driver()
+            tmp_queries = [SimpleTest("test_compatibility_")]
+            for query in tmp_queries:
+                logger.debug(f"Start new query  {query.get_name()}")
+                kikimr.ydb_client.query(query.get_query_text(inp, out))
+                self.wait_completed_checkpoints(kikimr, query.get_path())
+                data, expected_data = query.get_test_data()
+                self.write_stream(data, endpoint=endpoint)
+                assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+                logger.debug(f"Stoping {query.get_name()}...")
+                kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query.get_name()}`;")
+                logger.debug(f"Query {query.get_name()} no longer exists)")
 
         for query in Queries:
             logger.debug(f"Stoping {query.get_name()}...")

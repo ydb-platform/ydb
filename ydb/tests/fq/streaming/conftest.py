@@ -14,17 +14,10 @@ logger = logging.getLogger(__name__)
 
 class KikimrRollingUpgrade(Kikimr):
     """
-    Kikimr cluster with 2 dynamic nodes initially running the *current* binary.
+    Kikimr cluster with 2 dynamic nodes.
 
     Provides a :meth:`roll` generator that drives a minimal rolling
-    upgrade/downgrade of one dynamic node:
-
-    * Yield 0 (step 1):   roll node1 to stable version.
-    * Yield 1 (step 2):   roll node2 to stable version.
-    * Yield 2 (step 3):   roll node1 + node2 back to *current* version.
-
-    The YDB client is pinned to the *stable* node so that it remains connected
-    across the restarts of the rolling node.
+    upgrade/downgrade of one dynamic node.
     """
 
     def __init__(self, config, main_binary_path, stable_binary_path, **kwargs):
@@ -49,6 +42,9 @@ class KikimrRollingUpgrade(Kikimr):
             endpoint=f"grpc://{stable_endpoint.endpoint}",
             enable_discovery=False,
         )
+        logger.info(f" stable_endpoint.database {stable_endpoint.database}")
+        logger.info(f" stable_endpoint.endpoint {stable_endpoint.endpoint}")
+
         self.ydb_client.wait_connection()
         self.first_node = stable_node
         self.endpoint = stable_endpoint

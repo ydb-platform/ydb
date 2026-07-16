@@ -156,6 +156,15 @@ class Kikimr:
         )
         self.ydb_client.wait_connection()
 
+    def recreate_driver(self):
+        self.ydb_client.stop()
+        self.ydb_client = YdbClient(
+            database=self.endpoint.database,
+            endpoint=f"grpc://{self.endpoint.endpoint}",
+            enable_discovery=False#enable_discovery,
+        )
+        self.ydb_client.wait_connection()
+
     def stop(self):
         self.ydb_client.stop()
         self.cluster.stop()

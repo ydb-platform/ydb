@@ -111,9 +111,12 @@ public:
     // Insert/assign (acquires on new key) and record the matching undo.
     V& Set(TSetArgs args) {
         Y_VERIFY_DEBUG_S(args.Changes.IsArmed(),
-            "tracked Set on " << Reason << " outside an armed propose; use SetUntracked (see I3)");
+            "tracked Set on " << Reason << " outside an armed propose; use SetUntracked");
         auto it = Map.find(args.Path);
         if (it == Map.end()) {
+            Y_VERIFY_DEBUG_S(args.Changes.IsPathTracked(args.Path),
+                "Set(" << Reason << ") acquires a ref on " << args.Path
+                << " but the path was not grabbed in this tx; GrabNewPath/GrabPath it first");
             args.Changes.RecordSelfRefUndo([this, id = args.Path]() { UndoErase(id); });
             it = Map.emplace(args.Path, std::move(args.Value)).first;
             AcquirePathDbRef(SS, args.Path, Reason);
@@ -151,7 +154,7 @@ public:
     // reseated (Update(id,mc) = newPtr won't compile), which would desync the undo.
     const V& Update(const TPathId& id, TMemoryChanges& changes) {
         Y_VERIFY_DEBUG_S(changes.IsArmed(),
-            "tracked Update on " << Reason << " outside an armed propose; use UpdateUntracked (see I3)");
+            "tracked Update on " << Reason << " outside an armed propose; use UpdateUntracked");
         V& slot = Map.at(id);
         if (changes.NeedsUpdateSnapshot(this, id)) {
             changes.RecordSelfRefUndo([this, id, snap = SelfRefUndoClone(slot)]() {
@@ -167,6 +170,7 @@ public:
         return Map.at(id);
     }
 
+    // No undo: only legal outside an armed propose (an armed-propose erase can't roll back).
     size_t erase(const TPathId& id) {
         if (Map.contains(id)) {
             ReleasePathDbRef(SS, id, Reason);

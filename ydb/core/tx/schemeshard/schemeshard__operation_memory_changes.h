@@ -21,7 +21,19 @@ class TSchemeShard;
 
 class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TPathState = std::pair<TPathId, TPathElement::TPtr>;
-    TStack<TPathState> Paths;
+    // Holds both GrabPath snapshots (non-null elem) and GrabNewPath markers (null elem).
+    // Subclassed to expose the underlying container for the debug-only scan below.
+    struct TPathStack : TStack<TPathState> {
+        bool Contains(const TPathId& id) const {
+            for (const auto& [pid, elem] : this->c) {
+                if (pid == id) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    };
+    TPathStack Paths;
 
 
 
@@ -93,6 +105,10 @@ public:
 
     // True only inside an armed propose; tracked Set/Update are legal only then.
     bool IsArmed() const { return Armed; }
+
+    // Debug: was this path grabbed (GrabPath/GrabNewPath) in this tx? A tracked Set()
+    // that acquires a ref on an ungrabbed path can't fully roll back.
+    bool IsPathTracked(const TPathId& id) const { return Paths.Contains(id); }
 
     // True the first time this (map, path) needs a snapshot; false when disarmed.
     bool NeedsUpdateSnapshot(const void* map, const TPathId& id) {

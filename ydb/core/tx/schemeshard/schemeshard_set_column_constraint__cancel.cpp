@@ -70,7 +70,9 @@ public:
         // - TTxReplyValidateRowCondition ignores incoming validation messages due to IsCancelled flag
         // - AlterMainTableUnlockNullWritesPropose will NOT set NOT NULL constraint due to IsCancelled check
         // - The operation will complete naturally in Done state without setting the constraint
-        Progress(BuildId);
+        if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Validating) {
+            Progress(BuildId);
+        }
 
         return Reply();
     }

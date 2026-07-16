@@ -357,6 +357,11 @@ public:
             return true;
         }
 
+        if (operationInfo.ValidationFailed) {
+            LOG_I("TTxReplyValidateRowCondition: operation is rejected, ignoring message, id# " << BuildId);
+            return true;
+        }
+
         TShardIdx shardIdx;
         bool found = false;
         for (const auto& [idx, shardStatus] : operationInfo.ValidationShards) {
@@ -434,9 +439,6 @@ public:
 
             if (oldValidationFailedValue != operationInfo.ValidationFailed) {
                 Self->PersistSetColumnConstraintValidationFailedValue(db, operationInfo);
-
-                operationInfo.MarkAsCancelled(std::move(cancellationReason));
-                Self->PersistSetColumnConstraintCancellation(db, operationInfo);
             }
 
             Self->PersistSetColumnConstraintShardDone(db, BuildId, shardIdx, operationInfo);
@@ -640,7 +642,8 @@ public:
 
         LOG_D("TTxProgressSetColumnConstraint::DoExecute, id# " << BuildId
             << "; OperationState = " << ToString(operationInfo.OperationState)
-            << "; IsCancelled = " << operationInfo.IsCancelled);
+            << "; IsCancelled = " << operationInfo.IsCancelled
+            << "; ValidationFailed = " << operationInfo.ValidationFailed);
 
         switch (operationInfo.OperationState) {
             case TSetColumnConstraintOperationInfo::EOperationState::Invalid: {
@@ -662,15 +665,6 @@ public:
                 break;
             }
             case TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites: {
-                // If cancelled, skip to Finishing to release locks without setting constraint
-                if (operationInfo.IsCancelled) {
-                    LOG_I("TTxProgressSetColumnConstraint: operation cancelled in LockingNullWrites, jumping to Finishing, id# " << BuildId);
-                    NIceDb::TNiceDb db(txc.DB);
-                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
-                    Progress(BuildId);
-                    break;
-                }
-
                 if (operationInfo.LockNullWritesTxId == InvalidTxId) {
                     AllocateTxId(BuildId);
                 } else if (operationInfo.LockNullWritesTxStatus == NKikimrScheme::StatusSuccess) {
@@ -686,8 +680,13 @@ public:
             }
             case TSetColumnConstraintOperationInfo::EOperationState::Validating: {
                 // If cancelled, skip to Finishing to release locks without setting constraint
-                if (operationInfo.IsCancelled) {
-                    LOG_I("TTxProgressSetColumnConstraint: operation cancelled in Validating, jumping to Finishing, id# " << BuildId);
+                if (operationInfo.IsCancelled || operationInfo.ValidationFailed) {
+                    if (operationInfo.IsCancelled) {
+                        LOG_I("TTxProgressSetColumnConstraint: operation cancelled in Validating, jumping to Finishing, id# " << BuildId);
+                    } else {
+                        LOG_I("TTxProgressSetColumnConstraint: validation failed in Validating, jumping to Finishing, id# " << BuildId);
+                    }
+
                     NIceDb::TNiceDb db(txc.DB);
                     ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
                     Progress(BuildId);

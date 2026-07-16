@@ -100,6 +100,54 @@ Y_UNIT_TEST_SUITE(DDisk) {
             return responses;
         }
 
+        // Allocate a single direct block group via the new-style DirectBlockGroupOperations
+        // (as opposed to the compat Queries path) so that DDisks/PersistentBuffers can later
+        // be individually manipulated (deleted, reassigned, etc.) by DirectBlockGroupId.
+        NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TDirectBlockGroup
+        DefineDirectBlockGroup(ui64 directBlockGroupId, ui32 numDDisks, ui32 numChunksPerDDisk, ui32 numPersistentBuffers) {
+            auto ev = std::make_unique<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+            auto& r = ev->Record;
+            r.SetDDiskPoolName("ddisk_pool");
+            r.SetPersistentBufferDDiskPoolName("ddisk_pool");
+            r.SetTabletId(1);
+            auto *op = r.AddDirectBlockGroupOperations();
+            op->SetDirectBlockGroupId(directBlockGroupId);
+            auto *def = op->MutableDefineDirectBlockGroup();
+            def->SetNumDDisks(numDDisks);
+            def->SetNumChunksPerDDisk(numChunksPerDDisk);
+            def->SetNumPersistentBuffers(numPersistentBuffers);
+            // Use a fresh edge actor for every request: WaitForEdgeActorEvent()
+            // consumes/terminates the edge actor on capture by default (termOnCapture=true),
+            // so it can't be safely reused across multiple requests.
+            TActorId edge = Env.Runtime->AllocateEdgeActor(Env.Settings.ControllerNodeId, __FILE__, __LINE__);
+            Env.Runtime->SendToPipe(MakeBSControllerID(), edge, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+            auto response = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>(edge);
+            auto& rr = response->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL_C(rr.GetStatus(), NKikimrProto::OK, rr.GetErrorReason());
+            UNIT_ASSERT_VALUES_EQUAL(rr.DirectBlockGroupsSize(), 1);
+            return rr.GetDirectBlockGroups(0);
+        }
+
+        // Send an arbitrary set of DirectBlockGroupOperation commands for a given
+        // direct block group id and return the whole result record (including status).
+        NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult SendDirectBlockGroupOperation(
+                ui64 directBlockGroupId,
+                std::function<void(NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroup::TDirectBlockGroupOperation*)> fill) {
+            auto ev = std::make_unique<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+            auto& r = ev->Record;
+            r.SetDDiskPoolName("ddisk_pool");
+            r.SetPersistentBufferDDiskPoolName("ddisk_pool");
+            r.SetTabletId(1);
+            auto *op = r.AddDirectBlockGroupOperations();
+            op->SetDirectBlockGroupId(directBlockGroupId);
+            fill(op);
+            // Fresh edge actor, see comment in DefineDirectBlockGroup() above.
+            TActorId edge = Env.Runtime->AllocateEdgeActor(Env.Settings.ControllerNodeId, __FILE__, __LINE__);
+            Env.Runtime->SendToPipe(MakeBSControllerID(), edge, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+            auto response = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>(edge);
+            return response->Get()->Record;
+        }
+
         void GreetDDisks() {
             Creds.TabletId = 1;
             Creds.Generation = 1;
@@ -1363,5 +1411,138 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
         UNIT_ASSERT_C(foundReleasedChunk,
             "At least one chunk that held persistent-buffer data must have been released back to PDisk");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Tests for TDirectBlockGroupOperation::DeletePersistentBuffers and
+    // TDirectBlockGroupOperation::DeleteDDisks (ddisk.cpp handling of
+    // op.GetDeletePersistentBuffers() / op.GetDeleteDDisks()).
+    // ─────────────────────────────────────────────────────────────────────────
+
+    Y_UNIT_TEST(DeletePersistentBufferRemovesEntry) {
+        TDDiskTestContext f;
+        auto group = f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/2,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/2);
+        UNIT_ASSERT_VALUES_EQUAL(group.DDiskIdSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(group.PersistentBufferDDiskIdSize(), 2);
+
+        const auto pbToDelete = group.GetPersistentBufferDDiskId(0);
+
+        auto rr = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            auto *cmd = op->AddDeletePersistentBuffers();
+            cmd->MutablePersistentBufferId()->CopyFrom(pbToDelete);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(rr.GetStatus(), NKikimrProto::OK, rr.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL(rr.DirectBlockGroupsSize(), 1);
+
+        const auto& updated = rr.GetDirectBlockGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(updated.PersistentBufferDDiskIdSize(), 1);
+        // the remaining persistent buffer must be the one we did NOT delete
+        UNIT_ASSERT(TDDiskId(updated.GetPersistentBufferDDiskId(0)) == TDDiskId(group.GetPersistentBufferDDiskId(1)));
+        // DDisks themselves are untouched by persistent buffer deletion
+        UNIT_ASSERT_VALUES_EQUAL(updated.DDiskIdSize(), 2);
+    }
+
+    Y_UNIT_TEST(DeletePersistentBufferNotFoundReturnsError) {
+        TDDiskTestContext f;
+        f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/2,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+
+        auto rr = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            auto *cmd = op->AddDeletePersistentBuffers();
+            // bogus, never-allocated identifier
+            cmd->MutablePersistentBufferId()->SetNodeId(999);
+            cmd->MutablePersistentBufferId()->SetPDiskId(999);
+            cmd->MutablePersistentBufferId()->SetDDiskSlotId(999);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(rr.GetStatus(), NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(rr.GetErrorReason(), "PersistentBuffer not found");
+    }
+
+    Y_UNIT_TEST(DeleteDDiskRemovesEntry) {
+        TDDiskTestContext f;
+        auto group = f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/3,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+        UNIT_ASSERT_VALUES_EQUAL(group.DDiskIdSize(), 3);
+
+        const auto ddiskToDelete = group.GetDDiskId(2); // delete the last one so trimming kicks in
+
+        auto rr = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            auto *cmd = op->AddDeleteDDisks();
+            cmd->MutableDDiskId()->CopyFrom(ddiskToDelete);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(rr.GetStatus(), NKikimrProto::OK, rr.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL(rr.DirectBlockGroupsSize(), 1);
+
+        const auto& updated = rr.GetDirectBlockGroups(0);
+        // the trailing empty item gets trimmed away entirely
+        UNIT_ASSERT_VALUES_EQUAL(updated.DDiskIdSize(), 2);
+        for (ui32 i = 0; i < 2; ++i) {
+            UNIT_ASSERT(TDDiskId(updated.GetDDiskId(i)) == TDDiskId(group.GetDDiskId(i)));
+        }
+        // persistent buffers are untouched by DDisk deletion
+        UNIT_ASSERT_VALUES_EQUAL(updated.PersistentBufferDDiskIdSize(), 1);
+    }
+
+    Y_UNIT_TEST(DeleteDDiskNotFoundReturnsError) {
+        TDDiskTestContext f;
+        f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/2,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+
+        auto rr = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            auto *cmd = op->AddDeleteDDisks();
+            cmd->MutableDDiskId()->SetNodeId(999);
+            cmd->MutableDDiskId()->SetPDiskId(999);
+            cmd->MutableDDiskId()->SetDDiskSlotId(999);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(rr.GetStatus(), NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(rr.GetErrorReason(), "DDisk not found");
+    }
+
+    Y_UNIT_TEST(DeleteMiddleDDiskRemovesEntry) {
+        TDDiskTestContext f;
+        auto group = f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/3,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+        UNIT_ASSERT_VALUES_EQUAL(group.DDiskIdSize(), 3);
+
+        const auto ddiskToDelete = group.GetDDiskId(1); // middle one
+
+        auto rr = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            auto *cmd = op->AddDeleteDDisks();
+            cmd->MutableDDiskId()->CopyFrom(ddiskToDelete);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(rr.GetStatus(), NKikimrProto::OK, rr.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL(rr.DirectBlockGroupsSize(), 1);
+
+        const auto& updated = rr.GetDirectBlockGroups(0);
+        // the deleted middle entry must be removed from the list entirely --
+        // no hole is left behind, and the remaining entries keep their relative order
+        UNIT_ASSERT_VALUES_EQUAL(updated.DDiskIdSize(), 2);
+        UNIT_ASSERT(TDDiskId(updated.GetDDiskId(0)) == TDDiskId(group.GetDDiskId(0)));
+        UNIT_ASSERT(TDDiskId(updated.GetDDiskId(1)) == TDDiskId(group.GetDDiskId(2)));
+        // persistent buffers are untouched by DDisk deletion
+        UNIT_ASSERT_VALUES_EQUAL(updated.PersistentBufferDDiskIdSize(), 1);
+    }
+
+    Y_UNIT_TEST(DeleteAllPersistentBuffersAndDDisks) {
+        TDDiskTestContext f;
+        auto group = f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/2,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/2);
+
+        auto rr = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            for (const auto& pb : group.GetPersistentBufferDDiskId()) {
+                op->AddDeletePersistentBuffers()->MutablePersistentBufferId()->CopyFrom(pb);
+            }
+            for (const auto& dd : group.GetDDiskId()) {
+                op->AddDeleteDDisks()->MutableDDiskId()->CopyFrom(dd);
+            }
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(rr.GetStatus(), NKikimrProto::OK, rr.GetErrorReason());
+        UNIT_ASSERT_VALUES_EQUAL(rr.DirectBlockGroupsSize(), 1);
+
+        const auto& updated = rr.GetDirectBlockGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(updated.PersistentBufferDDiskIdSize(), 0);
+        // both DDisks removed and the last one had zero claim -> full trim
+        UNIT_ASSERT_VALUES_EQUAL(updated.DDiskIdSize(), 0);
     }
 }

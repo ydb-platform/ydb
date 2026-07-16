@@ -31,7 +31,7 @@ WITH (
     SCHEMA = (
         Data String
     ),
-    STREAMING = TRUE
+    STREAMING = "TRUE"
 )
 LIMIT 1
 ```
@@ -54,7 +54,7 @@ WITH (
         Level String NOT NULL,
         Host String NOT NULL
     ),
-    STREAMING = TRUE
+    STREAMING = "TRUE"
 )
 LIMIT 5
 ```
@@ -63,4 +63,4 @@ LIMIT 5
 
 * [{#T}](../../concepts/streaming-query.md)
 * [{#T}](../../dev/streaming-query/streaming-query-formats.md) — supported data formats
-* [{#T}](../../yql/reference/syntax/select/streaming.md) — `STREAMING = TRUE` in the YQL reference
+* [{#T}](../../yql/reference/syntax/select/streaming.md) — `STREAMING = "TRUE"` in the YQL reference

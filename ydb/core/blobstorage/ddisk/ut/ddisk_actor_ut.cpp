@@ -335,7 +335,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             return !blockedPersistentBufferPoison && ++eventsProcessed <= 200;
         });
         UNIT_ASSERT_C(blockedPersistentBufferPoison, "DDisk must poison its persistent buffer actor");
-        UNIT_ASSERT(ctx.Runtime.WrapInActorContext(ddiskActorId, [](IActor*) {}));
+        UNIT_ASSERT(!ctx.Runtime.WrapInActorContext(ddiskActorId, [](IActor*) {}));
         UNIT_ASSERT(ctx.Runtime.WrapInActorContext(persistentBufferActorId, [](IActor*) {}));
 
         ctx.Runtime.FilterFunction = {};

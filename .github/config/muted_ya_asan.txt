@@ -984,14 +984,10 @@ ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_drop_table_du
 ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_rename_table_during_export
 ydb/tests/olap/s3_import test_tpch_import.py.TestS3TpchImport.test_import_and_export
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
-ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
-ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
 ydb/tests/stress/reconfig_state_storage_workload/tests test_state_storage_workload.py.TestReconfigStateStorageWorkload.test_state_storage
-ydb/tests/stress/simple_queue/tests py3test.sole chunk
-ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[light-column]
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_0
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1

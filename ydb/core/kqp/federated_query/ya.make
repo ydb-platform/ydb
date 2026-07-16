@@ -12,6 +12,7 @@ PEERDIR(
     ydb/library/logger
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/generic/connector/libcpp
+    ydb/library/yql/providers/pq/comp_nodes
     ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/transform
     ydb/library/yql/providers/pq/gateway/native

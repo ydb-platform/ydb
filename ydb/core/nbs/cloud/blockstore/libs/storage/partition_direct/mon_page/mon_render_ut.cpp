@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .VChunk =
                 TVChunkSnapshot{
                     .VChunkConfig = config,
-                    .SafeBarrier = 100,
+                    .SafeBarrier = TRecordId{.Generation = 1, .Lsn = 100},
                     .DirtyMapDump = "DDiskStates: dump-text",
                 },
         };

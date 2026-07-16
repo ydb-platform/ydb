@@ -4,6 +4,7 @@ SRCS(
     block_range_algorithms.cpp
     block_range_map.cpp
     block_range.cpp
+    record_id.cpp
     thread_checker.cpp
 )
 

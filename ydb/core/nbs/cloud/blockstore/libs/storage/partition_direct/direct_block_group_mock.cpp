@@ -206,6 +206,12 @@ TExecutorPtr TDirectBlockGroupMock::GetExecutor()
     return Executor;
 }
 
+ui32 TDirectBlockGroupMock::GetTabletGeneration() const
+{
+    // Tests run within a single tablet generation.
+    return 1;
+}
+
 IOraclePtr TDirectBlockGroupMock::GetOracle()
 {
     return &Oracle;
@@ -254,7 +260,7 @@ NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroupMock::ReadBlocksFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    ui64 lsn,
+    TRecordId recordId,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
@@ -262,7 +268,7 @@ TDirectBlockGroupMock::ReadBlocksFromPBuffer(
     return ReadBlocksFromPBufferHandler(
         vChunkIndex,
         hostIndex,
-        lsn,
+        recordId,
         range,
         guardedSglist,
         traceId);
@@ -288,7 +294,7 @@ NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroupMock::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    ui64 lsn,
+    TRecordId recordId,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
@@ -296,7 +302,7 @@ TDirectBlockGroupMock::WriteBlocksToPBuffer(
     return WriteBlocksToPBufferHandler(
         vChunkIndex,
         hostIndex,
-        lsn,
+        recordId,
         range,
         guardedSglist,
         traceId);
@@ -306,7 +312,7 @@ void TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
     ui32 vChunkIndex,
     THostIndex coordinatorHostIndex,
     THostMask hostIndexes,
-    ui64 lsn,
+    TRecordId recordId,
     TBlockRange64 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
@@ -317,7 +323,7 @@ void TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
         vChunkIndex,
         coordinatorHostIndex,
         hostIndexes,
-        lsn,
+        recordId,
         range,
         replyTimeout,
         guardedSglist,
@@ -354,10 +360,10 @@ void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)
     Y_UNUSED(lsn);
 }
 
-NThreading::TFuture<std::optional<ui64>>
+NThreading::TFuture<std::optional<TRecordId>>
 TDirectBlockGroupMock::GatherSafeBarrierForErase()
 {
-    return NThreading::MakeFuture<std::optional<ui64>>(std::nullopt);
+    return NThreading::MakeFuture<std::optional<TRecordId>>(std::nullopt);
 }
 
 NThreading::TFuture<TDBGRestoreResponse>

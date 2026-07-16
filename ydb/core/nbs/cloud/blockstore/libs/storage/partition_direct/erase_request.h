@@ -21,8 +21,8 @@ public:
     struct TResponse
     {
         THostIndex Host = InvalidHostIndex;
-        TVector<ui64> EraseOk;
-        TVector<ui64> EraseFailed;
+        TVector<TRecordId> EraseOk;
+        TVector<TRecordId> EraseFailed;
     };
 
     TEraseRequestExecutor(
@@ -45,7 +45,7 @@ public:
 private:
     void SendEraseRequest(THostIndex host);
     void OnEraseResponse(const TDBGEraseResponse& response);
-    void Reply(TVector<ui64> eraseOk, TVector<ui64> eraseFailed);
+    void Reply(TVector<TRecordId> eraseOk, TVector<TRecordId> eraseFailed);
 
     void ScheduleRequestTimeout();
     void OnRequestTimeout();

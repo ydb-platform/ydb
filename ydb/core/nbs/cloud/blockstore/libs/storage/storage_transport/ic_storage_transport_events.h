@@ -114,7 +114,7 @@ struct TEvTransportPrivate
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
-        const TVector<ui64> Lsns;
+        const TVector<TRecordId> RecordIds;
         NWilson::TTraceId TraceId;
         NThreading::TPromise<TResult> Promise =
             NThreading::NewPromise<TResult>();
@@ -122,11 +122,11 @@ struct TEvTransportPrivate
         TBatchEraseFromPBuffer(
             const NActors::TActorId serviceId,
             const NKikimr::NDDisk::TQueryCredentials& credentials,
-            TVector<ui64> lsns,
+            TVector<TRecordId> recordIds,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
-            , Lsns(std::move(lsns))
+            , RecordIds(std::move(recordIds))
             , TraceId(std::move(traceId))
         {}
 
@@ -167,7 +167,7 @@ struct TEvTransportPrivate
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
         const NKikimr::NDDisk::TBlockSelector Selector;
-        const ui64 Lsn;
+        const TRecordId RecordId;
         const NKikimr::NDDisk::TReadInstruction Instruction;
         TGuardedSgList Data;
         NWilson::TTraceId TraceId;
@@ -178,14 +178,14 @@ struct TEvTransportPrivate
             const NActors::TActorId serviceId,
             const NKikimr::NDDisk::TQueryCredentials& credentials,
             const NKikimr::NDDisk::TBlockSelector& selector,
-            const ui64 lsn,
+            const TRecordId recordId,
             const NKikimr::NDDisk::TReadInstruction instruction,
             const TGuardedSgList& data,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
             , Selector(selector)
-            , Lsn(lsn)
+            , RecordId(recordId)
             , Instruction(instruction)
             , Data(data)
             , TraceId(std::move(traceId))
@@ -233,7 +233,7 @@ struct TEvTransportPrivate
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
         const TVector<NKikimr::NDDisk::TBlockSelector> Selectors;
-        const TVector<ui64> Lsns;
+        const TVector<TRecordId> RecordIds;
         const NKikimr::NBsController::TDDiskId PBufferId;
         const NKikimr::NDDisk::TQueryCredentials PBufferCredentials;
         NWilson::TTraceId TraceId;
@@ -244,14 +244,14 @@ struct TEvTransportPrivate
             const NActors::TActorId serviceId,
             const NKikimr::NDDisk::TQueryCredentials& credentials,
             TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-            TVector<ui64> lsns,
+            TVector<TRecordId> recordIds,
             const NKikimr::NBsController::TDDiskId& pBufferId,
             const NKikimr::NDDisk::TQueryCredentials& pBufferCredentials,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
             , Selectors(std::move(selectors))
-            , Lsns(std::move(lsns))
+            , RecordIds(std::move(recordIds))
             , PBufferId(pBufferId)
             , PBufferCredentials(pBufferCredentials)
             , TraceId(std::move(traceId))

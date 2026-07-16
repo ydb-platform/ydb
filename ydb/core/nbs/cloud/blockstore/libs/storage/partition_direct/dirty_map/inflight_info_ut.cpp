@@ -1,5 +1,7 @@
 #include "inflight_info.h"
 
+#include "record_id_test_helpers.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -10,7 +12,7 @@ namespace {
 
 struct TTestReadyQueue: public IReadyQueue
 {
-    void Register(ui64 lsn, EQueueType queueType) override
+    void Register(TRecordId lsn, EQueueType queueType) override
     {
         switch (queueType) {
             case IReadyQueue::EQueueType::Clone: {
@@ -37,7 +39,7 @@ struct TTestReadyQueue: public IReadyQueue
         }
     }
 
-    void UnRegister(ui64 lsn) override
+    void UnRegister(TRecordId lsn) override
     {
         ReadyToErase.erase(lsn);
         ReadyToClone.erase(lsn);
@@ -70,9 +72,9 @@ struct TTestReadyQueue: public IReadyQueue
         return PBufferCounters[host][EPBufferCounter::Locked];
     }
 
-    THashSet<ui64> ReadyToClone;
-    THashSet<ui64> ReadyToFlush;
-    THashSet<ui64> ReadyToErase;
+    THashSet<TRecordId> ReadyToClone;
+    THashSet<TRecordId> ReadyToFlush;
+    THashSet<TRecordId> ReadyToErase;
     TMap<THostIndex, TMap<EPBufferCounter, size_t>> PBufferCounters;
 };
 
@@ -90,23 +92,37 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldHandleRestore)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096, THostIndex{0});
-        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToClone.contains(123));
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeId(123),
+            4096,
+            THostIndex{0});
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToClone.contains(MakeId(123)));
 
         inflightInfo.RestorePBuffer(THostIndex{1});
-        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToClone.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToClone.contains(MakeId(123)));
 
         inflightInfo.RestorePBuffer(THostIndex{2});
-        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToClone.contains(123));
-        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            readyQueue.ReadyToClone.contains(MakeId(123)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToFlush.contains(MakeId(123)));
     }
 
     Y_UNIT_TEST(ShouldHandleConfirmedWrite)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
-        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToFlush.contains(MakeId(123)));
 
         // Start flushes
         UNIT_ASSERT_VALUES_EQUAL(
@@ -121,11 +137,17 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
 
         // Confirm flushes
         inflightInfo.ConfirmFlush(THostIndex{0});
-        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            readyQueue.ReadyToErase.contains(MakeId(123)));
         inflightInfo.ConfirmFlush(THostIndex{1});
-        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            readyQueue.ReadyToErase.contains(MakeId(123)));
         inflightInfo.ConfirmFlush(THostIndex{2});
-        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToErase.contains(MakeId(123)));
 
         // Check erase requests
         inflightInfo.RequestErase(THostIndex{0});
@@ -147,9 +169,11 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldHandleLock)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
-        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToFlush.contains(MakeId(123)));
 
         // Start flushes
         auto l = inflightInfo.RequestFlush(THostIndex{0}, THostMask());
@@ -170,7 +194,9 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.empty());
 
         inflightInfo.UnlockPBuffer();
-        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToErase.contains(MakeId(123)));
 
         // Check erase requests
         inflightInfo.RequestErase(THostIndex{0});
@@ -192,7 +218,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldPutToReadyQueueOnFail)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Flush started
@@ -209,7 +235,9 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         // When a flush fails, the lsn must be queued for a flush again.
         readyQueue.ReadyToFlush.clear();
         inflightInfo.FlushFailed(THostIndex{0});
-        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToFlush.contains(MakeId(123)));
 
         // Restart flush to host 0
         UNIT_ASSERT_VALUES_EQUAL(
@@ -218,11 +246,17 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
 
         // Confirm flushes
         inflightInfo.ConfirmFlush(THostIndex{0});
-        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            readyQueue.ReadyToErase.contains(MakeId(123)));
         inflightInfo.ConfirmFlush(THostIndex{1});
-        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            readyQueue.ReadyToErase.contains(MakeId(123)));
         inflightInfo.ConfirmFlush(THostIndex{2});
-        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToErase.contains(MakeId(123)));
 
         // Erase started
         inflightInfo.RequestErase(THostIndex{0});
@@ -232,14 +266,20 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         // When a erase fails, the lsn must be queued for a erase again.
         readyQueue.ReadyToErase.clear();
         inflightInfo.EraseFailed(THostIndex{0});
-        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToErase.contains(MakeId(123)));
     }
 
     Y_UNIT_TEST(ShouldCountTotalBytesForRestore)
     {
         TTestReadyQueue readyQueue;
         {
-            TInflightInfo inflightInfo(&readyQueue, 123, 4096, THostIndex{0});
+            TInflightInfo inflightInfo(
+                &readyQueue,
+                MakeId(123),
+                4096,
+                THostIndex{0});
 
             inflightInfo.RestorePBuffer(THostIndex{1});
             inflightInfo.RestorePBuffer(THostIndex{2});
@@ -263,7 +303,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     {
         TTestReadyQueue readyQueue;
         {
-            TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+            TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
             inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
             UNIT_ASSERT_VALUES_EQUAL(
@@ -284,7 +324,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldTrackGetEraseNeeded)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Start and confirm flushes to all 3 hosts.
@@ -345,7 +385,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldReturnEraseNeededAfterEraseFailed)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Flush all hosts.
@@ -380,7 +420,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldReturnDDiskReadMaskForPendingWrite)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
 
         // In PBufferPendingWrite state, ReadMask should return DDisk with all
         // hosts enabled (Lsn=0 means DDisk read).
@@ -401,13 +441,13 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         readSource = inflightInfo.ReadMask();
         UNIT_ASSERT_VALUES_EQUAL(false, readSource.OnlyDDisk());
         UNIT_ASSERT_VALUES_EQUAL(false, readSource.Empty());
-        UNIT_ASSERT_VALUES_EQUAL(123, readSource.Lsn);
+        UNIT_ASSERT_VALUES_EQUAL(MakeId(123), readSource.RecordId);
     }
 
     Y_UNIT_TEST(ShouldQuorumReadyFutureForPendingWrite)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
 
         auto future = inflightInfo.GetQuorumReadyFuture();
         UNIT_ASSERT_VALUES_EQUAL(false, future.IsReady());
@@ -424,7 +464,11 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldQuorumReadyFutureForIncompleteWrite)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096, THostIndex{0});
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeId(123),
+            4096,
+            THostIndex{0});
 
         auto future = inflightInfo.GetQuorumReadyFuture();
         UNIT_ASSERT_VALUES_EQUAL(false, future.IsReady());
@@ -441,7 +485,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     {
         TTestReadyQueue readyQueue;
         {
-            TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+            TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
 
             // Pending write should not account any bytes.
             UNIT_ASSERT_VALUES_EQUAL(
@@ -475,7 +519,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldRemoveHostsNoOpWhenNoOverlap)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Hosts 3 and 4 were never written to — RemoveHosts should be a no-op.
@@ -496,7 +540,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldRemoveHostsReleaseBytesInWrittenState)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // All 3 hosts have 4096 bytes in Total.
@@ -521,7 +565,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldRemoveHostsCompleteFlush)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Request flush for all 3 hosts.
@@ -537,7 +581,9 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(
             TInflightInfo::EState::PBufferFlushing,
             inflightInfo.GetState());
-        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            readyQueue.ReadyToErase.contains(MakeId(123)));
 
         // Remove host 2 — flush should now be complete.
         THostMask removed;
@@ -548,7 +594,9 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             TInflightInfo::EState::PBufferFlushed,
             inflightInfo.GetState());
         // Erase should be registered.
-        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToErase.contains(MakeId(123)));
         // Host 2 bytes released.
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
     }
@@ -556,7 +604,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldRemoveHostsCompleteErase)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Flush all hosts.
@@ -597,7 +645,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldRemoveHostsReleaseLockBytesWhenLocked)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Lock PBuffer — this should track locked bytes.
@@ -638,7 +686,7 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
     Y_UNIT_TEST(ShouldRemoveHostsNotRegisterEraseWhenLocked)
     {
         TTestReadyQueue readyQueue;
-        TInflightInfo inflightInfo(&readyQueue, 123, 4096);
+        TInflightInfo inflightInfo(&readyQueue, MakeId(123), 4096);
         inflightInfo.OnWritten(MakePrimaryHosts(), MakePrimaryHosts());
 
         // Request and confirm flush for hosts 0 and 1.
@@ -664,11 +712,15 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(
             TInflightInfo::EState::PBufferFlushed,
             inflightInfo.GetState());
-        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            readyQueue.ReadyToErase.contains(MakeId(123)));
 
         // After unlock, erase should be registered.
         inflightInfo.UnlockPBuffer();
-        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToErase.contains(MakeId(123)));
     }
 }
 

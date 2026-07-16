@@ -17,11 +17,11 @@ namespace {
 
 // GetSafeBarrierForErase asserts it runs on the vchunk's executor thread, so
 // hop onto the executor and bring the value back.
-std::optional<ui64> GetSafeBarrierOnExecutor(
+std::optional<TRecordId> GetSafeBarrierOnExecutor(
     const TExecutorPtr& executor,
     TVChunk& vchunk)
 {
-    auto promise = NThreading::NewPromise<std::optional<ui64>>();
+    auto promise = NThreading::NewPromise<std::optional<TRecordId>>();
     auto future = promise.GetFuture();
     executor->ExecuteSimple(
         [promise = std::move(promise), &vchunk]() mutable
@@ -162,14 +162,13 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         auto future =
             vchunk->WriteBlocksLocal(callContext, request, NWilson::TTraceId());
 
-        // GenerateLsn + RegisterInflightWrite happen as the write is
-        // dispatched, so the safe barrier is held at the generated lsn (123)
-        // right away.
+        // The record id is minted and registered as the write is dispatched,
+        // so the safe barrier is held at the minted record id right away.
         UNIT_ASSERT_VALUES_EQUAL(
             true,
             WaitWriteRequests(3, TDuration::Seconds(10)));
         UNIT_ASSERT_VALUES_EQUAL(
-            123,
+            MakeId(123),
             *GetSafeBarrierOnExecutor(
                 DirectBlockGroup->GetExecutor(),
                 *vchunk));
@@ -183,7 +182,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             result.Error.GetCode(),
             FormatError(result.Error));
         UNIT_ASSERT_VALUES_EQUAL(
-            123,
+            MakeId(123),
             *GetSafeBarrierOnExecutor(
                 DirectBlockGroup->GetExecutor(),
                 *vchunk));
@@ -196,8 +195,8 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
     // Reporting "no constraint" (nullopt) in that window is indistinguishable
     // from an idle vchunk, so FinishPBufferCleanup would skip it and a
     // tablet-wide barrier erase could wipe the very records the restore is
-    // about to return. An un-restored vchunk must report the blocking bound
-    // (0) instead; cleanup skips its tick on it.
+    // about to return. An un-restored vchunk must report the zero record id
+    // (the blocking bound) instead; cleanup skips its tick on it.
     Y_UNIT_TEST_F(
         ShouldConstrainCleanupBarrierUntilRestoreCompletes,
         TBaseFixture)
@@ -250,7 +249,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             barrierWhileRestoring.has_value(),
             "vchunk with a pending restore reported 'no constraint' to the "
             "cleanup barrier gather");
-        UNIT_ASSERT_VALUES_EQUAL(0, *barrierWhileRestoring);
+        UNIT_ASSERT_VALUES_EQUAL(TRecordId{}, *barrierWhileRestoring);
         UNIT_ASSERT(!barrierAfterRestore.has_value());
     }
 

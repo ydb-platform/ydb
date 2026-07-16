@@ -4,6 +4,7 @@
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/record_id.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
@@ -24,6 +25,12 @@ constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
 ////////////////////////////////////////////////////////////////////////////////
 
 TString GenerateRandomString(size_t size);
+
+// Makes a record id for tests, which run within a single tablet generation.
+constexpr TRecordId MakeId(ui64 lsn)
+{
+    return {.Generation = 1, .Lsn = lsn};
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

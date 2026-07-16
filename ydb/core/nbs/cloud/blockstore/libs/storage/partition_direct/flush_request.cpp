@@ -112,23 +112,23 @@ void TFlushRequestExecutor::OnFlushResponse(const TDBGFlushResponse& response)
 {
     Y_ABORT_UNLESS(Hint.Segments.size() == response.Errors.size());
 
-    TVector<ui64> flushOk;
-    TVector<ui64> flushFailed;
+    TVector<TRecordId> flushOk;
+    TVector<TRecordId> flushFailed;
     flushOk.reserve(Hint.Segments.size());
     for (size_t i = 0; i < Hint.Segments.size(); ++i) {
         if (HasError(response.Errors[i])) {
             LOG_ERROR(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,
-                "%s Flush failed: %lu %s %s",
+                "%s Flush failed: %s %s %s",
                 LogTitle.GetWithTime().c_str(),
-                Hint.Segments[i].Lsn,
+                Hint.Segments[i].RecordId.Print().c_str(),
                 Hint.Segments[i].Range.Print().c_str(),
                 FormatError(response.Errors[i]).c_str());
 
-            flushFailed.push_back(Hint.Segments[i].Lsn);
+            flushFailed.push_back(Hint.Segments[i].RecordId);
         } else {
-            flushOk.push_back(Hint.Segments[i].Lsn);
+            flushOk.push_back(Hint.Segments[i].RecordId);
         }
     }
 
@@ -136,8 +136,8 @@ void TFlushRequestExecutor::OnFlushResponse(const TDBGFlushResponse& response)
 }
 
 void TFlushRequestExecutor::Reply(
-    TVector<ui64> flushOk,
-    TVector<ui64> flushFailed)
+    TVector<TRecordId> flushOk,
+    TVector<TRecordId> flushFailed)
 {
     Promise.TrySetValue(TResponse{
         .Route = Route,
@@ -180,7 +180,7 @@ void TFlushRequestExecutor::OnRequestTimeout()
         "%s OnRequestTimeout.",
         LogTitle.GetWithTime().c_str());
 
-    Reply({}, MakeLsnVector(Hint.Segments));
+    Reply({}, MakeRecordIds(Hint.Segments));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

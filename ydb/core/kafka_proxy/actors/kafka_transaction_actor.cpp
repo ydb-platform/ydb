@@ -127,7 +127,7 @@ namespace NKafka {
             {"logPrefix", LogPrefix()},
             {"lastSentToKqpRequest", GetAsStr(LastSentToKqpRequest)});
         if (auto error = GetErrorFromYdbResponse(ev)) {
-            YDB_LOG_WARN("",
+            YDB_LOG_WARN(error,
                 {"logPrefix", LogPrefix()},
                 {"error", error});
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());
@@ -319,9 +319,8 @@ namespace NKafka {
         int expectedResultsSize = OffsetsToCommit.empty() ? 1 : 2; // if there were no consumer in transactions we do not send request to consumer table
         if (expectedResultsSize != resultsSize) {
             TString error = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected " << expectedResultsSize << ", got " << resultsSize << ".";
-            YDB_LOG_WARN("",
-                {"logPrefix", LogPrefix()},
-                {"error", error});
+            YDB_LOG_WARN(error,
+                {"logPrefix", LogPrefix()});
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
             Die(ctx);
             return;
@@ -333,17 +332,15 @@ namespace NKafka {
             producerState = ParseProducerState(response);
         } catch (const yexception& y) {
             TString error = TStringBuilder() << "Error parsing producer state response from KQP. Reason: " << y.what();
-            YDB_LOG_WARN("",
-                {"logPrefix", LogPrefix()},
-                {"error", error});
+            YDB_LOG_WARN(error,
+                {"logPrefix", LogPrefix()});
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
             Die(ctx);
             return;
         }
         if (auto error = GetErrorInProducerState(producerState)) {
-            YDB_LOG_WARN("",
-                {"logPrefix", LogPrefix()},
-                {"error", error});
+            YDB_LOG_WARN(error,
+                {"logPrefix", LogPrefix()});
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
             Die(ctx);
             return;
@@ -353,9 +350,8 @@ namespace NKafka {
             // parse and validate consumers
             std::unordered_map<TString, i32> consumerGenerationsByName = ParseConsumersGenerations(response);
             if (auto error = GetErrorInConsumersStates(consumerGenerationsByName)) {
-                YDB_LOG_WARN("",
-                    {"logPrefix", LogPrefix()},
-                    {"error", error});
+                YDB_LOG_WARN(error,
+                    {"logPrefix", LogPrefix()});
                 SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
                 Die(ctx);
                 return;

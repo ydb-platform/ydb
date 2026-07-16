@@ -67,9 +67,8 @@ void TKafkaListGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, con
     YDB_LOG_DEBUG("Received query response from KQP ListGroups request",
         {"logPrefix", LogPrefix()});
     if (auto error = GetErrorFromYdbResponse(ev)) {
-        YDB_LOG_WARN("",
-            {"logPrefix", LogPrefix()},
-            {"error", error});
+        YDB_LOG_WARN(error,
+            {"logPrefix", LogPrefix()});
         SendFailResponse(EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());
         Die(ctx);
         return;
@@ -84,9 +83,9 @@ void TKafkaListGroupsActor::HandleSelectResponse(const NKqp::TEvKqp::TEvQueryRes
         {"responseResults", response.Record.GetResponse().GetYdbResults().size()});
     if (response.Record.GetResponse().GetYdbResults().size() != 1) {
         TString errorMessage = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected 1, got " << response.Record.GetResponse().GetYdbResults().size() << ".";
-        YDB_LOG_WARN("",
+        YDB_LOG_WARN("KQP returned wrong number of result sets size!=1 on SELECT query",
             {"logPrefix", LogPrefix()},
-            {"errorMessage", errorMessage});
+            {"responseResults", response.Record.GetResponse().GetYdbResults().size()});
         SendFailResponse(EKafkaErrors::BROKER_NOT_AVAILABLE, errorMessage);
         Die(ctx);
         return;

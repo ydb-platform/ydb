@@ -212,7 +212,9 @@ protected:
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "TKafkaConnection"},
             {"selfId", SelfId()},
-            {"state", state});
+            {"state", state},
+            {"rawSocket", GetRawSocket()},
+            {"address", Address->ToString()});
     }
 
     void SendRequestMetrics(const TActorContext& ctx) {

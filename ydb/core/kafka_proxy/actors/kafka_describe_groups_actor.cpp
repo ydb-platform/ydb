@@ -77,9 +77,8 @@ void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev,
     YDB_LOG_DEBUG("Received query response from KQP DescribeGroups request",
         {"logPrefix", LogPrefix()});
     if (auto error = GetErrorFromYdbResponse(ev)) {
-        YDB_LOG_WARN("",
-            {"logPrefix", LogPrefix()},
-            {"error", error});
+        YDB_LOG_WARN(error,
+            {"logPrefix", LogPrefix()});
         SendFailResponse(EKafkaErrors::BROKER_NOT_AVAILABLE, *error);
         Die(ctx);
         return;
@@ -117,10 +116,9 @@ void TKafkaDescribeGroupsActor::HandleSelectResponse(const NKqp::TEvKqp::TEvQuer
         {"logPrefix", LogPrefix()},
         {"size", response.Record.GetResponse().GetYdbResults().size()});
     if (response.Record.GetResponse().GetYdbResults().size() != 2) {
-        TString errorMessage = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected 2, got " << response.Record.GetResponse().GetYdbResults().size() << ".";
-        YDB_LOG_WARN("",
+        YDB_LOG_WARN("KQP returned wrong number of result sets size!=2 on SELECT query",
             {"logPrefix", LogPrefix()},
-            {"errorMessage", errorMessage});
+            {"size",  response.Record.GetResponse().GetYdbResults().size()});
         return;
     }
     ParseGroupDescriptionMetadata(response);

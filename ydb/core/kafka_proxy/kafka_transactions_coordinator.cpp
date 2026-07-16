@@ -121,9 +121,8 @@ namespace NKafka {
 
     template<class ErrorResponseType, class RequestType>
     void TTransactionsCoordinator::SendProducerFencedResponse(TMessagePtr<RequestType> kafkaRequest, const TString& error, const TTransactionalRequest& txnRequestDetails) {
-        YDB_LOG_WARN("",
-            {"logPrefix", LogPrefix()},
-            {"error", error});
+        YDB_LOG_WARN(error,
+            {"logPrefix", LogPrefix()});
         std::shared_ptr<ErrorResponseType> response = NKafkaTransactions::BuildResponse<ErrorResponseType>(kafkaRequest, EKafkaErrors::PRODUCER_FENCED);
         Send(txnRequestDetails.ConnectionId, new TEvKafka::TEvResponse(txnRequestDetails.CorrelationId, response, EKafkaErrors::PRODUCER_FENCED));
     };

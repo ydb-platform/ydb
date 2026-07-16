@@ -558,5 +558,5 @@ message TTableServiceConfig {
     optional bool EnableAutoIndexSelectionForIndexLookupJoin = 139 [default = false, (InvalidateCompileCache) = true];
 
     // Defer join-filter inlining until after cost-based optimization.
-    optional bool EnableInlineJoinFiltersAfterCBO = 140 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableInlineJoinFiltersAfterCBO = 140 [default = true, (InvalidateCompileCache) = true];
 };

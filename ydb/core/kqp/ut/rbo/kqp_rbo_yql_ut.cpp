@@ -508,7 +508,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestFilter(ColumnStore);
     }
 
-    NKikimrConfig::TAppConfig CreateExplainPlanTestAppConfig(bool inlineJoinFiltersAfterCBO = false) {
+    NKikimrConfig::TAppConfig CreateExplainPlanTestAppConfig(bool inlineJoinFiltersAfterCBO = true) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -591,7 +591,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     class TExplainPlanTestContext {
     public:
-        explicit TExplainPlanTestContext(bool inlineJoinFiltersAfterCBO = false)
+        explicit TExplainPlanTestContext(bool inlineJoinFiltersAfterCBO = true)
             : AppConfig(CreateExplainPlanTestAppConfig(inlineJoinFiltersAfterCBO))
             , Kikimr(NKqp::TKikimrSettings(AppConfig).SetWithSampleTables(false))
             , Session(CreateSession())
@@ -2759,8 +2759,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
-        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(true);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
 
         auto db = kikimr.GetTableClient();

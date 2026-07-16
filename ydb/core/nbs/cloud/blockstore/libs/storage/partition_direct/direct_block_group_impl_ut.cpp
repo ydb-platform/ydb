@@ -66,6 +66,13 @@ void ResolveConnects(
     }
 }
 
+NWilson::TTraceId CreateTraceId()
+{
+    return NWilson::TTraceId::NewTraceId(
+        NWilson::TTraceId::MAX_VERBOSITY,
+        NWilson::TTraceId::MAX_TIME_TO_LIVE);
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -146,7 +153,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                         0,
                         range,
                         MakeSgList(readyBuffer),
-                        NWilson::TTraceId());
+                        CreateTraceId());
                 });
             UNIT_ASSERT_VALUES_EQUAL(
                 S_OK,
@@ -165,7 +172,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                         1,
                         range,
                         MakeSgList(readyWriteBuffer),
-                        NWilson::TTraceId());
+                        CreateTraceId());
                 });
             UNIT_ASSERT_VALUES_EQUAL(
                 S_OK,
@@ -207,16 +214,17 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     3,
                     range,
                     MakeSgList(pendingBuffer),
-                    NWilson::TTraceId());
+                    CreateTraceId());
             });
+        auto inFlightRead = WaitFuture(executor, pendingRead, WaitTimeout);
         DrainExecutor(executor);
-        UNIT_ASSERT(!pendingRead.HasValue());
+        UNIT_ASSERT(!inFlightRead.HasValue());
 
         // Establishing the session unblocks the read.
         pendingHost3.SetValue(TStorageTransportMock::MakeConnectResult());
-        UNIT_ASSERT_VALUES_EQUAL(
-            S_OK,
-            GetResponse(pendingRead).Error.GetCode());
+        DrainExecutor(executor);
+        auto response = WaitFuture(executor, inFlightRead, WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
     }
 
     // The tablet-wide "all DBGs ready" gate (WaitAll over per-DBG
@@ -296,7 +304,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     ddiskHost,   // host
                     TBlockRange64::WithLength(0, 3),
                     guardedSglist,
-                    NWilson::TTraceId());
+                    CreateTraceId());
             });
         auto readyReadResponse =
             pendingRead.GetValue(WaitTimeout).GetValue(WaitTimeout);
@@ -359,7 +367,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
-                    NWilson::TTraceId(),
+                    CreateTraceId(),
                     cb);
                 return future;
             });
@@ -422,7 +430,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     pbufferHost,
                     ddiskHost,
                     segments,
-                    NWilson::TTraceId());
+                    CreateTraceId());
             });
         auto flushResponse =
             pendingFlush.GetValue(WaitTimeout).GetValue(WaitTimeout);
@@ -485,7 +493,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     pbufferHost,
                     ddiskHost,
                     segments,
-                    NWilson::TTraceId());
+                    CreateTraceId());
             });
         auto flushResponse =
             pendingFlush.GetValue(WaitTimeout).GetValue(WaitTimeout);
@@ -564,7 +572,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
-                    NWilson::TTraceId(),
+                    CreateTraceId(),
                     cb);
                 return future;
             });
@@ -644,7 +652,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
-                    NWilson::TTraceId(),
+                    CreateTraceId(),
                     cb);
                 return future;
             });
@@ -722,10 +730,12 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,
                     range,
                     MakeSgList(pendingBuffer),
-                    NWilson::TTraceId());
+                    CreateTraceId());
             });
-        DrainExecutor(executor);
-        UNIT_ASSERT(!pendingRead.HasValue());
+
+        auto inFlightRead = WaitFuture(executor, pendingRead, WaitTimeout);
+        DoAllExecutorAndRuntimeWork(executor);
+        UNIT_ASSERT(!inFlightRead.HasValue());
 
         // Resolve the connect with BLOCKED -> stale generation, suicide.
         pendingConnect0.SetValue(TStorageTransportMock::MakeConnectResult(
@@ -733,9 +743,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED));
 
         // The suspended read is rejected once the session becomes Broken.
-        UNIT_ASSERT_VALUES_EQUAL(
-            E_REJECTED,
-            GetResponse(pendingRead).Error.GetCode());
+        auto response = WaitFuture(executor, inFlightRead, WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(E_REJECTED, response.Error.GetCode());
 
         const auto state = GetBlockedDetected(executor, dbg, 0, WaitTimeout);
         UNIT_ASSERT(state.DDiskSessionBroken);
@@ -779,7 +788,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,
                     range,
                     MakeSgList(writeBuffer),
-                    NWilson::TTraceId());
+                    CreateTraceId());
             });
         UNIT_ASSERT_VALUES_EQUAL(
             E_REJECTED,
@@ -818,7 +827,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,
                     range,
                     MakeSgList(readBuffer),
-                    NWilson::TTraceId());
+                    CreateTraceId());
             });
         UNIT_ASSERT_VALUES_EQUAL(
             E_REJECTED,
@@ -863,7 +872,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     pbufferHost,
                     ddiskHost,
                     segments,
-                    NWilson::TTraceId());
+                    CreateTraceId());
             });
         auto flushResponse =
             pendingFlush.GetValue(WaitTimeout).GetValue(WaitTimeout);
@@ -907,7 +916,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                         host,
                         range,
                         MakeSgList(writeBuffer),
-                        NWilson::TTraceId());
+                        CreateTraceId());
                 });
             UNIT_ASSERT_VALUES_EQUAL(
                 E_REJECTED,
@@ -1012,7 +1021,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     TBlockRange64::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
-                    NWilson::TTraceId(),
+                    CreateTraceId(),
                     cb);
                 return future;
             });
@@ -1298,7 +1307,7 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
         const auto range = TBlockRange64::WithLength(0, 1);
         TString buffer(DefaultBlockSize, 'r');
 
-        // The read on host 0 suspends inside WaitForSessionLock.
+        // The read on host 0 suspends inside ReadBlocksFromDDisk.
         auto pendingRead = RunOnExecutor(
             executor,
             [&]
@@ -1308,10 +1317,11 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
                     0,
                     range,
                     MakeSgList(buffer),
-                    NWilson::TTraceId());
+                    CreateTraceId());
             });
+        auto inFlightRead = WaitFuture(executor, pendingRead, WaitTimeout);
         DoAllExecutorAndRuntimeWork(executor);
-        UNIT_ASSERT(!pendingRead.HasValue());
+        UNIT_ASSERT(!inFlightRead.HasValue());
 
         // The disconnect resets the session: ResetSession wakes the waiter with
         // an error.
@@ -1320,9 +1330,7 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
             ddisks[0],
             transportPtr->GetNodeId());
 
-        auto innerRead = WaitFuture(executor, pendingRead, WaitTimeout);
-        UNIT_ASSERT(pendingRead.HasValue());
-        auto response = WaitFuture(executor, innerRead, WaitTimeout);
+        auto response = WaitFuture(executor, inFlightRead, WaitTimeout);
         UNIT_ASSERT_VALUES_UNEQUAL(S_OK, response.Error.GetCode());
     }
 
@@ -1355,12 +1363,10 @@ Y_UNIT_TEST_SUITE(TSessionsWithRealTransport)
                     0,
                     range,
                     MakeSgList(buffer),
-                    NWilson::TTraceId());
+                    CreateTraceId());
             });
 
-        // The session is already established, so the read does not suspend in
-        // WaitForSessionLock: the outer future resolves immediately, carrying
-        // the still-pending in-flight read future.
+        // The session is already established, so the read does not suspend.
         auto inFlightRead = WaitFuture(executor, pendingRead, WaitTimeout);
         DoAllExecutorAndRuntimeWork(executor);
         UNIT_ASSERT(!inFlightRead.HasValue());

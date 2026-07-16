@@ -87,15 +87,28 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         }
 
         // Truncate the table
+        const auto snapshotBeforeTruncate = NOlap::TSnapshot(planStep, txId);
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
         PlanSchemaTx(runtime, sender, { planStep, txId });
 
-        // After truncation, reading should return no data
+        // Reading at a pre-truncate snapshot must be rejected (barrier = first table version = truncate)
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, snapshotBeforeTruncate);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+            UNIT_ASSERT(reader.IsError());
+            UNIT_ASSERT(!reader.GetErrors().empty());
+            UNIT_ASSERT_STRING_CONTAINS(reader.GetErrors()[0].message(), "snapshot too old for path mapping");
+        }
+
+        // After truncation, reading at truncate snapshot should return no data
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, NOlap::TSnapshot(planStep, txId));
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(!rb);
+            UNIT_ASSERT(!reader.IsError());
         }
     }
 

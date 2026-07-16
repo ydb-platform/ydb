@@ -76,6 +76,34 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdOptional(
     }
 }
 
+std::optional<NOlap::TSnapshot> TTablesManager::GetPathMappingValidFromOptional(
+    const TSchemeShardLocalPathId schemeShardLocalPathId) const {
+    const auto internalPathId = ResolveInternalPathId(schemeShardLocalPathId, false);
+    if (!internalPathId) {
+        return std::nullopt;
+    }
+    const auto* table = Tables.FindPtr(*internalPathId);
+    if (!table) {
+        return std::nullopt;
+    }
+    if (const auto copyVersion = table->GetCopyVersionOptional(schemeShardLocalPathId)) {
+        return *copyVersion;
+    }
+    if (table->GetVersions().empty()) {
+        return std::nullopt;
+    }
+    return *table->GetVersions().begin();
+}
+
+bool TTablesManager::IsPathMappingValidAt(
+    const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& snapshot) const {
+    const auto validFrom = GetPathMappingValidFromOptional(schemeShardLocalPathId);
+    if (!validFrom) {
+        return true;
+    }
+    return !(snapshot < *validFrom);
+}
+
 std::optional<NOlap::TSnapshot> TTablesManager::GetCopyVersionOptional(const TSchemeShardLocalPathId schemeShardLocalPathId) const {
     if (const auto internalPathId = ResolveInternalPathId(schemeShardLocalPathId, false)) {
         if (const auto* table = Tables.FindPtr(*internalPathId)) {
@@ -514,7 +542,9 @@ TInternalPathId TTablesManager::TruncateTable(const TSchemeShardLocalPathId sche
     const auto newPathId = TInternalPathId::FromRawValue(MaxInternalPathId.GetRawValue() + 1);
     MaxInternalPathId = newPathId;
 
-    // Step 4: Register a fresh empty table with the new InternalPathId
+    // Step 4: Register a fresh empty table with the new InternalPathId.
+    // Mapping barrier for old snapshots is derived from the first TableVersionInfo
+    // written by RunTruncateTable::AddTableVersion (same plan version).
     TTableInfo newTable({ TUnifiedPathId::BuildValid(newPathId, schemeShardLocalPathId) });
     RegisterTable(std::move(newTable), db);
 

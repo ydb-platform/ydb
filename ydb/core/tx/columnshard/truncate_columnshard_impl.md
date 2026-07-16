@@ -23,7 +23,12 @@
 - `TSchemeShardLocalPathId` — внешний id пути, которым оперирует SchemeShard;
 - `TInternalPathId` — внутренний id, под которым в движке хранятся данные/порции.
 
-Связь между ними хранится в `TTablesManager::SchemeShardLocalToInternal`.
+Связь хранится в `TTablesManager::SchemeShardLocalToInternal`
+(`SchemeShardLocalPathId → InternalPathId`). Барьер для чтений после TRUNCATE
+**не** лежит в маппинге: при скане он вычисляется как min schema-version
+текущего `InternalPathId` (или `CopyVersion` для copy-пути). После TRUNCATE
+первая `AddTableVersion` нового id = версия усечения — чтения со старым
+снапшотом **отклоняются** (hard cut), а не получают пустую таблицу (см. 5.4, 6.1).
 
 ## 2. Обмен сообщениями со SchemeShard
 
@@ -149,8 +154,9 @@ sequenceDiagram
    (`StatusPreconditionFailed`, см. раздел 2).
   4. Регистрирует свежую пустую `TTableInfo` под новым `InternalPathId`
    (`RegisterTable`): пишет `TableInfo`/`TableInfoV1`, персистит
-   `MaxInternalPathId`, и при наличии индекса вызывает
-   `PrimaryIndex->RegisterTable`.
+   `MaxInternalPathId`, обновляет маппинг `ss → newInternal`, и при наличии
+   индекса вызывает `PrimaryIndex->RegisterTable`. Барьер снапшота появится
+   следом через `AddTableVersion` в `RunTruncateTable` (та же plan-версия).
 
 ### 5.1. Восстановление маппинга после рестарта
 
@@ -161,12 +167,18 @@ sequenceDiagram
 построении `SchemeShardLocalToInternal` — иначе маппинг мог бы указать на dropped
 путь, и таблица стала бы нерезолвимой/незаписываемой после рестарта.
 
+Барьер чтений после рестарта: `GetPathMappingValidFromOptional` берёт live id из
+маппинга и считает `*Versions.begin()` (из загруженного `TableVersionInfo`) либо
+`CopyVersion`. Отдельного поля/`ValidFrom` в маппинге нет.
+
+Инвариант: первая `AddTableVersion` нового id после truncate — на версии truncate.
+
 ### 5.2. Фоновая очистка
 
 `TryFinalizeDropPathOnComplete` при удалении данных старого `InternalPathId`
 стирает маппинг `SchemeShardLocalToInternal` **только если он всё ещё указывает на
-этот старый id** (после TRUNCATE он уже переустановлен на новый id, поэтому
-безусловное стирание было бы ошибкой).
+этот старый id** (после TRUNCATE маппинг уже на новый id, поэтому безусловное
+стирание было бы ошибкой).
 
 ### 5.3. Очередь удаления при нескольких усечениях
 
@@ -187,8 +199,8 @@ sequenceDiagram
   «ворот».
 - **Финализация одной версии не задевает остальные и живой маппинг.**
   `TryFinalizeDropPathOnComplete` удаляет ровно один `pathId` из его версии (и саму
-  версию, если набор опустел) и стирает маппинг лишь при `it->second == pathId`;
-  для старых id это всегда false, т.к. маппинг указывает на новейший живой id.
+  версию, если набор опустел) и стирает маппинг лишь при
+  `it->second == pathId`; для старых id это всегда false.
 - **Переживает рестарт.** `InitFromDB` заново отстраивает всю очередь из
   персистентных drop-версий, а `AddTableInfo` детерминированно выбирает живую
   таблицу для маппинга (см. 5.1).
@@ -201,6 +213,20 @@ sequenceDiagram
 - **Инвариант уникальности.** `AFL_VERIFY(PathsToDrop[version].emplace(pathId).second)`
   рассчитывает на уникальность пары (версия, `InternalPathId`); при штатном потоке
   версии разные, коллизий нет.
+
+### 5.4. Барьер снапшота vs CopyVersion
+
+Барьер truncate при запросе: `CopyVersion`, если путь — copy-алиас; иначе
+`*TTableInfo::Versions.begin()` текущего `InternalPathId` из маппинга.
+
+| | `CopyVersion` | Барьер truncate (derive) |
+|---|---|---|
+| Где | `TPathInfo` на dst после CopyTable | min `Versions` / CopyVersion живого id |
+| Семантика | **пин**: отдать данные «как на момент копии» | **барьер**: `S < barrier` → reject |
+| При `S < version` | `ResolveReadSnapshot` подменяет на CopyVersion | ошибка скана (`BAD_REQUEST`) |
+| При `S >= version` | обычно читают ровно CopyVersion | новый (пустой/живой) `InternalPathId` |
+| GC | пинит через `RegisterReadOnlyTableSnapshot` | не пинит для чтения старых данных |
+| Персист | `TableInfoV1.CopyStep/TxId` | `TableVersionInfo` (первая версия нового id) |
 
 ## 6. Обработка записей и чтений, начатых до TRUNCATE
 
@@ -216,24 +242,24 @@ TRUNCATE, в отличие от MoveTable, **не ждёт** завершени
 
 - запрошенный снапшот пропускается через
   `TablesManager.ResolveReadSnapshot(ssPathId, snapshot)` — для read-only/copy
-  таблиц возвращается зафиксированная copy-version, для обычных таблиц — сам
-  запрошенный снапшот (TRUNCATE никакой copy-version не фиксирует);
-- `ssPathId` → `InternalPathId` резолвится по **текущему** маппингу на старте
-  скана (`BuildTableMetadataAccessor` / `GetPathId`).
+  таблиц возвращается зафиксированная copy-version, для обычных — сам запрошенный
+  снапшот;
+- затем `IsPathMappingValidAt(ssPathId, snapshot)`: барьер = CopyVersion или
+  min Versions текущего id; если `snapshot < barrier` → **`TEvScanError` /
+  `BAD_REQUEST`** («snapshot too old for path mapping»);
+- иначе `ssPathId` → `InternalPathId` по **текущему** маппингу
+  (`BuildTableMetadataAccessor`).
 
-Отсюда два разных случая:
+Отсюда:
 
 - **Скан, уже стартовавший до TRUNCATE** (успел зарезолвить старый
-  `InternalPathId`): продолжает читать гранулу старого `InternalPathId`. Данные
-  физически ещё на месте — `DropTable` лишь помечает путь dropped и кладёт его в
-  `PathsToDrop`, а фактическое удаление порций делает фоновая очистка позже.
-  Такой скан остаётся консистентным в рамках своего снапшота.
-- **Скан, стартовавший после TRUNCATE**: зарезолвит **новый** (пустой)
-  `InternalPathId` независимо от запрошенного снапшота. Даже если снапшот чтения
-  старше версии усечения, данные старой таблицы видны не будут. То есть TRUNCATE
-  **не обеспечивает snapshot-isolation для поздно стартовавших чтений на старых
-  снапшотах** — в отличие от `CopyTable`, который держит данные читаемыми на
-  copy-version через `ResolveReadSnapshot` + `GetReadOnlyTablesSnapshots()`.
+  `InternalPathId`): продолжает читать гранулу старого id, пока данные не
+  вычищены фоном. Консистентен в рамках своего снапшота.
+- **Скан после TRUNCATE на снапшоте `>= barrier`**: видит новый (пустой/живой)
+  `InternalPathId`.
+- **Скан после TRUNCATE на снапшоте `< barrier`**: **reject**, а не пустой
+  результат. Это hard cut: TRUNCATE не даёт MVCC-дочитывания старых данных (в
+  отличие от CopyTable + `CopyVersion`), но и не врёт пустой таблицей.
 
 ### 6.2. Записи (insert/upsert/delete)
 
@@ -316,7 +342,8 @@ in-flight транзакций шарда перед завершением prop
 - **OnTabletInit**: no-op.
 - **План** (`RunTruncateTable` → `TablesManager::TruncateTable`, раздел 5):
   `DropTable(old)` + аллокация нового `InternalPathId` + регистрация пустой
-  `TTableInfo`. Старые данные уходят в `PathsToDrop`/GC.
+  `TTableInfo` + `AddTableVersion` (барьер = эта версия). Старые данные уходят в
+  `PathsToDrop`/GC.
 
 ### Ключевые отличия
 
@@ -331,20 +358,19 @@ in-flight транзакций шарда перед завершением prop
 | `MaxInternalPathId` | не трогает | не трогает | потребляет (требует `GenerateInternalPathId`) |
 | read-only / copy-version | dst read-only, copy-version зафиксирована | n/a | n/a |
 | SeqNo | per-path | глобальный шардовый | глобальный шардовый |
-| Снимок старых данных для старых снапшотов | сохраняется (`RegisterReadOnlyTableSnapshot`) | n/a (данные не удаляются) | **не** сохраняется |
+| Снимок старых данных для старых снапшотов | сохраняется (`RegisterReadOnlyTableSnapshot`) | n/a (данные не удаляются) | **не** сохраняется; `S < barrier` → reject |
 | Конкурентная запись на старый id | n/a (данные не меняются) | исключена ожиданием tx | возможна (нет барьера) → потеря/`AFL_VERIFY` |
+| Барьер чтений | CopyVersion (пин) | n/a | derive: min Versions нового id |
 
 ## 8. Потенциальные проблемы
 
 ### TRUNCATE
-- **Изоляция снапшотов для старых чтений.** Маппинг подменяется немедленно на
-  новый (пустой) `InternalPathId`, а старый помечается dropped на версии
-  `version`. Долгоиграющее чтение/скан, начатое на снапшоте *до* TRUNCATE, но
-  резолвящее путь *после* подмены маппинга, разрешит путь в новый пустой
-  `InternalPathId` и не увидит старые данные. В отличие от `CopyTable`, TRUNCATE
-  **не фиксирует copy-version** и не держит старые данные читаемыми на снапшоте до
-  усечения. Это потенциальное нарушение MVCC-консистентности для конкурентных
-  чтений.
+- **Hard cut вместо MVCC для старых чтений.** Маппинг подменяется на новый id;
+  барьер = первая schema-version этого id (версия truncate). Новый скан со
+  снапшотом `< barrier` получает ошибку («snapshot too old for path mapping»), а
+  не пустую таблицу. Скан, уже зарезолвивший старый id до truncate, может
+  дочитать старые данные до GC. Полноценного snapshot-isolation **нет** — в
+  отличие от CopyTable; это осознанный компромисс.
 - **Отсутствие ожидания in-flight транзакций.** В отличие от MoveTable, TRUNCATE
   не дожидается конкурентных операций над тем же путём. Запись, заплани­рованная до
   TRUNCATE, но завершающаяся после, может попасть в старый (dropped)
@@ -364,8 +390,9 @@ in-flight транзакций шарда перед завершением prop
   внутренние id.
 - **Неоднозначность маппинга после рестарта** (исторически): из-за двух записей с
   одним `SchemeShardLocalPathId`. Закрыто детерминированным выбором живой таблицы в
-  `AddTableInfo`, но это «хрупкое» место — любая регрессия в порядке загрузки/учёте
-  dropped-флага способна снова сломать резолвинг.
+  `AddTableInfo`; барьер чтений восстанавливается из `TableVersionInfo`. Регрессия
+  в порядке загрузки/учёте dropped-флага или первой schema-version способна снова
+  сломать резолвинг/hard cut.
 - **Грубость SeqNo.** TRUNCATE использует глобальный SeqNo шарда (а не per-path,
   как Drop/Copy), поэтому он сериализуется относительно любых схемных операций
   шарда; TRUNCATE с меньшим раундом, чем любая прошедшая на шарде схемная

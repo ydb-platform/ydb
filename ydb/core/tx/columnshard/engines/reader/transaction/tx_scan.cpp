@@ -50,6 +50,13 @@ void TTxScan::Complete(const TActorContext& ctx) {
     }
     const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
     snapshot = Self->TablesManager.ResolveReadSnapshot(ssPathId, snapshot);
+    if (!Self->TablesManager.IsPathMappingValidAt(ssPathId, snapshot)) {
+        const auto validFrom = Self->TablesManager.GetPathMappingValidFromOptional(ssPathId);
+        return SendError("snapshot too old for path mapping",
+            TStringBuilder() << "snapshot " << snapshot.DebugString() << " < mapping valid from "
+                             << (validFrom ? validFrom->DebugString() : "unknown"),
+            ctx);
+    }
     const bool deduplicationEnabled = AppDataVerified().ColumnShardConfig.GetDeduplicationEnabled();
     const TReadMetadataBase::ESorting sorting = [&]() {
         if (request.HasReverse()) {

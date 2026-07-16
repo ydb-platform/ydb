@@ -26,6 +26,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
+    library/cpp/containers/absl
     library/cpp/getopt/small
     library/cpp/logger
     library/cpp/malloc/api

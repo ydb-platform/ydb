@@ -1,8 +1,9 @@
 # CREATE STREAMING QUERY
 
-`CREATE STREAMING QUERY` creates a [streaming query](../../../concepts/streaming-query.md).
+`CREATE STREAMING QUERY` creates a [streaming query](../../../concepts/streaming-query/streaming-query.md).
 
 ## Syntax
+
 
 ```sql
 CREATE [OR REPLACE] STREAMING QUERY [IF NOT EXISTS] <query_name> [WITH (
@@ -17,53 +18,49 @@ DO BEGIN
 END DO
 ```
 
+
 ### Parameters
 
-* `OR REPLACE` — if a streaming query with this name already exists, replace it while preserving read offsets from topics.
-* `IF NOT EXISTS` — do not fail if a streaming query with this name already exists; leave the existing query unchanged.
-* `query_name` — name of the streaming query to create.
-* `WITH (<key> = <value>)` — optional list of settings for the new streaming query.
-* `AS DO BEGIN ... END DO` — full query text including all SQL statements. Limitations are described in [{#T}](../../../concepts/streaming-query.md#limitations); examples are [below](#examples).
+* `OR REPLACE` — if a streaming query with this name already exists, it will be replaced with a new query while preserving the read offsets from the topic.
+* `IF NOT EXISTS` — do not output an error if a streaming query with this name already exists; in this case, the existing query will remain unchanged.
+* `query_name` — the name of the streaming query to create.
+* `WITH (<key> = <value>)` — a list of settings for the new streaming query, optional.
+* `AS DO BEGIN ... END DO` — the full text of the new streaming query, including all required SQL statements. Restrictions on the query text are given in [{#T}](../../../concepts/streaming-query/streaming-query.md#limitations), see [below](#examples) for query text examples.
 
-You cannot use `OR REPLACE` and `IF NOT EXISTS` together.
+Settings `OR REPLACE` and `IF NOT EXISTS` cannot be used simultaneously.
 
-`WITH` parameters:
+Available parameters of the `WITH` block:
 
-* `RUN = (TRUE|FALSE)` — start the query after creation; default `TRUE`.
-* `RESOURCE_POOL = <resource_pool_name>` — name of the [resource pool](../../../concepts/glossary.md#resource-pool) where the query runs.
+* `RUN = (TRUE|FALSE)` — start the query after creation, default `TRUE`.
+* `RESOURCE_POOL = <resource_pool_name>` — the name of the [resource pool](../../../concepts/glossary.md#resource-pool) in which the query will run.
 
-Creation examples are [below](#examples).
+See [below](#examples) for examples of creating a streaming query.
 
-## Consumer usage {#consumer-usage}
+## Using a reader {#consumer-usage}
 
-A [consumer](../../../concepts/datamodel/topic.md#consumer) is a named subscription to a [topic](../../../concepts/datamodel/topic.md) that stores the current read position.
+{% include [consumer-usage](../../../_includes/consumer-usage.md) %}
 
-Create a consumer with the [CLI](../../../reference/ydb-cli/topic-consumer-add.md) or when creating a topic with [CREATE TOPIC](create-topic.md). Set the consumer name in the query with a pragma:
-
-```sql
-PRAGMA pq.Consumer="my_consumer";
-```
-
-If no consumer is specified, the topic is read without a named consumer. In both cases the read position is stored in a [checkpoint](../../../dev/streaming-query/checkpoints.md). A consumer lets you track position and lag from the topic side, for example via the [CLI](../../../reference/ydb-cli/topic-read.md).
+Regardless of whether a reader exists, the read position of the streaming query is saved in a [checkpoint](../../../dev/streaming-query/checkpoints.md).
 
 ## Examples {#examples}
 
-### Write to a topic (JSON) {#example-topic-json}
+### Writing to a topic (JSON) {#example-topic-json}
 
-The query reads events from the input topic, builds a JSON object from fields, and writes to the output topic.
+The query reads events from an input topic, forms a JSON object from individual fields, and writes the result to an output topic.
 
-`AsStruct` builds a structure, `Yson::From` converts to Yson, `Yson::SerializeJson` serializes to JSON, and `ToBytes` converts to `String` for topic writes.
+The `AsStruct` function creates a structure from the specified fields, `Yson::From` converts it to Yson, `Yson::SerializeJson` serializes it to a JSON string, and `ToBytes` converts it to the `String` type, which is required for writing to a topic.
 
 {% note info %}
 
-Streaming queries can use [local and external topics](../../../dev/streaming-query/local-and-external-topics.md).
+Streaming queries can work with [local and external topics](../../../concepts/query_execution/topics.md#local-external-topics).
 
 In the example:
 
-- `ext_source` — a pre-created [`external data source`](../../../concepts/datamodel/external_data_source.md);
+- `ext_source` — this is a pre-created [`external data source`](../../../concepts/datamodel/external_data_source.md).
 - `input_topic` and `output_topic` — local or external [topics](../../../concepts/datamodel/topic.md).
 
 {% endnote %}
+
 
 ```yql
 CREATE STREAMING QUERY my_streaming_query AS
@@ -71,15 +68,15 @@ DO BEGIN
 
     INSERT INTO output_topic -- or external topic ext_source.output_topic
     SELECT
-        -- Build JSON from fields
+        -- Generation of JSON from individual fields
         ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
             AsStruct(Id AS id, Name AS name)
         ))))
     FROM
         ext_source.input_topic -- or local topic input_topic
     WITH (
-        FORMAT = json_each_row,  -- Input format
-        SCHEMA = (               -- Input schema
+        FORMAT = json_each_row,  -- Input data format
+        SCHEMA = (               -- Input data schema
             Id Uint64 NOT NULL,
             Name Utf8 NOT NULL
         )
@@ -88,21 +85,23 @@ DO BEGIN
 END DO
 ```
 
-### Write to a table {#example-table}
 
-The query reads events from a topic and writes them to `output_table`. Create the table beforehand with a matching schema.
+### Writing to a table {#example-table}
+
+The query reads events from a topic and writes them to the `output_table` table. The table must be created in advance with a schema that matches the selected columns.
 
 {% note warning %}
 
-Table writes in streaming queries support **UPSERT only**. `INSERT INTO` is not supported: with [at-least-once](../../../concepts/streaming-query.md#guarantees) retries, it would duplicate rows. With `UPSERT`, an existing row with the same primary key is updated; otherwise a row is inserted, while `INSERT INTO` fails.
+Writing to tables in streaming queries is supported **only in UPSERT mode**. The `INSERT INTO` operation is not supported, because when events are reprocessed (the [at-least-once](../../../concepts/streaming-query/streaming-query.md#guarantees) guarantee), it would lead to duplicate rows. With `UPSERT`, if a row with the same primary key already exists, it will be updated; otherwise, a new row will be inserted, and `INSERT INTO` will fail with an error.
 
 {% endnote %}
+
 
 ```sql
 CREATE STREAMING QUERY my_streaming_query AS
 DO BEGIN
 
-    -- Table write (UPSERT only; INSERT not supported)
+    -- Write to table (only UPSERT, INSERT is not supported)
     UPSERT INTO output_table
     SELECT
         Id,
@@ -110,8 +109,8 @@ DO BEGIN
     FROM
         input_topic -- or external topic ext_source.input_topic
     WITH (
-        FORMAT = json_each_row,  -- Input format
-        SCHEMA = (               -- Input schema
+        FORMAT = json_each_row,  -- Input data format
+        SCHEMA = (               -- Input data schema
             Id Uint64 NOT NULL,
             Name Utf8 NOT NULL
         )
@@ -120,14 +119,16 @@ DO BEGIN
 END DO
 ```
 
-### Start in a resource pool {#example-resource-pool}
 
-The query is created in the given [resource pool](../../../concepts/glossary.md#resource-pool) but not started automatically (`RUN = FALSE`). You can validate configuration first or start later with [ALTER STREAMING QUERY](alter-streaming-query.md).
+### Running in a resource pool {#example-resource-pool}
+
+The query is created in the specified [resource pool](../../../concepts/glossary.md#resource-pool) but is not started automatically (`RUN = FALSE`). This allows you to check the configuration before starting or start the query later via [ALTER STREAMING QUERY](alter-streaming-query.md).
+
 
 ```sql
 CREATE STREAMING QUERY my_streaming_query WITH (
-    RUN = FALSE,                      -- Do not auto-start
-    RESOURCE_POOL = my_resource_pool  -- Pool for execution
+    RUN = FALSE,                      -- Do not start automatically
+    RESOURCE_POOL = my_resource_pool  -- Resource pool for execution
 ) AS
 DO BEGIN
 
@@ -149,11 +150,12 @@ DO BEGIN
 END DO
 ```
 
-More examples: [{#T}](../../../dev/streaming-query/patterns.md).
+
+Other examples: [{#T}](../../../dev/streaming-query/patterns.md).
 
 ## See also
 
 * [{#T}](../../../dev/streaming-query/patterns.md)
-* [{#T}](../../../concepts/streaming-query.md)
+* [{#T}](../../../concepts/streaming-query/streaming-query.md)
 * [{#T}](alter-streaming-query.md)
 * [{#T}](drop-streaming-query.md)

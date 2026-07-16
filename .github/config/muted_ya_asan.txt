@@ -472,6 +472,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ReadFro
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateAndAlterStreamingQuery
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithLocalYdbJoin
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithMultipleWrites
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithPrecompute
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithProcess+EnableKqpConstraintsTransformer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.WritingInLocalYdbTablesWithCheckpoints
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithRowCountBackPressure

@@ -25,6 +25,7 @@
 #include <util/generic/utility.h>
 #include <util/generic/yexception.h>
 #include <util/stream/mem.h>
+#include <util/system/thread.h>
 
 #include <atomic>
 #include <utility>
@@ -1911,6 +1912,40 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CleanupDecompressionQu
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnCreateNewDecompressionTask() {
     ++DecompressionTasksInflight;
+}
+
+template<bool UseMigrationProtocol>
+bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::WaitAllDecompressionTasks(TInstant deadline) const {
+    while (DecompressionTasksInflight.load() > 0 && TInstant::Now() < deadline) {
+        Sleep(TDuration::MilliSeconds(1));
+    }
+    return DecompressionTasksInflight.load() == 0;
+}
+
+template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ClearAllPartitionStreamEvents() {
+    TDeferredActions<UseMigrationProtocol> deferred;
+    std::vector<TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>>> streams;
+    std::vector<TRawPartitionStreamEventQueue<UseMigrationProtocol>> deferredDelete;
+    {
+        std::lock_guard guard(Lock);
+        streams.reserve(PartitionStreams.size());
+        for (auto& [_, partitionStream] : PartitionStreams) {
+            streams.push_back(partitionStream);
+        }
+    }
+
+    deferredDelete.reserve(streams.size());
+    for (auto& stream : streams) {
+        std::lock_guard guard(stream->GetLock());
+        if (stream->HasEvents()) {
+            deferredDelete.push_back(stream->ExtractQueue());
+        }
+    }
+
+    for (auto& queue : deferredDelete) {
+        queue.Cleanup(deferred);
+    }
 }
 
 template<bool UseMigrationProtocol>

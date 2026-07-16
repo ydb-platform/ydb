@@ -150,6 +150,15 @@ void TTopicWorkloadReader::ReaderLoop(const TTopicWorkloadReaderParams& params, 
             TryCommitTx(params, txSupport, commitTime, stopPartitionSessionEvents);
         }
     }
+
+    if (txSupport) {
+        TryCommitTableChanges(params, txSupport);
+        GracefullShutdown(stopPartitionSessionEvents);
+    }
+    streamState.clear();
+    if (!readSession->Close(TDuration::Seconds(5))) {
+        WRITE_LOG(params.Log, ELogPriority::TLOG_WARNING, "Reader session was not gracefully closed.");
+    }
 }
 
 std::vector<NYdb::NTopic::TReadSessionEvent::TEvent> TTopicWorkloadReader::GetEvents(NYdb::NTopic::IReadSession& readSession,

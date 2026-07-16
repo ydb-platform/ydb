@@ -191,57 +191,75 @@ bool TReadSession::Close(TDuration timeout) {
         promise.TrySetValue(true);
     };
 
-    TDeferredActions<false> deferred;
-    with_lock(Lock) {
-        if (Closing || Aborting) {
-            return false;
-        }
-
-        if (!timeout) {
-            AbortImpl(EStatus::ABORTED, "Close with zero timeout", deferred);
-            return false;
-        }
-
-        Closing = true;
-        session = CbContext->TryGet();
-    }
-    session->Close(callback);
-
-    callback(); // For the case when there are no subsessions yet.
-
-    auto timeoutCallback = [=](bool) mutable {
-        promise.TrySetValue(false);
-    };
-
-    auto timeoutContext = Connections->CreateContext();
-    if (!timeoutContext) {
-        AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
-        return false;
-    }
-    Connections->ScheduleCallback(timeout,
-                                  std::move(timeoutCallback),
-                                  timeoutContext);
-
-    // Wait.
-    NThreading::TFuture<bool> resultFuture = promise.GetFuture();
-    const bool result = resultFuture.GetValueSync();
-    if (result) {
-        Cancel(timeoutContext);
-
-        NYdb::NIssue::TIssues issues;
-        issues.AddIssue("Session was gracefully closed");
-        EventsQueue->Close(TSessionClosedEvent(EStatus::SUCCESS, std::move(issues)), deferred);
-    } else {
-        ++*Settings.Counters_->Errors;
-        session->Abort();
-
-        NYdb::NIssue::TIssues issues;
-        issues.AddIssue(TStringBuilder() << "Session was closed after waiting " << timeout);
-        EventsQueue->Close(TSessionClosedEvent(EStatus::TIMEOUT, std::move(issues)), deferred);
-    }
+    std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl<false>>> cbContextToCancel;
+    std::shared_ptr<TCallbackContext<TCountersLogger<false>>> dumpCountersContextToCancel;
+    bool result = false;
     {
-        std::lock_guard guard(Lock);
-        Aborting = true; // Set abort flag for doing nothing on destructor.
+        TDeferredActions<false> deferred;
+        with_lock(Lock) {
+            if (Closing || Aborting) {
+                return false;
+            }
+
+            if (!timeout) {
+                AbortImpl(EStatus::ABORTED, "Close with zero timeout", deferred);
+                return false;
+            }
+
+            Closing = true;
+            session = CbContext->TryGet();
+        }
+        session->Close(callback);
+
+        callback(); // For the case when there are no subsessions yet.
+
+        auto timeoutCallback = [=](bool) mutable {
+            promise.TrySetValue(false);
+        };
+
+        auto timeoutContext = Connections->CreateContext();
+        if (!timeoutContext) {
+            AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
+            return false;
+        }
+        Connections->ScheduleCallback(timeout,
+                                      std::move(timeoutCallback),
+                                      timeoutContext);
+
+        // Wait.
+        NThreading::TFuture<bool> resultFuture = promise.GetFuture();
+        result = resultFuture.GetValueSync();
+        if (result) {
+            Cancel(timeoutContext);
+
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue("Session was gracefully closed");
+            EventsQueue->Close(TSessionClosedEvent(EStatus::SUCCESS, std::move(issues)), deferred);
+        } else {
+            ++*Settings.Counters_->Errors;
+            session->Abort();
+
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue(TStringBuilder() << "Session was closed after waiting " << timeout);
+            EventsQueue->Close(TSessionClosedEvent(EStatus::TIMEOUT, std::move(issues)), deferred);
+        }
+        {
+            std::lock_guard guard(Lock);
+            Aborting = true; // Set abort flag for doing nothing on destructor.
+            cbContextToCancel = CbContext;
+            dumpCountersContextToCancel = DumpCountersContext;
+        }
+    }
+    ClearAllEvents();
+    session->ClearAllPartitionStreamEvents();
+    session->WaitAllDecompressionTasks(TInstant::Now() + timeout);
+    ClearAllEvents();
+    session->ClearAllPartitionStreamEvents();
+    if (cbContextToCancel) {
+        cbContextToCancel->Cancel();
+    }
+    if (dumpCountersContextToCancel) {
+        dumpCountersContextToCancel->Cancel();
     }
     return result;
 }

@@ -1263,6 +1263,8 @@ public:
     void Commit(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, ui64 startOffset, ui64 endOffset);
 
     void OnCreateNewDecompressionTask();
+    bool WaitAllDecompressionTasks(TInstant deadline) const;
+    void ClearAllPartitionStreamEvents();
     void OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount, i64 serverBytesSize);
     void OnDecompressionInfoDestroyImpl(i64 compressedSize,
                                         i64 decompressedSize,

@@ -154,7 +154,7 @@ ssl.endpoint.identification.algorithm=
 
 #### YDB configuration
 
-It is necessary to specify the required fields in the [kafka_proxy_config](../configuration/kafka.md).
+It is necessary to specify the required fields in the [kafka_proxy_config](../configuration/kafka_proxy_config.md).
 
 ```yaml
 kafka_proxy_config:

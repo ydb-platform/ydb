@@ -30,11 +30,13 @@
 #include <util/system/event.h>
 
 #include "device_test_tool.h"
+#include "device_test_tool_ddisk_client_server.h"
 
 namespace NKikimr {
 
 static TSystemEvent InterconnectDoneEvent(TSystemEvent::rAuto);
 static TSystemEvent InterconnectResultsPrintedEvent(TSystemEvent::rAuto);
+static TSystemEvent InterconnectServerStopEvent(TSystemEvent::rAuto);
 
 // Runs a sequence of interconnect load tests (NKikimr::TEvLoadTestRequest::TInterconnectLoad)
 // inside a single actor system, one after another, printing a short summary for each.
@@ -279,6 +281,267 @@ struct TInterconnectTest : public TPerfTest {
     }
 
     ~TInterconnectTest() override {
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Network (multi-host) interconnect test: a real TCP interconnect connection is
+// established between two separate ydb_stress_tool processes running on
+// different hosts. One side runs as a responder-only "server" (registers just
+// the load responder actor and listens for incoming connections); the other
+// side runs as a "client" that drives the InterconnectTestList load and
+// connects out to the server via NodeHops pointing at the server's NodeId.
+////////////////////////////////////////////////////////////////////////////////
+
+// Server: registers the interconnect load responder actor for this node and
+// listens for an incoming connection from the client. Does not run any load
+// itself; it only replies to messages forwarded through TLoadResponderActor.
+struct TInterconnectServer : public TPerfTest {
+    THolder<TActorSystemSetup> Setup;
+    TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
+    THolder<TActorSystem> ActorSystem;
+    TAppData AppData;
+    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    volatile bool IsLastExceptionSet = false;
+    ui32 ServerNodeId;
+    ui32 ClientNodeId;
+    ui16 Port;
+    bool UseUring;
+
+    TInterconnectServer(const TPerfTestConfig& cfg, ui32 serverNodeId, ui32 clientNodeId, ui16 port, bool useUring = false)
+        : TPerfTest(cfg)
+        , Setup(new TActorSystemSetup())
+        , LogSettings(new NActors::NLog::TSettings(NActors::TActorId(serverNodeId, "logger"),
+                                                   NActorsServices::LOGGER,
+                                                   NActors::NLog::PRI_ERROR,
+                                                   NActors::NLog::PRI_ERROR,
+                                                   0))
+        , AppData(0, 1, 3, 2, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr)
+        , ServerNodeId(serverNodeId)
+        , ClientNodeId(clientNodeId)
+        , Port(port)
+        , UseUring(useUring)
+    {
+    }
+
+    void Init() override {
+        try {
+            Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+            Setup->NodeId = ServerNodeId;
+            Setup->ExecutorsCount = 4;
+            Setup->Executors.Reset(new TAutoPtr<IExecutorPool>[4]);
+            Setup->Executors[0].Reset(new TBasicExecutorPool(0, 2, 20, "interconnect"));
+            Setup->Executors[1].Reset(new TBasicExecutorPool(1, 2, 20, "load_responder"));
+            Setup->Executors[2].Reset(new TBasicExecutorPool(2, 2, 20, "perf_actors"));
+            Setup->Executors[3].Reset(new TIOExecutorPool(3, 1, "IO"));
+            Setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(64, 20)));
+
+            // Register the interconnect load responder actor for this node; it acts as
+            // the remote endpoint that the client's load actor routes messages to via
+            // NodeHops.
+            Setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+                NInterconnect::MakeLoadResponderActorId(ServerNodeId),
+                TActorSetupCmd(NInterconnect::CreateLoadResponderActor(), TMailboxType::ReadAsFilled, 1)));
+
+            // Server only accepts incoming connections, but the interconnect handshake
+            // still resolves the peer NodeId via the local nameserver, so register the
+            // client with a placeholder address (port 0; server never initiates a
+            // connection to the client).
+            auto common = MakeInterconnectCommon(Counters, ServerNodeId, UseUring);
+            TVector<TInterconnectPeer> peers = {{ClientNodeId, "::", 0}};
+            SetupInterconnectServices(Setup.Get(), common, ServerNodeId, "::", Port, peers, /*listen=*/true);
+
+            // Logger
+            LogSettings->Append(
+                NActorsServices::EServiceCommon_MIN,
+                NActorsServices::EServiceCommon_MAX,
+                NActorsServices::EServiceCommon_Name
+            );
+            LogSettings->Append(
+                NKikimrServices::EServiceKikimr_MIN,
+                NKikimrServices::EServiceKikimr_MAX,
+                NKikimrServices::EServiceKikimr_Name
+            );
+
+            TString explanation;
+            const NLog::EPriority icLevel = std::min<NLog::EPriority>(Cfg.LogLevel, NLog::PRI_INFO);
+            LogSettings->SetLevel(Cfg.LogLevel, NKikimrServices::BS_LOAD_TEST, explanation);
+            LogSettings->SetLevel(icLevel, NActorsServices::INTERCONNECT, explanation);
+
+            NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(LogSettings,
+                NActors::CreateStderrBackend(),
+                GetServiceCounters(Counters, "utils"));
+            NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 3);
+            Setup->LocalServices.emplace_back(
+                NActors::TActorId(ServerNodeId, "logger"), std::move(loggerActorCmd));
+
+            ActorSystem.Reset(new TActorSystem(Setup, &AppData, LogSettings));
+            ActorSystem->Start();
+        } catch (yexception& ex) {
+            IsLastExceptionSet = true;
+            VERBOSE_COUT("Error on interconnect server init, what# " << ex.what());
+        }
+    }
+
+    void Run() override {
+        if (IsLastExceptionSet) {
+            return;
+        }
+
+        Cerr << "Interconnect load responder (node " << ServerNodeId << ", expecting client node " << ClientNodeId << ")"
+             << " is listening on port " << Port << ". Press Ctrl+C to stop." << Endl;
+
+        InterconnectServerStopEvent.Wait();
+
+        if (ActorSystem.Get()) {
+            ActorSystem->Stop();
+            ActorSystem.Destroy();
+        }
+    }
+
+    void Finish() override {
+    }
+
+    ~TInterconnectServer() override {
+    }
+};
+
+// Client: connects out to a set of remote interconnect servers and drives the
+// InterconnectTestList load. The load actor's NodeHops must reference the
+// server's NodeId (see ServerPeers) so that traffic is routed over the real
+// network connection rather than looped back locally.
+struct TInterconnectClient : public TPerfTest {
+    THolder<TActorSystemSetup> Setup;
+    TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
+    THolder<TActorSystem> ActorSystem;
+    TAppData AppData;
+    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    yexception LastException;
+    volatile bool IsLastExceptionSet = false;
+    TActorId TestId;
+    NDevicePerfTest::TInterconnectTest TestProto;
+    ui32 ClientNodeId;
+    TVector<TInterconnectPeer> ServerPeers;
+    bool UseUring;
+
+    TInterconnectClient(const TPerfTestConfig& cfg, const NDevicePerfTest::TInterconnectTest& testProto,
+                 ui32 clientNodeId, const TVector<TInterconnectPeer>& serverPeers, bool useUring = false)
+        : TPerfTest(cfg)
+        , Setup(new TActorSystemSetup())
+        , LogSettings(new NActors::NLog::TSettings(NActors::TActorId(clientNodeId, "logger"),
+                                                   NActorsServices::LOGGER,
+                                                   NActors::NLog::PRI_ERROR,
+                                                   NActors::NLog::PRI_ERROR,
+                                                   0))
+        , AppData(0, 1, 3, 2, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr)
+        , TestProto(testProto)
+        , ClientNodeId(clientNodeId)
+        , ServerPeers(serverPeers)
+        , UseUring(useUring)
+    {
+    }
+
+    void Init() override {
+        try {
+            Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+            Setup->NodeId = ClientNodeId;
+            Setup->ExecutorsCount = 4;
+            Setup->Executors.Reset(new TAutoPtr<IExecutorPool>[4]);
+            Setup->Executors[0].Reset(new TBasicExecutorPool(0, 4, 20, "interconnect"));
+            Setup->Executors[1].Reset(new TBasicExecutorPool(1, 2, 20, "load_responder"));
+            Setup->Executors[2].Reset(new TBasicExecutorPool(2, 4, 20, "perf_actors"));
+            Setup->Executors[3].Reset(new TIOExecutorPool(3, 1, "IO"));
+            Setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(64, 20)));
+
+            // Set up interconnect with all server peers
+            auto common = MakeInterconnectCommon(Counters, ClientNodeId, UseUring);
+            SetupInterconnectServices(Setup.Get(), common, ClientNodeId, "::", 0, ServerPeers, /*listen=*/false);
+
+            // The load actor queries a local load responder for a shared traffic
+            // counter on Bootstrap (see NInterconnect::TLoadActor::Bootstrap), so a
+            // load responder must be registered on this node too, even though the
+            // actual load messages are routed to the remote server via NodeHops.
+            Setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+                NInterconnect::MakeLoadResponderActorId(ClientNodeId),
+                TActorSetupCmd(NInterconnect::CreateLoadResponderActor(), TMailboxType::ReadAsFilled, 1)));
+
+            // Logger
+            LogSettings->Append(
+                NActorsServices::EServiceCommon_MIN,
+                NActorsServices::EServiceCommon_MAX,
+                NActorsServices::EServiceCommon_Name
+            );
+            LogSettings->Append(
+                NKikimrServices::EServiceKikimr_MIN,
+                NKikimrServices::EServiceKikimr_MAX,
+                NKikimrServices::EServiceKikimr_Name
+            );
+
+            TString explanation;
+            // INTERCONNECT is too chatty at DEBUG/TRACE; floor it at INFO regardless of --log-level.
+            const NLog::EPriority icLevel = std::min<NLog::EPriority>(Cfg.LogLevel, NLog::PRI_INFO);
+            LogSettings->SetLevel(Cfg.LogLevel, NKikimrServices::BS_LOAD_TEST, explanation);
+            LogSettings->SetLevel(icLevel, NActorsServices::INTERCONNECT, explanation);
+
+            NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(LogSettings,
+                NActors::CreateStderrBackend(),
+                GetServiceCounters(Counters, "utils"));
+            NActors::TActorSetupCmd loggerActorCmd(loggerActor, NActors::TMailboxType::Simple, 3);
+            Setup->LocalServices.emplace_back(
+                NActors::TActorId(ClientNodeId, "logger"), std::move(loggerActorCmd));
+
+            TestId = MakeBlobStorageProxyID(1);
+            TActorSetupCmd testSetup(new TInterconnectPerfTestActor(Cfg, TestProto, Printer, Counters),
+                TMailboxType::ReadAsFilled, 2);
+            Setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(TestId, std::move(testSetup)));
+
+            ActorSystem.Reset(new TActorSystem(Setup, &AppData, LogSettings));
+            ActorSystem->Start();
+
+            // Give interconnect some time to establish connections to the server(s)
+            Sleep(TDuration::Seconds(3));
+        } catch (yexception& ex) {
+            IsLastExceptionSet = true;
+            VERBOSE_COUT("Error on interconnect client init, what# " << ex.what());
+        }
+    }
+
+    void Run() override {
+        if (IsLastExceptionSet) {
+            return;
+        }
+
+        try {
+            ActorSystem->Send(TestId, new TEvTablet::TEvBoot(MakeTabletID(0, 0, 1), 0, nullptr, TActorId(), nullptr));
+
+            for (ui32 i = 0; i < TestProto.InterconnectTestListSize(); ++i) {
+                InterconnectDoneEvent.Wait();
+                Printer->PrintResults();
+                InterconnectResultsPrintedEvent.Signal();
+            }
+        } catch (yexception ex) {
+            LastException = ex;
+            IsLastExceptionSet = true;
+            VERBOSE_COUT(ex.what());
+        }
+
+        if (ActorSystem.Get()) {
+            ActorSystem->Stop();
+            ActorSystem.Destroy();
+        }
+        InterconnectDoneEvent.Reset();
+        if (IsLastExceptionSet) {
+            IsLastExceptionSet = false;
+            ythrow LastException;
+        }
+    }
+
+    void Finish() override {
+    }
+
+    ~TInterconnectClient() override {
     }
 };
 

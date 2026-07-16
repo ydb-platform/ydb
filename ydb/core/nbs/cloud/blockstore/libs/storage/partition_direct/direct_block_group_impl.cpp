@@ -1152,7 +1152,7 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
     return future;
 }
 
-NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot()
+NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot() const
 {
     auto promise = NewPromise<TDbgSnapshot>();
     auto future = promise.GetFuture();
@@ -1774,7 +1774,7 @@ void TDirectBlockGroup::HandleBlockedGeneration(
     Service->StopTablet(reason);
 }
 
-TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
+TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -1804,7 +1804,7 @@ TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
     return result;
 }
 
-TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot()
+TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 

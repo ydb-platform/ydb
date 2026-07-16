@@ -54,6 +54,10 @@ private:
 
     TPBufferCleanupGather CleanupGather;
 
+    // Result of the last finished cleanup round: the minimum safe barrier
+    // across all DBGs. 0 until the first round finishes.
+    std::atomic<ui64> LastSafeBarrier{0};
+
 public:
     TFastPathService(
         NActors::TActorSystem* actorSystem,
@@ -120,6 +124,11 @@ public:
     // Gathers per-DBG monitoring snapshots: one if dbgIndex is set, else all.
     [[nodiscard]] NThreading::TFuture<TVector<TDbgSnapshot>> GatherMonSnapshots(
         std::optional<size_t> dbgIndex) const;
+
+    // Snapshot of one vchunk by its global index, built on the owning DBG's
+    // executor. Resolves to nullopt when there is no such vchunk.
+    [[nodiscard]] NThreading::TFuture<std::optional<TVChunkSnapshot>>
+    GatherVChunkMonSnapshot(ui32 vchunkIndex) const;
 
 private:
     void ScheduleDirtyMapDebugPrint();

@@ -145,7 +145,7 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
-    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
 
     // IHostStateController implementation
     void SetHostState(
@@ -253,9 +253,9 @@ private:
 
     void HandleBlockedGeneration(THostIndex hostIndex, TStringBuf context);
 
-    TDBGDumpResponse DoDebugPrintDirtyMap();
+    [[nodiscard]] TDBGDumpResponse DoDebugPrintDirtyMap() const;
 
-    TDbgSnapshot DoBuildMonSnapshot();
+    [[nodiscard]] TDbgSnapshot DoBuildMonSnapshot() const;
 
     [[nodiscard]] TConnectionSnapshot MakeConnectionSnapshot(
         size_t hostIndex) const;

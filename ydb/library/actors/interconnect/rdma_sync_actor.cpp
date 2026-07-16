@@ -219,6 +219,30 @@ namespace {
         };
         std::optional<TPendingAckSync> PendingAckSync;
 
+        struct TPendingFinSync {
+            NActorsInterconnect::TRdmaFinSync Sync;
+        };
+        std::optional<TPendingFinSync> PendingFinSync;
+
+        struct TTcpControlReadState {
+            TSyncMsgHeader Header;
+            size_t HeaderBytes = 0;
+            TString Data;
+            size_t DataBytes = 0;
+            bool ReadRequested = false;
+
+            void Reset() {
+                Header = {};
+                HeaderBytes = 0;
+                Data.clear();
+                DataBytes = 0;
+                ReadRequested = false;
+            }
+        };
+        TTcpControlReadState TcpControlRead;
+
+        THolder<TEvRdmaIoDone::THandle> PendingIoDone;
+
     public:
         TRdmaSyncActor(
                 NActors::TInterconnectProxyCommon::TPtr common,
@@ -433,7 +457,7 @@ namespace {
         }
 
         template <typename TProto>
-        bool SendSyncProto(
+        bool SendTcpProto(
                 const TProto& proto,
                 ESyncTcpMessageType messageType,
                 const char* what,
@@ -460,7 +484,7 @@ namespace {
         }
 
         template <typename TProto>
-        bool ReceiveSyncProto(
+        bool ReceiveTcpProto(
                 TProto& proto,
                 ESyncTcpMessageType expectedMessageType,
                 const char* what,
@@ -519,7 +543,7 @@ namespace {
             NActorsInterconnect::TRdmaErrSync errSync;
             errSync.SetCode(code);
             errSync.SetText(text);
-            return SendSyncProto(errSync, ESyncTcpMessageType::ErrSync, "TRdmaErrSync", error);
+            return SendTcpProto(errSync, ESyncTcpMessageType::ErrSync, "TRdmaErrSync", error);
         }
 
         bool ReportRdmaSendError(TString& error) {
@@ -544,8 +568,149 @@ namespace {
             return false;
         }
 
+        bool HandleRdmaEvent(THolder<IEventHandle> ev, TString& error) {
+            if (ev->GetTypeRewrite() == TEvRdmaIoDone::EventType) {
+                if (PendingIoDone) {
+                    error = "duplicate RDMA SEND completion";
+                    return false;
+                }
+                PendingIoDone.Reset(static_cast<TEvRdmaIoDone::THandle*>(ev.Release()));
+                return true;
+            }
+
+            if (ev->GetTypeRewrite() == TEvRdmaIoReceiveDone::EventType) {
+                return HandleRdmaReceiveEvent(
+                    THolder<TEvRdmaIoReceiveDone::THandle>(static_cast<TEvRdmaIoReceiveDone::THandle*>(ev.Release())),
+                    error);
+            }
+
+            return false;
+        }
+
+        bool ProcessTcpControlMessage(TString& error) {
+            const auto& header = TcpControlRead.Header;
+            const auto& data = TcpControlRead.Data;
+
+            if (!header.Check(data.data(), data.size())) {
+                error = "TCP control protobuf checksum mismatch";
+                return false;
+            }
+
+            if (header.MessageType == static_cast<ui32>(ESyncTcpMessageType::ErrSync)) {
+                NActorsInterconnect::TRdmaErrSync errSync;
+                if (!errSync.ParseFromString(data)) {
+                    error = "unable to parse TRdmaErrSync protobuf";
+                    return false;
+                }
+                error = Sprintf("peer RDMA sync error: Code# %" PRIu32 " Text# %s",
+                    static_cast<ui32>(errSync.GetCode()), errSync.GetText().data());
+                return false;
+            }
+
+            if (header.MessageType == static_cast<ui32>(ESyncTcpMessageType::FinSync)) {
+                if (PendingFinSync) {
+                    error = "duplicate RDMA FinSync";
+                    return false;
+                }
+
+                NActorsInterconnect::TRdmaFinSync finSync;
+                if (!finSync.ParseFromString(data)) {
+                    error = "unable to parse TRdmaFinSync protobuf";
+                    return false;
+                }
+
+                PendingFinSync.emplace(TPendingFinSync{
+                    std::move(finSync),
+                });
+                return true;
+            }
+
+            error = Sprintf("unexpected TCP control message type in RDMA phase: %" PRIu32, header.MessageType);
+            return false;
+        }
+
+        bool TryReadTcpControlNoWait(TString& error) {
+            if (!Socket) {
+                error = "TCP control socket is not initialized";
+                return false;
+            }
+            if (!PollerToken) {
+                error = "TCP control poller token is not initialized";
+                return false;
+            }
+
+            for (;;) {
+                char* ptr = nullptr;
+                size_t len = 0;
+
+                if (TcpControlRead.HeaderBytes != sizeof(TSyncMsgHeader)) {
+                    ptr = reinterpret_cast<char*>(&TcpControlRead.Header) + TcpControlRead.HeaderBytes;
+                    len = sizeof(TSyncMsgHeader) - TcpControlRead.HeaderBytes;
+                } else {
+                    ptr = TcpControlRead.Data.Detach() + TcpControlRead.DataBytes;
+                    len = TcpControlRead.Data.size() - TcpControlRead.DataBytes;
+                }
+
+                TString err;
+                const ssize_t nbytes = Socket->Recv(ptr, len, &err);
+                if (nbytes > 0) {
+                    TcpControlRead.ReadRequested = false;
+                    if (TcpControlRead.HeaderBytes != sizeof(TSyncMsgHeader)) {
+                        TcpControlRead.HeaderBytes += nbytes;
+                        if (TcpControlRead.HeaderBytes != sizeof(TSyncMsgHeader)) {
+                            continue;
+                        }
+                        if (TcpControlRead.Header.Size > TSyncMsgHeader::MaxSize) {
+                            error = Sprintf("TCP control protobuf size is too large: %" PRIu32, TcpControlRead.Header.Size);
+                            return false;
+                        }
+                        TcpControlRead.Data.resize(TcpControlRead.Header.Size);
+                        TcpControlRead.DataBytes = 0;
+                        if (!TcpControlRead.Header.Size) {
+                            if (!ProcessTcpControlMessage(error)) {
+                                return false;
+                            }
+                            TcpControlRead.Reset();
+                        }
+                    } else {
+                        TcpControlRead.DataBytes += nbytes;
+                        if (TcpControlRead.DataBytes != TcpControlRead.Data.size()) {
+                            continue;
+                        }
+                        if (!ProcessTcpControlMessage(error)) {
+                            return false;
+                        }
+                        TcpControlRead.Reset();
+                    }
+                } else if (-nbytes == EAGAIN || -nbytes == EWOULDBLOCK) {
+                    if (!TcpControlRead.ReadRequested) {
+                        if (PollerToken->RequestReadNotificationAfterWouldBlock()) {
+                            continue;
+                        }
+                        TcpControlRead.ReadRequested = true;
+                    }
+                    return true;
+                } else if (!nbytes) {
+                    error = "connection unexpectedly closed while reading TCP control message";
+                    return false;
+                } else if (-nbytes != EINTR) {
+                    error = Sprintf("socket receive error while reading TCP control message: %s",
+                        (err ? err : TString(strerror(-nbytes))).data());
+                    return false;
+                }
+            }
+        }
+
         THolder<TEvRdmaIoDone::THandle> WaitRdmaIoDone(TString& error) {
             for (;;) {
+                if (PendingIoDone) {
+                    return std::move(PendingIoDone);
+                }
+
+                if (!TryReadTcpControlNoWait(error)) {
+                    return nullptr;
+                }
+
                 auto ev = TActorCoroImpl::WaitForEvent();
                 if (!ev) {
                     return nullptr;
@@ -564,12 +729,24 @@ namespace {
                         error = std::move(parseError);
                         return nullptr;
                     }
+                    continue;
+                }
+
+                if (ev->GetTypeRewrite() == TEvPollerReady::EventType) {
+                    TcpControlRead.ReadRequested = false;
+                    if (!TryReadTcpControlNoWait(error)) {
+                        return nullptr;
+                    }
                 }
             }
         }
 
         bool WaitRdmaReceivePacket(TString& error) {
             for (;;) {
+                if (!TryReadTcpControlNoWait(error)) {
+                    return false;
+                }
+
                 auto ev = TActorCoroImpl::WaitForEvent();
                 if (!ev) {
                     error = "unable to wait RDMA sync receive";
@@ -580,6 +757,20 @@ namespace {
                     return HandleRdmaReceiveEvent(
                         THolder<TEvRdmaIoReceiveDone::THandle>(static_cast<TEvRdmaIoReceiveDone::THandle*>(ev.Release())),
                         error);
+                }
+
+                if (ev->GetTypeRewrite() == TEvRdmaIoDone::EventType) {
+                    if (!HandleRdmaEvent(std::move(ev), error)) {
+                        return false;
+                    }
+                    continue;
+                }
+
+                if (ev->GetTypeRewrite() == TEvPollerReady::EventType) {
+                    TcpControlRead.ReadRequested = false;
+                    if (!TryReadTcpControlNoWait(error)) {
+                        return false;
+                    }
                 }
             }
         }
@@ -792,11 +983,11 @@ namespace {
             }
 
             const auto local = MakeStartSync();
-            if (!SendSyncProto(local, ESyncTcpMessageType::StartSync, "TRdmaStartSync", error, &localStartSyncChecksum)) {
+            if (!SendTcpProto(local, ESyncTcpMessageType::StartSync, "TRdmaStartSync", error, &localStartSyncChecksum)) {
                 return false;
             }
 
-            if (!ReceiveSyncProto(peerStartSync, ESyncTcpMessageType::StartSync, "TRdmaStartSync", error, &peerStartSyncChecksum)) {
+            if (!ReceiveTcpProto(peerStartSync, ESyncTcpMessageType::StartSync, "TRdmaStartSync", error, &peerStartSyncChecksum)) {
                 return false;
             }
 
@@ -903,13 +1094,18 @@ namespace {
         }
 
         bool DoFin(ui64 peerAckSyncChecksum, ui64 rdmaRtt, TString& error) {
-            return SendSyncProto(MakeFinSync(peerAckSyncChecksum, rdmaRtt), ESyncTcpMessageType::FinSync, "TRdmaFinSync", error);
+            return SendTcpProto(MakeFinSync(peerAckSyncChecksum, rdmaRtt), ESyncTcpMessageType::FinSync, "TRdmaFinSync", error);
         }
 
         bool DoReceiveFin(ui64 localAckSyncChecksum, TString& error) {
             NActorsInterconnect::TRdmaFinSync finSync;
-            if (!ReceiveSyncProto(finSync, ESyncTcpMessageType::FinSync, "TRdmaFinSync", error)) {
-                return false;
+            if (PendingFinSync) {
+                finSync = std::move(PendingFinSync->Sync);
+                PendingFinSync.reset();
+            } else {
+                if (!ReceiveTcpProto(finSync, ESyncTcpMessageType::FinSync, "TRdmaFinSync", error)) {
+                    return false;
+                }
             }
 
             if (finSync.GetHashChain() != localAckSyncChecksum) {

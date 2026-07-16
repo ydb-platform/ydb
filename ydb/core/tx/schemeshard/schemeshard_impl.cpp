@@ -2794,7 +2794,7 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
         }
 
         db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Delete();
-        SubDomains.erase(it);
+        SubDomains.erase(pathId);
     }
 }
 
@@ -3648,7 +3648,7 @@ void TSchemeShard::PersistRemovePersQueueGroup(NIceDb::TNiceDb& db, TPathId path
             }
         }
 
-        Topics.erase(it);
+        Topics.erase(pathId);
     }
 
     db.Table<Schema::PersQueueGroups>().Key(pathId.LocalPathId).Delete();
@@ -3869,8 +3869,8 @@ void TSchemeShard::PersistView(NIceDb::TNiceDb &db, TPathId pathId) {
 
 void TSchemeShard::PersistRemoveView(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
-    if (const auto view = Views.find(pathId); view != Views.end()) {
-        Views.erase(view);
+    if (Views.contains(pathId)) {
+        Views.erase(pathId);
     }
     db.Table<Schema::View>().Key(pathId.LocalPathId).Delete();
 }
@@ -3895,8 +3895,8 @@ void TSchemeShard::PersistSysView(NIceDb::TNiceDb& db, TPathId pathId) {
 
 void TSchemeShard::PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
-    if (const auto sysView = SysViews.find(pathId); sysView != SysViews.end()) {
-        SysViews.erase(sysView);
+    if (SysViews.contains(pathId)) {
+        SysViews.erase(pathId);
     }
 
     db.Table<Schema::SysView>().Key(pathId.LocalPathId).Delete();
@@ -4066,8 +4066,8 @@ void TSchemeShard::PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId) {
 
 void TSchemeShard::PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
-    if (const auto it = StreamingQueries.find(pathId); it != StreamingQueries.end()) {
-        StreamingQueries.erase(it);
+    if (StreamingQueries.contains(pathId)) {
+        StreamingQueries.erase(pathId);
     }
 
     db.Table<Schema::StreamingQueryState>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
@@ -4107,7 +4107,7 @@ void TSchemeShard::PersistTestShardSet(NIceDb::TNiceDb& db, TPathId pathId) {
 void TSchemeShard::PersistRemoveTestShardSet(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
     if (const auto it = TestShardSets.find(pathId); it != TestShardSets.end()) {
-        TestShardSets.erase(it);
+        TestShardSets.erase(pathId);
     }
     db.Table<Schema::TestShardSet>().Key(pathId.LocalPathId).Delete();
 }
@@ -4123,7 +4123,7 @@ void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) 
             db.Table<Schema::RTMRPartitions>().Key(pathId.LocalPathId, partition.second->ShardIdx.GetLocalId()).Delete();
         }
 
-        RtmrVolumes.erase(it);
+        RtmrVolumes.erase(pathId);
     }
 
     db.Table<Schema::RtmrVolumes>().Key(pathId.LocalPathId).Delete();
@@ -4171,7 +4171,7 @@ void TSchemeShard::PersistRemoveSolomonVolume(NIceDb::TNiceDb &db, TPathId pathI
             db.Table<Schema::SolomonPartitions>().Key(pathId.LocalPathId, part.first.GetLocalId()).Delete();
         }
 
-        SolomonVolumes.erase(it);
+        SolomonVolumes.erase(pathId);
     }
 
     db.Table<Schema::SolomonVolumes>().Key(pathId.LocalPathId).Delete();

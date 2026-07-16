@@ -343,7 +343,7 @@ void VerifyParams(TProposeResponse* result, TParamsDelta* delta, const TPathId p
     result->SetStatus(status, reason);
 }
 
-void RegisterChanges(const TTxState& txState, const TTxId operationTxId, TOperationContext& context, TPath& path, TSubDomainInfo::TPtr& subdomainInfo, TSubDomainInfo::TPtr& alter) {
+void RegisterChanges(const TTxState& txState, const TTxId operationTxId, TOperationContext& context, TPath& path, const TSubDomainInfo::TPtr& subdomainInfo, TSubDomainInfo::TPtr& alter) {
     const auto& basenameId = path.Base()->PathId;
 
     context.MemChanges.GrabPath(context.SS, basenameId);

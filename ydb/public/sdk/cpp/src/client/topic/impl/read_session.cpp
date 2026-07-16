@@ -193,6 +193,7 @@ bool TReadSession::Close(TDuration timeout) {
 
     std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl<false>>> cbContextToCancel;
     std::shared_ptr<TCallbackContext<TCountersLogger<false>>> dumpCountersContextToCancel;
+    TInstant closeDeadline;
     bool result = false;
     {
         TDeferredActions<false> deferred;
@@ -222,6 +223,7 @@ bool TReadSession::Close(TDuration timeout) {
             AbortImpl(EStatus::ABORTED, DRIVER_IS_STOPPING_DESCRIPTION, deferred);
             return false;
         }
+        closeDeadline = TInstant::Now() + timeout;
         Connections->ScheduleCallback(timeout,
                                       std::move(timeoutCallback),
                                       timeoutContext);
@@ -250,7 +252,7 @@ bool TReadSession::Close(TDuration timeout) {
             dumpCountersContextToCancel = DumpCountersContext;
         }
     }
-    if (!session->WaitAllDecompressionTasks(TInstant::Now() + timeout)) {
+    if (!session->WaitAllDecompressionTasks(closeDeadline)) {
         LOG_LAZY(Log, TLOG_WARNING, GetLogPrefix() << "Some decompression tasks are still running after read session close timeout");
     }
     ClearAllEvents();

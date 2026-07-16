@@ -198,9 +198,9 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
                 INSERT INTO {ref}(Data) VALUES("data3");
 
                 SELECT
-                    SystemMetadata('offset') as offset,
-                    SystemMetadata('seq_no') as seq_no,
-                    SystemMetadata("write_time") as write_time,
+                    __ydb_offset as offset,
+                    __ydb_seq_no as seq_no,
+                    __ydb_write_time as write_time,
                     Data
                 FROM {ref};"""
         )

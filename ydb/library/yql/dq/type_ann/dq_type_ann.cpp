@@ -1479,14 +1479,16 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 4, ctx)) {
+    if (!EnsureArgsCount(*input, 6, ctx)) {
         return TStatus::Error;
     }
 
     auto stream = input->Child(TDqPhyWatermarkGenerator::idx_Input);
     auto& watermarkExtractor = input->ChildRef(TDqPhyWatermarkGenerator::idx_WatermarkExtractor);
-    auto& partitionIdExtractor = input->ChildRef(TDqPhyWatermarkGenerator::idx_PartitionIdExtractor);
+    auto& partitionKeyExtractor = input->ChildRef(TDqPhyWatermarkGenerator::idx_PartitionKeyExtractor);
+    auto& writeTimeExtractor = input->ChildRef(TDqPhyWatermarkGenerator::idx_WriteTimeExtractor);
     auto watermarkSettings = input->Child(TDqPhyWatermarkGenerator::idx_WatermarkSettings);
+    auto partitionKeys = input->Child(TDqPhyWatermarkGenerator::idx_PartitionKeys);
 
     if (stream->GetTypeAnn() && stream->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
         input->SetTypeAnn(stream->GetTypeAnn());
@@ -1505,13 +1507,15 @@ TStatus AnnotateDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext&
     }();
 
     bool isUniversal1;
-    bool isUniversal2;
     auto status = ConvertToLambda(watermarkExtractor, ctx, isUniversal1, 1);
-    status = status.Combine(ConvertToLambda(partitionIdExtractor, ctx, isUniversal2, 1));
+    bool isUniversal2;
+    status = status.Combine(ConvertToLambda(partitionKeyExtractor, ctx, isUniversal2, 1));
+    bool isUniversal3;
+    status = status.Combine(ConvertToLambda(writeTimeExtractor, ctx, isUniversal3, 1));
     if (status.Level != TStatus::Ok) {
         return status;
     }
-    if (isUniversal1 || isUniversal2) {
+    if (isUniversal1 || isUniversal2 || isUniversal3) {
         input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
         return TStatus::Ok;
     }
@@ -1526,30 +1530,55 @@ TStatus AnnotateDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext&
         return TStatus::Error;
     }
 
-    if (!UpdateLambdaAllArgumentsTypes(partitionIdExtractor, {itemType}, ctx)) {
+    if (!UpdateLambdaAllArgumentsTypes(partitionKeyExtractor, {itemType}, ctx)) {
         return TStatus::Error;
     }
-    if (!partitionIdExtractor->GetTypeAnn()) {
+    if (!partitionKeyExtractor->GetTypeAnn()) {
         return TStatus::Repeat;
     }
-    if (!EnsureSpecificDataType(*partitionIdExtractor, EDataSlot::Uint64, ctx)) {
+    if (!EnsureStructType(*partitionKeyExtractor, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!UpdateLambdaAllArgumentsTypes(writeTimeExtractor, {itemType}, ctx)) {
+        return TStatus::Error;
+    }
+    if (!writeTimeExtractor->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+    if (!EnsureSpecificDataType(*writeTimeExtractor, EDataSlot::Timestamp, ctx)) {
         return TStatus::Error;
     }
 
     if (!EnsureValidSettings(
         *watermarkSettings,
-        {"WatermarksLateArrivalDelayUs", "WatermarksGranularityUs", "WatermarksIdleTimeoutUs"},
-        [](TStringBuf /* name */, TExprNode& node, TExprContext& ctx) -> bool {
+        {
+            "WatermarksLateArrivalDelayUs",
+            "WatermarksGranularityUs",
+            "WatermarksIdleTimeoutUs",
+            "FederatedClusters",
+        },
+        [](TStringBuf name, TExprNode& node, TExprContext& ctx) -> bool {
             if (!EnsureArgsCount(node, 2, ctx)) {
                 return false;
             }
-            if (!EnsureAtom(node.Tail(), ctx)) {
-                return false;
+            if ("FederatedClusters" == name) {
+                if (!EnsureTupleOfAtoms(node.Tail(), ctx)) {
+                    return false;
+                }
+            } else {
+                if (!EnsureAtom(node.Tail(), ctx)) {
+                    return false;
+                }
             }
             return true;
         },
         ctx
     )) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureVoidLiteral(*partitionKeys, ctx)) {
         return TStatus::Error;
     }
 

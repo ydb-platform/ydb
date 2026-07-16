@@ -59,12 +59,16 @@ public:
 
     void SetHostState(THostIndex hostIndex, EHostState state);
 
+    void OnHostAppended(size_t newHostCount);
+
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
     [[nodiscard]] TString DebugPrintDirtyMap();
 
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
     // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.
+    // Until the dirty map is restored it returns 0 (the blocking bound), so
+    // the cleanup cannot erase records that are not accounted for yet.
     // Must run on the executor thread.
     [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
 
@@ -101,6 +105,7 @@ private:
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         std::shared_ptr<NWilson::TSpan> span);
+    void OnReadBlocksResponse(const IReadRequestExecutor::TResponse& response);
 
     void DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle);
     void DoFlush(bool force);
@@ -159,6 +164,7 @@ private:
     size_t InflightWritesCount = 0;
     size_t InflightFlushesCount = 0;
     bool CleaningUpScheduled = false;
+    bool Stopped = false;
 
     TVector<IRequestExecutorWeakPtr> Inflight;
 

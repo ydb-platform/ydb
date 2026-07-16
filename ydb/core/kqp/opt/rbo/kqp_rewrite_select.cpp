@@ -410,9 +410,8 @@ TExprNode::TPtr NormalizeMemberNames(TExprNode::TPtr node, TExprContext& ctx, TP
     for (const auto& member : members) {
         const TString colName(TCoMember(member).Name().StringValue());
         if (colName.StartsWith("_alias_")) {
-            auto it = colName.find(".");
-            Y_ENSURE(it != TString::npos, "Invalid _alias_ prefix");
-            const auto newMemberName = colName.substr(7);
+            const auto [alias, column] = SplitAliasedMemberName(colName);
+            const TString newMemberName = alias + "." + column;
             // clang-format off
             auto newMember = Build<TCoMember>(ctx, pos)
                 .Struct(member->ChildPtr(0))
@@ -855,10 +854,11 @@ void ProcessAggregations(TExprNode::TPtr lambdaToProcess, TString&& resultColNam
             auto body = lambda.Body().Ptr();
             if (IsExpression(body)) {
                 originalColName = TInfoUnit(resultColName);
-                expressionsMapPreAgg.push_back({resultColName, lambda.Ptr(), false});
+                expressionsMapPreAgg.emplace_back(resultColName, lambda.Ptr(), false);
             } else {
                 auto member = TCoMember(body);
                 originalColName = TInfoUnit(member.Name().StringValue());
+                expressionsMapPreAgg.emplace_back(originalColName.GetFullName(), lambda.Ptr(), false);
             }
         }
 

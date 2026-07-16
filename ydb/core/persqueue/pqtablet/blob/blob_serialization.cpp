@@ -14,17 +14,17 @@ namespace {
 
 const ui32 CHUNK_SIZE_PLACEMENT = 0xCCCCCCCC;
 
-static_assert(MESSAGE_COUNT_BITS + MESSAGE_METADATA_RESERVED_BITS == 32);
+static_assert(LOGICAL_MESSAGE_COUNT_BITS + MESSAGE_METADATA_RESERVED_BITS == 32);
 
 ui32 PackMessageMetadata(const TClientBlob& blob) {
-    AFL_ENSURE(blob.MessageCount >= 1 && blob.MessageCount <= MAX_MESSAGE_COUNT)("messageCount", blob.MessageCount);
-    return (blob.MessageCount << MESSAGE_METADATA_RESERVED_BITS) | (blob.IsBatch ? 1 : 0);
+    AFL_ENSURE(blob.LogicalMessageCount >= 1 && blob.LogicalMessageCount <= MAX_LOGICAL_MESSAGE_COUNT)("logicalMessageCount", blob.LogicalMessageCount);
+    return (blob.LogicalMessageCount << MESSAGE_METADATA_RESERVED_BITS) | (blob.IsBatch ? 1 : 0);
 }
 
 std::pair<ui32, bool> UnpackMessageMetadata(ui32 metadata) {
-    ui32 messageCount = metadata >> MESSAGE_METADATA_RESERVED_BITS;
+    ui32 logicalMessageCount = metadata >> MESSAGE_METADATA_RESERVED_BITS;
     bool isBatch = metadata & 1;
-    return {messageCount == 0 ? 1 : messageCount, isBatch};
+    return {logicalMessageCount == 0 ? 1 : logicalMessageCount, isBatch};
 }
 
 
@@ -77,7 +77,7 @@ TMessageFlags InitFlags(const TClientBlob& blob) {
     flags.F.HasPartData = !blob.PartData.Empty();
     flags.F.HasUncompressedSize = blob.UncompressedSize != 0;
     flags.F.HasKinesisData = !blob.PartitionKey.empty();
-    flags.F.HasBatchInfo = blob.MessageCount != 1 || blob.IsBatch;
+    flags.F.HasBatchInfo = blob.LogicalMessageCount != 1 || blob.IsBatch;
     return flags;
 }
 
@@ -142,7 +142,7 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
             hasKinesis = true;
         }
 
-        if (Batch.Blobs[i].MessageCount != 1 || Batch.Blobs[i].IsBatch) {
+        if (Batch.Blobs[i].LogicalMessageCount != 1 || Batch.Blobs[i].IsBatch) {
             hasBatchInfo = true;
         }
     }
@@ -156,7 +156,7 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
     for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
         if (Batch.Blobs[i].IsLastPart()) {
             ++lastPartCount;
-            offsetSpan += Batch.Blobs[i].MessageCount;
+            offsetSpan += Batch.Blobs[i].LogicalMessageCount;
         }
         ++reorderMap[TStringBuf(Batch.Blobs[i].SourceId)];
     }
@@ -472,20 +472,20 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
         uncompressedSize.resize(totalBlobs); //fill with zero-s
     }
 
-    TVector<ui32> messageCounts;
+    TVector<ui32> logicalMessageCounts;
     TVector<bool> isBatches;
-    messageCounts.reserve(totalBlobs);
+    logicalMessageCounts.reserve(totalBlobs);
     isBatches.reserve(totalBlobs);
     if (data < dataEnd) {
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs);
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
-            auto [messageCount, isBatch] = UnpackMessageMetadata(ReadUnaligned<ui32>(iter->Next().Data()));
-            messageCounts.push_back(messageCount);
+            auto [logicalMessageCount, isBatch] = UnpackMessageMetadata(ReadUnaligned<ui32>(iter->Next().Data()));
+            logicalMessageCounts.push_back(logicalMessageCount);
             isBatches.push_back(isBatch);
         }
     } else {
-        messageCounts.resize(totalBlobs, 1);
+        logicalMessageCounts.resize(totalBlobs, 1);
         isBatches.resize(totalBlobs, false);
     }
 
@@ -517,7 +517,7 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
         processedBlob.PartitionKey = std::move(partitionKey[i]);
         processedBlob.ExplicitHashKey = std::move(explicitHash[i]);
 
-        processedBlob.MessageCount = messageCounts[pos[i]];
+        processedBlob.LogicalMessageCount = logicalMessageCounts[pos[i]];
         processedBlob.IsBatch = isBatches[pos[i]];
 
         if (lastPart) {
@@ -725,10 +725,10 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
             data += explicitHashKey.size();
     }
 
-    ui32 messageCount = 1;
+    ui32 logicalMessageCount = 1;
     bool isBatch = false;
     if (flags.F.HasBatchInfo) {
-        std::tie(messageCount, isBatch) = UnpackMessageMetadata(ReadUnaligned<ui32>(data));
+        std::tie(logicalMessageCount, isBatch) = UnpackMessageMetadata(ReadUnaligned<ui32>(data));
         data += sizeof(ui32);
     }
 
@@ -759,6 +759,6 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
 
     return TClientBlob(std::move(sourceId), seqNo, std::move(dt), partData,
                        writeTimestamp, createTimestamp, uncompressedSize,
-                       std::move(partitionKey), std::move(explicitHashKey), messageCount, isBatch);
+                       std::move(partitionKey), std::move(explicitHashKey), logicalMessageCount, isBatch);
 }
 } //NKikimr :: NPQ

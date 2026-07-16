@@ -19,6 +19,9 @@ SET(ORIG_SOURCES
     mkql_block_decimal.cpp
     mkql_block_exists.cpp
     mkql_block_getelem.cpp
+    mkql_block_guess.cpp
+    mkql_block_variant.cpp
+    mkql_block_way.cpp
     mkql_block_if.cpp
     mkql_block_just.cpp
     mkql_block_logical.cpp

@@ -890,6 +890,11 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildInitHandlerLambda(const TVecto
     TVector<TExprNode::TPtr> lambdaResults;
     for (const auto& aggTraits : aggTraitsList) {
         const auto& aggFunction = aggTraits.AggFunc;
+        // No init state for distinct.
+        if (aggFunction == "distinct") {
+            continue;
+        }
+
         const auto isOptional = aggTraits.InputItemType->IsOptionalOrNull();
         const TTypeAnnotationNode* itemType = aggTraits.InputItemType;
 
@@ -904,8 +909,6 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildInitHandlerLambda(const TVecto
             initState = isOptional ? BuildAvgAggregationInitialStateForOptionalType(initState, itemType) : BuildAvgAggregationInitialState(initState, itemType);
         } else if (aggFunction == "sum") {
             initState = BuildSumAggregationInitialState(initState, itemType);
-        } else if (aggFunction == "distinct") {
-            continue;
         } else if (aggFunction == "variance_1_1") {
             initState =
                 isOptional ? BuildVarianceAggregationInitialStateOptionalType(initState, itemType) : BuildVarianceAggregationInitialState(initState, itemType);
@@ -943,6 +946,11 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambda(const TVec
     TVector<TExprNode::TPtr> lambdaResults;
     for (const auto& aggTraits : aggTraitsList) {
         const auto& aggFunction = aggTraits.AggFunc;
+        // No update state for distinct.
+        if (aggFunction == "distinct") {
+            continue;
+        }
+
         const auto& fieldName = aggTraits.AggFieldName;
         const auto& stateName = aggTraits.StateFieldName;
         const bool isOptional = aggTraits.InputItemType->IsOptionalOrNull();
@@ -950,11 +958,11 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambda(const TVec
         TExprNode::TPtr updateState;
 
         auto it = lambdaArgsMap.find(fieldName);
-        Y_ENSURE(it != lambdaArgsMap.end());
+        Y_ENSURE(it != lambdaArgsMap.end(), TStringBuilder() << "Cannot find a field name: " << fieldName);
         TExprNode::TPtr lambdaArgField = lambdaArgs[it->second];
 
         it = lambdaArgsMap.find(stateName);
-        Y_ENSURE(it != lambdaArgsMap.end());
+        Y_ENSURE(it != lambdaArgsMap.end(), TStringBuilder() << "Cannot find state name: " << stateName);
         TExprNode::TPtr lambdaArgState = lambdaArgs[it->second];
 
         if (aggFunction == "count") {
@@ -965,8 +973,6 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambda(const TVec
                                      : BuildAvgAggregationUpdateState(lambdaArgState, lambdaArgField, itemType);
         } else if (aggFunction == "sum") {
             updateState = BuildSumAggregationUpdateState(lambdaArgState, lambdaArgField, aggTraits.InputItemType);
-        } else if (aggFunction == "distinct") {
-            continue;
         } else if (aggFunction == "variance_1_1") {
             updateState = isOptional ? BuildVarianceAggregationUpdateStateOptionalType(lambdaArgState, lambdaArgField, aggTraits.InputItemType)
                                      : BuildVarianceAggregationUpdateState(lambdaArgState, lambdaArgField, aggTraits.InputItemType);
@@ -1078,11 +1084,12 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildNarrowMapForPhysicalAggregatio
                                                                                         const TVector<TPhysicalAggregationTraits>& aggTraitsList,
                                                                                         const THashMap<TString, TString>& renameMap, bool isDistinct,
                                                                                         EOpPhase aggregationPhase) {
-    TVector<TString> outputFields = keyFields;
+    TVector<TString> outputFields;
     if (!isDistinct) {
-        for (const auto& aggTraits : aggTraitsList) {
-            outputFields.push_back(aggTraits.StateFieldName);
-        }
+        outputFields = keyFields;
+    }
+    for (const auto& aggTraits : aggTraitsList) {
+        outputFields.push_back(aggTraits.StateFieldName);
     }
 
     if (keyFields.empty() && aggregationPhase != EOpPhase::Intermediate) {
@@ -1197,12 +1204,7 @@ void TPhysicalAggregationBuilder::BuildPhysicalAggregationTraits(const TVector<T
                 const auto* inputType = std::get<2>(tupleTraits);
                 const auto* outputType = std::get<3>(tupleTraits);
                 const auto unwrap = std::get<4>(tupleTraits);
-
-                auto stateName = "__kqp_agg_state_" + aggFunction + "_" + originalColName + ToString(j);
-                // No renames for distinct, we want to process only keys.
-                if (aggFunction == "distinct") {
-                    stateName = originalColName;
-                }
+                const auto stateName = "__kqp_agg_state_" + aggFunction + "_" + originalColName + ToString(j);
 
                 TString inputField;
                 if (!aggFieldsMap.contains(originalColName)) {

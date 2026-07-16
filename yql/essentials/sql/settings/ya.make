@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     partitioning.cpp
     translation_settings.cpp
-    translation_sql_flags.cpp
     translator.cpp
 )
 
@@ -16,7 +15,12 @@ PEERDIR(
     yql/essentials/core/issue
     yql/essentials/core/pg_settings
     yql/essentials/public/issue/protos
+    yql/essentials/sql/settings/flags
     yql/essentials/utils
 )
 
 END()
+
+RECURSE(
+    flags
+)

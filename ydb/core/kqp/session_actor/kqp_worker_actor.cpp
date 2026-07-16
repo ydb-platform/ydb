@@ -586,9 +586,6 @@ private:
                 execSettings.UsePgParser = false;
                 execSettings.SyntaxVersion = 1;
                 break;
-            case Ydb::Query::Syntax::SYNTAX_PG:
-                execSettings.UsePgParser = true;
-                break;
             default:
                 break;
         }
@@ -608,9 +605,6 @@ private:
                         execSettings.SyntaxVersion = 1;
                         break;
 
-                    case Ydb::Query::Syntax::SYNTAX_PG:
-                        execSettings.UsePgParser = true;
-                        break;
                     default:
                         break;
                 }
@@ -916,7 +910,8 @@ private:
                 if (!NKikimr::IsQueryWithSensitiveInfo(text)) {
                     auto userSID = QueryState->RequestEv->GetUserToken()->GetUserSID();
                     CollectQueryStats(ctx, stats, queryDuration, text,
-                        userSID, QueryState->RequestEv->GetParametersSize(), database, type, requestUnits);
+                        userSID, QueryState->RequestEv->GetParametersSize(), database, type, requestUnits,
+                        QueryState->RequestEv->GetTraceId());
                 }
                 break;
             }

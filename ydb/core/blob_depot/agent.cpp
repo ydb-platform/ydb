@@ -30,6 +30,7 @@ namespace NKikimr::NBlobDepot {
                     agentIt->second.Connection->PipeServerId == it->first) {
                 OnAgentDisconnect(agentIt->second);
                 agentIt->second.Connection.reset();
+                TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_AGENTS_CONNECTED] -= 1;
                 agentIt->second.ExpirationTimestamp = TActivationContext::Now() + ExpirationTimeout;
             }
         }
@@ -65,6 +66,9 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(!it->second.NodeId || *it->second.NodeId == nodeId);
         it->second.NodeId = nodeId;
         auto& agent = Agents[nodeId];
+        if (!agent.Connection) {
+            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_AGENTS_CONNECTED] += 1;
+        }
         agent.Connection = {
             .PipeServerId = pipeServerId,
             .AgentId = ev->Sender,

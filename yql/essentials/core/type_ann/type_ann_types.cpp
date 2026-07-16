@@ -2,12 +2,14 @@
 #include "type_ann_expr.h"
 #include "type_ann_impl.h"
 #include "type_ann_types.h"
+
 #include "yql/essentials/core/yql_opt_utils.h"
+#include "yql/essentials/core/langver/feature.gen.h"
 
 
 namespace NYql::NTypeAnnImpl {
     bool CheckLinearLangver(TPositionHandle pos, TLangVersion langver, TExprContext& ctx) {
-        if (!IsAvailableLangVersion(MakeLangVersion(2025, 4), langver)) {
+        if (!IsAvailableLangVersion(NFeature::LinearTypes.MinLangVer, langver)) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "Linear types are not available before version 2025.04"));
             return false;
         }
@@ -1265,7 +1267,7 @@ namespace NYql::NTypeAnnImpl {
             TAstNode::NewList(inputPos, pool,
                 TAstNode::NewLiteralAtom(inputPos, TStringBuf("return"), pool), parsedType));
         TExprNode::TPtr exprRoot;
-        if (!CompileExpr(*astRoot, exprRoot, ctx.Expr, nullptr, nullptr)) {
+        if (!CompileExpr(*astRoot, exprRoot, ctx.Expr, /*resolver=*/nullptr, /*urlListerManager=*/nullptr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1564,12 +1566,12 @@ namespace NYql::NTypeAnnImpl {
 
     template <>
     IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::RemoveMember>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        return RemoveMemberImpl(input, output, ctx, false);
+        return RemoveMemberImpl(input, output, ctx, /*force=*/false);
     }
 
     template <>
     IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::ForceRemoveMember>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        return RemoveMemberImpl(input, output, ctx, true);
+        return RemoveMemberImpl(input, output, ctx, /*force=*/true);
     }
 
     template <>
@@ -2402,7 +2404,7 @@ namespace NYql::NTypeAnnImpl {
         Y_UNUSED(input);
         Y_UNUSED(output);
         ctx.Expr.Step.Repeat(TExprStep::ExprEval);
-        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
     }
 
     IGraphTransformer::TStatus EvaluateExprIfPureWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -2572,4 +2574,3 @@ namespace NYql::NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 } // namespace NYql::NTypeAnnImpl
-

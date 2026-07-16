@@ -1,4 +1,14 @@
+* Added `TQueryClient::DeleteSession` to explicitly delete a query session by session id.
+
+* Added a flag to support deferred session creation(when client timeout exceeded, the session is created in the backgroud)
+
+* Added a distributed lock primitive based on the coordination service, which implements basic_lockable concept.
+
+# v3.20.0
+
 * Added automatic retries for unary methods of table and query clients(ExecuteQuery, ExecuteScript, BulkUpsert, ReadRows).
+
+* Implemented native ranges(TRowRange) and iterators over both streaming query results and TResultSet.
 
 ## v3.19.0
 

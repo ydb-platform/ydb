@@ -1021,11 +1021,7 @@ TFuture<void> UpdatePersistentQueueTabletsState(
                 auto rowToDelete = rowBuffer->AllocateUnversioned(2);
                 rowToDelete[0] = MakeUnversionedInt64Value(tabletIndex, nameTableTabletIndexColumnId);
                 rowToDelete[1] = MakeUnversionedInt64Value(rowIndex, nameTableRowIndexColumnId);
-                modifications.push_back(TRowModification{
-                    ERowModificationType::Delete,
-                    rowToDelete.ToTypeErasedRow(),
-                    TLockMask()
-                });
+                modifications.push_back(NRowModifications::TDeleteRow(rowToDelete));
             }
 
             for (const auto& [tabletIndex, tabletUpdate] : tabletMap) {
@@ -1035,11 +1031,7 @@ TFuture<void> UpdatePersistentQueueTabletsState(
                     rowToWrite[0] = MakeUnversionedInt64Value(tabletIndex, nameTableTabletIndexColumnId);
                     rowToWrite[1] = MakeUnversionedInt64Value(tabletUpdate.FirstUnconsumedRowIndex - 1, nameTableRowIndexColumnId);
                     rowToWrite[2] = MakeUnversionedInt64Value(static_cast<i64>(ERowState::ConsumedAndTrimmed), nameTableStateColumnId);
-                    modifications.push_back(TRowModification{
-                        ERowModificationType::Write,
-                        rowToWrite.ToTypeErasedRow(),
-                        TLockMask()
-                    });
+                    modifications.push_back(NRowModifications::TWriteRow(rowToWrite));
                 }
             }
 

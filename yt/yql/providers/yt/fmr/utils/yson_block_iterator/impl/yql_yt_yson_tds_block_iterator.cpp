@@ -21,7 +21,8 @@ TTableDataServiceBlockIterator::TTableDataServiceBlockIterator(
     TMaybe<bool> isLastRowKeysInclusive,
     TMaybe<TString> firstRowKeys,
     TMaybe<TString> lastRowKeys,
-    ui64 readAheadChunks
+    ui64 readAheadChunks,
+    TMaybe<size_t> numBoundaryKeyColumns
 )
     : TableId_(std::move(tableId))
     , TableRanges_(std::move(tableRanges))
@@ -31,6 +32,7 @@ TTableDataServiceBlockIterator::TTableDataServiceBlockIterator(
     , NeededColumns_(std::move(neededColumns))
     , SerializedColumnGroupsSpec_(std::move(serializedColumnGroupsSpec))
     , ReadAheadChunks_(readAheadChunks)
+    , NumBoundaryKeyColumns_(numBoundaryKeyColumns.GetOrElse(KeyColumns_.size()))
 {
     if (SortOrders_.empty()) {
         SortOrders_.assign(KeyColumns_.size(), ESortOrder::Ascending);
@@ -38,6 +40,7 @@ TTableDataServiceBlockIterator::TTableDataServiceBlockIterator(
     if (SortOrders_.size() != KeyColumns_.size()) {
         ythrow yexception() << "SortOrders and KeyColumns sizes are different";
     }
+    Y_ENSURE(NumBoundaryKeyColumns_ <= KeyColumns_.size(), "numBoundaryKeyColumns must not exceed keyColumns size");
 
     if (firstRowKeys) {
         FirstBoundary_ = TFmrTableKeysBoundary(*firstRowKeys, KeyColumns_, SortOrders_);
@@ -130,14 +133,87 @@ void TTableDataServiceBlockIterator::FillPrefetchQueue() {
     }
 }
 
+namespace {
+
+// A key column's value is considered null either because the row's binary yson genuinely omits
+// it (IsValid()==false - e.g. a nullable column that a sparse writer drops rather than encoding
+// as an explicit entity) or because it IS encoded, but as the explicit '#' entity marker (e.g.
+// boundary blobs built from a NYT::TNode map, which always sets every key, and represents a NULL
+// value as an entity rather than omitting the key).
+bool IsNullColumnValue(TStringBuf blob, const TColumnOffsetRange& range) {
+    if (!range.IsValid()) {
+        return true;
+    }
+    return SliceRange(blob, range) == TStringBuf(&EntitySymbol, 1);
+}
+
+// FirstRowKeys/LastRowKeys boundaries are built by the coordinator from a task's chunk-stats,
+// i.e. from an actual physical row's real key - for MapReduce reduce tasks over joins that key
+// is [_yql_key_hash, ...ReduceBy, ...SortBy tiebreaker] in full, tiebreaker included, because
+// that's what TReducePartitioner sorts intermediate data by (see
+// yql_yt_map_reduce_stage_operation_manager.cpp). It is NOT reliably a strict prefix that omits
+// the tiebreaker: whichever physical row happens to land on a task cut contributes its own real
+// tiebreaker value to the boundary blob. So this can't stop at "wherever the boundary blob runs
+// out of valid columns" (that already-invalid range doesn't reliably appear here) - it must be
+// told explicitly, via numBoundaryKeyColumns, how many leading columns actually define a reduce
+// group, and ignore everything past that. Comparing the tiebreaker as a real bound column would
+// silently split a reduce group in half whenever a task cut lands between two physical rows that
+// share a reduce key but differ in tiebreaker (e.g. a join's build-side row vs. its probe-side
+// rows) - each side would look like it's on the "wrong side" of the other's boundary.
+int CompareRowToBoundaryPrefix(
+    TStringBuf rowBlob,
+    const TRowIndexMarkup& row,
+    TStringBuf boundaryBlob,
+    const TRowIndexMarkup& boundaryMarkup,
+    const std::vector<ESortOrder>& sortOrders,
+    size_t numBoundaryKeyColumns
+) {
+    const size_t limit = std::min<size_t>(numBoundaryKeyColumns, boundaryMarkup.empty() ? 0 : boundaryMarkup.size() - 1);
+    for (ui64 colIdx = 0; colIdx < limit; ++colIdx) {
+        const auto& boundaryRange = boundaryMarkup[colIdx];
+        if (!boundaryRange.IsValid()) {
+            // Boundary doesn't encode this column (or any further one, since it's a prefix) -
+            // no constraint from here on.
+            break;
+        }
+        const auto& rowRange = row[colIdx];
+
+        // Both sides null (whichever way each happens to encode it) - equal at this column,
+        // keep comparing the remaining columns instead of declaring the row out of bounds.
+        const bool rowIsNull = IsNullColumnValue(rowBlob, rowRange);
+        const bool boundaryIsNull = IsNullColumnValue(boundaryBlob, boundaryRange);
+        if (rowIsNull && boundaryIsNull) {
+            continue;
+        }
+        if (rowIsNull) {
+            return -1;
+        }
+        if (boundaryIsNull) {
+            return 1;
+        }
+
+        int result = CompareYsonValuesImpl(SliceRange(rowBlob, rowRange), SliceRange(boundaryBlob, boundaryRange));
+        if (sortOrders[colIdx] == ESortOrder::Descending) {
+            result = -result;
+        }
+        if (result != 0) {
+            return result;
+        }
+    }
+    return 0;
+}
+
+} // namespace
+
 bool TTableDataServiceBlockIterator::RowInKeyBounds(const TString& blob, const TRowIndexMarkup& row) const {
     if (FirstBoundary_) {
-        int c = CompareKeyRowsAcrossYsonBlocks(
+        int c = CompareRowToBoundaryPrefix(
             blob,
             row,
             FirstBoundary_->Row,
             FirstBoundary_->Markup,
-            SortOrders_
+            SortOrders_,
+            NumBoundaryKeyColumns_
         );
         if (c < 0) { // if row < first boundary
             return false;
@@ -146,12 +222,13 @@ bool TTableDataServiceBlockIterator::RowInKeyBounds(const TString& blob, const T
         }
     }
     if (LastBoundary_) {
-        int c = CompareKeyRowsAcrossYsonBlocks(
+        int c = CompareRowToBoundaryPrefix(
             blob,
             row,
             LastBoundary_->Row,
             LastBoundary_->Markup,
-            SortOrders_
+            SortOrders_,
+            NumBoundaryKeyColumns_
         );
         if (c > 0) { // if row > last boundary
             return false;

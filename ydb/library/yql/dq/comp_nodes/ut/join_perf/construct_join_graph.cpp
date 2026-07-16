@@ -9,6 +9,8 @@
 #include <arrow/array/util.h>
 #include <arrow/scalar.h>
 
+#include <algorithm>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -129,6 +131,49 @@ NUdf::TUnboxedValuePod SliceBlockList(
     return holderFactory.CreateDirectListHolder(std::move(newList));
 }
 
+NUdf::TUnboxedValuePod ScalarizeBlockList(
+    const THolderFactory& holderFactory,
+    NUdf::TUnboxedValuePod blockList,
+    size_t width,
+    const TVector<int>& scalarColumns)
+{
+    NUdf::TUnboxedValue iterator = blockList.GetListIterator();
+    NUdf::TUnboxedValue current;
+
+    TDefaultListRepresentation newList;
+
+    while (iterator.Next(current)) {
+        auto blockCountUV = current.GetElement(width);
+        ui64 blockCount =
+            TArrowBlock::From(blockCountUV).GetDatum()
+                .scalar_as<arrow::UInt64Scalar>().value;
+
+        NUdf::TUnboxedValue* items = nullptr;
+        auto tuple = holderFactory.CreateDirectArrayHolder(width + 1, items);
+
+        for (size_t i = 0; i < width; i++) {
+            auto colValue = current.GetElement(i);
+            const bool scalarize =
+                std::find(scalarColumns.begin(), scalarColumns.end(), static_cast<int>(i)) != scalarColumns.end();
+
+            if (scalarize && blockCount > 0) {
+                const auto& datum = TArrowBlock::From(colValue).GetDatum();
+                Y_ABORT_UNLESS(datum.is_array());
+                auto arr = arrow::MakeArray(datum.array());
+                auto scalar = ARROW_RESULT(arr->GetScalar(0));
+                items[i] = holderFactory.CreateArrowBlock(arrow::Datum(std::move(scalar)));
+            } else {
+                items[i] = std::move(colValue);
+            }
+        }
+
+        items[width] = MakeBlockCount(holderFactory, blockCount);
+        newList = newList.Append(std::move(tuple));
+    }
+
+    return holderFactory.CreateDirectListHolder(std::move(newList));
+}
+
 void SetEntryPointValues(IComputationGraph& g, NYql::NUdf::TUnboxedValue left, NYql::NUdf::TUnboxedValue right) {
     TComputationContext& ctx = g.GetContext();
     g.GetEntryPoint(0, false)->SetValue(ctx, std::move(left));
@@ -227,6 +272,14 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
         if (descr.SliceBlocks) {
             leftBlocks = SliceBlockList(ctx.HolderFactory, leftBlocks, descr.LeftSource.ColumnTypes.size());
             rightBlocks = SliceBlockList(ctx.HolderFactory, rightBlocks, descr.RightSource.ColumnTypes.size());
+        }
+        if (!descr.ScalarizeLeftColumns.empty()) {
+            leftBlocks = ScalarizeBlockList(ctx.HolderFactory, leftBlocks, descr.LeftSource.ColumnTypes.size(),
+                                            descr.ScalarizeLeftColumns);
+        }
+        if (!descr.ScalarizeRightColumns.empty()) {
+            rightBlocks = ScalarizeBlockList(ctx.HolderFactory, rightBlocks, descr.RightSource.ColumnTypes.size(),
+                                             descr.ScalarizeRightColumns);
         }
         SetEntryPointValues(*graph, leftBlocks, rightBlocks);
         return graph;

@@ -434,6 +434,30 @@ message TableIndexDescription {
     uint64 size_bytes = 7;
 }
 
+// Represent multi-column table statistics
+message TableMultiColumnStatistics {
+    enum MultiColumnStatisticsType {
+        STATISTIC_TYPE_UNSPECIFIED = 0;
+        COUNT_MIN_SKETCH = 1;
+    }
+    // Name of statistics
+    string name = 1;
+    // List of columns the statistics is built on
+    repeated string columns = 2;
+    // Types of statistics to build
+    repeated MultiColumnStatisticsType types = 3;
+}
+
+// Represent multi-column table statistics description
+message TableMultiColumnStatisticsDescription {
+    // Name of statistics
+    string name = 1;
+    // List of columns the statistics is built on
+    repeated string columns = 2;
+    // Types of statistics to build
+    repeated TableMultiColumnStatistics.MultiColumnStatisticsType types = 3;
+}
+
 // State of index building operation
 message IndexBuildState {
     enum State {
@@ -447,6 +471,29 @@ message IndexBuildState {
         STATE_REJECTION = 7;
         STATE_REJECTED = 8;
     }
+}
+
+// State of set not null operation
+message SetNotNullState {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_PREPARING = 1;
+        STATE_VALIDATING = 2;
+        STATE_APPLYING = 3;
+        STATE_DONE = 4;
+        STATE_CANCELLED = 5;
+    }
+}
+
+message SetNotNullItem {
+    optional string column_name = 1;
+}
+
+message SetNotNullMetadata {
+    string path = 1;
+    repeated string columns = 2;
+    SetNotNullState.State state = 3;
+    float progress = 4;
 }
 
 // Description of index building operation
@@ -1042,6 +1089,8 @@ message CreateTableRequest {
      * The metrics configuration for the given table.
      */
     optional MetricsSettings metrics_settings = 21;
+    // List of multi-column table statistics
+    repeated TableMultiColumnStatistics statistics = 22;
 }
 
 message CreateTableResponse {
@@ -1096,6 +1145,27 @@ message CompactMetadata {
     optional float progress = 5;
     optional uint32 shards_total = 6;
     optional uint32 shards_done = 7;
+}
+
+// State of an analyze operation
+message AnalyzeState {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_ENQUEUED = 1;
+        STATE_IN_PROGRESS = 2;
+        STATE_DONE = 3;
+        STATE_CANCELLED = 4;
+        STATE_FAILED = 5;
+    }
+}
+
+message AnalyzeMetadata {
+
+    repeated string paths = 1;             // All table paths covered by this analyze operation.
+    repeated string in_progress_paths = 2; // Tables currently being traversed
+    repeated string done_paths = 3;        // Tables for which analysis is complete
+    optional AnalyzeState.State state = 4;
+    optional float progress = 5;
 }
 
 // Alter table with given path
@@ -1154,6 +1224,13 @@ message AlterTableRequest {
         MetricsSettings set_metrics_settings = 25;
         google.protobuf.Empty drop_metrics_settings = 26;
     }
+
+    // Start set not null for table
+    repeated SetNotNullItem set_not_null = 27;
+    // Add multi-column table statistics
+    repeated TableMultiColumnStatistics add_statistics = 28;
+    // Remove multi-column table statistics (by its names)
+    repeated string drop_statistics = 29;
 }
 
 message AlterTableResponse {
@@ -1285,6 +1362,8 @@ message DescribeTableResult {
      * The metrics configuration for the given table.
      */
     optional MetricsSettings metrics_settings = 19;
+    // List of multi-column table statistics
+    repeated TableMultiColumnStatisticsDescription statistics = 20;
 }
 
 message Query {
@@ -1317,6 +1396,9 @@ message SnapshotRWModeSettings {
 message ReadCommittedRWModeSettings {
 }
 
+message StrictSerializableRWModeSettings {
+}
+
 message TransactionSettings {
     oneof tx_mode {
         SerializableModeSettings serializable_read_write = 1;
@@ -1325,6 +1407,7 @@ message TransactionSettings {
         SnapshotModeSettings snapshot_read_only = 4;
         SnapshotRWModeSettings snapshot_read_write = 5;
         ReadCommittedRWModeSettings read_committed_read_write = 6;
+        StrictSerializableRWModeSettings strict_serializable_read_write = 7;
     }
 }
 

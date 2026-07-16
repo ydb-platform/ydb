@@ -261,6 +261,20 @@ struct TPersistentBufferFormat {
     bool EnableFastErases = true;
     ui32 WritesBatchingPeriodMicroseconds = 40;
     bool EnableWritesBatching = true;
+    // Minimum number of free sectors to keep reserved so that barrier movement
+    // and fast erases (which write to a new sector before freeing the old one)
+    // always have space available. New plain writes are rejected with OVERFILL
+    // when the free sector count drops below this threshold. Defaults to 256
+    // (= default disk operations max inflight size).
+    ui32 MinFreeSectorsReserve = 256;
+    // Allocate a new chunk proactively when free space drops below this percentage
+    // of the currently owned capacity. 0 disables proactive allocation.
+    ui32 PreallocateFreeSpaceThresholdPercent = 10;
+    // Deallocate a chunk proactively when free space is over this percentage
+    // of the currently owned capacity. 100% disables proactive deallocation.
+    ui32 DeallocateFreeSpaceThresholdPercent = 90;
+    // Deallocate a chunk proactively when it has been freed for this many seconds.
+    ui32 DeallocateThresholdSeconds = 30;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \

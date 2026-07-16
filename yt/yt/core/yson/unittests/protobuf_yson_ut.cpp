@@ -133,7 +133,7 @@ REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(NYT::NYson::NProt
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToHex(const TString& data)
+TString ToHex(const std::string& data)
 {
     TStringBuilder builder;
     for (char ch : data) {
@@ -895,7 +895,7 @@ TEST(TYsonToProtobufTest, ErrorProto)
 
     auto attribute = message.attributes().attributes()[0];
     EXPECT_EQ(attribute.key(), "host");
-    EXPECT_EQ(ConvertTo<TString>(TYsonString(attribute.value())), "localhost");
+    EXPECT_EQ(ConvertTo<std::string>(TYsonString(attribute.value())), "localhost");
 }
 
 TEST(TYsonToProtobufTest, SkipUnknownFields)
@@ -1012,6 +1012,23 @@ TEST(TYsonToProtobufTest, KeepUnknownFields)
     EXPECT_TRUE(AreNodesEqual(ConvertToNode(TYsonString(newYsonString)), ConvertToNode(ysonString)));
 }
 
+TEST(TYsonToProtobufTest, RejectWireTypeMismatch)
+{
+    // Field 2 is length-delimited in TNestedMessage and varint in TMessage.
+    NYT::NYson::NProto::TNestedMessage message;
+    message.mutable_nested_message()->set_int32_field(42);
+    TString protobufString = message.SerializeAsString();
+
+    TString ysonString;
+    TStringOutput ysonOutputStream(ysonString);
+    TYsonWriter ysonWriter(&ysonOutputStream, EYsonFormat::Pretty);
+    ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+
+    EXPECT_THROW_WITH_ERROR_CODE(
+        ParseProtobuf(&ysonWriter, &protobufInput, ReflectProtobufMessageType<NYT::NYson::NProto::TMessage>()),
+        EErrorCode::InvalidProtobufWireFormat);
+}
+
 TEST(TYsonToProtobufTest, Entities)
 {
     TProtobufWriterOptions options;
@@ -1036,7 +1053,7 @@ TEST(TYsonToProtobufTest, ValidUtf8StringCheck)
             SetProtobufInteropConfig(config);
             auto effectiveOption = option.value_or(configOption);
 
-            TString invalidUtf8 = "\xc3\x28";
+            std::string invalidUtf8 = "\xc3\x28";
             auto checkWrite = [&] {
                 TEST_PROLOGUE_WITH_OPTIONS(TMessage, TProtobufWriterOptions{.Utf8Check = option})
                     .BeginMap()

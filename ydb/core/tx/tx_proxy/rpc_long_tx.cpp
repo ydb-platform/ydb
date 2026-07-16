@@ -12,7 +12,6 @@
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/actors/wilson/wilson_profile_span.h>
 #include <ydb/library/signals/object_counter.h>
-#include <ydb/services/ext_index/common/service.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 
@@ -29,7 +28,7 @@ ui64 GetMemoryInFlightLimit() {
 
     if (DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load() == 0) {
         uint64_t oldValue = 0;
-        const uint64_t newValue = NKqp::TStagePredictor::GetUsableThreads() * 10_MB;
+        const uint64_t newValue = NKqp::TStagePredictor::GetPossibleMaxLimitThreads() * 10_MB;
         DEFAULT_MEMORY_IN_FLIGHT_LIMIT.compare_exchange_strong(oldValue, newValue);
     }
     return DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load();
@@ -106,13 +105,6 @@ protected:
         if (GetMemoryInFlightLimit() < (ui64)sizeInFlight && sizeInFlight != InFlightSize) {
             return ReplyError(Ydb::StatusIds::OVERLOADED, "a lot of memory in flight");
         }
-        if (NCSIndex::TServiceOperator::IsEnabled()) {
-            TBase::Send(
-                NCSIndex::MakeServiceId(TBase::SelfId().NodeId()), new NCSIndex::TEvAddData(accessor->GetDeserializedBatch(), DatabaseName, Path,
-                                                                       std::make_shared<NCSIndex::TNaiveDataUpsertController>(TBase::SelfId())));
-        } else {
-            IndexReady = true;
-        }
 
         auto shardsSplitter = NEvWrite::IShardsSplitter::BuildSplitter(entry);
         if (!shardsSplitter) {
@@ -156,7 +148,6 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NEvWrite::TWritersController::TEvPrivate::TEvShardsWriteResult, Handle);
             hFunc(TEvLongTxService::TEvAttachColumnShardWritesResult, Handle);
-            hFunc(NCSIndex::TEvAddDataResult, Handle);
         }
     }
 
@@ -164,11 +155,7 @@ private:
         NWilson::TProfileSpan pSpan(0, ActorSpan.GetTraceId(), "ShardsWriteResult");
         const auto* msg = ev->Get();
         if (msg->Status == Ydb::StatusIds::SUCCESS) {
-            if (IndexReady) {
-                ReplySuccess();
-            } else {
-                ColumnShardReady = true;
-            }
+            ReplySuccess();
         } else {
             Y_ABORT_UNLESS(msg->Status != Ydb::StatusIds::SUCCESS);
             for (auto& issue : msg->Issues) {
@@ -190,26 +177,7 @@ private:
             }
             return ReplyError(msg->Record.GetStatus());
         }
-        if (IndexReady) {
-            ReplySuccess();
-        } else {
-            ColumnShardReady = true;
-        }
-    }
-
-    void Handle(NCSIndex::TEvAddDataResult::TPtr& ev) {
-        const auto* msg = ev->Get();
-        if (msg->GetErrorMessage()) {
-            NWilson::TProfileSpan pSpan(0, ActorSpan.GetTraceId(), "NCSIndex::TEvAddDataResult");
-            RaiseIssue(NYql::TIssue(msg->GetErrorMessage()));
-            return ReplyError(Ydb::StatusIds::GENERIC_ERROR, msg->GetErrorMessage());
-        } else {
-            if (ColumnShardReady) {
-                ReplySuccess();
-            } else {
-                IndexReady = true;
-            }
-        }
+        ReplySuccess();
     }
 
 protected:
@@ -229,8 +197,6 @@ private:
     std::optional<NACLib::TUserToken> UserToken;
     NWilson::TProfileSpan ActorSpan;
     NEvWrite::TWritersController::TPtr InternalController;
-    bool ColumnShardReady = false;
-    bool IndexReady = false;
     TIntrusivePtr<NACLib::TUserContext> UserCtx;
     std::shared_ptr<NEvWrite::TCSUploadCounters> Counters;
 };

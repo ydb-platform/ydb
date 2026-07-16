@@ -150,7 +150,9 @@ public:
     // TODO(qyryq) Extract a separate TDeferredDirectReadActions class?
     void DeferReadFromProcessor(const typename IDirectReadProcessor::TPtr& processor, TDirectReadServerMessage* dst, typename IDirectReadProcessor::TReadCallback callback);
     void DeferScheduleCallback(TDuration delay, std::function<void(bool)> callback, TSingleClusterReadSessionContextPtr);
-    void DeferCallback(std::function<void()> callback);
+    void DeferCallback(
+        std::function<void()> callback,
+        NYdbGrpc::TQueueClientCallbackGuardFactory callbackGuardFactory = {});
 
     void DeferReadFromProcessor(const typename IProcessor<UseMigrationProtocol>::TPtr& processor, TServerMessage<UseMigrationProtocol>* dst, typename IProcessor<UseMigrationProtocol>::TReadCallback callback);
     void DeferStartExecutorTask(const typename IExecutor::TPtr& executor, typename IExecutor::TFunction&& task);
@@ -202,7 +204,12 @@ private:
         };
 
         std::optional<TScheduledCallback> ScheduledCallback;
-        std::optional<std::function<void()>> Callback;
+        struct TCallback {
+            std::function<void()> Callback;
+            NYdbGrpc::TQueueClientCallbackGuardFactory CallbackGuardFactory;
+        };
+
+        std::optional<TCallback> Callback;
     } DirectReadActions;
 
     // Executor tasks.
@@ -257,8 +264,9 @@ public:
     i64 StartDecompressionTasks(const typename IExecutor::TPtr& executor,
                                 i64 availableMemory,
                                 TDeferredActions<UseMigrationProtocol>& deferred);
-    void PlanDecompressionTasks(double averageCompressionRatio,
-                                TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream);
+    bool PlanDecompressionTasks(double averageCompressionRatio,
+                                TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                TDeferredActions<UseMigrationProtocol>& deferred);
 
     void OnDestroyReadSession();
 
@@ -628,6 +636,7 @@ public:
                            TReadSessionEventsQueue<UseMigrationProtocol>& queue,
                            TDeferredActions<UseMigrationProtocol>& deferred);
     void DeleteNotReadyTail(TDeferredActions<UseMigrationProtocol>& deferred);
+    void Cleanup(TDeferredActions<UseMigrationProtocol>& deferred);
 
     void GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                           size_t& maxEventsCount,
@@ -962,6 +971,9 @@ public:
         }
 
         // Delayed deletion is necessary to avoid deadlock with PushEvent
+        for (auto& queue : deferredDelete) {
+            queue.Cleanup(deferred);
+        }
         deferredDelete.clear();
 
         TReadSessionEventInfo<UseMigrationProtocol> info(event);
@@ -1268,7 +1280,7 @@ public:
     void OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount) override;
 
     void Abort();
-    void AbortImpl();
+    void AbortImpl(TDeferredActions<UseMigrationProtocol>* deferred = nullptr);
     void Close(std::function<void()> callback);
     void AbortSession(TASessionClosedEvent<UseMigrationProtocol>&& closeEvent);
 
@@ -1337,6 +1349,7 @@ private:
     void OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext);
     void OnConnect(TPlainStatus&&, typename IProcessor::TPtr&&, const NYdbGrpc::IQueueClientContextPtr& connectContext);
     void DestroyAllPartitionStreamsImpl(TDeferredActions<UseMigrationProtocol>& deferred); // Destroy all streams before setting new connection // Assumes that we're under lock.
+    void CleanupDecompressionQueueImpl(TDeferredActions<UseMigrationProtocol>& deferred); // Assumes that we're under lock.
 
     // Initing.
     inline void InitImpl(TDeferredActions<UseMigrationProtocol>& deferred); // Assumes that we're under lock.
@@ -1378,7 +1391,7 @@ private:
 
     bool GetRangesMode() const;
 
-    void CallCloseCallbackImpl();
+    void CallCloseCallbackImpl(TDeferredActions<UseMigrationProtocol>* deferred = nullptr);
 
     void UpdateMemoryUsageStatisticsImpl();
     void UpdateReadSizeBudgetCounter(i64 value);

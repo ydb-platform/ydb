@@ -2037,6 +2037,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
     Y_UNIT_TEST(CopyMovePreservesMultipleBloomPrefixes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
         ui64 txId = 100;
 
         // Create source table with multiple bloom filter prefixes
@@ -2054,29 +2055,47 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Verify source table has multiple bloom filter prefixes
-        {
-            auto srcTable = DescribePath(runtime, "/MyRoot/Table", true).GetPathDescription().GetTable();
-            const auto& srcConfig = srcTable.GetPartitionConfig();
-            UNIT_ASSERT_VALUES_EQUAL(srcConfig.ByKeyFilterPrefixesSize(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(srcConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(srcConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
-            UNIT_ASSERT_DOUBLES_EQUAL(srcConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+        // Restart SchemeShard to trigger migration to scheme objects
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // Wait deterministically for migration to complete by polling for scheme objects
+        int retries = 10;
+        while (retries--) {
+            auto tableDescr = DescribePath(runtime, "/MyRoot/Table", true);
+            const auto& table = tableDescr.GetPathDescription().GetTable();
+
+            // Check if migration has completed (scheme objects exist)
+            if (table.TableIndexesSize() == 2) {
+                bool allReady = true;
+                for (const auto& idx : table.GetTableIndexes()) {
+                    if (idx.GetState() != NKikimrSchemeOp::EIndexStateReady) {
+                        allReady = false;
+                        break;
+                    }
+                }
+                if (allReady) {
+                    break; // Migration complete
+                }
+            }
+
+            // Use SimulateSleep instead of manual DispatchEvents
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
         }
+
+        // Verify source table has multiple bloom filter prefixes and scheme objects after migration
+        NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/Table",
+            {1, 3},
+            {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
 
         // Perform CopyTable operation
         TestCopyTable(runtime, ++txId, "/MyRoot", "TableCopy", "/MyRoot/Table");
         env.TestWaitNotification(runtime, txId);
 
-        // Verify copied table has all bloom filter prefixes
-        {
-            auto dstTable = DescribePath(runtime, "/MyRoot/TableCopy", true).GetPathDescription().GetTable();
-            const auto& dstConfig = dstTable.GetPartitionConfig();
-            UNIT_ASSERT_VALUES_EQUAL(dstConfig.ByKeyFilterPrefixesSize(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(dstConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(dstConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
-            UNIT_ASSERT_DOUBLES_EQUAL(dstConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
-        }
+        // Verify copied table has all bloom filter prefixes and scheme objects
+        NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/TableCopy",
+            {1, 3},
+            {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
 
         // Perform MoveTable operation on the copied table
         TestMoveTable(runtime, ++txId, "/MyRoot/TableCopy", "/MyRoot/TableMove");
@@ -2086,15 +2105,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TableCopy"),
                            {NLs::PathNotExist});
 
-        // Verify moved table has all bloom filter prefixes
-        {
-            auto movedTable = DescribePath(runtime, "/MyRoot/TableMove", true).GetPathDescription().GetTable();
-            const auto& config = movedTable.GetPartitionConfig();
-            UNIT_ASSERT_VALUES_EQUAL(config.ByKeyFilterPrefixesSize(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(config.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(config.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
-            UNIT_ASSERT_DOUBLES_EQUAL(config.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
-        }
+        // Verify moved table has all bloom filter prefixes and scheme objects
+        NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/TableMove",
+            {1, 3},
+            {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
     }
 
 
@@ -2343,6 +2357,62 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                 }
             }
         )", {NKikimrScheme::StatusSchemeError});
+    }
+
+    Y_UNIT_TEST(MoveTableWithMultiColumnStatistics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/Table", "/MyRoot/TableMove");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathNotExist});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove", true, true), {
+            NLs::PathExist,
+            NLs::CheckMultiColumnStatistics("s1", {"value"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+        });
+    }
+
+    Y_UNIT_TEST(MoveColumnTableWithMultiColumnStatistics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+            MultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/Table", "/MyRoot/TableMove");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathNotExist});
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TableMove", true, true), {
+            NLs::PathExist,
+            NLs::CheckColumnTableMultiColumnStatistics("s1", {"data"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+        });
     }
 
  }

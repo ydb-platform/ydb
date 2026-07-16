@@ -140,11 +140,11 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableMoveIndex(true);
     ServerSettings->SetUseRealThreads(settings.UseRealThreads);
     ServerSettings->SetEnableTablePgTypes(true);
-    ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
     ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
     ServerSettings->SetEnableScriptExecutionBackgroundChecks(settings.EnableScriptExecutionBackgroundChecks);
+    ServerSettings->SetNeedStatsCollectors(settings.NeedsStatsCollectors);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
         ServerSettings->SetEnableOlapCompression(true);

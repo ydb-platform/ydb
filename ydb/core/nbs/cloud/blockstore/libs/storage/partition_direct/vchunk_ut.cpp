@@ -116,9 +116,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         // Finish erase requests with success.
         SetEraseResult(TDBGEraseResponse{.Error = MakeError(S_OK)}, true);
 
-        // Should not get more scheduled tasks.
+        // Should get scheduled tasks.
         UNIT_ASSERT_VALUES_EQUAL(
-            false,
+            true,
             WaitScheduledTasks(1, TDuration::MilliSeconds(100)));
 
         auto onStop = vchunk->Stop();
@@ -191,6 +191,69 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
 
+    // Until the vchunk finishes restoring its dirty map from the PBuffers,
+    // its pre-flush records exist only in the PBuffers and are not inflight.
+    // Reporting "no constraint" (nullopt) in that window is indistinguishable
+    // from an idle vchunk, so FinishPBufferCleanup would skip it and a
+    // tablet-wide barrier erase could wipe the very records the restore is
+    // about to return. An un-restored vchunk must report the blocking bound
+    // (0) instead; cleanup skips its tick on it.
+    Y_UNIT_TEST_F(
+        ShouldConstrainCleanupBarrierUntilRestoreCompletes,
+        TBaseFixture)
+    {
+        Init();
+
+        // Keep the restore pending: the vchunk stays not-ready.
+        auto neverResolvePromise =
+            NThreading::NewPromise<TDBGRestoreResponse>();
+        DirectBlockGroup->RestoreDBGPBuffersHandler =
+            [neverResolvePromise](const auto& vChunkIndex) mutable
+        {
+            Y_UNUSED(vChunkIndex);
+            return neverResolvePromise.GetFuture();
+        };
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            PartitionDirectService.get(),
+            VChunkConfig,
+            DirectBlockGroup,
+            3,   // syncRequestsBatchSize
+            DefaultVChunkSize,
+            Counters);
+        vchunk->Start();
+
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+        UNIT_ASSERT_EQUAL(false, IsDirtyMapReady(*vchunk));
+
+        const auto barrierWhileRestoring =
+            GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk);
+
+        // Resolve the restore; with an empty dirty map and restore complete
+        // the vchunk stops constraining the cleanup.
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]() -> bool
+            {
+                InvokeUpdateDirtyMap(
+                    *vchunk,
+                    TDBGRestoreResponse{.Error = MakeError(S_OK)});
+                return true;
+            });
+        const auto barrierAfterRestore =
+            GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk);
+
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
+
+        UNIT_ASSERT_C(
+            barrierWhileRestoring.has_value(),
+            "vchunk with a pending restore reported 'no constraint' to the "
+            "cleanup barrier gather");
+        UNIT_ASSERT_VALUES_EQUAL(0, *barrierWhileRestoring);
+        UNIT_ASSERT(!barrierAfterRestore.has_value());
+    }
+
     Y_UNIT_TEST_F(ShouldSwitchHostToTemporaryOfflineAndBack, TBaseFixture)
     {
         Init();
@@ -210,7 +273,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::TemporaryOffline);
                     ready.SetValue();
@@ -220,7 +285,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should stay the same since new config is not persisted yet.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{+++++}",
@@ -245,7 +310,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{-++++}",
@@ -265,7 +330,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::Online);
                     ready.SetValue();
@@ -283,7 +350,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{+++++}",
@@ -297,6 +364,73 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             "H3+{Disabled,0,0};"
             "H4+{Disabled,0,0};",
             AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState());
+
+        auto onStop = vchunk->Stop();
+        onStop.GetValue(TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST_F(ShouldAppendHostAndGrowDirtyMap, TBaseFixture)
+    {
+        Init();
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            PartitionDirectService.get(),
+            VChunkConfig,
+            DirectBlockGroup,
+            3,
+            DefaultVChunkSize,
+            Counters);
+        vchunk->Start();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            AccessConfig(*vchunk).GetHostCount());
+
+        {
+            TPromise<void> ready = NewPromise();
+            auto wait = ready.GetFuture();
+            DirectBlockGroup->GetExecutor()->ExecuteSimple(
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
+                {
+                    vchunk->OnHostAppended(DirectBlockGroupHostCount + 1);
+                    ready.SetValue();
+                });
+            wait.GetValue(TDuration::Seconds(10));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            AccessConfig(*vchunk).GetHostCount());
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState(),
+            "H5-{Disabled,0,0}");
+
+        {
+            UNIT_ASSERT_VALUES_EQUAL(1, ScheduledTasks.size());
+            auto task = RunScheduledTasks();
+            task.Wait(TDuration::Seconds(10));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount + 1,
+            AccessConfig(*vchunk).GetHostCount());
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessConfig(*vchunk).DebugPrint(),
+            "PBuffer{Primary;Primary;Primary;HandOff;HandOff;None}");
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessConfig(*vchunk).DebugPrint(),
+            "DDisk{Primary;Primary;Primary;None;None;None}");
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessConfig(*vchunk).DebugPrint(),
+            "Enabled{+++++-}");
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState(),
+            "H5-{Disabled,0,0}");
 
         auto onStop = vchunk->Stop();
         onStop.GetValue(TDuration::Seconds(10));
@@ -367,7 +501,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::Offline);
                     ready.SetValue();
@@ -377,7 +513,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should stay the same since new config is not persisted yet.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
             "DDisk{Primary;Primary;Primary;None;None} "
             "Enabled{+++++}",
@@ -403,7 +539,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{HandOff;Primary;Primary;Primary;HandOff} "
             "DDisk{None;Primary;Primary;Primary;None} "
             "Enabled{-+++[0]+}",
@@ -423,7 +559,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::Online);
                     ready.SetValue();
@@ -442,7 +580,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{HandOff;Primary;Primary;Primary;HandOff} "
             "DDisk{None;Primary;Primary;Primary;None} "
             "Enabled{++++[0]+}",
@@ -476,7 +614,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Config should be updated.
         UNIT_ASSERT_VALUES_EQUAL(
-            "[100] "
+            "[0/100] "
             "PBuffer{HandOff;Primary;Primary;Primary;HandOff} "
             "DDisk{None;Primary;Primary;Primary;None} "
             "Enabled{+++++}",

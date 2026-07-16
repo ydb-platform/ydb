@@ -277,7 +277,22 @@ protected:
     TActorId ChannelBalancerActorId;
     ui64 InitialCollectsSent = 0;
 
-    TDeque<TAutoPtr<TIntermediate>> Queue;
+    struct TPostponedChannel {
+        TPostponedChannel() = default;
+        TPostponedChannel(TPostponedChannel&& other) noexcept;
+        TPostponedChannel& operator=(TPostponedChannel&& other) noexcept;
+        TPostponedChannel(const TPostponedChannel&) = delete;
+        TPostponedChannel& operator=(const TPostponedChannel&) = delete;
+        ~TPostponedChannel();
+
+        void ClearQueue();
+
+        TDeque<TIntermediate*> Queue;
+        ui64 IntermediatesInFlight = 0;
+    };
+
+    TVector<TPostponedChannel> PostponedChannels;
+    ui64 PostponedIntermediatesCount = 0;
     ui64 IntermediatesInFlight;
     ui64 RoInlineIntermediatesInFlight;
     ui64 DeletesPerRequestLimit;
@@ -303,6 +318,8 @@ protected:
     TMemorizableControlWrapper UsePayload;
     TControlWrapper RejectNonExistentStorageChannel_Base;
     TMemorizableControlWrapper RejectNonExistentStorageChannel;
+    TControlWrapper UsePerChannelReadQueues_Base;
+    TMemorizableControlWrapper UsePerChannelReadQueues;
 
     std::shared_ptr<TKeyValueStateLifetimeToken> LifetimeToken = std::make_shared<TKeyValueStateLifetimeToken>();
 
@@ -474,7 +491,8 @@ public:
     void OnUpdateWeights(TChannelBalancer::TEvUpdateWeights::TPtr ev);
 
     void OnRequestComplete(ui64 requestUid, ui64 generation, ui64 step, const TActorContext &ctx,
-        const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat);
+        const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat,
+        const TVector<ui32> &acquiredChannels);
     void CancelInFlight(ui64 requestUid);
 
     void OnEvIntermediate(TIntermediate &intermediate);
@@ -598,7 +616,7 @@ public:
         NKikimrKeyValue::Statuses::ReplyStatus status, THolder<TIntermediate> &intermediate,
         const TTabletStorageInfo *info = nullptr)
     {
-        ALOG_INFO(NKikimrServices::KEYVALUE, errorDescription);
+        YDB_LOG_INFO_COMP(NKikimrServices::KEYVALUE, errorDescription);
         Y_ABORT_UNLESS(!intermediate->IsReplied);
         std::unique_ptr<TResponse> response = std::make_unique<TResponse>();
         response->Record.set_status(status);
@@ -628,7 +646,8 @@ public:
         if (info) {
             intermediate->UpdateStat();
             OnRequestComplete(intermediate->RequestUid, intermediate->CreatedAtGeneration, intermediate->CreatedAtStep,
-                    ctx, info, TEvKeyValue::TEvNotify::ConvertStatus(status), intermediate->Stat);
+                    ctx, info, TEvKeyValue::TEvNotify::ConvertStatus(status), intermediate->Stat,
+                    intermediate->AcquiredChannels);
         } else { //metrics change report in OnRequestComplete is not done
             ResourceMetrics->TryUpdate(ctx);
             RequestInputTime.erase(intermediate->RequestUid);
@@ -648,11 +667,13 @@ public:
     bool PrepareAcquireLockRequest(const TActorContext &ctx, TEvKeyValue::TEvAcquireLock::TPtr &ev,
         THolder<TIntermediate> &intermediate);
 
-    template <typename TRequestType>
-    void PostponeIntermediate(THolder<TIntermediate> &&intermediate) {
-        intermediate->Stat.EnqueuedAs = Queue.size() + 1;
-        Queue.push_back(std::move(intermediate));
-    }
+    TVector<ui32> GetAcquiredChannels(const TIntermediate &intermediate) const;
+    bool TryStartOrPostponeIntermediate(THolder<TIntermediate> &intermediate, const TActorContext &ctx);
+    void StartChannelLimitedIntermediate(const TIntermediate &intermediate);
+    void ReleaseChannelLimitedIntermediate(const TVector<ui32> &acquiredChannels);
+    void ProcessPostponedChannel(ui32 channel, const TActorContext &ctx, const TTabletStorageInfo *info);
+    void ProcessPostponedChannels(const TVector<ui32> &channels, const TActorContext &ctx,
+        const TTabletStorageInfo *info);
     void ProcessPostponedIntermediate(const TActorContext& ctx, THolder<TIntermediate> &&intermediate,
              const TTabletStorageInfo *info);
 

@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 $factory = AGGREGATION_FACTORY('sum');
 
 SELECT

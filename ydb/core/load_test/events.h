@@ -7,6 +7,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/histogram/hdr/histogram.h>
+#include <library/cpp/histogram/hdr/histogram_iter.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
 #include <library/cpp/json/writer/json_value.h>
 
@@ -59,7 +60,30 @@ struct TNbsDbgLikeFinishStats {
     NHdr::THistogram ReadDDiskUs{kLatencyHistMaxUs, kLatencyHistPrecision};
 };
 
-using TLoadWorkerFinishStats = std::variant<TNbsDbgLikeFinishStats>;
+// Aggregated statistics parsed from the interconnect load actor's final
+// result summary (see NInterconnect::TLoadActor::PublishResults() in
+// ydb/library/actors/interconnect/load.cpp), used to render a Speed/IOPS/
+// latency-percentiles table for the stress tool (see
+// ydb/tools/stress_tool/device_test_tool_interconnect_test.h).
+struct TInterconnectLoadFinishStats {
+    bool Valid = false;              // whether stats were successfully parsed
+    TDuration ThroughputWindow;      // window over which throughput was measured
+    ui64 ThroughputBytes = 0;        // bytes transferred within ThroughputWindow
+    ui64 ThroughputSamples = 0;      // number of messages accounted within ThroughputWindow
+    ui64 BytesPerSecond = 0;         // throughput, bytes/sec (as reported by the load actor)
+    TDuration RttWindow;             // window over which RTT samples were collected
+    ui64 RttSamples = 0;             // number of RTT samples within RttWindow
+    ui64 NumDropped = 0;             // number of dropped (timed out) messages
+
+    // Latency (RTT) percentiles; pair of {quantile in [0..1], value in microseconds}.
+    TVector<std::pair<double, ui64>> LatencyPercentilesUs;
+
+    double GetIops() const {
+        return RttWindow != TDuration::Zero() ? RttSamples / RttWindow.SecondsFloat() : 0.0;
+    }
+};
+
+using TLoadWorkerFinishStats = std::variant<TNbsDbgLikeFinishStats, TInterconnectLoadFinishStats>;
 
 struct TEvLoad {
     enum EEv {
@@ -327,11 +351,80 @@ inline const TNbsDbgLikeFinishStats* GetNbsDbgLikeFinishStats(
     return std::get_if<TNbsDbgLikeFinishStats>(&*ev.WorkerStats);
 }
 
+// Non-const overload: allows std::move of the contained stats without
+// resorting to const_cast (TNbsDbgLikeFinishStats is move-only).
+inline TNbsDbgLikeFinishStats* GetNbsDbgLikeFinishStats(
+    TEvLoad::TEvLoadTestFinished& ev)
+{
+    if (!ev.WorkerStats) {
+        return nullptr;
+    }
+    return std::get_if<TNbsDbgLikeFinishStats>(&*ev.WorkerStats);
+}
+
 inline void SetNbsDbgLikeFinishStats(
     TEvLoad::TEvLoadTestFinished& ev,
     TNbsDbgLikeFinishStats stats)
 {
     ev.WorkerStats = TLoadWorkerFinishStats{std::move(stats)};
+}
+
+inline const TInterconnectLoadFinishStats* GetInterconnectLoadFinishStats(
+    const TEvLoad::TEvLoadTestFinished& ev)
+{
+    if (!ev.WorkerStats) {
+        return nullptr;
+    }
+    return std::get_if<TInterconnectLoadFinishStats>(&*ev.WorkerStats);
+}
+
+inline void SetInterconnectLoadFinishStats(
+    TEvLoad::TEvLoadTestFinished& ev,
+    TInterconnectLoadFinishStats stats)
+{
+    ev.WorkerStats = TLoadWorkerFinishStats{std::move(stats)};
+}
+
+// Serialize an HDR histogram into the proto carrier as (value, count) pairs for
+// the recorded buckets, plus the (lowest, highest, significantDigits) needed to
+// reconstruct a compatible histogram. The reconstruction via RecordValues is
+// exact within the histogram's resolution.
+inline void SerializeNbsDbgLikeHistogram(
+    const NHdr::THistogram& src,
+    NKikimr::TEvNodeFinishResponse::TNbsDbgLikeHistogram& dst)
+{
+    dst.SetLowest(src.GetLowestDiscernibleValue());
+    dst.SetHighest(src.GetHighestTrackableValue());
+    dst.SetSignificantDigits(src.GetNumberOfSignificantValueDigits());
+    NHdr::TRecordedValuesIterator it(src);
+    while (it.Next()) {
+        const i64 count = it.GetCount();
+        if (count <= 0) {
+            continue;
+        }
+        dst.AddValues(it.GetValue());
+        dst.AddCounts(count);
+    }
+}
+
+// Reconstruct an HDR histogram from the proto carrier produced by
+// SerializeNbsDbgLikeHistogram.
+inline NHdr::THistogram DeserializeNbsDbgLikeHistogram(
+    const NKikimr::TEvNodeFinishResponse::TNbsDbgLikeHistogram& src)
+{
+    const i64 lowest = src.HasLowest() && src.GetLowest() >= 1 ? src.GetLowest() : 1;
+    const i64 highest = src.HasHighest() && src.GetHighest() > lowest
+        ? src.GetHighest()
+        : TNbsDbgLikeFinishStats::kLatencyHistMaxUs;
+    const i32 digits = src.HasSignificantDigits()
+        ? src.GetSignificantDigits()
+        : TNbsDbgLikeFinishStats::kLatencyHistPrecision;
+    NHdr::THistogram hist(lowest, highest, digits);
+    const int n = Min(src.ValuesSize(), src.CountsSize());
+    for (int i = 0; i < n; ++i) {
+        hist.RecordValues(src.GetValues(i), src.GetCounts(i));
+    }
+    return hist;
 }
 
 }

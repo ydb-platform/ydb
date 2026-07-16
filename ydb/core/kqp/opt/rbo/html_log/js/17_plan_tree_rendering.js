@@ -35,18 +35,18 @@ var ruleTreeSurface = createVisualSurface({
 
 function treePinnedHeaderHtml(ruleKey, showPinned, query, scope, minWidth) {
     var headerHtml = '';
-    if (pinnedColumnCount() > 0 && showPinned) {
+    if (pinnedFieldCount() > 0 && showPinned) {
         var width = Math.max(1, Number(minWidth) || 0);
         headerHtml += '<div class="tree-pinned-header visible" id="pinhdr-' + ruleKey + '" ' +
             'style="min-width:' + width + 'px">';
-        for (var col = 0; col < pinnedColumnCount(); col++) {
-            var label = tracePinnedColumnName(col);
-            headerHtml += pinnedColumnHeaderCellHtml(
+        for (var col = 0; col < pinnedFieldCount(); col++) {
+            var label = tracePinnedFieldName(col);
+            headerHtml += pinnedFieldHeaderCellHtml(
                 col,
                 htmlEscape(label),
                 {
                     labelTitle: label,
-                    unpinTitle: 'Unpin column'
+                    unpinTitle: 'Unpin field'
                 }
             );
         }
@@ -57,38 +57,38 @@ function treePinnedHeaderHtml(ruleKey, showPinned, query, scope, minWidth) {
     return headerHtml;
 }
 
-function pinnedColumnCellAttrs(col) {
-    var keys = activeNodeColumnKeys();
+function pinnedFieldCellAttrs(col) {
+    var keys = activePinnedFieldKeys();
     var key = keys[col] || '';
-    return ' data-node-column-index="' + col + '"' +
-           ' data-node-column-key="' + htmlEscape(key) + '"' +
-           ' style="--pinned-column-width:' + nodeColumnWidthForKey(key) + 'px"';
+    return ' data-pinned-field-index="' + col + '"' +
+           ' data-pinned-field-key="' + htmlEscape(key) + '"' +
+           ' style="--pinned-field-width:' + pinnedFieldWidthForKey(key) + 'px"';
 }
 
-function pinnedColumnHeaderCellHtml(col, labelHtml, options) {
+function pinnedFieldHeaderCellHtml(col, labelHtml, options) {
     options = options || {};
-    var keys = activeNodeColumnKeys();
+    var keys = activePinnedFieldKeys();
     var key = keys[col] || '';
     var hasUnpin = !!options.unpinTitle;
     var labelTitle = options.labelTitle === undefined
         ? ''
         : ' title="' + htmlEscape(options.labelTitle) + '"';
     var html = '<span class="pinned-header-cell' + (hasUnpin ? ' has-unpin' : '') + '"' +
-               pinnedColumnCellAttrs(col) +
-               ' data-node-column-reorder="true" draggable="false">' +
+               pinnedFieldCellAttrs(col) +
+               ' data-pinned-field-reorder="true" draggable="false">' +
                '<span class="pinned-header-label"' + labelTitle + '>' + labelHtml + '</span>';
     if (hasUnpin) {
         html += '<button type="button" class="pinned-header-unpin" ' +
-                'data-trace-action="unpin-node-column" ' +
-                'data-node-column-key="' + htmlEscape(key) + '" ' +
+                'data-trace-action="unpin-field" ' +
+                'data-pinned-field-key="' + htmlEscape(key) + '" ' +
                 'title="' + options.unpinTitle + '" ' +
                 'aria-label="' + options.unpinTitle + '">' +
                 traceIconSvg('drawing-pin') + '</button>';
     }
     html += '<span class="pinned-header-resize" role="separator" aria-orientation="vertical" ' +
-            'data-node-column-index="' + col + '" ' +
-            'data-node-column-key="' + htmlEscape(key) + '" ' +
-            'title="Drag to resize column" aria-label="Resize column"></span>' +
+            'data-pinned-field-index="' + col + '" ' +
+            'data-pinned-field-key="' + htmlEscape(key) + '" ' +
+            'title="Drag to resize field" aria-label="Resize field"></span>' +
             '</span>';
     return html;
 }
@@ -286,11 +286,27 @@ function normalizeTreeRuleKey(ruleKey) {
 }
 
 function treeSessionKey(ruleKey) {
-    var traceIndex = 0;
+    var normalized = normalizeTreeRuleKey(ruleKey);
+    var match = /^(\d+)-(\d+)-(\d+)(.*)$/.exec(normalized);
+    if (match && typeof currentRuleSessionKey === 'function') {
+        var key = currentRuleSessionKey(ruleRef(
+            Number(match[1]),
+            Number(match[2]),
+            Number(match[3])
+        ));
+        if (key) return key + (match[4] || '');
+    }
+
+    var selectionKey = '';
     try {
-        traceIndex = Math.max(0, Number(traceRuntime().activeTraceIndex) || 0);
+        selectionKey = activeTraceSelectionKey();
     } catch (err) {}
-    return traceIndex + ':' + normalizeTreeRuleKey(ruleKey);
+    if (!selectionKey) {
+        try {
+            selectionKey = String(Math.max(0, Number(traceRuntime().activeTraceIndex) || 0));
+        } catch (err2) {}
+    }
+    return (selectionKey || 'trace') + ':' + normalized;
 }
 
 function treeSessionForRule(ruleKey) {
@@ -671,7 +687,7 @@ function ruleFeatureButtonActive(feature, si, gi, ri) {
     if (feature === 'fields') {
         return ruleFieldRowsFullyExpanded(si, gi, ri);
     }
-    if (feature === 'pinned' && pinnedColumnCount() === 0) {
+    if (feature === 'pinned' && pinnedFieldCount() === 0) {
         return false;
     }
     return effectiveRuleFeature(si, gi, ri, feature);
@@ -702,7 +718,7 @@ function treeEstimateTextWidth(text) {
 
 function treeRowModelEstimateNodeWidth(row, options) {
     options = options || {};
-    var pinnedWidth = options.showPinned ? activeNodeColumnWidthTotal() : 0;
+    var pinnedWidth = options.showPinned ? activePinnedFieldWidthTotal() : 0;
     var connectors = row.isRoot
         ? 16
         : row.parentPrefix.length * TREE_CONNECTOR_PX + TREE_CONNECTOR_PX + 16;
@@ -711,7 +727,7 @@ function treeRowModelEstimateNodeWidth(row, options) {
 
 function treeRowModelEstimateFieldRowWidth(row, options) {
     options = options || {};
-    var pinnedWidth = options.showPinned ? activeNodeColumnWidthTotal() : 0;
+    var pinnedWidth = options.showPinned ? activePinnedFieldWidthTotal() : 0;
     var meta = row.meta;
     var key = treeFieldRowKey(meta);
     var val = treeFieldRowValue(meta);
@@ -2138,7 +2154,7 @@ function treeMaterializerPlanStartOffset(state) {
         if (total > 0) return total;
     }
 
-    return activeNodeColumnWidthTotal();
+    return activePinnedFieldWidthTotal();
 }
 
 function treeMaterializerPlanScrollLeft(state, rawScrollLeft) {
@@ -2464,8 +2480,8 @@ function virtualTreeProjectionRowRenderSignature(projected, state) {
         state && state.query || '',
         state && state.scope || '',
         state && state.showPinned ? 'pinned' : '',
-        activeNodeColumnKeys().map(function(key) {
-            return key + ':' + nodeColumnWidthForKey(key);
+        activePinnedFieldKeys().map(function(key) {
+            return key + ':' + pinnedFieldWidthForKey(key);
         }).join(',')
     ].join('|');
 }
@@ -2915,16 +2931,16 @@ function renderTreeModelNodeRow(row, state) {
 }
 
 /**
- * Hover affordance that promotes an attribute-backed metadata row to a stat
- * column. Rows without a field key (plain node metadata) are not pinnable.
+ * Hover affordance that promotes an attribute-backed metadata row to a pinned
+ * field. Rows without a field key (plain node metadata) are not pinnable.
  */
 function treeMetaPinButtonHtml(fieldKey, availableFields) {
     fieldKey = String(fieldKey || '');
     if (!fieldKey || !availableFields[fieldKey]) return '';
     return '<button type="button" class="tree-meta-pin" ' +
-           'data-trace-action="pin-node-column" ' +
-           'data-node-column-key="' + htmlEscape(fieldKey) + '" ' +
-           'title="Show as column" aria-label="Show as column">' +
+           'data-trace-action="pin-field" ' +
+           'data-pinned-field-key="' + htmlEscape(fieldKey) + '" ' +
+           'title="Pin field" aria-label="Pin field">' +
            traceIconSvg('drawing-pin-filled') + '</button>';
 }
 
@@ -2957,9 +2973,9 @@ function renderTreeModelMetaRow(row, state) {
         '" id="' + nodeId + '-meta-' + row.metaIndex +
         '" style="--tree-meta-key-align:' + row.keyAlignCh + 'ch">';
     html += '<div class="tree-meta-row">';
-    if (pinnedColumnCount() > 0) {
-        for (var col = 0; col < pinnedColumnCount(); col++) {
-            html += '<span class="pinned-val-cell"' + pinnedColumnCellAttrs(col) + '></span>';
+    if (pinnedFieldCount() > 0) {
+        for (var col = 0; col < pinnedFieldCount(); col++) {
+            html += '<span class="pinned-val-cell"' + pinnedFieldCellAttrs(col) + '></span>';
         }
     }
     html += renderTreeMetaConnectors(row.metaPrefix, row.hasChildren, row.collapsed);
@@ -3111,12 +3127,12 @@ function diffFieldValueHtml(value, change, side, query, scope, searchContext) {
 
 /** Render stat value cells for a node row. */
 function renderPinnedCells(node, showPinned, query, scope, fieldChanges, diffSide, searchContext) {
-    if (pinnedColumnCount() === 0 || !showPinned) return '';
+    if (pinnedFieldCount() === 0 || !showPinned) return '';
     var html = '';
     var rows = treeFieldRows(node);
-    for (var col = 0; col < pinnedColumnCount(); col++) {
-        var key = tracePinnedColumnKey(col);
-        var rawValue = traceNodeColumnValue(node, col);
+    for (var col = 0; col < pinnedFieldCount(); col++) {
+        var key = tracePinnedFieldKey(col);
+        var rawValue = tracePinnedFieldValue(node, col);
         var change = diffFieldChangeForKey(fieldChanges, key);
         var rowKey = '';
         for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
@@ -3135,7 +3151,7 @@ function renderPinnedCells(node, showPinned, query, scope, fieldChanges, diffSid
             ? diffFieldValueHtml(rawValue, change, diffSide, query, scope, valueContext)
             : '';
         var title = rawValue ? ' title="' + htmlEscape(rawValue) + '"' : '';
-        html += '<span class="pinned-val-cell"' + pinnedColumnCellAttrs(col) + title + '>' + val + '</span>';
+        html += '<span class="pinned-val-cell"' + pinnedFieldCellAttrs(col) + title + '>' + val + '</span>';
     }
     return html;
 }

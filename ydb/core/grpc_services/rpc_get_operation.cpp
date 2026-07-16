@@ -14,12 +14,14 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/statistics/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_backup.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
+#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
@@ -67,6 +69,10 @@ class TGetOperationRPC
             return "[GetForcedCompaction]";
         case TOperationId::FULL_BACKUP:
             return "[GetFullBackup]";
+        case TOperationId::ANALYZE:
+            return "[GetAnalyze]";
+        case TOperationId::SET_NOT_NULL:
+            return "[GetSetNotNull]";
         default:
             return "[Untagged]";
         }
@@ -88,9 +94,100 @@ class TGetOperationRPC
             return new NSchemeShard::TEvForcedCompaction::TEvGetRequest(GetDatabaseName(), RawOperationId_);
         case TOperationId::FULL_BACKUP:
             return new NSchemeShard::TEvBackup::TEvGetFullBackupRequest(GetDatabaseName(), RawOperationId_);
+        case TOperationId::SET_NOT_NULL:
+            return new NSchemeShard::TEvSetColumnConstraint::TEvGetRequest(GetDatabaseName(), RawOperationId_);
         default:
             Y_ABORT("unreachable");
         }
+    }
+
+    void HandleNavigateResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (OperationId_.GetKind() == TOperationId::ANALYZE) {
+            HandleSANavigateResult(ev);
+        } else {
+            TRpcOperationRequestActor::Handle(ev);
+        }
+    }
+
+    // SA-specific navigation (two-hop, mirrors TRpcAnalyzeOperationRequestActor)
+    void ResolveStatisticsAggregatorForAnalyze() {
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+        auto req = MakeHolder<TNavigate>();
+        req->DatabaseName = GetDatabaseName();
+        auto& entry = req->ResultSet.emplace_back();
+        entry.Operation = TNavigate::OpPath;
+        entry.Path = NKikimr::SplitPath(GetDatabaseName());
+        entry.RedirectRequired = false;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(req.Release()),
+             0, SANav1Cookie);
+    }
+
+    void HandleSANavigateResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto& request = ev->Get()->Request;
+        if (request->ResultSet.empty() || request->ErrorCount > 0) {
+            return ReplyWithStatus(StatusIds::SCHEME_ERROR);
+        }
+        const auto& entry = request->ResultSet.front();
+        if (!entry.DomainInfo) {
+            return ReplyWithStatus(StatusIds::INTERNAL_ERROR);
+        }
+
+        if (!this->CheckAccess(CanonizePath(entry.Path), entry.SecurityObject, GetRequiredAccessRights())) {
+            return;
+        }
+
+        if (ev->Cookie == SANav2Cookie) {
+            // Second hop: got resources domain
+            if (!entry.DomainInfo->Params.HasStatisticsAggregator()) {
+                return ReplyWithStatus(StatusIds::INTERNAL_ERROR);
+            }
+            SendToSA(entry.DomainInfo->Params.GetStatisticsAggregator());
+            return;
+        }
+
+        // First hop
+        const auto& domainInfo = entry.DomainInfo;
+        if (!domainInfo->IsServerless()) {
+            if (domainInfo->Params.HasStatisticsAggregator()) {
+                SendToSA(domainInfo->Params.GetStatisticsAggregator());
+            } else {
+                NavigateDomainKeyForSA(domainInfo->DomainKey);
+            }
+        } else {
+            NavigateDomainKeyForSA(domainInfo->ResourcesDomainKey);
+        }
+    }
+
+    void NavigateDomainKeyForSA(const TPathId& domainKey) {
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+        auto nav = MakeHolder<TNavigate>();
+        nav->DatabaseName = GetDatabaseName();
+        auto& entry = nav->ResultSet.emplace_back();
+        entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
+        entry.Operation = TNavigate::EOp::OpPath;
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+        entry.RedirectRequired = false;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(nav.Release()),
+             0, SANav2Cookie);
+    }
+
+    void SendToSA(ui64 saTabletId) {
+        NTabletPipe::TClientConfig config;
+        config.RetryPolicy = {.RetryLimitCount = 3};
+        SAPipeClient_ = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), saTabletId, config));
+        NTabletPipe::SendData(SelfId(), SAPipeClient_,
+            new NStat::TEvStatistics::TEvAnalyzeOpGetRequest(GetDatabaseName(), AnalyzeOperationId_));
+    }
+
+    void Handle(NStat::TEvStatistics::TEvAnalyzeOpGetResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            ReplyGetOperationResponse(true, ctx, record.GetStatus());
+            return;
+        }
+        TEvGetOperationRequest::TResponse resp;
+        ::NKikimr::NGRpcService::ToOperation(record.GetAnalyzeOperation(), resp.mutable_operation());
+        Reply(resp, ctx);
     }
 
     void PassAway() override {
@@ -98,7 +195,7 @@ class TGetOperationRPC
             NTabletPipe::CloseClient(SelfId(), PipeActorId_);
             PipeActorId_ = TActorId();
         }
-
+        NTabletPipe::CloseAndForgetClient(SelfId(), SAPipeClient_);
         TRpcOperationRequestActor::PassAway();
     }
 
@@ -122,10 +219,20 @@ public:
             case TOperationId::RESTORE:
             case TOperationId::COMPACTION:
             case TOperationId::FULL_BACKUP:
+            case TOperationId::SET_NOT_NULL:
                 if (!TryGetId(OperationId_, RawOperationId_)) {
                     return ReplyWithStatus(StatusIds::BAD_REQUEST);
                 }
                 ResolveDatabase();
+                break;
+            case TOperationId::ANALYZE:
+                if (!AppData()->FeatureFlags.GetEnableAnalyzeLongRunningOperation()) {
+                    return ReplyWithStatus(StatusIds::UNSUPPORTED);
+                }
+                if (!TryGetUlidId(OperationId_, AnalyzeOperationId_)) {
+                    return ReplyWithStatus(StatusIds::BAD_REQUEST);
+                }
+                ResolveStatisticsAggregatorForAnalyze();
                 break;
             case TOperationId::SCRIPT_EXECUTION:
                 SendGetScriptExecutionOperation();
@@ -150,10 +257,13 @@ public:
             HFunc(NSchemeShard::TEvImport::TEvGetImportResponse, Handle);
             HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
             HFunc(NSchemeShard::TEvForcedCompaction::TEvGetResponse, Handle);
+            HFunc(NSchemeShard::TEvSetColumnConstraint::TEvGetResponse, Handle);
             HFunc(NKqp::TEvGetScriptExecutionOperationResponse, Handle);
             HFunc(NSchemeShard::TEvBackup::TEvGetIncrementalBackupResponse, Handle);
             HFunc(NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreResponse, Handle);
             HFunc(NSchemeShard::TEvBackup::TEvGetFullBackupResponse, Handle);
+            HFunc(NStat::TEvStatistics::TEvAnalyzeOpGetResponse, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigateResult);
 
         default:
             return StateBase(ev);
@@ -291,6 +401,22 @@ private:
         }
     }
 
+    void Handle(NSchemeShard::TEvSetColumnConstraint::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvSetColumnConstraint::TEvGetResponse"
+            << ": record# " << record.ShortDebugString());
+
+        if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            ReplyGetOperationResponse(true, ctx, record.GetStatus());
+        } else {
+            TEvGetOperationRequest::TResponse resp;
+
+            ::NKikimr::NGRpcService::ToOperation(record.GetSetColumnConstraint(), resp.mutable_operation());
+            Reply(resp, ctx);
+        }
+    }
+
     void Handle(NKqp::TEvGetScriptExecutionOperationResponse::TPtr& ev, const TActorContext& ctx) {
         TEvGetOperationRequest::TResponse resp;
         auto deferred = resp.mutable_operation();
@@ -396,7 +522,12 @@ private:
 
     TOperationId OperationId_;
     ui64 RawOperationId_ = 0;
+    TString AnalyzeOperationId_;   // 16-byte binary ULID for ANALYZE ops
     TActorId PipeActorId_;
+    TActorId SAPipeClient_;
+
+    static constexpr ui64 SANav1Cookie = 100;
+    static constexpr ui64 SANav2Cookie = 101;
 };
 
 void DoGetOperationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {

@@ -398,7 +398,7 @@ public:
     void SendCreateTabletEvent(const TPathId& pathId, TShardIdx shardIdx, TOperationContext& context) {
         auto path = context.SS->PathsById.at(pathId);
 
-        auto ev = CreateEvCreateTablet(path, shardIdx, context);
+        auto ev = CreateEvCreateTablet(path, shardIdx, context.SS);
         auto rootHiveId = context.SS->GetGlobalHive();
 
         LOG_D(DebugHint() << "Send CreateTablet event to Hive: " << rootHiveId << " msg:  "<< ev->Record.DebugString());

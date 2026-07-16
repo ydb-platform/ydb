@@ -1,5 +1,6 @@
 #include "flat_executor_recovery.h"
 
+#include "flat_direct_part_writer.h"
 #include "flat_executor_backup_common.h"
 #include "flat_cxx_database.h"
 #include "flat_part_iface.h"
@@ -162,6 +163,7 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
     }
 
     TVector<TRawTypeValue> key(table->KeyColumns.size());
+    TVector<bool> keyFound(table->KeyColumns.size(), false);
     TVector<NTable::TUpdateOp> ops;
 
     if (!json.IsMap()) {
@@ -182,6 +184,7 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
 
         if (column.KeyOrder != Max<ui32>()) {
             key.at(column.KeyOrder) = MakeTypeValueFromJson(column.PType.GetTypeId(), value, pool);
+            keyFound.at(column.KeyOrder) = true;
         } else {
             ops.emplace_back(NIceDb::TUpdateOp(
                 column.Id,
@@ -191,8 +194,8 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
         }
     }
 
-    for (size_t i = 0; i < key.size(); ++i) {
-        if (key[i].IsEmpty()) {
+    for (size_t i = 0; i < keyFound.size(); ++i) {
+        if (!keyFound[i]) {
             ui32 keyColId = table->KeyColumns.at(i);
             const auto& col = table->Columns.at(keyColId);
             throw yexception() << "Key column " << col.Name << " is missing in table " << table->Name;
@@ -306,6 +309,8 @@ public:
     ui64 CompactMemTable(ui32) override { Y_TABLET_ERROR("Not supported"); }
     ui64 CompactTable(ui32) override { Y_TABLET_ERROR("Not supported"); }
     bool CompactTables() override { Y_TABLET_ERROR("Not supported"); }
+    THolder<TDirectPartWriter> BeginWritePart(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void ReleaseWritePart(ui32) override { Y_TABLET_ERROR("Not supported"); }
     void AllowBorrowedGarbageCompaction(ui32) override { Y_TABLET_ERROR("Not supported"); }
     void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase>) override { Y_TABLET_ERROR("Not supported"); }
     void SendUserAuxUpdateToFollowers(TString, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
@@ -323,6 +328,7 @@ public:
     void MoveSnapshot(const TTableSnapshotContext&, ui32, ui32) override { Y_TABLET_ERROR("Not supported"); }
     void ClearSnapshot(const TTableSnapshotContext&) override { Y_TABLET_ERROR("Not supported"); }
     void LoanTable(ui32, const TString&) override { Y_TABLET_ERROR("Not supported"); }
+    void AttachPart(ui32, THolder<TDirectPartResult>) override { Y_TABLET_ERROR("Not supported"); }
     void CleanupLoan(const TLogoBlobID&, ui64) override { Y_TABLET_ERROR("Not supported"); }
     void ConfirmLoan(const TLogoBlobID&, const TLogoBlobID&) override { Y_TABLET_ERROR("Not supported"); }
     void EnableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }

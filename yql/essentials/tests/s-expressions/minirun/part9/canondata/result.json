@@ -209,6 +209,20 @@
             "uri": "https://{canondata_backend}/1936842/97e0ab044a6a521639a649b6b781407443c8c0f8/resource.tar.gz#test.test_InMem-Iterator-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[InMem-LPartitionsByKeysSorted-default.txt-Debug]": [
+        {
+            "checksum": "344f7eae976694446bf07e0a90cd6f07",
+            "size": 566,
+            "uri": "https://{canondata_backend}/1814674/2df5cbfd5d5a594d9f476819b99ebb23ca848426/resource.tar.gz#test.test_InMem-LPartitionsByKeysSorted-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[InMem-LPartitionsByKeysSorted-default.txt-Results]": [
+        {
+            "checksum": "20b62fca5b0e72f0ca2df54d7d61a5e2",
+            "size": 337,
+            "uri": "https://{canondata_backend}/1814674/2df5cbfd5d5a594d9f476819b99ebb23ca848426/resource.tar.gz#test.test_InMem-LPartitionsByKeysSorted-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[InMem-ReplaceMember-default.txt-Debug]": [
         {
             "checksum": "356532c5c41738b56f422acc79110cbc",

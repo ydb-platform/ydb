@@ -7,7 +7,13 @@
 #include <util/string/cast.h>
 #include <util/string/builder.h>
 
+#include <memory>
+
 namespace NActors {
+    // Defined in ydb/library/actors/interconnect/interconnect_direct_session.h; forward declared here to
+    // avoid a dependency from actors/core onto actors/interconnect. Only referenced through shared_ptr.
+    class IDirectSession;
+
     class TNodeLocation {
     public:
         struct TKeys {
@@ -17,6 +23,8 @@ namespace NActors {
                 Module = 20,
                 Rack = 30,
                 Unit = 40,
+                // value 50 is used for PDisk domain mapping
+                // DiskScope = 50,
             };
         };
 
@@ -179,7 +187,15 @@ namespace NActors {
                 : NodeId(node)
             {
             }
+            TEvNodeConnected(ui32 node, std::shared_ptr<IDirectSession> directSession) noexcept
+                : NodeId(node)
+                , DirectSession(std::move(directSession))
+            {
+            }
             const ui32 NodeId;
+            // Set only for TInterconnectSessionTCPv2 sessions; carries a thread-safe direct send/receive
+            // interface that bypasses the actor system. Null for classic (v1) sessions.
+            std::shared_ptr<IDirectSession> DirectSession;
         };
 
         struct TEvNodeDisconnected: public TEventLocal<TEvNodeDisconnected, EvNodeDisconnected> {
@@ -195,11 +211,13 @@ namespace NActors {
 
         struct TEvListNodes: public TEventLocal<TEvListNodes, EvListNodes> {
             const bool SubscribeToStaticNodeChanges = false;
+            const bool OnlyAliveNodes = true;
 
             TEvListNodes() = default;
 
-            TEvListNodes(bool subscribeToStaticNodeChanges)
+            TEvListNodes(bool subscribeToStaticNodeChanges, bool onlyAliveNodes = true)
                 : SubscribeToStaticNodeChanges(subscribeToStaticNodeChanges)
+                , OnlyAliveNodes(onlyAliveNodes)
             {}
         };
 

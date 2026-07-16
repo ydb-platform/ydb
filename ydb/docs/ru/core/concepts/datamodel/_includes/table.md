@@ -164,13 +164,21 @@ CREATE TABLE article (
 * [Переименование таблицы в YQL](../../../yql/reference/syntax/alter_table/rename.md)
 * [Переименование таблицы через CLI](../../../reference/ydb-cli/commands/tools/rename.md)
 
-### Фильтр Блума {#bloom-filter}
+### Локальные блум-индексы {#bloom-filter}
 
 Использование [фильтра Блума](https://en.wikipedia.org/wiki/Bloom_filter) позволяет эффективнее определять отсутствие ключей в таблице при множественных точечных запросах по первичному ключу, снижая количество необходимых операций ввода-вывода с диска, ценой увеличения объема потребляемой памяти.
+
+Рекомендуемый способ управления фильтрами Блума в строковых таблицах — через [локальные Блум-индексы](../../glossary.md#local-bloom-skip-index) (`LOCAL USING bloom_filter`), создаваемые с помощью [ALTER TABLE ... ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom) и удаляемые с помощью [ALTER TABLE ... DROP INDEX](../../../yql/reference/syntax/alter_table/indexes.md#drop-index). Подробнее см. [Блум-индексы](../../../dev/bloom-skip-indexes.md#row-vs-column).
+
+{% note warning %}
 
 | Имя параметра | Тип | Допустимые значения | Возможность<br/>изменения | Возможность<br/>сброса |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |
 | `KEY_BLOOM_FILTER` | Enum | `ENABLED`, `DISABLED` | Да | Нет |
+
+Настройка `KEY_BLOOM_FILTER` устарела (deprecated). Она включает фильтр Блума по всему первичному ключу, а при установке `DISABLED` очищает все фильтры Блума на таблице.
+
+{% endnote %}
 
 ### Группы колонок {#column-groups}
 
@@ -256,14 +264,9 @@ CREATE TABLE article_column_table (
 WITH (STORE = COLUMN);
 ```
 
-В настоящий момент реализована не вся функциональность колоночных таблиц. Сейчас не поддерживается:
+### Локальные блум-индексы {#local-bloom-indexes}
 
-* Чтение с реплик.
-* Вторичные индексы.
-* Векторные индексы.
-* Фильтры Блума.
-* Change Data Capture.
-* Пользовательские атрибуты таблиц.
+В колоночных и строковых таблицах можно задавать [локальные Блум-индексы](../../glossary.md#local-bloom-skip-index) по колонкам: `LOCAL USING bloom_filter` или `LOCAL USING bloom_ngram_filter`. Индексы создаются при [создании таблицы](../../../yql/reference/syntax/create_table/bloom_skip_index.md) или добавляются через [ALTER TABLE ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom). Подробнее: [локальные индексы](../../query_execution/local_indexes.md), [Блум-индексы](../../../dev/bloom-skip-indexes.md).
 
 ### Партицирование колоночной таблицы {#olap-tables-partitioning}
 
@@ -282,3 +285,14 @@ AUTO_PARTITIONING_MIN_PARTITIONS_COUNT определяет минимально
 Значение по умолчанию: 64.
 
 С учетом, что остальные параметры партицирования игнорируются, это же значение определяет и верхнее число партиций.
+
+### Ограничения колоночных таблиц
+
+В настоящий момент реализована не вся функциональность колоночных таблиц. Сейчас не поддерживается:
+
+* Чтение с реплик.
+* Глобальные вторичные индексы.
+* Векторные и полнотекстовые индексы.
+* Фильтр Блума для первичного ключа (`KEY_BLOOM_FILTER`; см. [фильтр Блума](#bloom-filter) для строковых таблиц).
+* Change Data Capture.
+* Пользовательские атрибуты таблиц.

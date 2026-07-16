@@ -228,7 +228,7 @@ int TCommandExportToYt::Run(TConfig& config) {
     settings.NumberOfRetries(NumberOfRetries);
     settings.UseTypeV3(UseTypeV3);
 
-    const TDriver driver = CreateDriver(config);
+    const auto driver = CreateDriver(config);
 
     TSchemeClient schemeClient(driver);
     TTableClient tableClient(driver);
@@ -436,7 +436,7 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
         settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database, .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
     }
 
-    const TDriver driver = CreateDriver(config);
+    const auto driver = CreateDriver(config);
 
     using namespace NExport;
     using namespace NScheme;

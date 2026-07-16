@@ -64,6 +64,10 @@ private:
     }
 
     bool CanReplaceOnHybrid(const TYtOutputOpBase& operation) const {
+        if (operation.DataSink().Cluster().Value() == YtUnspecifiedCluster) {
+            // wait until runtime cluster is assigned
+            return false;
+        }
         const TStringBuf nodeName = operation.Raw()->Content();
         if (!State_->IsHybridEnabledForCluster(operation.DataSink().Cluster().Value())) {
             PushSkipStat("DisabledCluster", nodeName);
@@ -72,6 +76,9 @@ private:
 
         if (State_->HybridTakesTooLong()) {
             PushSkipStat("TakesTooLong", nodeName);
+            YQL_CLOG(DEBUG, ProviderYt) << "CanReplaceOnHybrid: skip " << nodeName
+                << " by TakesTooLong: timeSpentInHybrid=" << State_->TimeSpentInHybrid
+                << ", limit=" << State_->GetHybridDqTimeSpentLimit();
             return false;
         }
 
@@ -95,6 +102,8 @@ private:
 
         if (operation.Output().Size() != 1U) {
             PushSkipStat("MultipleOutputs", nodeName);
+            YQL_CLOG(DEBUG, ProviderYt) << "CanReplaceOnHybrid: skip " << nodeName
+                << " by MultipleOutputs: outputCount=" << operation.Output().Size();
             return false;
         }
 
@@ -177,6 +186,10 @@ private:
 
         if (dataSize > sizeLimit || dataChunks > chunksLimit) {
             PushSkipStat("OverLimits", nodeName);
+            YQL_CLOG(DEBUG, ProviderYt) << "CanReadHybrid: skip " << nodeName
+                << " by OverLimits: dataSize=" << dataSize << " (limit=" << sizeLimit << ")"
+                << ", dataChunks=" << dataChunks << " (limit=" << chunksLimit << ")"
+                << ", orderedInput=" << orderedInput;
             return false;
         }
 

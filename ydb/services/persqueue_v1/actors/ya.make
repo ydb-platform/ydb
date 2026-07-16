@@ -9,10 +9,12 @@ PEERDIR(
     ydb/core/base
     ydb/core/grpc_services
     ydb/core/persqueue/common
+    ydb/core/persqueue/deferred_publish
     ydb/core/persqueue/events
     ydb/core/persqueue/public
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/cluster_tracker
+    ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/scheme_cache
@@ -20,7 +22,7 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/persqueue
     ydb/library/persqueue/topic_parser
-    ydb/library/kafka
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/library/cloud_permissions
     ydb/public/api/protos
     ydb/public/lib/base
@@ -62,6 +64,8 @@ SRCS(
     partition_writer.cpp
     partition_writer_cache_actor.h
     partition_writer_cache_actor.cpp
+    deferred_destination_upsert_actor.h
+    deferred_destination_upsert_actor.cpp
 )
 
 END()

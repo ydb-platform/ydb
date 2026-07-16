@@ -8,7 +8,12 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/library/actors/core/subsystems/stats.h>
 #include <ydb/library/services/services.pb.h>
+
+#include <util/string/cast.h>
+
+#include <cmath>
 
 namespace NKikimr::NKqp {
 
@@ -46,9 +51,6 @@ void TStagePredictor::Scan(const NYql::TExprNode::TPtr& stageNode) {
             HasCondenseFlag = true;
         } else if (node.Maybe<NYql::NNodes::TKqpWideReadTable>()) {
             HasRangeScanFlag = true;
-        } else if (node.Maybe<NYql::NNodes::TKqpUpsertRows>()) {
-        } else if (node.Maybe<NYql::NNodes::TKqpDeleteRows>()) {
-
         } else if (node.Maybe<NYql::NNodes::TKqpWideReadTableRanges>() || node.Maybe<NYql::NNodes::TKqpWideReadOlapTableRanges>()) {
             HasRangeScanFlag = true;
         } else if (node.Maybe<NYql::NNodes::TCoSort>()) {
@@ -70,6 +72,20 @@ void TStagePredictor::Scan(const NYql::TExprNode::TPtr& stageNode) {
             }
         } else if (node.Maybe<NYql::NNodes::TCoMapJoinCore>()) {
             HasMapJoinFlag = true;
+        } else if (const auto maybeWatermarkGenerator = node.Maybe<NYql::NNodes::TDqPhyWatermarkGenerator>()) {
+            HasWatermarkGeneratorFlag = true;
+
+            const auto watermarkGenerator = maybeWatermarkGenerator.Cast();
+            for (const auto& nameValue : watermarkGenerator.WatermarkSettings()) {
+                if (nameValue.Name().Value() != "WatermarksIdleTimeoutUs") {
+                    continue;
+                }
+
+                ui64 idleTimeoutUs = 0;
+                if (TryFromString<ui64>(nameValue.Value().Cast<NYql::NNodes::TCoAtom>().Value(), idleTimeoutUs)) {
+                    WatermarkGeneratorIdleTimeoutUs = Max(WatermarkGeneratorIdleTimeoutUs.value_or(0), idleTimeoutUs);
+                }
+            }
         } else if (node.Maybe<NYql::NNodes::TCoUdf>()) {
             HasUdfFlag = true;
         }
@@ -93,6 +109,10 @@ void TStagePredictor::SerializeToKqpSettings(NYql::NDqProto::TProgram::TSettings
     kqpProto.SetHasTop(HasTopFlag);
     kqpProto.SetHasRangeScan(HasRangeScanFlag);
     kqpProto.SetHasCondense(HasCondenseFlag);
+    kqpProto.SetHasWatermarkGenerator(HasWatermarkGeneratorFlag);
+    if (WatermarkGeneratorIdleTimeoutUs) {
+        kqpProto.SetWatermarkGeneratorIdleTimeoutUs(*WatermarkGeneratorIdleTimeoutUs);
+    }
     kqpProto.SetNodesCount(NodesCount);
     kqpProto.SetInputDataPrediction(InputDataPrediction);
     kqpProto.SetOutputDataPrediction(OutputDataPrediction);
@@ -111,6 +131,12 @@ bool TStagePredictor::DeserializeFromKqpSettings(const NYql::NDqProto::TProgram:
     HasTopFlag = kqpProto.GetHasTop();
     HasRangeScanFlag = kqpProto.GetHasRangeScan();
     HasCondenseFlag = kqpProto.GetHasCondense();
+    HasWatermarkGeneratorFlag = kqpProto.GetHasWatermarkGenerator();
+    if (kqpProto.HasWatermarkGeneratorIdleTimeoutUs()) {
+        WatermarkGeneratorIdleTimeoutUs = kqpProto.GetWatermarkGeneratorIdleTimeoutUs();
+    } else {
+        WatermarkGeneratorIdleTimeoutUs.reset();
+    }
     NodesCount = kqpProto.GetNodesCount();
     InputDataPrediction = kqpProto.GetInputDataPrediction();
     OutputDataPrediction = kqpProto.GetOutputDataPrediction();
@@ -129,6 +155,19 @@ ui32 TStagePredictor::GetUsableThreads() {
         userPoolSize = NSystemInfo::NumberOfCpus();
     }
     return Max<ui32>(1, *userPoolSize);
+}
+
+ui32 TStagePredictor::GetPossibleMaxLimitThreads() {
+    const ui32 usableThreads = GetUsableThreads();
+    if (HasAppData() && TlsActivationContext && TlsActivationContext->ActorSystem()) {
+        TExecutorPoolState poolState;
+        GetActorSystemStats().GetExecutorPoolState(AppData()->UserPoolId, poolState);
+        if (poolState.PossibleMaxLimit > 0) {
+            return Max(usableThreads, static_cast<ui32>(std::ceil(poolState.PossibleMaxLimit)));
+        }
+    }
+
+    return usableThreads;
 }
 
 ui32 TStagePredictor::CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount) const {

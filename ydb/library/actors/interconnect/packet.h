@@ -201,11 +201,13 @@ struct TTcpPacketOutTask : TNonCopyable {
 
     // Append reference to some data (acquired previously or external pointer).
     template<bool External>
-    void Append(const void *buffer, size_t len, ui32* const zcHandle) {
+    void Append(const void *buffer, size_t len, ui32* const zcHandle, bool disableChecksum) {
         Y_DEBUG_ABORT_UNLESS(len <= (External ? GetExternalFreeAmount() : GetInternalFreeAmount()));
         (External ? ExternalSize : InternalSize) += len;
         (External ? XdcStream : OutgoingStream).Append({static_cast<const char*>(buffer), len}, zcHandle);
-        ProcessChecksum<External>(buffer, len);
+        if (! disableChecksum) {
+            ProcessChecksum<External>(buffer, len);
+        }
     }
 
     // Write some data with copying.

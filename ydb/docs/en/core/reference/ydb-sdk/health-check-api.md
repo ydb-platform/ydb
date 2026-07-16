@@ -43,6 +43,12 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   await monitoring.selfCheck();
   ```
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
+
 {% endlist %}
 
 ## Call parameters {#call-parameters}
@@ -101,6 +107,12 @@ The complete list of extra parameters is presented below:
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
+
 {% endlist %}
 
 | Parameter | Type | Description |
@@ -111,7 +123,7 @@ The complete list of extra parameters is presented below:
 
 ## Response structure {#response-structure}
 
-For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository.
+For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository.
 Calling the `SelfCheck` method will return the following message:
 
 ```protobuf
@@ -153,7 +165,7 @@ message IssueLog {
 | `issue_log.reason` | This is a set of elements, each of which describes an issue in the system at a certain level. |
 | `issue_log.type` | Issue category (by subsystem). Each type is at a certain level and interconnected with others through a [rigid hierarchy](#issues-hierarchy) (as shown in the picture above). |
 | `issue_log.level` | Issue [nesting depth](#issues-hierarchy). |
-| `database_status` | If the settings include `ReturnVerboseStatus` parameter, the `database_status` field will be populated. <br/>This field offers a comprehensive summary of the overall health of the database. <br/>It is designed to provide a quick overview of the database's condition, helping to assess its health and identify any major issues at a high level. [Example](#example-verbose). For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository. |
+| `database_status` | If the settings include `ReturnVerboseStatus` parameter, the `database_status` field will be populated. <br/>This field offers a comprehensive summary of the overall health of the database. <br/>It is designed to provide a quick overview of the database's condition, helping to assess its health and identify any major issues at a high level. [Example](#example-verbose). For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository. |
 | `location` | Contains information about the host, where the `HealthCheck` service was called |
 
 ### Issues hierarchy {#issues-hierarchy}
@@ -168,7 +180,7 @@ Each issue has a nesting `level`. The higher the `level`, the deeper the issue i
 
 #### Database check result {#selfcheck-result}
 
-The most general status of the database. It can have the following values:
+The most general status of the database `self_check_result` can have the following values:
 
 | Value | Description |
 |:----|:----|
@@ -179,7 +191,7 @@ The most general status of the database. It can have the following values:
 
 #### Issue status {#issue-status}
 
-The status (severity) of the current issue:
+The status (severity) of the current issue `issue_log.status`:
 
 | Value | Description |
 |:----|:----|

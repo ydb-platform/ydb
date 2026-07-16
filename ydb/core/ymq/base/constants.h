@@ -10,7 +10,7 @@ namespace NKikimr::NSQS {
 constexpr size_t MAX_SHARDS_COUNT = 32;
 constexpr size_t MAX_PARTITIONS_COUNT = 128;
 
-constexpr char const ConsumerName[] = "sqs_consumer";
+constexpr char const ConsumerName[] = "ydb-sqs-consumer";
 
 static const TString yaSqsArnPrefix = "yrn:ya:sqs";
 static const TString cloudArnPrefix = "yrn:yc:ymq";

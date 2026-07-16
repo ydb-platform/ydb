@@ -4,6 +4,7 @@
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/driver_lib/version/ut/ut_helpers.h>
 
 namespace NKikimr {
 
@@ -13,6 +14,20 @@ template<typename Int1 = ui32, typename Int2 = ui32>
 inline Int1 GenerateRandom(Int1 min, Int2 max) {
     return min + RandomNumber(max - min);
 }
+
+using EComponentId = NKikimrConfig::TCompatibilityRule::EComponentId;
+
+using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;
+using TYdbVersion = TCompatibilityInfo::TProtoConstructor::TVersion;
+using TCompatibilityRule = TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
+using TCurrentConstructor = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
+
+using TValidateCallback = std::function<bool(std::unique_ptr<TEnvironmentSetup>&, TString&)>;
+using TVersion = std::tuple<ui32, ui32, ui32, ui32>;
+
+NKikimrConfig::TCurrentCompatibilityInfo MakeCompatibilityInfo(const std::optional<TVersion>& version,
+        EComponentId componentId);
+
 
 class TInflightActor : public TActorBootstrapped<TInflightActor> {
 public:

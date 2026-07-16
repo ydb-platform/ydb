@@ -3289,8 +3289,9 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     // ProcessDeallocatePersistentBufferChunk (called after every Free()) locks
     // owned chunks round-robin and, once a locked chunk turns out to be fully
     // free, sends TEvPrivate::TEvDeallocatePersistentBufferChunk to the DDisk
-    // actor, which writes a chunk-map log record and issues NPDisk::TEvChunkForget
-    // for the physical chunk.
+    // actor, which writes a chunk-map log record with the physical chunk in
+    // DeleteChunks, causing PDisk to release the chunk immediately as part of
+    // that log commit.
     //
     // Shared setup: reuse MakeProactiveAllocationFormat / DoPBWriteRoundTrip /
     // GetPBFreeSectors from the proactive-allocation tests above. 12 writes with
@@ -3366,11 +3367,11 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     // erasing a record frees sectors and triggers ProcessDeallocatePersistentBufferChunk, which
     // round-robins the lock through the owned chunks (starting at chunk 0) until it reaches the
     // fully-free 5th chunk, then issues TEvPrivate::TEvDeallocatePersistentBufferChunk -> a
-    // persistent-buffer-chunk-map log record -> NPDisk::TEvChunkForget for that physical chunk.
+    // persistent-buffer-chunk-map log record whose commit record's DeleteChunks contains that
+    // physical chunk, causing PDisk to release it immediately.
     //
     // Covers: ProcessDeallocatePersistentBufferChunk, TPersistentBufferSpaceAllocator::LockNextChunk/
-    //         DeallocateChunk, TDDiskActor::Handle(TEvDeallocatePersistentBufferChunk),
-    //         TDDiskActor::Handle(TEvChunkForgetResult).
+    //         DeallocateChunk, TDDiskActor::Handle(TEvDeallocatePersistentBufferChunk).
     // ─────────────────────────────────────────────────────────────────────────
     Y_UNIT_TEST(PersistentBufferProactiveDeallocationAfterErase) {
         TTestContext ctx;
@@ -3397,17 +3398,20 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
 
         // Drain the persistent-buffer-chunk-map log record for the deallocation
         // (the simulated clock advances through the intermediate 1-second wakeup
-        // cycles automatically while waiting for this event).
+        // cycles automatically while waiting for this event). Its commit record's
+        // DeleteChunks must contain exactly the extra (physically freed) chunk,
+        // which causes PDisk to release it immediately as part of the commit.
+        // Regression check: the physical chunk being deallocated must go into
+        // DeleteChunks, not CommitChunks (CommitChunks would tell PDisk to keep
+        // the chunk committed/owned rather than release it).
         auto log = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
+        UNIT_ASSERT_VALUES_EQUAL(log->Get()->CommitRecord.DeleteChunks.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(log->Get()->CommitRecord.DeleteChunks[0], extraChunk);
+        UNIT_ASSERT_C(log->Get()->CommitRecord.CommitChunks.empty(),
+            "the deallocated chunk must not appear in CommitChunks");
         auto logReply = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
         logReply->Results.emplace_back(log->Get()->Lsn, log->Get()->Cookie);
         ctx.SendPDiskResponse(disk, *log, logReply.release());
-
-        // The DDisk actor must now ask PDisk to forget exactly the extra chunk.
-        auto forget = ctx.WaitPDiskRequest<NPDisk::TEvChunkForget>(disk);
-        UNIT_ASSERT_VALUES_EQUAL(forget->Get()->ForgetChunks.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(forget->Get()->ForgetChunks[0], extraChunk);
-        ctx.SendPDiskResponse(disk, *forget, new NPDisk::TEvChunkForgetResult(NKikimrProto::OK, 0));
 
         // The deallocated chunk's capacity (32768 sectors) must be gone from the
         // free pool: free sectors after deallocation must be exactly

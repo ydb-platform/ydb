@@ -293,7 +293,6 @@ namespace {
             hFunc(NPDisk::TEvReadLogResult, Handle)
             cFunc(TEvPrivate::EvHandleSingleQuery, HandleSingleQuery)
             hFunc(NPDisk::TEvChunkReserveResult, Handle)
-            hFunc(NPDisk::TEvChunkForgetResult, Handle)
             hFunc(NPDisk::TEvLogResult, Handle)
             hFunc(TEvPrivate::TEvHandleEventForChunk, Handle)
             hFunc(NPDisk::TEvCutLog, Handle)

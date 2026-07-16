@@ -28,6 +28,8 @@ protected:
 public:
     using TBase::TBase;
 
+    void AddConfig(TResourcePoolClassifierConfig config);
+
     std::optional<TResourcePoolClassifierConfig> GetClassifierConfig(const TString& database, const TString& name) const;
 };
 

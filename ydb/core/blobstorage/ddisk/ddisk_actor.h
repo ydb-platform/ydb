@@ -485,7 +485,6 @@ namespace NKikimr::NDDisk {
 
         void IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex);
         void Handle(NPDisk::TEvChunkReserveResult::TPtr ev);
-        void Handle(NPDisk::TEvChunkForgetResult::TPtr ev);
         void HandleChunkReserved();
         void Handle(NPDisk::TEvLogResult::TPtr ev);
         void Handle(TEvPrivate::TEvHandleEventForChunk::TPtr ev);

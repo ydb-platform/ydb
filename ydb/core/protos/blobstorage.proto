@@ -1017,6 +1017,7 @@ message TNodeWardenServiceSet {
 
         reserved 16; // optional uint64 InferPDiskSlotCountFromUnitSize, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
         reserved 17; // optional uint32 InferPDiskSlotCountMax, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
+        optional string DiskScope = 18; // optional, used for layout check
     }
 
     message TVDisk {
@@ -1646,6 +1647,17 @@ message TEvControllerAllocateDDiskBlockGroup {
             repeated uint32 PreferredNodeIds = 2; // in order of descending preference
         }
         repeated TReassignPersistentBuffer ReassignPersistentBuffers = 5;
+
+        message TDeletePersistentBuffer {
+            optional NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferId = 1;
+        }
+        repeated TDeletePersistentBuffer DeletePersistentBuffers = 6;
+
+        message TDeleteDDisk {
+            optional NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 1;
+        }
+        repeated TDeleteDDisk DeleteDDisks = 7;
+
     }
     repeated TDirectBlockGroupOperation DirectBlockGroupOperations = 5;
 }

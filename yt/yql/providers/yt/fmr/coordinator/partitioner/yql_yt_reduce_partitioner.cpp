@@ -3,8 +3,18 @@
 #include "yql_yt_sorted_partitioner_base.h"
 
 #include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
+#include <library/cpp/yson/node/node_io.h>
 
 namespace NYql::NFmr {
+
+namespace {
+
+// Binary YSON key rows may contain arbitrary non-UTF8 bytes; text YSON escapes them, keeping error messages valid UTF-8.
+TString FormatKeyRow(const TString& binaryYsonRow) {
+    return NYT::NodeToYsonString(NYT::NodeFromYsonString(binaryYsonRow));
+}
+
+} // namespace
 
 TReducePartitioner::TReducePartitioner(
     const std::unordered_map<TFmrTableId, std::vector<TString>>& partIdsForTables,
@@ -47,7 +57,7 @@ TFmrTableKeysRange TReducePartitioner::GetReadRangeFromSlices(const std::vector<
     YQL_ENSURE(taskRangeLeftBorderInclusive, " task range left border should always be true for reduce paritioner");
 
     if (taskRangeLeftBorder == taskRangeRightBorder && !taskRangeRightBorderInclusive) {
-        ythrow yexception() << "Key " << taskRangeLeftBorder.Row << " takes all slice and is too large, cannot partition";
+        ythrow yexception() << "Key " << FormatKeyRow(taskRangeLeftBorder.Row) << " takes all slice and is too large, cannot partition";
     }
 
     taskRange.SetFirstKeysBound(taskRangeLeftBorder, taskRangeLeftBorderInclusive);
@@ -93,7 +103,7 @@ void TReducePartitioner::CheckMaxKeySizePerSlices(const std::vector<TSlice>& sli
 
         if (*curLeftBorder != curRightBorder) {
             if (currentFilledSlicesWeight > maxKeySizePerPart) {
-                ythrow yexception() << "Key " << curLeftBorder->Row << " weighs at least " << currentFilledSlicesWeight << " bytes which is larget than maxKeySizePerPart - " << maxKeySizePerPart << " - cannot partition";
+                ythrow yexception() << "Key " << FormatKeyRow(curLeftBorder->Row) << " weighs at least " << currentFilledSlicesWeight << " bytes which is larget than maxKeySizePerPart - " << maxKeySizePerPart << " - cannot partition";
             }
             curLeftBorder = Nothing();
             currentFilledSlicesWeight = 0;
@@ -102,7 +112,7 @@ void TReducePartitioner::CheckMaxKeySizePerSlices(const std::vector<TSlice>& sli
         }
     }
     if (currentFilledSlicesWeight > maxKeySizePerPart) {
-        ythrow yexception() << "Key " << curLeftBorder->Row << " weighs at least " << currentFilledSlicesWeight << " bytes which is larget than maxKeySizePerPart - " << maxKeySizePerPart;
+        ythrow yexception() << "Key " << FormatKeyRow(curLeftBorder->Row) << " weighs at least " << currentFilledSlicesWeight << " bytes which is larget than maxKeySizePerPart - " << maxKeySizePerPart;
     }
     CurrentLastKeyWeight_ = currentFilledSlicesWeight;
 }
@@ -115,7 +125,11 @@ void TReducePartitioner::ChangeLeftKeyBoundaryIfNeeded(
     isLeftInclusive = true;
 }
 
-void TReducePartitioner::ChangeRightKeyBoundaryIfNeeded(TFmrTableKeysBoundary& rightKey, const TFmrTableKeysBoundary& taskRangeLastKey) {
+void TReducePartitioner::ChangeRightKeyBoundaryIfNeeded(
+    TFmrTableKeysBoundary& rightKey,
+    bool& /*isRightInclusive*/,
+    const TFmrTableKeysBoundary& taskRangeLastKey
+) {
     rightKey = taskRangeLastKey;
 }
 

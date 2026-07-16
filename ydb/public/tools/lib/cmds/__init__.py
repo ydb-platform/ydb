@@ -383,9 +383,6 @@ def deploy(arguments):
         for flag_name in flags:
             enable_feature_flags.append(flag_name)
 
-    if 'YDB_EXPERIMENTAL_PG' in os.environ:
-        optionals['pg_compatible_expirement'] = True
-
     kafka_api_port = int(os.environ.get("YDB_KAFKA_PROXY_PORT", "0"))
     if kafka_api_port != 0:
         optionals['kafka_api_port'] = kafka_api_port

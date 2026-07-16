@@ -120,6 +120,13 @@ namespace NKikimr {
         };
     };
 
+    struct TWilsonQuoter {
+        enum {
+            QuoterService = TComponentTracingLevels::TGrpcProxy::TopLevel,
+            QuoterProxy = TComponentTracingLevels::TGrpcProxy::TopLevel,
+        };
+    };
+
     struct TWilsonTopic {
         enum {
             TopicTopLevel = TComponentTracingLevels::TTopic::TopLevel,

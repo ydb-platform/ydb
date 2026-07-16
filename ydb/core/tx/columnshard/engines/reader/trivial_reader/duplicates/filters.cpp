@@ -1,5 +1,7 @@
 #include "filters.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
 
 TFilterAccumulator::TFilterAccumulator(
@@ -19,9 +21,12 @@ TFilterAccumulator::~TFilterAccumulator() {
 
 void TFilterAccumulator::AddFilter(NArrow::TColumnFilter&& filter) {
     AFL_VERIFY(!IsDone());
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
-    ("component", "duplicates_manager")("type", "filter_ready")("info", DebugString())("portion_id", OriginalRequest->Get()->GetPortionId())(
-        "filter", filter.DebugString());
+    YDB_LOG_TRACE("",
+        {"component", "duplicates_manager"},
+        {"type", "filter_ready"},
+        {"info", DebugString()},
+        {"portionId", OriginalRequest->Get()->GetPortionId()},
+        {"filter", filter.DebugString()});
     OriginalRequest->Get()->GetSubscriber()->OnFilterReady(std::move(filter));
     Done = true;
     AFL_VERIFY(IsDone());

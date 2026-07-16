@@ -5,13 +5,18 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_BACKGROUND
+
 namespace NKikimr::NOlap::NBackground {
 
 bool TSessionActor::SendTabletTransaction(std::unique_ptr<NTabletFlatExecutor::ITransaction>&& tx) {
     if (Send<TEvExecuteGeneralLocalTransaction>(TabletActorId, std::move(tx))) {
         return true;
     }
-    AFL_WARN(NKikimrServices::TX_BACKGROUND)("event", "tablet_transaction_send_failed")("tablet_id", TabletId)("self_id", SelfId());
+    YDB_LOG_WARN("",
+        {"event", "tablet_transaction_send_failed"},
+        {"tabletId", TabletId},
+        {"selfId", SelfId()});
     return false;
 }
 

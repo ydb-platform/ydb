@@ -1,4 +1,7 @@
 ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_Uring
+ydb/core/blobstorage/pdisk/ut RDMA.TestChunkReadWithRdmaAllocatorEncryptedChunks
+ydb/core/blobstorage/pdisk/ut RDMA.TestChunkReadWithRdmaAllocatorPlainChunks
+ydb/core/blobstorage/pdisk/ut RDMA.TestRcBuf
 ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
 ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
@@ -23,6 +26,7 @@ ydb/core/kafka_proxy/ut unittest.sole chunk
 ydb/core/kqp/ut/federated_query/datastreams HasPathDatastreams.CdcStreamMatches
 ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.IndexesActualization-QueryService
+ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.MinMaxIndexAppliedToDataAfterCompaction-QueryService-SchemeObjectEnabled
 ydb/core/kqp/ut/olap/storage KqpOlapDictionary.GroupBySomeDictionaryWithCompaction
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
@@ -176,6 +180,7 @@ ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_stabl
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_restart_idempotency
 ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
+ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_multiple_disks_creation
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer

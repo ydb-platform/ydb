@@ -147,7 +147,9 @@ public:
     }
 
     // Mutable access that records a deduped undo snapshot. The only tracked way to mutate.
-    V& Update(const TPathId& id, TMemoryChanges& changes) {
+    // Returns const V&: the pointee stays mutable (->Field), but the slot can't be
+    // reseated (Update(id,mc) = newPtr won't compile), which would desync the undo.
+    const V& Update(const TPathId& id, TMemoryChanges& changes) {
         Y_VERIFY_DEBUG_S(changes.IsArmed(),
             "tracked Update on " << Reason << " outside an armed propose; use UpdateUntracked (see I3)");
         V& slot = Map.at(id);
@@ -159,9 +161,9 @@ public:
         return slot;
     }
 
-    // Mutable access without undo, for non-transactional callers (init, stats).
-    // Operations use Update() so their mutation is undoable.
-    V& UpdateUntracked(const TPathId& id) {
+    // Pointee-mutable access without undo, for non-transactional callers (init, stats).
+    // Const V& (no slot reseat); operations use Update() so their mutation is undoable.
+    const V& UpdateUntracked(const TPathId& id) {
         return Map.at(id);
     }
 
@@ -172,27 +174,20 @@ public:
         return Map.erase(id);
     }
 
-    void erase(iterator it) {
-        ReleasePathDbRef(SS, it->first, Reason);
-        Map.erase(it);
-    }
-
     // Read-only: const pointee, so at(id)->Mutate() won't compile; mutate via Update().
     TConstView at(const TPathId& id) const { return Map.at(id); }
 
-    // Untracked read accessors: no const enforcement (TIntrusivePtr) and no undo.
-    // Read only; reassigning a slot desyncs the self-ref. Mutate via Set/Update/UpdateUntracked.
-    iterator find(const TPathId& id) { return Map.find(id); }
+    // Read accessors are const-only: they never hand out a mutable slot, so a caller
+    // can't reseat an entry (it->second = newPtr) and desync the self-ref. The
+    // const_iterator/const V* still permit pointee mutation (->Field); the sanctioned
+    // mutation gates are Set/Update/UpdateUntracked.
     const_iterator find(const TPathId& id) const { return Map.find(id); }
-    V* FindPtr(const TPathId& id) { return Map.FindPtr(id); }
     const V* FindPtr(const TPathId& id) const { return Map.FindPtr(id); }
     V Value(const TPathId& id, const V& def) const { return Map.Value(id, def); }
     bool contains(const TPathId& id) const { return Map.contains(id); }
     size_t count(const TPathId& id) const { return Map.count(id); }
     size_t size() const { return Map.size(); }
     bool empty() const { return Map.empty(); }
-    iterator begin() { return Map.begin(); }
-    iterator end() { return Map.end(); }
     const_iterator begin() const { return Map.begin(); }
     const_iterator end() const { return Map.end(); }
 

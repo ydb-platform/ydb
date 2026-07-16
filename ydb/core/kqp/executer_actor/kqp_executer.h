@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/kqp_batch_operations.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
+#include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/executer_actor/kqp_partition_helper.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver_events.h>
@@ -32,7 +33,7 @@ struct TEvKqpExecuter {
 
         NLWTrace::TOrbit Orbit;
         IKqpGateway::TKqpSnapshot Snapshot;
-        std::optional<std::pair<ui64, ui64>> CommitTimestamp;
+        std::optional<TCommitTimestamp> CommitTimestamp;
         std::optional<NYql::TKikimrPathId> BrokenLockPathId;
         std::optional<ui64> BrokenLockShardId;
         std::optional<ui64> BrokenLockQuerySpanId;

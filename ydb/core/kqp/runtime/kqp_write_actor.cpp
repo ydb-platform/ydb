@@ -4750,7 +4750,7 @@ public:
                     AFL_ENSURE(res->Record.HasStepId());
                     AFL_ENSURE(res->Record.HasTxId());
                     AFL_ENSURE(TxId && *TxId == res->Record.GetTxId());
-                    CommitTimestamp = std::make_pair(res->Record.GetStepId(), res->Record.GetTxId());
+                    CommitTimestamp = TCommitTimestamp{res->Record.GetStepId(), res->Record.GetTxId()};
                 }
                 break;
 
@@ -5906,7 +5906,7 @@ private:
     bool IsImmediateCommit = false;
     bool TxPlanned = false;
     std::optional<ui64> Coordinator;
-    std::optional<std::pair<ui64, ui64>> CommitTimestamp;
+    std::optional<TCommitTimestamp> CommitTimestamp;
 
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;

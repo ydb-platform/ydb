@@ -3046,8 +3046,8 @@ public:
 
         if (QueryState->CommitTimestamp) {
             auto* ts = response->MutableCommitTimestamp();
-            ts->set_plan_step(QueryState->CommitTimestamp->first);
-            ts->set_tx_id(QueryState->CommitTimestamp->second);
+            ts->set_plan_step(QueryState->CommitTimestamp->PlanStep);
+            ts->set_tx_id(QueryState->CommitTimestamp->TxId);
         }
 
         UpdateQueryExecutionCounters();

@@ -1,7 +1,12 @@
 name: YDB CLI coverage
 
+# TEMPORARY: trigger is `pull_request` (not `pull_request_target`) so that the
+# workflow file and composite action are taken from the PR's head branch,
+# letting us dogfood the workflow before it lands in main.
+# TODO: switch back to `pull_request_target` before merging this to main
+# (SDK coverage uses `pull_request_target` — that is the intended final form).
 on:
-  pull_request_target:
+  pull_request:
     branches:
       - main
       - stable-*

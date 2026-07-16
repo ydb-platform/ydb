@@ -391,7 +391,7 @@ When creating a semaphore, you can specify its limit. The limit determines the m
 
 - Java
 
-  A semaphore is created explicitly by the `createSemaphore` method on a connected session. You can pass custom binary data stored with the semaphore (`byte[] data`); the method variant without the `data` parameter is equivalent to passing `null`. If a semaphore with that name already exists, the operation completes with a 'already exists' status.
+  A semaphore is created explicitly by the `createSemaphore` method on a connected session. You can pass custom binary data stored with the semaphore (`byte[] data`); the method variant without the `data` parameter is equivalent to passing `null`. If a semaphore with that name already exists, the operation completes with an 'already exists' status.
 
 
   ```java

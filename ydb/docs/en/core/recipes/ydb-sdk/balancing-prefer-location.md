@@ -4,13 +4,13 @@ Below are code examples for setting the balancing algorithm option "prefer avail
 
 {% list tabs %}
 
-- C++++
+- Native SDK
 
   {% list tabs %}
 
-  - Native SDK
+  - In the C++ SDK, you can select only one availability zone as the preferred one.
 
-    In the C++ SDK, you can select only one availability zone as the preferred one.
+    userver
 
 
     ```cpp
@@ -29,7 +29,7 @@ Below are code examples for setting the balancing algorithm option "prefer avail
     }
     ```
 
-  - userver
+  - Native SDK
 
     {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
@@ -39,7 +39,7 @@ Below are code examples for setting the balancing algorithm option "prefer avail
 
   {% list tabs %}
 
-  - Native SDK
+  - database/sql
 
     ```go
     package main
@@ -77,7 +77,7 @@ Below are code examples for setting the balancing algorithm option "prefer avail
 
     Client balancing in the `database/sql` driver for {{ ydb-short-name }} is performed only when a new connection is established (in terms of `database/sql`), which is a session {{ ydb-short-name }} on a specific node. After the session is created, all queries on that session are directed to the node where the session was created. Balancing of queries on the same session {{ ydb-short-name }} between different nodes {{ ydb-short-name }} does not occur.
 
-    Example code for setting the balancing algorithm "prefer availability zone":
+    In **Java SDK**, the availability zone preference is set in the gRPC transport settings.
 
 
     ```go
@@ -137,11 +137,11 @@ Below are code examples for setting the balancing algorithm option "prefer avail
 
 - Java
 
-  In **Java SDK**, the availability zone preference is set in the gRPC transport settings.
+  Native SDK
 
   {% list tabs %}
 
-  - Native SDK
+  - JDBC
 
     ```java
     import tech.ydb.core.grpc.BalancingSettings;

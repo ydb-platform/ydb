@@ -389,7 +389,7 @@ The only required parameter for creating a topic is its path; all other paramete
 
   You can see the full list of settings [in the header file](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L458).
 
-  Example of adding an [important reader](../../concepts/datamodel/topic#important-consumer) to a topic and setting the [message retention time](../../concepts/datamodel/topic#retention-time) for the topic to two days:
+  Example of adding an [important consumer](../../concepts/datamodel/topic#important-consumer) to a topic and setting the [message retention time](../../concepts/datamodel/topic#retention-time) for the topic to two days:
 
 
   ```cpp
@@ -2839,7 +2839,7 @@ Usually, topic reading progress is stored on the server in each `Consumer`. Howe
 
   - `topic` - an `ydb.TopicReaderSelector` object with the specified `path` and a list of `partitions`
   - `consumer` must be `None`.
-  - `event_handler` is a successor of `ydb.TopicReaderEvents.EventHandler`, which implements the `on_partition_get_start_offset` function. This function is responsible for returning the initial offset for reading messages when the reader starts, as well as during reconnections. The client application must specify this offset in the `ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse.start_offset` parameter. Also, the function can be implemented as asynchronous.
+  - `event_handler` is a subclass of `ydb.TopicReaderEvents.EventHandler`, which implements the `on_partition_get_start_offset` function. This function is responsible for returning the initial offset for reading messages when the reader starts, as well as during reconnections. The client application must specify this offset in the `ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse.start_offset` parameter. Also, the function can be implemented as asynchronous.
 
   Example:
 

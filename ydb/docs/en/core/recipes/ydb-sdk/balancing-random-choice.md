@@ -1,6 +1,6 @@
 # Uniform random choice
 
-{{ ydb-short-name }}SDK uses the `random_choice` algorithm (uniform random balancing) by default, except for the C++ SDK, which uses the ["prefer nearest datacenter"](./balancing-prefer-local.md) algorithm by default.
+{{ ydb-short-name }} SDK uses the `random_choice` algorithm (uniform random balancing) by default, except for the C++ SDK, which uses the ["prefer nearest datacenter"](./balancing-prefer-local.md) algorithm by default.
 
 Below are code examples for forcibly setting the "uniform random choice" balancing algorithm in different {{ ydb-short-name }} SDKs.
 

@@ -193,7 +193,7 @@ Each issue has a nesting level `level` — the higher `level`, the deeper the is
 
 The most general database status can take the following values:
 
-| Field | Description |
+| Value | Description |
 | :--- | :--- |
 | `GOOD` | No issues detected. |
 | `DEGRADED` | Degradation of one of the database systems has been detected, but the database is still functioning (for example, acceptable disk loss). |
@@ -204,7 +204,7 @@ The most general database status can take the following values:
 
 Status (severity) of the current problem:
 
-| Field | Description |
+| Value | Description |
 | :--- | :--- |
 | `GREY` | Degradation detected in one of the database systems, but the database is still functioning (e.g., acceptable disk loss). |
 | `GREEN` | No problems detected. |

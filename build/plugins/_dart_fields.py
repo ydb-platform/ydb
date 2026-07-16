@@ -869,6 +869,13 @@ class Requirements:
         return serialize_list(requirements)
 
     @classmethod
+    def from_unit_with_cpu(cls, unit, flat_args, spec_args):
+        requirements = get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+        if [r for r in requirements if r and r.startswith("cpu:")]:
+            return serialize_list(requirements)
+        return serialize_list(requirements + ["cpu:4"])
+
+    @classmethod
     def from_unit_with_full_network(cls, unit, flat_args, spec_args):
         requirements = sorted(set(["network:full"] + get_values_list(unit, "TEST_REQUIREMENTS_VALUE")))
         return serialize_list(requirements)

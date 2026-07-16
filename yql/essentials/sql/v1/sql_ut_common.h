@@ -13559,7 +13559,7 @@ Y_UNIT_TEST(ReadsNamedNodeExpresionSubquery) {
 
 Y_UNIT_TEST(ReadsProjectionFromSubquery) {
     NSQLTranslation::TTranslationSettings s;
-    s.LangVer = NYql::MakeLangVersion(2025, 4);
+    s.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         SELECT (SELECT a FROM plato.x) FROM (SELECT * FROM plato.y);

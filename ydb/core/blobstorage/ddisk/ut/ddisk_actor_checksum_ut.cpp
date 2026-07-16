@@ -281,8 +281,7 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
         const NDDisk::TBlockSelector selector{3, 0, BlockSize};
 
         auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
-        write->AddPayload(TRope(payload));
-        write->ChecksumPayload();
+        write->AddPayloadThenChecksum(TRope(payload));
         write->Record.SetChecksums(0, write->Record.GetChecksums(0) + 1);
 
         SendToDDisk(ctx, disk.PBServiceId, write.release());
@@ -307,8 +306,7 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
             const NDDisk::TBlockSelector selector{3, 0, 4 * BlockSize};
 
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
-            write->AddPayload(TRope(payload));
-            write->ChecksumPayload();
+            write->AddPayloadThenChecksum(TRope(payload));
             write->Record.SetChecksums(corruptedBlock, write->Record.GetChecksums(corruptedBlock) + 1);
 
             SendToDDisk(ctx, disk.PBServiceId, write.release());
@@ -341,8 +339,7 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
             {NodeId, disk3.PDiskId, disk3.SlotId}};
         auto write = std::make_unique<NDDisk::TEvWritePersistentBuffers>(creds, selector, lsn,
             NDDisk::TWriteInstruction(0), pbs, 1000);
-        write->AddPayload(TRope(payload));
-        write->ChecksumPayload();
+        write->AddPayloadThenChecksum(TRope(payload));
         write->Record.SetChecksums(0, write->Record.GetChecksums(0) + 1);
 
         SendToDDisk(ctx, disk1.PBServiceId, write.release());
@@ -378,8 +375,7 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
                 {NodeId, disk3.PDiskId, disk3.SlotId}};
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffers>(creds, selector, lsn,
                 NDDisk::TWriteInstruction(0), pbs, 1000);
-            write->AddPayload(TRope(payload));
-            write->ChecksumPayload();
+            write->AddPayloadThenChecksum(TRope(payload));
             write->Record.SetChecksums(corruptedBlock, write->Record.GetChecksums(corruptedBlock) + 1);
 
             SendToDDisk(ctx, disk1.PBServiceId, write.release());
@@ -420,8 +416,7 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
             {NodeId, disk3.PDiskId, disk3.SlotId}};
         auto write = std::make_unique<NDDisk::TEvWritePersistentBuffers>(creds, selector, lsn,
             NDDisk::TWriteInstruction(0), pbs, 1000);
-        write->AddPayload(TRope(payload));
-        write->ChecksumPayload(); // correct: the coordinator forwards these checksums verbatim to every peer
+        write->AddPayloadThenChecksum(TRope(payload)); // correct: the coordinator forwards these checksums verbatim to every peer
 
         // The coordinator assigns fan-out cookies 1, 2, 3 to disk1, disk2, disk3 respectively (in
         // TEvWritePersistentBuffers order); cookie 2 is the message routed to disk2. Flip one of its
@@ -480,8 +475,7 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
         const NDDisk::TBlockSelector selector{3, 0, 2 * BlockSize};
 
         auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
-        write->AddPayload(TRope(payload));
-        write->ChecksumPayload();
+        write->AddPayloadThenChecksum(TRope(payload));
         UNIT_ASSERT_VALUES_EQUAL(write->Record.ChecksumsSize(), 2u);
         write->Record.MutableChecksums()->RemoveLast(); // now only 1 checksum for a 2-block payload
 
@@ -504,8 +498,7 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
         const NDDisk::TBlockSelector selector{3, 0, BlockSize};
 
         auto write = std::make_unique<NDDisk::TEvWrite>(creds, selector, NDDisk::TWriteInstruction(0));
-        write->AddPayload(MakeAlignedRope(payload));
-        write->ChecksumPayload();
+        write->AddPayloadThenChecksum(MakeAlignedRope(payload));
         write->Record.SetChecksums(0, write->Record.GetChecksums(0) + 1);
 
         SendToDDisk(ctx, disk.ServiceId, write.release());
@@ -528,8 +521,7 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
         const NDDisk::TBlockSelector selector{3, 0, 2 * BlockSize};
 
         auto write = std::make_unique<NDDisk::TEvWrite>(creds, selector, NDDisk::TWriteInstruction(0));
-        write->AddPayload(MakeAlignedRope(payload));
-        write->ChecksumPayload();
+        write->AddPayloadThenChecksum(MakeAlignedRope(payload));
         UNIT_ASSERT_VALUES_EQUAL(write->Record.ChecksumsSize(), 2u);
         write->Record.MutableChecksums()->RemoveLast(); // now only 1 checksum for a 2-block payload
 
@@ -555,7 +547,7 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
 
         auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
         write->AddPayload(TRope(payload));
-        // Deliberately not calling ChecksumPayload(): checksum validation is opt-in.
+        // Deliberately not calling AddPayloadThenChecksum(): checksum validation is opt-in.
         UNIT_ASSERT_VALUES_EQUAL(write->Record.ChecksumsSize(), 0u);
 
         SendToDDisk(ctx, disk.PBServiceId, write.release());

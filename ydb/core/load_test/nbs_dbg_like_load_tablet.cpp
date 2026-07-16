@@ -2278,8 +2278,7 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
         creds, selector, lsn, NDDisk::TWriteInstruction(0), pbIds,
         TabletConfig.GetPBufferReplyTimeoutMicroseconds());
 
-    wireEv->AddPayload(std::move(ev->Get()->Payload));
-    wireEv->ChecksumPayload();
+    wireEv->AddPayloadThenChecksum(std::move(ev->Get()->Payload));
 
     Send(dbg.PBActor[coord], wireEv.release(), 0, lsn, it->second.Span.GetTraceId().Clone());
 

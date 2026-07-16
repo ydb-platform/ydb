@@ -424,18 +424,22 @@ struct TPersistentBufferFormat {
             return DataAlignment;
         }
 
-        void AddChecksum(ui64 checksum) {
+        ui32 AddPayloadWithChecksum(TRope&& rope, ui64 checksum) {
+            const ui32 id = AddPayload(std::move(rope));
             Record.AddChecksums(checksum);
+            return id;
         }
 
-        void AddChecksum(const std::vector<ui64>& checksums) {
+        ui32 AddPayloadWithChecksum(TRope&& rope, const std::vector<ui64>& checksums) {
+            const ui32 id = AddPayload(std::move(rope));
             for (ui64 checksum : checksums) {
                 Record.AddChecksums(checksum);
             }
+            return id;
         }
 
-        // Computes and attaches a checksum for each MinSectorSize block of the already-attached payload 0.
-        void ChecksumPayload();
+        // Attaches the payload and computes a checksum for each MinSectorSize block of payload 0.
+        ui32 AddPayloadThenChecksum(TRope&& rope);
     };
 
     DECLARE_DDISK_EVENT(WriteResult) {
@@ -499,18 +503,22 @@ struct TPersistentBufferFormat {
             return MinSectorSize;
         }
 
-        void AddChecksum(ui64 checksum) {
+        ui32 AddPayloadWithChecksum(TRope&& rope, ui64 checksum) {
+            const ui32 id = AddPayload(std::move(rope));
             Record.AddChecksums(checksum);
+            return id;
         }
 
-        void AddChecksum(const std::vector<ui64>& checksums) {
+        ui32 AddPayloadWithChecksum(TRope&& rope, const std::vector<ui64>& checksums) {
+            const ui32 id = AddPayload(std::move(rope));
             for (ui64 checksum : checksums) {
                 Record.AddChecksums(checksum);
             }
+            return id;
         }
 
-        // Computes and attaches a checksum for each MinSectorSize block of the already-attached payload 0.
-        void ChecksumPayload();
+        // Attaches the payload and computes a checksum for each MinSectorSize block of payload 0.
+        ui32 AddPayloadThenChecksum(TRope&& rope);
     };
 
     DECLARE_DDISK_EVENT(WritePersistentBufferResult) {
@@ -592,18 +600,22 @@ struct TPersistentBufferFormat {
             return DataAlignment;
         }
 
-        void AddChecksum(ui64 checksum) {
+        ui32 AddPayloadWithChecksum(TRope&& rope, ui64 checksum) {
+            const ui32 id = AddPayload(std::move(rope));
             Record.AddChecksums(checksum);
+            return id;
         }
 
-        void AddChecksum(const std::vector<ui64>& checksums) {
+        ui32 AddPayloadWithChecksum(TRope&& rope, const std::vector<ui64>& checksums) {
+            const ui32 id = AddPayload(std::move(rope));
             for (ui64 checksum : checksums) {
                 Record.AddChecksums(checksum);
             }
+            return id;
         }
 
-        // Computes and attaches a checksum for each MinSectorSize block of the already-attached payload 0.
-        void ChecksumPayload();
+        // Attaches the payload and computes a checksum for each MinSectorSize block of payload 0.
+        ui32 AddPayloadThenChecksum(TRope&& rope);
     };
 
     DECLARE_DDISK_EVENT(ReadPersistentBuffer) {

@@ -369,8 +369,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     const TString payload = MakeData('Q', 2 * blockSize);
     auto write = std::make_unique<NDDisk::TEvWrite>(creds,
         NDDisk::TBlockSelector(7, blockSize, static_cast<ui32>(payload.size())), NDDisk::TWriteInstruction(0));
-    write->AddPayload(MakeAlignedRope(payload));
-    write->ChecksumPayload();
+    write->AddPayloadThenChecksum(MakeAlignedRope(payload));
 
     auto writeResult = ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release());
     AssertStatus<NDDisk::TEvWriteResult>(writeResult, TReplyStatus::OK);
@@ -384,8 +383,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     const ui32 secondOffset = blockSize + static_cast<ui32>(payload.size());
     auto write2 = std::make_unique<NDDisk::TEvWrite>(creds,
         NDDisk::TBlockSelector(7, secondOffset, static_cast<ui32>(payload2.size())), NDDisk::TWriteInstruction(0));
-    write2->AddPayload(MakeAlignedRope(payload2));
-    write2->ChecksumPayload();
+    write2->AddPayloadThenChecksum(MakeAlignedRope(payload2));
 
     auto writeResult2 = ctx.SendAndGrab<NDDisk::TEvWriteResult>(write2.release());
     AssertStatus<NDDisk::TEvWriteResult>(writeResult2, TReplyStatus::OK);
@@ -406,8 +404,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto w = std::make_unique<NDDisk::TEvWrite>(creds1, NDDisk::TBlockSelector(0, 0, MinBlockSize),
             NDDisk::TWriteInstruction(0));
-        w->AddPayload(MakeAlignedRope(payload1));
-        w->ChecksumPayload();
+        w->AddPayloadThenChecksum(MakeAlignedRope(payload1));
         auto wr = ctx.SendAndGrab<NDDisk::TEvWriteResult>(w.release());
         AssertStatus<NDDisk::TEvWriteResult>(wr, TReplyStatus::OK);
     }
@@ -433,8 +430,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto w = std::make_unique<NDDisk::TEvWrite>(creds2, NDDisk::TBlockSelector(0, 0, MinBlockSize),
             NDDisk::TWriteInstruction(0));
-        w->AddPayload(MakeAlignedRope(payload2));
-        w->ChecksumPayload();
+        w->AddPayloadThenChecksum(MakeAlignedRope(payload2));
         auto wr = ctx.SendAndGrab<NDDisk::TEvWriteResult>(w.release());
         AssertStatus<NDDisk::TEvWriteResult>(wr, TReplyStatus::OK);
     }
@@ -476,8 +472,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         TString payload = MakeDataWithIndex(idx, MinBlockSize);
         auto write = std::make_unique<NDDisk::TEvWrite>(creds,
             NDDisk::TBlockSelector(vchunkIdx, offset, MinBlockSize), NDDisk::TWriteInstruction(0));
-        write->AddPayload(MakeAlignedRope(payload));
-        write->ChecksumPayload();
+        write->AddPayloadThenChecksum(MakeAlignedRope(payload));
         ctx.Send(write.release());
     }
 
@@ -512,16 +507,14 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     const TString data1 = MakeData('A', MinBlockSize);
     auto w1 = std::make_unique<NDDisk::TEvWrite>(creds,
         NDDisk::TBlockSelector(0, 0, MinBlockSize), NDDisk::TWriteInstruction(0));
-    w1->AddPayload(MakeAlignedRope(data1));
-    w1->ChecksumPayload();
+    w1->AddPayloadThenChecksum(MakeAlignedRope(data1));
     auto r1 = ctx.SendAndGrab<NDDisk::TEvWriteResult>(w1.release());
     AssertStatus<NDDisk::TEvWriteResult>(r1, TReplyStatus::OK);
 
     const TString data2 = MakeData('B', MinBlockSize);
     auto w2 = std::make_unique<NDDisk::TEvWrite>(creds,
         NDDisk::TBlockSelector(0, 0, MinBlockSize), NDDisk::TWriteInstruction(0));
-    w2->AddPayload(MakeAlignedRope(data2));
-    w2->ChecksumPayload();
+    w2->AddPayloadThenChecksum(MakeAlignedRope(data2));
     auto r2 = ctx.SendAndGrab<NDDisk::TEvWriteResult>(w2.release());
     AssertStatus<NDDisk::TEvWriteResult>(r2, TReplyStatus::OK);
 
@@ -554,8 +547,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         TString payload = MakeDataWithIndex(i, MinBlockSize);
         auto write = std::make_unique<NDDisk::TEvWrite>(creds,
             NDDisk::TBlockSelector(i, 0, MinBlockSize), NDDisk::TWriteInstruction(0));
-        write->AddPayload(MakeAlignedRope(payload));
-        write->ChecksumPayload();
+        write->AddPayloadThenChecksum(MakeAlignedRope(payload));
         auto writeResult = ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release());
         AssertStatus<NDDisk::TEvWriteResult>(writeResult, TReplyStatus::OK);
     }
@@ -580,16 +572,14 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         TString payload1 = MakeDataWithIndex(i, MinBlockSize);
         auto w1 = std::make_unique<NDDisk::TEvWrite>(creds1,
             NDDisk::TBlockSelector(0, i * MinBlockSize, MinBlockSize), NDDisk::TWriteInstruction(0));
-        w1->AddPayload(MakeAlignedRope(payload1));
-        w1->ChecksumPayload();
+        w1->AddPayloadThenChecksum(MakeAlignedRope(payload1));
         auto wr1 = ctx.SendAndGrab<NDDisk::TEvWriteResult>(w1.release());
         AssertStatus<NDDisk::TEvWriteResult>(wr1, TReplyStatus::OK);
 
         TString payload2 = MakeDataWithIndex(i + 1000, MinBlockSize);
         auto w2 = std::make_unique<NDDisk::TEvWrite>(creds2,
             NDDisk::TBlockSelector(0, i * MinBlockSize, MinBlockSize), NDDisk::TWriteInstruction(0));
-        w2->AddPayload(MakeAlignedRope(payload2));
-        w2->ChecksumPayload();
+        w2->AddPayloadThenChecksum(MakeAlignedRope(payload2));
         auto wr2 = ctx.SendAndGrab<NDDisk::TEvWriteResult>(w2.release());
         AssertStatus<NDDisk::TEvWriteResult>(wr2, TReplyStatus::OK);
     }
@@ -663,8 +653,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         auto write = std::make_unique<NDDisk::TEvWrite>(creds[op.tabletIdx],
             NDDisk::TBlockSelector(op.vchunkIdx, op.blockInChunk * MinBlockSize, MinBlockSize),
             NDDisk::TWriteInstruction(0));
-        write->AddPayload(MakeAlignedRope(payload));
-        write->ChecksumPayload();
+        write->AddPayloadThenChecksum(MakeAlignedRope(payload));
         ctx.Send(write.release());
     };
 
@@ -758,8 +747,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         auto write = std::make_unique<NDDisk::TEvWrite>(creds,
             NDDisk::TBlockSelector(vchunkIdx, blockInChunk * MinBlockSize, MinBlockSize),
             NDDisk::TWriteInstruction(0));
-        write->AddPayload(MakeAlignedRope(payload));
-        write->ChecksumPayload();
+        write->AddPayloadThenChecksum(MakeAlignedRope(payload));
         auto writeResult = ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release());
         AssertStatus<NDDisk::TEvWriteResult>(writeResult, TReplyStatus::OK);
     };
@@ -832,8 +820,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         auto write = std::make_unique<NDDisk::TEvWrite>(creds,
             NDDisk::TBlockSelector(vchunkIdx, blockInChunk * MinBlockSize, MinBlockSize),
             NDDisk::TWriteInstruction(0));
-        write->AddPayload(MakeAlignedRope(payload));
-        write->ChecksumPayload();
+        write->AddPayloadThenChecksum(MakeAlignedRope(payload));
         auto writeResult = ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release());
         AssertStatus<NDDisk::TEvWriteResult>(writeResult, TReplyStatus::OK);
     };
@@ -890,8 +877,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto w = std::make_unique<NDDisk::TEvWrite>(creds,
             NDDisk::TBlockSelector(0, 0, MinBlockSize), NDDisk::TWriteInstruction(0));
-        w->AddPayload(MakeAlignedRope(dataA));
-        w->ChecksumPayload();
+        w->AddPayloadThenChecksum(MakeAlignedRope(dataA));
         auto wr = ctx.SendAndGrab<NDDisk::TEvWriteResult>(w.release());
         AssertStatus<NDDisk::TEvWriteResult>(wr, TReplyStatus::OK);
     }
@@ -903,8 +889,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto w = std::make_unique<NDDisk::TEvWrite>(creds,
             NDDisk::TBlockSelector(0, 0, MinBlockSize), NDDisk::TWriteInstruction(0));
-        w->AddPayload(MakeAlignedRope(dataB));
-        w->ChecksumPayload();
+        w->AddPayloadThenChecksum(MakeAlignedRope(dataB));
         auto wr = ctx.SendAndGrab<NDDisk::TEvWriteResult>(w.release());
         AssertStatus<NDDisk::TEvWriteResult>(wr, TReplyStatus::OK);
     }
@@ -920,8 +905,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto w = std::make_unique<NDDisk::TEvWrite>(creds,
             NDDisk::TBlockSelector(0, MinBlockSize, MinBlockSize), NDDisk::TWriteInstruction(0));
-        w->AddPayload(MakeAlignedRope(dataC));
-        w->ChecksumPayload();
+        w->AddPayloadThenChecksum(MakeAlignedRope(dataC));
         auto wr = ctx.SendAndGrab<NDDisk::TEvWriteResult>(w.release());
         AssertStatus<NDDisk::TEvWriteResult>(wr, TReplyStatus::OK);
     }
@@ -944,8 +928,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto w = std::make_unique<NDDisk::TEvWrite>(creds,
             NDDisk::TBlockSelector(0, 0, MinBlockSize), NDDisk::TWriteInstruction(0));
-        w->AddPayload(MakeAlignedRope(data));
-        w->ChecksumPayload();
+        w->AddPayloadThenChecksum(MakeAlignedRope(data));
         auto wr = ctx.SendAndGrab<NDDisk::TEvWriteResult>(w.release());
         AssertStatus<NDDisk::TEvWriteResult>(wr, TReplyStatus::OK);
     }
@@ -969,8 +952,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         auto write = std::make_unique<NDDisk::TEvWrite>(creds,
             NDDisk::TBlockSelector(vchunkIdx, blockInChunk * MinBlockSize, MinBlockSize),
             NDDisk::TWriteInstruction(0));
-        write->AddPayload(MakeAlignedRope(payload));
-        write->ChecksumPayload();
+        write->AddPayloadThenChecksum(MakeAlignedRope(payload));
         auto writeResult = ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release());
         AssertStatus<NDDisk::TEvWriteResult>(writeResult, TReplyStatus::OK);
     };
@@ -1069,8 +1051,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
                 TString payload = MakeDataWithTabletAndBlock(baseTabletId + t, blockIdx, MinBlockSize);
                 auto write = std::make_unique<NDDisk::TEvWrite>(tablets[t].Src,
                     NDDisk::TBlockSelector(v, b * MinBlockSize, MinBlockSize), NDDisk::TWriteInstruction(0));
-                write->AddPayload(MakeAlignedRope(payload));
-                write->ChecksumPayload();
+                write->AddPayloadThenChecksum(MakeAlignedRope(payload));
                 ctx.SendTo(0, write.release());
             }
         }
@@ -1172,8 +1153,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         auto write = std::make_unique<NDDisk::TEvWrite>(creds,
             NDDisk::TBlockSelector(vchunkIdx, blockInChunk * MinBlockSize, MinBlockSize),
             NDDisk::TWriteInstruction(0));
-        write->AddPayload(MakeAlignedRope(payload));
-        write->ChecksumPayload();
+        write->AddPayloadThenChecksum(MakeAlignedRope(payload));
         return write;
     };
 
@@ -1299,8 +1279,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     for (ui64 vchunk : {0u, 1u}) {
         auto w = std::make_unique<NDDisk::TEvWrite>(creds1,
             NDDisk::TBlockSelector(vchunk, 0, MinBlockSize), NDDisk::TWriteInstruction(0));
-        w->AddPayload(MakeAlignedRope(data1));
-        w->ChecksumPayload();
+        w->AddPayloadThenChecksum(MakeAlignedRope(data1));
         auto wr = ctx.SendToAndGrab<NDDisk::TEvWriteResult>(diskIdx, w.release());
         AssertStatus<NDDisk::TEvWriteResult>(wr, TReplyStatus::OK);
     }
@@ -1309,8 +1288,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     for (ui64 vchunk : {0u, 1u}) {
         auto w = std::make_unique<NDDisk::TEvWrite>(creds2,
             NDDisk::TBlockSelector(vchunk, 0, MinBlockSize), NDDisk::TWriteInstruction(0));
-        w->AddPayload(MakeAlignedRope(data2));
-        w->ChecksumPayload();
+        w->AddPayloadThenChecksum(MakeAlignedRope(data2));
         auto wr = ctx.SendToAndGrab<NDDisk::TEvWriteResult>(diskIdx, w.release());
         AssertStatus<NDDisk::TEvWriteResult>(wr, TReplyStatus::OK);
     }

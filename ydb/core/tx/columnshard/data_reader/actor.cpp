@@ -6,7 +6,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "scan_data");
     LastAck = std::nullopt;
     if (!CheckActivity()) {
-        TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
+        AbortScanIfKnown();
         return;
     }
     SwitchStage(EStage::WaitData, EStage::WaitData);
@@ -39,14 +39,14 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
 void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "init_actor");
     LastAck = std::nullopt;
-    if (!CheckActivity()) {
-        TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
-        return;
-    }
-    SwitchStage(EStage::Initialization, EStage::WaitData);
     AFL_VERIFY(!ScanActorId);
     auto& msg = ev->Get()->Record;
     ScanActorId = ActorIdFromProto(msg.GetScanActorId());
+    if (!CheckActivity()) {
+        AbortScanIfKnown();
+        return;
+    }
+    SwitchStage(EStage::Initialization, EStage::WaitData);
     TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, 1, 1), NActors::IEventHandle::FlagTrackDelivery);
     LastAck = TMonotonic::Now();
 }
@@ -68,7 +68,7 @@ void TActor::HandleExecute(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
 void TActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
     if (!CheckActivity()) {
-        TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
+        AbortScanIfKnown();
         return;
     }
 
@@ -76,7 +76,7 @@ void TActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
         SwitchStage(std::nullopt, EStage::Finished);
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "problem_timeout");
         RestoreTask->OnError("timeout on restore data");
-        TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
+        AbortScanIfKnown();
         PassAway();
         return;
     }
@@ -94,6 +94,12 @@ void TActor::Bootstrap(const TActorContext& /*ctx*/) {
     LastAck = TMonotonic::Now();
     Become(&TActor::StateFunc);
     Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
+}
+
+void TActor::AbortScanIfKnown() {
+    if (ScanActorId) {
+        TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
+    }
 }
 
 bool TActor::CheckActivity() {

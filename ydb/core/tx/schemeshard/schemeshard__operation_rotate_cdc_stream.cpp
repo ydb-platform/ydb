@@ -69,11 +69,11 @@ public:
         context.SS->PersistCreateStep(db, newStreamPathId, step);
 
         context.SS->PersistCdcStream(db, newStreamPathId);
-        context.SS->CdcStreams.Set({.Path = newStreamPathId, .Value = newStream->AlterData, .Changes = context.MemChanges});
+        context.SS->CdcStreams.SetUntracked(newStreamPathId, newStream->AlterData);
         context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Add(1);
 
         context.SS->PersistCdcStream(db, oldStreamPathId);
-        context.SS->CdcStreams.Update(oldStreamPathId, context.MemChanges)->FinishAlter();
+        context.SS->CdcStreams.UpdateUntracked(oldStreamPathId)->FinishAlter();
 
         context.SS->ClearDescribePathCaches(oldStreamPath);
         context.SS->ClearDescribePathCaches(newStreamPath);
@@ -429,7 +429,7 @@ protected:
         auto path = context.SS->PathsById.at(pathId);
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto& table = context.SS->Tables.Update(pathId, context.MemChanges);
+        auto& table = context.SS->Tables.UpdateUntracked(pathId);
 
         auto& notice = *tx.MutableRotateCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());

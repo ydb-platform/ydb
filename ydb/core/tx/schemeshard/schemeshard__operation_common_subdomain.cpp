@@ -325,7 +325,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
     }
 
     Y_ABORT_UNLESS(context.SS->SubDomains.contains(pathId));
-    auto& subDomain = context.SS->SubDomains.Update(pathId, context.MemChanges);
+    auto& subDomain = context.SS->SubDomains.UpdateUntracked(pathId);
     auto alter = subDomain->GetAlter();
     Y_ABORT_UNLESS(alter);
     Y_VERIFY_S(subDomain->GetVersion() < alter->GetVersion(), "" << subDomain->GetVersion() << " and " << alter->GetVersion());

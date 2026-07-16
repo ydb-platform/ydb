@@ -473,7 +473,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        auto& table = context.SS->Tables.Update(pathId, context.MemChanges);
+        auto& table = context.SS->Tables.UpdateUntracked(pathId);
         table->FinishAlter();
 
         if (!table->IsAsyncReplica()) {

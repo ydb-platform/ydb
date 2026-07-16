@@ -345,6 +345,8 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
 
     Y_ABORT_UNLESS(path.Base()->IsCreateFinished());
 
+    // Untracked in armed propose: TFileStoreInfo is non-copyable (THolder AlterConfig),
+    // so it can't be Update-snapshotted. Safe: this op rejects before mutating.
     auto& fs = context.SS->FileStoreInfos.UpdateUntracked(path.Base()->PathId);
     Y_VERIFY_S(fs, "FileStore info is null. PathId: " << path.Base()->PathId);
 

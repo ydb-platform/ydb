@@ -141,7 +141,7 @@ public:
 
         const auto path = TPath::Init(txState->TargetPathId, context.SS);
 
-        auto& table = context.SS->Tables.Update(path.Base()->PathId, context.MemChanges);
+        auto& table = context.SS->Tables.UpdateUntracked(path.Base()->PathId);
         table->AlterVersion += 1;
         context.SS->PersistTableAlterVersion(db, path.Base()->PathId, table);
 

@@ -91,6 +91,9 @@ public:
     // Called from IgniteOperation.
     void Arm() { Armed = true; }
 
+    // True only inside an armed propose; tracked Set/Update are legal only then.
+    bool IsArmed() const { return Armed; }
+
     // True the first time this (map, path) needs a snapshot; false when disarmed.
     bool NeedsUpdateSnapshot(const void* map, const TPathId& id) {
         return Armed && UpdateSnapshotted[map].insert(id).second;

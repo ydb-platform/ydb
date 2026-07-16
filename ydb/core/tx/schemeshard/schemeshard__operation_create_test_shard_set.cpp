@@ -115,7 +115,7 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTestShardSet);
 
-        auto& testShardInfo = context.SS->TestShardSets.Update(txState->TargetPathId, context.MemChanges);
+        auto& testShardInfo = context.SS->TestShardSets.UpdateUntracked(txState->TargetPathId);
         Y_VERIFY_S(testShardInfo, "test shard info is null. PathId: " << txState->TargetPathId);
 
         txState->ClearShardsInProgress();

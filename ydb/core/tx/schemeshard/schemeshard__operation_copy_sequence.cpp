@@ -178,7 +178,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        context.SS->Sequences.Set({.Path = pathId, .Value = alterData, .Changes = context.MemChanges});
+        context.SS->Sequences.SetUntracked(pathId, alterData);
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 
@@ -349,7 +349,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        auto& sequenceInfo = context.SS->Sequences.Update(pathId, context.MemChanges);
+        auto& sequenceInfo = context.SS->Sequences.UpdateUntracked(pathId);
         UpdateSequenceDescription(sequenceInfo->Description);
 
         context.SS->PersistSequence(db, pathId, *sequenceInfo);

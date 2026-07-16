@@ -277,7 +277,7 @@ public:
 
 
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
-        auto& table = context.SS->Tables.Update(txState->TargetPathId, context.MemChanges);
+        auto& table = context.SS->Tables.UpdateUntracked(txState->TargetPathId);
 
         Y_ABORT_UNLESS(txState->PlanStep);
 

@@ -578,7 +578,7 @@ public:
         context.SS->PersistPath(db, path->PathId);
         context.SS->ClearDescribePathCaches(path);
 
-        auto subDomain = context.SS->SubDomains.Update(pathId, context.MemChanges);
+        auto subDomain = context.SS->SubDomains.UpdateUntracked(pathId);
         subDomain->SetAlterPrivate(nullptr);
         context.SS->PersistSubDomain(db, pathId, *subDomain);
         context.SS->PersistSubDomainSchemeQuotas(db, pathId, *subDomain);
@@ -612,7 +612,7 @@ public:
 
         // Copy, not a reference: the SetUntracked below reseats this slot, and
         // *subDomain must still see the original object at PersistDeleteSubDomainAlter.
-        auto subDomain = context.SS->SubDomains.Update(pathId, context.MemChanges);
+        auto subDomain = context.SS->SubDomains.UpdateUntracked(pathId);
         Y_ABORT_UNLESS(subDomain);
         auto alterData = subDomain->GetAlter();
         Y_ABORT_UNLESS(alterData);
@@ -669,7 +669,7 @@ public:
 
         item->PathType = TPathElement::EPathType::EPathTypeExtSubDomain;
 
-        auto subDomain = context.SS->SubDomains.Update(pathId, context.MemChanges);
+        auto subDomain = context.SS->SubDomains.UpdateUntracked(pathId);
         auto alterData = subDomain->GetAlter();
         Y_ABORT_UNLESS(alterData);
         Y_ABORT_UNLESS(subDomain->GetVersion() < alterData->GetVersion());

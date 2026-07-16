@@ -74,7 +74,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
 
     txState->ClearShardsInProgress();
 
-    auto& volume = context.SS->BlockStoreVolumes.Update(txState->TargetPathId, context.MemChanges);
+    auto& volume = context.SS->BlockStoreVolumes.UpdateUntracked(txState->TargetPathId);
     Y_VERIFY_S(volume, "volume is null. PathId: " << txState->TargetPathId);
 
     ui64 version = volume->AlterVersion;
@@ -158,7 +158,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
         context.SS->PersistCreateStep(db, pathId, step);
     }
 
-    auto& volume = context.SS->BlockStoreVolumes.Update(pathId, context.MemChanges);
+    auto& volume = context.SS->BlockStoreVolumes.UpdateUntracked(pathId);
 
     auto oldVolumeSpace = volume->GetVolumeSpace();
     volume->FinishAlter();

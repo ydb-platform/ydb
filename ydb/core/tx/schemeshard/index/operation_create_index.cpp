@@ -50,7 +50,7 @@ public:
         Y_ABORT_UNLESS(context.SS->Indexes.contains(path->PathId));
         auto indexData = context.SS->Indexes.at(path->PathId);
         context.SS->PersistTableIndex(db, path->PathId);
-        context.SS->Indexes.Set({.Path = path->PathId, .Value = indexData->AlterData, .Changes = context.MemChanges});
+        context.SS->Indexes.SetUntracked(path->PathId, indexData->AlterData);
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);

@@ -164,7 +164,7 @@ public:
         Y_ABORT_UNLESS(pending);
         TOlapStoreInfo::TPtr store = pending->AlterData;
         Y_ABORT_UNLESS(store);
-        context.SS->OlapStores.Set({.Path = pathId, .Value = store, .Changes = context.MemChanges});
+        context.SS->OlapStores.SetUntracked(pathId, store);
 
         context.SS->PersistOlapStoreAlterRemove(db, pathId);
         context.SS->PersistOlapStore(db, pathId, *store);

@@ -315,7 +315,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        auto& table = context.SS->Tables.Update(pathId, context.MemChanges);
+        auto& table = context.SS->Tables.UpdateUntracked(pathId);
         Y_ABORT_UNLESS(table);
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
 

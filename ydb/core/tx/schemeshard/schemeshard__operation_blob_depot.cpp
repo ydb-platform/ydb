@@ -58,7 +58,7 @@ namespace NKikimr::NSchemeShard {
                     auto path = TPath::Init(txState->TargetPathId, context.SS);
                     Y_ABORT_UNLESS(path.IsResolved());
 
-                    auto& blobDepotInfo = context.SS->BlobDepots.Update(path->PathId, context.MemChanges);
+                    auto& blobDepotInfo = context.SS->BlobDepots.UpdateUntracked(path->PathId);
                     Y_ABORT_UNLESS(blobDepotInfo);
 
                     for (auto& shard : txState->Shards) {

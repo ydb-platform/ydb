@@ -495,6 +495,12 @@ namespace NFlatExecutorSetup {
         TPathId TableId;
         TString TablePath;
         ui64 SchemaVersion = 0;
+
+        // Effective detailed METRICS_LEVEL for this table (per-table override,
+        // falling back to the database-wide default). Raw NKikimrSchemeOp::
+        // TTableDetailedMetricsSettings::EMetricsLevel value; kept as a plain
+        // integer to keep this generic header free of the schemeshard proto.
+        ui32 MetricsLevel = 0;
     };
 
     struct ITablet : TNonCopyable {

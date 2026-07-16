@@ -184,6 +184,48 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         UNIT_ASSERT_VALUES_EQUAL(info->TablePath, "/Root/table-1-moved");
         UNIT_ASSERT_UNEQUAL(info->TableId, prevTableId);
     }
+
+    Y_UNIT_TEST(TestGetTableInfoReflectsMetricsLevel) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false)
+            .SetFeatureFlags(featureFlags);
+
+        auto server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        auto shard = GetTableShards(server, sender, "/Root/table-1")[0];
+        auto *dataShard = dynamic_cast<NDataShard::TDataShard*>(runtime.FindActor(ResolveTablet(runtime, shard)));
+        UNIT_ASSERT(dataShard);
+
+        const auto *info = dataShard->GetTableInfo();
+        UNIT_ASSERT(info);
+        UNIT_ASSERT_VALUES_EQUAL(info->MetricsLevel,
+            static_cast<ui32>(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified));
+
+        WaitTxNotification(server, sender, AsyncAlterSetMetricsLevel(server, "/Root", "table-1",
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+
+        info = dataShard->GetTableInfo();
+        UNIT_ASSERT(info);
+        UNIT_ASSERT_VALUES_EQUAL(info->MetricsLevel,
+            static_cast<ui32>(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+
+        WaitTxNotification(server, sender, AsyncAlterSetMetricsLevel(server, "/Root", "table-1",
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        info = dataShard->GetTableInfo();
+        UNIT_ASSERT(info);
+        UNIT_ASSERT_VALUES_EQUAL(info->MetricsLevel,
+            static_cast<ui32>(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+    }
 }
 
 }

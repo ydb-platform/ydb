@@ -1,8 +1,12 @@
 # Enabling metrics in Prometheus
 
-Below are examples of the code for enabling metrics in Prometheus in different {{ ydb-short-name }} SDKs.
+Below are code examples for enabling metrics in Prometheus in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
+
+- C++
+
+  This functionality is not currently supported.
 
 - Go
 
@@ -10,97 +14,103 @@ Below are examples of the code for enabling metrics in Prometheus in different {
 
   - Native SDK
 
-      ```go
-      package main
+    ```go
+    package main
 
-      import (
-          "context"
+    import (
+        "context"
 
-          "github.com/prometheus/client_golang/prometheus"
-          metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
-          "github.com/ydb-platform/ydb-go-sdk/v3"
-          "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-      )
+        "github.com/prometheus/client_golang/prometheus"
+        metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
+        "github.com/ydb-platform/ydb-go-sdk/v3"
+        "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+    )
 
-      func main() {
-          ctx := context.Background()
-          registry := prometheus.NewRegistry()
-          db, err := ydb.Open(ctx,
-              os.Getenv("YDB_CONNECTION_STRING"),
-              metrics.WithTraces(
-                  registry,
-                  metrics.WithDetails(trace.DetailsAll),
-                  metrics.WithSeparator("_"),
-              ),
-          )
-          if err != nil {
-              panic(err)
-          }
-          defer db.Close(ctx)
-          ...
-      }
-      ```
+    func main() {
+        ctx := context.Background()
+        registry := prometheus.NewRegistry()
+        db, err := ydb.Open(ctx,
+            os.Getenv("YDB_CONNECTION_STRING"),
+            metrics.WithTraces(
+                registry,
+                metrics.WithDetails(trace.DetailsAll),
+                metrics.WithSeparator("_"),
+            ),
+        )
+        if err != nil {
+            panic(err)
+        }
+        defer db.Close(ctx)
+        ...
+    }
+    ```
 
   - database/sql
 
-      ```go
-      package main
+    ```go
+    package main
 
-      import (
-          "context"
-          "database/sql"
+    import (
+        "context"
+        "database/sql"
 
-          "github.com/prometheus/client_golang/prometheus"
-          metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
-          "github.com/ydb-platform/ydb-go-sdk/v3"
-          "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-      )
+        "github.com/prometheus/client_golang/prometheus"
+        metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
+        "github.com/ydb-platform/ydb-go-sdk/v3"
+        "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+    )
 
-      func main() {
-          ctx := context.Background()
-          registry := prometheus.NewRegistry()
-          nativeDriver, err := ydb.Open(ctx,
-              os.Getenv("YDB_CONNECTION_STRING"),
-              metrics.WithTraces(
-                  registry,
-                  metrics.WithDetails(trace.DetailsAll),
-                  metrics.WithSeparator("_"),
-              ),
-          )
-          if err != nil {
-              panic(err)
-          }
-          defer nativeDriver.Close(ctx)
+    func main() {
+        ctx := context.Background()
+        registry := prometheus.NewRegistry()
+        nativeDriver, err := ydb.Open(ctx,
+            os.Getenv("YDB_CONNECTION_STRING"),
+            metrics.WithTraces(
+                registry,
+                metrics.WithDetails(trace.DetailsAll),
+                metrics.WithSeparator("_"),
+            ),
+        )
+        if err != nil {
+            panic(err)
+        }
+        defer nativeDriver.Close(ctx)
 
-          connector, err := ydb.Connector(nativeDriver)
-          if err != nil {
-              panic(err)
-          }
+        connector, err := ydb.Connector(nativeDriver)
+        if err != nil {
+            panic(err)
+        }
 
-          db := sql.OpenDB(connector)
-          defer db.Close()
-          ...
-      }
-      ```
+        db := sql.OpenDB(connector)
+        defer db.Close()
+        ...
+    }
+    ```
 
   {% endlist %}
 
 - Java
 
-  This functionality is not currently supported.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Python
 
-  This functionality is not currently supported.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-  Track progress or vote for Rust SDK support: [ydb-rs-sdk#267](https://github.com/ydb-platform/ydb-rs-sdk/issues/267)
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

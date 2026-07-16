@@ -1,6 +1,6 @@
 # Enabling tracing in Jaeger
 
-Below are code examples for enabling tracing in Jaeger in different {{ ydb-short-name }} SDK.
+Below are code examples for enabling tracing in Jaeger in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
 

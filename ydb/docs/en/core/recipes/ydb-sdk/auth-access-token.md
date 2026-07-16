@@ -2,9 +2,46 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-Below are examples of authentication with a token in different {{ ydb-short-name }} SDKs.
+Below are code examples of authentication using a token in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+
+    NYdb::TDriver CreateDriverWithAccessToken(const std::string& accessToken) {
+        auto config = NYdb::TDriverConfig("grpcs://localhost:2135/?database=/local")
+            .SetAuthToken(accessToken);
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    {% cut "secdist" %}
+
+    ```json
+    {
+      "ydb_settings": {
+        "db": {
+          "token": "<access token>"
+        }
+      }
+    }
+    ```
+
+    {% endcut %}
+
+    The code for initializing `ydb::YdbComponent`, obtaining `ydb::TableClient`, and starting `components::MinimalServerComponentList` is the same as in the example from [init.md](./init.md).
+
+  {% endlist %}
 
 - Go
 
@@ -39,64 +76,64 @@ Below are examples of authentication with a token in different {{ ydb-short-name
 
   - database/sql
 
-    {% cut "If you use a connector to create a connection to {{ ydb-short-name }}" %}
+    {% cut "If a connector is used to create a connection {{ ydb-short-name }}" %}
 
-      ```go
-      package main
+    ```go
+    package main
 
-      import (
-        "context"
-        "database/sql"
-        "os"
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-        "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
       )
-
-      func main() {
-        ctx, cancel := context.WithCancel(context.Background())
-        defer cancel()
-        nativeDriver, err := ydb.Open(ctx,
-          os.Getenv("YDB_CONNECTION_STRING"),
-          ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-        )
-        if err != nil {
-          panic(err)
-        }
-        defer nativeDriver.Close(ctx)
-        connector, err := ydb.Connector(nativeDriver)
-        if err != nil {
-          panic(err)
-        }
-        db := sql.OpenDB(connector)
-        defer db.Close()
-        ...
+      if err != nil {
+        panic(err)
       }
-      ```
+      defer nativeDriver.Close(ctx)
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      ...
+    }
+    ```
 
     {% endcut %}
 
-    {% cut "If you use a connection string" %}
+    {% cut "If a to create" %}
 
-      ```go
-      package main
+    ```go
+    package main
 
-      import (
-        "context"
-        "database/sql"
-        "os"
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-        _ "github.com/ydb-platform/ydb-go-sdk/v3"
-      )
+      _ "github.com/ydb-platform/ydb-go-sdk/v3"
+    )
 
-      func main() {
-        db, err := sql.Open("ydb", "grpcs://localhost:2135/local?token="+os.Getenv("YDB_TOKEN"))
-        if err != nil {
-          panic(err)
-        }
-        defer db.Close()
-        ...
+    func main() {
+      db, err := sql.Open("ydb", "grpcs://localhost:2135/local?token="+os.Getenv("YDB_TOKEN"))
+      if err != nil {
+        panic(err)
       }
-      ```
+      defer db.Close()
+      ...
+    }
+    ```
 
     {% endcut %}
 
@@ -126,14 +163,14 @@ Below are examples of authentication with a token in different {{ ydb-short-name
 
     ```java
     public void work() throws SQLException {
-        // Connection with an explicit authentication token value
+        // Connecting by specifying the authentication token value
         Properties props1 = new Properties();
         props1.setProperty("token", "AQAD-XXXXXXXXXXXXXXXXXXXX");
         try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props1)) {
             doWork(connection);
         }
 
-        // Connection with the token read from the specified file
+        // Connecting by reading the authentication token from the specified file
         Properties props2 = new Properties();
         props2.setProperty("tokenFile", "~/.ydb_token");
         try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props2)) {
@@ -142,7 +179,8 @@ Below are examples of authentication with a token in different {{ ydb-short-name
     }
     ```
 
-    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL and authentication parameters as above (for example `spring.datasource.url` with query parameters or `spring.datasource.*` for the token and token file).
+
+    In Spring Boot, ORM, and other third-party frameworks around JDBC, use the same JDBC connection string and the same authentication parameters as above (for example, `spring.datasource.url` with query parameters or `spring.datasource.*` for the token and token file).
 
   {% endlist %}
 
@@ -180,23 +218,32 @@ Below are examples of authentication with a token in different {{ ydb-short-name
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
+  using Ydb.Sdk.Ado;
   using Ydb.Sdk.Auth;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
-  const string token = "MY_VERY_SECURE_TOKEN";
+  var builder = new YdbConnectionStringBuilder("Host=localhost;Port=2136;Database=/local")
+  {
+      CredentialsProvider = new TokenProvider("MY_VERY_SECURE_TOKEN")
+  };
 
-  var config = new DriverConfig(
-      endpoint: endpoint,
-      database: database,
-      credentials: new TokenProvider(token)
-  );
+  await using var dataSource = new YdbDataSource(builder);
+  await using var connection = await dataSource.OpenConnectionAsync();
+  ```
 
-  await using var driver = await Driver.CreateInitialized(config);
+
+  Not supported for Entity Framework and linq2db.
+
+- Rust
+
+  ```rust
+  use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(AccessTokenCredentials::from(std::env::var("YDB_TOKEN")?))
+      .client()?;
   ```
 
 - PHP

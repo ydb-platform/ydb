@@ -1,16 +1,100 @@
-# Bulk upsert of data
+# Bulk upsert
 
-{{ ydb-short-name }} supports bulk insert of many rows without atomicity guarantees. The write is split into several independent transactions, each touching a single partition, with parallel execution. This makes the approach more efficient than plain YQL. On success, the `BulkUpsert` method guarantees that all data passed in the request is inserted.
+{{ ydb-short-name }} supports bulk upsert of a large number of rows without atomicity guarantees. Data writing is split into multiple independent transactions, each affecting a single partition, with parallel execution. Therefore, this approach is more efficient than `YQL`. If successful, the `BulkUpsert` method guarantees the insertion of all data passed in the request.
 
 {% note warning %}
 
-When you load data to [column-oriented tables](../../concepts/datamodel/table.md#column-oriented-tables) using `BulkUpsert`, you must provide values for **all** columns, even `NULL` values.
+When using `BulkUpsert` to insert data into [columnar tables](../../concepts/datamodel/table.md#column-oriented-tables), you must pass the values of **all** columns, including `NULL` values.
 
 {% endnote %}
 
-Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk insert:
+Below are code examples of using the built-in {{ ydb-short-name }} SDK tools for performing bulk upsert:
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/table/table.h>
+
+    void BulkUpsertLogs(const NYdb::TDriver& driver) {
+      NYdb::NTable::TTableClient client(driver);
+
+      constexpr int kBatchSize = 1000;
+      NYdb::TValueBuilder rowsBuilder;
+      rowsBuilder.BeginList();
+      for (int i = 0; i < kBatchSize; ++i) {
+          rowsBuilder.AddListItem()
+              .BeginStruct()
+              .AddMember("App").Utf8("App_" + std::to_string(i / 256))
+              .AddMember("Host").Utf8("192.168.0." + std::to_string(i % 256))
+              .AddMember("Timestamp")
+                  .Timestamp(TInstant::Now() + TDuration::Seconds(i))
+              .AddMember("HttpCode").Uint32(static_cast<uint32_t>(i % 113 == 0 ? 404 : 200))
+              .AddMember("Message")
+                  .Utf8(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
+              .EndStruct();
+      }
+      rowsBuilder.EndList();
+
+      NYdb::TValue rows = rowsBuilder.Build();
+
+      NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync(
+          [&rows](NYdb::NTable::TTableClient& client) {
+              return client.BulkUpsert("/local/bulk_upsert_example", NYdb::TValue{rows}).GetValueSync();
+          },
+          NYdb::NTable::TRetryOperationSettings()
+              .Idempotent(true)
+      ));
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/io/supported_types.hpp>
+    #include <userver/ydb/table.hpp>
+
+    struct LogMessage final {
+        ydb::Utf8 App;
+        ydb::Utf8 Host;
+        std::chrono::system_clock::time_point Timestamp;
+        std::uint32_t HttpCode;
+        ydb::Utf8 Message;
+    };
+
+    void BulkUpsertLogs(ydb::TableClient& client) {
+        constexpr int kBatchSize = 1000;
+        std::vector<LogMessage> rows;
+        rows.reserve(kBatchSize);
+
+        for (int i = 0; i < kBatchSize; ++i) {
+            rows.push_back({
+                .App = ydb::Utf8{"App_" + std::to_string(i / 256)},
+                .Host = ydb::Utf8{"192.168.0." + std::to_string(i % 256)},
+                .Timestamp = std::chrono::system_clock::now() + std::chrono::seconds{i},
+                .HttpCode = static_cast<std::uint32_t>(i % 113 == 0 ? 404 : 200),
+                .Message = ydb::Utf8{
+                    i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1"
+                },
+            });
+        }
+
+        client.BulkUpsert(
+            "/local/bulk_upsert_example",
+            rows,
+            ydb::OperationSettings{
+                .is_idempotent = true,
+            }
+        );
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -18,16 +102,14 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
   - Native SDK
 
-    {% cut "Bulk upsert with native {{ ydb-short-name }} data" %}
+    {% cut "Bulk insert native {{ ydb-short-name }} data" %}
 
     ```go
     package main
 
     import (
       "context"
-      "fmt"
       "os"
-      "time"
 
       "github.com/ydb-platform/ydb-go-sdk/v3"
       "github.com/ydb-platform/ydb-go-sdk/v3/table"
@@ -94,7 +176,7 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
     {% endcut %}
 
-    {% cut "Bulk upsert `CSV` data" %}
+    {% cut "Bulk insert `CSV`" %}
 
     ```go
     package main
@@ -133,7 +215,7 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
         []byte(csv),
         table.WithCsvHeader(),
         table.WithCsvSkipRows(2),
-        table.WithCsvNullValue([]byte("hello")), // "hello" would be interpreted as NULL
+        table.WithCsvNullValue([]byte("hello")), // the string "hello" will be treated as NULL
       ))
       if err != nil {
         fmt.Printf("unexpected error: %v", err)
@@ -143,9 +225,10 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
     {% endcut %}
 
-    {% cut "Bulk upsert `Apache Arrow` data" %}
+    {% cut "Bulk insert `Apache Arrow`" %}
 
-    In the following example, the [arrow package](https://pkg.go.dev/github.com/apache/arrow-go/v18/arrow) is used to prepare the data.
+    In the following example, the [arrow](https://pkg.go.dev/github.com/apache/arrow-go/v18/arrow) package is used to prepare data.
+
 
     ```go
     package main
@@ -154,7 +237,6 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
       "bytes"
       "context"
       "fmt"
-      "os"
 
       "github.com/apache/arrow-go/v18/arrow"
       "github.com/apache/arrow-go/v18/arrow/array"
@@ -223,14 +305,15 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
         fmt.Printf("unexpected error: %v", err)
       }
     }
+
     ```
 
     {% endcut %}
 
   - database/sql
 
-    The {{ ydb-short-name }} `database/sql` driver does not support non-transactional bulk insert.
-    For bulk insert, use [transactional insert](./upsert.md).
+    The `database/sql` driver implementation for {{ ydb-short-name }} does not support non-transactional bulk data upsert.
+    For bulk upsert, use [transactional upsert](./upsert.md).
 
   {% endlist %}
 
@@ -245,50 +328,50 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
     private static final int BATCH_SIZE = 1000;
 
     public static void main(String[] args) {
-        String connectionString = args[0];
+      String connectionString = args[0];
 
-        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(NopAuthProvider.INSTANCE) // use anonymous credentials
-                .build()) {
+      try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+              .withAuthProvider(NopAuthProvider.INSTANCE) // anonymous authentication
+              .build()) {
 
-            // For bulk upsert, the full table path needs to be specified
-            String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
-            try (TableClient tableClient = TableClient.newClient(transport).build()) {
-                SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-                execute(retryCtx, tablePath);
-            }
-        }
+          // For bulk upsert, you must use the full path to the table
+          String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
+          try (TableClient tableClient = TableClient.newClient(transport).build()) {
+              SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+              execute(retryCtx, tablePath);
+          }
+      }
     }
 
     public static void execute(SessionRetryContext retryCtx, String tablePath) {
-        // table description
-        StructType structType = StructType.of(
-            "app", PrimitiveType.Text,
-            "timestamp", PrimitiveType.Timestamp,
-            "host", PrimitiveType.Text,
-            "http_code", PrimitiveType.Uint32,
-            "message", PrimitiveType.Text
-        );
+      // table description
+      StructType structType = StructType.of(
+          "app", PrimitiveType.Text,
+          "timestamp", PrimitiveType.Timestamp,
+          "host", PrimitiveType.Text,
+          "http_code", PrimitiveType.Uint32,
+          "message", PrimitiveType.Text
+      );
 
-        // generate batch of records
-        List<Value<?>> list = new ArrayList<>(50);
-        for (int i = 0; i < BATCH_SIZE; i += 1) {
-            // add a new row as a struct value
-            list.add(structType.newValue(
-                "app", PrimitiveValue.newText("App_" + String.valueOf(i / 256)),
-                "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),
-                "host", PrimitiveValue.newText("192.168.0." + i % 256),
-                "http_code", PrimitiveValue.newUint32(i % 113 == 0 ? 404 : 200),
-                "message", PrimitiveValue.newText(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
-            ));
-        }
+      // generation of a batch of records
+      List<Value<?>> list = new ArrayList<>(50);
+      for (int i = 0; i < BATCH_SIZE; i += 1) {
+          // adding a new row as a struct value
+          list.add(structType.newValue(
+              "app", PrimitiveValue.newText("App_" + i / 256),
+              "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),
+              "host", PrimitiveValue.newText("192.168.0." + i % 256),
+              "http_code", PrimitiveValue.newUint32(i % 113 == 0 ? 404 : 200),
+              "message", PrimitiveValue.newText(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
+          ));
+      }
 
-        // Create list of structs
-        ListValue rows = ListType.of(structType).newValue(list);
-        // Do retry operation on errors with best effort
-        retryCtx.supplyStatus(
-            session -> session.executeBulkUpsert(tablePath, rows, new BulkUpsertSettings())
-        ).join().expectSuccess("bulk upsert problem");
+      // Create list of structs
+      ListValue rows = ListType.of(structType).newValue(list);
+      // Do retry operation on errors with best effort
+      retryCtx.supplyStatus(
+          session -> session.executeBulkUpsert(tablePath, rows, new BulkUpsertSettings())
+      ).join().expectSuccess("bulk upsert problem");
     }
     ```
 
@@ -308,7 +391,7 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
                     ps.setString(1, "App_" + String.valueOf(i / 256));
                     ps.setTimestamp(2, Timestamp.from(Instant.now().plusSeconds(i)));
                     ps.setString(3, "192.168.0." + i % 256);
-                    ps.setLong(4, i % 113 == 0 ? 404 : 200);
+                    ps.setLong(4,i % 113 == 0 ? 404 : 200);
                     ps.setString(5, i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1");
                     ps.addBatch();
                 }
@@ -321,7 +404,8 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
     }
     ```
 
-    In Spring Boot, Hibernate, JOOQ, and other ORM stacks on JDBC you can run native YQL (including from repositories and `@Query`). The driver tries to optimize large inserts; `UPDATE`, `INSERT`, `DELETE`, `UPSERT` through JDBC are batched on the driver side when appropriate.
+
+    In Spring Boot, Hibernate, JOOQ, and other ORM frameworks on top of JDBC, you can execute native YQL (including from repositories and `@Query`). The driver aims to optimize large inserts; operations `UPDATE`, `INSERT`, `DELETE`, `UPSERT` going through JDBC are automatically grouped into batches on the driver side when necessary.
 
   {% endlist %}
 

@@ -1,50 +1,50 @@
 # Apache Arrow format
 
-Results are returned in the columnar [Apache Arrow](https://arrow.apache.org/) format ([IPC](https://arrow.apache.org/docs/5.0/format/Columnar.html#serialization-and-interprocess-communication-ipc) standard, version 5.0) without conversion inside the SDK, which makes large result sets efficient to process.
+Data is returned in the columnar [Apache Arrow](https://arrow.apache.org/) format ([IPC](https://arrow.apache.org/docs/5.0/format/Columnar.html#serialization-and-interprocess-communication-ipc) standard version 5.0) and is not transformed on the SDK side, which allows efficient processing of large data volumes.
 
-Prefer this format for:
+This format is recommended for:
 
-* Analytical ([OLAP](https://en.wikipedia.org/wiki/Online_analytical_processing)) workloads with columnar processing — aggregations, filters, scans over multiple columns on large samples.
-* Systems that integrate natively with Apache Arrow.
-* Scenarios where throughput for large data transfers matters most.
+* Analytical ( [OLAP](https://en.wikipedia.org/wiki/Online_analytical_processing)) tasks where data is processed column-wise — aggregations, filtering, scanning across multiple columns of large datasets;
+* Systems that natively work with Apache Arrow;
+* Tasks where high performance is important when transferring large data volumes.
 
-## YQL type mapping {#type-mapping}
+## YQL type conversion {#type-mapping}
 
-[YQL data types](../../../yql/reference/types/index.md) are mapped to Apache Arrow types as follows.
+[YQL data types](../../../yql/reference/types/index.md) are converted to Apache Arrow types according to the following rules.
 
 ### Numeric types
 
-| YQL type | Arrow type | Notes |
-|----------|------------|-------|
-| `Bool` | `uint8` | `true`/`false` encoded as `1`/`0` |
-| `Int8` | `int8` | |
-| `Int16` | `int16` | |
-| `Int32` | `int32` | |
-| `Int64` | `int64` | |
-| `Uint8` | `uint8` | |
-| `Uint16` | `uint16` | |
-| `Uint32` | `uint32` | |
-| `Uint64` | `uint64` | |
-| `Float` | `float` | |
-| `Double` | `double` | |
-| `Decimal(p, s)` | `fixed_size_binary(16)` | 120 bits used; ±inf and NaN markers supported |
+| YQL type | Arrow type | Note |
+| --- | --- | --- |
+| `Bool` | `uint8` | Values `true`/`false` are encoded as `1`/`0` |
+| `Int8` | `int8` |  |
+| `Int16` | `int16` |  |
+| `Int32` | `int32` |  |
+| `Int64` | `int64` |  |
+| `Uint8` | `uint8` |  |
+| `Uint16` | `uint16` |  |
+| `Uint32` | `uint32` |  |
+| `Uint64` | `uint64` |  |
+| `Float` | `float` |  |
+| `Double` | `double` |  |
+| `Decimal(p, s)` | `fixed_size_binary(16)` | Uses 120 bits, has ±inf and NaN markers |
 | `DyNumber` | `string` | String representation of the number |
 
 ### String types
 
-| YQL type | Arrow type | Notes |
-|----------|------------|-------|
-| `String` | `binary` | |
-| `Utf8` | `string` | |
-| `Json` | `string` | |
-| `JsonDocument` | `string` | String form of binary [JSON](https://en.wikipedia.org/wiki/JSON) |
-| `Yson` | `binary` | |
+| YQL type | Arrow type | Note |
+| --- | --- | --- |
+| `String` | `binary` |  |
+| `Utf8` | `string` |  |
+| `Json` | `string` |  |
+| `JsonDocument` | `string` | String representation of binary [JSON](https://en.wikipedia.org/wiki/JSON) |
+| `Yson` | `binary` |  |
 | `Uuid` | `fixed_size_binary(16)` | 16 bytes in mixed-endian order |
 
-### Date and time types
+### Temporal types
 
-| YQL type | Arrow type | Notes |
-|----------|------------|-------|
+| YQL type | Arrow type | Note |
+| --- | --- | --- |
 | `Date` | `uint16` | Day precision |
 | `Date32` | `int32` | Day precision |
 | `Datetime` | `uint32` | Second precision |
@@ -53,28 +53,28 @@ Prefer this format for:
 | `Timestamp64` | `int64` | Microsecond precision |
 | `Interval` | `int64` | Microseconds |
 | `Interval64` | `int64` | Microseconds |
-| `TzDate` | `struct<datetime: uint16, timezone: string>` | Time zone name as a string |
-| `TzDate32` | `struct<datetime: int32, timezone: string>` | Time zone name as a string |
-| `TzDatetime` | `struct<datetime: uint32, timezone: string>` | Time zone name as a string |
-| `TzDatetime64` | `struct<datetime: int64, timezone: string>` | Time zone name as a string |
-| `TzTimestamp` | `struct<datetime: uint64, timezone: string>` | Time zone name as a string |
-| `TzTimestamp64` | `struct<datetime: int64, timezone: string>` | Time zone name as a string |
+| `TzDate` | `struct<datetime: uint16, timezone: string>` | Includes the string timezone label name |
+| `TzDate32` | `struct<datetime: int32, timezone: string>` | Includes the string timezone label name |
+| `TzDatetime` | `struct<datetime: uint32, timezone: string>` | Includes the string timezone label name |
+| `TzDatetime64` | `struct<datetime: int64, timezone: string>` | Includes the string timezone label name |
+| `TzTimestamp` | `struct<datetime: uint64, timezone: string>` | Includes the string timezone label name |
+| `TzTimestamp64` | `struct<datetime: int64, timezone: string>` | Includes the string timezone label name |
 
 {% note info %}
 
-In Arrow, basic date/time types are represented as unsigned integers, while extended date/time types types use signed integers.
+In the Arrow format, basic temporal data types are unsigned integer types, unlike extended temporal types, which are signed.
 
 {% endnote %}
 
 ### Container types
 
-| YQL type | Arrow type | Notes |
-|----------|------------|-------|
-| `List<T>` | `list<item: T>` | |
-| `Tuple<T1, T2, ...>` | `struct<field0: T1, field1: T2, ...>` | |
-| `Struct<name: T, ...>` | `struct<name: T, ...>` | |
-| `Dict<K, V>` | `list<struct<key: K, payload: V>>` | |
-| `Set<T>` | `list<struct<key: T, payload: struct<>>>` | Same as `Dict<T, Void>` |
+| YQL type | Arrow type | Note |
+| --- | --- | --- |
+| `List<T>` | `list<item: T>` |  |
+| `Tuple<T1, T2, ...>` | `struct<field0: T1, field1: T2, ...>` |  |
+| `Struct<name: T, ...>` | `struct<name: T, ...>` |  |
+| `Dict<K, V>` | `list<struct<key: K, payload: V>>` |  |
+| `Set<T>` | `list<struct<key: T, payload: struct<>>>` | Is `Dict<T, Void>` |
 | `Variant<T1, ..., Tn>` | `dense_union<field0: T1, ...>` | For n <= 128 |
 | `Variant<T1, ..., Tn>` | `dense_union<dense_union<field0: T1, ...>, ...>` | For 128 < n <= 16384 |
 | `Variant<name1: T1, ..., nameN: Tn>` | `dense_union<name1: T1, ...>` | For n <= 128 |
@@ -82,50 +82,89 @@ In Arrow, basic date/time types are represented as unsigned integers, while exte
 
 {% note warning %}
 
-`Variant` over tuple or struct cannot be represented in Apache Arrow if the number of child types exceeds 16384 (128 * 128).
+`Variant` types over a tuple and over a struct are not representable in the Apache Arrow format if the number of child types exceeds 16384 (128 * 128).
 
 {% endnote %}
 
 ### Optional and special types
 
-| YQL type | Arrow type | Notes |
-|----------|------------|-------|
+| YQL type | Arrow type | Note |
+| --- | --- | --- |
 | `Null` | `null` | Singular type |
 | `Void` | `struct<>` | Singular type |
 | `EmptyList` | `struct<>` | Singular type |
 | `EmptyDict` | `struct<>` | Singular type |
-| `Tagged<T>` | `T` | Tag stripped |
-| `Optional<T>` | `struct<opt: T>` | When `T` is `Variant`, `Optional`, `Pg`, or singular |
-| `Optional<T>` | `T` | For all other `T` |
+| `Tagged<T>` | `T` | Unfolding with loss of naming |
+| `Optional<T>` | `struct<opt: T>` | If the `T` type is `Variant`, `Optional`, `Pg`, or singular |
+| `Optional<T>` | `T` | For other types |
 
-### Types in the `pg` family
+### pg family types
 
-All `pg` types are represented as Arrow `string` values containing the textual form.
+All types of the `pg` family are represented by the Arrow type `string` as a text representation of values.
 
 ## Data compression {#compression}
 
-You can enable compression for Arrow payloads. Supported codecs:
+For the Apache Arrow format, you can configure compression of transmitted data. The following codecs are available:
 
 | Codec | Description |
-|-------|-------------|
-| None (default) | |
-| `ZSTD` | [Zstandard](https://github.com/facebook/zstd). Compression level is configurable |
-| `LZ4_FRAME` | [LZ4](https://github.com/lz4/lz4). Compression level is not configurable |
+| --- | --- |
+| No compression (default) |  |
+| `ZSTD` | [Zstandard](https://github.com/facebook/zstd) compression. Supports compression level setting |
+| `LZ4_FRAME` | [LZ4](https://github.com/lz4/lz4) compression. Compression level setting is not supported |
 
-## Returned schema {#schema}
+## Returned data schema {#schema}
 
-The schema has two parts:
+The schema contains two components:
 
-* **Column list with YQL types** — describes the logical types in YQL terms so your application can interpret semantics regardless of Arrow representation details.
-* **Serialized Arrow RecordBatch schema** — describes the binary layout in Apache Arrow terms. Required to deserialize RecordBatch on the client.
+* **List of columns with YQL types** — describes the original data types in YQL terms. Allows the application to understand the semantics of the data regardless of the specifics of the Arrow representation.
+* **Serialized Arrow RecordBatch schema** — describes the structure of the received binary data in Apache Arrow terms. Required for correct deserialization of RecordBatch on the client side.
 
-Both are needed because YQL and Arrow types do not always map one-to-one.
+The presence of two schemas is due to the fact that YQL types and Arrow types do not always have a one-to-one correspondence.
 
-## Apache Arrow examples in the SDK {#sdk-examples}
+## Examples of using Apache Arrow in the SDK {#sdk-examples}
 
 {% list tabs group=lang %}
 
+- C++
+
+  In the query execution settings, the result format `Arrow`, the schema inclusion mode `FirstOnly`, and (similar to the Python example) ZSTD compression with level 10 are specified. The serialized IPC schema and binary RecordBatch are read through [`NYdb::TArrowAccessor`](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/include/ydb-cpp-sdk/client/arrow/accessor.h) — this API is marked as experimental; further deserialization is performed using [Apache Arrow C++](https://arrow.apache.org/docs/cpp/). The session `NYdb::NQuery::TSession` is usually obtained in the callback `TQueryClient::RetryQuerySync` / `RetryQuery`.
+
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/arrow/accessor.h>
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  NYdb::TStatus ExampleArrow(NYdb::NQuery::TSession session) {
+      constexpr std::string_view query = "SELECT * FROM example ORDER BY Key LIMIT 100;";
+
+      auto settings = NYdb::NQuery::TExecuteQuerySettings()
+          .Format(NYdb::TResultSet::EFormat::Arrow)
+          .SchemaInclusionMode(NYdb::NQuery::ESchemaInclusionMode::FirstOnly)
+          .ArrowFormatSettings(NYdb::NQuery::TArrowFormatSettings()
+              .CompressionCodec(NYdb::NQuery::TArrowFormatSettings::TCompressionCodec()
+                  .Type(NYdb::NQuery::TArrowFormatSettings::TCompressionCodec::EType::Zstd)
+                  .Level(10)
+              )
+          );
+
+      auto queryResult = session.ExecuteQuery(
+          query,
+          NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+          settings).GetValueSync();
+
+      NYdb::NStatusHelpers::ThrowOnError(queryResult);
+
+      for (const NYdb::TResultSet& resultSet : queryResult.GetResultSets()) {
+          const std::string& schema = NYdb::TArrowAccessor::GetArrowSchema(resultSet);
+          const std::vector<std::string>& batches = NYdb::TArrowAccessor::GetArrowBatches(resultSet);
+          std::cout << "Arrow schema size: " << schema.size() << ", batches: " << batches.size()
+                    << std::endl;
+      }
+  }
+  ```
+
 - Python
+
 
   ```python
   import pyarrow
@@ -155,6 +194,7 @@ Both are needed because YQL and Arrow types do not always map one-to-one.
 
 - Java
 
+
   ```java
   String query = "SELECT * FROM example ORDER BY Key LIMIT 100;";
 
@@ -180,5 +220,9 @@ Both are needed because YQL and Arrow types do not always map one-to-one.
       ).join().getStatus().expectSuccess("execute query problem");
   }
   ```
+
+- C#
+
+  {% include [feature-not-supported](../../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

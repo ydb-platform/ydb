@@ -1,24 +1,56 @@
 <!-- markdownlint-disable blanks-around-fences -->
 
-# Username and password based authentication
+# Authentication using login and password
 
-Below are examples of authentication with a username and password in different {{ ydb-short-name }} SDKs.
+Below are code examples for authentication using login and password in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
 
 - C++
 
-  ```c++
-  auto driverConfig = NYdb::TDriverConfig()
-    .SetEndpoint(endpoint)
-    .SetDatabase(database)
-    .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-        .User = "user",
-        .Password = "password",
-    }));
+  {% list tabs %}
 
-  NYdb::TDriver driver(driverConfig);
-  ```
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+
+    NYdb::TDriver CreateDriverWithStaticCredentials(
+        const std::string& connectionString,
+        const std::string& user,
+        const std::string& password)
+    {
+        auto config = NYdb::TDriverConfig(connectionString)
+            .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+                .User = user,
+                .Password = password,
+            }));
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    {% cut "secdist" %}
+
+    ```json
+    {
+      "ydb_settings": {
+        "db": {
+          "user": "user",
+          "password": "password"
+        }
+      }
+    }
+    ```
+
+    {% endcut %}
+
+    The code for initializing `ydb::YdbComponent`, obtaining `ydb::TableClient`, and starting `components::MinimalServerComponentList` is the same as in the example from [init.md](./init.md).
+
+  {% endlist %}
 
 - Go
 
@@ -26,25 +58,27 @@ Below are examples of authentication with a username and password in different {
 
   - Native SDK
 
-    You can pass the username and password in the connection string. For example:
+    You can pass the login and password as part of the connection string. For example:
+
 
     ```shell
     "grpcs://login:password@localhost:2135/local"
     ```
 
-    You can also pass them explicitly using the `ydb.WithStaticCredentials` option:
 
-    {% include [auth-static-with-native](../../_includes/go/auth-static-with-native.md) %}
+    You can also pass the login and password explicitly via the `ydb.WithStaticCredentials` option:
+
+    {% include [auth-static-with-native](../../../_includes/go/auth-static-with-native.md) %}
 
   - database/sql
 
-    You can pass the username and password in the connection string. For example:
+    You can pass the login and password as part of the connection string. For example:
 
-    {% include [auth-static-database-sql](../../_includes/go/auth-static-database-sql.md) %}
+    {% include [auth-static-database-sql](../../../_includes/go/auth-static-database-sql.md) %}
 
-    You can also pass them explicitly when initializing the driver via a connector using the `ydb.WithStaticCredentials` option:
+    You can also pass the login and password explicitly during driver initialization via a connector using a special option `ydb.WithStaticCredentials`:
 
-    {% include [auth-static-with-database-sql](../../_includes/go/auth-static-with-database-sql.md) %}
+    {% include [auth-static-with-database-sql](../../../_includes/go/auth-static-with-database-sql.md) %}
 
   {% endlist %}
 
@@ -79,14 +113,15 @@ Below are examples of authentication with a username and password in different {
             doWork(connection);
         }
 
-        // Username and password can be passed directly
+        // Login and password can be specified directly
         try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", username, password)) {
             doWork(connection);
         }
     }
     ```
 
-    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL, username, and password as above (for example `spring.datasource.url`, `spring.datasource.username`, `spring.datasource.password`, or the pool’s equivalent settings).
+
+    In Spring Boot, ORM, and other third-party frameworks around JDBC, set the same JDBC URL, login, and password as in the example above (for example, `spring.datasource.url`, `spring.datasource.username`, `spring.datasource.password` or their equivalent in the pool configuration).
 
   {% endlist %}
 
@@ -127,22 +162,29 @@ Below are examples of authentication with a username and password in different {
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Auth;
+  using Ydb.Sdk.Ado;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
+  await using var dataSource = new YdbDataSource(
+      "Host=localhost;Port=2136;Database=/local;User=user;Password=password");
+  await using var connection = await dataSource.OpenConnectionAsync();
+  ```
 
-  var config = new DriverConfig(
-      endpoint: endpoint, // Database endpoint, "grpcs://host:port"
-      database: database, // Full database path
-      credentials: new StaticCredentialsProvider(user, password)
-  );
+- Rust
 
-  await using var driver = await Driver.CreateInitialized(config);
+  ```rust
+  use ydb::{ClientBuilder, StaticCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(StaticCredentials::new(
+          std::env::var("YDB_USER")?,
+          std::env::var("YDB_PASSWORD")?,
+          http::Uri::from_static("grpc://localhost:2136"),
+          "local".into(),
+      ))
+      .client()?;
   ```
 
 - PHP

@@ -1,6 +1,6 @@
-# Upsert data
+# Inserting data
 
-Below are code examples of using the built-in upsert tools of the {{ ydb-short-name }} SDK:
+Below are code examples of using the built-in data insertion tools of the {{ ydb-short-name }} SDK:
 
 {% list tabs %}
 
@@ -284,7 +284,7 @@ Below are code examples of using the built-in upsert tools of the {{ ydb-short-n
 
   - Native SDK
 
-    Use `SessionRetryContext` and `TableSession.executeDataQuery` with the `$seriesData` parameter of type `List<Struct<...>>`. Values for `AS_TABLE($seriesData)` are collected in the same way as row structures in the [batch upsert](./bulk-upsert.md) example.
+    Use `SessionRetryContext` and `TableSession.executeDataQuery` with the `$seriesData` parameter of type `List<Struct<...>>`. Values for `AS_TABLE($seriesData)` are collected in the same way as row structures in the [batch insertion](./bulk-upsert.md) example.
 
 
     ```java
@@ -323,7 +323,7 @@ Below are code examples of using the built-in upsert tools of the {{ ydb-short-n
     ```
 
 
-    In Spring Boot, Hibernate, JOOQ, and other frameworks on top of JDBC, the driver also tries to optimize **large** sequences of inserts and updates: when necessary, **UPSERT**, `INSERT`, `UPDATE`, `DELETE` are automatically **grouped into batches** on the driver side (including large batches from ORM).
+    In Spring Boot, Hibernate, JOOQ, and other frameworks on top of JDBC, the driver also aims to optimize **large** sequences of inserts and updates: when necessary, **UPSERT**, `INSERT`, `UPDATE`, `DELETE` are automatically **grouped into batches** on the driver side (including large batches from ORM).
 
   {% endlist %}
 
@@ -333,7 +333,7 @@ Below are code examples of using the built-in upsert tools of the {{ ydb-short-n
 
   - Native SDK
 
-    To upsert data, use `QuerySessionPool` and the `execute_with_retries` method with a parameterized YQL query. The query operates on the container type `List<Struct<...>>`, which allows passing multiple rows in a single call.
+    To insert data, use `QuerySessionPool` and the `execute_with_retries` method with a parameterized YQL query. The query operates on the container type `List<Struct<...>>`, which allows passing multiple rows in a single call.
 
 
     ```python
@@ -443,7 +443,7 @@ Below are code examples of using the built-in upsert tools of the {{ ydb-short-n
 
   - SQLAlchemy
 
-    When using {{ ydb-short-name }} via SQLAlchemy, the `ydb_sqlalchemy.upsert` function is used to insert data, which generates an `UPSERT INTO` query based on the table and the passed values. You can insert either a single row or multiple rows in one call:
+    When using {{ ydb-short-name }} via SQLAlchemy, to insert data, use the `ydb_sqlalchemy.upsert` function, which generates a `UPSERT INTO` query based on the table and the passed values. You can insert either a single row or multiple rows in a single call:
 
 
     ```python
@@ -541,7 +541,7 @@ Below are code examples of using the built-in upsert tools of the {{ ydb-short-n
 
   ```rust
   use ydb::{
-      ydb_params, ydb_struct, AccessTokenCredentials, ClientBuilder, Value, YdbResult,
+      ydb_params, ydb_struct, AccessTokenCredentials, ClientBuilder, Query, Value, YdbResult,
   };
 
   fn series_row(
@@ -594,27 +594,43 @@ Below are code examples of using the built-in upsert tools of the {{ ydb-short-n
           ],
       )?;
 
-      client
-          .query_client()
-          .exec(
-              r#"
-              PRAGMA TablePathPrefix("/local");
-              UPSERT INTO series
-              (
-                  series_id,
-                  title,
-                  series_info,
-                  comment
-              )
-              SELECT
-                  series_id,
-                  title,
-                  series_info,
-                  comment
-              FROM AS_TABLE($seriesData);
-              "#,
+      let query = Query::new(
+          r#"
+          PRAGMA TablePathPrefix("/local");
+          DECLARE $seriesData AS List<Struct<
+              series_id: Uint64,
+              title: Utf8,
+              series_info: Utf8,
+              comment: Optional<Utf8>
+          >>;
+
+          UPSERT INTO series
+          (
+              series_id,
+              title,
+              series_info,
+              comment
           )
-          .params(ydb_params!("$seriesData" => series_data))
+          SELECT
+              series_id,
+              title,
+              series_info,
+              comment
+          FROM AS_TABLE($seriesData);
+          "#,
+      )
+      .with_params(ydb_params!("$seriesData" => series_data));
+
+      client
+          .table_client()
+          .retry_transaction(|mut t| {
+              let query = query.clone();
+              async move {
+                  t.query(query).await?;
+                  t.commit().await?;
+                  Ok(())
+              }
+          })
           .await?;
 
       Ok(())

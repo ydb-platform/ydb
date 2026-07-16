@@ -28,22 +28,22 @@ Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [a
   [Examples on GitHub](https://github.com/ydb-platform/ydb-js-sdk/tree/main/examples/topic)
 - Rust
 
-  [Examples on GitHub](https://github.com/ydb-platform/ydb-rs-sdk/tree/master/ydb/examples) (`topic-writer`, `topic-reader-retry`, `topic-read-in-transaction-example`).
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
-## Initializing a connection to topics {#init}
+## Initializing a connection to topics
 
 {% list tabs group=lang %}
 
 - C++
 
-  To work with topics, instances of the {{ ydb-short-name }} driver and client are created.
+  To work with topics, create instances of the {{ ydb-short-name }} driver and client.
 
-  The {{ ydb-short-name }} driver is responsible for the interaction between the application and {{ ydb-short-name }} at the transport level. The driver must exist throughout the entire lifecycle of working with topics and must be initialized before creating the client.
+  The {{ ydb-short-name }} driver handles the interaction between the application and {{ ydb-short-name }} at the transport level. The driver must exist throughout the entire lifecycle of working with topics and must be initialized before creating the client.
 
   The topic service client ( [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1589)) runs on top of the {{ ydb-short-name }} driver and is responsible for management operations with topics, as well as creating read and write sessions.
 
@@ -72,7 +72,7 @@ Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [a
 
 - Go
 
-  To work with topics, an instance of the {{ ydb-short-name }} driver created using `ydb.Open` is used. The topic client is available via the `db.Topic()` method.
+  To work with topics, use an instance of the {{ ydb-short-name }} driver created using `ydb.Open`. The topic client is available through the `db.Topic()` method.
 
 
   ```go
@@ -116,9 +116,9 @@ Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [a
 
 - Java
 
-  To work with topics, instances of the {{ ydb-short-name }} transport and client are created.
+  To work with topics, create instances of the {{ ydb-short-name }} transport and client.
 
-  The {{ ydb-short-name }} transport is responsible for the interaction between the application and {{ ydb-short-name }} at the transport level. It must exist throughout the entire lifecycle of working with topics and must be initialized before creating the client.
+  The {{ ydb-short-name }} transport handles the interaction between the application and {{ ydb-short-name }} at the transport level. It must exist throughout the entire lifecycle of working with topics and must be initialized before creating the client.
 
   Application code snippet for initializing the {{ ydb-short-name }} transport:
 
@@ -132,7 +132,7 @@ Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [a
   ```
 
 
-  This example uses the helper method `CloudAuthHelper.getAuthProviderFromEnviron()`, which obtains a token from environment variables.
+  This example uses the helper method `CloudAuthHelper.getAuthProviderFromEnviron()`, which retrieves a token from environment variables.
   For example, `YDB_ACCESS_TOKEN_CREDENTIALS`.
   For more information, see [connecting to a database](../../concepts/connect.md) and [authentication](../../security/authentication.md).
 
@@ -151,7 +151,7 @@ Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [a
 
 
   Both code examples above use a ( [try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html)) block.
-  This allows automatically closing the client and transport when exiting this block, as both are descendants of `AutoCloseable`.
+  This automatically closes the client and transport when exiting the block, as both are descendants of `AutoCloseable`.
 - C#
 
   To work with topics, simply pass the connection string directly to the constructor of the required client.
@@ -180,7 +180,7 @@ Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [a
 
 - Python
 
-  To work with topics, an instance of the {{ ydb-short-name }} driver is created. The topic client is available via the `topic_client` attribute and is used for management operations with topics, as well as creating writers and readers.
+  To work with topics, create an instance of the {{ ydb-short-name }} driver. The topic client is available through the `topic_client` attribute and is used for management operations with topics, as well as creating writers and readers.
 
   {% list tabs %}
 
@@ -240,37 +240,24 @@ Before running the examples, [create a topic](../ydb-cli/topic-create.md) and [a
 
 - Rust
 
-
-  ```rust
-  use ydb::{ClientBuilder, YdbResult};
-
-  #[tokio::main]
-  async fn main() -> YdbResult<()> {
-      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136/local")?.client()?;
-      client.wait().await?;
-      let mut topic_client = client.topic_client();
-      // topic_client.create_reader(...), create_writer_with_params(...), ...
-      Ok(())
-  }
-  ```
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
-## Managing topics {#manage}
+## Topic management {#manage}
 
 ### Creating a topic {#create-topic}
 
-The only required parameter for creating a topic is its path; the other parameters are optional.
+The only required parameter for creating a topic is its path; all other parameters are optional.
 
 {% list tabs group=lang %}
 
 - C++
 
-  The full list of settings can be found [in the header file](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L394).
+  You can see the full list of settings [in the header file](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L394).
 
   Example of creating a topic with three partitions and ZSTD codec support:
 
@@ -287,7 +274,7 @@ The only required parameter for creating a topic is its path; the other paramete
 
 - Go
 
-  The full list of supported parameters can be found in the [SDK documentation](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#CreateOption).
+  You can see the full list of supported parameters in the [SDK documentation](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#CreateOption).
 
   Example of creating a topic with a list of supported codecs and a minimum number of partitions
 
@@ -329,7 +316,7 @@ The only required parameter for creating a topic is its path; the other paramete
   {% endlist %}
 - Java
 
-  The full list of settings can be found [in the SDK code](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/settings/CreateTopicSettings.java#L97).
+  You can see the full list of settings [in the SDK code](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/settings/CreateTopicSettings.java#L97).
 
   Example of creating a topic with a list of supported codecs and a minimum number of partitions
 
@@ -385,21 +372,7 @@ The only required parameter for creating a topic is its path; the other paramete
 
 - Rust
 
-
-  ```rust
-  use ydb::{Codec, CreateTopicOptionsBuilder, YdbResult};
-
-  topic_client
-      .create_topic(
-          "/local/my-topic".into(),
-          CreateTopicOptionsBuilder::default()
-              .min_active_partitions(3)
-              .supported_codecs(vec![Codec::Raw, Codec::Zstd])
-              .build()?,
-      )
-      .await?;
-  ```
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -412,7 +385,7 @@ The only required parameter for creating a topic is its path; the other paramete
 
 - C++
 
-  When changing a topic, in the parameters of the `AlterTopic` method you need to specify the topic path and the parameters to be changed. The changed parameters are represented by the `TAlterTopicSettings` structure.
+  When modifying a topic, in the parameters of the `AlterTopic` method, you need to specify the topic path and the parameters to be changed. The modifiable parameters are represented by the `TAlterTopicSettings` structure.
 
   You can see the full list of settings [in the header file](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L458).
 
@@ -433,11 +406,11 @@ The only required parameter for creating a topic is its path; the other paramete
 
 - Go
 
-  When changing a topic, in the parameters you need to specify the topic path and the parameters to be changed.
+  When modifying a topic, in the parameters you need to specify the topic path and the parameters that will be changed.
 
   You can see the full list of supported parameters in the [SDK documentation](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#AlterOption).
 
-  Example of adding a reader to a topic
+  Example of adding a consumer to a topic
 
 
   ```go
@@ -476,7 +449,7 @@ The only required parameter for creating a topic is its path; the other paramete
   {% endlist %}
 - Java
 
-  When changing a topic, in the parameters of the `alterTopic` method you need to specify the topic path and the parameters to be changed.
+  When modifying a topic, you need to specify the topic path and the parameters to be changed in the method parameters `alterTopic`.
 
   You can see the full list of settings [in the SDK code](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/settings/AlterTopicSettings.java#L23).
 
@@ -511,20 +484,7 @@ The only required parameter for creating a topic is its path; the other paramete
 
 - Rust
 
-
-  ```rust
-  use ydb::{AlterTopicOptionsBuilder, YdbResult};
-
-  topic_client
-      .alter_topic(
-          "/local/my-topic".into(),
-          AlterTopicOptionsBuilder::default()
-              .set_min_active_partitions(Some(5))
-              .build()?,
-      )
-      .await?;
-  ```
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -537,7 +497,7 @@ The only required parameter for creating a topic is its path; the other paramete
 
 - C++
 
-  To get information about a topic, use the `DescribeTopic` method.
+  The `DescribeTopic` method is used to get information about a topic.
 
   The topic description is represented by the `TTopicDescription` structure.
 
@@ -555,7 +515,7 @@ The only required parameter for creating a topic is its path; the other paramete
   ```
 
 
-  There is a separate method for getting information about a reader - `DescribeConsumer`.
+  There is a separate method for getting information about a consumer - `DescribeConsumer`.
 - Go
 
 
@@ -589,7 +549,7 @@ The only required parameter for creating a topic is its path; the other paramete
   {% endlist %}
 - Java
 
-  To get information about a topic, use the `describeTopic` method.
+  The `describeTopic` method is used to get information about a topic.
 
   You can see the full list of description fields [in the SDK code](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/description/TopicDescription.java#L19).
 
@@ -617,18 +577,7 @@ The only required parameter for creating a topic is its path; the other paramete
 
 - Rust
 
-
-  ```rust
-  use ydb::{DescribeTopicOptionsBuilder, YdbResult};
-
-  let description = topic_client
-      .describe_topic(
-          "/local/my-topic".into(),
-          DescribeTopicOptionsBuilder::default().include_stats(true).build()?,
-      )
-      .await?;
-  ```
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -637,7 +586,7 @@ The only required parameter for creating a topic is its path; the other paramete
 
 ### Deleting a topic {#drop-topic}
 
-To delete a topic, just specify its path.
+To delete a topic, you just need to specify its path.
 
 {% list tabs group=lang %}
 
@@ -700,11 +649,7 @@ To delete a topic, just specify its path.
 
 - Rust
 
-
-  ```rust
-  topic_client.drop_topic("/local/my-topic".into()).await?;
-  ```
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -721,74 +666,23 @@ Currently, only connections with matching [source and message group](../../conce
 
 - C++
 
-  In the C++ SDK, three API options are available for writing to a topic. The basic settings (buffering, codecs, retries) are the same for all three and are set by the `TWriteSessionSettings` structure, so the tips below focus on differences and usage scenarios.
+  The connection to a topic for writing is represented by a write session object with the `IWriteSession` or `ISimpleBlockingWriteSession` interface (a variant for simple one-message writing without acknowledgment, which blocks when the number of inflight writes or the SDK buffer size is exceeded). The write session settings are represented by the `TWriteSessionSettings` structure; for the `ISimpleBlockingWriteSession` variant, some settings are not supported.
 
-  - `IWriteSession` — a low-level write session to a single partition with a full set of features: event loop (`TReadyToAcceptEvent`, `TAcksEvent`, `TSessionClosedEvent`), explicit send flow control via `TContinuationToken` that the system issues before receiving each message; independent acknowledgments for each message; sending pre-compressed data via the `WriteEncoded` method, bypassing recompression on the server. The `TWriteSessionSettings` structure is defined here — the other two options reuse it. Suitable when you need the status of each message, custom asynchronous logic, or manual compression control.
-  - `ISimpleBlockingWriteSession` — a synchronous fire-and-forget API for writing to a single topic partition, the simplest option. The `Write(message, blockTimeout)` method puts the message into an internal buffer, and sending to the server happens in the background. In normal mode, the call returns instantly and blocks only when the buffer is full (by `MaxMemoryUsage` / `MaxInflightCount`), for no longer than `blockTimeout`. A return of `false` means the message **did not get into the buffer** and is lost. There are no acknowledgments for individual messages; you can only verify that the entire buffer has been delivered to the server by calling `Close()` — it waits for an ack from the server. Suitable when an "all or nothing" guarantee by session close is sufficient and simple synchronous code is needed.
-  - `IProducer` — a high-level API on top of multiple write sessions: transparently shards messages across topic partitions by key. Inspired by the Producer interface from Apache Kafka, but takes into account the specifics of {{ ydb-short-name }} and, when working with topics with [auto-partitioning](../../concepts/datamodel/topic.md#autopartitioning), provides full ordering and exactly-once guarantees. Acknowledgments from the server are available via the `AcksHandler` handler; to wait for delivery of the accumulated buffer — `Flush()`, to shut down correctly — `Close()`. Suitable when you need to write to a **multi-partition** topic with key-based routing.
+  See the full list of settings [in the header file](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1199).
 
-  {% list tabs %}
-
-  - IWriteSession
-
-    `IWriteSession` — a basic write session from which other write options inherit settings. The write session settings are represented by the `TWriteSessionSettings` structure; for the `ISimpleBlockingWriteSession` option, some settings are not supported.
-
-    See the full list of settings [in the header file](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h#L56).
+  Example of creating a write session with the `IWriteSession` interface.
 
 
-    ```cpp
-    std::string producerAndGroupID = "group-id";
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-        .Path("my-topic")
-        .ProducerId(producerAndGroupID)
-        .MessageGroupId(producerAndGroupID);
+  ```cpp
+  std::string producerAndGroupID = "group-id";
+  auto settings = NYdb::NTopic::TWriteSessionSettings()
+      .Path("my-topic")
+      .ProducerId(producerAndGroupID)
+      .MessageGroupId(producerAndGroupID);
 
-    auto session = topicClient.CreateWriteSession(settings);
-    ```
+  auto session = topicClient.CreateWriteSession(settings);
+  ```
 
-  - ISimpleBlockingWriteSession
-
-    `ISimpleBlockingWriteSession` is a simple synchronous variant of the `IWriteSession` write session for writing one message at a time without acknowledgment for each message. The `Write` method blocks when the number of inflight records or the SDK buffer size is exceeded. Write session settings are represented by the `TWriteSessionSettings` structure, as in the case of `IWriteSession`, however some settings are not supported.
-
-    See the full list of settings [in the header file](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h#L56).
-
-
-    ```cpp
-    std::string producerAndGroupID = "group-id";
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-        .Path("my-topic")
-        .ProducerId(producerAndGroupID)
-        .MessageGroupId(producerAndGroupID);
-
-    auto session = topicClient.CreateSimpleBlockingWriteSession(settings);
-    ```
-
-  - IProducer
-
-    `IProducer` is a high-level API over write sessions: a single object hides the management of multiple sessions and automatically selects a partition based on the message key. Producer settings are represented by the `TProducerSettings` structure, which inherits from `TWriteSessionSettings`, so the common write settings match those of `IWriteSession`.
-
-    Settings are specified via `TProducerSettings`:
-
-    - `ProducerIdPrefix` — producer id prefix for write sub-sessions.
-    - `PartitionChooserStrategy` — partition selection strategy by message key:
-
-      - `Bound` — the key is matched against the topic partition ranges (`FromBound`/`ToBound` from the topic description). By default, before matching, the key is passed through MurmurHash64. Recommended for topics with [auto-partitioning](../../concepts/datamodel/topic.md#autopartitioning): when a partition splits, the SDK updates the boundaries and continues to route messages with the same key to the correct range.
-      - `KafkaHash` — analogous to Kafka: MurmurHash is computed from the key, the partition index is the remainder of dividing the hash by the number of partitions. Convenient when migrating from Kafka. Not supported when auto-partitioning is enabled.
-    - `PartitioningKeyHasher` — key transformation function before matching against ranges; used only for the `Bound` strategy. You can set your own, for example to have the original key participate in the comparison without hashing.
-
-    See the full list of settings [in the header file](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h#L10).
-
-
-    ```cpp
-    auto producerSettings = NYdb::NTopic::TProducerSettings()
-        .Path("my-topic")
-        .ProducerIdPrefix("my-producer")
-        .PartitionChooserStrategy(NYdb::NTopic::EPartitionChooserStrategy::Bound);
-
-    auto producer = topicClient.CreateProducer(producerSettings);
-    ```
-
-  {% endlist %}
 - Go
 
 
@@ -846,16 +740,16 @@ Currently, only connections with matching [source and message group](../../conce
     ```
 
 
-    After creating the writer, it must be initialized. There are two methods for this:
+    After creating the writer, you need to initialize it. There are two methods for this:
 
-    - `init()`: non-blocking, starts the initialization process in the background and does not wait for it to complete.
+    - `init()`: non-blocking, starts the initialization process in the background and does not wait for its completion.
 
 
       ```java
       writer.init();
       ```
 
-    - `initAndWait()`: blocking, starts the initialization process and waits for it to complete. If an error occurs during initialization, an exception is thrown.
+    - `initAndWait()`: blocking, starts the initialization process and waits for its completion. If an error occurs during initialization, an exception will be thrown.
 
 
       ```java
@@ -921,21 +815,7 @@ Currently, only connections with matching [source and message group](../../conce
 
 - Rust
 
-
-  ```rust
-  use ydb::{TopicWriter, TopicWriterOptionsBuilder, YdbResult};
-
-  let writer: TopicWriter = topic_client
-      .create_writer_with_params(
-          TopicWriterOptionsBuilder::default()
-              .topic_path("/local/my-topic".into())
-              .producer_id("group-id".into())
-              .message_group_id("group-id".into())
-              .build()?,
-      )
-      .await?;
-  ```
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -948,81 +828,47 @@ Currently, only connections with matching [source and message group](../../conce
 
 - C++
 
-  {% list tabs %}
+  Asynchronous writing is possible via the `IWriteSession` interface.
 
-  - IWriteSession
+  The user's work with the `IWriteSession` object is generally structured as processing an event loop with three event types: `TReadyToAcceptEvent`, `TAcksEvent`, and `TSessionClosedEvent`.
 
-    Working with the `IWriteSession` object is structured as event loop processing with three event types: `TReadyToAcceptEvent`, `TAcksEvent`, and `TSessionClosedEvent`.
+  For each event type, you can set a handler for that event, and you can also set a common handler. Handlers are set in the write session settings before its creation.
 
-    For each event type, you can set a handler for that event, and you can also set a common handler. Handlers are set in the write session settings before its creation.
+  If a handler for a certain event is not set, you need to get and process it in the `GetEvent` / `GetEvents` methods. For non-blocking waiting for the next event, there is the `WaitEvent` method with the `TFuture<void>()` interface.
 
-    If a handler for a certain event is not set, you must obtain and process it in the `GetEvent` / `GetEvents` methods. For non-blocking waiting for the next event, there is the `WaitEvent` method with the `TFuture<void>()` interface.
+  To write each message, the user must "spend" a move-only object `TContinuationToken`, which the SDK provides with the `TReadyToAcceptEvent` event. When writing a message, you can set custom seqNo and creation timestamp, but by default the SDK sets them automatically.
 
-    To write each message, the user must "spend" a move-only object `TContinuationToken`, which the SDK issues with the `TReadyToAcceptEvent` event. When writing a message, you can set custom seqNo and creation timestamp, but by default the SDK sets them automatically.
+  By default, `Write` is performed asynchronously: data is read from messages and saved to an internal buffer, and sending occurs in the background according to the settings `MaxMemoryUsage`, `MaxInflightCount`, `BatchFlushInterval`, `BatchFlushSizeBytes`. The session itself reconnects to {{ ydb-short-name }} when connection breaks and retries sending messages as long as possible, according to the `RetryPolicy` setting. When an error is received after which it is impossible to continue operation, the read session sends `TSessionClosedEvent` with diagnostic information to the user.
 
-    By default, `Write` runs asynchronously — data from messages is read and stored in an internal buffer, and sending occurs in the background according to the settings `MaxMemoryUsage`, `MaxInflightCount`, `BatchFlushInterval`, `BatchFlushSizeBytes`. The session automatically reconnects to {{ ydb-short-name }} when connections are broken and retries sending messages as long as possible, according to the setting `RetryPolicy`. Upon receiving an error that makes it impossible to continue, the write session sends `TSessionClosedEvent` with diagnostic information to the user.
-
-    This is how writing multiple messages in an event loop without handlers might look:
+  This is how writing multiple messages in an event loop without using handlers might look:
 
 
-    ```cpp
-    // Event loop
-    while (true) {
-        // Get event
-        // May block for a while if write session is busy
-        std::optional<NYdb::NTopic::TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
+  ```cpp
+  // Event loop
+  while (true) {
+      // Get event
+      // May block for a while if write session is busy
+      std::optional<NYdb::NTopic::TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
 
-        if (auto* readyEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-            session->Write(std::move(event.ContinuationToken), "This is yet another message.");
+      if (auto* readyEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+          session->Write(std::move(event.ContinuationToken), "This is yet another message.");
 
-        } else if (auto* ackEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*event)) {
-            std::cout << ackEvent->DebugString() << std::endl;
+      } else if (auto* ackEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*event)) {
+          std::cout << ackEvent->DebugString() << std::endl;
 
-        } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
-            break;
-        }
-    }
-    ```
+      } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+          break;
+      }
+  }
+  ```
 
-  - ISimpleBlockingWriteSession
-
-    As a simplified version of `IWriteSession`, `ISimpleBlockingWriteSession` writes through the same internal buffering but without an event loop: it does not use `ContinuationToken` and does not return acknowledgments via `TAcksEvent`. The `Write` method puts a message into the internal buffer; if the buffer is full, the call blocks until space becomes available. The `blockTimeout` parameter limits the wait time. The method returns `true` if the message is accepted into the buffer, and `false` if it fails to write within the allotted time.
-
-    Sending to the server, as with `IWriteSession`, is performed in the background. To wait for all writes to complete and close the session, call `Close()`.
-
-
-    ```cpp
-    auto messageData = std::string("message");
-    NYdb::NTopic::TWriteMessage writeMessage(messageData);
-    session->Write(std::move(writeMessage));
-    ```
-
-  - IProducer
-
-    `TProducerSettings` inherits `TWriteSessionSettings`, so buffering, sending, and reconnection work the same as in `IWriteSession`: `Write` puts a message into the internal buffer, sending to the server happens in the background according to the settings `MaxMemoryUsage`, `MaxInflightCount`, `BatchFlushInterval`, `BatchFlushSizeBytes`. The producer reconnects to {{ ydb-short-name }} when the connection is broken and retries sending as long as possible, according to `RetryPolicy`. On an unrecoverable error, the producer closes; the status and reason can be obtained from the result of `Write` or `Flush`.
-
-    `Flush` waits for the accumulated data to be delivered to the server; `Close` waits for the remaining messages in the buffer to be sent and terminates the producer.
-
-
-    ```cpp
-    auto messageData = std::string("order-created");
-    // First argument is the partitioning key — the SDK chooses a partition by it.
-    NYdb::NTopic::TWriteMessage writeMessage("user-42", messageData);
-    producer->Write(std::move(writeMessage));
-    producer->Flush().GetValueSync();
-    ```
-
-
-    See a detailed example in the [ydb-platform/ydb repository](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_writer/producer/basic_write).
-
-  {% endlist %}
 - Go
 
-  To send a message, it is enough to store a Reader in the Data field from which data can be read. You can expect that the data of each message is read once (or until the first error); by the time Write returns, the data will have been read and saved to the internal buffer.
+  To send a message, it is enough to save a Reader in the Data field from which the data can be read. You can expect that the data of each message is read once (or until the first error), and by the time Write returns, the data will have been read and saved to the internal buffer.
 
   SeqNo and message creation date are set automatically by default.
 
-  By default, Write is performed asynchronously – data from messages is read and saved to the internal buffer, and sending occurs in the background. The Writer itself reconnects to {{ ydb-short-name }} when the connection is broken and retries sending messages as long as possible. When an error is received after which it is impossible to continue, the Writer stops and subsequent Write calls will fail with an error.
+  By default, Write is performed asynchronously - data from messages is read and saved to the internal buffer, and sending happens in the background. The Writer itself reconnects to {{ ydb-short-name }} on connection breaks and retries sending messages as long as possible. Upon receiving an error after which it is impossible to continue operation, the Writer stops and subsequent Write calls will fail with an error.
 
 
   ```go
@@ -1036,42 +882,9 @@ Currently, only connections with matching [source and message group](../../conce
   }
   ```
 
-
-  To write by key to multiple partitions, use `WithWriteToManyPartitions(...)` when creating the writer and fill in the `Key` field in `topicwriter.Message`.
-
-  Routing strategies (set in `WithWriterPartitionByKey(...)` or `WithWriterPartitionByPartitionID()`):
-
-  - `BoundPartitionChooser` — the key is matched against the topic partition ranges (`FromBound`/`ToBound`). By default, the key is passed through MurmurHash64 before matching. Recommended for topics with [auto-partitioning](../../concepts/datamodel/topic.md#autopartitioning): the SDK updates the boundaries when partitions are split.
-  - `KafkaHashPartitionChooser` — analogous to Kafka: MurmurHash of the key modulo the number of partitions. Convenient when migrating from Kafka. Not supported when auto-partitioning is enabled.
-  - `WithWriterPartitionByPartitionID` — write to the partition specified in the `PartitionID` field of the message. Does not combine with key-based routing; when a partition is split, the writer must be recreated manually.
-
-
-  ```go
-  writer, err := db.Topic().StartWriter(topicPath,
-    topicoptions.WithWriteToManyPartitions(
-      topicoptions.WithProducerIDPrefix("orders-producer"),
-      topicoptions.WithWriterPartitionByKey(topicoptions.BoundPartitionChooser()),
-    ),
-  )
-  if err != nil {
-    return err
-  }
-  defer func() { _ = writer.Close(context.Background()) }()
-
-  err = writer.Write(ctx, topicwriter.Message{
-    Key:  "user-42",
-    Data: bytes.NewReader([]byte("order-created")),
-  })
-  if err != nil {
-    return err
-  }
-  ```
-
-
-  See a detailed example with key-based routing, alternative strategies (`KafkaHash` and `PartitionID`), and the transactional variant in the [ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicwriter/topicwriter_to_many_partitions.go) repository.
 - Python
 
-  To send messages, you can pass either just the message content (bytes, str) or manually set some properties. Objects can be passed one at a time or in an array (list). The `write` method is executed asynchronously. The method returns immediately after the messages are placed in the client's internal buffer, which usually happens quickly. Waiting may occur if the internal buffer is already full and you need to wait until some data is sent to the server.
+  To send messages, you can pass either just the message content (bytes, str) or manually set some properties. Objects can be passed one at a time or in an array (list). The `write` method is executed asynchronously. The method returns as soon as the messages are placed in the client's internal buffer, which usually happens quickly. A wait may occur if the internal buffer is already full and you need to wait until some data is sent to the server.
 
   {% list tabs %}
 
@@ -1087,7 +900,7 @@ Currently, only connections with matching [source and message group](../../conce
                                     # binary data.
     writer.write(["mess-1", "mess-2"])  # Здесь за один вызов отправляется несколько сообщений —
                                          # this reduces overhead on internal SDK processes,
-                                         # makes sense with a large message stream.
+                                         # makes sense for a large message stream.
 
     # Full form, used when, in addition to the message content, you need to manually set its properties.
     writer = driver.topic_client.writer(topic="topic-path", auto_seqno=False, auto_created_at=False)
@@ -1096,7 +909,7 @@ Currently, only connections with matching [source and message group](../../conce
     writer.write(ydb.TopicWriterMessage(bytes([1, 2, 3]), seqno=124, created_at=datetime.datetime.now()))
 
     # In the full form, you can also send multiple messages in a single function call.
-    # This makes sense with a large stream of outgoing messages — to reduce
+    # This makes sense for a large stream of sent messages — to reduce
     # overhead on internal SDK calls.
     writer.write([
       ydb.TopicWriterMessage("asd", seqno=123, created_at=datetime.datetime.now()),
@@ -1121,11 +934,11 @@ Currently, only connections with matching [source and message group](../../conce
   - Synchronous API
 
     The `send` method blocks control until the message is placed in the send queue.
-    Placing a message in this queue means that the writer will do everything possible to deliver the message.
-    For example, if the write session is interrupted for some reason, the writer will re-establish the connection and try to send this message on a new session.
+    Placing a message in this queue means that the writer will do its best to deliver the message.
+    For example, if the write session breaks for some reason, the writer will re-establish the connection and try to send this message on a new session.
     However, placing a message in the send queue does not guarantee that the message will eventually be written.
-    For example, errors may occur that cause the writer to terminate before the messages from the queue are sent.
-    If you need confirmation of successful writing for each message, use an asynchronous writer and check the status returned by the `send` method.
+    For example, errors may occur that cause the writer to shut down before the messages from the queue are sent.
+    If you need confirmation of successful write for each message, use an asynchronous writer and check the status returned by the `send` method.
 
 
     ```java
@@ -1151,11 +964,11 @@ Currently, only connections with matching [source and message group](../../conce
   - Asynchronous API
 
     The `send` method in the asynchronous client is non-blocking. It places the message in the send queue.
-    The method returns `CompletableFuture<WriteAck>`, which allows you to check whether the message was actually written.
-    If the queue is full, a QueueOverflowException will be thrown.
-    This is a way to signal to the user that the write stream should be slowed down.
-    In this case, you should either skip messages or retry writing with exponential backoff.
-    You can also increase the size of the client buffer (`setMaxSendBufferMemorySize`) to handle a larger volume of messages before it fills up.
+    The method returns `CompletableFuture<WriteAck>`, allowing you to check whether the message was actually written.
+    If the queue is full, a QueueOverflowException is thrown.
+    This is a way to signal the user that the write stream should be slowed down.
+    In this case, you should either skip messages or retry writes with exponential backoff.
+    You can also increase the client buffer size (`setMaxSendBufferMemorySize`) to handle a larger volume of messages before it becomes full.
 
 
     ```java
@@ -1193,93 +1006,51 @@ Currently, only connections with matching [source and message group](../../conce
 
 - Rust
 
-
-  ```rust
-  use ydb::{TopicWriterMessageBuilder, YdbResult};
-
-  writer
-      .write(
-          TopicWriterMessageBuilder::default()
-              .data(b"payload".to_vec())
-              .build()?,
-      )
-      .await?;
-  writer.stop().await?;
-  ```
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
-### Writing messages with server storage confirmation
+### Writing messages with acknowledgment of saving on the server
 
 {% list tabs group=lang %}
 
 - C++
 
-  {% list tabs %}
+  Receiving acknowledgments from the server is possible through the `IWriteSession` interface.
 
-  - IWriteSession
+  Responses about writing messages on the server arrive at the SDK client as `TAcksEvent` events. One event may contain responses about several previously sent messages. Response options: write confirmed (`EES_WRITTEN`), write discarded as a duplicate of a previously written message (`EES_ALREADY_WRITTEN`), or write discarded due to failure (`EES_DISCARDED`).
 
-    Responses about message writes on the server arrive at the SDK client as `TAcksEvent` events. A single event may contain responses about several previously sent messages. Response options: write confirmed (`EES_WRITTEN`), write discarded as a duplicate of a previously written message (`EES_ALREADY_WRITTEN`), or write discarded due to a failure (`EES_DISCARDED`).
-
-    Example of setting up a `TAcksEvent` handler for a write session:
+  Example of setting a TAcksEvent handler for a write session:
 
 
-    ```cpp
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-      // other settings are set here
-      .EventHandlers(
-        NYdb::NTopic::TWriteSessionSettings::TEventHandlers()
-          .AcksHandler(
-            [&](NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
-              for (const auto& ack : event.Acks) {
-                if (ack.State == NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState::EES_WRITTEN) {
-                  ackedSeqNo.insert(ack.SeqNo);
-                  std::cout << "Acknowledged message with seqNo " << ack.SeqNo << std::endl;
-                }
+  ```cpp
+  auto settings = NYdb::NTopic::TWriteSessionSettings()
+    // other settings are set here
+    .EventHandlers(
+      NYdb::NTopic::TWriteSessionSettings::TEventHandlers()
+        .AcksHandler(
+          [&](NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
+            for (const auto& ack : event.Acks) {
+              if (ack.State == NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState::EES_WRITTEN) {
+                ackedSeqNo.insert(ack.SeqNo);
+                std::cout << "Acknowledged message with seqNo " << ack.SeqNo << std::endl;
               }
             }
-          )
-      );
+          }
+        )
+    );
 
-    auto session = topicClient.CreateWriteSession(settings);
-    ```
-
-
-    In such a write session, `TAcksEvent` events will not be delivered to the user via `GetEvent` / `GetEvents`; instead, when receiving confirmations from the server, the SDK will call the passed handler. Similarly, handlers for other event types can be configured.
-
-  - ISimpleBlockingWriteSession
-
-    Unlike `IWriteSession`, `ISimpleBlockingWriteSession` does not return confirmations for individual messages: `TAcksEvent` events and their handlers are not available. To wait until all messages from the buffer are written to the server, call `Close()` — the method waits for confirmation from the server and closes the session.
-
-  - IProducer
-
-    Confirmations from the server arrive the same way as for `IWriteSession`: via the `AcksHandler` handler in `TProducerSettings::EventHandlers`. To wait for the accumulated buffer to be delivered to the server, call `Flush()`.
+  auto session = topicClient.CreateWriteSession(settings);
+  ```
 
 
-    ```cpp
-    auto producerSettings = NYdb::NTopic::TProducerSettings()
-        .Path("my-topic")
-        .ProducerIdPrefix("my-producer")
-        .EventHandlers(
-            NYdb::NTopic::TWriteSessionSettings::TEventHandlers()
-                .AcksHandler([](NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
-                .AcksHandler([](NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
-                    // handle acknowledgements
-                })
-                })
-        );
-
-    auto producer = topicClient.CreateProducer(producerSettings);
-    ```
-
-  {% endlist %}
+  In such a write session, `TAcksEvent` events will not arrive to the user in `GetEvent` / `GetEvents`; instead, upon receiving acknowledgments from the server, the SDK will call the passed handler. Similarly, you can configure handlers for other event types.
 - Go
 
-  When connecting, you can specify the synchronous message write option - topicoptions.WithSyncWrite(true). Then Write will return only after receiving confirmation from the server that all messages passed in the call have been saved. At the same time, the SDK will, as usual, reconnect and retry sending messages if necessary. In this mode, the context only controls the timeout for waiting for a response from the SDK, i.e., even after the context is canceled, the SDK will continue trying to send messages.
+  When connecting, you can specify the synchronous write option - topicoptions.WithSyncWrite(true). Then Write will return only after it receives acknowledgment from the server that all messages passed in the call have been saved. At the same time, the SDK, as usual, will reconnect and retry sending messages if necessary. In this mode, the context only controls the wait time for a response from the SDK, i.e., even after context cancellation, the SDK will continue attempts to send messages.
 
 
   ```go
@@ -1301,10 +1072,10 @@ Currently, only connections with matching [source and message group](../../conce
 
 - Python
 
-  There are two ways to get confirmation that messages have been written to the server:
+  There are two ways to get acknowledgment of writing messages on the server:
 
-  - `flush()` — waits for confirmation for all messages previously written to the internal buffer.
-  - `write_with_ack(...)` — sends a message and waits for confirmation of its delivery from the server. When sending multiple messages in a row, this method works slowly.
+  - `flush()` — waits for acknowledgment for all messages previously written to the internal buffer.
+  - `write_with_ack(...)` — sends a message and waits for delivery acknowledgment from the server. When sending multiple messages in a row, this method works slowly.
 
   {% list tabs %}
 
@@ -1321,9 +1092,9 @@ Currently, only connections with matching [source and message group](../../conce
     # You can send several messages and wait for acknowledgment for the entire group.
     writer.write_with_ack(["mess-1", "mess-2"])
 
-    # Waiting when sending each message — this method will return a result only after receiving
+    # Waiting when sending each message — this method returns the result only after receiving
     # acknowledgment from the server.
-    # This is the slowest message sending option, use it only if this mode
+    # This is the slowest message sending option, use it only if such a mode
     # is really needed.
     writer.write_with_ack("message")
     ```
@@ -1343,7 +1114,7 @@ Currently, only connections with matching [source and message group](../../conce
   {% endlist %}
 - Java
 
-  The `send` method returns `CompletableFuture<WriteAck>`. Its successful completion means the write is confirmed by the server.
+  The `send` method returns `CompletableFuture<WriteAck>`. Its successful completion means the server has confirmed the write.
   The `WriteAck` structure contains information about seqNo, offset, and write status:
 
 
@@ -1374,7 +1145,7 @@ Currently, only connections with matching [source and message group](../../conce
 
 - C#
 
-  Asynchronous write of a message to a topic. In case of internal buffer overflow, it will wait for the buffer to become free for retransmission.
+  Asynchronous write of a message to a topic. If the internal buffer overflows, it will wait for the buffer to free up for retransmission.
 
 
   ```c#
@@ -1382,7 +1153,7 @@ Currently, only connections with matching [source and message group](../../conce
   ```
 
 
-  If the server is unavailable, messages may accumulate in a queue waiting to be sent. To control the wait time, you can use a cancellation token (`CancellationToken`). However, with this approach, there is a risk that the user may cancel the sending of an already confirmed message.
+  If the server is unavailable, messages may accumulate in the queue waiting to be sent. To control the wait time, you can use a cancellation token (`CancellationToken`). However, with this approach, there is a risk that the user may cancel the sending of an already acknowledged message.
 
 
   ```c#
@@ -1394,7 +1165,7 @@ Currently, only connections with matching [source and message group](../../conce
 
 - JavaScript
 
-  All messages are written to an internal buffer. There are 3 mechanisms for sending to the server: two automatic and one manual. The manual one is calling the `writer.flush` method, which returns the last seqno written on the server. Automatic sending occurs under the following conditions:
+  All messages are written to the internal buffer. There are 3 mechanisms for sending to the server: two automatic and one manual. The manual one is calling the `writer.flush` method, which returns the last seqno written on the server. Automatic sending occurs under the following conditions:
 
   - Exceeding the internal buffer size `maxBufferBytes` (default value = 256MiB).
   - By the tick of the periodic send interval `flushIntervalMs` (default value = 10ms).
@@ -1418,26 +1189,14 @@ Currently, only connections with matching [source and message group](../../conce
 
 - Rust
 
-
-  ```rust
-  use ydb::{TopicWriterMessageBuilder, YdbResult};
-
-  writer
-      .write_with_ack(
-          TopicWriterMessageBuilder::default()
-              .data(b"payload".to_vec())
-              .build()?,
-      )
-      .await?;
-  ```
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
-### Choosing a codec for message compression {#codec}
+### Selecting a codec for message compression {#codec}
 
 Learn more about [data compression in topics](../../concepts/datamodel/topic#message-codec).
 
@@ -1445,57 +1204,25 @@ Learn more about [data compression in topics](../../concepts/datamodel/topic#mes
 
 - C++
 
-  {% list tabs %}
-
-  - IWriteSession
-
-    The compression used when sending messages via the `Write` method is set when [creating a write session](#start-writer) with the `Codec` and `CompressionLevel` settings. By default, the GZIP codec is selected.
-    Example of creating a write session without message compression:
+  The compression used when sending messages via the `Write` method is set when [creating a write session](#start-writer) with the `Codec` and `CompressionLevel` settings. By default, the GZIP codec is selected.
+  Example of creating a write session without message compression:
 
 
-    ```cpp
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-      // other settings are set here
-      .Codec(ECodec::RAW);
+  ```cpp
+  auto settings = NYdb::NTopic::TWriteSessionSettings()
+    // other settings are set here
+    .Codec(ECodec::RAW);
 
-    auto session = topicClient.CreateWriteSession(settings);
-    ```
-
-
-    If you need to send a message compressed with a different codec within a write session, you can use the `WriteEncoded` method specifying the codec and the size of the uncompressed message. For a successful write using this method, the codec used must be allowed in the topic settings.
-
-  - ISimpleBlockingWriteSession
-
-    The codec is set when [creating a write session](#start-writer) in `TWriteSessionSettings` — the same `Codec` and `CompressionLevel` settings as for `IWriteSession`. The `WriteEncoded` method is not available.
+  auto session = topicClient.CreateWriteSession(settings);
+  ```
 
 
-    ```cpp
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-        // other settings are set here
-        .Codec(ECodec::RAW);
-
-    auto session = topicClient.CreateSimpleBlockingWriteSession(settings);
-    ```
-
-  - IProducer
-
-    The codec is set in `TProducerSettings` when [creating a producer](#start-writer) — the same `Codec` and `CompressionLevel` settings as for `IWriteSession`.
-
-
-    ```cpp
-    auto producerSettings = NYdb::NTopic::TProducerSettings()
-        // other settings are set here
-        .Codec(NYdb::NTopic::ECodec::RAW);
-
-    auto producer = topicClient.CreateProducer(producerSettings);
-    ```
-
-  {% endlist %}
+  If you need to send a message compressed with a different codec within a write session, you can use the `WriteEncoded` method specifying the codec and the size of the uncompressed message. For successful writing using this method, the codec used must be allowed in the topic settings.
 - Go
 
-  By default, the SDK selects the codec automatically (taking into account the topic settings). In automatic mode, the SDK first sends one group of messages with each of the allowed codecs, then occasionally tries to compress messages with all available codecs and selects the codec that gives the smallest message size. If the list of allowed codecs for the topic is empty, auto-selection is performed between Raw and Gzip codecs.
+  By default, the SDK selects the codec automatically (taking into account the topic settings). In automatic mode, the SDK first sends one group of messages with each of the allowed codecs, then occasionally tries to compress messages with all available codecs and selects the codec that gives the smallest message size. If the list of allowed codecs for the topic is empty, the auto-selection is performed between Raw and Gzip codecs.
 
-  If necessary, you can set a fixed codec in the connection options. Then that codec will be used and no measurements will be performed.
+  If necessary, you can set a fixed codec in the connection options. Then it will be used and no measurements will be performed.
 
 
   ```go
@@ -1508,9 +1235,9 @@ Learn more about [data compression in topics](../../concepts/datamodel/topic#mes
 
 - Python
 
-  By default, the SDK selects the codec automatically (taking into account the topic settings). In automatic mode, the SDK first sends one group of messages with each of the allowed codecs, then occasionally tries to compress messages with all available codecs and selects the codec that gives the smallest message size. If the list of allowed codecs for the topic is empty, auto-selection is performed between Raw and Gzip codecs.
+  By default, the SDK selects the codec automatically (taking into account the topic settings). In automatic mode, the SDK first sends one group of messages with each of the allowed codecs, then occasionally tries to compress messages with all available codecs and selects the codec that gives the smallest message size. If the list of allowed codecs for the topic is empty, the auto-selection is performed between Raw and Gzip codecs.
 
-  If necessary, you can set a fixed codec in the connection options. Then that codec will be used and no measurements will be performed.
+  If necessary, you can set a fixed codec in the connection options. Then it will be used and no measurements will be performed.
 
 
   ```python
@@ -1558,11 +1285,7 @@ Learn more about [data compression in topics](../../concepts/datamodel/topic#mes
 
 - Rust
 
-  Selecting a compression codec when writing in the Rust SDK is not yet available; messages are sent with the `Raw` codec.
-
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for support in the Rust SDK: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -1571,53 +1294,31 @@ Learn more about [data compression in topics](../../concepts/datamodel/topic#mes
 
 ### Writing messages without deduplication {#nodedup}
 
-For more information about writing without deduplication, see the [corresponding section of concepts](../../concepts/datamodel/topic#no-dedup).
+Learn more about writing without deduplication in the [corresponding concepts section](../../concepts/datamodel/topic#no-dedup).
 
 {% list tabs group=lang %}
 
 - C++
 
-  {% list tabs %}
-
-  - IWriteSession
-
-    If the `ProducerId` option is not specified in the write session settings, a write session without deduplication will be created.
-    Example of creating such a write session:
+  If the `ProducerId` option is not specified in the write session settings, a write session without deduplication will be created.
+  Example of creating such a write session:
 
 
-    ```cpp
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-        .Path(myTopicPath);
+  ```cpp
+  auto settings = NYdb::NTopic::TWriteSessionSettings()
+      .Path(myTopicPath);
 
-    auto session = topicClient.CreateWriteSession(settings);
-    ```
-
-
-    To enable deduplication, you need to specify the `ProducerId` option in the write session settings or explicitly enable deduplication by calling the `DeduplicationEnabled()` method, for example, as in the ["Connecting to a topic"](#start-writer) section.
-
-  - ISimpleBlockingWriteSession
-
-    The behavior is the same as for `IWriteSession`: if `ProducerId` is not specified, the session is created without deduplication.
+  auto session = topicClient.CreateWriteSession(settings);
+  ```
 
 
-    ```cpp
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-        .Path(myTopicPath);
-
-    auto session = topicClient.CreateSimpleBlockingWriteSession(settings);
-    ```
-
-  - IProducer
-
-    `IProducer` always writes with deduplication: the producer ID is formed from `ProducerIdPrefix` and the partition ID. For writing without deduplication, use `IWriteSession` or `ISimpleBlockingWriteSession`.
-
-  {% endlist %}
+  To enable deduplication, you need to specify the `ProducerId` option in the write session settings or explicitly enable deduplication by calling the `DeduplicationEnabled()` method, for example, as in the ["Connecting to a topic"](#start-writer) section.
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Go
 
-  In **ydb-go-sdk**, when creating a writer, if `topicoptions.WithWriterProducerID` is not passed, the SDK still substitutes the producer ID (generates it automatically). The write mode without deduplication, equivalent to the absence of `ProducerId` in the C++ example above, is not available in the current version of the SDK.
+  In **ydb-go-sdk**, when creating a writer, if `topicoptions.WithWriterProducerID` is not passed, the SDK still substitutes a producer identifier (generates it automatically). The write mode without deduplication, equivalent to the absence of `ProducerId` in the C++ example above, is not available in the current SDK version.
 - Java
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -1627,8 +1328,6 @@ For more information about writing without deduplication, see the [corresponding
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for support in the Rust SDK: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -1644,63 +1343,28 @@ The metadata size limit is no more than 1000 keys.
 
 - C++
 
-  {% list tabs %}
-
-  - IWriteSession
-
-    Metadata is set in the `TWriteMessage` object and passed to `Write()`:
+  You can use the metadata writing function via the `Write()` method, which accepts an `TWriteMessage` object:
 
 
-    ```cpp
-    auto settings = NYdb::NTopic::TWriteSessionSettings()
-        .Path(myTopicPath)
-    // set all other settings;
-    ;
+  ```cpp
+  auto settings = NYdb::NTopic::TWriteSessionSettings()
+      .Path(myTopicPath)
+  // set all other settings;
+  ;
 
-    auto session = topicClient.CreateWriteSession(settings);
+  auto session = topicClient.CreateWriteSession(settings);
 
-    std::optional<NYdb::NTopic::TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
-    NYdb::NTopic::TWriteMessage message("This is yet another message").MessageMeta({
-        {"meta-key", "meta-value"},
-        {"another-key", "value"}
-    });
+  std::optional<NYdb::NTopic::TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
+  NYdb::NTopic::TWriteMessage message("This is yet another message").MessageMeta({
+      {"meta-key", "meta-value"},
+      {"another-key", "value"}
+  });
 
-    if (auto* readyEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-        session->Write(std::move(event.ContinuationToken), std::move(message));
-    }
-    ```
+  if (auto* readyEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+      session->Write(std::move(event.ContinuationToken), std::move(message));
+  }
+  ```
 
-  - ISimpleBlockingWriteSession
-
-    The same `TWriteMessage` is used as for `IWriteSession`: metadata is set via `MessageMeta()` and passed to `Write()`:
-
-
-    ```cpp
-    auto messageData = std::string("message-data");
-    NYdb::NTopic::TWriteMessage writeMessage(messageData);
-    writeMessage.MessageMeta({
-        {"meta-key", "meta-value"},
-        {"another-key", "value"},
-    });
-    session->Write(std::move(writeMessage));
-    ```
-
-  - IProducer
-
-    As with write sessions, metadata is set in `TWriteMessage` via `MessageMeta()`. The difference of `IProducer` is that the message also contains a partitioning key, by which the producer selects a partition:
-
-
-    ```cpp
-    auto messageData = std::string("message-data");
-    NYdb::NTopic::TWriteMessage writeMessage("user-42", messageData);
-    writeMessage.MessageMeta({
-        {"meta-key", "meta-value"},
-        {"another-key", "value"},
-    });
-    producer->Write(std::move(writeMessage));
-    ```
-
-  {% endlist %}
 - Go
 
   Metadata is set in the `Metadata` field of the `topicwriter.Message` structure:
@@ -1732,7 +1396,7 @@ The metadata size limit is no more than 1000 keys.
 
 - Java
 
-  When constructing a message for writing using a Builder, you can pass it objects of type `MetadataItem` with a key of type `String` + value of type `byte[]`.
+  When constructing a message for writing using the Builder, you can pass it objects of type `MetadataItem` with a pair of key type `String` + value type `byte[]`.
 
   You can pass `List` such objects at once:
 
@@ -1763,7 +1427,7 @@ The metadata size limit is no more than 1000 keys.
   ```
 
 
-  When reading, you can get these message metadata by calling the `getMetadataItems()` method on it:
+  When reading, to get these message metadata, call the `getMetadataItems()` method on it:
 
 
   ```java
@@ -1826,8 +1490,6 @@ The metadata size limit is no more than 1000 keys.
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for support in the Rust SDK: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -1840,61 +1502,28 @@ The metadata size limit is no more than 1000 keys.
 
 - C++
 
-  {% list tabs %}
+  To write to a topic in a transaction, you need to pass a reference to the transaction object to the `Write` method of the write session.
 
-  - IWriteSession
-
-    To write to a topic in a transaction, you need to pass a reference to the transaction object to the `Write` method of the write session.
-
-    [Example on GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_writer/transaction/main.cpp)
+  [Example on GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_writer/transaction/main.cpp)
 
 
-    ```c++
-    NYdb::NQuery::TQueryClient queryClient(driver);
+  ```c++
+  NYdb::NQuery::TQueryClient queryClient(driver);
 
-    NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-        auto beginTxResult = session.BeginTransaction().GetValueSync();
-        if (!beginTxResult.IsSuccess()) {
-            return beginTxResult;
-        }
-        auto tx = beginTxResult.GetTransaction();
+  NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+      auto beginTxResult = session.BeginTransaction().GetValueSync();
+      if (!beginTxResult.IsSuccess()) {
+          return beginTxResult;
+      }
+      auto tx = beginTxResult.GetTransaction();
 
-        NYdb::NTopic::TWriteMessage writeMessage("message");
+      NYdb::NTopic::TWriteMessage writeMessage("message");
 
-        topicSession->Write(std::move(writeMessage), tx);
-        return tx.Commit().GetValueSync();
-    }));
-    ```
+      topicSession->Write(std::move(writeMessage), tx);
+      return tx.Commit().GetValueSync();
+  }));
+  ```
 
-  - ISimpleBlockingWriteSession
-
-    Like `IWriteSession`, `ISimpleBlockingWriteSession` supports writing in transactions. Since the simple variant does not have `ContinuationToken`, the transaction object is passed as the second argument to `Write()`.
-
-    [Example on GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_writer/transaction/main.cpp)
-
-
-    ```c++
-    NYdb::NQuery::TQueryClient queryClient(driver);
-
-    NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
-        auto beginTxResult = session.BeginTransaction().GetValueSync();
-        if (!beginTxResult.IsSuccess()) {
-            return beginTxResult;
-        }
-        auto tx = beginTxResult.GetTransaction();
-
-        NYdb::NTopic::TWriteMessage writeMessage("message");
-
-        topicSession->Write(std::move(writeMessage), &tx);
-        return tx.Commit().GetValueSync();
-    }));
-    ```
-
-  - IProducer
-
-    For `IProducer`, the transaction is specified not by the `Write` argument, but in `TWriteMessage` via `Tx()`. After that, the producer writes the message in the same way as a regular message with a partitioning key:
-
-  {% endlist %}
 - Go
 
   To write to a topic in a transaction, you need to create a transactional writer by calling [TopicClient.StartTransactionalWriter](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic#Client.StartTransactionalWriter). After that, you can send messages as usual. There is no need to close the transactional writer — it happens automatically when the transaction completes.
@@ -1972,7 +1601,7 @@ The metadata size limit is no more than 1000 keys.
     [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteSync.java)
 
     In the settings of the `SendSettings` method `send`, you can specify a transaction.
-    Then the message will be written together with the commit of that transaction.
+    Then the message will be written together with the commit of this transaction.
 
 
     ```java
@@ -2023,7 +1652,7 @@ The metadata size limit is no more than 1000 keys.
     [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteAsync.java)
 
     In the settings of the `SendSettings` method `send`, you can specify a transaction.
-    Then the message will be written together with the commit of that transaction.
+    Then the message will be written together with the commit of this transaction.
 
 
     ```java
@@ -2102,8 +1731,6 @@ The metadata size limit is no more than 1000 keys.
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for support in the Rust SDK: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -2112,11 +1739,11 @@ The metadata size limit is no more than 1000 keys.
 
 ## Reading messages {#reading}
 
-### Connecting to a topic for reading messages {#start-reader}
+### Connecting to a topic to read messages {#start-reader}
 
-Reading messages from a topic can be performed with or without specifying a Consumer associated with the topic. If a Consumer is not specified, the client application must calculate the offset for reading messages on its own. A more detailed example of reading without a Consumer is provided in the [corresponding section](#no-consumer).
+Reading messages from a topic can be performed with or without specifying a Consumer associated with this topic. If no Consumer is specified, the client application must calculate the offset for reading messages on its own. A more detailed example of reading without a Consumer is provided in the [corresponding section](#no-consumer).
 
-A Consumer can be created when [creating](#create-topic) or [altering](#alter-topic) a topic.
+You can create a Consumer when [creating](#create-topic) or [modifying](#alter-topic) a topic.
 A topic can have multiple Consumers, and the server stores its own read progress for each of them.
 
 {% list tabs group=lang %}
@@ -2200,7 +1827,7 @@ A topic can have multiple Consumers, and the server stores its own read progress
 
     After creating a synchronous reader, you need to initialize it. To do this, use one of two methods:
 
-    - `init()`: non-blocking, starts the initialization process in the background and does not wait for it to complete.
+    - `init()`: non-blocking, starts the initialization process in the background and does not wait for its completion.
 
 
     ```java
@@ -2208,7 +1835,7 @@ A topic can have multiple Consumers, and the server stores its own read progress
     ```
 
 
-    - `initAndWait()`: blocking, starts the initialization process and waits for it to complete. If an error occurs during initialization, an exception is thrown.
+    - `initAndWait()`: blocking, starts the initialization process and waits for its completion. If an error occurs during initialization, an exception will be thrown.
 
 
     ```java
@@ -2238,7 +1865,7 @@ A topic can have multiple Consumers, and the server stores its own read progress
     ```
 
 
-    For an asynchronous reader, in addition to the general read settings `ReaderSettings`, you will need the event handler settings `ReadEventHandlersSettings`, in which you must pass an instance of a `ReadEventHandler` subclass.
+    For an asynchronous reader, in addition to the general read settings `ReaderSettings`, you will need the event handler settings `ReadEventHandlersSettings`, in which you must pass an instance of a descendant of `ReadEventHandler`.
     It will describe how to handle various events that occur during reading.
 
 
@@ -2252,7 +1879,7 @@ A topic can have multiple Consumers, and the server stores its own read progress
     Optionally, in `ReadEventHandlersSettings` you can specify an executor on which message processing will occur; by default, the internal SDK thread is used.
 
     To implement an event handler, you can inherit from `AbstractReadEventHandler` and override the `onMessages` method.
-    The `onMessages` method is called each time the SDK receives the next batch of messages from the server. Within a single call, one or more messages arrive, which can be acknowledged (`commit`) either individually or after processing the entire batch. Example implementation:
+    The `onMessages` method is called each time the SDK receives a batch of messages from the server. Within a single call, one or more messages arrive, which can be acknowledged (`commit`) either individually or after processing the entire batch. Example implementation:
 
 
     ```java
@@ -2312,22 +1939,14 @@ A topic can have multiple Consumers, and the server stores its own read progress
 
 - Rust
 
-
-  ```rust
-  use ydb::YdbResult;
-
-  let mut reader = topic_client
-      .create_reader("my-consumer", "/local/my-topic")
-      .await?;
-  ```
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
-You can also use the extended connection creation option to specify multiple topics and set read parameters. The following code will create a connection to topics `my-topic` and `my-specific-topic` via the reader `my-consumer`:
+You can also use an advanced connection creation option to specify multiple topics and set reading parameters. The following code will create a connection to topics `my-topic` and `my-specific-topic` through the reader `my-consumer`:
 
 {% list tabs group=lang %}
 
@@ -2369,7 +1988,7 @@ You can also use the extended connection creation option to specify multiple top
   Also, the example above sets the time from which to start reading messages.
 - Python
 
-  Functionality is under development.
+  This functionality is under development.
 - Java
 
 
@@ -2452,29 +2071,7 @@ You can also use the extended connection creation option to specify multiple top
 
 - Rust
 
-
-  ```rust
-  use std::time::{Duration, SystemTime};
-
-  use ydb::{TopicReaderOptionsBuilder, TopicSelector, TopicSelectors, YdbResult};
-
-  let mut reader = topic_client
-      .create_reader_with_params(
-          TopicReaderOptionsBuilder::default()
-              .consumer("my-consumer".into())
-              .topic(TopicSelectors(vec![
-                  TopicSelector::new("/local/my-topic"),
-                  TopicSelector {
-                      path: "/local/my-specific-topic".into(),
-                      partition_ids: None,
-                      read_from: Some(SystemTime::now() - Duration::from_secs(3600)),
-                  },
-              ]))
-              .build()?,
-      )
-      .await?;
-  ```
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -2483,13 +2080,13 @@ You can also use the extended connection creation option to specify multiple top
 
 ### Reading messages {#reading-messages}
 
-The server stores the [message read position](../../concepts/datamodel/topic.md#consumer-offset). After reading the next message, the client can [send an acknowledgment of processing to the server](#commit). The read position will change, and on a new connection, only unacknowledged messages will be read.
+The server stores the [message read position](../../concepts/datamodel/topic.md#consumer-offset). After reading the next message, the client can [send a processing acknowledgment to the server](#commit). The read position will change, and upon a new connection, only unacknowledged messages will be read.
 
-Messages can also be read [without acknowledgment of processing](#no-commit). In this case, on a new connection, all unacknowledged messages will be read, including those already processed.
+You can also read messages [without processing acknowledgment](#no-commit). In this case, upon a new connection, all unacknowledged messages will be read, including those already processed.
 
-Information about which messages have already been processed can be [stored on the client side](#client-commit) by passing the starting read position to the server when creating a connection. In this case, the message read position on the server does not change.
+Information about which messages have already been processed can be [stored on the client side](#client-commit) by passing the starting read position to the server when creating the connection. In this case, the message read position on the server does not change.
 
-You can use [transactions](#read-tx). In this case, the read position will change when the transaction is committed. On a new connection, all unacknowledged messages will be read.
+You can use [transactions](#read-tx). In this case, the read position changes when the transaction is committed. Upon a new connection, all unacknowledged messages will be read.
 
 {% list tabs group=lang %}
 
@@ -2499,7 +2096,7 @@ You can use [transactions](#read-tx). In this case, the read position will chang
 
   For each event type, you can set a handler for that event, and you can also set a common handler. Handlers are set in the write session settings before creating it.
 
-  If a handler for a certain event is not set, you must obtain and process it in the `GetEvent` / `GetEvents` methods. For non-blocking waiting for the next event, there is the `WaitEvent` method with the signature `TFuture<void>()`.
+  If a handler for a certain event is not set, you must receive and process it in the `GetEvent` / `GetEvents` methods. For non-blocking waiting for the next event, there is the `WaitEvent` method with the `TFuture<void>()` signature.
 - Go
 
   {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
@@ -2517,21 +2114,14 @@ You can use [transactions](#read-tx). In this case, the read position will chang
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Rust
 
-  Full example of reading a topic in a transaction with writing to a table: [`topic-read-in-transaction-example.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/topic-read-in-transaction-example.rs).
-
-
-  ```rust
-  let batch = reader.pop_batch_in_tx(&mut tx).await?;
-  // processing batch.messages and committing the transaction
-  ```
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
-### Reading without message processing acknowledgment {#no-commit}
+### Reading without commit {#no-commit}
 
 #### Reading messages one by one
 
@@ -2582,7 +2172,7 @@ You can use [transactions](#read-tx). In this case, the read position will chang
 
   - Synchronous API
 
-    To read messages one by one without processing acknowledgment, use the following code:
+    To read messages one by one without commit, use the following code:
 
 
     ```java
@@ -2594,7 +2184,7 @@ You can use [transactions](#read-tx). In this case, the read position will chang
 
   - Asynchronous API
 
-    In the asynchronous client, it is not possible to read messages one by one.
+    The asynchronous client does not support reading messages one by one.
 
   {% endlist %}
 - C#
@@ -2628,8 +2218,6 @@ You can use [transactions](#read-tx). In this case, the read position will chang
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for support in the Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -2642,7 +2230,7 @@ You can use [transactions](#read-tx). In this case, the read position will chang
 
 - C++
 
-  When setting up a read session with the `SimpleDataHandlers` setting, it is enough to pass a handler for data messages. The SDK will call this handler for each batch of messages received from the server. Read acknowledgments will not be sent by default.
+  When setting up a read session with the `SimpleDataHandlers` setting, it is sufficient to pass a handler for data messages. The SDK will call this handler for each batch of messages received from the server. Read commits will not be sent by default.
 
 
   ```cpp
@@ -2660,7 +2248,7 @@ You can use [transactions](#read-tx). In this case, the read position will chang
   ```
 
 
-  In this example, after creating the session, the main thread waits for the session to be closed by the server in the `GetEvent` method; other event types will not arrive.
+  In this example, after creating the session, the main thread waits for the session to be terminated by the server in the `GetEvent` method; other event types will not occur.
 - Go
 
 
@@ -2703,11 +2291,11 @@ You can use [transactions](#read-tx). In this case, the read position will chang
 
   - Synchronous API
 
-    In the synchronous client, it is not possible to read a batch of messages at once.
+    The synchronous client does not support reading a batch of messages at once.
 
   - Asynchronous API
 
-    To read a batch of messages without processing acknowledgment, use the following code:
+    To read a batch of messages without commit, use the following code:
 
 
     ```java
@@ -2754,23 +2342,21 @@ You can use [transactions](#read-tx). In this case, the read position will chang
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for support in the Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
-### Reading with message processing acknowledgment {#commit}
+### Reading with message commit {#commit}
 
-Message processing acknowledgment (commit) tells the server that the message from the topic has been processed by the receiver and no longer needs to be sent. When using reading with acknowledgment, you must acknowledge all received messages without skipping. Message commit on the server occurs after acknowledging the next interval of messages 'without gaps'; the acknowledgments themselves can be sent in any order.
+Message commit tells the server that the message from the topic has been processed by the receiver and no longer needs to be sent. When using reading with commit, you must commit all received messages without skipping any. Message commit on the server occurs after committing the next interval of messages without gaps; the commits themselves can be sent in any order.
 
-For example, messages 1, 2, 3 arrive from the server. The program processes them in parallel and sends acknowledgments in this order: 1, 3, 2. In this case, message 1 will be committed first, and messages 2 and 3 will be committed only after the server receives acknowledgment of message 2 processing.
+For example, messages 1, 2, 3 arrive from the server. The program processes them in parallel and sends commits in this order: 1, 3, 2. In this case, message 1 will be committed first, and messages 2 and 3 will be committed only after the server receives the commit for message 2.
 
-If an error occurs on message commit, you can log the error and continue working. The state of the message at that point is unknown. The message might have been committed, and then a network error occurred and the client did not receive the acknowledgment. If the message was not committed, it will be read again and will be processed again (possibly by a different reader). There is no point in retrying the commit itself, because the read session for that message is already lost.
+If a commit error occurs, you can log the error and continue working. The state of the message at this point is unknown. The message might have been committed, and then a network error occurred and the client did not receive the confirmation. If the message was not committed, it will be read again and processed again (possibly by a different reader). There is no point in retrying the commit itself, because the read session for this message is already lost.
 
-#### Reading messages one by one with acknowledgment
+#### Reading messages one by one with commit
 
 {% list tabs group=lang %}
 
@@ -2794,10 +2380,10 @@ If an error occurs on message commit, you can log the error and continue working
   ```
 
 
-  By default, `Commit` is a fast call: it saves data in an internal buffer and immediately returns control, while the actual sending happens later. Therefore, to avoid losing the last commits before exiting the program, you need to explicitly close the reader using the `Reader.Close()` call.
+  By default, `Commit` is a fast call: it saves data to an internal buffer and immediately returns control, while the actual sending happens later. Therefore, to avoid losing the latest commits before exiting the program, you must explicitly close the reader by calling `Reader.Close()`.
 - Python
 
-  `commit` is a fast call: it saves data in an internal buffer and immediately returns control, while the actual sending happens later. Therefore, to avoid losing the last commits before exiting the program, you need to explicitly close the reader.
+  `commit` is a fast call: it saves data to an internal buffer and immediately returns control, while the actual sending happens later. Therefore, to avoid losing the latest commits before exiting the program, you must explicitly close the reader.
 
   {% list tabs %}
 
@@ -2822,11 +2408,11 @@ If an error occurs on message commit, you can log the error and continue working
   {% endlist %}
 - Java
 
-  To confirm message processing, just call the `commit` method on the message.
+  To commit a message, simply call the `commit` method on the message.
   This applies to both synchronous and asynchronous readers.
   In an asynchronous reader, when processing a batch of messages, you can call `commit` either on the entire batch at once or on each message individually.
-  This method returns `CompletableFuture<Void>`; its successful completion means the server has acknowledged processing.
-  If a commit error occurs, do not attempt to retry it. The error is most likely caused by a session closure.
+  This method returns `CompletableFuture<Void>`; its successful completion means the server has acknowledged the commit.
+  If a commit error occurs, do not attempt to retry it. Most likely, the error is caused by session closure.
   The reader (not necessarily the same one) will create a new session for this partition, and the message will be read again.
 
 
@@ -2883,27 +2469,20 @@ If an error occurs on message commit, you can log the error and continue working
 
 - Rust
 
-
-  ```rust
-  let batch = reader.read_batch().await?;
-  reader.commit(batch.get_commit_marker())?;
-  // or with waiting for ack from the server:
-  reader.commit_with_ack(batch.get_commit_marker()).await?;
-  ```
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
-#### Batch reading of messages with acknowledgment
+#### Reading messages in a batch with commit
 
 {% list tabs group=lang %}
 
 - C++
 
-  Similarly to [the example above](#no-commit), when setting up a read session with the `SimpleDataHandlers` setting, it is sufficient to pass a handler for data messages. The SDK will call this handler for each message batch received from the server. Passing the `commitDataAfterProcessing = true` parameter means that the SDK will send read acknowledgments for all messages to the server after the handler execution.
+  Similarly to the [example above](#no-commit), when setting up a read session with the `SimpleDataHandlers` setting, it is enough to pass a handler for data messages. The SDK will call this handler for each message packet received from the server. Passing the `commitDataAfterProcessing = true` parameter means that the SDK will send read acknowledgments for all messages to the server after the handler completes.
 
 
   ```cpp
@@ -2970,7 +2549,7 @@ If an error occurs on message commit, you can log the error and continue working
 
   - Synchronous API
 
-    Not relevant, because the synchronous reader does not support reading messages in batches.
+    Not relevant, as the synchronous reader cannot read messages in batches.
 
   - Asynchronous API
 
@@ -3039,8 +2618,6 @@ If an error occurs on message commit, you can log the error and continue working
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for support in Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -3049,13 +2626,16 @@ If an error occurs on message commit, you can log the error and continue working
 
 ### Reading with position storage on the client side {#client-commit}
 
-Instead of committing messages to the server, you can store the read progress yourself. In this case, you need to pass a handler to the SDK that will be called when reading of each partition starts. In this handler, you will need to specify the position from which to start reading this partition.
+Instead of committing messages to the server, you can store the read progress yourself. In this case, you need to pass a handler to the SDK that will be called when reading each partition starts. In this handler, you will need to
+specify the position from which to start reading this partition.
 
 {% list tabs group=lang %}
 
 - C++
 
-  When processing events `TStartPartitionSessionEvent`, you can set the position from which to start reading in the response to the server. To do this, you should pass to the method `Confirm` the parameter `readOffset`. Additionally, you can pass the parameter `commitOffset`, which will specify the position up to which messages should be considered [committed](#commit).
+  When processing `TStartPartitionSessionEvent` events, you can set the position from which to start reading in the response to the server.
+  To do this, pass the parameter `readOffset` to the method `Confirm`.
+  Additionally, you can pass the parameter `commitOffset`, which will specify the position up to which messages should be considered [committed](#commit).
 
   Example of setting up a handler:
 
@@ -3070,14 +2650,14 @@ Instead of committing messages to the server, you can store the read progress yo
   ```
 
 
-  Here, `GetOffsetToReadFrom` is part of the example, not the SDK. Use your own method to determine the required starting read position for a partition with the given partition id.
+  Here `GetOffsetToReadFrom` is part of the example, not the SDK. Use your own method to determine the required starting read position for a partition with the given partition id.
 
-  Also, `TReadSessionSettings` supports the `ReadFromTimestamp` setting for reading events with write timestamps not less than a given value. This setting is intended not for precise start positioning, but for skipping a volume of data over a large time interval. The first few received messages may have write timestamps less than the specified one.
+  Also, in `TReadSessionSettings`, the `ReadFromTimestamp` setting is supported for reading events with write timestamps not less than the given one. This setting is intended not for precise start positioning, but for skipping a volume of data over a large time interval. The first few received messages may have write timestamps less than the specified one.
 - Go
 
   {% note tip %}
 
-  In the default reader mode, offsets up to the position specified by `res.StartFrom` are committed on the server. After that, re-reading the same messages by moving the position back becomes impossible. To disable automatic acknowledgment, use the no-commit mode when creating the reader.
+  In the default reader mode, offsets up to the position specified via `res.StartFrom` are acknowledged on the server. After that, re-reading the same messages by shifting the position back becomes impossible. To disable automatic acknowledgment, use the no-commit mode when creating the reader.
 
 
   ```go
@@ -3136,10 +2716,10 @@ Instead of committing messages to the server, you can store the read progress yo
   The functionality is under development.
 - Java
 
-  Reading from a given offset in Java is only possible in the asynchronous reader.
-  In the `StartPartitionSessionEvent` event handler, when responding to the server, you can set the position from which to start reading.
+  Reading from a specified offset in Java is only possible in the asynchronous reader.
+  In the `StartPartitionSessionEvent` event handler, you can set the position from which to start reading when responding to the server.
   To do this, pass the `StartPartitionSessionSettings` settings with the specified offset via `setReadOffset` to the `confirm` method.
-  Also, by calling `setCommitOffset`, you can specify the offset that should be considered committed.
+  Also, by calling `setCommitOffset`, you can specify the offset to be considered committed.
 
 
   ```java
@@ -3153,7 +2733,7 @@ Instead of committing messages to the server, you can store the read progress yo
   ```
 
 
-  You can also configure the `setReadFrom` reader to read events with write timestamps not less than the given one.
+  You can also configure a reader `setReadFrom` to read events with write timestamps not less than the specified one.
 - JavaScript
 
 
@@ -3176,8 +2756,6 @@ Instead of committing messages to the server, you can store the read progress yo
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for support in the Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -3186,7 +2764,7 @@ Instead of committing messages to the server, you can store the read progress yo
 
 ### Reading without specifying a Consumer {#no-consumer}
 
-Typically, the topic read progress is stored on the server in each `Consumer`. However, you can choose not to store such progress on the server and explicitly specify when creating a reader that reading will occur without `Consumer`.
+Usually, topic reading progress is stored on the server in each `Consumer`. However, you can choose not to store such progress on the server and explicitly specify when creating a reader that reading will occur without `Consumer`.
 
 {% list tabs group=lang %}
 
@@ -3208,10 +2786,10 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
   ```
 
 
-  On reconnection, the read progress is not saved on the server. To avoid starting from the beginning, pass the offset in `TStartPartitionSessionEvent::Confirm` each time a partition reading session starts — see [storing position on the client](#client-commit).
+  When reconnecting, the read progress is not saved on the server. To avoid starting from the beginning, pass the offset in `TStartPartitionSessionEvent::Confirm` each time you start a partition read session — see [storing the position on the client](#client-commit).
 - Go
 
-  You need to pass an empty string as the consumer name and the `topicoptions.WithReaderWithoutConsumer(false)` option (**experimental** mode, see [VERSIONING](https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md) in the SDK repository). In the read selector, specify the topic path and the list of partitions. Message commits are not available in this mode (`CommitModeNone`); on reconnections, progress must be restored on the client side — see [storing position on the client](#client-commit).
+  You need to pass an empty string as the consumer name and the `topicoptions.WithReaderWithoutConsumer(false)` option (experimental mode, see [VERSIONING](https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md) in the SDK repository). In the read selector, specify the topic path and the list of partitions. Message commits are not available in this mode (`CommitModeNone`); on reconnections, progress must be restored on the client side — see [storing position on the client](#client-commit).
 
 
   ```go
@@ -3230,7 +2808,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
 
 - Java
 
-  To read without a consumer, you should explicitly specify this in the reader settings `ReaderSettings` by calling `withoutConsumer()`:
+  To read without a Consumer, you should explicitly specify this in the reader settings `ReaderSettings` by calling `withoutConsumer()`:
 
 
   ```java
@@ -3243,7 +2821,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
   ```
 
 
-  In this case, note that when the connection is re-established, the progress on the server will be reset. Therefore, to avoid starting reading from the beginning, you should pass the starting read offset in the SDK each time a partition reading session starts:
+  In this case, note that when the connection is re-established, the progress on the server will be reset. Therefore, to avoid starting reading from the beginning, you should pass the offset to start reading from to the SDK each time a partition read session starts:
 
 
   ```java
@@ -3257,11 +2835,11 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
 
 - Python
 
-  To read without a consumer, create a reader using the `reader` method with the following arguments:
+  To read without a Consumer, create a reader using the `reader` method, specifying the following arguments:
 
-  - `topic` - an `ydb.TopicReaderSelector` object with the specified `path` and list of `partitions`;
-  - `consumer` - must be `None`;
-  - `event_handler` - a descendant of `ydb.TopicReaderEvents.EventHandler` that implements the `on_partition_get_start_offset` function. This function is responsible for returning the initial offset for reading messages when the reader starts and during reconnections. The client application must specify this offset in the `ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse.start_offset` parameter. The function can also be implemented as asynchronous.
+  - `topic` - an `ydb.TopicReaderSelector` object with the specified `path` and a list of `partitions`
+  - `consumer` must be `None`.
+  - `event_handler` is a successor of `ydb.TopicReaderEvents.EventHandler`, which implements the `on_partition_get_start_offset` function. This function is responsible for returning the initial offset for reading messages when the reader starts, as well as during reconnections. The client application must specify this offset in the `ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse.start_offset` parameter. Also, the function can be implemented as asynchronous.
 
   Example:
 
@@ -3292,8 +2870,6 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for support in the Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -3306,7 +2882,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
 
 - C++
 
-  Before reading from a topic, the client code must pass a reference to a transaction object in the session event receiving settings.
+  Before reading from a topic, the client code must pass a reference to a transaction object to the settings for receiving events from a session.
 
   [Example on GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_reader/transaction/application.cpp)
 
@@ -3328,7 +2904,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
       auto events = readSession->GetEvents(topicSettings);
 
       for (auto& event : events) {
-          // process the event and write results to the table
+          // process the event and write the results to the table
       }
 
       return tx.Commit().GetValueSync();
@@ -3342,7 +2918,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
 
   {% endnote %}
 
-  Acknowledgment of `TStopPartitionSessionEvent` event processing must be done after calling `Commit`.
+  You must confirm processing of event `TStopPartitionSessionEvent` after calling `Commit`.
 
 
   ```cpp
@@ -3354,7 +2930,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
       if (auto* e = std::get_if<NYdb::NTopic::TStopPartitionSessionEvent>(&event)) {
           stopPartitionSessionEvent = std::move(*e);
       } else {
-          // process the event and write results to the table
+          // process the event and write the results to the table
       }
   }
 
@@ -3370,7 +2946,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
 
 - Go
 
-  To read messages within a transaction, use the [`Reader.PopMessagesBatchTx`](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicreader#Reader.PopMessagesBatchTx) method. It reads a batch of messages and adds their commit to the transaction, so you do not need to commit these messages separately. The message reader can be reused in different transactions. However, it is important that the order of transaction commits matches the order of messages received from the reader, because message commits in a topic must be performed strictly in order. The easiest way to do this is to use the reader in a loop.
+  To read messages within a transaction, use the [`Reader.PopMessagesBatchTx`](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicreader#Reader.PopMessagesBatchTx) method. It reads a batch of messages and adds their commit to the transaction, so no separate commit of these messages is required. The message reader can be reused in different transactions. It is important that the order of transaction commits matches the order of message retrieval from the reader, because message commits in a topic must be performed strictly in order. The easiest way to do this is to use the reader in a loop.
 
   [Example on GitHub](https://github.com/ydb-platform/ydb-go-sdk/blob/master/examples/topic/topicreader/topic_reader_transaction.go)
 
@@ -3378,7 +2954,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
   ```go
   for {
     err := db.Query().DoTx(ctx, func(ctx context.Context, tx query.TxActor) error {
-      batch, err := reader.PopMessagesBatchTx(ctx, tx) // the batch will be committed upon the overall transaction commit
+      batch, err := reader.PopMessagesBatchTx(ctx, tx) // the batch will be committed upon the common transaction commit
       if err != nil {
         return err
       }
@@ -3393,7 +2969,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
 
 - Python
 
-  To read messages within a transaction, use the `reader.receive_batch_with_tx` method. It reads a batch of messages and adds their commit to the transaction, so you do not need to commit these messages separately. The message reader can be reused in different transactions. However, it is important that the order of transaction commits matches the order of messages received from the reader, because message commits in a topic must be performed strictly in order — otherwise, the transaction will get an error when trying to commit. The easiest way to do this is to use the reader in a loop.
+  To read messages within a transaction, use the `reader.receive_batch_with_tx` method. It reads a batch of messages and adds their commit to the transaction, without requiring a separate commit for these messages. The reader can be reused across different transactions. It is important that the order of committing transactions corresponds to the order of receiving messages from the reader, since commits of messages in a topic must be performed strictly in order — otherwise the transaction will receive an error when attempting to commit. The easiest way to do this is to use the reader in a loop.
 
   {% list tabs %}
 
@@ -3440,7 +3016,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
 
     [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadSync.java)
 
-    In the `ReceiveSettings` settings of the `receive` method, you can specify a transaction:
+    In the settings of the `ReceiveSettings` method `receive`, you can specify a transaction:
 
 
     ```java
@@ -3450,15 +3026,15 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
     ```
 
 
-    Then the received message will be committed together with the transaction. You do not need to commit it separately.
-    The `receive` method will link the message offsets with the transaction on the server by calling `sendUpdateOffsetsInTransaction` and return control when it receives a response.
+    Then the received message will be committed together with the transaction. There is no need to commit it separately.
+    The `receive` method will associate the message offsets with the transaction on the server by calling `sendUpdateOffsetsInTransaction` and returns control when it receives a response to it.
 
   - Asynchronous API
 
     [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadAsync.java)
 
     After receiving a message in the `onMessages` handler, you can associate one or more messages with a transaction.
-    To do this, call a separate method `reader.updateOffsetsInTransaction` and wait for its execution on the server.
+    To do this, you need to call a separate method `reader.updateOffsetsInTransaction` and wait for its execution on the server.
     This method takes a list of offsets as a parameter. For convenience, `Message` and `DataReceivedEvent` have a method `getPartitionOffsets()` that returns such a list.
 
 
@@ -3505,14 +3081,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Rust
 
-  Full example of reading a topic in a transaction with writing to a table: [`topic-read-in-transaction-example.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/topic-read-in-transaction-example.rs).
-
-
-  ```rust
-  let batch = reader.pop_batch_in_tx(&mut tx).await?;
-  // processing batch.messages and committing the transaction
-  ```
-
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -3524,19 +3093,19 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
 
 ### Handling server read interruption {#stop}
 
-In {{ ydb-short-name }}, server-side balancing of partitions between clients is used. This means that the server can interrupt reading messages from arbitrary partitions.
+In {{ ydb-short-name }} server-side balancing of partitions between clients is used. This means that the server can interrupt reading messages from arbitrary partitions.
 
-With a *soft interrupt*, the client receives a notification that the server has finished sending messages from the partition and no more messages will be read. The client can finish processing the messages and send an acknowledgment to the server.
+With a *soft interruption*, the client receives a notification that the server has finished sending messages from the partition and no more messages will be read. The client can complete message processing and send an acknowledgment to the server.
 
-In case of a *hard interrupt*, the client receives a notification that it can no longer work with partition messages. The client must stop processing the read messages. Unacknowledged messages will be passed to another reader.
+In the case of a *hard interruption*, the client receives a notification that it can no longer work with partition messages. The client must stop processing the read messages. Unacknowledged messages will be delivered to another reader.
 
-#### Soft interrupt {#soft-stop}
+#### Soft interrupt of reading {#soft-stop}
 
 {% list tabs group=lang %}
 
 - C++
 
-  A soft interrupt arrives as an event `TStopPartitionSessionEvent` with method `Confirm`. The client can finish processing messages and send an acknowledgment to the server.
+  A soft interrupt comes as an event `TStopPartitionSessionEvent` with method `Confirm`. The client can finish processing messages and send an acknowledgment to the server.
 
   A fragment of the event loop might look like this:
 
@@ -3552,7 +3121,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
 
 - Go
 
-  The client code immediately receives all messages available in the buffer (on the SDK side), even if they are not enough to form a packet during batch processing.
+  Client code immediately receives all messages available in the buffer (on the SDK side), even if they are not enough to form a batch during batch processing.
 
 
   ```go
@@ -3565,6 +3134,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
       processBatch(batch)
       _ = r.Commit(batch.Context(), batch)
   }
+
   ```
 
 - Python
@@ -3598,13 +3168,13 @@ In case of a *hard interrupt*, the client receives a notification that it can no
 
   - Synchronous API
 
-    Not relevant, as the synchronous reader does not allow configuring handling of such events.
-    The client immediately responds to the server with a stop acknowledgment.
+    Not relevant, because the synchronous reader does not have the ability to configure handling of such events.
+    The client will immediately respond to the server with a stop acknowledgment.
 
   - Asynchronous API
 
-    To be able to respond to such an event, you should override the `onStopPartitionSession(StopPartitionSessionEvent event)` method in the `ReadEventHandler` descendant object (see [Connecting to a topic for reading messages](#start-reader)).
-    `event.confirm()` must be called, because the server expects this response to continue the shutdown.
+    To be able to react to such an event, override the `onStopPartitionSession(StopPartitionSessionEvent event)` method in the `ReadEventHandler` descendant object (see [Connecting to a topic for reading messages](#start-reader)).
+    `event.confirm()` must be called, because the server expects this response to continue the stop.
 
 
     ```java
@@ -3624,32 +3194,28 @@ In case of a *hard interrupt*, the client receives a notification that it can no
   {% endlist %}
 - C#
 
-  No special processing is required.
+  No special handling is required.
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Rust
 
-  Rust SDK handles stop and close events of partition session internally; there is no public API for configuring soft or hard interrupt yet.
-
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for support in the Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
-#### Hard interrupt {#hard-stop}
+#### Hard read interruption {#hard-stop}
 
 {% list tabs group=lang %}
 
 - C++
 
-  A hard interrupt comes as an `TPartitionSessionClosedEvent` event either in response to acknowledgment of a soft interrupt, or when the connection to the partition is lost. You can find out the reason by calling the `GetReason` method.
+  A hard interruption comes as an `TPartitionSessionClosedEvent` event, either in response to a soft interruption acknowledgment, or when the connection to a partition is lost. You can find out the reason by calling the `GetReason` method.
 
-  An event loop fragment may look like this:
+  A fragment of the event loop might look like this:
 
 
   ```cpp
@@ -3665,7 +3231,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
 
 - Go
 
-  When reading is interrupted, the context of the message or batch of messages is cancelled.
+  When reading is interrupted, the context of the message or message batch will be canceled.
 
 
   ```go
@@ -3685,7 +3251,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
 
 - Python
 
-  In this example, message processing in a batch will stop if the partition is reassigned during operation. This optimization requires additional code on the client side. In simple cases, when processing reassigned partitions is not a problem, it can be omitted.
+  In this example, message processing in a batch will stop if the partition is taken away during operation. This optimization requires additional code on the client. In simple cases, when handling taken-away partitions is not a problem, it can be omitted.
 
   {% list tabs %}
 
@@ -3726,7 +3292,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
 
   - Synchronous API
 
-    Not relevant, because the synchronous reader does not provide the ability to configure handling of such events.
+    Not relevant, because the synchronous reader does not have the ability to configure handling of such events.
 
   - Asynchronous API
 
@@ -3746,11 +3312,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Rust
 
-  Rust SDK handles stop and close events of a partition session internally; there is no public API for configuring soft or hard interrupt yet.
-
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for support in Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -3763,7 +3325,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
 
 - C++
 
-  The SDK supports two modes for reading topics with auto-scaling enabled: full support mode and compatibility mode. The reading mode is set in the read session creation parameters. By default, compatibility mode is used.
+  The SDK supports two modes for reading topics with auto-scaling enabled: full support mode and compatibility mode. The reading mode is set in the parameters of creating a read session. By default, compatibility mode is used.
 
 
   ```cpp
@@ -3779,9 +3341,9 @@ In case of a *hard interrupt*, the client receives a notification that it can no
   ```
 
 
-  In full support mode, when all messages from a partition have been read, the `TEndPartitionSessionEvent` event arrives. After receiving this event, no new messages will appear in the partition for reading. To continue reading from child partitions, you must call `Confirm()`, thereby confirming that the application is ready to receive messages from child partitions. If messages from all partitions are processed in a single thread, then `Confirm()` can be called immediately after receiving `TEndPartitionSessionEvent`. If messages from different partitions are processed in different threads, you should finish processing the messages, for example, execute the accumulated batch, commit them, or save the read position in your own database, and only then call `Confirm()`.
+  In full support mode, when all messages from a partition have been read, an `TEndPartitionSessionEvent` event will arrive. After receiving this event, no new messages for reading will appear in the partition. To continue reading from child partitions, you must call `Confirm()`, thereby confirming that the application is ready to receive messages from child partitions. If messages from all partitions are processed in a single thread, then `Confirm()` can be called immediately after receiving `TEndPartitionSessionEvent`. If message processing from different partitions is done in different threads, then you should finish processing messages, for example, execute the accumulated batch, confirm their processing (commit), or save the read position in your database, and only then call `Confirm()`.
 
-  After receiving `TEndPartitionSessionEvent` and processing all messages, it is recommended to always immediately commit them. This will balance the reading of child partitions among different read sessions, leading to an even distribution of load across all readers.
+  After receiving `TEndPartitionSessionEvent` and processing all messages, it is recommended to always immediately confirm their processing (commit). This will balance the reading of child partitions among different read sessions, leading to an even distribution of load across all readers.
 
   A fragment of the event loop might look like this:
 
@@ -3801,14 +3363,14 @@ In case of a *hard interrupt*, the client receives a notification that it can no
   ```
 
 
-  In compatibility mode, there is no explicit signal that reading from a partition is complete, and the server will try to heuristically determine that the client has processed the partition to the end. This may cause a delay between finishing reading from the original partition and starting reading from its child partitions.
+  In compatibility mode, there is no explicit signal about the completion of reading from a partition, and the server will try to heuristically determine that the client has processed the partition to the end. This may cause a delay between the completion of reading from the original partition and the start of reading from its child partitions.
 
-  If the client commits messages, then the signal that processing of messages from a partition is complete will be the commit of the last message of that partition. If the client does not commit messages, the server will periodically interrupt reading from the partition and switch to reading in another session (if there are other sessions ready to process the partition). This will continue until reading [starts](#client-commit) from the end of the partition.
+  If the client confirms message processing (commit), then the signal for completion of message processing from a partition will be the confirmation of processing of the last message of that partition. If the client does not confirm message processing, the server will periodically interrupt reading from the partition and switch to reading in another session (if there are other sessions ready to process the partition). This will continue until reading [starts](#client-commit) from the end of the partition.
 
-  It is recommended to check the correctness of handling a soft read interrupt: the client must process the received messages, commit them or save the read position in its own database, and only then call `Confirm()` for the `TStopPartitionSessionEvent` event.
+  It is recommended to check the correctness of handling a soft read interruption: the client must process the received messages, confirm their processing (commit), or save the read position in its database, and only then call `Confirm()` for the `TStopPartitionSessionEvent` event.
 - Go
 
-  Enabling topic autoscaling during its creation is done using the `topicoptions.CreateWithAutoPartitioningSettings` option:
+  Enabling topic auto-scaling during its creation is done using the `topicoptions.CreateWithAutoPartitioningSettings` option:
 
 
   ```go
@@ -3830,7 +3392,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
   ```
 
 
-  If necessary, you can also set other parameters in AutoPartitioningSettings:
+  If necessary, you can set other parameters in AutoPartitioningSettings:
 
 
   ```go
@@ -3849,7 +3411,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
   ```
 
 
-  Enabling autoscaling for an existing topic is done using the `topicoptions.AlterWithAutoPartitioningStrategy` option of `.Topic().Alter`:
+  Enabling auto-scaling for an existing topic is done using the `topicoptions.AlterWithAutoPartitioningStrategy` option of `.Topic().Alter`:
 
 
   ```go
@@ -3881,7 +3443,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
   ```
 
 
-  The SDK supports two modes for reading topics with autoscaling enabled: full support mode and compatibility mode. The reading mode is set by the `topicoptions.WithReaderSupportSplitMergePartitions` option when creating the reader. By default, full support mode (`true`) is used.
+  The SDK supports two modes for reading topics with auto-scaling enabled: full support mode and compatibility mode. The reading mode is set by the `topicoptions.WithReaderSupportSplitMergePartitions` option when creating the reader. By default, full support mode (`true`) is used.
 
 
   ```go
@@ -3892,7 +3454,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
     "github.com/ydb-platform/ydb-go-sdk/v3/topic/topictypes"
   )
 
-  // full support mode (auto-scaling handling in the SDK, default)
+  // full support mode (auto-scaling handling in SDK, default)
   reader, err := db.Topic().StartReader(
     "consumer",
     topicoptions.ReadTopic("topic"),
@@ -3909,7 +3471,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
 
 - Python
 
-  Enabling topic autoscaling during its creation is done using the `auto_partitioning_settings` argument of `create_topic`:
+  Enabling topic auto-scaling during its creation is done using the `auto_partitioning_settings` argument of `create_topic`:
 
   {% list tabs %}
 
@@ -3965,7 +3527,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
   ```
 
 
-  The SDK supports two modes for reading topics with autoscaling enabled: full support mode and compatibility mode. The reading mode is set by the `auto_partitioning_support` argument when creating the reader. By default, full support mode is used.
+  The SDK supports two modes for reading topics with auto-scaling enabled: full support mode and compatibility mode. The reading mode is set by the `auto_partitioning_support` argument when creating a reader. By default, full support mode is used.
 
 
   ```python
@@ -3985,7 +3547,7 @@ In case of a *hard interrupt*, the client receives a notification that it can no
   ```
 
 
-  From a practical point of view, the modes do not differ for the end user. The full support mode differs from the compatibility mode in who guarantees the reading order — the client or the server. The compatibility mode is achieved by server-side processing and is generally slower.
+  From a practical standpoint, the modes do not differ for the end user. Full support mode differs from compatibility mode in who guarantees the reading order — the client or the server. Compatibility mode is achieved through server-side processing and is generally slower.
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -3998,23 +3560,21 @@ In case of a *hard interrupt*, the client receives a notification that it can no
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for support in Rust SDK: [ydb-rs-sdk#311](https://github.com/ydb-platform/ydb-rs-sdk/issues/311)
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
-### Commit Outside the Reader {#commit-outside-the-reader}
+### Acknowledging processing outside the reader {#commit-outside-the-reader}
 
-Most often, it is convenient to commit within the reader that receives messages. However, there are scenarios where the commit must be performed by a process different from the reading process. In such a case, a commit method outside the reader is needed.
+Most often, it is convenient to acknowledge processing within the reader that receives messages. However, there are scenarios where processing acknowledgment must be performed by a process other than the reading process. In such cases, an acknowledgment method outside the reader is needed.
 
 {% list tabs group=lang %}
 
 - C++
 
-  Committing outside the read session is done using the `NYdb::NTopic::TTopicClient::CommitOffset` method:
+  Acknowledging processing outside the reading session is done using the `NYdb::NTopic::TTopicClient::CommitOffset` method:
 
 
   ```cpp
@@ -4030,7 +3590,7 @@ Most often, it is convenient to commit within the reader that receives messages.
   ```
 
 
-  If there is an active read session at the time of commit (for example, via `CreateReadSession`), it is recommended to pass its ID using the `ReadSessionId` option in `NYdb::NTopic::TCommitOffsetSettings`. This allows the server not to interrupt the current read session:
+  If an active reading session exists at the time of acknowledgment (for example, via `CreateReadSession`), it is recommended to pass its identifier using the `ReadSessionId` option in `NYdb::NTopic::TCommitOffsetSettings`. This allows the server not to interrupt the current reading session:
 
 
   ```cpp
@@ -4049,7 +3609,7 @@ Most often, it is convenient to commit within the reader that receives messages.
 
 - Go
 
-  Acknowledgment of processing outside the reader is performed using the `db.Topic().CommitOffset` method:
+  Acknowledging processing outside the reader is done using the `db.Topic().CommitOffset` method:
 
 
   ```go
@@ -4064,7 +3624,7 @@ Most often, it is convenient to commit within the reader that receives messages.
   ```
 
 
-  If there is an active read session at the time of commit (via `StartReader` or `StartListener`), it is recommended to pass its ID using the `WithCommitOffsetReadSessionID` option. This allows the server not to interrupt the current read session:
+  If an active reading session exists at the time of acknowledgment (via `StartReader` or `StartListener`), it is recommended to pass its identifier using the `WithCommitOffsetReadSessionID` option. This allows the server not to interrupt the current reading session:
 
 
   ```go
@@ -4089,7 +3649,7 @@ Most often, it is convenient to commit within the reader that receives messages.
 
 - Python
 
-  Acknowledgment of processing outside the reader is performed using the `topic_client.commit_offset` method:
+  Acknowledging processing outside the reader is done using the `topic_client.commit_offset` method:
 
   {% list tabs %}
 
@@ -4147,8 +3707,6 @@ Most often, it is convenient to commit within the reader that receives messages.
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for support in Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}

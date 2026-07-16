@@ -1,17 +1,38 @@
 # Authentication using environment variables
 
-When using this method, the authentication mode and its parameters are defined by the environment that an application is run in, [as described here](../../reference/ydb-sdk/auth.md#env).
+When using this method, the authentication mode and its parameters are determined by the environment in which the application is launched, in the [order described here](../../reference/ydb-sdk/auth.md#env).
 
 By setting one of the following environment variables, you can control the authentication method:
 
-* `YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=<path/to/sa_key_file>` — use a service account key file in Yandex Cloud.
-* `YDB_ANONYMOUS_CREDENTIALS="1"` — use anonymous authentication. Useful for testing against a Docker container with {{ ydb-short-name }}.
-* `YDB_METADATA_CREDENTIALS="1"` — use the metadata service inside Yandex Cloud (Yandex Cloud Function or VM).
-* `YDB_ACCESS_TOKEN_CREDENTIALS=<access_token>` — use token-based authentication.
+* `YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=<path/to/sa_key_file>` — Use a service account file in Yandex Cloud.
+* `YDB_ANONYMOUS_CREDENTIALS="1"` — Use anonymous authentication. Relevant for testing against a Docker container with {{ ydb-short-name }}.
+* `YDB_METADATA_CREDENTIALS="1"` — Use the metadata service inside Yandex Cloud (Yandex Function or virtual machine).
+* `YDB_ACCESS_TOKEN_CREDENTIALS=<access_token>` — Use token authentication.
 
-Below are examples of authentication using environment variables in different {{ ydb-short-name }} SDKs.
+Below are code examples of authentication using environment variables in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/helpers/helpers.h>
+
+    NYdb::TDriver CreateDriverFromEnvironment(const std::string& connectionString) {
+        return NYdb::TDriver(NYdb::CreateFromEnvironment(connectionString));
+    }
+    ```
+
+  - userver
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  {% endlist %}
 
 - Go
 
@@ -106,15 +127,16 @@ Below are examples of authentication using environment variables in different {{
 
     ```java
     public void work() throws SQLException {
-        // No explicit credentials: the driver reads YDB_* environment variables in the order
-        // described in [Authentication](../../reference/ydb-sdk/auth.md#env)
+        // Connection without explicit credentials: the driver reads YDB_* environment variables in the order,
+        // described in the [Authentication](../../reference/ydb-sdk/auth.md#env) section
         try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", new Properties())) {
             doWork(connection);
         }
     }
     ```
 
-    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL; credentials from the environment are picked up the same way as in the example above (for example via `spring.datasource.url`).
+
+    In Spring Boot, ORM, and other third-party frameworks around JDBC, specify the same JDBC connection string; credentials from environment variables are picked up by the driver in the same way as in the example above (for example, via `spring.datasource.url`).
 
   {% endlist %}
 
@@ -135,7 +157,6 @@ Below are examples of authentication using environment variables in different {{
         return driver
     }
   ```
-
 
 - Python
 
@@ -167,6 +188,20 @@ Below are examples of authentication using environment variables in different {{
     ```
 
   {% endlist %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, FromEnvCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string(std::env::var("YDB_CONNECTION_STRING")?)?
+      .with_credentials(FromEnvCredentials::new()?)
+      .client()?;
+  ```
 
 - PHP
 

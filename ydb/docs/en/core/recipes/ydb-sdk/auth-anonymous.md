@@ -2,9 +2,39 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-Below are examples of anonymous authentication in different {{ ydb-short-name }} SDKs.
+Below are code examples of anonymous authentication in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    Anonymous authentication is the default authentication.
+    You can explicitly enable anonymous authentication as follows:
+
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+
+    NYdb::TDriver CreateDriverAnonymous() {
+        auto config = NYdb::TDriverConfig("grpc://localhost:2136/local")
+            .SetCredentialsProviderFactory(NYdb::CreateInsecureCredentialsProviderFactory());
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    If you do not set `credentials-provider`, do not specify `databases.*.credentials`, and do not put `token`, `iam_jwt_params`, and the `user`/`password` pair in secdist for this database, the driver will use anonymous mode by default.
+
+    The code for initializing `ydb::YdbComponent`, obtaining `ydb::TableClient`, and starting `components::MinimalServerComponentList` is the same as in the example from [init.md](./init.md).
+
+  {% endlist %}
 
 - Go
 
@@ -12,15 +42,15 @@ Below are examples of anonymous authentication in different {{ ydb-short-name }}
 
   - Native SDK
 
-    Anonymous authentication is the default.
-    You can enable it explicitly as follows:
+    Anonymous authentication is the default authentication.
+    You can explicitly enable anonymous authentication as follows:
+
 
     ```go
     package main
 
     import (
       "context"
-      "os"
 
       "github.com/ydb-platform/ydb-go-sdk/v3"
     )
@@ -42,8 +72,9 @@ Below are examples of anonymous authentication in different {{ ydb-short-name }}
 
   - database/sql
 
-    Anonymous authentication is the default.
-    You can enable it explicitly as follows:
+    Anonymous authentication is the default authentication.
+    You can explicitly enable anonymous authentication as follows:
+
 
     ```go
     package main
@@ -103,14 +134,15 @@ Below are examples of anonymous authentication in different {{ ydb-short-name }}
 
     ```java
     public void work() throws SQLException {
-        // Connection with no extra options — anonymous authentication
+        // Connection without additional options — with anonymous authentication
         try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
             doWork(connection);
         }
     }
     ```
 
-    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL as above (for example `spring.datasource.url`).
+
+    In Spring Boot, ORM, and other third-party frameworks around JDBC, the connection is specified using the same JDBC connection string as above (for example, `spring.datasource.url`).
 
   {% endlist %}
 
@@ -142,22 +174,26 @@ Below are examples of anonymous authentication in different {{ ydb-short-name }}
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Auth;
+  using Ydb.Sdk.Ado;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
+  await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+  await using var connection = await dataSource.OpenConnectionAsync();
+  ```
 
-  var config = new DriverConfig(
-      endpoint: endpoint,
-      database: database,
-      credentials: new AnonymousProvider()
-  );
 
-  await using var driver = await Driver.CreateInitialized(config);
+  For Entity Framework and linq2db, use the same connectionString.
+
+- Rust
+
+  ```rust
+  use ydb::{AnonymousCredentials, ClientBuilder, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(AnonymousCredentials::new())
+      .client()?;
   ```
 
 - PHP

@@ -204,7 +204,7 @@ static int test_some(struct io_uring *ring)
  */
 static int test_already(struct io_uring *ring)
 {
-	return __test_nop(ring, 4, 0, 1, 100000, __FUNCTION__);
+	return __test_nop(ring, 4, 0, 5, 100000, __FUNCTION__);
 }
 
 /*

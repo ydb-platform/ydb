@@ -304,6 +304,21 @@ TEST_P(TRdmaSyncActorTest, FailsWhenRdmaSendBufferAllocationFails) {
     EXPECT_FALSE(result.SessionReturned2);
 }
 
+TEST_P(TRdmaSyncActorTest, FailsWhenOneSideRdmaSendBufferAllocationFails) {
+    const TActorId virtualId1(1, 0, 1, 1);
+    const TActorId virtualId2(2, 0, 1, 2);
+
+    TSyncRunResult result;
+    ASSERT_NO_FATAL_FAILURE(RunSyncActors(
+        GetParam(), virtualId1, virtualId2, virtualId2, virtualId1,
+        TSyncRunOptions{.DropRdmaMemPool1 = true}, result));
+
+    EXPECT_NE(result.Error1.find("RDMA memory pool is not initialized"), TString::npos) << result.Error1;
+    EXPECT_NE(result.Error2.find("peer RDMA sync error"), TString::npos) << result.Error2;
+    EXPECT_FALSE(result.SessionReturned1);
+    EXPECT_FALSE(result.SessionReturned2);
+}
+
 TEST_P(TRdmaSyncActorTest, FailsOnSessionHashMismatch) {
     const TActorId virtualId1(1, 0, 1, 1);
     const TActorId virtualId2(2, 0, 1, 2);

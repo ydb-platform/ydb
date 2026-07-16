@@ -610,10 +610,6 @@ namespace NKikimr::NStorage {
 
         // update generation and send update message
         currentInfo = newInfo;
-        if (vdisk.RuntimeData->DDisk) {
-            // DDisk reads the updated group info on restart and doesn't support TEvVGenerationChange.
-            return;
-        }
         const TVDiskID newVDiskId = currentInfo->GetVDiskId(orderNumber);
         vdisk.WhiteboardVDiskId.emplace(newVDiskId);
         Send(vdiskServiceId, new TEvVGenerationChange(newVDiskId, currentInfo));

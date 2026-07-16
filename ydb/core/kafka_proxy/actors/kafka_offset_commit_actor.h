@@ -53,7 +53,7 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
 private:
-    TString LogPrefix();
+    NActors::NStructuredLog::TStructuredMessage LogPrefix();
     void Die(const TActorContext& ctx) override;
 
     STATEFN(StateWork) {

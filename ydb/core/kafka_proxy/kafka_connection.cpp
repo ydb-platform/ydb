@@ -202,18 +202,17 @@ protected:
 
         auto stateFunc = CurrentStateFunc();
         if (stateFunc == &TKafkaConnection::StateConnected) {
-            state = "Connected ";
+            state = "Connected";
         } else if (stateFunc == &TKafkaConnection::StateAccepting) {
-            state = "Accepting ";
+            state = "Accepting";
         } else {
-            state = "Unknown ";
+            state = "Unknown";
         }
 
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "TKafkaConnection"},
             {"selfId", SelfId()},
-            {"state", SelfId()},
-        );
+            {"state", state});
     }
 
     void SendRequestMetrics(const TActorContext& ctx) {

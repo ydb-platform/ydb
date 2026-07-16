@@ -6,6 +6,6 @@
 
 namespace NKafka {
 
-inline TString LogPrefix() { return {}; }
+inline NActors::NStructuredLog::TStructuredMessage LogPrefix() { return {}; }
 
 }

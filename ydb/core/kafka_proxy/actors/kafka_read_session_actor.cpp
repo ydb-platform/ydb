@@ -17,10 +17,11 @@ void TKafkaReadSessionActor::Bootstrap(const NActors::TActorContext&) {
     Become(&TKafkaReadSessionActor::StateWork);
 }
 
-TString TKafkaReadSessionActor::LogPrefix() {
-    TStringBuilder sb;
-    sb << "TKafkaReadSessionActor " << (Session == "" ? SelfId().ToString() : Session) << ": ";
-    return sb;
+NStructuredLog::TStructuredMessage TKafkaReadSessionActor::LogPrefix() {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "TKafkaReadSessionActor"},
+        {"selfId", SelfId()},
+        {"session", Session});
 }
 
 void TKafkaReadSessionActor::Die(const TActorContext& ctx) {

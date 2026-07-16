@@ -11,10 +11,10 @@ NActors::IActor* CreateKafkaFindCoordinatorActor(const TContext::TPtr context, c
     return new TKafkaFindCoordinatorActor(context, correlationId, message);
 }
 
-TString TKafkaFindCoordinatorActor::LogPrefix() {
-    TStringBuilder sb;
-    sb << "TKafkaFindCoordinatorActor " << SelfId().ToString() << ": ";
-    return sb;
+NActors::NStructuredLog::TStructuredMessage TKafkaFindCoordinatorActor::LogPrefix() {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "TKafkaFindCoordinatorActor"},
+        {"selfId", SelfId()});
 }
 
 void TKafkaFindCoordinatorActor::Bootstrap(const NActors::TActorContext& ctx) {

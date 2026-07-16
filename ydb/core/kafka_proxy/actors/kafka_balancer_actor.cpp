@@ -1587,10 +1587,13 @@ void TKafkaBalancerActor::SendHeartbeatResponseFail(const TActorContext& ctx,
     Die(ctx);
 }
 
-TString TKafkaBalancerActor::LogPrefix() {
-    TStringBuilder sb;
-    sb << "TKafkaBalancerActor: GroupId# " << GroupId << ", MemberId# " << MemberId << ", CurrentStep# " << static_cast<int>(CurrentStep) << ". ";
-    return sb;
+NActors::NStructuredLog::TStructuredMessage TKafkaBalancerActor::LogPrefix() {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "TKafkaBalancerActor"},
+        {"selfId", SelfId()},
+        {"groupId", GroupId},
+        {"memberId", MemberId},
+        {"currentStep", static_cast<int>(CurrentStep)});
 }
 
 } // namespace NKafka

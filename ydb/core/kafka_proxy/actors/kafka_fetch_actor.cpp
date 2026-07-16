@@ -19,8 +19,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
-
 
 namespace NKafka {
 

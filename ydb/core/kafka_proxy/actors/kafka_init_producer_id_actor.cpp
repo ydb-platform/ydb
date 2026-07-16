@@ -388,8 +388,10 @@ namespace NKafka {
         );
     }
 
-    TString TKafkaInitProducerIdActor::LogPrefix() {
-        return "InitProducerId actor: ";
+    NActors::NStructuredLog::TStructuredMessage TKafkaInitProducerIdActor::LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TKafkaInitProducerIdActor"},
+            {"selfId", SelfId()});
     }
 
     TString TKafkaInitProducerIdActor::GetAsStr(EInitProducerIdKqpRequests request) {

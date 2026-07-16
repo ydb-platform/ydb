@@ -15,8 +15,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
-
 namespace NKafka {
 
 namespace {
@@ -118,18 +116,22 @@ NKikimrPQClient::TDataChunk MakeDataChunk(const TKafkaRecord& record) {
     return proto;
 }
 
-TString TKafkaProduceActor::LogPrefix() {
-    TStringBuilder sb;
-    sb << "TKafkaProduceActor " << SelfId() << " State: ";
+NStructuredLog::TStructuredMessage TKafkaProduceActor::LogPrefix() {
+    TString state;
+
     auto stateFunc = CurrentStateFunc();
     if (stateFunc == &TKafkaProduceActor::StateInit) {
-        sb << "Init ";
+        state = "Init";
     } else if (stateFunc == &TKafkaProduceActor::StateWork) {
-        sb << "Work ";
+        state = "Work";
     } else {
-        sb << "Unknown ";
+        state = "Unknown";
     }
-    return sb;
+
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "TKafkaProduceActor"},
+        {"selfId", SelfId()},
+        {"state", state});
 }
 
 void TKafkaProduceActor::LogEvent(IEventHandle& ev) {
@@ -489,9 +491,9 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
         TString str;
         const bool res = proto.SerializeToString(&str);
         if (!res) {
-            YDB_LOG_ERROR("Produce actor: Failed to serialize TDataChunk",
+            YDB_LOG_ERROR("Produce actor: Failed to serialize TDataChunk to string",
                 {"logPrefix", LogPrefix()},
-                {"string", proto.DebugString()});
+                {"message", proto.DebugString()});
 
             return {EKafkaErrors::INVALID_RECORD, nullptr};
         }
@@ -546,9 +548,9 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
 
             // set seqno
             if (enableKafkaDeduplication && batch.BaseSequence < 0) {
-                YDB_LOG_ERROR("Idempotent producer enabled and batch base sequence is less then",
+                YDB_LOG_ERROR("Idempotent producer enabled and batch base sequence is less then zero",
                     {"logPrefix", LogPrefix()},
-                    {"zero", batch.BaseSequence});
+                    {"baseSequence", batch.BaseSequence});
                 return {EKafkaErrors::INVALID_RECORD, nullptr};
             }
             w->SetSeqNo(GetRecordSeqNo(batch, batchIndex, record));

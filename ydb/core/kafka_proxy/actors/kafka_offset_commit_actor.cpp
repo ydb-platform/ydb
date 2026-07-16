@@ -9,8 +9,10 @@ NActors::IActor* CreateKafkaOffsetCommitActor(const TContext::TPtr context, cons
     return new TKafkaOffsetCommitActor(context, correlationId, message);
 }
 
-TString TKafkaOffsetCommitActor::LogPrefix() {
-    return "TKafkaOffsetCommitActor";
+NActors::NStructuredLog::TStructuredMessage TKafkaOffsetCommitActor::LogPrefix() {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "TKafkaOffsetCommitActor"},
+        {"selfId", SelfId()});
 }
 
 void TKafkaOffsetCommitActor::Die(const TActorContext& ctx) {

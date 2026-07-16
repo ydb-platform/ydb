@@ -310,7 +310,7 @@ private:
     void SendLeaveGroupResponseFail(const TActorContext&, ui64 corellationId,
                                     EKafkaErrors error, TString message = "");
 
-    TString LogPrefix();
+    NActors::NStructuredLog::TStructuredMessage LogPrefix();
     void SendResponseFail(const TActorContext& ctx, EKafkaErrors error, const TString& message);
 
     std::optional<TGroupStatus> ParseGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);

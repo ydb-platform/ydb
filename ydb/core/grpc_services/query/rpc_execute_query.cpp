@@ -51,6 +51,10 @@ struct TProducerState {
 
 class TStreamRowsLimitState {
 public:
+    bool IsTruncated(i64 resultSetIndex) const {
+        return Truncated_.contains(resultSetIndex);
+    }
+
     bool ApplyLimit(TMaybe<ui64> rowsLimit, i64 resultSetIndex, Ydb::ResultSet& resultSet) {
         if (!rowsLimit) {
             return false;
@@ -439,13 +443,31 @@ private:
     }
 
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
+        const auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
+
+        auto& channel = StreamChannels_[ev->Get()->Record.GetChannelId()];
+        channel.ActorId = ev->Sender;
+        channel.LastSeqNo = ev->Get()->Record.GetSeqNo();
+        channel.ChannelId = ev->Get()->Record.GetChannelId();
+        channel.AckedFreeSpaceBytes = FlowControl_.FreeSpaceBytes();
+
+        if (StreamRowsLimitState_.IsTruncated(resultSetIndex)) {
+            LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Skip stream data for truncated result set"
+                << ", resultSetIndex: " << resultSetIndex
+                << ", seqNo: " << ev->Get()->Record.GetSeqNo()
+                << ", to: " << ev->Sender);
+
+            channel.SendAck(SelfId(), true);
+            return;
+        }
+
         Ydb::Query::ExecuteQueryResponsePart *response = ev->Get()->Arena->Allocate<Ydb::Query::ExecuteQueryResponsePart>();
         response->set_status(Ydb::StatusIds::SUCCESS);
-        response->set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
+        response->set_result_set_index(resultSetIndex);
         response->mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
 
         const bool truncated = StreamRowsLimitState_.ApplyLimit(
-            RowsLimit_, response->result_set_index(), *response->mutable_result_set());
+            RowsLimit_, resultSetIndex, *response->mutable_result_set());
 
         if (ev->Get()->Record.HasVirtualTimestamp()) {
             auto snap = response->mutable_snapshot_timestamp();
@@ -462,11 +484,7 @@ private:
 
         Request_->SendSerializedResult(std::move(out), Ydb::StatusIds::SUCCESS);
 
-        auto& channel = StreamChannels_[ev->Get()->Record.GetChannelId()];
-        channel.ActorId = ev->Sender;
-        channel.LastSeqNo = ev->Get()->Record.GetSeqNo();
         channel.AckedFreeSpaceBytes = freeSpaceBytes;
-        channel.ChannelId = ev->Get()->Record.GetChannelId();
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Send stream data ack"
             << ", seqNo: " << ev->Get()->Record.GetSeqNo()

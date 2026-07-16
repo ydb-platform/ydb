@@ -110,7 +110,7 @@ Below is an example where all transactions for accounts with even identifiers ar
 
 For some tasks, the order of message processing is not critical. For example, sometimes it is important to simply deliver the data, and the storage system will handle ordering.
 
-For such cases, you can use a simplified write mode called "write without deduplication". In this mode, you do not need to specify message source identifiers ( [`producer_id`](#producer-id)) and sequential message numbers — [`sequence number`](#seqno). Write without deduplication is faster and consumes fewer server resources, but message ordering and deduplication do not occur on the server. This means that if you send the same message again (for example, after a crash and subsequent restart of the writing process), it may be written more than once.
+For such cases, you can use a simplified write mode called "write without deduplication". In this mode, you do not need to specify message source identifiers ([`producer_id`](#producer-id)) and sequential message numbers — [`sequence number`](#seqno). Write without deduplication is faster and consumes fewer server resources, but message ordering and deduplication do not occur on the server. This means that if you send the same message again (for example, after a crash and subsequent restart of the writing process), it may be written more than once.
 
 ## Sequential message numbers {#seqno}
 
@@ -197,7 +197,7 @@ See also [{#T}](../../dev/shared-consumer-internals.md).
 
 A reading position is a saved [offset](#offset) of the reader for each topic partition. The reading position is saved by the reader after sending an acknowledgment of the read data. When establishing a new reading session, messages are delivered to the reader starting from the saved reading position. This allows users not to store the reading position on their side.
 
-### Reading limit from one partition {#partition-max-in-flight-bytes}
+### Reading limit per partition {#partition-max-in-flight-bytes}
 
 The `partition_max_in_flight_bytes` parameter can be set when creating a reading session.
 

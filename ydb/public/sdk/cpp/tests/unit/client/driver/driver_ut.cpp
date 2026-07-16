@@ -1,4 +1,5 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
@@ -14,6 +15,7 @@
 #include <util/generic/mapfindptr.h>
 
 #include <atomic>
+#include <memory>
 
 #include <google/protobuf/text_format.h>
 
@@ -77,9 +79,102 @@ namespace {
         return builder.BuildAndStart();
     }
 
+    class TCountingCredentialsProvider final : public ICredentialsProvider {
+    public:
+        std::string GetAuthInfo() const override {
+            return "token";
+        }
+
+        bool IsValid() const override {
+            return true;
+        }
+    };
+
+    class TCountingCredentialsProviderFactory final : public ICredentialsProviderFactory {
+    public:
+        explicit TCountingCredentialsProviderFactory(std::atomic_int& providerCount)
+            : ProviderCount_(providerCount)
+        {}
+
+        TCredentialsProviderPtr CreateProvider() const override {
+            ++ProviderCount_;
+            return std::make_shared<TCountingCredentialsProvider>();
+        }
+
+        std::string GetClientIdentity() const override {
+            return "same-credentials";
+        }
+
+    private:
+        std::atomic_int& ProviderCount_;
+    };
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
+<<<<<<< HEAD
+=======
+    Y_UNIT_TEST(ReusesCredentialsProviderForSameIdentity) {
+        std::atomic_int providerCount = 0;
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint("localhost:1")
+                .SetDatabase("/Root")
+                .SetDiscoveryMode(EDiscoveryMode::Off));
+
+        auto firstClient = TTableClient(driver, TClientSettings().CredentialsProviderFactory(
+            std::make_shared<TCountingCredentialsProviderFactory>(providerCount)));
+        auto secondClient = TTableClient(driver, TClientSettings().CredentialsProviderFactory(
+            std::make_shared<TCountingCredentialsProviderFactory>(providerCount)));
+
+        UNIT_ASSERT_VALUES_EQUAL(providerCount.load(), 1);
+    }
+
+    Y_UNIT_TEST(InvalidRootCertificatePemFailsFast) {
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint("localhost:100")
+                .UseSecureConnection("not-a-certificate"));
+        auto client = NTable::TTableClient(driver);
+
+        auto result = client.CreateSession().GetValueSync();
+
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Client TLS credentials validation failed");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "root CA PEM:");
+    }
+
+    Y_UNIT_TEST(EmptyRootCertificateWithoutClientCredentialsKeepsBehavior) {
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint("localhost:100")
+                .UseSecureConnection(""));
+        auto client = NTable::TTableClient(driver);
+
+        auto result = client.CreateSession().GetValueSync();
+        auto issues = result.GetIssues().ToString();
+
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+        UNIT_ASSERT(issues.find("Client TLS credentials validation failed") == std::string::npos);
+    }
+
+    Y_UNIT_TEST(InvalidClientCertificateFailsFast) {
+        const std::string privateKeyOnly = "-----BEGIN PRIVATE KEY-----\ninvalid\n-----END PRIVATE KEY-----\n";
+
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint("localhost:100")
+                .UseClientCertificate("", privateKeyOnly));
+        auto client = NTable::TTableClient(driver);
+
+        auto result = client.CreateSession().GetValueSync();
+
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Client TLS credentials validation failed");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "client TLS:");
+    }
+
+>>>>>>> 1a38ab96700 (reuse equivalent IAM credentials providers (#46593))
     Y_UNIT_TEST(ConnectWrongPort) {
         auto driver = TDriver(
             TDriverConfig()

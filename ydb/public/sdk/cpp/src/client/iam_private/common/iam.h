@@ -59,18 +59,38 @@ public:
     // returns a TOwningFacilityCredentialsProvider). Sharing a TSimpleCoreFacility between two gRPC
     // IAM providers would abort: each one registers a periodic task and the facility allows only one.
     TCredentialsProviderPtr CreateProvider() const override final {
-        auto authProvider = Params_.SystemServiceAccountCredentials->CreateProvider();
-        auto outerFacility = CreateSimpleCoreFacility();
-        auto serviceProvider = std::make_shared<TCredentialsProvider>(
-            Params_, std::weak_ptr<ICoreFacility>(outerFacility), std::move(authProvider));
-        return std::make_shared<TOwningFacilityCredentialsProvider>(
-            std::move(outerFacility), std::move(serviceProvider));
+        return NCredentials::NDetail::GetOrCreateCachedProvider(
+            GetClientIdentity(),
+            [this] {
+                auto authProvider = Params_.SystemServiceAccountCredentials->CreateProvider();
+                auto outerFacility = CreateSimpleCoreFacility();
+                auto serviceProvider = std::make_shared<TCredentialsProvider>(
+                    Params_, std::weak_ptr<ICoreFacility>(outerFacility), std::move(authProvider));
+                return std::make_shared<TOwningFacilityCredentialsProvider>(
+                    std::move(outerFacility), std::move(serviceProvider));
+            });
     }
 
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
         return std::make_shared<TCredentialsProvider>(Params_, std::move(facility));
     }
 
+<<<<<<< HEAD
+=======
+    std::string GetClientIdentity() const override final {
+        return NIam::NDetail::MakeClientIdentity(
+            "TIamServiceCredentialsProviderFactory",
+            Params_,
+            TService::service_full_name(),
+            Params_.ServiceId,
+            Params_.MicroserviceId,
+            Params_.ResourceId,
+            Params_.ResourceType,
+            Params_.TargetServiceAccountId,
+            Params_.SystemServiceAccountCredentials->GetClientIdentity());
+    }
+
+>>>>>>> 1a38ab96700 (reuse equivalent IAM credentials providers (#46593))
 private:
     TIamServiceParams Params_;
 };

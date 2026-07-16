@@ -22,6 +22,7 @@ ydb/core/kafka_proxy/ut KafkaProtocol.TopicsCompactionGapFromRetention
 ydb/core/kafka_proxy/ut unittest.sole chunk
 ydb/core/kqp/ut/federated_query/datastreams HasPathDatastreams.CdcStreamMatches
 ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
+ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.IndexesActualization-QueryService
 ydb/core/kqp/ut/olap/storage KqpOlapDictionary.GroupBySomeDictionaryWithCompaction
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle

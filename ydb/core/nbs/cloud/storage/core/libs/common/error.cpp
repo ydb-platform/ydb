@@ -293,11 +293,6 @@ NProto::TError MakeTabletIsDeadError(ui32 code, const TSourceLocation& location)
     return MakeError(code, out.Str());
 }
 
-NProto::TError MakeTabletGenerationBlockedError()
-{
-    return MakeError(E_REJECTED, TString(TabletGenerationBlockedErrorMessage));
-}
-
 }   // namespace NYdb::NBS
 
 ////////////////////////////////////////////////////////////////////////////////

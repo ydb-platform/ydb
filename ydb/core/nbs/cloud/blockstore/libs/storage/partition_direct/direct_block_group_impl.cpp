@@ -863,15 +863,6 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
             HandleBlockedGeneration(ddiskHostIndex, "SyncWithPBuffer");
         }
 
-        auto error = MakeError(E_FAIL, response.GetErrorReason());
-        if (IsBlockedStatus(response.GetStatus())) {
-            HandleBlockedGeneration(
-                ddiskHostIndex,
-                "SyncWithPBuffer",
-                response.GetStatus());
-            error = MakeTabletGenerationBlockedError();
-        }
-
         for (size_t i = 0; i < segmentCount; ++i) {
             result.Errors.push_back(error);
         }

@@ -676,8 +676,20 @@ public:
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
     }
 
-    NOlap::TSnapshot GetCurrentSnapshotForInternalModification() const {
+    NOlap::TSnapshot GetOutdatedSnapshot() const {
         return NOlap::TSnapshot::MaxForPlanStep(GetOutdatedStep());
+    }
+
+    // NoTxWrites may be visible sometimes to current reads. It is a bug, and we are going to fix it
+    // someday https://github.com/ydb-platform/ydb/issues/32061
+    NOlap::TSnapshot GetSnapshotForNoTxWrites() const {
+        return GetOutdatedSnapshot();
+    }
+
+    // Internal write MUST NOT be visible to current reads, so we must commit them strictly after
+    // the youngest possible read snapshot.
+    NOlap::TSnapshot GetCurrentSnapshotForInternalModification() const {
+        return NOlap::TSnapshot::MaxForPlanStep(GetOutdatedStep() + 1);
     }
 
     const std::shared_ptr<NOlap::NDataSharing::TSessionsManager>& GetSharingSessionsManager() const {

@@ -578,7 +578,7 @@ public:
         context.SS->PersistPath(db, path->PathId);
         context.SS->ClearDescribePathCaches(path);
 
-        auto& subDomain = context.SS->SubDomains.Update(pathId, context.MemChanges);
+        auto subDomain = context.SS->SubDomains.Update(pathId, context.MemChanges);
         subDomain->SetAlterPrivate(nullptr);
         context.SS->PersistSubDomain(db, pathId, *subDomain);
         context.SS->PersistSubDomainSchemeQuotas(db, pathId, *subDomain);
@@ -610,7 +610,9 @@ public:
         item->SwapChildren(HiddenChildren); //return back children
         item->PreSerializedChildrenListing.clear();
 
-        auto& subDomain = context.SS->SubDomains.Update(pathId, context.MemChanges);
+        // Copy, not a reference: the SetUntracked below reseats this slot, and
+        // *subDomain must still see the original object at PersistDeleteSubDomainAlter.
+        auto subDomain = context.SS->SubDomains.Update(pathId, context.MemChanges);
         Y_ABORT_UNLESS(subDomain);
         auto alterData = subDomain->GetAlter();
         Y_ABORT_UNLESS(alterData);
@@ -667,7 +669,7 @@ public:
 
         item->PathType = TPathElement::EPathType::EPathTypeExtSubDomain;
 
-        auto& subDomain = context.SS->SubDomains.Update(pathId, context.MemChanges);
+        auto subDomain = context.SS->SubDomains.Update(pathId, context.MemChanges);
         auto alterData = subDomain->GetAlter();
         Y_ABORT_UNLESS(alterData);
         Y_ABORT_UNLESS(subDomain->GetVersion() < alterData->GetVersion());
@@ -1162,7 +1164,7 @@ public:
         auto pathId = path.Base()->PathId;
 
         Y_ABORT_UNLESS(context.SS->SubDomains.contains(pathId));
-        auto& subDomain = context.SS->SubDomains.Update(pathId, context.MemChanges);
+        auto subDomain = context.SS->SubDomains.Update(pathId, context.MemChanges);
         if (!subDomain->IsSupportTransactions()) {
             result->SetError(NKikimrScheme::StatusSchemeError, "There are no sense to upgrade subdomain with out transactions support (NBS?).");
             return result;

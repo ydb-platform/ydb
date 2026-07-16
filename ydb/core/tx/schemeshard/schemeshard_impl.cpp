@@ -4040,7 +4040,8 @@ void TSchemeShard::PersistSecretRemove(NIceDb::TNiceDb& db, TPathId pathId) {
         return;
     }
 
-    auto& secretInfo = Secrets.UpdateUntracked(pathId);
+    // Copy, not a reference: Secrets.erase(pathId) below destroys the slot.
+    auto secretInfo = Secrets.UpdateUntracked(pathId);
     if (secretInfo->AlterData) {
         secretInfo->AlterData = nullptr;
         PersistSecretAlterRemove(db, pathId);

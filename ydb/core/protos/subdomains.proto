@@ -144,6 +144,14 @@ message TDomainDescription {
     optional NLoginProto.TSecurityState SecurityState = 20;
 
     optional TAuditSettings AuditSettings = 21;
+
+    // Database-wide default detailed metrics level for row/column tables
+    // (spec's TABLES_METRICS_LEVEL). Values match
+    // NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel; kept as a
+    // raw int here (rather than that enum type) because flat_scheme_op.proto
+    // (which defines it) already imports this file, and referencing it back
+    // would create a proto import cycle.
+    optional uint32 TablesMetricsLevel = 26;
 }
 
 message TSchemeQuotas {

@@ -2437,6 +2437,15 @@ const NTabletFlatExecutor::NFlatExecutorSetup::TTabletTableInfo* TDataShard::Get
     TableInfoCache.TableId = TPathId(GetPathOwnerId(), TableInfos.begin()->first);
     TableInfoCache.TablePath = table.Path;
     TableInfoCache.SchemaVersion = table.GetTableSchemaVersion();
+
+    // Effective level: the table's own override wins; otherwise fall back to
+    // the database-wide default learned via the subdomain subscription.
+    const auto tableLevel = table.GetDetailedMetricsLevel();
+    const auto effectiveLevel = tableLevel != NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified
+        ? tableLevel
+        : GetSubDomainTablesMetricsLevel();
+    TableInfoCache.MetricsLevel = static_cast<ui32>(effectiveLevel);
+
     return &TableInfoCache;
 }
 

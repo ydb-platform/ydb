@@ -31,6 +31,9 @@ constexpr ui64 InitialDDiskSessionSeqNo = 0;
 constexpr size_t MinLockedDDiskSessionsToStart =
     QuorumDirectBlockGroupHostCount;
 
+constexpr TStringBuf DDiskSessionIsNotEstablishedMessage =
+    "DDisk session is not established";
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TListPBufferResponse MakeListPBufferResponse(
@@ -74,6 +77,61 @@ THostSnapshot MakeHostSnapshot(const TOracleHostStat& stat)
         .Errors = stat.Errors,
         .PBufferUsedSize = stat.PBufferUsedSize,
     };
+}
+
+// help function for TDirectBlockGroup::SyncWithPBuffer
+std::function<void(const TFuture<NProto::TError>&)>
+CreateWaitSessionCbForSyncWithPBuffer(
+    TPromise<TDBGFlushResponse>&& promise,
+    std::weak_ptr<TDirectBlockGroup>&& weakSelf,
+    ui32 vChunkIndex,
+    THostIndex pbufferHostIndex,
+    THostIndex ddiskHostIndex,
+    const TVector<TPBufferSegment>& segments,
+    std::shared_ptr<NWilson::TSpan> childSpan)
+{
+    using TDBGFlushResponseFuture = NThreading::TFuture<TDBGFlushResponse>;
+    auto cb = [weakSelf = std::move(weakSelf),
+               promise = std::move(promise),
+               vChunkIndex,
+               pbufferHostIndex,
+               ddiskHostIndex,
+               segments = segments,
+               childSpan = std::move(childSpan)]   //
+        (const TFuture<NProto::TError>& f) mutable
+    {
+        TDBGFlushResponse flushResponse;
+        if (HasError(f.GetValue())) {
+            for (size_t i = 0; i < segments.size(); ++i) {
+                flushResponse.Errors.push_back(MakeError(
+                    E_REJECTED,
+                    TString(DDiskSessionIsNotEstablishedMessage)));
+            }
+            promise.SetValue(std::move(flushResponse));
+            return;
+        }
+
+        if (auto self = weakSelf.lock()) {
+            childSpan->Event("ConnectionReady");
+
+            self->SyncWithPBuffer(
+                    vChunkIndex,
+                    pbufferHostIndex,
+                    ddiskHostIndex,
+                    segments,
+                    childSpan->GetTraceId())
+                .Subscribe([promise = std::move(promise)]   //
+                           (const TDBGFlushResponseFuture& f) mutable
+                           { promise.SetValue(f.GetValue()); });
+        } else {
+            for (size_t i = 0; i < segments.size(); ++i) {
+                flushResponse.Errors.push_back(MakeError(E_CANCELLED));
+            }
+        }
+        promise.SetValue(std::move(flushResponse));
+    };
+
+    return cb;
 }
 
 }   // namespace
@@ -244,6 +302,8 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
 
     using TEvReadResultFuture =
         TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult>;
+    using TDBGReadBlocksResponseFuture =
+        NThreading::TFuture<TDBGReadBlocksResponse>;
 
     auto startAt = TMonotonic::Now();
     auto promise = NewPromise<TDBGReadBlocksResponse>();
@@ -268,7 +328,7 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                 promise.SetValue(TDBGReadBlocksResponse{
                     .Error = MakeError(
                         E_REJECTED,
-                        "DDisk session is not established")});
+                        TString(DDiskSessionIsNotEstablishedMessage))});
                 return;
             }
 
@@ -281,10 +341,9 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                         range,
                         guardedSglist,
                         childSpan->GetTraceId())
-                    .Subscribe(
-                        [promise = std::move(promise)]   //
-                        (const NThreading::TFuture<TDBGReadBlocksResponse>&
-                             f) mutable { promise.SetValue(f.GetValue()); });
+                    .Subscribe([promise = std::move(promise)]   //
+                               (const TDBGReadBlocksResponseFuture& f) mutable
+                               { promise.SetValue(UnsafeExtractValue(f)); });
 
             } else {
                 promise.SetValue(
@@ -435,6 +494,8 @@ TDirectBlockGroup::WriteBlocksToDDisk(
 
     using TEvWriterResultFuture =
         NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvWriteResult>;
+    using TDBGWriteBlocksResponseFuture =
+        NThreading::TFuture<TDBGWriteBlocksResponse>;
 
     const auto startAt = TMonotonic::Now();
     auto childSpan =
@@ -460,7 +521,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                 promise.SetValue(TDBGWriteBlocksResponse{
                     .Error = MakeError(
                         E_REJECTED,
-                        "DDisk session is not established")});
+                        TString(DDiskSessionIsNotEstablishedMessage))});
                 return;
             }
             if (auto self = weakSelf.lock()) {
@@ -472,10 +533,9 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                         range,
                         guardedSglist,
                         childSpan->GetTraceId())
-                    .Subscribe(
-                        [promise = std::move(promise)]   //
-                        (const NThreading::TFuture<TDBGWriteBlocksResponse>&
-                             f) mutable { promise.SetValue(f.GetValue()); });
+                    .Subscribe([promise = std::move(promise)]   //
+                               (const TDBGWriteBlocksResponseFuture& f) mutable
+                               { promise.SetValue(f.GetValue()); });
 
             } else {
                 promise.SetValue(
@@ -792,49 +852,15 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
     {
         childSpan->Event("WaitConnectionReady");
 
-        auto waitReadyCb = [weakSelf = weak_from_this(),
-                            promise = std::move(promise),
-                            vChunkIndex,
-                            pbufferHostIndex,
-                            ddiskHostIndex,
-                            segments = segments,
-                            childSpan = std::move(childSpan)]   //
-            (const TFuture<NProto::TError>& f) mutable
-        {
-            TDBGFlushResponse flushResponse;
-            if (HasError(f.GetValue())) {
-                for (size_t i = 0; i < segments.size(); ++i) {
-                    flushResponse.Errors.push_back(MakeError(
-                        E_REJECTED,
-                        "DDisk session is not established"));
-                }
-                promise.SetValue(std::move(flushResponse));
-                return;
-            }
-            if (auto self = weakSelf.lock()) {
-                childSpan->Event("ConnectionReady");
-
-                self->SyncWithPBuffer(
-                        vChunkIndex,
-                        pbufferHostIndex,
-                        ddiskHostIndex,
-                        segments,
-                        childSpan->GetTraceId())
-                    .Subscribe([promise = std::move(promise)]   //
-                               (const NThreading::TFuture<TDBGFlushResponse>&
-                                    f) mutable
-                               { promise.SetValue(f.GetValue()); });
-
-            } else {
-                for (size_t i = 0; i < segments.size(); ++i) {
-                    flushResponse.Errors.push_back(MakeError(E_CANCELLED));
-                }
-            }
-            promise.SetValue(std::move(flushResponse));
-        };
-
-        DDiskConnections[ddiskHostIndex].GetFuture().Subscribe(
-            std::move(waitReadyCb));
+        auto cb = CreateWaitSessionCbForSyncWithPBuffer(
+            std::move(promise),
+            std::move(weak_from_this()),
+            vChunkIndex,
+            pbufferHostIndex,
+            ddiskHostIndex,
+            segments,
+            childSpan);
+        DDiskConnections[ddiskHostIndex].GetFuture().Subscribe(std::move(cb));
 
         return flushFuture;
     }

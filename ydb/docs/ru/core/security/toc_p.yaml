@@ -1,4 +1,6 @@
 items:
+- name: Аутентификация устройств
+  href: device-auth.md
 - name: Аутентификация
   href: authentication.md
 - name: Авторизация

@@ -306,7 +306,7 @@ std::unique_ptr<TEventHandle<NDDisk::TEvWriteResult>> DoWrite(TTestContext& ctx,
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDDiskActorTest) {
-    Y_UNIT_TEST(PoisonWaitsForPersistentBufferBeforeNotifyingNodeWarden) {
+    Y_UNIT_TEST(PoisonNotifiesNodeWardenImmediately) {
         TTestContext ctx;
         ctx.Runtime.RegisterService(MakeBlobStorageNodeWardenID(NodeId), ctx.Edge);
 
@@ -339,18 +339,19 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT(ctx.Runtime.WrapInActorContext(persistentBufferActorId, [](IActor*) {}));
 
         ctx.Runtime.FilterFunction = {};
-        ctx.Runtime.Send(new IEventHandle(ctx.Edge, {}, new TEvents::TEvWakeup()), NodeId);
-        auto eventBeforePersistentBufferShutdown = ctx.Runtime.WaitForEdgeActorEvent({ctx.Edge});
-        UNIT_ASSERT_VALUES_EQUAL_C(eventBeforePersistentBufferShutdown->GetTypeRewrite(),
-            TEvents::TEvWakeup::EventType,
-            "NodeWarden must not receive TEvGone while the persistent buffer actor is still alive");
+        const auto gone = WaitFromDDisk<TEvents::TEvGone>(ctx);
 
         ctx.Runtime.Send(std::move(blockedPersistentBufferPoison), NodeId);
-        const auto gone = WaitFromDDisk<TEvents::TEvGone>(ctx);
 
         UNIT_ASSERT_VALUES_EQUAL(gone->Sender, ddiskActorId);
         UNIT_ASSERT(!ctx.Runtime.WrapInActorContext(ddiskActorId, [](IActor*) {}));
-        UNIT_ASSERT(!ctx.Runtime.WrapInActorContext(persistentBufferActorId, [](IActor*) {}));
+        ui32 persistentBufferEventsProcessed = 0;
+        ctx.Runtime.Sim([&] {
+            return ctx.Runtime.WrapInActorContext(persistentBufferActorId, [](IActor*) {})
+                && ++persistentBufferEventsProcessed <= 200;
+        });
+        UNIT_ASSERT_C(!ctx.Runtime.WrapInActorContext(persistentBufferActorId, [](IActor*) {}),
+            "Persistent buffer must stop after receiving poison");
     }
 
     Y_UNIT_TEST(SessionValidation) {

@@ -369,23 +369,28 @@ namespace NKikimr::NDDisk {
         void CollectPbStatsSnapshot();
 
         const bool IsPersistentBufferActor = false;
+        const TActorId ParentDDiskActorId;
 
     public:
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor = false);
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor = false,
+            TActorId parentDDiskActorId = {});
 
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const std::vector<ui32>& initPersistentBufferChunks,
             ui64 persistentBufferUniqueId, TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat,
-            TFileHandle&& diskFd);
+            TFileHandle&& diskFd, TActorId parentDDiskActorId);
 
         ~TDDiskActor();
         void Bootstrap();
         STFUNC(StateFuncDDisk);
         STFUNC(StateFuncPersistentBuffer);
         STFUNC(StateFuncTerminate);
+        STFUNC(StateFuncShutdown);
+        void HandlePoison();
+        void HandlePersistentBufferGone(TEvents::TEvGone::TPtr ev);
         void PassAway() override;
 
         // Mirrors TVDiskContext::CheckPDiskResponse: returns true on OK, returns false and

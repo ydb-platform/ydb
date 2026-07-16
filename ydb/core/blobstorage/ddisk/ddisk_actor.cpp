@@ -40,8 +40,9 @@ namespace {
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const std::vector<ui32>& initPersistentBufferChunks,
             ui64 persistentBufferUniqueId, TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat,
-            TFileHandle&& diskFd)
-        : TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat), std::move(ddiskConfig), counters, true)
+            TFileHandle&& diskFd, TActorId parentDDiskActorId)
+        : TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat), std::move(ddiskConfig), counters, true,
+            parentDDiskActorId)
     {
         PersistentBufferUniqueId = persistentBufferUniqueId;
         PDiskParams = pDiskParams;
@@ -66,13 +67,15 @@ namespace {
 
     TDDiskActor::TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor)
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor,
+            TActorId parentDDiskActorId)
         : BaseInfo(std::move(baseInfo))
         , Config(std::move(ddiskConfig))
         , Info(std::move(info))
         , CountersParent(std::move(counters))
         , CountersBase(GetServiceCounters(CountersParent, "ddisks"))
         , IsPersistentBufferActor(isPersistentBufferActor)
+        , ParentDDiskActorId(parentDDiskActorId)
         , SegmentManager(DDiskInstanceGuid)
         , PersistentBufferFormat(std::move(pbFormat))
     {
@@ -310,7 +313,8 @@ namespace {
             hFunc(NMon::TEvHttpInfo, Handle)
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
-            cFunc(TEvents::TSystem::Poison, PassAway)
+            hFunc(TEvents::TEvGone, HandlePersistentBufferGone)
+            cFunc(TEvents::TSystem::Poison, HandlePoison)
         )
     }
 
@@ -344,7 +348,7 @@ namespace {
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
-            cFunc(TEvents::TSystem::Poison, PassAway)
+            cFunc(TEvents::TSystem::Poison, HandlePoison)
 
             case TEvReadThenWritePersistentBuffers::EventType:
             case TEvWritePersistentBuffers::EventType: {
@@ -356,12 +360,23 @@ namespace {
     }
 
     STFUNC(TDDiskActor::StateFuncTerminate) {
-        // Mirrors VDisk's PDISK_TERMINATE_STATE_FUNC_DEF: ignore everything except poison.
+        // Mirrors VDisk's PDISK_TERMINATE_STATE_FUNC_DEF: ignore everything except poison
+        // and termination of our persistent buffer child.
         // Reaching this state means PDisk's session for our owner is gone (INVALID_ROUND etc).
         // The owning environment (warden in production, test scaffolding in tests) is expected
         // to send TEvPoison and start a replacement DDisk actor with a fresh OwnerRound.
         switch (ev->GetTypeRewrite()) {
-            cFunc(TEvents::TSystem::Poison, PassAway)
+            hFunc(TEvents::TEvGone, HandlePersistentBufferGone)
+            cFunc(TEvents::TSystem::Poison, HandlePoison)
+            default:
+                break;
+        }
+    }
+
+    STFUNC(TDDiskActor::StateFuncShutdown) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvents::TEvGone, HandlePersistentBufferGone)
+            IgnoreFunc(TEvents::TEvPoison)
             default:
                 break;
         }
@@ -392,11 +407,27 @@ namespace {
         }
     }
 
-    void TDDiskActor::PassAway() {
-        if (IsPersistentBufferActor) {
-            Send(WritePersistentBuffersActor, new NActors::TEvents::TEvPoison());
+    void TDDiskActor::HandlePoison() {
+        if (IsPersistentBufferActor || !PersistentBufferActorId) {
+            PassAway();
         } else {
+            Become(&TThis::StateFuncShutdown);
             Send(PersistentBufferActorId, new NActors::TEvents::TEvPoison());
+        }
+    }
+
+    void TDDiskActor::HandlePersistentBufferGone(TEvents::TEvGone::TPtr ev) {
+        if (IsPersistentBufferActor) {
+            return;
+        }
+        Y_ABORT_UNLESS(ev->Sender == PersistentBufferActorId);
+        PersistentBufferActorId = {};
+        PassAway();
+    }
+
+    void TDDiskActor::PassAway() {
+        if (IsPersistentBufferActor && WritePersistentBuffersActor) {
+            Send(WritePersistentBuffersActor, new NActors::TEvents::TEvPoison());
         }
 #if defined(__linux__)
         if (UringRouter) {
@@ -408,6 +439,13 @@ namespace {
         }
 #endif
         CountersBase->RemoveSubgroupChain(CountersChain);
+        if (IsPersistentBufferActor) {
+            Y_ABORT_UNLESS(ParentDDiskActorId);
+            Send(ParentDDiskActorId, new TEvents::TEvGone());
+        } else {
+            Y_ABORT_UNLESS(!PersistentBufferActorId);
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvents::TEvGone());
+        }
         TActorBootstrapped::PassAway();
     }
 

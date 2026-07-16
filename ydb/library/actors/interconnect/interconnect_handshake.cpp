@@ -474,10 +474,10 @@ namespace NActors {
             Schedule(Deadline, new TEvents::TEvWakeup);
             TRdmaPreinitedSessionPtr rdmaPreinitSession;
             try {
-                std::optional<NActorsInterconnect::TRdmaCred> rdmaIncommingRead;    
+                std::optional<NActorsInterconnect::TRdmaCred> rdmaIncomingRead;
                 const bool incoming = MainChannel;
                 if (incoming) {
-                    PerformIncomingHandshake(rdmaIncommingRead, rdmaPreinitSession);
+                    PerformIncomingHandshake(rdmaIncomingRead, rdmaPreinitSession);
                 } else {
                     PerformOutgoingHandshake(rdmaPreinitSession);
                 }
@@ -495,8 +495,8 @@ namespace NActors {
                             }
                             // RDMA is part of XDC.
                             // Try to complete rdma handshake by reading remote region via RDMA READ verb
-                            if (rdmaIncommingRead) {
-                                auto ack = TryRdmaRead(rdmaIncommingRead.value());
+                            if (rdmaIncomingRead) {
+                                auto ack = TryRdmaRead(rdmaIncomingRead.value());
                                 SendExBlock(MainChannel, ack, "TRdmaHandshakeReadAck");
                                 if (ack.HasDigest()) {
                                     Params.UseRdma = true;
@@ -873,11 +873,11 @@ namespace NActors {
             return region;
         }
 
-        TRdmaPreinitedSessionPtr RunRdmaIncomminghandshakePart() {
+        TRdmaPreinitedSessionPtr RunRdmaIncomingHandshakePart() {
             MainChannel.ResetPollerToken();
             Register(NInterconnect::NRdma::CreateRdmaIncommingSyncActor(
                 Common, SelfVirtualId, PeerVirtualId, PeerNodeId, MainChannel.GetSocketRef(), Rdma.Qp, Rdma.Cq));
-                        
+
             auto ev = WaitForSpecificEvent<TEvRdmaSyncResult>("TEvRdmaSyncResult");
             MainChannel.RegisterInPoller();
 
@@ -917,12 +917,12 @@ namespace NActors {
                 if (Params.AllowRdmaSendReceive) {
                     // QP is ready, now we need two things:
                     // 1. make sure send and receive works
-                    // 2. perform barrier to make sure sessions are ready to handle recieve
+                    // 2. perform barrier to make sure sessions are ready to handle receive
                     MainChannel.ResetPollerToken();
 
                     Register(NInterconnect::NRdma::CreateRdmaOutgoingSyncActor(
                         Common, SelfVirtualId, PeerVirtualId, PeerNodeId, MainChannel.GetSocketRef(), Rdma.Qp, Rdma.Cq));
-                        
+
                     auto ev = WaitForSpecificEvent<TEvRdmaSyncResult>("TEvRdmaSyncResult");
                     MainChannel.RegisterInPoller();
                     if (auto err = ev->Get()->Error()) {
@@ -1411,7 +1411,7 @@ namespace NActors {
                 Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
                 Params.UseXxhash = request.GetRequestXxhash();
                 Params.UseXdcShuffle = request.GetRequestXdcShuffle();
-                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady(); 
+                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
                 Params.AllowDisablingPayloadChecksums = request.GetRequestAllowDisablingPayloadChecksums();
                 // v2 session is used only when both peers enabled it and encryption is not in effect
                 Params.UseSessionV2 = request.GetRequestSessionV2() &&
@@ -1440,9 +1440,9 @@ namespace NActors {
                     params.emplace(item.GetKey(), item.GetValue());
                 }
 
-                std::optional<NActorsInterconnect::TRdmaHandshake> rdmaIncommingHandshake;
+                std::optional<NActorsInterconnect::TRdmaHandshake> rdmaIncomingHandshake;
                 if (Rdma && request.HasRdmaHandshake()) {
-                    rdmaIncommingHandshake = request.GetRdmaHandshake();
+                    rdmaIncomingHandshake = request.GetRdmaHandshake();
                 } else {
                     Rdma.Clear();
                 }
@@ -1464,12 +1464,12 @@ namespace NActors {
                         FillInScopeId(*success.MutableServerScopeId());
                     }
 
-                    if (rdmaIncommingHandshake) {
-                        TryRdmaQpExchange(rdmaIncommingHandshake.value(), success);
+                    if (rdmaIncomingHandshake) {
+                        TryRdmaQpExchange(rdmaIncomingHandshake.value(), success);
                         if (Rdma) {
-                            if (rdmaIncommingHandshake->HasRead()) {
-                                rdma = rdmaIncommingHandshake->GetRead();
-                                if (rdmaIncommingHandshake->HasRdmaChecksum() && rdmaIncommingHandshake->GetRdmaChecksum() == true) {
+                            if (rdmaIncomingHandshake->HasRead()) {
+                                rdma = rdmaIncomingHandshake->GetRead();
+                                if (rdmaIncomingHandshake->HasRdmaChecksum() && rdmaIncomingHandshake->GetRdmaChecksum() == true) {
                                     Params.ChecksumRdmaEvent = Common->Settings.RdmaChecksum;
                                     success.MutableQpPrepared()->SetRdmaChecksum(Params.ChecksumRdmaEvent);
                                 } else {
@@ -1478,15 +1478,15 @@ namespace NActors {
                                 }
                             }
                             if (Common->Settings.EnableRdmaSendReceive
-                                    && (rdmaIncommingHandshake->GetSendReceiveVersion() == RdmaSendReceiveVersion)) {
+                                    && (rdmaIncomingHandshake->GetSendReceiveVersion() == RdmaSendReceiveVersion)) {
                                 Params.AllowRdmaSendReceive = true;
                                 success.MutableQpPrepared()->SetSendReceiveVersion(RdmaSendReceiveVersion);
                             }
                         } else {
-                            success.SetRdmaErr("Unable to perform qp exchange on the incomming side");
+                            success.SetRdmaErr("Unable to perform qp exchange on the incoming side");
                         }
                     } else {
-                        success.SetRdmaErr("Rdma is not ready on the incomming side");
+                        success.SetRdmaErr("Rdma is not ready on the incoming side");
                     }
 
                     success.SetUseModernFrame(true);
@@ -1528,7 +1528,7 @@ namespace NActors {
                     const auto& str = success.GetSenderActorId();
                     SelfVirtualId.Parse(str.data(), str.size());
                     if (Params.AllowRdmaSendReceive) {
-                        rdmaSession = std::move(RunRdmaIncomminghandshakePart());
+                        rdmaSession = std::move(RunRdmaIncomingHandshakePart());
                     }
                 } else if (auto ev = reply->CastAsLocal<TEvHandshakeReplyError>()) {
                     // in case of error just send reply to the peer and terminate handshake
@@ -1657,7 +1657,7 @@ namespace NActors {
                 if (err) {
                     TStringBuilder sb;
                     sb << hd;
-                    success.SetRdmaErr("Unable to promote QP to RTS on the incomming side");
+                    success.SetRdmaErr("Unable to promote QP to RTS on the incoming side");
                     LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                         "Unable to promote QP to RTS, err: %d (%s), handshake data: %s", err, strerror(err), sb.data());
                     Rdma.Clear();

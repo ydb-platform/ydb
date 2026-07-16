@@ -89,7 +89,7 @@ enum ERdmaSyncErrorCode {
 
 // Send by TCP
 message TRdmaStartSync {
-    required uint32 Version = 1;         // The RdmaSync protocol version 
+    required uint32 Version = 1;         // The RdmaSync protocol version
     required uint64 FeatureMask = 2;     // Requested feature mask
     required uint64 SessionHash = 3;     // xxhash(SelfVirtualId) | xxhash(PeerVirtualId)
     optional uint64 MaxRdmaRttNs = 4;    // If set the peer will accept rdma ACK only if it took less time
@@ -199,7 +199,7 @@ message THandshakeSuccess {
     repeated TKeyValuePair Params = 18; // extra params for connection validation
 
     oneof RdmaHandshake {
-        TRdmaHandshake QpPrepared = 19; // Set and containts QP of incomming handshaker
+        TRdmaHandshake QpPrepared = 19; // Set and contains QP of incoming handshaker
         string RdmaErr = 20;
     }
 }

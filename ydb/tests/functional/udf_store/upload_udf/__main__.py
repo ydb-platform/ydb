@@ -4,7 +4,7 @@
 Standalone helper: upload a UDF to YDB tables.
 
 For NATIVE_UNSAFE: KV volume + meta table (unchanged).
-For WASM: wasm_source + meta tables (no KV, no disk).
+For WASM: wasm_source (+ chunks) + meta tables (no KV, no disk).
 """
 
 import argparse
@@ -18,12 +18,15 @@ import ydb
 
 from ydb.tests.functional.udf_store.lib.constants import (
     UDF_KV_BINARIES_PATH,
+    UDF_TABLE_LIBRARY_SOURCE_CHUNKS_PATH,
     UDF_TABLE_LIBRARY_SOURCE_PATH,
     UDF_TABLE_META_PATH,
+    UDF_TABLE_WASM_SOURCE_CHUNKS_PATH,
     UDF_TABLE_WASM_SOURCE_PATH,
+    WASM_BLOB_CHUNK_SIZE,
 )
 
-_CHUNK_SIZE = 4 * 1024 * 1024  # 4 MiB
+_HASH_CHUNK_SIZE = 4 * 1024 * 1024  # 4 MiB
 
 
 def _uint64(value: int):
@@ -42,7 +45,7 @@ def _compute_md5(path: str) -> tuple:
     size = 0
     with open(path, "rb") as f:
         while True:
-            chunk = f.read(_CHUNK_SIZE)
+            chunk = f.read(_HASH_CHUNK_SIZE)
             if not chunk:
                 break
             ctx.update(chunk)
@@ -53,6 +56,12 @@ def _compute_md5(path: str) -> tuple:
 def _read_file(path: str) -> bytes:
     with open(path, "rb") as f:
         return f.read()
+
+
+def _split_blob(data: bytes, chunk_size: int = WASM_BLOB_CHUNK_SIZE) -> list:
+    if not data:
+        return []
+    return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 
 def _upload_to_kv(endpoint: str, database: str, udf_file: str, md5: str) -> None:
@@ -75,6 +84,26 @@ def _upload_to_kv(endpoint: str, database: str, udf_file: str, md5: str) -> None
         )
 
 
+def _upsert_source_chunks(pool, database: str, chunks_table: str, owner_key: str, chunks: list) -> None:
+    full_table = "{}/{}".format(database, chunks_table)
+    query = (
+        "DECLARE $owner_key AS Utf8; "
+        "DECLARE $chunk_idx AS Uint64; "
+        "DECLARE $data AS String; "
+        "UPSERT INTO `{}` (owner_key, chunk_idx, data) "
+        "VALUES ($owner_key, $chunk_idx, $data);"
+    ).format(full_table)
+    for idx, chunk in enumerate(chunks):
+        pool.execute_with_retries(
+            query,
+            {
+                "$owner_key": owner_key,
+                "$chunk_idx": _uint64(idx),
+                "$data": chunk,
+            },
+        )
+
+
 def _upsert_wasm_source(
     pool,
     database: str,
@@ -82,16 +111,26 @@ def _upsert_wasm_source(
     version: int,
     body: bytes,
 ) -> None:
+    chunks = _split_blob(body)
+    _upsert_source_chunks(pool, database, UDF_TABLE_WASM_SOURCE_CHUNKS_PATH, md5, chunks)
+
     full_table = "{}/{}".format(database, UDF_TABLE_WASM_SOURCE_PATH)
     query = (
         "DECLARE $md5 AS Utf8; "
         "DECLARE $version AS Uint64; "
-        "DECLARE $body AS String; "
-        "UPSERT INTO `{}` (md5, version, body) VALUES ($md5, $version, $body);"
+        "DECLARE $size AS Uint64; "
+        "DECLARE $chunk_count AS Uint64; "
+        "UPSERT INTO `{}` (md5, version, size, chunk_count) "
+        "VALUES ($md5, $version, $size, $chunk_count);"
     ).format(full_table)
     pool.execute_with_retries(
         query,
-        {"$md5": md5, "$version": _uint64(version), "$body": body},
+        {
+            "$md5": md5,
+            "$version": _uint64(version),
+            "$size": _uint64(len(body)),
+            "$chunk_count": _uint64(len(chunks)),
+        },
     )
 
 
@@ -104,15 +143,19 @@ def _upsert_library_source(
     body: bytes,
     compile_status: str = "pending",
 ) -> None:
+    chunks = _split_blob(body)
+    _upsert_source_chunks(pool, database, UDF_TABLE_LIBRARY_SOURCE_CHUNKS_PATH, name, chunks)
+
     full_table = "{}/{}".format(database, UDF_TABLE_LIBRARY_SOURCE_PATH)
     query = (
         "DECLARE $name AS Utf8; "
         "DECLARE $md5 AS Utf8; "
         "DECLARE $version AS Uint64; "
-        "DECLARE $body AS String; "
+        "DECLARE $size AS Uint64; "
+        "DECLARE $chunk_count AS Uint64; "
         "DECLARE $compile_status AS Utf8; "
-        "UPSERT INTO `{}` (name, md5, version, body, compile_status) "
-        "VALUES ($name, $md5, $version, $body, $compile_status);"
+        "UPSERT INTO `{}` (name, md5, version, size, chunk_count, compile_status) "
+        "VALUES ($name, $md5, $version, $size, $chunk_count, $compile_status);"
     ).format(full_table)
     pool.execute_with_retries(
         query,
@@ -120,7 +163,8 @@ def _upsert_library_source(
             "$name": name,
             "$md5": md5,
             "$version": _uint64(version),
-            "$body": body,
+            "$size": _uint64(len(body)),
+            "$chunk_count": _uint64(len(chunks)),
             "$compile_status": compile_status,
         },
     )
@@ -206,8 +250,8 @@ def main() -> int:
     try:
         md5, size = _compute_md5(args.udf_file)
         body = _read_file(args.udf_file)
-        print("[upload_udf] file={} size={} md5={} type={} kind={}".format(
-            args.udf_file, size, md5, args.type, args.kind), file=sys.stderr)
+        print("[upload_udf] file={} size={} md5={} type={} kind={} chunks={}".format(
+            args.udf_file, size, md5, args.type, args.kind, len(_split_blob(body))), file=sys.stderr)
 
         with ydb.Driver(ydb.DriverConfig(endpoint=args.endpoint, database=args.database)) as driver:
             driver.wait(timeout=30, fail_fast=True)

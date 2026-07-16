@@ -227,6 +227,27 @@ void TWasmLibraryCompileActor::FailAndPersist(const TString& message) {
     ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
 }
 
+void TWasmLibraryCompileActor::StartWriteChunks() {
+    NextChunkWriteIndex_ = 0;
+    WriteNextChunk();
+}
+
+void TWasmLibraryCompileActor::WriteNextChunk() {
+    if (NextChunkWriteIndex_ >= PendingChunkWrites_.size()) {
+        Step_ = EStep::UpdateMetaReady;
+        ExecuteQuery(NTableQuery::BuildUpdateLibraryCompileStatusQuery(LibrarySourceTablePath_), false);
+        return;
+    }
+    Step_ = EStep::WriteArtifactChunk;
+    ExecuteQuery(NTableQuery::BuildUpsertArtifactChunkQuery(ArtifactChunksTablePath_), false);
+}
+
+void TWasmLibraryCompileActor::FailAndPersist(const TString& message) {
+    ErrorMessage_ = message;
+    Step_ = EStep::UpdateMetaFailed;
+    ExecuteQuery(NTableQuery::BuildUpdateLibraryCompileStatusQuery(LibrarySourceTablePath_), false);
+}
+
 void TWasmLibraryCompileActor::ReplyError(const TString& message) {
     ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "TWasmLibraryCompileActor: " << message;
     Send(ReplyTo_, new TEvLibraryCompileResponse(false, LibraryName_, message));

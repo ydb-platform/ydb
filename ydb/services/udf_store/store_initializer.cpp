@@ -54,6 +54,18 @@ void TUdfStoreInitializer::CreateNextTable() {
             ));
             break;
         }
+        case EInitStep::LibrarySourceChunks: {
+            Register(CreateTableCreator(
+                GetTablePathSuffix(GetLibrarySourceChunksTablePath()),
+                TSourceChunkSchema::GetColumnDescription(),
+                TSourceChunkSchema::GetPk(),
+                NKikimrServices::METADATA_PROVIDER,
+                Nothing(),
+                {},
+                /* isSystemUser */ true
+            ));
+            break;
+        }
         case EInitStep::KvVolume: {
             auto tablePath = SplitPath(TUdfModule::GetBehaviour()->GetStorageTablePath());
             AFL_VERIFY(!tablePath.empty());

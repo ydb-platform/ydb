@@ -54,6 +54,10 @@ TString BuildSelectSourceChunksQuery(const TString& tablePath);
 void SetSelectSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey);
 bool ParseSourceChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks);
 
+TString BuildSelectSourceChunksQuery(const TString& tablePath);
+void SetSelectSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey);
+bool ParseSourceChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TString>& chunks);
+
 TString BuildSelectArtifactQuery(const TString& tablePath);
 void SetSelectArtifactParams(
     Ydb::Table::ExecuteDataQueryRequest& request,

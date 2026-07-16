@@ -7,7 +7,8 @@ TUdfLibrarySource::TDecoder::TDecoder(const Ydb::ResultSet& rawData) {
     NameIdx = GetFieldIndex(rawData, NameColName);
     Md5Idx = GetFieldIndex(rawData, Md5ColName);
     VersionIdx = GetFieldIndex(rawData, VersionColName);
-    BodyIdx = GetFieldIndex(rawData, BodyColName);
+    SizeIdx = GetFieldIndex(rawData, SizeColName);
+    ChunkCountIdx = GetFieldIndex(rawData, ChunkCountColName);
     CompileStatusIdx = GetFieldIndex(rawData, CompileStatusColName);
     CompileErrorIdx = GetFieldIndex(rawData, CompileErrorColName);
 }
@@ -34,7 +35,8 @@ TVector<NKikimrSchemeOp::TColumnDescription> TUdfLibrarySource::GetColumnDescrip
         makeCol(NameColName, "Utf8"),
         makeCol(Md5ColName, "Utf8"),
         makeCol(VersionColName, "Uint64"),
-        makeCol(BodyColName, "String"),
+        makeCol(SizeColName, "Uint64"),
+        makeCol(ChunkCountColName, "Uint64"),
         makeCol(CompileStatusColName, "Utf8"),
         makeCol(CompileErrorColName, "Utf8"),
     };
@@ -54,8 +56,11 @@ bool TUdfLibrarySource::DeserializeFromRecord(const TDecoder& decoder, const Ydb
     if (decoder.GetVersionIdx() >= 0) {
         decoder.Read(decoder.GetVersionIdx(), Version, rawValue);
     }
-    if (!decoder.Read(decoder.GetBodyIdx(), Body, rawValue)) {
-        return false;
+    if (decoder.GetSizeIdx() >= 0) {
+        decoder.Read(decoder.GetSizeIdx(), Size, rawValue);
+    }
+    if (decoder.GetChunkCountIdx() >= 0) {
+        decoder.Read(decoder.GetChunkCountIdx(), ChunkCount, rawValue);
     }
     if (decoder.GetCompileStatusIdx() >= 0) {
         ECompileStatus status = ECompileStatus::Pending;
@@ -80,6 +85,8 @@ TString TUdfLibrarySource::SerializeToString() const {
         << "{Name: " << Name
         << ", Md5: " << Md5
         << ", Version: " << Version
+        << ", Size: " << Size
+        << ", ChunkCount: " << ChunkCount
         << ", CompileStatus: " << TUdfMeta::CompileStatusToString(CompileStatus)
         << "}";
 }

@@ -1540,7 +1540,7 @@ private:
 
                 for (const auto& tx : Self->TxInFlight) {
                     TOperationId opId = tx.first;
-                    const TTxState txState = tx.second;
+                    const TTxState& txState = tx.second;
                     TABLER() {
                         TABLED() { str << "<a href='app?" << TCgi::Page.AsCgiParam(TCgi::TPages::TransactionInfo)
                                                           << "&" << TCgi::TabletID.AsCgiParam(Self->TabletID())
@@ -1575,7 +1575,7 @@ private:
                     str << "Unknown Tx\n";
                 }
             } else {
-                const TTxState txState = *txInfo;
+                const TTxState& txState = *txInfo;
 
                 OutputOperationPartInfo(operationId, str);
 

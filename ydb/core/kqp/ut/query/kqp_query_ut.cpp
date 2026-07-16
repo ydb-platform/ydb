@@ -1500,6 +1500,56 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(1).RowsCount(), 5u);
     }
 
+    Y_UNIT_TEST(GenericQueryRowsLimitMultiChunkCounting) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetQueryClient();
+
+        constexpr ui32 rowsLimit = 5;
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .OutputChunkMaxSize(100)
+            .RowsLimit(rowsLimit);
+
+        auto it = db.StreamExecuteQuery(Q_(R"(
+            SELECT * FROM AS_TABLE(ListMap(ListFromRange(1, 101), ($x) -> {
+                RETURN AsStruct($x AS key);
+            }));
+        )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+
+        ui32 totalRows = 0;
+        ui32 resultSetParts = 0;
+        ui32 truncatedParts = 0;
+        bool seenTruncated = false;
+        for (;;) {
+            auto part = it.ReadNext().GetValueSync();
+            if (!part.IsSuccess()) {
+                UNIT_ASSERT_C(part.EOS(), part.GetIssues().ToString());
+                break;
+            }
+
+            if (!part.HasResultSet()) {
+                continue;
+            }
+
+            if (seenTruncated) {
+                UNIT_FAIL("Unexpected result set part after truncation");
+            }
+
+            const auto& resultSet = part.GetResultSet();
+            totalRows += resultSet.RowsCount();
+            ++resultSetParts;
+            if (resultSet.Truncated()) {
+                seenTruncated = true;
+                ++truncatedParts;
+            }
+        }
+
+        UNIT_ASSERT_C(resultSetParts > 1, "Expected multiple stream parts, got " << resultSetParts);
+        UNIT_ASSERT(seenTruncated);
+        UNIT_ASSERT_VALUES_EQUAL(truncatedParts, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(totalRows, rowsLimit);
+    }
+
     Y_UNIT_TEST(GenericQueryNoRowsLimitLotsOfRows) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetQueryClient();

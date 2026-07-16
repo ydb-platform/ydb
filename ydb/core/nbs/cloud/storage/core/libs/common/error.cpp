@@ -194,6 +194,12 @@ bool IsConnectionError(const NProto::TError& e)
     return e.GetCode() == E_GRPC_UNAVAILABLE;
 }
 
+bool IsSessionBlockedError(const NProto::TError& e)
+{
+    return e.GetCode() == E_REJECTED &&
+           e.GetMessage() == TabletGenerationBlockedErrorMessage;
+}
+
 NJson::TJsonValue FormatErrorJson(const NProto::TError& e)
 {
     NJson::TJsonValue result;

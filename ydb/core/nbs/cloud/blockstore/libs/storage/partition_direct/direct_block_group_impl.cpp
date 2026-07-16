@@ -309,12 +309,10 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                     if (auto self = weakSelf.lock()) {
                         NProto::TError error = TranslateError(f.GetValue());
 
-                        if (IsBlockedStatus(f.GetValue().GetStatus())) {
+                        if (IsSessionBlockedError(error)) {
                             self->HandleBlockedGeneration(
                                 hostIndex,
-                                "ReadFromDDisk",
-                                f.GetValue().GetStatus());
-                            error = MakeTabletGenerationBlockedError();
+                                "ReadFromDDisk");
                         }
 
                         self->OnResponse(
@@ -473,12 +471,10 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                     if (auto self = weakSelf.lock()) {
                         NProto::TError error = TranslateError(f.GetValue());
 
-                        if (IsBlockedStatus(f.GetValue().GetStatus())) {
+                        if (IsSessionBlockedError(error)) {
                             self->HandleBlockedGeneration(
                                 hostIndex,
-                                "WriteToDDisk",
-                                f.GetValue().GetStatus());
-                            error = MakeTabletGenerationBlockedError();
+                                "WriteToDDisk");
                         }
                         self->OnResponse(
                             hostIndex,
@@ -853,6 +849,7 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
                 ETranslateFlags::TreatOutdatedAsSuccess));
         }
     } else {
+        NProto::TError error = TranslateError(response);
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
@@ -860,7 +857,11 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
             LogTitle.GetWithTime().c_str(),
             segmentCount,
             response.ShortUtf8DebugString().c_str(),
-            FormatError(TranslateError(response)).c_str());
+            FormatError(error).c_str());
+
+        if (IsSessionBlockedError(error)) {
+            HandleBlockedGeneration(ddiskHostIndex, "SyncWithPBuffer");
+        }
 
         auto error = MakeError(E_FAIL, response.GetErrorReason());
         if (IsBlockedStatus(response.GetStatus())) {
@@ -1447,9 +1448,9 @@ void TDirectBlockGroup::OnConnectionEstablished(
             Oracle.OnDDiskConnected(index, TInstant::Now());
         }
         // INVARIANT: PBuffer does NOT require a session/lock
-    } else if (IsBlockedStatus(result.GetStatus())) {
+    } else if (IsSessionBlockedError(error)) {
         // Terminal: our tablet generation is stale. Suicide, no reconnect.
-        HandleBlockedGeneration(index, "Connect", result.GetStatus());
+        HandleBlockedGeneration(index, "Connect");
         // Unblock waiters on ConnectFuture with the error.
         connection.ConnectPromise.SetValue(error);
         return;
@@ -1457,7 +1458,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s connection failed for host %s (post-init): %s",
+            "%s connection failed for host %s: %s",
             LogTitle.GetWithTime().c_str(),
             PrintHostIndex(static_cast<THostIndex>(index)).c_str(),
             FormatError(error).c_str());
@@ -1758,8 +1759,7 @@ bool TDirectBlockGroup::WaitForSessionLock(THostIndex hostIndex)
 
 void TDirectBlockGroup::HandleBlockedGeneration(
     THostIndex hostIndex,
-    TStringBuf context,
-    NKikimrBlobStorage::NDDisk::TReplyStatus_E status)
+    TStringBuf context)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
@@ -1773,12 +1773,9 @@ void TDirectBlockGroup::HandleBlockedGeneration(
                            << "DDisk returned BLOCKED (stale tablet generation "
                            << TabletGeneration << "); context: " << context
                            << "; " << PrintHostIndex(hostIndex)
-                           << "; DBGIndex: " << DirectBlockGroupIndex
-                           << "; status="
-                           << NKikimrBlobStorage::NDDisk::TReplyStatus_E_Name(
-                                  status);
+                           << "; DBGIndex: " << DirectBlockGroupIndex;
 
-    LOG_CRIT(
+    LOG_ERROR(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "%s SUICIDE: %s",
@@ -1830,10 +1827,34 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot()
         hosts.push_back(MakeHostSnapshot(stat));
     }
 
+    TVector<TConnectionSnapshot> connections;
+    connections.reserve(DDiskConnections.size());
+    for (size_t host = 0; host < DDiskConnections.size(); ++host) {
+        connections.push_back(MakeConnectionSnapshot(host));
+    }
+
     return {
         .Index = DirectBlockGroupIndex,
         .VChunkCount = VChunks.size(),
         .Hosts = std::move(hosts),
+        .Connections = std::move(connections),
+    };
+}
+
+TConnectionSnapshot TDirectBlockGroup::MakeConnectionSnapshot(
+    size_t hostIndex) const
+{
+    const auto& ddisk = DDiskConnections[hostIndex];
+    const bool hasPBuffer = hostIndex < PBufferConnections.size();
+    const auto* pbuffer = hasPBuffer ? &PBufferConnections[hostIndex] : nullptr;
+
+    return {
+        .HostIndex = static_cast<THostIndex>(hostIndex),
+        .DDiskId = ddisk.HostConnection.DDiskId,
+        .PBufferId = pbuffer ? std::optional(pbuffer->HostConnection.DDiskId)
+                             : std::nullopt,
+        .DDiskSession = ToString(ddisk.SessionState),
+        .PBufferConnected = pbuffer && pbuffer->ConnectPromise.HasValue(),
     };
 }
 

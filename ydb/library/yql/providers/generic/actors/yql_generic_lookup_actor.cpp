@@ -83,7 +83,7 @@ namespace NYql::NDq {
     public:
         TGenericLookupActor(
             NConnector::IClient::TPtr connectorClient,
-            TGenericCredentialsProvider::TPtr credentialsProvider,
+            TGenericCredentialsProvider::TPtr credentialsFactory,
             NActors::TActorId&& parentId,
             ::NMonitoring::TDynamicCounterPtr taskCounters,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
@@ -96,7 +96,7 @@ namespace NYql::NDq {
             const size_t maxKeysInRequest,
             bool isMultiMatches = false)
             : Connector(connectorClient)
-            , CredentialsProvider(std::move(credentialsProvider))
+            , CredentialsProvider(std::move(credentialsFactory))
             , ParentId(std::move(parentId))
             , Alloc(alloc)
             , KeyTypeHelper(keyTypeHelper)
@@ -656,7 +656,7 @@ namespace NYql::NDq {
 
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateGenericLookupActor(
         NConnector::IClient::TPtr connectorClient,
-        ISecuredServiceAccountCredentialsFactory::TPtr securedServiceAccountCredentialsFactory,
+        IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
         NActors::TActorId parentId,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
@@ -671,13 +671,13 @@ namespace NYql::NDq {
         const bool isMultiMatches
     )
     {
-        auto credentialsProvider = NYql::NDq::CreateGenericCredentialsProvider(
+        auto genericCredentials = NYql::NDq::CreateGenericCredentialsProvider(
             secureParams.Value(lookupSource.GetTokenName(), TString()),
-            securedServiceAccountCredentialsFactory);
+            credentialsFactory);
         auto guard = Guard(*alloc);
         const auto actor = new TGenericLookupActor(
             connectorClient,
-            std::move(credentialsProvider),
+            std::move(genericCredentials),
             std::move(parentId),
             taskCounters,
             alloc,

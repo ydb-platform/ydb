@@ -253,14 +253,14 @@ private:
 
     [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
 
-    void HandleBlockedGeneration(
-        THostIndex hostIndex,
-        TStringBuf context,
-        NKikimrBlobStorage::NDDisk::TReplyStatus_E status);
+    void HandleBlockedGeneration(THostIndex hostIndex, TStringBuf context);
 
     TDBGDumpResponse DoDebugPrintDirtyMap();
 
     TDbgSnapshot DoBuildMonSnapshot();
+
+    [[nodiscard]] TConnectionSnapshot MakeConnectionSnapshot(
+        size_t hostIndex) const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;

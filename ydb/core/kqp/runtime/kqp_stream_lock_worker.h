@@ -38,6 +38,7 @@ struct TKqpStreamLockSettings {
     NKikimrDataEvents::ELockMode LockMode = NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE;
     TString Database;
     NKikimrDataEvents::TMvccSnapshot Snapshot;
+    bool SkipAbsent = false;
     ui64 QuerySpanId = 0;
 
     const NMiniKQL::THolderFactory& HolderFactory;
@@ -82,10 +83,10 @@ public:
 
     const std::vector<NScheme::TTypeInfo>& GetColumnTypes() const { return ColumnTypes; }
 
-    using TProcessRowCallback = std::function<void(NUdf::TUnboxedValue row, bool modified)>;
+    using TProcessRowCallback = std::function<void(NUdf::TUnboxedValue row, bool locked, bool modified)>;
     void ProcessRowsByLockResult(ui64 requestId, TProcessRowCallback callback);
 
-    using TProcessRowCallbackOwned = std::function<void(const TOwnedCellVec& row, bool modified)>;
+    using TProcessRowCallbackOwned = std::function<void(const TOwnedCellVec& row, bool locked, bool modified)>;
     void ProcessRowsByLockResult(ui64 requestId, TProcessRowCallbackOwned callback);
 
     bool AllRowsProcessed();

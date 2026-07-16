@@ -24,9 +24,13 @@ bool IsStrictDatabaseOnlyToken(const TAppData* appData, const TString& userToken
 // Check token against database owner
 bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::TSID& databaseOwner);
 
-// When the AlwaysSetSystemOwner setting is enabled, forces the owner of a scheme
-// modification record to the system basic owner, unless the record is already owned
-// by the system metadata user (objects created by the system itself keep their owner).
-void SetSystemOwnerIfNeeded(NKikimrScheme::TEvModifySchemeTransaction& record, const TAppData* appData);
+// Computes the owner that should be set for a scheme modification record.
+// If neither the AlwaysSetSystemOwner setting nor the EnableIdmPermissionsManagement
+// feature flag is enabled, the owner is the acting user (from userToken, if given)
+// or, if no user token is given, the owner already present in the record.
+// Otherwise the owner is forced to the system basic owner,
+// unless objects created by the system itself.
+TString ChooseAppropriateOwner(const NKikimrScheme::TEvModifySchemeTransaction& record,
+    const TAppData* appData, const std::optional<NACLib::TUserToken>& userToken = std::nullopt);
 
 } // namespace NKikimr

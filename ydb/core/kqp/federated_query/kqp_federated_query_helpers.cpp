@@ -3,6 +3,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/fq/libs/credentials/structured_token_credentials.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
@@ -15,6 +16,7 @@
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
+#include <ydb/library/yql/providers/pq/comp_nodes/yql_pq_factory.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
@@ -22,8 +24,6 @@
 #include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extensions/discovery_mutator/discovery_mutator.h>
-
-#include <yql/essentials/public/issue/yql_issue_utils.h>
 
 #include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
@@ -60,7 +60,7 @@ namespace {
             LOG_NOTICE_S(*NActors::TActivationContext::ActorSystem(), NKikimrServices::KQP_GATEWAY, "Skipped describe for path '" << path << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "'");
             return NThreading::MakeFuture<TGetSchemeEntryResult>(TGetSchemeEntryResult{.EntryType = NYdb::NScheme::ESchemeEntryType::Table});
         }
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false);
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson);
         auto driver = federatedQuerySetup->Driver;
 
         NYdb::TCommonClientSettings opts;
@@ -96,34 +96,6 @@ namespace {
     }
 
 }  // anonymous namespace
-
-    bool CheckNestingDepth(const google::protobuf::Message& message, ui32 maxDepth) {
-        if (!maxDepth) {
-            return false;
-        }
-        --maxDepth;
-
-        const auto* descriptor = message.GetDescriptor();
-        const auto* reflection = message.GetReflection();
-        for (int i = 0; i < descriptor->field_count(); ++i) {
-            const auto* field = descriptor->field(i);
-            if (field->cpp_type() != google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE) {
-                continue;
-            }
-
-            if (field->is_repeated()) {
-                for (int j = 0; j < reflection->FieldSize(message, field); ++j) {
-                    if (!CheckNestingDepth(reflection->GetRepeatedMessage(message, field, j), maxDepth)) {
-                        return false;
-                    }
-                }
-            } else if (reflection->HasField(message, field) && !CheckNestingDepth(reflection->GetMessage(message, field), maxDepth)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
 
     NYql::IYtGateway::TPtr MakeYtGateway(const NMiniKQL::IFunctionRegistry* functionRegistry, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
         NYql::TYtNativeServices ytServices;
@@ -201,13 +173,13 @@ namespace {
         return settings;
     }
 
-    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings) {
+    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver, NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings) {
         auto settings = MakeCommonTopicClientSettings(1, 2);
 
         return CreatePqNativeGatewayFactory(NYql::TPqGatewayServices(
             *driver,
             nullptr,
-            nullptr,
+            credentialsFactory,
             std::make_shared<NYql::TPqGatewayConfig>(),
             nullptr,
             nullptr,
@@ -278,6 +250,7 @@ namespace {
         }
 
         // Initialize Token Accessor
+        NYql::ISecuredServiceAccountCredentialsFactory::TPtr securedCredentialsFactory;
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {
             const auto& tokenAccessorConfig = appConfig.GetAuthConfig().GetTokenAccessorConfig();
             TString caContent;
@@ -286,12 +259,13 @@ namespace {
             }
 
             auto parsed = ParseGrpcEndpoint(tokenAccessorConfig.GetEndpoint());
-            CredentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(
+            securedCredentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(
                 parsed.first,
                 parsed.second,
                 caContent,
                 tokenAccessorConfig.GetConnectionPoolSize());
         }
+        CredentialsFactory = NFq::CreateKikimrStructuredTokenCredentialsFactory(securedCredentialsFactory);
 
         // Initialize Connector client
         if (queryServiceConfig.HasGeneric()) {
@@ -343,7 +317,7 @@ namespace {
             S3ReadActorFactoryConfig,
             DqTaskTransformFactory,
             PqGatewayConfig,
-            MakePqGatewayFactory(Driver, LocalTopicClientSettings),
+            MakePqGatewayFactory(Driver, CredentialsFactory, LocalTopicClientSettings),
             ActorSystemPtr,
             ScriptExecutionSettings,
         };
@@ -388,13 +362,18 @@ namespace {
     }
 
     NMiniKQL::TComputationNodeFactory MakeKqpFederatedQueryComputeFactory(NMiniKQL::TComputationNodeFactory baseComputeFactory, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup) {
+        auto pqComputeFactory = NYql::GetDqPqFactory();
         auto ytComputeFactory = NYql::GetDqYtFactory();
         auto federatedComputeFactory = federatedQuerySetup ? federatedQuerySetup->ComputationFactory : nullptr;
 
-        return [baseComputeFactory, ytComputeFactory, federatedComputeFactory]
+        return [baseComputeFactory, pqComputeFactory, ytComputeFactory, federatedComputeFactory]
             (NMiniKQL::TCallable& callable, const NMiniKQL::TComputationNodeFactoryContext& ctx) -> NMiniKQL::IComputationNode* {
                 if (auto compute = baseComputeFactory(callable, ctx)) {
                     return compute;
+                }
+
+                if (auto pqCompute = pqComputeFactory(callable, ctx)) {
+                    return pqCompute;
                 }
 
                 if (auto ytCompute = ytComputeFactory(callable, ctx)) {
@@ -424,29 +403,6 @@ namespace {
         } while (TInstant::Now() <= deadline);
 
         return false;
-    }
-
-    NYql::TIssues TruncateIssues(const NYql::TIssues& issues, ui32 maxLevels, ui32 keepTailLevels) {
-        const auto options = NYql::TTruncateIssueOpts()
-            .SetMaxLevels(maxLevels)
-            .SetKeepTailLevels(keepTailLevels);
-
-        NYql::TIssues result;
-        result.Reserve(issues.Size());
-        for (const auto& issue : issues) {
-            result.AddIssue(NYql::TruncateIssueLevels(issue, options));
-        }
-        return result;
-    }
-
-    NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<Ydb::Column>& columns, ui32 maxNestingDepth) {
-        NYql::TIssues issues;
-        for (const auto& column : columns) {
-            if (!CheckNestingDepth(column.type(), maxNestingDepth)) {
-                issues.AddIssue(NYql::TIssue(TStringBuilder() << "Nesting depth of type for result column '" << column.name() << "' large than allowed limit " << maxNestingDepth));
-            }
-        }
-        return issues;
     }
 
     NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(

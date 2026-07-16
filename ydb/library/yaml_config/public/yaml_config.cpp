@@ -279,7 +279,7 @@ void Inherit(NFyaml::TMapping& toMap, const NFyaml::TMapping& fromMap) {
                 toMap.Append(it->Key().Copy().Ref(), it->Value().Copy().Ref());
             }
         } else {
-            toMap.Append(it->Key().Copy().Ref(),  it->Value().Copy().Ref());
+            toMap.Append(it->Key().Copy().Ref(), it->Value().Copy().Ref());
         }
     }
 }
@@ -493,9 +493,11 @@ void RestoreNodesTags(NFyaml::TNodeRef rootNode, const TElementsTags& tags) {
         }
 
         // Restore tag
-        auto tag = tags.find(node.Path());
-        if (tag != tags.end()) {
-            node.SetTag(tag->second);
+        {
+            auto tag = tags.find(node.Path());
+            if (tag != tags.end()) {
+                node.SetTag(tag->second);
+            }
         }
 
         // Go deep
@@ -1522,6 +1524,25 @@ void ResolveDatabaseConfig(NFyaml::TDocument& doc, const TSet<TNamedLabel>& labe
         return;
     }
 
+    auto removeSelectorsAndAllowedLabels =
+        [&]() {
+            if (hasSelectors) {
+                if (auto pair = rootMap.pair_at_opt("selector_config"); pair) {
+                    rootMap.Remove(pair);
+                }
+            }
+            if (hasAllowedLabels) {
+                if (auto pair = rootMap.pair_at_opt("allowed_labels"); pair) {
+                    rootMap.Remove(pair);
+                }
+            }
+        };
+
+    if (!rootMap.Has("config")) {
+        // No config section - just remove selectors and allowed_labels
+        removeSelectorsAndAllowedLabels();
+        return;
+    }
     auto configNode = rootMap.at("config");
 
     // Save existing nodes tags to restore them later
@@ -1535,16 +1556,7 @@ void ResolveDatabaseConfig(NFyaml::TDocument& doc, const TSet<TNamedLabel>& labe
     RemoveTags(doc);
 
     // Remove selectors and allowed_labels
-    if (hasSelectors) {
-        if (auto pair = rootMap.pair_at_opt("selector_config"); pair) {
-            rootMap.Remove(pair);
-        }
-    }
-    if (hasAllowedLabels) {
-        if (auto pair = rootMap.pair_at_opt("allowed_labels"); pair) {
-            rootMap.Remove(pair);
-        }
-    }
+    removeSelectorsAndAllowedLabels();
 
     // Restore existed nodes tags
     RestoreNodesTags(configNode, savedTags);

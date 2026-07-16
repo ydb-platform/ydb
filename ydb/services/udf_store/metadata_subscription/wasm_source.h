@@ -11,11 +11,13 @@ class TUdfWasmSource: public NMetadata::NModifications::TObject<TUdfWasmSource> 
 public:
     static inline const TString Md5ColName = "md5";
     static inline const TString VersionColName = "version";
-    static inline const TString BodyColName = "body";
+    static inline const TString SizeColName = "size";
+    static inline const TString ChunkCountColName = "chunk_count";
 
     YDB_ACCESSOR_DEF(TString, Md5);
     YDB_ACCESSOR_DEF(ui64, Version);
-    YDB_ACCESSOR_DEF(TString, Body);
+    YDB_ACCESSOR_DEF(ui64, Size);
+    YDB_ACCESSOR_DEF(ui64, ChunkCount);
 
 public:
     static TVector<NKikimrSchemeOp::TColumnDescription> GetColumnDescription();

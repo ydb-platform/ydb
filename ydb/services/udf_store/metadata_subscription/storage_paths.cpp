@@ -17,12 +17,24 @@ TString GetWasmSourceTablePath() {
     return GetUdfStorePrefix() + "/wasm_source";
 }
 
+TString GetWasmSourceChunksTablePath() {
+    return GetUdfStorePrefix() + "/wasm_source_chunks";
+}
+
 TString GetLibrarySourceTablePath() {
     return GetUdfStorePrefix() + "/library_source";
 }
 
+TString GetLibrarySourceChunksTablePath() {
+    return GetUdfStorePrefix() + "/library_source_chunks";
+}
+
 TString GetArtifactTablePath(const TString& cpuSpec) {
     return GetUdfStorePrefix() + "/artifacts/" + cpuSpec;
+}
+
+TString GetArtifactChunksTablePath(const TString& cpuSpec) {
+    return GetUdfStorePrefix() + "/artifacts/" + cpuSpec + "_chunks";
 }
 
 TString NormalizeCpuSpec(TStringBuf triple, TStringBuf cpu) {

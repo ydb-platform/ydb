@@ -1,5 +1,6 @@
 #include "wasm_artifact_load_actor.h"
 
+#include "blob_chunks.h"
 #include "metadata_subscription/wasm_artifact.h"
 #include "table_query.h"
 #include "wasm/compile.h"
@@ -42,11 +43,39 @@ void TWasmArtifactLoadActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 Md5_,
                 WasmArtifactKindToString(EWasmArtifactKind::Module));
             break;
+        case EStep::ReadModuleWasmChunks:
+            NTableQuery::SetSelectArtifactChunksParams(
+                request,
+                Md5_,
+                WasmArtifactKindToString(EWasmArtifactKind::Module),
+                BlobKindWasmData());
+            break;
+        case EStep::ReadModuleObjectChunks:
+            NTableQuery::SetSelectArtifactChunksParams(
+                request,
+                Md5_,
+                WasmArtifactKindToString(EWasmArtifactKind::Module),
+                BlobKindObjectCode());
+            break;
         case EStep::ReadLibraryArtifact:
             NTableQuery::SetSelectArtifactParams(
                 request,
                 PendingLibraryName_,
                 WasmArtifactKindToString(EWasmArtifactKind::Library));
+            break;
+        case EStep::ReadLibraryWasmChunks:
+            NTableQuery::SetSelectArtifactChunksParams(
+                request,
+                PendingLibraryName_,
+                WasmArtifactKindToString(EWasmArtifactKind::Library),
+                BlobKindWasmData());
+            break;
+        case EStep::ReadLibraryObjectChunks:
+            NTableQuery::SetSelectArtifactChunksParams(
+                request,
+                PendingLibraryName_,
+                WasmArtifactKindToString(EWasmArtifactKind::Library),
+                BlobKindObjectCode());
             break;
         case EStep::LoadCompartment:
             return;
@@ -72,35 +101,99 @@ void TWasmArtifactLoadActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryRe
     switch (Step_) {
         case EStep::ReadModuleArtifact: {
             if (!NTableQuery::ParseArtifactResponse(response, ModuleArtifact_)
-                || ModuleArtifact_.ObjectCode.empty())
+                || ModuleArtifact_.ObjectCodeChunkCount == 0)
             {
                 ReplyError(TStringBuilder() << "Compiled module artifact not found for md5=" << Md5_);
                 return;
             }
+            Step_ = EStep::ReadModuleWasmChunks;
+            ExecuteQuery(NTableQuery::BuildSelectArtifactChunksQuery(ArtifactChunksTablePath_), true);
+            return;
+        }
+        case EStep::ReadModuleWasmChunks: {
+            if (!NTableQuery::ParseArtifactChunksResponse(response, PendingWasmChunks_)) {
+                ReplyError(TStringBuilder() << "Failed to read module wasm_data chunks for md5=" << Md5_);
+                return;
+            }
+            if (PendingWasmChunks_.size() != ModuleArtifact_.WasmDataChunkCount) {
+                ReplyError(TStringBuilder()
+                    << "Module wasm_data chunk_count mismatch for md5=" << Md5_);
+                return;
+            }
+            Step_ = EStep::ReadModuleObjectChunks;
+            ExecuteQuery(NTableQuery::BuildSelectArtifactChunksQuery(ArtifactChunksTablePath_), true);
+            return;
+        }
+        case EStep::ReadModuleObjectChunks: {
+            TVector<TString> objectChunks;
+            if (!NTableQuery::ParseArtifactChunksResponse(response, objectChunks)) {
+                ReplyError(TStringBuilder() << "Failed to read module object_code chunks for md5=" << Md5_);
+                return;
+            }
+            if (objectChunks.size() != ModuleArtifact_.ObjectCodeChunkCount) {
+                ReplyError(TStringBuilder()
+                    << "Module object_code chunk_count mismatch for md5=" << Md5_);
+                return;
+            }
+            ModuleArtifact_.WasmData = JoinBlobs(PendingWasmChunks_);
+            ModuleArtifact_.ObjectCode = JoinBlobs(objectChunks);
+            PendingWasmChunks_.clear();
             Step_ = EStep::ReadLibraryArtifact;
             StartNextLibrary();
             return;
         }
         case EStep::ReadLibraryArtifact: {
-            NTableQuery::TWasmArtifactRow artifact;
-            if (!NTableQuery::ParseArtifactResponse(response, artifact)
-                || artifact.ObjectCode.empty())
+            if (!NTableQuery::ParseArtifactResponse(response, PendingLibraryArtifact_)
+                || PendingLibraryArtifact_.ObjectCodeChunkCount == 0)
             {
                 ReplyError(TStringBuilder()
                     << "Compiled library artifact not found for '" << PendingLibraryName_ << "'");
                 return;
             }
-            const auto format = artifact.Format == "wat" || artifact.Format == "wast"
+            Step_ = EStep::ReadLibraryWasmChunks;
+            ExecuteQuery(NTableQuery::BuildSelectArtifactChunksQuery(ArtifactChunksTablePath_), true);
+            return;
+        }
+        case EStep::ReadLibraryWasmChunks: {
+            if (!NTableQuery::ParseArtifactChunksResponse(response, PendingWasmChunks_)) {
+                ReplyError(TStringBuilder()
+                    << "Failed to read library wasm_data chunks for '" << PendingLibraryName_ << "'");
+                return;
+            }
+            if (PendingWasmChunks_.size() != PendingLibraryArtifact_.WasmDataChunkCount) {
+                ReplyError(TStringBuilder()
+                    << "Library wasm_data chunk_count mismatch for '" << PendingLibraryName_ << "'");
+                return;
+            }
+            Step_ = EStep::ReadLibraryObjectChunks;
+            ExecuteQuery(NTableQuery::BuildSelectArtifactChunksQuery(ArtifactChunksTablePath_), true);
+            return;
+        }
+        case EStep::ReadLibraryObjectChunks: {
+            TVector<TString> objectChunks;
+            if (!NTableQuery::ParseArtifactChunksResponse(response, objectChunks)) {
+                ReplyError(TStringBuilder()
+                    << "Failed to read library object_code chunks for '" << PendingLibraryName_ << "'");
+                return;
+            }
+            if (objectChunks.size() != PendingLibraryArtifact_.ObjectCodeChunkCount) {
+                ReplyError(TStringBuilder()
+                    << "Library object_code chunk_count mismatch for '" << PendingLibraryName_ << "'");
+                return;
+            }
+            const auto format = PendingLibraryArtifact_.Format == "wat" || PendingLibraryArtifact_.Format == "wast"
                 ? NYdb::NWasm::EBytecodeFormat::HumanReadable
                 : NYdb::NWasm::EBytecodeFormat::Binary;
             Libraries_.push_back(NWasm::TNamedModuleBytecode{
                 .Name = PendingLibraryName_,
                 .Bytecode = NWasm::MakeModuleBytecode(
-                    artifact.WasmData,
-                    artifact.ObjectCode,
+                    JoinBlobs(PendingWasmChunks_),
+                    JoinBlobs(objectChunks),
                     format),
             });
+            PendingWasmChunks_.clear();
             ++NextLibraryIndex_;
+            Step_ = EStep::ReadLibraryArtifact;
             StartNextLibrary();
             return;
         }
@@ -139,31 +232,28 @@ void TWasmArtifactLoadActor::HandleCompartmentLoaded(TEvWasmCompartmentLoaded::T
     }
     if (!ev->Get()->Success || !ev->Get()->State) {
         ReplyError(ev->Get()->ErrorMessage.empty()
-            ? "Wasm compartment load failed"
+            ? TString("Failed to load WASM compartment")
             : ev->Get()->ErrorMessage);
         return;
     }
 
     try {
         auto module = NWasm::BuildWasmSoModule(ev->Get()->State);
-        const TString moduleName = ev->Get()->State->ModuleName;
-        FunctionRegistry_->AddModule(Md5_, moduleName, std::move(module));
-        ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-            << "TWasmArtifactLoadActor: registered wasm module '" << moduleName
-            << "' for UDF '" << Md5_ << "'";
+        if (!module) {
+            ReplyError("BuildWasmSoModule returned null");
+            return;
+        }
+        FunctionRegistry_->AddModule(TString{}, ParsedManifest_.ModuleName, std::move(module));
         Send(ReplyTo_, new TEvReadBodyResponse(true, Md5_));
+        PassAway();
     } catch (const std::exception& ex) {
-        ReplyError(TStringBuilder()
-            << "Failed to register wasm UDF '" << Md5_ << "' in function registry: "
-            << ex.what());
-        return;
+        ReplyError(ex.what());
     }
-
-    PassAway();
 }
 
 void TWasmArtifactLoadActor::ReplyError(const TString& message) {
-    ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "TWasmArtifactLoadActor: " << message;
+    ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
+        << "TWasmArtifactLoadActor: " << message;
     Send(ReplyTo_, new TEvReadBodyResponse(false, Md5_, message));
     PassAway();
 }

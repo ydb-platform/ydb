@@ -1,5 +1,6 @@
 #include "wasm_library_compile_actor.h"
 
+#include "blob_chunks.h"
 #include "metadata_subscription/library_source.h"
 #include "metadata_subscription/wasm_artifact.h"
 #include "wasm/compile.h"
@@ -12,6 +13,7 @@ namespace NKikimr::NUdfStore {
 
 void TWasmLibraryCompileActor::Bootstrap() {
     Become(&TWasmLibraryCompileActor::StateMain);
+    Kind_ = WasmArtifactKindToString(EWasmArtifactKind::Library);
     ExecuteQuery(NTableQuery::BuildSelectLibrarySourceQuery(LibrarySourceTablePath_), true);
 }
 
@@ -30,20 +32,25 @@ void TWasmLibraryCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
         case EStep::ReadLibrarySource:
             NTableQuery::SetSelectLibrarySourceParams(request, LibraryName_);
             break;
-        case EStep::UpsertArtifact: {
-            const auto format = LibrarySource_.Body.StartsWith("(")
-                ? NYdb::NWasm::EBytecodeFormat::HumanReadable
-                : NYdb::NWasm::EBytecodeFormat::Binary;
-            NTableQuery::TWasmArtifactRow row{
-                .Id = LibraryName_,
-                .Kind = WasmArtifactKindToString(EWasmArtifactKind::Library),
-                .SourceMd5 = LibrarySource_.Md5,
-                .Version = LibrarySource_.Version,
-                .Format = format == NYdb::NWasm::EBytecodeFormat::HumanReadable ? "wat" : "wasm",
-                .WasmData = LibrarySource_.Body,
-                .ObjectCode = NWasm::CompileModuleObjectCode(LibrarySource_.Body, format),
-            };
-            NTableQuery::SetUpsertArtifactParams(request, row);
+        case EStep::ReadLibraryChunks:
+            NTableQuery::SetSelectSourceChunksParams(request, LibraryName_);
+            break;
+        case EStep::DeleteArtifactChunks:
+            NTableQuery::SetDeleteArtifactChunksParams(request, LibraryName_, Kind_);
+            break;
+        case EStep::UpsertArtifact:
+            NTableQuery::SetUpsertArtifactParams(request, ArtifactRow_);
+            break;
+        case EStep::WriteArtifactChunk: {
+            Y_ABORT_UNLESS(NextChunkWriteIndex_ < PendingChunkWrites_.size());
+            const auto& chunk = PendingChunkWrites_[NextChunkWriteIndex_];
+            NTableQuery::SetUpsertArtifactChunkParams(
+                request,
+                LibraryName_,
+                Kind_,
+                chunk.BlobKind,
+                chunk.ChunkIdx,
+                chunk.Data);
             break;
         }
         case EStep::UpdateMetaReady:
@@ -86,12 +93,45 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
                     ReplyError(TStringBuilder() << "Library source '" << LibraryName_ << "' not found");
                     return;
                 }
+                Step_ = EStep::ReadLibraryChunks;
+                ExecuteQuery(NTableQuery::BuildSelectSourceChunksQuery(LibrarySourceChunksTablePath_), true);
+                return;
+            }
+            case EStep::ReadLibraryChunks: {
+                TVector<TString> chunks;
+                if (!NTableQuery::ParseSourceChunksResponse(response, chunks)) {
+                    ReplyError(TStringBuilder()
+                        << "Failed to read library source chunks for '" << LibraryName_ << "'");
+                    return;
+                }
+                if (chunks.size() != LibrarySource_.ChunkCount) {
+                    ReplyError(TStringBuilder()
+                        << "Library '" << LibraryName_ << "' chunk_count mismatch: meta="
+                        << LibrarySource_.ChunkCount << " actual=" << chunks.size());
+                    return;
+                }
+                LibrarySource_.Body = JoinBlobs(chunks);
+                if (LibrarySource_.Size != 0 && LibrarySource_.Body.size() != LibrarySource_.Size) {
+                    ReplyError(TStringBuilder()
+                        << "Library '" << LibraryName_ << "' size mismatch: meta="
+                        << LibrarySource_.Size << " actual=" << LibrarySource_.Body.size());
+                    return;
+                }
                 CompileLibrary();
                 return;
             }
+            case EStep::DeleteArtifactChunks: {
+                Step_ = EStep::UpsertArtifact;
+                ExecuteQuery(NTableQuery::BuildUpsertArtifactQuery(ArtifactTablePath_), false);
+                return;
+            }
             case EStep::UpsertArtifact: {
-                Step_ = EStep::UpdateMetaReady;
-                ExecuteQuery(NTableQuery::BuildUpdateLibraryCompileStatusQuery(LibrarySourceTablePath_), false);
+                StartWriteChunks();
+                return;
+            }
+            case EStep::WriteArtifactChunk: {
+                ++NextChunkWriteIndex_;
+                WriteNextChunk();
                 return;
             }
             case EStep::UpdateMetaReady:
@@ -102,21 +142,74 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
                 return;
         }
     } catch (const std::exception& ex) {
-        ErrorMessage_ = ex.what();
-        Step_ = EStep::UpdateMetaFailed;
-        ExecuteQuery(NTableQuery::BuildUpdateLibraryCompileStatusQuery(LibrarySourceTablePath_), false);
+        FailAndPersist(ex.what());
     }
 }
 
 void TWasmLibraryCompileActor::CompileLibrary() {
     try {
-        Step_ = EStep::UpsertArtifact;
-        ExecuteQuery(NTableQuery::BuildUpsertArtifactQuery(ArtifactTablePath_), false);
+        Format_ = LibrarySource_.Body.StartsWith("(") ? "wat" : "wasm";
+        const auto format = Format_ == "wat"
+            ? NYdb::NWasm::EBytecodeFormat::HumanReadable
+            : NYdb::NWasm::EBytecodeFormat::Binary;
+        const TString objectCode = NWasm::CompileModuleObjectCode(LibrarySource_.Body, format);
+        const auto wasmChunks = SplitBlob(LibrarySource_.Body);
+        const auto objectChunks = SplitBlob(objectCode);
+
+        PendingChunkWrites_.clear();
+        for (ui64 i = 0; i < wasmChunks.size(); ++i) {
+            PendingChunkWrites_.push_back({
+                .BlobKind = BlobKindWasmData(),
+                .ChunkIdx = i,
+                .Data = wasmChunks[i],
+            });
+        }
+        for (ui64 i = 0; i < objectChunks.size(); ++i) {
+            PendingChunkWrites_.push_back({
+                .BlobKind = BlobKindObjectCode(),
+                .ChunkIdx = i,
+                .Data = objectChunks[i],
+            });
+        }
+
+        ArtifactRow_ = NTableQuery::TWasmArtifactRow{
+            .Id = LibraryName_,
+            .Kind = Kind_,
+            .SourceMd5 = LibrarySource_.Md5,
+            .Version = LibrarySource_.Version,
+            .Format = Format_,
+            .WasmDataSize = LibrarySource_.Body.size(),
+            .WasmDataChunkCount = wasmChunks.size(),
+            .ObjectCodeSize = objectCode.size(),
+            .ObjectCodeChunkCount = objectChunks.size(),
+        };
+
+        Step_ = EStep::DeleteArtifactChunks;
+        ExecuteQuery(NTableQuery::BuildDeleteArtifactChunksQuery(ArtifactChunksTablePath_), false);
     } catch (const std::exception& ex) {
-        ErrorMessage_ = ex.what();
-        Step_ = EStep::UpdateMetaFailed;
-        ExecuteQuery(NTableQuery::BuildUpdateLibraryCompileStatusQuery(LibrarySourceTablePath_), false);
+        FailAndPersist(ex.what());
     }
+}
+
+void TWasmLibraryCompileActor::StartWriteChunks() {
+    NextChunkWriteIndex_ = 0;
+    WriteNextChunk();
+}
+
+void TWasmLibraryCompileActor::WriteNextChunk() {
+    if (NextChunkWriteIndex_ >= PendingChunkWrites_.size()) {
+        Step_ = EStep::UpdateMetaReady;
+        ExecuteQuery(NTableQuery::BuildUpdateLibraryCompileStatusQuery(LibrarySourceTablePath_), false);
+        return;
+    }
+    Step_ = EStep::WriteArtifactChunk;
+    ExecuteQuery(NTableQuery::BuildUpsertArtifactChunkQuery(ArtifactChunksTablePath_), false);
+}
+
+void TWasmLibraryCompileActor::FailAndPersist(const TString& message) {
+    ErrorMessage_ = message;
+    Step_ = EStep::UpdateMetaFailed;
+    ExecuteQuery(NTableQuery::BuildUpdateLibraryCompileStatusQuery(LibrarySourceTablePath_), false);
 }
 
 void TWasmLibraryCompileActor::ReplyError(const TString& message) {

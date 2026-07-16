@@ -15,8 +15,10 @@ TVector<NKikimrSchemeOp::TColumnDescription> TUdfWasmArtifact::GetColumnDescript
         makeCol(SourceMd5ColName, "Utf8"),
         makeCol(VersionColName, "Uint64"),
         makeCol(FormatColName, "Utf8"),
-        makeCol(WasmDataColName, "String"),
-        makeCol(ObjectCodeColName, "String"),
+        makeCol(WasmDataSizeColName, "Uint64"),
+        makeCol(WasmDataChunkCountColName, "Uint64"),
+        makeCol(ObjectCodeSizeColName, "Uint64"),
+        makeCol(ObjectCodeChunkCountColName, "Uint64"),
         makeCol(CompiledAtColName, "Timestamp"),
     };
 }

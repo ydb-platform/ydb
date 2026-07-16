@@ -10,7 +10,7 @@
 namespace NKikimr::NUdfStore {
 
 // Actor that sequentially initializes UDF store infrastructure:
-//   1. Creates meta, wasm_source, library_source tables.
+//   1. Creates meta, wasm_source(+chunks), library_source(+chunks) tables.
 //   2. Creates the KV volume for native UDF binaries.
 // Artifact tables are created lazily per CPU spec by TUdfStoreService.
 class TUdfStoreInitializer : public NActors::TActorBootstrapped<TUdfStoreInitializer> {
@@ -20,7 +20,9 @@ private:
     enum class EInitStep {
         Meta,
         WasmSource,
+        WasmSourceChunks,
         LibrarySource,
+        LibrarySourceChunks,
         KvVolume,
         Done,
     };

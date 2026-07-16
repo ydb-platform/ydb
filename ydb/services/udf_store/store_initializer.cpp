@@ -1,4 +1,5 @@
 #include "store_initializer.h"
+#include "blob_chunks.h"
 #include "metadata_subscription/udf_meta.h"
 #include "metadata_subscription/wasm_source.h"
 #include "metadata_subscription/library_source.h"
@@ -55,11 +56,35 @@ void TUdfStoreInitializer::CreateNextTable() {
             ));
             break;
         }
+        case EInitStep::WasmSourceChunks: {
+            Register(CreateTableCreator(
+                GetTablePathSuffix(GetWasmSourceChunksTablePath()),
+                TSourceChunkSchema::GetColumnDescription(),
+                TSourceChunkSchema::GetPk(),
+                NKikimrServices::METADATA_PROVIDER,
+                Nothing(),
+                {},
+                /* isSystemUser */ true
+            ));
+            break;
+        }
         case EInitStep::LibrarySource: {
             Register(CreateTableCreator(
                 GetTablePathSuffix(GetLibrarySourceTablePath()),
                 TUdfLibrarySource::GetColumnDescription(),
                 TUdfLibrarySource::GetPk(),
+                NKikimrServices::METADATA_PROVIDER,
+                Nothing(),
+                {},
+                /* isSystemUser */ true
+            ));
+            break;
+        }
+        case EInitStep::LibrarySourceChunks: {
+            Register(CreateTableCreator(
+                GetTablePathSuffix(GetLibrarySourceChunksTablePath()),
+                TSourceChunkSchema::GetColumnDescription(),
+                TSourceChunkSchema::GetPk(),
                 NKikimrServices::METADATA_PROVIDER,
                 Nothing(),
                 {},
@@ -104,9 +129,15 @@ void TUdfStoreInitializer::AdvanceInitStep() {
             InitStep_ = EInitStep::WasmSource;
             break;
         case EInitStep::WasmSource:
+            InitStep_ = EInitStep::WasmSourceChunks;
+            break;
+        case EInitStep::WasmSourceChunks:
             InitStep_ = EInitStep::LibrarySource;
             break;
         case EInitStep::LibrarySource:
+            InitStep_ = EInitStep::LibrarySourceChunks;
+            break;
+        case EInitStep::LibrarySourceChunks:
             InitStep_ = EInitStep::KvVolume;
             break;
         case EInitStep::KvVolume:

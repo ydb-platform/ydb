@@ -12,7 +12,8 @@ TVector<NKikimrSchemeOp::TColumnDescription> TUdfWasmSource::GetColumnDescriptio
     return {
         makeCol(Md5ColName, "Utf8"),
         makeCol(VersionColName, "Uint64"),
-        makeCol(BodyColName, "String"),
+        makeCol(SizeColName, "Uint64"),
+        makeCol(ChunkCountColName, "Uint64"),
     };
 }
 

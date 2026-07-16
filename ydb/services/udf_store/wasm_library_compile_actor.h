@@ -15,7 +15,10 @@ private:
 
     enum class EStep {
         ReadLibrarySource,
+        ReadLibraryChunks,
+        DeleteArtifactChunks,
         UpsertArtifact,
+        WriteArtifactChunk,
         UpdateMetaReady,
         UpdateMetaFailed,
     };
@@ -24,10 +27,17 @@ private:
     TString LibraryName_;
     TString CpuSpec_;
     TString LibrarySourceTablePath_;
+    TString LibrarySourceChunksTablePath_;
     TString ArtifactTablePath_;
+    TString ArtifactChunksTablePath_;
 
     EStep Step_ = EStep::ReadLibrarySource;
     NTableQuery::TLibrarySourceRow LibrarySource_;
+    NTableQuery::TWasmArtifactRow ArtifactRow_;
+    TString Kind_;
+    TString Format_;
+    TVector<NTableQuery::TPendingChunkWrite> PendingChunkWrites_;
+    size_t NextChunkWriteIndex_ = 0;
     TString ErrorMessage_;
 
     void ExecuteQuery(const TString& yql, bool readOnly);
@@ -37,6 +47,9 @@ private:
     void HandleQueryFailed(NMetadata::NRequest::TEvRequestFailed::TPtr& ev);
     void OnQuerySuccess(const Ydb::Table::ExecuteDataQueryResponse& response);
     void CompileLibrary();
+    void StartWriteChunks();
+    void WriteNextChunk();
+    void FailAndPersist(const TString& message);
 
 public:
     TWasmLibraryCompileActor(
@@ -44,12 +57,16 @@ public:
         const TString& libraryName,
         const TString& cpuSpec,
         const TString& librarySourceTablePath,
-        const TString& artifactTablePath)
+        const TString& librarySourceChunksTablePath,
+        const TString& artifactTablePath,
+        const TString& artifactChunksTablePath)
         : ReplyTo_(replyTo)
         , LibraryName_(libraryName)
         , CpuSpec_(cpuSpec)
         , LibrarySourceTablePath_(librarySourceTablePath)
+        , LibrarySourceChunksTablePath_(librarySourceChunksTablePath)
         , ArtifactTablePath_(artifactTablePath)
+        , ArtifactChunksTablePath_(artifactChunksTablePath)
     {}
 
     void Bootstrap();

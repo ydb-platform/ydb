@@ -17,7 +17,11 @@ private:
 
     enum class EStep {
         ReadModuleArtifact,
+        ReadModuleWasmChunks,
+        ReadModuleObjectChunks,
         ReadLibraryArtifact,
+        ReadLibraryWasmChunks,
+        ReadLibraryObjectChunks,
         LoadCompartment,
     };
 
@@ -26,6 +30,7 @@ private:
     TString Md5_;
     TString Manifest_;
     TString ArtifactTablePath_;
+    TString ArtifactChunksTablePath_;
     NWasm::TWasmManifest ParsedManifest_;
     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> FunctionRegistry_;
 
@@ -33,6 +38,8 @@ private:
     size_t NextLibraryIndex_ = 0;
     TString PendingLibraryName_;
     NTableQuery::TWasmArtifactRow ModuleArtifact_;
+    NTableQuery::TWasmArtifactRow PendingLibraryArtifact_;
+    TVector<TString> PendingWasmChunks_;
     TVector<NWasm::TNamedModuleBytecode> Libraries_;
 
     void ExecuteQuery(const TString& yql, bool readOnly);
@@ -51,12 +58,14 @@ public:
         const TString& md5,
         const TString& manifest,
         const TString& artifactTablePath,
+        const TString& artifactChunksTablePath,
         TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry)
         : ReplyTo_(replyTo)
         , CompartmentActorId_(compartmentActorId)
         , Md5_(md5)
         , Manifest_(manifest)
         , ArtifactTablePath_(artifactTablePath)
+        , ArtifactChunksTablePath_(artifactChunksTablePath)
         , FunctionRegistry_(std::move(functionRegistry))
     {}
 

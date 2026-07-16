@@ -15,14 +15,16 @@ public:
     static inline const TString NameColName = "name";
     static inline const TString Md5ColName = "md5";
     static inline const TString VersionColName = "version";
-    static inline const TString BodyColName = "body";
+    static inline const TString SizeColName = "size";
+    static inline const TString ChunkCountColName = "chunk_count";
     static inline const TString CompileStatusColName = "compile_status";
     static inline const TString CompileErrorColName = "compile_error";
 
     YDB_ACCESSOR_DEF(TString, Name);
     YDB_ACCESSOR_DEF(TString, Md5);
     YDB_ACCESSOR_DEF(ui64, Version);
-    YDB_ACCESSOR_DEF(TString, Body);
+    YDB_ACCESSOR_DEF(ui64, Size);
+    YDB_ACCESSOR_DEF(ui64, ChunkCount);
     YDB_ACCESSOR_DEF(ECompileStatus, CompileStatus);
     YDB_ACCESSOR_DEF(TString, CompileError);
 
@@ -37,7 +39,8 @@ public:
         YDB_ACCESSOR(i32, NameIdx, -1);
         YDB_ACCESSOR(i32, Md5Idx, -1);
         YDB_ACCESSOR(i32, VersionIdx, -1);
-        YDB_ACCESSOR(i32, BodyIdx, -1);
+        YDB_ACCESSOR(i32, SizeIdx, -1);
+        YDB_ACCESSOR(i32, ChunkCountIdx, -1);
         YDB_ACCESSOR(i32, CompileStatusIdx, -1);
         YDB_ACCESSOR(i32, CompileErrorIdx, -1);
 

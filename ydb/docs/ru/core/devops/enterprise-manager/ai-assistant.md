@@ -1,6 +1,6 @@
-# Подключение AI-ассистента в YDB EM
+# Настройка AI-ассистента в YDB EM
 
-В этой инструкции описано, как включить AI-ассистента в {{ ydb-short-name }} Enterprise Manager (YDB EM). После настройки пользователи увидят ассистента в веб-интерфейсе YDB EM. Ассистент отправляет запросы к модели через Gateway и может использовать инструменты Model Context Protocol (MCP), предоставляемые Gateway.
+В этой инструкции описано, как включить AI-ассистента в {{ ydb-short-name }} Enterprise Manager (YDB EM). После настройки пользователи увидят ассистента в веб-интерфейсе YDB EM. Ассистент отправляет запросы к модели через [Gateway](index.md#architecture) и может использовать инструменты Model Context Protocol (MCP), предоставляемые Gateway.
 
 ## Перед началом {#before-start}
 
@@ -9,15 +9,15 @@
 Убедитесь, что у вас есть:
 
 1. Доступ к Ansible inventory, который используется для развёртывания YDB EM.
-1. OpenAI-compatible endpoint модели, который будет доступен с хоста Gateway.
-1. Способ добавить именованную запись с учётными данными модели в token-файл Gateway. Tokenator в Gateway читает этот файл и использует значение поля `Token` записи, у которой поле `Name` равно `ydb_em_ai_model_token_name`, например `model-token`, как upstream-заголовок `Authorization`.
+1. Endpoint OpenAI-compatible модели, который будет доступен с хоста Gateway.
+1. Права на изменение [token-файла Gateway](#configure-model-access). В рамках настройки будет необходимо прописать секрет для доступа к модели в token-файл. Gateway читает этот файл и использует значение поля `Token` записи, у которой поле `Name` равно `ydb_em_ai_model_token_name`, например `model-token`, как upstream-заголовок `Authorization`.
 1. Если вы обновляете существующую установку, доступ к развёрнутому хосту Gateway.
 
 Для уже работающей установки сначала убедитесь, что хост Gateway управляется тем же Ansible inventory. Перед запуском playbook проверьте активный service manager unit, владельца процесса, путь к конфигурации, token-файл и порт, который слушает Gateway. Если на хосте используется custom или ручной layout Gateway, применяйте те же настройки через операционную процедуру этой установки, а не запускайте playbook вслепую.
 
 {% note warning %}
 
-Не помещайте API-ключи модели, OAuth-токены и другие секреты в `ydb_em_ai_assistant_client_runtime_config`. Gateway возвращает это значение в браузер через `GET /meta/ai_assistant_client_config`.
+Не помещайте API-ключи модели, OAuth-токены и другие секреты в `ydb_em_ai_assistant_client_runtime_config`. Gateway возвращает это значение в браузер через `GET /meta/ai_assistant_client_config`. Секреты держите в token-файле.
 
 {% endnote %}
 
@@ -86,7 +86,7 @@ Gateway добавляет путь из `/proxy/model/...` к `ydb_em_ai_model_
 
 ## Настройте поиск по документации {#configure-docs-search}
 
-Этот шаг необязателен. Включайте его только если ассистенту нужен MCP-инструмент `search_docs`. Для этого инструмента Gateway вызывает OpenAI-compatible embeddings endpoint и добавляет `/embeddings` к настроенному base URL, если suffix отсутствует. Когда поиск по документации включён, ассистент получает `search_docs` через настроенный MCP-сервер `/meta/mcp`.
+Рекомендуется включить поиск по документации, чтобы ассистент получил MCP-инструмент `search_docs`. Для этого инструмента Gateway вызывает OpenAI-compatible embeddings endpoint и добавляет `/embeddings` к настроенному base URL, если suffix отсутствует. Когда поиск по документации включён, ассистент получает `search_docs` через настроенный MCP-сервер `/meta/mcp`.
 
 ```yaml
 ydb_em_docs_search_enabled: true

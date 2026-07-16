@@ -1,6 +1,6 @@
-# Enabling AI assistant in YDB EM
+# Configuring AI assistant in YDB EM
 
-This guide shows how to enable AI assistant in {{ ydb-short-name }} Enterprise Manager (YDB EM). After the setup, users will see the assistant in the YDB EM web interface. The assistant sends model requests through Gateway and can use Model Context Protocol (MCP) tools provided by Gateway.
+This guide shows how to enable AI assistant in {{ ydb-short-name }} Enterprise Manager (YDB EM). After the setup, users will see the assistant in the YDB EM web interface. The assistant sends model requests through [Gateway](index.md#architecture) and can use Model Context Protocol (MCP) tools provided by Gateway.
 
 ## Before you start {#before-start}
 
@@ -9,15 +9,15 @@ You can use this guide before the first YDB EM deployment or when updating an ex
 Make sure that you have:
 
 1. Access to the Ansible inventory used to deploy YDB EM.
-1. An OpenAI-compatible model endpoint that will be reachable from the Gateway host.
-1. A way to add a named model credential entry to the Gateway token file. The tokenator in Gateway reads this file and uses the `Token` value of the entry whose `Name` equals `ydb_em_ai_model_token_name`, for example `model-token`, as the upstream `Authorization` header.
+1. An endpoint of an OpenAI-compatible model that will be reachable from the Gateway host.
+1. Permissions to modify the [Gateway token file](#configure-model-access). During setup you will need to write the model access secret into the token file. Gateway reads this file and uses the `Token` value of the entry whose `Name` equals `ydb_em_ai_model_token_name`, for example `model-token`, as the upstream `Authorization` header.
 1. If you are updating an existing installation, access to the deployed Gateway host.
 
 For an existing installation, first confirm that the Gateway host is managed by the same Ansible inventory. Check the active service manager unit, process owner, config path, token file, and listening port before applying the playbook. If the host uses a custom or manual Gateway layout, apply the same settings through that installation's operational procedure instead of running the playbook blindly.
 
 {% note warning %}
 
-Do not put model API keys, OAuth tokens, or other secrets into `ydb_em_ai_assistant_client_runtime_config`. Gateway returns this value to the browser from `GET /meta/ai_assistant_client_config`.
+Do not put model API keys, OAuth tokens, or other secrets into `ydb_em_ai_assistant_client_runtime_config`. Gateway returns this value to the browser from `GET /meta/ai_assistant_client_config`. Keep secrets in the token file.
 
 {% endnote %}
 
@@ -86,7 +86,7 @@ Gateway appends the request suffix from `/proxy/model/...` to `ydb_em_ai_model_e
 
 ## Configure documentation search {#configure-docs-search}
 
-This step is optional. Enable it only if the assistant should have the `search_docs` MCP tool. Gateway calls an OpenAI-compatible embeddings endpoint for this tool and appends `/embeddings` to the configured base URL when the suffix is missing. When documentation search is enabled, the assistant gets `search_docs` through the configured `/meta/mcp` server.
+It is recommended to enable documentation search so that the assistant gets the `search_docs` MCP tool. Gateway calls an OpenAI-compatible embeddings endpoint for this tool and appends `/embeddings` to the configured base URL when the suffix is missing. When documentation search is enabled, the assistant gets `search_docs` through the configured `/meta/mcp` server.
 
 ```yaml
 ydb_em_docs_search_enabled: true

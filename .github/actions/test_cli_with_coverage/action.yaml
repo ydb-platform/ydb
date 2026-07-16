@@ -32,9 +32,10 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
         BUILD_PRESET: profile
       run: |
-        set -ex
+        set -exo pipefail
 
         BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
+        trap 'rm -f "$BAZEL_REMOTE_PASSWORD_FILE"' EXIT
         echo -n "${{ inputs.bazel_remote_password }}" > "$BAZEL_REMOTE_PASSWORD_FILE"
 
         # ydb/apps/ydb has a trailing slash in the regex to avoid matching ydb/apps/ydbd.

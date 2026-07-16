@@ -1,4 +1,5 @@
 import logging
+import os
 import random
 import threading
 import time
@@ -8,9 +9,16 @@ from dataclasses import dataclass
 import pytest
 
 from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture
+from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
+
+# Debug: ydbd inherits this test process's environment (Daemon.start -> process.execute),
+# so setting it here makes every cluster node emit a symbolized in-process backtrace on a
+# fatal signal (SIGSEGV/SIGABRT). Without it the stderr trace truncates at the signal
+# handler and we get nothing usable. Needed while chasing the intermittent SIGSEGV.
+os.environ.setdefault("YDB_ENABLE_SIGNAL_BACKTRACE", "1")
 
 # ---------------------------------------------------------------------------
 # Overview
@@ -99,11 +107,18 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster(
+            disabled_feature_flags=["enable_snapshots_locking"],
             table_service_config={
                 "enable_snapshot_isolation_rw": True,
             },
             column_shard_config={
                 "enable_cursor_v1": True,
+                "reader_class_name": "SIMPLE",
+                "enable_interval_tree_for_metadata_select": False,
+                # "max_read_staleness_ms": 1800000,
+            },
+            additional_log_configs={
+                "TX_COLUMNSHARD_SCAN": LogLevels.WARN,
             },
         )
 
@@ -193,6 +208,24 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
     class ExecState:
         successes: int = 0
         error: Exception = None
+        phase: str = ""
+
+    # Per-statement client deadline. Without it, a scan/write that wedges
+    # server-side (e.g. a shard that never answers after a rolling restart)
+    # blocks the worker forever, and the only symptom is the coarse
+    # _wait_for_progress watchdog. With a deadline the stall surfaces as a
+    # retriable ydb.Cancelled, so the worker keeps looping and the log gets
+    # timestamped breadcrumbs we can correlate to the stuck scan server-side.
+    STMT_DEADLINE_SEC = 30
+
+    @classmethod
+    def _stmt_settings(cls):
+        return (
+            ydb.BaseRequestSettings()
+            .with_timeout(cls.STMT_DEADLINE_SEC + 5)
+            .with_operation_timeout(cls.STMT_DEADLINE_SEC)
+            .with_cancel_after(cls.STMT_DEADLINE_SEC)
+        )
 
     RETRIABLE_ERRORS = (
         ydb.Unavailable,
@@ -204,7 +237,32 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         ydb.Overloaded,
         ydb.SessionExpired,
         ydb.Cancelled,
+        # A per-statement deadline (see _stmt_settings) firing means the request
+        # stalled server-side rather than the workload being wrong. During a
+        # rolling restart a column-table scan can block for tens of seconds
+        # (a shard on the just-restarted node is slow to serve scans even after
+        # the node reports ready) while writes to the same table keep
+        # succeeding. Treat it as retriable so the worker re-issues a fresh
+        # snapshot read instead of aborting the whole test.
+        ydb.DeadlineExceed,
     )
+
+    # Signature of a known KQP bug (to be fixed there): during a rolling restart a
+    # scan whose compute tasks target a draining/just-stopped node exhausts the
+    # executer's internal retry and is surfaced as a non-retriable InternalError
+    # instead of a retriable UNAVAILABLE (kqp_executer_impl.h HandleRetry, unlike
+    # its Disconnected / NODE_SHUTTING_DOWN siblings). It is a transient, so retry
+    # ONLY this exact signature -- every other InternalError stays fatal, so real
+    # bugs (columnshard, etc.) still fail the test. Remove once KQP is fixed.
+    _KQP_ACTOR_UNKNOWN_SIGNATURE = "TEvKqpNode::TEvStartKqpTasksRequest lost: ActorUnknown"
+
+    @classmethod
+    def _is_retriable(cls, e):
+        if isinstance(e, cls.RETRIABLE_ERRORS):
+            return True
+        if isinstance(e, ydb.InternalError) and cls._KQP_ACTOR_UNKNOWN_SIGNATURE in str(e):
+            return True
+        return False
 
     def _updater(self, table_name, stop_event, exec_state, lock):
         """
@@ -225,15 +283,19 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                         f"({lo + i}, {new_vals[i]}, \"{new_vals[i]:05d}\")"
                         for i in range(GROUP_SIZE)
                     )
+                    exec_state.phase = "upsert"
                     pool.execute_with_retries(
-                        f"UPSERT INTO `{table_name}` (key, int_val, str_val) VALUES {values_str}"
+                        f"UPSERT INTO `{table_name}` (key, int_val, str_val) VALUES {values_str}",
+                        settings=self._stmt_settings(),
                     )
 
                     with lock:
                         exec_state.successes += 1
-                except self.RETRIABLE_ERRORS as e:
-                    logger.warning("Updater [%s] retriable error: %s", table_name, e)
+                        exec_state.phase = "idle"
                 except Exception as e:
+                    if self._is_retriable(e):
+                        logger.warning("Updater [%s] retriable error: %s", table_name, e)
+                        continue
                     logger.error("Updater [%s] error: %s", table_name, e)
                     with lock:
                         exec_state.error = e
@@ -262,17 +324,20 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                                 count(distinct str_val) as cd,
                                 sum(key * int_val) as product_sum
                             FROM `{table_name}` WHERE key BETWEEN $lo AND $hi"""
+                        exec_state.phase = "read1"
                         with tx.execute(
                             agg_query,
                             parameters={
                                 '$lo': lo,
                                 '$hi': hi,
                             },
+                            settings=self._stmt_settings(),
                         ) as results:
                             res = list(results)[0].rows[0]
 
                         time.sleep(random.uniform(0, 0.1))
 
+                        exec_state.phase = "write"
                         with tx.execute(
                             f"UPSERT INTO `{results_table}` "
                             "(filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
@@ -284,18 +349,21 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                                 '$int_sum': (res.sum, ydb.PrimitiveType.Int64),
                                 '$cd': (res.cd, ydb.PrimitiveType.Int32),
                             },
+                            settings=self._stmt_settings(),
                         ):
                             pass
 
                         time.sleep(random.uniform(0, 0.1))
 
                         # check snapshot stability
+                        exec_state.phase = "read2"
                         with tx.execute(
                             agg_query,
                             parameters={
                                 '$lo': lo,
                                 '$hi': hi,
                             },
+                            settings=self._stmt_settings(),
                         ) as results:
                             res2 = list(results)[0].rows[0]
                         assert res2.product_sum == res.product_sum
@@ -304,9 +372,11 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
                     with lock:
                         exec_state.successes += 1
-                except self.RETRIABLE_ERRORS as e:
-                    logger.warning("PK aggregator [%s] retriable error: %s", table_name, e)
+                        exec_state.phase = "idle"
                 except Exception as e:
+                    if self._is_retriable(e):
+                        logger.warning("PK aggregator [%s] retriable error: %s", table_name, e)
+                        continue
                     logger.error("PK aggregator [%s] error: %s", table_name, e)
                     with lock:
                         exec_state.error = e
@@ -336,17 +406,20 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                         WHERE int_val BETWEEN $lo AND $hi
                         """
 
+                        exec_state.phase = "read1"
                         with tx.execute(
                             agg_query,
                             parameters={
                                 '$lo': lo,
                                 '$hi': hi,
                             },
+                            settings=self._stmt_settings(),
                         ) as results:
                             res = list(results)[0].rows[0]
 
                         time.sleep(random.uniform(0, 0.1))
 
+                        exec_state.phase = "write"
                         with tx.execute(
                             f"UPSERT INTO `{results_table}` "
                             "(filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
@@ -358,18 +431,21 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                                 '$int_sum': (res.sum, ydb.PrimitiveType.Int64),
                                 '$cd': (res.cd, ydb.PrimitiveType.Int32),
                             },
+                            settings=self._stmt_settings(),
                         ):
                             pass
 
                         time.sleep(random.uniform(0, 0.1))
 
                         # check snapshot stability
+                        exec_state.phase = "read2"
                         with tx.execute(
                             agg_query,
                             parameters={
                                 '$lo': lo,
                                 '$hi': hi,
                             },
+                            settings=self._stmt_settings(),
                         ) as results:
                             res2 = list(results)[0].rows[0]
                         assert res2.product_sum == res.product_sum
@@ -378,9 +454,11 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
                     with lock:
                         exec_state.successes += 1
-                except self.RETRIABLE_ERRORS as e:
-                    logger.warning("Int range aggregator [%s] retriable error: %s", table_name, e)
+                        exec_state.phase = "idle"
                 except Exception as e:
+                    if self._is_retriable(e):
+                        logger.warning("Int range aggregator [%s] retriable error: %s", table_name, e)
+                        continue
                     logger.error("Int range aggregator [%s] error: %s", table_name, e)
                     with lock:
                         exec_state.error = e
@@ -409,17 +487,20 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                         FROM `{table_name}`
                         WHERE str_val BETWEEN $str_lo AND $str_hi"""
 
+                        exec_state.phase = "read1"
                         with tx.execute(
                             agg_query,
                             parameters={
                                 '$str_lo': str_lo,
                                 '$str_hi': str_hi,
                             },
+                            settings=self._stmt_settings(),
                         ) as results:
                             res = list(results)[0].rows[0]
 
                         time.sleep(random.uniform(0, 0.1))
 
+                        exec_state.phase = "write"
                         with tx.execute(
                             f"UPSERT INTO `{results_table}` "
                             "(filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
@@ -431,18 +512,21 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                                 '$int_sum': (res.sum, ydb.PrimitiveType.Int64),
                                 '$cd': (res.cd, ydb.PrimitiveType.Int32),
                             },
+                            settings=self._stmt_settings(),
                         ):
                             pass
 
                         time.sleep(random.uniform(0, 0.1))
 
                         # check snapshot stability
+                        exec_state.phase = "read2"
                         with tx.execute(
                             agg_query,
                             parameters={
                                 '$str_lo': str_lo,
                                 '$str_hi': str_hi,
                             },
+                            settings=self._stmt_settings(),
                         ) as results:
                             res2 = list(results)[0].rows[0]
                         assert res2.product_sum == res.product_sum
@@ -451,9 +535,11 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
                     with lock:
                         exec_state.successes += 1
-                except self.RETRIABLE_ERRORS as e:
-                    logger.warning("String range aggregator [%s] retriable error: %s", table_name, e)
+                        exec_state.phase = "idle"
                 except Exception as e:
+                    if self._is_retriable(e):
+                        logger.warning("String range aggregator [%s] retriable error: %s", table_name, e)
+                        continue
                     logger.error("String range aggregator [%s] error: %s", table_name, e)
                     with lock:
                         exec_state.error = e
@@ -507,6 +593,10 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     ret[name] = st.successes
             return ret
 
+        def get_phases():
+            with lock:
+                return {name: st.phase for name, st in exec_states.items()}
+
         baseline = get_success_counters()
 
         deadline = time.time() + timeout
@@ -519,9 +609,23 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
             )
             if done:
                 return
+            # Name the workers that have not advanced yet, together with the
+            # phase they are currently stuck in, so a stall is diagnosable.
+            stuck = {
+                name: get_phases().get(name)
+                for name in current
+                if current[name] - baseline[name] < min_per_counter
+            }
+            logger.debug(f"workers not yet at target (name -> phase): {stuck}")
             time.sleep(1)
+        stuck = {
+            name: get_phases().get(name)
+            for name in current
+            if current[name] - baseline[name] < min_per_counter
+        }
         raise TimeoutError(
-            f"Threads did not make {min_per_counter} iterations each within {timeout}s"
+            f"Threads did not make {min_per_counter} iterations each within {timeout}s; "
+            f"stuck workers (name -> phase): {stuck}"
         )
 
     # -------------------------------------------------------------------------
@@ -586,5 +690,5 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         self.run_basic(TableType.ROW)
 
     def test_column_tables(self):
-        pytest.skip("TODO: re-enable when column table SI test passes")
-        # self.run_basic(TableType.COLUMN)
+        # pytest.skip("TODO: re-enable when column table SI test passes")
+        self.run_basic(TableType.COLUMN)

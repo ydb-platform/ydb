@@ -81,8 +81,15 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     static constexpr char ROOT[] = "scheme_board";
     static constexpr TBackupLimits BackupLimits = TBackupLimits();
 
-    static constexpr TStringBuf LogPrefix() {
-        return "monitoring"sv;
+    static constexpr auto ActorActivityType() {
+        return TActivity::SCHEME_BOARD_MONITORING_ACTOR;
+    }
+
+    NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TMonitoring"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", SelfId()});
     }
 
     using TActivity = NKikimrServices::TActivity;
@@ -1867,10 +1874,6 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     }
 
 public:
-    static constexpr auto ActorActivityType() {
-        return TActivity::SCHEME_BOARD_MONITORING_ACTOR;
-    }
-
     void Bootstrap() {
         if (auto* mon = AppData()->Mon) {
             auto* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
@@ -1882,6 +1885,7 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TSchemeBoardMonEvents::TEvRegister, Handle);
             hFunc(TSchemeBoardMonEvents::TEvUnregister, Handle);

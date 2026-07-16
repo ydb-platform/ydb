@@ -69,8 +69,11 @@ public:
         return NKikimrServices::TActivity::SCHEME_BOARD_BACKUP_ACTOR;
     }
 
-    static constexpr TStringBuf LogPrefix() {
-        return "backup"sv;
+    NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TBackupActor"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", SelfId()});
     }
 
     struct TPathDescriptionAggregate {
@@ -125,6 +128,7 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         try {
             OutputFile.ConstructInPlace(FilePath);
         } catch (...) {
@@ -419,6 +423,7 @@ private:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
             hFunc(TSchemeBoardMonEvents::TEvDescribeResponse, Handle);
@@ -454,8 +459,11 @@ public:
         return NKikimrServices::TActivity::SCHEME_BOARD_RESTORE_ACTOR;
     }
 
-    static constexpr TStringBuf LogPrefix() {
-        return "restore"sv;
+    NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TRestoreActor"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", SelfId()});
     }
 
     TRestoreActor(const TString& filePath, ui64 schemeShardId, ui64 generation, const TActorId& parent)
@@ -467,6 +475,7 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         try {
             InputFile.ConstructInPlace(FilePath);
         } catch (...) {
@@ -571,6 +580,7 @@ private:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TSchemeBoardMonEvents::TEvInfoResponse, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);

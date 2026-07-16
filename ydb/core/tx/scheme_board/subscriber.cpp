@@ -351,8 +351,6 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
         auto& record = *ev->Get()->MutableRecord();
 
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", LogPrefix()},
-            {"selfId", this->SelfId()},
             {"path", Path},
             {"ev", ev->Get()->ToString()},
             {"sender", ev->Sender});
@@ -361,8 +359,6 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
 
         if (!IsValidNotification(Path, record)) {
             YDB_LOG_ERROR("Suspicious",
-                {"logPrefix", LogPrefix()},
-                {"selfId", this->SelfId()},
                 {"path", Path},
                 {"ev", ev->Get()->ToString()},
                 {"sender", ev->Sender});
@@ -374,9 +370,6 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
 
     void Handle(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", LogPrefix()},
-            {"selfId", this->SelfId()},
-            {"path", Path},
             {"ev", ev->Get()->ToString()},
             {"sender", ev->Sender},
             {"cookie", ev->Cookie});
@@ -387,9 +380,6 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
 
     void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", LogPrefix()},
-            {"selfId", this->SelfId()},
-            {"path", Path},
             {"ev", ev->Get()->ToString()},
             {"sender", ev->Sender},
             {"cookie", ev->Cookie});
@@ -423,6 +413,7 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
     }
 
     void PassAway() override {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         if (Replica.NodeId() != this->SelfId().NodeId()) {
             this->Send(MakeInterconnectProxyId(Replica.NodeId()), new TEvents::TEvUnsubscribe());
         }
@@ -446,8 +437,12 @@ public:
         return NKikimrServices::TActivity::SCHEME_BOARD_REPLICA_SUBSCRIBER_ACTOR;
     }
 
-    static constexpr TStringBuf LogPrefix() {
-        return "replica"sv;
+    NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TReplicaSubscriber"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", this->SelfId()},
+            {"path", Path});
     }
 
     explicit TReplicaSubscriber(
@@ -464,11 +459,7 @@ public:
     }
 
     void Bootstrap(const TActorContext&) {
-        YDB_LOG_CREATE_CONTEXT(
-            {"selfId", this->SelfId()},
-            {"actorName", "TReplicaSubscriber"},
-            {"actorAction", "bootstrap"},
-        );
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         TMonitorableActor<TDerived>::Bootstrap();
 
         this->Send(Replica, new NInternalEvents::TEvSubscribe(Path, DomainOwnerId),
@@ -477,11 +468,9 @@ public:
     }
 
     STATEFN(StateWork) {
-        YDB_LOG_CREATE_CONTEXT(
-            {"selfId", this->SelfId()},
-            {"actorName", "TReplicaSubscriber"},
-            {"actorAction", "StateWork"},
-        );
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorStateFn", "StateWork"});
+
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvNotify, Handle);
             hFunc(NInternalEvents::TEvSyncVersionRequest, Handle);
@@ -521,9 +510,6 @@ template <typename TPath, typename TDerived, typename TReplicaDerived>
 class TSubscriberProxy: public TMonitorableActor<TDerived> {
     void Sleep() {
         YDB_LOG_TRACE("Sleep",
-            {"logPrefix", LogPrefix()},
-            {"selfId", this->SelfId()},
-            {"path", Path},
             {"delay", Delay});
 
         ReplicaSubscriber = TActorId();
@@ -538,9 +524,6 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
         }
         if (const auto& record = ev->Get()->GetRecord(); !ClusterStatesMatch(ClusterState, record)) {
             YDB_LOG_DEBUG("Cluster state mismatch in replica notification",
-                {"logPrefix", LogPrefix()},
-                {"selfId", this->SelfId()},
-                {"path", Path},
                 {"sender", ev->Sender},
                 {"clusterState", ClusterState},
                 {"state", record.GetClusterState().ShortDebugString()});
@@ -559,9 +542,6 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
 
     void HandleSleep(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
         YDB_LOG_TRACE("HandleSleep",
-            {"logPrefix", LogPrefix()},
-            {"selfId", this->SelfId()},
-            {"path", Path},
             {"ev", ev->Get()->ToString()},
             {"sender", ev->Sender},
             {"cookie", ev->Cookie});
@@ -571,9 +551,6 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
 
     void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix()},
-            {"selfId", this->SelfId()},
-            {"path", Path},
             {"ev", ev->Get()->ToString()},
             {"sender", ev->Sender},
             {"cookie", ev->Cookie},
@@ -622,6 +599,7 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
     }
 
     void PassAway() override {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         if (ReplicaSubscriber) {
             this->Send(ReplicaSubscriber, new TEvents::TEvPoisonPill());
         }
@@ -642,8 +620,12 @@ public:
         return NKikimrServices::TActivity::SCHEME_BOARD_SUBSCRIBER_PROXY_ACTOR;
     }
 
-    static constexpr TStringBuf LogPrefix() {
-        return "proxy"sv;
+    NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TSubscriberProxy"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", this->SelfId()},
+            {"path", Path});
     }
 
     explicit TSubscriberProxy(
@@ -667,11 +649,7 @@ public:
     }
 
     void Bootstrap(const TActorContext&) {
-        YDB_LOG_CREATE_CONTEXT(
-            {"selfId", this->SelfId()},
-            {"actorName", "TSubscriberProxy"},
-            {"actorAction", "bootstrap"},
-        );
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         TMonitorableActor<TDerived>::Bootstrap();
 
         ReplicaSubscriber = this->RegisterWithSameMailbox(new TReplicaDerived(this->SelfId(), Replica, Path, DomainOwnerId));
@@ -679,11 +657,8 @@ public:
     }
 
     STATEFN(StateWork) {
-        YDB_LOG_CREATE_CONTEXT(
-            {"selfId", this->SelfId()},
-            {"actorName", "TSubscriberProxy"},
-            {"actorAction", "StateWork"},
-        );
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorStateFn", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvNotify, Handle);
             hFunc(NInternalEvents::TEvSyncVersionRequest, Handle);
@@ -697,6 +672,8 @@ public:
     }
 
     STFUNC(StateSleep) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorStateFn", "StateSleep"});
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvSyncVersionRequest, HandleSleep);
 

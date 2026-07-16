@@ -642,9 +642,8 @@ protected:
 
             auto errorResponse = std::make_shared<TEvKafka::TEvResponse>(event->ClientResponse->CorrelationId, responseToClient, kafkaError);
             TString errorMessage = TStringBuilder() << event->SaslMechanism << " authentication mechanism is disabled, because mTLS flag is on. Turn of mTLS in configuration to use this mechanism.";
-            YDB_LOG_DEBUG("Dump logPrefix, errorMessage",
-                {"logPrefix", LogPrefix()},
-                {"errorMessage", errorMessage});
+            YDB_LOG_DEBUG(errorMessage,
+                {"logPrefix", LogPrefix()});
             Reply(event->ClientResponse->CorrelationId, errorResponse->Response, kafkaError, ctx);
             CloseConnection = true;
             return;
@@ -653,9 +652,8 @@ protected:
         Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
         auto authStep = event->AuthStep;
         if (authStep == EAuthSteps::FAILED) {
-            YDB_LOG_ERROR("",
-                {"logPrefix", LogPrefix()},
-                {"error", event->Error});
+            YDB_LOG_ERROR(event->Error,
+                {"logPrefix", LogPrefix()});
             CloseConnection = true;
             return;
         }
@@ -790,9 +788,9 @@ protected:
         if (IsSslRequired && !IsSslActive) {
             int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, ServerCreds);
             if (res < 0) {
-                YDB_LOG_ERROR("Connection closed - error",
+                YDB_LOG_ERROR("Connection closed - error in UpgradeToSecure",
                     {"logPrefix", LogPrefix()},
-                    {"upgradeToSecure", strerror(-res)});
+                    {"error", strerror(-res)});
                 PassAway();
                 return false;
             }

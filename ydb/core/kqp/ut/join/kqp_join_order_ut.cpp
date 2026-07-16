@@ -897,6 +897,40 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
+    Y_UNIT_TEST(ShuffleEliminationBothSidesTPCH4) {
+        auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpch1000s.json"), true);
+        auto queryClient = kikimr.GetQueryClient();
+        auto sessionResult = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(sessionResult);
+        auto session = sessionResult.GetSession();
+
+        CreateTables(session, "schema/tpch.sql", true);
+
+        auto explainResult = session.ExecuteQuery(
+            GetStatic("queries/tpch4.sql"),
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        explainResult.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+        UNIT_ASSERT_C(explainResult.GetStats()->GetPlan().has_value(), "Missing explain plan");
+
+        const TString plan{*explainResult.GetStats()->GetPlan()};
+        auto join = TFindJoinWithLabels(plan).Find({"orders", "lineitem"});
+        UNIT_ASSERT_VALUES_EQUAL_C(join.Join, "InnerJoin (BlockHash)", plan);
+        UNIT_ASSERT_C(!join.LhsShuffled, "The orders-side join shuffle was not eliminated\n" << plan);
+        UNIT_ASSERT_C(join.RhsShuffled, "The existing lineitem DISTINCT shuffle was not preserved\n" << plan);
+
+        const auto hashShuffles = CollectHashShuffleDescriptions(plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            hashShuffles.size(),
+            2,
+            TStringBuilder() << "Expected only the DISTINCT and final aggregation shuffles, got: "
+                             << JoinSeq(", ", hashShuffles) << "\n" << plan
+        );
+    }
+
     Y_UNIT_TEST(ShuffleEliminationTPCHQ5CompositeJoinKeys) {
         auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpch1000s.json"), true);
         auto queryClient = kikimr.GetQueryClient();

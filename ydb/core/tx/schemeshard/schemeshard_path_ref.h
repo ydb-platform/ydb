@@ -6,6 +6,22 @@ namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
 
+// A DbRefCount log label. Only binds char arrays (string literals); a raw
+// const char* (e.g. TString::c_str()) has no viable ctor and fails to compile,
+// so a stored label can never dangle.
+class TRefLabel {
+public:
+    template <size_t N>
+    constexpr TRefLabel(const char (&s)[N]) noexcept
+        : Str(s)
+    {}
+
+    const char* c_str() const noexcept { return Str; }
+
+private:
+    const char* Str;
+};
+
 // Owning handle for a DbRefCount reference on a path element (issue #33764).
 // Construction acquires, destruction releases: the inc/dec pairing that was a
 // convention across CreateTx/RemoveTx/init becomes structural, so a restored
@@ -16,7 +32,7 @@ class TPathRef {
 public:
     TPathRef() = default;
 
-    TPathRef(TSchemeShard* ss, const TPathId& pathId, const char* reason)
+    TPathRef(TSchemeShard* ss, const TPathId& pathId, TRefLabel reason)
         : SS(ss)
         , PathId(pathId)
         , Reason(reason)
@@ -70,7 +86,7 @@ public:
         Release();
     }
 
-    void Reset(TSchemeShard* ss, const TPathId& pathId, const char* reason) {
+    void Reset(TSchemeShard* ss, const TPathId& pathId, TRefLabel reason) {
         Release();
         SS = ss;
         PathId = pathId;
@@ -97,13 +113,12 @@ private:
 
     TSchemeShard* SS = nullptr;
     TPathId PathId;
-    // String literal (stored by pointer); a label for DbRefCount logging.
-    const char* Reason = "";
+    TRefLabel Reason = "";
 };
 
 // Acquire/release a path's DbRefCount without an owning handle, for containers
 // (TSelfRefMap) whose membership is the reference. `reason` must be a string literal.
-void AcquirePathDbRef(TSchemeShard* ss, const TPathId& pathId, const char* reason);
-void ReleasePathDbRef(TSchemeShard* ss, const TPathId& pathId, const char* reason);
+void AcquirePathDbRef(TSchemeShard* ss, const TPathId& pathId, TRefLabel reason);
+void ReleasePathDbRef(TSchemeShard* ss, const TPathId& pathId, TRefLabel reason);
 
 } // NKikimr::NSchemeShard

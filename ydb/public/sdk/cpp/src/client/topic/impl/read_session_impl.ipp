@@ -1879,7 +1879,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::DestroyAllPartitionStr
 
     for (auto&& [key, partitionStream] : PartitionStreams) {
         bool pushRes = EventsQueue->PushEvent(partitionStream,
-                                TClosedEvent(std::move(partitionStream), TClosedEvent::EReason::ConnectionLost),
+                                TClosedEvent(partitionStream, TClosedEvent::EReason::ConnectionLost),
                                deferred);
         if (!pushRes) {
             AbortImpl(&deferred);

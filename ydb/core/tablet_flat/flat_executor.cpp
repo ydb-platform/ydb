@@ -1,4 +1,5 @@
 #include <cmath>
+#include <optional>
 
 #include "flat_executor.h"
 #include "flat_executor_bootlogic.h"
@@ -4144,9 +4145,15 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
         auto tabletType = Owner->TabletType();
         auto tenantPathId = Owner->Info()->TenantPathId;
 
+        std::optional<TEvTabletCounters::TEvTabletAddCounters::TTableInfo> tableInfo;
+        if (const auto *ti = Owner->GetTableInfo()) {
+            tableInfo = TEvTabletCounters::TEvTabletAddCounters::TTableInfo{ti->TableId, ti->TablePath, ti->SchemaVersion};
+        }
+
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
+            FollowerId, std::move(tableInfo)));
 
         if (ResourceMetrics) {
             ResourceMetrics->TryUpdate(ctx);
@@ -4173,9 +4180,15 @@ void TExecutor::ForceSendCounters() {
         auto tabletType = Owner->TabletType();
         auto tenantPathId = Owner->Info()->TenantPathId;
 
+        std::optional<TEvTabletCounters::TEvTabletAddCounters::TTableInfo> tableInfo;
+        if (const auto *ti = Owner->GetTableInfo()) {
+            tableInfo = TEvTabletCounters::TEvTabletAddCounters::TTableInfo{ti->TableId, ti->TablePath, ti->SchemaVersion};
+        }
+
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
-            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
+            CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters,
+            FollowerId, std::move(tableInfo)));
     }
 }
 

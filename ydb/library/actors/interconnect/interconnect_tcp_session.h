@@ -403,8 +403,6 @@ namespace NActors {
 
         TReceiveContext::TPerChannelContext& GetPerChannelContext(ui16 channel) const;
 
-        
-
         TDeque<TRcBuf> Buffers;
 
         size_t CurrentBuffers = 1; // number of buffers currently required to allocate

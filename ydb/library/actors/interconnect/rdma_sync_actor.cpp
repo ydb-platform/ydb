@@ -1,11 +1,8 @@
-
 #include "events_local.h"
 #include "rdma_sync_actor.h"
 #include "interconnect_tcp_session.h"
 #include "interconnect_tcp_proxy.h"
 #include "packet.h"
-
-
 
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/core/actor.h>
@@ -18,10 +15,9 @@ namespace NActors {
     TInterconnectSessionRdma* TRdmaHandshakeResult::ReleasePreinitedSession() noexcept {
         auto ok = std::get_if<TOk>(&Result);
         Y_ABORT_UNLESS(ok);
-        auto sesion = ok->PreinitedSession.release();
-        return sesion;
+        return ok->PreinitedSession.release();
     }
-    
+
     TEvRdmaSyncResult::TEvRdmaSyncResult(TRdmaPreinitedSessionPtr session)
         : Session(std::move(session))
     {}
@@ -96,11 +92,11 @@ namespace {
     class TSessionCreatorDelegate final : public NActors::TEvProxyCall {
     public:
         TSessionCreatorDelegate(
-                TActorId synActor,
+                TActorId syncActor,
                 NInterconnect::NRdma::TQueuePair::TPtr qp,
                 NInterconnect::NRdma::ICq::TPtr cq,
                 ui32 peerNodeId)
-            : SyncActor(synActor)
+            : SyncActor(syncActor)
             , Qp(std::move(qp))
             , Cq(std::move(cq))
             , PeerNodeId(peerNodeId)

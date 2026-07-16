@@ -358,12 +358,13 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
             const auto loadContext = loader->BuildAccessorContext(accessor->GetRecordsCount());
             std::vector<std::shared_ptr<IPortionDataChunk>> columnChunks;
             if (accessorClassName == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName) {
-                auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor::SerializeToBlobAndMeta(*arrToWrite, loadContext);
+                auto blobAndMeta = NArrow::NAccessor::NDictionary::TConstructor().SerializeToBlobAndMeta(*arrToWrite, loadContext);
                 columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
                     std::move(blobAndMeta.Blob), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures, std::move(blobAndMeta.Meta)) };
             } else {
                 columnChunks = { std::make_shared<NChunks::TChunkPreparation>(
-                    accessorConstructor->SerializeToString(*arrToWrite, loadContext), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures) };
+                    accessorConstructor->SerializeToBlobAndMeta(*arrToWrite, loadContext).Blob, *arrToWrite, TChunkAddress(columnId, 0),
+                    columnFeatures) };
             }
             AFL_VERIFY(chunks.emplace(columnId, std::move(columnChunks)).second);
             ++itIncoming;

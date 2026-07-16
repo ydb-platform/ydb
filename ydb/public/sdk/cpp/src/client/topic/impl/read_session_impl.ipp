@@ -1994,8 +1994,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64
 
     TDeferredActions<UseMigrationProtocol> deferred;
 
-    OnDecompressionTaskFinished();
-
     *Settings.Counters_->BytesRead += decompressedSize;
     *Settings.Counters_->BytesReadCompressed += sourceSize;
     *Settings.Counters_->MessagesRead += messagesCount;
@@ -3647,6 +3645,10 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
     if (bool expected = false; !Ready->Abandoned.compare_exchange_strong(expected, true)) {
         // Message is dropped due to partition stream cancellation, we should release decompressed memory
         parent->OnUserRetrievedEvent(DecompressedSize, messagesProcessed);
+    }
+
+    if (auto session = parent->CbContext->LockShared()) {
+        session->OnDecompressionTaskFinished();
     }
 }
 

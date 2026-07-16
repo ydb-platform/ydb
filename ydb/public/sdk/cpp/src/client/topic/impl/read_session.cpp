@@ -40,7 +40,20 @@ TReadSession::~TReadSession() {
     Close(TDuration::Zero());
 
     Abort(EStatus::ABORTED, "Aborted");
-    ClearAllEvents();
+    if (CbContext) {
+        if (auto session = CbContext->LockShared()) {
+            const TInstant closeDeadline = TInstant::Now() + TDuration::Seconds(5);
+            if (!session->WaitAllDecompressionTasks(closeDeadline)) {
+                LOG_LAZY(Log, TLOG_WARNING, GetLogPrefix() << "Some decompression tasks are still running after read session destroy timeout");
+            }
+            ClearAllEvents();
+            session->ClearAllPartitionStreamEvents();
+        } else {
+            ClearAllEvents();
+        }
+    } else {
+        ClearAllEvents();
+    }
 
     if (CbContext) {
         CbContext->Cancel();

@@ -75,8 +75,6 @@ public:
         return std::make_shared<TCredentialsProvider>(Params_, std::move(facility));
     }
 
-<<<<<<< HEAD
-=======
     std::string GetClientIdentity() const override final {
         return NIam::NDetail::MakeClientIdentity(
             "TIamServiceCredentialsProviderFactory",
@@ -90,7 +88,6 @@ public:
             Params_.SystemServiceAccountCredentials->GetClientIdentity());
     }
 
->>>>>>> 1a38ab96700 (reuse equivalent IAM credentials providers (#46593))
 private:
     TIamServiceParams Params_;
 };

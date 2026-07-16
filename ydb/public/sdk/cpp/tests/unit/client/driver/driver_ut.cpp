@@ -112,8 +112,6 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
-<<<<<<< HEAD
-=======
     Y_UNIT_TEST(ReusesCredentialsProviderForSameIdentity) {
         std::atomic_int providerCount = 0;
         auto driver = TDriver(
@@ -174,7 +172,6 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "client TLS:");
     }
 
->>>>>>> 1a38ab96700 (reuse equivalent IAM credentials providers (#46593))
     Y_UNIT_TEST(ConnectWrongPort) {
         auto driver = TDriver(
             TDriverConfig()

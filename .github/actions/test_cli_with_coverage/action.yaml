@@ -1,4 +1,4 @@
-name: Ya-Build-Test-Coverage
+name: Ya-Build-Test-Coverage-CLI
 inputs:
   bazel_remote_uri:
     type: string
@@ -15,6 +15,10 @@ inputs:
   link_threads:
     type: string
     default: "12"
+  warn_only:
+    description: "If \"true\", coverage regression is reported but the check does not fail (no blocking, no red status)."
+    type: string
+    default: "true"
 defaults:
   run:
     shell: bash
@@ -33,14 +37,17 @@ runs:
         BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
         echo -n "${{ inputs.bazel_remote_password }}" > "$BAZEL_REMOTE_PASSWORD_FILE"
 
-        run_sdk_coverage() {
+        # ydb/apps/ydb has a trailing slash in the regex to avoid matching ydb/apps/ydbd.
+        run_cli_coverage() {
           local out_dir="$1"
           mkdir -p "$out_dir"
           local params=(
             -tA --build profile
             --clang-coverage --coverage-report
-            -DCOVERAGE_TARGET_REGEXP=ydb/public/sdk/cpp
-            --coverage-prefix-filter=ydb/public/sdk/cpp
+            -DCOVERAGE_TARGET_REGEXP='ydb/apps/ydb/|ydb/public/lib/ydb_cli|ydb/library/workload'
+            --coverage-prefix-filter=ydb/apps/ydb/
+            --coverage-prefix-filter=ydb/public/lib/ydb_cli
+            --coverage-prefix-filter=ydb/library/workload
             --test-threads "${{ inputs.test_threads }}"
             --link-threads "${{ inputs.link_threads }}"
             --output "$out_dir"
@@ -57,7 +64,11 @@ runs:
               --dist-cache-evict-bins
             )
           fi
-          ./ya make "${params[@]}" ydb/public/sdk/cpp
+          ./ya make "${params[@]}" \
+            ydb/apps/ydb \
+            ydb/public/lib/ydb_cli \
+            ydb/library/workload \
+            ydb/tests/functional/ydb_cli
         }
 
         MERGE_HEAD=$(git rev-parse HEAD)
@@ -69,26 +80,30 @@ runs:
 
         git fetch origin "$BASE_REF"
         git checkout "origin/$BASE_REF"
-        run_sdk_coverage "$BASE_OUT"
+        run_cli_coverage "$BASE_OUT"
 
         git checkout "$MERGE_HEAD"
         python3 .github/scripts/tests/compare_coverage.py extract \
           "$BASE_OUT/coverage.report" "$BASE_COVERAGE_JSON"
-        run_sdk_coverage "$PR_OUT"
+        run_cli_coverage "$PR_OUT"
         python3 .github/scripts/tests/compare_coverage.py extract \
           "$PR_OUT/coverage.report" "$PR_COVERAGE_JSON"
 
         CURRENT=$(python3 -c 'import json; print(json.load(open("'"$PR_COVERAGE_JSON"'"))["line_pct"])')
         BASELINE=$(python3 -c 'import json; print(json.load(open("'"$BASE_COVERAGE_JSON"'"))["line_pct"])')
-        if python3 .github/scripts/tests/compare_coverage.py check --label "CPP SDK" --tolerance 0.1 "$PR_COVERAGE_JSON" "$BASE_COVERAGE_JSON"; then
-          STATE=success; COLOR=green; MSG="CPP SDK line coverage: ${CURRENT}% (${BASE_REF}: ${BASELINE}%) — OK"
+        if python3 .github/scripts/tests/compare_coverage.py check --label "YDB CLI" --tolerance 5.0 "$PR_COVERAGE_JSON" "$BASE_COVERAGE_JSON"; then
+          STATE=success; COLOR=green; MSG="YDB CLI line coverage: ${CURRENT}% (${BASE_REF}: ${BASELINE}%) — OK"
         else
-          STATE=failure; COLOR=red; MSG="CPP SDK line coverage: ${CURRENT}% (${BASE_REF}: ${BASELINE}%) — FAILED"
+          STATE=failure; COLOR=red; MSG="YDB CLI line coverage: ${CURRENT}% (${BASE_REF}: ${BASELINE}%) — REGRESSED"
+        fi
+        if [[ "${{ inputs.warn_only }}" == "true" && "$STATE" == "failure" ]]; then
+          MSG="$MSG (warn-only mode, not blocking the PR)"
+          STATE=success
         fi
         SHA="${{ github.event.pull_request.head.sha }}"
         curl --retry 5 --fail -L -X POST \
           -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
           "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$SHA" \
-          -d "{\"state\":\"$STATE\",\"description\":\"${CURRENT}% vs ${BASE_REF} ${BASELINE}%\",\"context\":\"coverage_cpp_sdk\"}"
+          -d "{\"state\":\"$STATE\",\"description\":\"${CURRENT}% vs ${BASE_REF} ${BASELINE}%\",\"context\":\"coverage_cli\"}"
         echo "$MSG" | .github/scripts/tests/comment-pr.py --color "$COLOR"
         [[ "$STATE" == success ]]

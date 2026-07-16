@@ -321,7 +321,10 @@ namespace NKikimr::NSchemeShard {
                     return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPreconditionFailed, txId, ssId, reason);
                 }
 
-                dstPath.MaterializeLeaf(owner);
+                const TPathId pathId = context.SS->AllocatePathId();
+                context.MemChanges.GrabNewPath(context.SS, pathId);
+                context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+                dstPath.MaterializeLeaf(owner, pathId);
 
                 context.SS->TabletCounters->Simple()[COUNTER_BLOB_DEPOT_COUNT].Add(1);
                 auto blobDepot = MakeIntrusive<TBlobDepotInfo>(1u, description);
@@ -332,7 +335,6 @@ namespace NKikimr::NSchemeShard {
                 dstPath->LastTxId = OperationId.GetTxId();
                 dstPath->PathState = TPathElement::EPathState::EPathStateCreate;
                 dstPath->PathType = TPathElement::EPathType::EPathTypeBlobDepot;
-                const TPathId pathId = dstPath->PathId;
 
                 TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateBlobDepot, pathId);
 

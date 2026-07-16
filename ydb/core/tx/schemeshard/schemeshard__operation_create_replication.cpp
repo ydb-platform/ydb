@@ -455,12 +455,15 @@ public:
             return result;
         }
 
-        path.MaterializeLeaf(owner);
+        const TPathId pathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, pathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        path.MaterializeLeaf(owner, pathId);
         path->CreateTxId = OperationId.GetTxId();
         path->LastTxId = OperationId.GetTxId();
         path->PathState = TPathElement::EPathState::EPathStateCreate;
         path->PathType = Strategy->GetPathType();
-        result->SetPathId(path->PathId.LocalPathId);
+        result->SetPathId(pathId.LocalPathId);
 
         IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
         parentPath.DomainInfo()->IncPathsInside(context.SS);

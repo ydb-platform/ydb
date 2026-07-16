@@ -310,7 +310,7 @@ namespace {
             hFunc(NMon::TEvHttpInfo, Handle)
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
-            hFunc(TEvents::TEvPoison, HandlePoison)
+            cFunc(TEvents::TSystem::Poison, PassAway)
         )
     }
 
@@ -344,7 +344,7 @@ namespace {
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
-            hFunc(TEvents::TEvPoison, HandlePoison)
+            cFunc(TEvents::TSystem::Poison, PassAway)
 
             case TEvReadThenWritePersistentBuffers::EventType:
             case TEvWritePersistentBuffers::EventType: {
@@ -361,7 +361,7 @@ namespace {
         // The owning environment (warden in production, test scaffolding in tests) is expected
         // to send TEvPoison and start a replacement DDisk actor with a fresh OwnerRound.
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvPoison, HandlePoison)
+            cFunc(TEvents::TSystem::Poison, PassAway)
             default:
                 break;
         }
@@ -392,17 +392,12 @@ namespace {
         }
     }
 
-    void TDDiskActor::HandlePoison(TEvents::TEvPoison::TPtr& /*ev*/) {
-        if (!IsPersistentBufferActor && PersistentBufferActorId) {
+    void TDDiskActor::PassAway() {
+        if (IsPersistentBufferActor) {
+            Send(WritePersistentBuffersActor, new NActors::TEvents::TEvPoison());
+        } else {
             Send(PersistentBufferActorId, new NActors::TEvents::TEvPoison());
         }
-        if (IsPersistentBufferActor && WritePersistentBuffersActor) {
-            Send(WritePersistentBuffersActor, new NActors::TEvents::TEvPoison());
-        }
-        PassAway();
-    }
-
-    void TDDiskActor::PassAway() {
 #if defined(__linux__)
         if (UringRouter) {
             for (int i = 0; i < 1000 && UringRouter->GetInflight() > 0; ++i) {

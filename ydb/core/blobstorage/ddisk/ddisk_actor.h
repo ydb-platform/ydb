@@ -386,7 +386,6 @@ namespace NKikimr::NDDisk {
         STFUNC(StateFuncDDisk);
         STFUNC(StateFuncPersistentBuffer);
         STFUNC(StateFuncTerminate);
-        void HandlePoison(TEvents::TEvPoison::TPtr& ev);
         void PassAway() override;
 
         // Mirrors TVDiskContext::CheckPDiskResponse: returns true on OK, returns false and

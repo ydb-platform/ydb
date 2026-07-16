@@ -1,24 +1,34 @@
-# Developer UI Security Guidelines
+﻿# Developer UI Security Guidelines
 
-This article describes security requirements for C++ developers writing monitoring pages (Developer UI) in {{ ydb-short-name }}. These pages are generated at runtime using `HTML(str) { ... }` macros and served by the built-in HTTP monitoring server.
+This article is a security checklist for {{ ydb-short-name }} developers and contributors who write C++ monitoring pages ([Developer UI](../reference/embedded-ui/index.md)). These pages are generated at runtime using `HTML(str) { ... }` macros and are served by the built-in monitoring HTTP server.
 
-Example of a pull request with CSRF protection and nonce handling in HTTP responses: [#36981](https://github.com/ydb-platform/ydb/pull/36981).
+This article covers [Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP) (CSP), [Cross-Site Request Forgery](https://en.wikipedia.org/wiki/Cross-site_request_forgery) (CSRF) protection, and safe HTML output.
 
-## 1. Content Security Policy (CSP) and `nonce`
+The CSP (`nonce`) and CSRF mechanisms in the monitoring HTTP layer are described below based on the current code behavior; they were introduced in pull request [#36981](https://github.com/ydb-platform/ydb/pull/36981).
 
-> **What the PR actually enforces.** PR [#36981](https://github.com/ydb-platform/ydb/pull/36981) sets exactly one CSP directive on monitoring responses:
->
-> ```http
-> Content-Security-Policy: script-src 'nonce-AbCd…=='
-> ```
->
-> There is **no** `style-src`, `font-src`, `connect-src`, `frame-src`, `img-src`, or `default-src` in the emitted header. So today only `<script>` execution is policed by the browser; rules below for other resource types are **defensive coding guidelines** for forward-compatibility, not browser-enforced.
->
-> The nonce → CSP-header translation happens in [`THttpMonLegacyActorRequest::Handle(TEvHttpInfoRes…)`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mon/mon.cpp) (the legacy monitoring path that delivers `TEvHttpInfoRes`/`TEvRemoteHttpInfoRes`). Handlers that reply with a raw `THttpOutgoingResponse` are on their own.
+## Content Security Policy (CSP) and nonce {#csp-and-nonce}
 
-### Rule: All inline `<script>` tags MUST use `nonce`
+{% note info %}
 
-**❌ FORBIDDEN — inline script without nonce:**
+**Current implementation.** Monitoring responses include one CSP directive:
+
+```http
+Content-Security-Policy: script-src 'nonce-AbCdвЂ¦=='
+```
+
+The header does not include `style-src`, `font-src`, `connect-src`, `frame-src`, `img-src`, or `default-src`. In the current version, the browser enforces restrictions only for `<script>` execution; rules below for other resource types are defensive coding recommendations for forward compatibility, not browser-enforced requirements yet.
+
+Nonce-to-CSP-header translation happens in [`THttpMonLegacyActorRequest::Handle(TEvHttpInfoResвЂ¦)`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mon/mon.cpp) (the legacy monitoring path that delivers `TEvHttpInfoRes`/`TEvRemoteHttpInfoRes`). Handlers that reply with raw `THttpOutgoingResponse` must ensure security on their own.
+
+{% endnote %}
+
+### Inline `<script>` tags and nonce {#inline-script-nonce}
+
+Inline `<script>` tags require a `nonce` attribute. Without it, the browser blocks script execution under the active CSP policy.
+
+{% note alert %}
+
+An inline script without a `nonce` attribute does not execute under the active CSP policy.
 
 ```cpp
 // ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl_http.cpp
@@ -31,9 +41,9 @@ str << R"___(
 )___";
 ```
 
-**✅ CORRECT — generate a nonce per response, attach it to the response event, and use it in `<script>`:**
+{% endnote %}
 
-The monitoring framework (see [#36981](https://github.com/ydb-platform/ydb/pull/36981)) provides [`NActors::NMon::GenerateCspNonce()`](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/mon.h) — a base64-encoded random GUID. The renderer generates the nonce, uses it in every inline `<script>`, and assigns it to `res->Nonce` on the outgoing `TEvRemoteHttpInfoRes` / `TEvHttpInfoRes`. The HTTP layer then automatically emits a matching `Content-Security-Policy: script-src 'nonce-<value>'` header — you do **not** write the CSP header by hand.
+A nonce is generated for every response, attached to the response event, and injected into inline `<script>` tags. The monitoring framework provides [`NActors::NMon::GenerateCspNonce()`](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/mon.h), which returns a random base64-encoded GUID. Page rendering code generates the nonce, uses it in all inline `<script>` tags, and writes it to `res->Nonce` of outgoing `TEvRemoteHttpInfoRes` / `TEvHttpInfoRes`. The HTTP layer automatically adds the matching `Content-Security-Policy: script-src 'nonce-<value>'` header; the CSP header must not be built manually.
 
 ```cpp
 #include <ydb/library/actors/core/mon.h>
@@ -44,7 +54,7 @@ bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&)
     RenderMainPage(s, nonce);
 
     auto* res = new NMon::TEvRemoteHttpInfoRes(s.Str());
-    res->Nonce = nonce; // framework will emit the CSP header with this nonce
+    res->Nonce = nonce; // the HTTP layer adds the CSP header with this nonce
     Send(ev->Sender, res, 0, ev->Cookie);
     return true;
 }
@@ -62,35 +72,43 @@ void RenderMainPage(IOutputStream& s, const TString& nonce) {
 }
 ```
 
-For pages served via `TEvHttpInfoRes` (local mon, not forwarded through tablets), the same `res->Nonce = nonce` assignment applies — see `Notify(...)` in [`tablet_monitoring_proxy.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet/tablet_monitoring_proxy.cpp). Do **not** reuse a nonce across responses — generate a fresh one each time `OnRenderAppHtmlPage` is invoked.
+For pages served via `TEvHttpInfoRes` (local mon, without proxying through [tablets](../concepts/glossary.md#tablet)), the same `res->Nonce = nonce` assignment applies; see `Notify(...)` in [`tablet_monitoring_proxy.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet/tablet_monitoring_proxy.cpp). Nonce values must not be reused between responses: generate a new value for each `OnRenderAppHtmlPage` call.
 
-The nonce is preserved when the response is forwarded across nodes: [`TEvRemoteHttpInfoRes::SerializeToArcadiaStream`](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/mon.cpp) packs it alongside the HTML, so the same pattern works for remote tablet monitoring.
+When a response is forwarded between nodes, nonce is preserved: [`TEvRemoteHttpInfoRes::SerializeToArcadiaStream`](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/mon.cpp) serializes it together with HTML, so the same approach works for remote tablet monitoring.
 
-### Rule: NEVER weaken the `script-src` CSP
+### `script-src` policy {#script-src-csp}
 
-Do not add `'unsafe-inline'`, `'unsafe-eval'`, or external domains to `script-src`. If a script doesn't work without `'unsafe-inline'`, rewrite it to use a nonce (see the rule above).
+Do not add `'unsafe-inline'`, `'unsafe-eval'`, or external domains to `script-src`. If a script does not work without `'unsafe-inline'`, rewrite it using nonce (see [{#T}](#inline-script-nonce)).
 
-**❌ FORBIDDEN — weakening `script-src`:**
+{% note alert %}
+
+Do not weaken `script-src` by adding `'unsafe-inline'`, `'unsafe-eval'`, or external domains.
 
 ```cpp
 response << "Content-Security-Policy: script-src 'unsafe-inline'\r\n";
 response << "Content-Security-Policy: script-src 'self' https://cdn.example.com\r\n";
 ```
 
-### Rule: Avoid new inline styles even though CSP does not block them today
+{% endnote %}
 
-There is no `style-src` directive in the CSP header set by PR [#36981](https://github.com/ydb-platform/ydb/pull/36981), so inline styles (`style="..."` attributes and inline `<style>` blocks) are not blocked by the browser today. They are used pervasively across existing Developer UI pages (hive monitoring, pdisk, tablet_flat, graph, cms, columnshard, tracing, etc.); the plan is to migrate those usages and later add a stricter `style-src` to the header.
+### Inline styles {#inline-styles}
 
-This is **not** an invitation to add new inline styles. For new code:
+The current CSP header has no `style-src` directive, so inline styles (`style="..."` attributes and `<style>` blocks) are not blocked by the browser. They are widely used on existing Developer UI pages (hive monitoring, pdisk, tablet_flat, graph, cms, columnshard, tracing, etc.); those usages are planned for migration, followed by adding stricter `style-src` to the header.
 
-**❌ AVOID — new inline styles:**
+Lack of blocking in the current version does not mean new inline styles should be added.
+
+{% note alert %}
+
+For new code, avoid inline styles (`style="..."` attributes and `<style>` blocks).
 
 ```cpp
 str << "<div style='color:red; margin:5px'>...</div>";
 str << "<style>.my-table th { text-align: center; }</style>";
 ```
 
-**✅ PREFER — put styles into a static CSS file served from the same origin:**
+{% endnote %}
+
+Prefer moving styles into a static CSS file served from the same origin:
 
 ```cpp
 // In ydb/core/viewer/.../monitoring.css (served from /static/):
@@ -100,30 +118,36 @@ str << "<style>.my-table th { text-align: center; }</style>";
 str << "<div class='mon-warning'>...</div>";
 ```
 
-When a stricter `style-src` is eventually added to the header, do **not** weaken it with `'unsafe-inline'` or external domains.
+When stricter `style-src` is added to the header, do not weaken it with `'unsafe-inline'` or external domains.
 
-## 2. No External Resources
+## External resources {#no-external-resources}
 
-> **Enforcement status.** Only the `script-src` row below is enforced by the CSP header from PR [#36981](https://github.com/ydb-platform/ydb/pull/36981). The other rows describe the **target policy** the codebase is moving toward — follow them in new code so that turning on the stricter header later does not break the UI.
+{% note info %}
 
-| Directive     | Target policy                               | Enforced today?                    |
-| ------------- | ------------------------------------------- | ---------------------------------- |
-| `script-src`  | `'self'` + nonce, no external scripts       | ✅ Yes — `script-src 'nonce-…'`    |
-| `style-src`   | `'self'` only, no external stylesheets      | ❌ No directive in header (see §1) |
-| `font-src`    | `'self'`, no external fonts                 | ❌ No directive in header          |
-| `connect-src` | `'self'`, no external `fetch()`/XHR         | ❌ No directive in header          |
-| `frame-src`   | `'self'`, no external iframes               | ❌ No directive in header          |
-| `img-src`     | `'self'` and `data:` only, no external URLs | ❌ No directive in header          |
+**Enforcement status.** Only the `script-src` row in the table below is currently enforced by the CSP header. Other rows describe the target policy the codebase is moving to; following it in new code allows enabling stricter headers later without breaking the UI.
 
-### Rule: Use only relative links in HTML generated from C++
+{% endnote %}
 
-Monitoring pages may be served under different prefixes, so generated HTML must not hardcode absolute locations. In `href`, `src`, `action`, `formaction`, `fetch()`, `$.ajax()`, etc. use only relative links. Do not use:
+| Directive | Target policy | Enforced now? |
+| --- | --- | --- |
+| `script-src` | `'self'` + nonce, no external scripts | Yes: `script-src 'nonce-вЂ¦'` |
+| `style-src` | `'self'` only, no external stylesheets | No: directive is not in the header (see [{#T}](#csp-and-nonce)) |
+| `font-src` | `'self'`, no external fonts | No: directive is not in the header |
+| `connect-src` | `'self'`, no external `fetch()`/XMLHttpRequest (XHR) | No: directive is not in the header |
+| `frame-src` | `'self'`, no external iframes | No: directive is not in the header |
+| `img-src` | `'self'` and `data:`, no external URLs | No: directive is not in the header |
+
+### Relative links in generated HTML {#relative-links}
+
+Monitoring pages may be served under different prefixes, so generated HTML must not hardcode absolute paths. Use only relative links in `href`, `src`, `action`, `formaction`, `fetch()`, `$.ajax()`, etc. Forbidden:
 
 - full URLs: `https://example.com/...`;
-- protocol-relative URLs: `//example.com/...`;
+- URL without scheme (protocol-relative): `//example.com/...`;
 - root-relative paths: `/get_blob`, `/static/js/...`.
 
-**❌ FORBIDDEN:**
+{% note alert %}
+
+Do not use absolute URLs or root-relative paths in generated HTML.
 
 ```cpp
 out << "<a href='https://ydb.tech/docs'>docs</a>\n";
@@ -131,7 +155,9 @@ out << "<button type='submit' formaction='/get_blob'>Query</button>\n";
 out << "fetch('/api/data')\n";
 ```
 
-**✅ CORRECT:**
+{% endnote %}
+
+Relative links:
 
 ```cpp
 out << "<a href='docs'>docs</a>\n";
@@ -139,30 +165,36 @@ out << "<button type='submit' formaction='get_blob'>Query</button>\n";
 out << "fetch('api/data')\n";
 ```
 
-If a page must reference product documentation or any other external page, route it through a relative internal documentation page/redirect, or render plain text instead of a clickable external link.
+If a page needs a link to product docs or any external page, route it through a relative internal docs page/redirect, or render plain text instead of a clickable external link.
 
-### Rule: NEVER load scripts, styles, or fonts from external URLs
+### Loading scripts, styles, and fonts {#no-external-scripts}
 
-**❌ FORBIDDEN:**
+Resources must be loaded from the same origin, without external URLs.
+
+{% note alert %}
+
+Do not load scripts, styles, or fonts from external URLs.
 
 ```cpp
 out << "<script src='https://code.jquery.com/jquery-3.6.0.min.js'></script>\n";
 out << "<link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet'>\n";
 ```
 
-**✅ CORRECT — use only resources served from the same origin:**
+{% endnote %}
 
-Bootstrap, jQuery, and tablesorter are already bundled and served by the monitoring page wrapper. Page-specific C++ renderers normally must not emit additional `<script>`/`<link>` tags for them.
+Bootstrap, jQuery, and tablesorter are already included in the embedded resource set and served by the monitoring page wrapper. Page-specific C++ rendering code usually should not emit extra `<script>`/`<link>` tags for them.
 
-If a page-specific renderer still needs to reference a bundled resource, follow the relative-link rule above: do not hardcode root-relative paths such as `/static/js/jquery.min.js` or `/jquery.tablesorter.js`.
+If a page still needs to reference an embedded resource, the relative-link rule still applies: do not hardcode root-relative paths such as `/static/js/jquery.min.js` or `/jquery.tablesorter.js`.
 
-If you need a library that is not yet bundled, add it to the embedded resources in [`ydb/core/viewer/`](https://github.com/ydb-platform/ydb/tree/main/ydb/core/viewer) and expose it through the monitoring wrapper/helper without introducing external or root-relative links in page C++.
+If you need a library that is not yet in embedded resources, add it in [`ydb/core/viewer/`](https://github.com/ydb-platform/ydb/tree/main/ydb/core/viewer) and connect it via the monitoring wrapper or helper, without external URLs and without root-relative paths in page C++.
 
-### Rule: NEVER make `fetch()`/XHR requests to absolute links
+### `fetch()` and XHR requests {#no-absolute-fetch}
 
-This is the same rule for JavaScript requests: use relative URLs only.
+Same rule applies to JavaScript requests: use only relative URLs.
 
-**❌ FORBIDDEN:**
+{% note alert %}
+
+Do not make `fetch()`/XHR requests to absolute URLs or root-relative paths.
 
 ```cpp
 str << "fetch('https://external-api.example.com/data')\n";
@@ -170,66 +202,78 @@ str << "fetch('/api/data')\n";
 str << "$.ajax({ url: '/api/data' })\n";
 ```
 
-**✅ CORRECT:**
+{% endnote %}
+
+Relative URLs:
 
 ```cpp
-str << "fetch('')\n";           // same URL as the page
-str << "fetch('api/data')\n";   // relative to the current page
-str << "fetch('../api/data')\n"; // relative path to a sibling/parent endpoint
+str << "fetch('')\n";            // same URL as the page
+str << "fetch('api/data')\n";    // relative to the current page
+str << "fetch('../api/data')\n"; // relative path to sibling/parent endpoint
 ```
 
-### Rule: NEVER embed external iframes
+### Embedding iframes {#no-external-iframes}
 
-**❌ FORBIDDEN:**
+Only same-origin iframe sources are allowed.
+
+{% note alert %}
+
+Do not embed external iframes.
 
 ```cpp
 out << "<iframe src='https://external.example.com/widget'></iframe>\n";
 ```
 
-## 3. CSRF Protection
+{% endnote %}
 
-The monitoring HTTP layer implements CSRF protection via the double-submit cookie pattern (see PR [#36981](https://github.com/ydb-platform/ydb/pull/36981)):
+## CSRF protection {#csrf-protection}
 
-- On any response the server sets a `csrf_token` cookie (random GUID, `SameSite=Strict; Path=/`) if it is not already present. The cookie is intentionally **not** `HttpOnly` (the double-submit pattern requires JS to read it) and **not** `Secure` (the monitoring HTTP layer does not know whether it is behind TLS).
-- For state-changing methods (POST/PUT/DELETE/PATCH), the server compares the `csrf_token` cookie with either the `X-CSRF-Token` request header or a `csrf_token` form parameter; a mismatch results in `403 FORBIDDEN`.
-- CSRF check is skipped when the request is not cookie-based (no `ydb_session_id` cookie) — e.g. API clients using `Authorization` headers.
-- If `ydb_session_id` **is** present but the `csrf_token` cookie has not been issued yet (e.g. first POST immediately after login, with no preceding GET), the request is rejected — make sure the UI performs at least one GET before any state-changing request.
+The monitoring HTTP layer implements CSRF protection using the [double-submit cookie](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html#alternative-using-a-double-submit-cookie-pattern) pattern:
 
-Since there is no shared monitoring JS bundle, each inline `<script>` that performs a POST must read the `csrf_token` cookie itself. Use this small `getCsrfToken()` helper, matching the cookie name used by the server in [#36981](https://github.com/ydb-platform/ydb/pull/36981):
+- for any response, the server sets `csrf_token` cookie (random GUID, `SameSite=Strict; Path=/`) if it is not present yet; the cookie is intentionally without `HttpOnly` (double-submit requires JS read access) and without `Secure` (the monitoring HTTP layer does not know whether it runs behind TLS);
+- for state-changing methods (POST/PUT/DELETE/PATCH), the server compares `csrf_token` cookie to `X-CSRF-Token` request header or `csrf_token` form field; on mismatch it returns `403 FORBIDDEN`;
+- CSRF checks are skipped when request is not cookie-based (no `ydb_session_id` cookie), for example API clients with `Authorization` headers;
+- if `ydb_session_id` exists but `csrf_token` has not been issued yet (for example first POST immediately after login without previous GET), the request is rejected; do at least one GET before a state-changing request.
+
+There is no shared monitoring JS bundle, so each inline `<script>` that makes POST requests reads `csrf_token` cookie itself. A small `getCsrfToken()` helper with the same cookie name as on the server is sufficient:
 
 ```js
-// Reads the `csrf_token` cookie set by the monitoring HTTP server.
-// Returns an empty string when the cookie is absent (e.g. local deployment,
-// or first request before any response has set the cookie) — the server will
-// accept the request only if it does not require CSRF protection.
+// Reads the csrf_token cookie set by the monitoring HTTP server.
+// Returns empty string if cookie is absent (for example, local setup
+// or first request before any response has set it) -
+// the server accepts the request only when CSRF protection is not required.
 function getCsrfToken() {
   return document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] || '';
 }
 ```
 
-You can either inline this function into every `<script nonce='...'>` block that needs it, or — preferred — emit it once per page from a shared helper (e.g. a `RenderCsrfTokenHelper(str, nonce)` function placed next to your page renderer).
+The function can be embedded into each `<script nonce='...'>` block that needs it, or preferably emitted once per page from a shared helper (for example, `RenderCsrfTokenHelper(str, nonce)` near page rendering code).
 
-### Rule: Every state-changing request MUST carry a CSRF token — header _or_ hidden form field
+### CSRF token in state-changing requests {#csrf-token-required}
 
-The monitoring server accepts the token from either of two places (see `CheckCsrfToken` in [`mon.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mon/mon.cpp)):
+Monitoring server accepts token from one of two places (see `CheckCsrfToken` in [`mon.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mon/mon.cpp)):
 
-1. The `X-CSRF-Token` request header — preferred for `fetch`/`$.ajax` calls. **Required for any non-form-encoded body** (in particular, JSON requests): the server parses the body as `TCgiParameters`, so a `csrf_token` field inside a JSON payload will not be found.
-2. A `csrf_token` form parameter in the POST body — works **only** for `Content-Type: application/x-www-form-urlencoded` (i.e. a plain `<form method="POST">` or `URLSearchParams` body), because forms cannot set custom request headers.
+1. `X-CSRF-Token` request header: preferred for `fetch`/`$.ajax`; required for any non-form-encoded body (especially JSON), because server parses body as `TCgiParameters`, so `csrf_token` inside JSON is not found;
+2. `csrf_token` form field in POST body: works only with `Content-Type: application/x-www-form-urlencoded` (plain `<form method="POST">` or `URLSearchParams` body), because forms cannot set custom request headers.
 
-Either approach is acceptable. Use a form only when you genuinely need a no-JS fallback (the BlobStorage Controller's "Disable Self-Heal" page in the PR is one such case); otherwise prefer `fetch` with the `X-CSRF-Token` header — it composes better with dynamic UI and is the only option for JSON bodies (as in [`state_storage_state.js`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/cms/ui/state_storage_state.js)).
+Both approaches are valid. A form is useful when a JavaScript-free fallback is required (for example, Disable Self-Heal page in BlobStorage Controller, see [`self_heal.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mind/bscontroller/self_heal.cpp)); in other cases, prefer `fetch` with `X-CSRF-Token` header because it fits dynamic UI better and is the only option for JSON bodies (as in [`state_storage_state.js`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/cms/ui/state_storage_state.js)).
 
-**❌ FORBIDDEN — POST without any CSRF token:**
+{% note alert %}
+
+Do not send state-changing POST requests without a CSRF token.
 
 ```cpp
 str << "<form method='POST' action=''>\n";
 str << "  <input type='hidden' name='restartPDisk' value='1'>\n";
-str << "  <button type='submit'>Restart</button>\n";  // ← no csrf_token field!
+str << "  <button type='submit'>Restart</button>\n";  // no csrf_token field
 str << "</form>\n";
 ```
 
-**✅ CORRECT (option A) — `<form>` with a hidden `csrf_token` field:**
+{% endnote %}
 
-The server-side handler must read the `csrf_token` cookie from the incoming `TEvRemoteHttpInfo` (via `ev->Get()->GetCookie("csrf_token")`) and pass it into the renderer. The token must be HTML-escaped when embedded into an attribute value (use a small inline escaper as in [`self_heal.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mind/bscontroller/self_heal.cpp), or `HtmlEscape` — see §5):
+#### Option A: `<form>` with hidden `csrf_token` field
+
+Server handler reads `csrf_token` cookie from incoming `TEvRemoteHttpInfo` (via `ev->Get()->GetCookie("csrf_token")`) and passes it to rendering code. Token must be escaped for HTML attribute context (a small inline escaper as in [`self_heal.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mind/bscontroller/self_heal.cpp) or `HtmlEscape`; see [{#T}](#output-escaping)):
 
 ```cpp
 void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
@@ -247,7 +291,7 @@ void RenderMonPage(IOutputStream& out, bool selfHealEnabled, const TString& csrf
 }
 ```
 
-**✅ CORRECT (option B) — `fetch` from a `<script nonce='...'>` block with the `X-CSRF-Token` header:**
+#### Option B: `fetch` from `<script nonce='...'>` with `X-CSRF-Token` header
 
 ```cpp
 str << "<button id='restartBtn'>Restart</button>\n";
@@ -265,7 +309,9 @@ str << R"js(
 str << "</script>\n";
 ```
 
-**✅ CORRECT (option B, `$.ajax` variant) — same idea with jQuery, if the page already uses it:**
+#### Option B with `$.ajax`
+
+Same approach with jQuery, if the page already uses it:
 
 ```cpp
 str << "<script nonce='" << nonce << "'>\n";
@@ -283,24 +329,28 @@ str << R"js(
 str << "</script>\n";
 ```
 
-For an in-repo example of this pattern see [`state_storage_state.js`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/cms/ui/state_storage_state.js) (`loadDistconfStatus`) — a `POST` that reads `csrf_token` from `document.cookie` and forwards it as `X-CSRF-Token`.
+Example of this pattern in repository: [`state_storage_state.js`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/cms/ui/state_storage_state.js) (`loadDistconfStatus`), where POST reads `csrf_token` from `document.cookie` and sends it via `X-CSRF-Token`.
 
-### Rule: GET handlers MUST NOT perform any state-changing operations
+### GET requests and state changes {#get-no-side-effects}
 
-GET requests are not CSRF-protected: `CheckCsrfToken` only validates the token for `POST`/`PUT`/`DELETE`/`PATCH` (see [`mon.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mon/mon.cpp), `IsCsrfProtectedMethod`). If your page needs to trigger an action (restart, stop, reconfigure), use one of the protected methods — POST is the conventional choice.
+GET requests are not CSRF-protected: `CheckCsrfToken` validates token only for `POST`/`PUT`/`DELETE`/`PATCH` (see [`mon.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/mon/mon.cpp), `IsCsrfProtectedMethod`). If a page needs to trigger action (restart, stop, reconfigure), use a protected method, typically POST.
 
-**❌ FORBIDDEN — side effect in GET handler:**
+{% note alert %}
+
+Do not perform state-changing operations in a GET handler.
 
 ```cpp
 void RenderPage(IOutputStream& str, const TCgiParameters& params) {
     if (params.Has("action")) {
-        DoSomethingDestructive(); // ← side effect triggered by GET!
+        DoSomethingDestructive(); // side effect from GET
     }
     // ... render HTML
 }
 ```
 
-**✅ CORRECT — separate GET (render) from POST (action):**
+{% endnote %}
+
+Separate GET (render) and POST (action):
 
 ```cpp
 // GET handler: render only
@@ -320,18 +370,22 @@ void HandlePost(NMon::TEvHttpInfo::TPtr& ev) {
 }
 ```
 
-## 4. No `onclick` and `onXxx` Inline Event Handlers
+## Inline event handlers {#no-inline-handlers}
 
-Inline event handlers (`onclick="..."`, `onchange="..."`, etc.) are blocked by CSP `script-src` policy even with a nonce, because the nonce applies only to `<script>` blocks, not to inline attributes.
+Inline event handlers (`onclick="..."`, `onchange="..."`, etc.) are blocked by CSP `script-src` even when nonce is present, because nonce applies to `<script>` blocks only, not inline attributes.
 
-**❌ FORBIDDEN — inline event handler:**
+{% note alert %}
+
+Do not use inline event handlers in HTML attributes (`onclick`, `onchange`, etc.).
 
 ```cpp
 str << "<input type='checkbox' id='ignoreChecks' onchange='toggleButtonColor()'>";
 str << "<button onclick='sendRestartRequest()'>Restart</button>";
 ```
 
-**✅ CORRECT — attach event listeners from a `<script nonce='...'>` block:**
+{% endnote %}
+
+Attach handlers from `<script nonce='...'>` block:
 
 ```cpp
 str << "<input type='checkbox' id='ignoreChecks'>\n";
@@ -345,18 +399,22 @@ str << R"js(
 str << "</script>\n";
 ```
 
-## 5. Output Escaping
+## Output escaping {#output-escaping}
 
-Any user-controlled or externally-sourced data rendered into HTML must be escaped.
+Any user-controlled or externally sourced data rendered into HTML must be escaped.
 
-**❌ FORBIDDEN — unescaped output:**
+{% note alert %}
+
+Do not render user or external data into HTML without escaping.
 
 ```cpp
 TABLED() { str << pathName; }           // pathName may contain <, >, &, "
 TABLED() { str << errorMessage; }       // error messages may contain HTML
 ```
 
-**✅ CORRECT — use `HtmlEscape`:**
+{% endnote %}
+
+Escaped output with `HtmlEscape`:
 
 ```cpp
 #include <util/string/html.h>
@@ -365,40 +423,44 @@ TABLED() { str << HtmlEscape(pathName); }
 TABLED() { str << HtmlEscape(errorMessage); }
 ```
 
-For URLs in `href` attributes, use URL encoding:
+Use URL-encoding for values in `href`. Example below focuses only on escaping values; paths themselves should remain relative (see [{#T}](#relative-links)):
 
 ```cpp
-str << "<a href='/tablets?TabletID=" << tabletId << "'>";  // numeric — safe
-str << "<a href='/path?name=" << CGIEscapeRet(name) << "'>";  // string — must escape
+str << "<a href='tablets?TabletID=" << tabletId << "'>";       // numeric value is safe
+str << "<a href='path?name=" << CGIEscapeRet(name) << "'>";    // string value must be escaped
 ```
 
-### Rule: NEVER interpolate dynamic values into `<script>` — pass them through `data-*` attributes
+### Dynamic values and `<script>` {#no-script-interpolation}
 
-JavaScript has its own escaping rules, and `HtmlEscape` does **not** cover them: it does not touch `'`, `\`, line terminators (`U+2028`, `U+2029`), or `</script>` substrings. A value like `O'Brien`, `foo\nbar`, or `</script><script>alert(1)//` breaks out of a JS string literal even after `HtmlEscape`. Instead of reinventing JS-escaping on the server, keep the script body fully static and read dynamic values from `data-*` attributes via the standard `dataset` API — the attribute context is correctly handled by `HtmlEscape`.
+JavaScript has its own escaping rules, and `HtmlEscape` does **not** cover them: it does not process `'`, `\`, line terminators (`U+2028`, `U+2029`), and `</script>` substrings. Values such as `O'Brien`, `foo\nbar`, or `</script><script>alert(1)//` break out of JS literals even after `HtmlEscape`. Instead of custom JS escaping on server side, keep script body fully static and read dynamic values from `data-*` attributes via standard `dataset` API; for attribute context, `HtmlEscape` is suitable.
 
-**❌ FORBIDDEN — interpolating a value into a `<script>` block:**
+{% note alert %}
+
+Do not interpolate dynamic values directly into `<script>` blocks: this leads to [Cross-site scripting](https://en.wikipedia.org/wiki/Cross-site_scripting) (XSS).
 
 ```cpp
 str << "<script nonce='" << nonce << "'>\n";
-str << "  const tableName = '" << tableName << "';\n";              // raw: trivial XSS
+str << "  const tableName = '" << tableName << "';\n";              // raw value: trivial XSS
 str << "  const errorText = '" << HtmlEscape(errorText) << "';\n";  // still vulnerable:
-                                                                    // a single ' or \ in the value breaks out.
+                                                                    // ', \ in value break literal
 str << "</script>";
 ```
 
-**✅ CORRECT — emit values as HTML-escaped `data-*` attributes and read them from JS:**
+{% endnote %}
+
+Pass values through HTML-escaped `data-*` attributes and read them in JS:
 
 ```cpp
 str << "<div id='pageData'"
        " data-table-name='"  << HtmlEscape(tableName)  << "'"
        " data-error-text='"  << HtmlEscape(errorText)  << "'"
-       " data-tablet-id='"   << tabletId               << "'"  // numeric — safe
+       " data-tablet-id='"   << tabletId               << "'"  // numeric value is safe
     << "></div>\n";
 
 str << "<script nonce='" << nonce << "'>\n";
 str << R"js(
     const el = document.getElementById('pageData');
-    const tableName = el.dataset.tableName;   // ← values come from DOM, not from source
+    const tableName = el.dataset.tableName;   // values come from DOM, not script source
     const errorText = el.dataset.errorText;
     const tabletId  = Number(el.dataset.tabletId);
     // ... use tableName, errorText, tabletId
@@ -406,31 +468,35 @@ str << R"js(
 str << "</script>";
 ```
 
-This way the script body is a fixed string with no interpolation, and every dynamic value travels through an HTML-attribute context where `HtmlEscape` is the correct tool. The same approach works for arrays/objects — serialize them in C++ to a string and put into a single `data-...` attribute, then `JSON.parse(el.dataset.items)` on the client.
+Script body remains a fixed string without interpolation, and each dynamic value travels through HTML attribute context where `HtmlEscape` is the right tool. The same method works for arrays and objects: serialize in C++ to a string, put into a single `data-...` attribute, then call `JSON.parse(el.dataset.items)` on the client.
 
-Inline event handlers (`onclick="..."`) and `eval`/`setTimeout('...')`-style string-eval APIs are out of scope for this rule — they are already forbidden by §4 and by `script-src` not allowing `'unsafe-eval'`.
+Inline handlers (`onclick="..."`) and APIs such as `eval`/`setTimeout('...')` with string code are outside this specific recommendation; they are already restricted in [{#T}](#no-inline-handlers) and by `script-src` without `'unsafe-eval'`.
 
-## 6. Use `GetHTTPOK()` for HTTP Responses
+## HTTP responses and `GetHTTPOK()` {#get-httpok}
 
-Always use [`TViewer::GetHTTPOK()`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/viewer/viewer.cpp) and related methods to build HTTP responses — **do not build raw HTTP response strings manually**.
+Build HTTP responses via [`TViewer::GetHTTPOK()`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/viewer/viewer.cpp) and related methods; do not assemble raw HTTP strings manually.
 
-Always include `charset=utf-8` in the content type — `GetHTTPOK()` does not add it automatically.
-
-**✅ CORRECT:**
+Set `charset=utf-8` in `Content-Type`; `GetHTTPOK()` does not add it automatically.
 
 ```cpp
 ReplyAndPassAway(Viewer->GetHTTPOK(Request, "text/html; charset=utf-8", htmlContent));
 ```
 
-**❌ FORBIDDEN — raw HTTP string or missing charset:**
+{% note alert %}
+
+Do not build raw HTTP response strings manually, and do not omit `charset=utf-8` in `Content-Type`.
 
 ```cpp
 Send(Sender, new NMon::TEvHttpInfoRes("HTTP/1.1 200 Ok\r\n\r\n" + html));  // raw string
 ReplyAndPassAway(Viewer->GetHTTPOK(Request, "text/html", htmlContent));     // missing charset
 ```
 
-## References
+{% endnote %}
 
+## See also {#see-also}
+
+- [{#T}](../reference/embedded-ui/index.md)
+- [{#T}](../security/index.md)
 - [OWASP CSP Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html)
 - [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
 - [MDN: Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP)

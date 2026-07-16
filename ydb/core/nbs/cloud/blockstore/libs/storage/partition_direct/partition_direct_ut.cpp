@@ -1556,7 +1556,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             env.Runtime->SendToPipe(
                 partition,
                 sender,
-                new TEvPartitionDirectPrivate::TEvAddHostToDBG(dbgId),
+                new TEvPartitionDirectPrivate::TEvAddHostToDBG(dbgId, 5),
                 0,
                 TTestActorSystem::GetPipeConfigWithRetries());
             runtime->DestroyActor(sender);

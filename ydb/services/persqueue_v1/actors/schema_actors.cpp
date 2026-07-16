@@ -250,6 +250,7 @@ TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::TEvDescribeTopic
             request->GetProtoRequest()->include_stats(),
             request->GetProtoRequest()->include_location()))
 {
+    TBase::CheckAccessWithDescribeOrWriteTopicPermission = true;
     YDB_LOG_DEBUG("TDescribeTopicActor for request",
         {"request", request->GetProtoRequest()->DebugString()});
 }
@@ -260,6 +261,7 @@ TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::IRequestOpCtx * 
             dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(ctx->GetRequest())->include_stats(),
             dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(ctx->GetRequest())->include_location()))
 {
+    TBase::CheckAccessWithDescribeOrWriteTopicPermission = true;
 }
 
 TDescribeTopicActorImpl::TDescribeTopicActorImpl(const TDescribeTopicActorSettings& settings)

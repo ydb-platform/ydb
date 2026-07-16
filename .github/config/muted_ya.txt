@@ -20,6 +20,9 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.LocalSyncDataUnsuccessfulFullRecoveryDoesNotExhaustLogChunks
 ydb/core/kafka_proxy/ut KafkaProtocol.TopicsCompactionGapFromRetention
 ydb/core/kafka_proxy/ut unittest.sole chunk
+ydb/core/kqp/ut/federated_query/datastreams HasPathDatastreams.CdcStreamMatches
+ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
+ydb/core/kqp/ut/olap/storage KqpOlapDictionary.GroupBySomeDictionaryWithCompaction
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime

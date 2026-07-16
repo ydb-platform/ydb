@@ -42,27 +42,27 @@ inline TIntrusivePtr<TTableInfo> SelfRefUndoClone(const TIntrusivePtr<TTableInfo
     return p ? TTableInfo::DeepCopy(*p) : TIntrusivePtr<TTableInfo>();
 }
 
-// Teardown interface: every TSelfRefMap registers (via SetSchemeShard) so
+// Teardown interface: every TSelfRefMap registers itself at construction so
 // TSchemeShard::Clear() iterates one registry instead of a per-map list.
 class ISelfRefMap {
 public:
     virtual ~ISelfRefMap() = default;
     virtual void clear() = 0;
 
-    // Debug: Refs mirror Map 1:1 and every self-ref points at a live path.
-    // Checked after UnDo to catch rollback drift at its cause, not later.
+    // Debug: every entry points at a live path. Checked after UnDo to catch
+    // rollback drift at its cause, not later.
     virtual void DebugCheckConsistency(const std::function<bool(const TPathId&)>& pathExists) const = 0;
 
-    // Debug: feed every held self-ref to a DbRefCount reconciliation pass.
-    virtual void DebugForEachRef(const std::function<void(const TPathRef&)>& fn) const = 0;
+    // Debug: feed every held self-ref's pathId to a DbRefCount reconciliation pass.
+    virtual void DebugForEachRef(const std::function<void(const TPathId&)>& fn) const = 0;
 };
 
-// THashMap<TPathId, V> whose entries own a TPathRef self-ref (insert acquires,
-// erase releases). No operator[], so a missing-key read can't silently acquire.
+// THashMap<TPathId, V> that holds a DbRefCount self-ref per entry: insert
+// acquires, erase releases. The map membership IS the reference (no second
+// handle per entry). No operator[], so a missing-key read can't silently acquire.
 template <class V>
 class TSelfRefMap : public ISelfRefMap {
     using TInner = THashMap<TPathId, V>;
-    using TElem = std::remove_reference_t<decltype(*std::declval<V&>())>;
 
 public:
     using iterator = typename TInner::iterator;
@@ -78,11 +78,17 @@ public:
         TMemoryChanges& Changes;
     };
 
-    // `reason` is this map's name, logged on every DbRefCount change for the
-    // self-ref (so traces say "CdcStreams", not a shared "type info record").
-    explicit TSelfRefMap(const char* reason)
+    // Registers into the owner's teardown list at construction, so a map cannot
+    // exist unregistered and SS is set before the first acquire — a missing
+    // registration is structurally impossible, not a silent leak. `reason` is
+    // this map's name, logged on every DbRefCount change for the self-ref (so
+    // traces say "CdcStreams", not a shared "type info record").
+    TSelfRefMap(const char* reason, TSchemeShard* ss, TVector<ISelfRefMap*>& registry)
         : Reason(reason)
-    {}
+        , SS(ss)
+    {
+        registry.push_back(this);
+    }
 
     // Non-copyable, non-movable: refs mirror live DbRefCounts and the map is
     // registered by address, so a copy would double-acquire and orphan the entry.
@@ -91,20 +97,10 @@ public:
     TSelfRefMap(TSelfRefMap&&) = delete;
     TSelfRefMap& operator=(TSelfRefMap&&) = delete;
 
-    // Registers into the owner's teardown list; without this SS stays null and
-    // the first acquire fails loudly, so registration cannot be silently missed.
-    void SetSchemeShard(TSchemeShard* ss, TVector<ISelfRefMap*>& registry) {
-        SS = ss;
-        registry.push_back(this);
-    }
-
-    // Whole-map destruction is whole-graph teardown: disarm, don't release
-    // against other TSchemeShard members dying in an unspecified order.
-    ~TSelfRefMap() override {
-        for (auto& [id, ref] : Refs) {
-            ref.Disarm();
-        }
-    }
+    // Whole-map destruction is whole-graph teardown: just drop entries. Don't
+    // release against other TSchemeShard members dying in an unspecified order
+    // (the counters die with them); dropping without releasing is the disarm.
+    ~TSelfRefMap() override = default;
 
     // Read-only view for APIs that take a const THashMap& (never for mutation).
     const TInner& AsMap() const {
@@ -118,7 +114,7 @@ public:
         if (it == Map.end()) {
             args.Changes.RecordSelfRefUndo([this, id = args.Path]() { UndoErase(id); });
             it = Map.emplace(args.Path, std::move(args.Value)).first;
-            Refs.emplace(args.Path, TPathRef(SS, args.Path, Reason));
+            AcquirePathDbRef(SS, args.Path, Reason);
         } else {
             args.Changes.RecordSelfRefUndo([this, id = args.Path, old = it->second]() { UndoRestore(id, old); });
             it->second = std::move(args.Value);
@@ -132,7 +128,7 @@ public:
         auto it = Map.find(id);
         if (it == Map.end()) {
             it = Map.emplace(id, std::move(value)).first;
-            Refs.emplace(id, TPathRef(SS, id, Reason));
+            AcquirePathDbRef(SS, id, Reason);
         } else {
             it->second = std::move(value);
         }
@@ -145,7 +141,7 @@ public:
         auto it = Map.find(id);
         if (it == Map.end()) {
             it = Map.emplace(id, V{}).first;
-            Refs.emplace(id, TPathRef(SS, id, Reason));
+            AcquirePathDbRef(SS, id, Reason);
         }
         return it->second;
     }
@@ -153,7 +149,7 @@ public:
     // Mutable access that records the rollback in the same act, so an in-place
     // mutation (CreateNextVersion, FinishAlter, ...) can't skip its undo. The
     // snapshot is a single struct copy (nested TIntrusivePtr members are shared)
-    // and deduped per tx, so it is cheap. The only way to get mutable access.
+    // and deduped per tx, so it is cheap. The only tracked way to mutate.
     V& Update(const TPathId& id, TMemoryChanges& changes) {
         V& slot = Map.at(id);
         if (changes.NeedsUpdateSnapshot(this, id)) {
@@ -167,23 +163,32 @@ public:
     // Mutable access WITHOUT recording undo — for non-transactional callers
     // (init restore, stats, background scans) that have no TMemoryChanges to roll
     // back into. Operations must use Update() so their mutation is undoable.
-    V& MutableUntracked(const TPathId& id) {
+    V& UpdateUntracked(const TPathId& id) {
         return Map.at(id);
     }
 
     size_t erase(const TPathId& id) {
-        Refs.erase(id);
+        if (Map.contains(id)) {
+            ReleasePathDbRef(SS, id, Reason);
+        }
         return Map.erase(id);
     }
 
     void erase(iterator it) {
-        Refs.erase(it->first);
+        ReleasePathDbRef(SS, it->first, Reason);
         Map.erase(it);
     }
 
     // Read-only: the pointee is const, so at(id)->Mutate() won't compile —
     // mutation must go through Update(id, changes) so the undo can't be skipped.
     TConstView at(const TPathId& id) const { return Map.at(id); }
+
+    // Untracked lookup/iteration. These hand out the raw value handle, so unlike
+    // at() they neither const-enforce the pointee (a TIntrusivePtr can't; its
+    // const does not reach the object) nor record an undo. Reassigning a slot
+    // through them (*FindPtr(id) = v, it->second = v) also bypasses Refs, so it
+    // leaks/desyncs the self-ref. Read through them; mutate only via
+    // Set / Update / UpdateUntracked.
     iterator find(const TPathId& id) { return Map.find(id); }
     const_iterator find(const TPathId& id) const { return Map.find(id); }
     V* FindPtr(const TPathId& id) { return Map.FindPtr(id); }
@@ -198,27 +203,21 @@ public:
     const_iterator begin() const { return Map.begin(); }
     const_iterator end() const { return Map.end(); }
 
-    // Disarm all refs then drop everything, for TSchemeShard::Clear() where
-    // PathsById is being torn down and refs must not touch it.
+    // Drop everything without releasing, for TSchemeShard::Clear() where
+    // PathsById is being torn down and the counters must not be touched.
     void clear() override {
-        for (auto& [id, ref] : Refs) {
-            ref.Disarm();
-        }
-        Refs.clear();
         Map.clear();
     }
 
     void DebugCheckConsistency(const std::function<bool(const TPathId&)>& pathExists) const override {
-        Y_VERIFY_DEBUG_S(Refs.size() == Map.size(),
-            "self-ref map Refs/Map size mismatch: " << Refs.size() << " vs " << Map.size());
-        for (const auto& [id, ref] : Refs) {
+        for (const auto& [id, value] : Map) {
             Y_VERIFY_DEBUG_S(pathExists(id), "self-ref for pathId " << id << " absent from PathsById");
         }
     }
 
-    void DebugForEachRef(const std::function<void(const TPathRef&)>& fn) const override {
-        for (const auto& [id, ref] : Refs) {
-            fn(ref);
+    void DebugForEachRef(const std::function<void(const TPathId&)>& fn) const override {
+        for (const auto& [id, value] : Map) {
+            fn(id);
         }
     }
 
@@ -227,30 +226,22 @@ private:
     friend class TMemoryChanges;
 
     // Restore a snapshot value without acquiring: the Paths snapshot owns the
-    // DbRefCount rollback, so the re-added ref is adopted (armed, not acquired).
+    // DbRefCount rollback, so the re-added entry adopts the count, not acquires.
     V& UndoRestore(const TPathId& id, V value) {
         auto& slot = Map[id];
         slot = std::move(value);
-        if (!Refs.contains(id)) {
-            Refs.emplace(id, TPathRef(TPathRef::Adopt, SS, id, Reason));
-        }
         return slot;
     }
 
-    // Drop a tx-created entry. Disarm not release: Paths owns the counter
-    // rollback and PathsById may already be gone here.
+    // Drop a tx-created entry without releasing: Paths owns the counter rollback
+    // and PathsById may already be gone here.
     void UndoErase(const TPathId& id) {
-        if (auto it = Refs.find(id); it != Refs.end()) {
-            it->second.Disarm();
-            Refs.erase(it);
-        }
         Map.erase(id);
     }
 
     const char* Reason;
     TSchemeShard* SS = nullptr;
     TInner Map;
-    THashMap<TPathId, TPathRef> Refs;
 };
 
 } // NKikimr::NSchemeShard

@@ -193,6 +193,10 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     using namespace NGenerated;
     THolder<TProposeResponse> response = nullptr;
 
+    // Propose is the only flow that can roll back (via AbortOperationPropose ->
+    // MemChanges.UnDo): arm the changes so their self-ref undos are recorded.
+    context.MemChanges.Arm();
+
     auto selfId = SelfTabletId();
     auto& record = request.Record;
     auto txId = TTxId(record.GetTxId());

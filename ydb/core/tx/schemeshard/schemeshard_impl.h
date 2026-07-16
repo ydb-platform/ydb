@@ -289,11 +289,12 @@ public:
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
 
-    // Every TSelfRefMap below registers here via SetSchemeShard, so Clear()
-    // disarms+drops them all by iteration (no hand-maintained list to forget).
+    // Every TSelfRefMap below registers here from its constructor (it takes
+    // `this` and this list), so Clear() disarms+drops them all by iteration and
+    // a map cannot be declared without being registered.
     TVector<ISelfRefMap*> SelfRefMaps;
 
-    TSelfRefMap<TTableInfo::TPtr> Tables{"Tables"};
+    TSelfRefMap<TTableInfo::TPtr> Tables{"Tables", this, SelfRefMaps};
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
 
     // Batch processing for conditional erase responses
@@ -303,11 +304,11 @@ public:
     TDuration CondEraseResponseBatchMaxTime = TDuration::MilliSeconds(100);
     ui32 MaxTTLShardsInFlight = 0;
 
-    TSelfRefMap<TTableIndexInfo::TPtr> Indexes{"Indexes"};
-    TSelfRefMap<TCdcStreamInfo::TPtr> CdcStreams{"CdcStreams"};
-    TSelfRefMap<TSequenceInfo::TPtr> Sequences{"Sequences"};
-    TSelfRefMap<TReplicationInfo::TPtr> Replications{"Replications"};
-    TSelfRefMap<TBlobDepotInfo::TPtr> BlobDepots{"BlobDepots"};
+    TSelfRefMap<TTableIndexInfo::TPtr> Indexes{"Indexes", this, SelfRefMaps};
+    TSelfRefMap<TCdcStreamInfo::TPtr> CdcStreams{"CdcStreams", this, SelfRefMaps};
+    TSelfRefMap<TSequenceInfo::TPtr> Sequences{"Sequences", this, SelfRefMaps};
+    TSelfRefMap<TReplicationInfo::TPtr> Replications{"Replications", this, SelfRefMaps};
+    TSelfRefMap<TBlobDepotInfo::TPtr> BlobDepots{"BlobDepots", this, SelfRefMaps};
 
     THashMap<TPathId, TTxId> TablesWithSnapshots;
     THashMap<TTxId, TSet<TPathId>> SnapshotTables;
@@ -315,24 +316,24 @@ public:
 
     THashMap<TPathId, TTxId> LockedPaths;
 
-    TSelfRefMap<TTopicInfo::TPtr> Topics{"Topics"};
-    TSelfRefMap<TRtmrVolumeInfo::TPtr> RtmrVolumes{"RtmrVolumes"};
-    TSelfRefMap<TSolomonVolumeInfo::TPtr> SolomonVolumes{"SolomonVolumes"};
-    TSelfRefMap<TSubDomainInfo::TPtr> SubDomains{"SubDomains"};
-    TSelfRefMap<TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes{"BlockStoreVolumes"};
-    TSelfRefMap<TFileStoreInfo::TPtr> FileStoreInfos{"FileStoreInfos"};
-    TSelfRefMap<TKesusInfo::TPtr> KesusInfos{"KesusInfos"};
-    TSelfRefMap<TOlapStoreInfo::TPtr> OlapStores{"OlapStores"};
-    TSelfRefMap<TExternalTableInfo::TPtr> ExternalTables{"ExternalTables"};
-    TSelfRefMap<TExternalDataSourceInfo::TPtr> ExternalDataSources{"ExternalDataSources"};
-    TSelfRefMap<TViewInfo::TPtr> Views{"Views"};
-    TSelfRefMap<TResourcePoolInfo::TPtr> ResourcePools{"ResourcePools"};
-    TSelfRefMap<TBackupCollectionInfo::TPtr> BackupCollections{"BackupCollections"};
-    TSelfRefMap<TSysViewInfo::TPtr> SysViews{"SysViews"};
-    TSelfRefMap<TSecretInfo::TPtr> Secrets{"Secrets"};
-    TSelfRefMap<TStreamingQueryInfo::TPtr> StreamingQueries{"StreamingQueries"};
+    TSelfRefMap<TTopicInfo::TPtr> Topics{"Topics", this, SelfRefMaps};
+    TSelfRefMap<TRtmrVolumeInfo::TPtr> RtmrVolumes{"RtmrVolumes", this, SelfRefMaps};
+    TSelfRefMap<TSolomonVolumeInfo::TPtr> SolomonVolumes{"SolomonVolumes", this, SelfRefMaps};
+    TSelfRefMap<TSubDomainInfo::TPtr> SubDomains{"SubDomains", this, SelfRefMaps};
+    TSelfRefMap<TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes{"BlockStoreVolumes", this, SelfRefMaps};
+    TSelfRefMap<TFileStoreInfo::TPtr> FileStoreInfos{"FileStoreInfos", this, SelfRefMaps};
+    TSelfRefMap<TKesusInfo::TPtr> KesusInfos{"KesusInfos", this, SelfRefMaps};
+    TSelfRefMap<TOlapStoreInfo::TPtr> OlapStores{"OlapStores", this, SelfRefMaps};
+    TSelfRefMap<TExternalTableInfo::TPtr> ExternalTables{"ExternalTables", this, SelfRefMaps};
+    TSelfRefMap<TExternalDataSourceInfo::TPtr> ExternalDataSources{"ExternalDataSources", this, SelfRefMaps};
+    TSelfRefMap<TViewInfo::TPtr> Views{"Views", this, SelfRefMaps};
+    TSelfRefMap<TResourcePoolInfo::TPtr> ResourcePools{"ResourcePools", this, SelfRefMaps};
+    TSelfRefMap<TBackupCollectionInfo::TPtr> BackupCollections{"BackupCollections", this, SelfRefMaps};
+    TSelfRefMap<TSysViewInfo::TPtr> SysViews{"SysViews", this, SelfRefMaps};
+    TSelfRefMap<TSecretInfo::TPtr> Secrets{"Secrets", this, SelfRefMaps};
+    TSelfRefMap<TStreamingQueryInfo::TPtr> StreamingQueries{"StreamingQueries", this, SelfRefMaps};
     THashSet<TPathId> TableInBackupCollections;
-    TSelfRefMap<TTestShardSetInfo::TPtr> TestShardSets{"TestShardSets"};
+    TSelfRefMap<TTestShardSetInfo::TPtr> TestShardSets{"TestShardSets", this, SelfRefMaps};
 
     TTempDirsState TempDirsState;
 
@@ -345,7 +346,6 @@ public:
     THashMap<TTxId, TOperation::TPtr> Operations;
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
-    THashMap<TPathId, TPathRef> ParentDbRefs; // child row's ref on its parent, keyed by child path id
     THashMap<TPathId, TPathRef> SelfDbRefs; // path's own type info record ref
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
 

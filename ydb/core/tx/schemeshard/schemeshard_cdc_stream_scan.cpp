@@ -164,7 +164,7 @@ private:
             return true;
         }
 
-        auto streamInfo = Self->CdcStreams.MutableUntracked(streamPathId);
+        auto streamInfo = Self->CdcStreams.UpdateUntracked(streamPathId);
         if (streamInfo->State != TCdcStreamInfo::EState::ECdcStreamStateScan) {
             LOG_W("Cannot run"
                 << ": streamPathId# " << streamPathId
@@ -246,7 +246,7 @@ private:
             return true;
         }
 
-        auto streamInfo = Self->CdcStreams.MutableUntracked(streamPathId);
+        auto streamInfo = Self->CdcStreams.UpdateUntracked(streamPathId);
         if (streamInfo->State != TCdcStreamInfo::EState::ECdcStreamStateScan) {
             LOG_W("Cannot process response"
                 << ": streamPathId# " << streamPathId
@@ -341,7 +341,7 @@ private:
             return true;
         }
 
-        auto streamInfo = Self->CdcStreams.MutableUntracked(streamPathId);
+        auto streamInfo = Self->CdcStreams.UpdateUntracked(streamPathId);
         if (streamInfo->State != TCdcStreamInfo::EState::ECdcStreamStateScan) {
             LOG_W("Cannot retry"
                 << ": streamPathId# " << streamPathId
@@ -379,7 +379,7 @@ private:
         const auto domainPathId = Self->ResolvePathIdForDomain(pathId);
 
         Y_ABORT_UNLESS(Self->SubDomains.contains(domainPathId));
-        auto domainInfo = Self->SubDomains.MutableUntracked(domainPathId);
+        auto domainInfo = Self->SubDomains.UpdateUntracked(domainPathId);
 
         if (!Self->IsServerlessDomain(domainInfo)) {
             LOG_D("Unable to make a bill"

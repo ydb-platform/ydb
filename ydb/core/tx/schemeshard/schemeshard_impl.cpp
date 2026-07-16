@@ -712,10 +712,7 @@ void TSchemeShard::Clear() {
     for (auto& [opId, txState] : TxInFlight) {
         txState.DisarmPathRefs();
     }
-    for (auto& [pathId, ref] : ParentDbRefs) {
-        ref.Disarm();
-    }
-    ParentDbRefs.clear();
+    // ParentRefHeld bits die with their path elements below; nothing to disarm.
     for (auto& [pathId, ref] : SelfDbRefs) {
         ref.Disarm();
     }
@@ -858,16 +855,21 @@ void TSchemeShard::DebugCheckSelfRefIntegrity() const {
     // shard on the path (shards are the only non-TPathRef counter source). A
     // mismatch means a rollback disarmed/adopted against the wrong path snapshot.
     THashMap<TPathId, ui64> counted;
+    auto bumpId = [&](const TPathId& id) {
+        ++counted[id];
+    };
     auto bump = [&](const TPathRef& ref) {
         if (ref) {
-            ++counted[ref.GetPathId()];
+            bumpId(ref.GetPathId());
         }
     };
     for (const auto* selfRefMap : SelfRefMaps) {
-        selfRefMap->DebugForEachRef(bump);
+        selfRefMap->DebugForEachRef(bumpId);
     }
-    for (const auto& [id, ref] : ParentDbRefs) {
-        bump(ref);
+    for (const auto& [id, path] : PathsById) {
+        if (path->ParentRefHeld) {
+            bumpId(path->ParentPathId);
+        }
     }
     for (const auto& [id, ref] : SelfDbRefs) {
         bump(ref);
@@ -1017,12 +1019,12 @@ void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node, bool f
 
     if (node->PathType == NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup) {
         Y_ABORT_UNLESS(Topics.contains(node->PathId));
-        auto& pqGroup = Topics.MutableUntracked(node->PathId);
+        auto& pqGroup = Topics.UpdateUntracked(node->PathId);
         pqGroup->PreSerializedPathDescription.clear();
         pqGroup->PreSerializedPartitionsDescription.clear();
     } else if (node->PathType == NKikimrSchemeOp::EPathType::EPathTypeTable) {
         Y_ABORT_UNLESS(Tables.contains(node->PathId));
-        auto& tabletInfo = Tables.MutableUntracked(node->PathId);
+        auto& tabletInfo = Tables.UpdateUntracked(node->PathId);
         tabletInfo->PreserializedTablePartitions.clear();
         tabletInfo->PreserializedTablePartitionsNoKeys.clear();
         tabletInfo->PreserializedTableSplitBoundaries.clear();
@@ -1595,7 +1597,7 @@ TSubDomainInfo::TPtr TSchemeShard::ResolveDomainInfo(TPathElement::TPtr pathEl) 
     TPathId domainId = ResolvePathIdForDomain(pathEl);
     Y_ABORT_UNLESS(SubDomains.contains(domainId));
     // const getter hands out a mutable handle (pre-existing contract)
-    auto info = const_cast<TSchemeShard*>(this)->SubDomains.MutableUntracked(domainId);
+    auto info = const_cast<TSchemeShard*>(this)->SubDomains.UpdateUntracked(domainId);
     Y_ABORT_UNLESS(info);
     return info;
 }
@@ -2510,8 +2512,11 @@ void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TP
     // Release the parent reference last: DecrementPathDbRefCount's subdomain
     // cleanup trigger checks DbRefCount and AllChildrenCount together, so the
     // child's AllChildrenCount decrement above must be visible first.
-    // Absent for orphan placeholder parents (TolerateOrphanedPathsOnInit).
-    ParentDbRefs.erase(path->PathId);
+    // Not held by orphan placeholders (TolerateOrphanedPathsOnInit).
+    if (path->ParentRefHeld) {
+        DecrementPathDbRefCount(path->ParentPathId, "child path row");
+        path->ParentRefHeld = false;
+    }
 }
 
 void TSchemeShard::PersistPathDirAlterVersion(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
@@ -3031,7 +3036,7 @@ void TSchemeShard::PersistRemoveTx(NIceDb::TNiceDb& db, const TOperationId opId,
 
 void TSchemeShard::PersistTable(NIceDb::TNiceDb& db, const TPathId tableId) {
     Y_ABORT_UNLESS(Tables.contains(tableId));
-    const auto tableInfo = Tables.MutableUntracked(tableId);
+    const auto tableInfo = Tables.UpdateUntracked(tableId);
 
     PersistTableAltered(db, tableId, tableInfo);
     PersistTablePartitioning(db, tableId, tableInfo);
@@ -3941,7 +3946,7 @@ void TSchemeShard::PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, 
 void TSchemeShard::PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
     if (BackupCollections.contains(pathId)) {
-        UnregisterBackupCollectionTables(BackupCollections.MutableUntracked(pathId));
+        UnregisterBackupCollectionTables(BackupCollections.UpdateUntracked(pathId));
         BackupCollections.erase(pathId);
     }
 
@@ -3986,7 +3991,7 @@ void TSchemeShard::PersistSecret(NIceDb::TNiceDb& db, TPathId pathId) {
     TPathElement::TPtr elem = PathsById.at(pathId);
 
     Y_ABORT_UNLESS(Secrets.contains(pathId));
-    auto& secretInfo = Secrets.MutableUntracked(pathId);
+    auto& secretInfo = Secrets.UpdateUntracked(pathId);
 
     Y_ABORT_UNLESS(elem->IsSecret());
 
@@ -4002,7 +4007,7 @@ void TSchemeShard::PersistSecretRemove(NIceDb::TNiceDb& db, TPathId pathId) {
         return;
     }
 
-    auto& secretInfo = Secrets.MutableUntracked(pathId);
+    auto& secretInfo = Secrets.UpdateUntracked(pathId);
     if (secretInfo->AlterData) {
         secretInfo->AlterData = nullptr;
         PersistSecretAlterRemove(db, pathId);
@@ -4028,7 +4033,7 @@ void TSchemeShard::PersistSecretAlter(NIceDb::TNiceDb& db, TPathId pathId) {
     TPathElement::TPtr elem = PathsById.at(pathId);
 
     Y_ABORT_UNLESS(Secrets.contains(pathId));
-    auto& secretInfo = Secrets.MutableUntracked(pathId);
+    auto& secretInfo = Secrets.UpdateUntracked(pathId);
 
     Y_ABORT_UNLESS(elem->IsSecret());
 
@@ -4634,7 +4639,7 @@ void TSchemeShard::PersistOlapStoreRemove(NIceDb::TNiceDb& db, TPathId pathId, b
         return;
     }
 
-    auto& storeInfo = OlapStores.MutableUntracked(pathId);
+    auto& storeInfo = OlapStores.UpdateUntracked(pathId);
     if (storeInfo->AlterData) {
         PersistOlapStoreAlterRemove(db, pathId);
     }
@@ -4739,7 +4744,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
     // Unlink table from olap store
     if (!tableInfo.IsStandalone() && tableInfo.GetOlapStorePathIdVerified()) {
         Y_ABORT_UNLESS(OlapStores.contains(tableInfo.GetOlapStorePathIdVerified()));
-        auto& storeInfo = OlapStores.MutableUntracked(tableInfo.GetOlapStorePathIdVerified());
+        auto& storeInfo = OlapStores.UpdateUntracked(tableInfo.GetOlapStorePathIdVerified());
         storeInfo->ColumnTablesUnderOperation.erase(pathId);
         storeInfo->ColumnTables.erase(pathId);
     }
@@ -4796,7 +4801,7 @@ void TSchemeShard::PersistSequence(NIceDb::TNiceDb& db, TPathId pathId)
     TPathElement::TPtr elem = PathsById.at(pathId);
 
     Y_ABORT_UNLESS(Sequences.contains(pathId));
-    auto& sequenceInfo = Sequences.MutableUntracked(pathId);
+    auto& sequenceInfo = Sequences.UpdateUntracked(pathId);
 
     Y_ABORT_UNLESS(elem->IsSequence());
 
@@ -4813,7 +4818,7 @@ void TSchemeShard::PersistSequenceRemove(NIceDb::TNiceDb& db, TPathId pathId)
         return;
     }
 
-    auto& sequenceInfo = Sequences.MutableUntracked(pathId);
+    auto& sequenceInfo = Sequences.UpdateUntracked(pathId);
     if (sequenceInfo->AlterData) {
         PersistSequenceAlterRemove(db, pathId);
         sequenceInfo->AlterData = nullptr;
@@ -4844,7 +4849,7 @@ void TSchemeShard::PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId)
     TPathElement::TPtr elem = PathsById.at(pathId);
 
     Y_ABORT_UNLESS(Sequences.contains(pathId));
-    auto& sequenceInfo = Sequences.MutableUntracked(pathId);
+    auto& sequenceInfo = Sequences.UpdateUntracked(pathId);
 
     Y_ABORT_UNLESS(elem->IsSequence());
 
@@ -4879,7 +4884,7 @@ void TSchemeShard::PersistReplicationRemove(NIceDb::TNiceDb& db, TPathId pathId)
         return;
     }
 
-    auto& replicationInfo = Replications.MutableUntracked(pathId);
+    auto& replicationInfo = Replications.UpdateUntracked(pathId);
     if (replicationInfo->AlterData) {
         replicationInfo->AlterData = nullptr;
         PersistReplicationAlterRemove(db, pathId);
@@ -5636,29 +5641,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
             .AttemptResetDuration = AppData()->AuthConfig.GetAccountLockout().GetAttemptResetDuration()
         })
 {
-    Tables.SetSchemeShard(this, SelfRefMaps);
-    Indexes.SetSchemeShard(this, SelfRefMaps);
-    CdcStreams.SetSchemeShard(this, SelfRefMaps);
-    Sequences.SetSchemeShard(this, SelfRefMaps);
-    Replications.SetSchemeShard(this, SelfRefMaps);
-    BlobDepots.SetSchemeShard(this, SelfRefMaps);
-    Topics.SetSchemeShard(this, SelfRefMaps);
-    RtmrVolumes.SetSchemeShard(this, SelfRefMaps);
-    SolomonVolumes.SetSchemeShard(this, SelfRefMaps);
-    SubDomains.SetSchemeShard(this, SelfRefMaps);
-    BlockStoreVolumes.SetSchemeShard(this, SelfRefMaps);
-    FileStoreInfos.SetSchemeShard(this, SelfRefMaps);
-    KesusInfos.SetSchemeShard(this, SelfRefMaps);
-    OlapStores.SetSchemeShard(this, SelfRefMaps);
-    ExternalTables.SetSchemeShard(this, SelfRefMaps);
-    ExternalDataSources.SetSchemeShard(this, SelfRefMaps);
-    ResourcePools.SetSchemeShard(this, SelfRefMaps);
-    BackupCollections.SetSchemeShard(this, SelfRefMaps);
-    Secrets.SetSchemeShard(this, SelfRefMaps);
-    StreamingQueries.SetSchemeShard(this, SelfRefMaps);
-    TestShardSets.SetSchemeShard(this, SelfRefMaps);
-    Views.SetSchemeShard(this, SelfRefMaps);
-    SysViews.SetSchemeShard(this, SelfRefMaps);
+    // Self-ref maps register themselves into SelfRefMaps from their constructors.
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
                             ECumulativeCounters_descriptor,
@@ -8306,7 +8289,7 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
         bool rangeBeginInclusive, bool rangeEndInclusive, bool newTable)
 {
     Y_VERIFY_S(Tables.contains(tableId), "Unknown table id " << tableId);
-    auto& tinfo = Tables.MutableUntracked(tableId);
+    auto& tinfo = Tables.UpdateUntracked(tableId);
     TPathElement::TPtr pinfo = *PathsById.FindPtr(tableId);
 
     TVector<ui32> keyColumnIds = tinfo->FillDescriptionCache(pinfo);
@@ -8368,7 +8351,7 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
         switch (childPath->PathType) {
             case NKikimrSchemeOp::EPathTypeTableIndex: {
                 Y_ABORT_UNLESS(Indexes.contains(childPathId));
-                auto& info = Indexes.MutableUntracked(childPathId);
+                auto& info = Indexes.UpdateUntracked(childPathId);
                 DescribeTableIndex(childPathId, childName, newTable ? info->AlterData : info, false, false,
                     *tableDescr->MutableTableIndexes()->Add()
                 );
@@ -8379,7 +8362,7 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
                 Y_VERIFY_S(CdcStreams.contains(childPathId), "Cdc stream not found"
                     << ": pathId# " << childPathId
                     << ", name# " << childName);
-                auto& info = CdcStreams.MutableUntracked(childPathId);
+                auto& info = CdcStreams.UpdateUntracked(childPathId);
                 DescribeCdcStream(childPathId, childName, info, *tableDescr->MutableCdcStreams()->Add());
                 break;
             }
@@ -8388,7 +8371,7 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
                 Y_VERIFY_S(Sequences.contains(childPathId), "Sequence not found"
                     << ": path#d# " << childPathId
                     << ", name# " << childName);
-                auto& info = Sequences.MutableUntracked(childPathId);
+                auto& info = Sequences.UpdateUntracked(childPathId);
                 DescribeSequence(childPathId, childName, info, *tableDescr->MutableSequences()->Add());
                 break;
             }
@@ -9409,7 +9392,7 @@ void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
 }
 
 void TSchemeShard::ResolveSA() {
-    auto& subDomainInfo = SubDomains.MutableUntracked(RootPathId());
+    auto& subDomainInfo = SubDomains.UpdateUntracked(RootPathId());
     if (IsServerlessDomain(subDomainInfo)) {
         auto resourcesDomainId = subDomainInfo->GetResourcesDomainId();
 
@@ -9561,7 +9544,7 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         << ", paths with incomplete stats: " << incompleteCount
         << ", at schemeshard: " << TabletID());
 
-    if (IsServerlessDomain(SubDomains.MutableUntracked(RootPathId()))) {
+    if (IsServerlessDomain(SubDomains.UpdateUntracked(RootPathId()))) {
         // In serverless subdomains several schemeshards send stats to a single SA
         // so we use a bigger interval with jitter.
         const auto max = TDuration::Seconds(SendStatsIntervalSecondsServerless);

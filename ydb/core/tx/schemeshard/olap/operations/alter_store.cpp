@@ -514,7 +514,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->OlapStores.contains(path->PathId));
-        auto storeInfo = context.SS->OlapStores.MutableUntracked(path->PathId);
+        auto storeInfo = context.SS->OlapStores.UpdateUntracked(path->PathId);
 
         if (!storeInfo->ColumnTablesUnderOperation.empty()) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Store has unfinished table operations");

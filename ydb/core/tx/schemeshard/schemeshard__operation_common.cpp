@@ -803,7 +803,7 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
     Y_ABORT_UNLESS(txState.ShardsInProgress.empty());
 
     Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-    TTableInfo::TPtr table = context.SS->Tables.MutableUntracked(txState.TargetPathId);
+    TTableInfo::TPtr table = context.SS->Tables.UpdateUntracked(txState.TargetPathId);
     TTxState::ETxState commonShardOp = TTxState::CreateParts;
 
     if (txState.TxType == TTxState::TxAlterTable) {

@@ -31,18 +31,6 @@ public:
         Acquire();
     }
 
-    // Adopt an already-counted reference: arm the handle without acquiring.
-    // For undo restore, where the path snapshot owns the DbRefCount rollback.
-    struct TAdopt {};
-    static constexpr TAdopt Adopt{};
-
-    TPathRef(TAdopt, TSchemeShard* ss, const TPathId& pathId, const char* reason)
-        : SS(ss)
-        , PathId(pathId)
-        , Reason(reason)
-    {
-    }
-
     TPathRef(const TPathRef& other)
         : SS(other.SS)
         , PathId(other.PathId)
@@ -106,6 +94,8 @@ public:
         return SS != nullptr;
     }
 
+    // Meaningful only while the handle is armed (operator bool()); a default or
+    // disarmed handle carries no reference and its PathId is not significant.
     TPathId GetPathId() const {
         return PathId;
     }
@@ -116,7 +106,16 @@ private:
 
     TSchemeShard* SS = nullptr;
     TPathId PathId;
+    // Stored by pointer, not copied: pass a string literal (or other pointer with
+    // static storage). It is only a label for DbRefCount change logging.
     const char* Reason = "";
 };
+
+// Acquire/release a path's DbRefCount without an owning handle. For containers
+// (TSelfRefMap) that already track membership in their primary map: the entry's
+// existence is the reference, so a second per-entry handle would only mirror it.
+// Same counter and null-SS guard as TPathRef. `reason` must be a string literal.
+void AcquirePathDbRef(TSchemeShard* ss, const TPathId& pathId, const char* reason);
+void ReleasePathDbRef(TSchemeShard* ss, const TPathId& pathId, const char* reason);
 
 } // NKikimr::NSchemeShard

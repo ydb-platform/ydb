@@ -1626,7 +1626,7 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     Y_VERIFY_S(CdcStreams.contains(pathId), "Cdc stream not found"
         << ": pathId# " << pathId
         << ", name# " << name);
-    DescribeCdcStream(pathId, name, CdcStreams.MutableUntracked(pathId), desc);
+    DescribeCdcStream(pathId, name, CdcStreams.UpdateUntracked(pathId), desc);
 }
 
 void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name, const TIntrusiveConstPtr<TCdcStreamInfo>& info,

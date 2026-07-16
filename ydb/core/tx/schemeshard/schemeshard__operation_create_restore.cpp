@@ -81,7 +81,7 @@ struct TRestore {
         const TPath sourcePath = TPath::Init(pathId, context.SS);
         if (sourcePath->IsTable()) {
             Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
-            TTableInfo::TPtr table = context.SS->Tables.MutableUntracked(txState.TargetPathId);
+            TTableInfo::TPtr table = context.SS->Tables.UpdateUntracked(txState.TargetPathId);
             return TableFinish(table, opId, txState, context);
         } else {
             Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState.TargetPathId));
@@ -121,7 +121,7 @@ struct TRestore {
         const TPath sourcePath = TPath::Init(pathId, context.SS);
         if (sourcePath->IsTable()) {
             Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-            TTableInfo::TPtr table = context.SS->Tables.MutableUntracked(pathId);
+            TTableInfo::TPtr table = context.SS->Tables.UpdateUntracked(pathId);
             return PersistTableTask(table, pathId, tx, context);
         } else {
             Y_ABORT_UNLESS(context.SS->ColumnTables.contains(pathId));

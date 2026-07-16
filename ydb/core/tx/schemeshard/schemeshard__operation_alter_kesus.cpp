@@ -182,7 +182,7 @@ public:
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
 
-        auto& kesus = context.SS->KesusInfos.MutableUntracked(pathId);
+        auto& kesus = context.SS->KesusInfos.UpdateUntracked(pathId);
         kesus->FinishAlter();
         context.SS->PersistKesusInfo(db, pathId, kesus);
         context.SS->PersistRemoveKesusAlter(db, pathId);
@@ -315,7 +315,7 @@ public:
             return result;
         }
 
-        auto& kesus = context.SS->KesusInfos.MutableUntracked(path.Base()->PathId);
+        auto& kesus = context.SS->KesusInfos.UpdateUntracked(path.Base()->PathId);
         Y_ABORT_UNLESS(kesus);
         Y_ABORT_UNLESS(path.Base()->IsCreateFinished()); // checks.NotUnderOperation checks that path not under creation
 

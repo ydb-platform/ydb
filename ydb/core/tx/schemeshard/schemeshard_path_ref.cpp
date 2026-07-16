@@ -17,4 +17,16 @@ void TPathRef::Release() {
     }
 }
 
+void AcquirePathDbRef(TSchemeShard* ss, const TPathId& pathId, const char* reason) {
+    if (ss) {
+        ss->IncrementPathDbRefCount(pathId, reason);
+    }
+}
+
+void ReleasePathDbRef(TSchemeShard* ss, const TPathId& pathId, const char* reason) {
+    if (ss) {
+        ss->DecrementPathDbRefCount(pathId, reason);
+    }
+}
+
 } // NKikimr::NSchemeShard

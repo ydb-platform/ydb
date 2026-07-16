@@ -46,7 +46,7 @@ namespace NTest {
                 pass ? TTestEnv::Locate(part, ref, lob) : TResult{need, nullptr };
         }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageLocation location, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
         {
             return Pages ? TTestEnv::TryGetPage(part, location, groupId) : nullptr;
         }
@@ -107,7 +107,7 @@ namespace NTest {
             }
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
             auto pass = ShouldPass((const void*)part,
                 static_cast<ui64>(THash<TPageOffset>()(location.Offset)) ^ (ui64(groupId.Raw()) << 48),
@@ -284,7 +284,7 @@ namespace NTest {
             return Get(part, room).DoLoad(TPageOffset::FromPageIndex(ref), EPage::Opaque, AheadLo, AheadHi);
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
             InitPart(part);
 

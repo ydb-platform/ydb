@@ -17,7 +17,7 @@ namespace NPage {
         ui64 Raw;
 
         static constexpr ui64 MaxRaw = ::Max<ui64>();
-        static constexpr ui64 ByteOffsetTag = ui64(1) << 63;
+        static constexpr ui64 IndexTag = ui64(1) << 63;
 
         explicit constexpr TPageOffset(ui64 raw) noexcept
             : Raw(raw)
@@ -30,16 +30,17 @@ namespace NPage {
         {}
 
         /** Factory: create from a real byte offset (pages in a blob sequence).
-            Sets the MSB to tag this as a byte offset. */
+            Untagged — sorts before IndexTag-addressed pages. */
         static TPageOffset FromByteOffset(ui64 value) {
-            Y_ENSURE(value < ByteOffsetTag,
+            Y_ENSURE(value < IndexTag,
                 "Byte offset is too large to be represented as TPageOffset");
-            return TPageOffset(value | ByteOffsetTag);
+            return TPageOffset(value);
         }
 
-        /** Factory: create from a page index (independently addressed pages). */
+        /** Factory: create from a page index (independently addressed pages).
+            Sets the MSB to tag this as an index-addressed entry (sorts after byte offsets). */
         static TPageOffset FromPageIndex(ui32 value) noexcept {
-            return TPageOffset(static_cast<ui64>(value));
+            return TPageOffset(static_cast<ui64>(value) | IndexTag);
         }
 
         /** Max sentinel — all bits set */
@@ -50,22 +51,22 @@ namespace NPage {
         explicit operator bool() const noexcept { return Raw != MaxRaw; }
 
         bool IsMax() const noexcept { return Raw == MaxRaw; }
-        bool IsByteOffset() const noexcept { return !IsMax() && (Raw & ByteOffsetTag); }
-        bool IsPageIndex() const noexcept { return !IsMax() && !(Raw & ByteOffsetTag); }
+        bool IsByteOffset() const noexcept { return !IsMax() && !(Raw & IndexTag); }
+        bool IsPageIndex() const noexcept { return !IsMax() && (Raw & IndexTag); }
 
         /** Access as a real byte offset — asserts ByteOffset kind */
         ui64 AsByteOffset() const {
             Y_ENSURE(IsByteOffset(), "TPageOffset is not a byte offset (raw=" << Raw << ")");
-            return Raw & ~ByteOffsetTag;
+            return Raw;
         }
 
         /** Access as a page index — asserts PageIndex kind */
         ui32 AsPageIndex() const {
             Y_ENSURE(IsPageIndex(), "TPageOffset is not a page index (raw=" << Raw << ")");
-            return static_cast<ui32>(Raw);
+            return static_cast<ui32>(Raw & ~IndexTag);
         }
 
-        /** Natural ui64 ordering: page-index (no MSB) < byte-offset (MSB set) < Max */
+        /** Natural ui64 ordering: byte-offset (no MSB) < page-index (MSB set) < Max */
         friend auto operator<=>(const TPageOffset& a, const TPageOffset& b) noexcept = default;
 
         explicit operator size_t() const noexcept {
@@ -78,7 +79,7 @@ namespace NPage {
             } else if (IsByteOffset()) {
                 out << "bo:" << AsByteOffset();
             } else {
-                out << "pi:" << static_cast<ui32>(Raw);
+                out << "pi:" << AsPageIndex();
             }
         }
 
@@ -185,7 +186,7 @@ namespace NPage {
         ui32 GetPageIndex() const { return Offset.AsPageIndex(); }
 
         /** In theory pages in different rooms may share same offset but differ in Type */
-        auto operator<=>(const TPageLocation& rhs) const {
+        auto operator<=>(const TPageLocation& rhs) const noexcept {
             if (auto cmp = Offset <=> rhs.Offset; cmp != 0) return cmp;
             if (auto cmp = static_cast<ui16>(Type) <=> static_cast<ui16>(rhs.Type); cmp != 0) return cmp;
             if (Size != rhs.Size) return Size <=> rhs.Size;

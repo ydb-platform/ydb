@@ -46,7 +46,7 @@ namespace NPageCollection {
            metas and old-format v2 blobs. */
         ui32 SkippedPages() const noexcept;
 
-        TBorder Bounds(NTable::NPage::TPageLocation location) const;
+        TBorder Bounds(const NTable::NPage::TPageLocation& location) const;
         TPageLocation GetLocation(ui32 pageId) const;
 
     public:

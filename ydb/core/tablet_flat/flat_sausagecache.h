@@ -127,6 +127,10 @@ public:
             CacheMode = cacheMode;
         }
 
+        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const {
+            return PageCollection->GetLocation(pageId);
+        }
+
         const TLogoBlobID Id;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
 

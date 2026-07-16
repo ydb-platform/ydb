@@ -217,7 +217,7 @@ namespace {
         TWriterBundle pager(1, TLogoBlobID());
         auto& writer = static_cast<IPageWriter&>(pager);
         writer.Write(node, EPage::BTreeIndex, 0);
-        TChild page{writer.GetWrittenPageId(0), 0, 0, 0, 0};
+        TChild page{writer.GetLastWrittenPageId(0), 0, 0, 0, 0};
         Dump(page, groupInfo, pager.Back());
     }
 
@@ -2469,7 +2469,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
             TResult Locate(const TPart*, ui64, ELargeObj) override {
                 Y_TABLET_ERROR("Unused");
             }
-            const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override {
+            const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
                 Y_UNUSED(part);
                 if (Loaded.count(location.GetByteOffset())) {
                     return Part->Store->GetPage(groupId.Index, location.Offset);
@@ -2564,7 +2564,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
             TResult Locate(const TPart*, ui64, ELargeObj) override {
                 Y_TABLET_ERROR("Unused");
             }
-            const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override {
+            const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
                 Y_UNUSED(part);
                 // Index pages for all groups are in room 0.
                 // Data pages for group i are in room i.
@@ -2584,7 +2584,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
                 return nullptr;
             }
 
-            void Save(TPageLocation loc, TSharedData data) {
+            void Save(const TPageLocation& loc, TSharedData data) {
                 Needs.erase(loc);
                 Cache[loc.Offset] = std::move(data);
             }
@@ -2709,7 +2709,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
             TResult Locate(const TPart*, ui64, ELargeObj) override {
                 Y_TABLET_ERROR("Unused");
             }
-            const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override {
+            const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
                 Y_UNUSED(part);
                 auto& cache = Cache[groupId.Index];
                 auto it = cache.find(location.Offset);
@@ -2720,7 +2720,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
                 return nullptr;
             }
 
-            void Save(ui32 room, TPageLocation loc, TSharedData data) {
+            void Save(ui32 room, const TPageLocation& loc, TSharedData data) {
                 Needs[room].erase(loc);
                 Cache[room][loc.Offset] = std::move(data);
             }

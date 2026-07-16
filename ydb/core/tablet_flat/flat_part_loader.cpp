@@ -136,7 +136,10 @@ void TLoader::StageParseMeta()
                 }
             }
 
-            /* Without a V1 b-tree the part has no usable index — this is the documented V2-only risk. */
+            /* Without a V1 b-tree the part has no usable index — this is the documented V2-only risk.
+               So don't remove V2-only indexes.
+             */
+
             //auto isV2OnlyRoot = [](const NPage::TBtreeIndexMeta& m) { return m.HasV2Root() && !m.HasV1Root(); };
             //BTreeGroupIndexes.erase(std::remove_if(BTreeGroupIndexes.begin(), BTreeGroupIndexes.end(), isV2OnlyRoot),
             //                        BTreeGroupIndexes.end());

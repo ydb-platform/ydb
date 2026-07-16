@@ -43,7 +43,7 @@ namespace NTable {
         virtual NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) = 0;
         virtual void Finish(TString overlay) = 0;
 
-        virtual ui32 GetWrittenPageId(ui32 group) const noexcept = 0;
+        virtual ui32 GetLastWrittenPageId(ui32 group) const noexcept = 0;
     };
 
     struct IPages {
@@ -73,7 +73,7 @@ namespace NTable {
 
         virtual TResult Locate(const TMemTable*, ui64 ref, ui32 tag) = 0;
         virtual TResult Locate(const TPart*, ui64 ref, ELargeObj lob) = 0;
-        virtual const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) = 0;
+        virtual const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) = 0;
 
         /**
          * Hook for cleaning up env on DB.RollbackChanges()

@@ -68,7 +68,7 @@ struct TPageCollectionMock : public IPageCollection {
         return { Page(page).Size, { page, 0 }, { page, ui32(Page(page).Size) } };
     }
 
-    TBorder Bounds(TPageLocation location) const override {
+    TBorder Bounds(const TPageLocation& location) const override {
         return Bounds(location.Offset.AsPageIndex());
     }
 
@@ -80,7 +80,7 @@ struct TPageCollectionMock : public IPageCollection {
         Y_TABLET_ERROR("Unexpected Verify(...) call");
     }
 
-    bool Verify(TPageLocation location, TArrayRef<const char> data) const override {
+    bool Verify(const TPageLocation& location, TArrayRef<const char> data) const override {
         return data.size() == location.Size;
     }
 

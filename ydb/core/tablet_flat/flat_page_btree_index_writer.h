@@ -557,11 +557,11 @@ namespace NKikimr::NTable::NPage {
             std::visit([this](auto&& c) { Writer.AddChild(std::move(c)); }, std::move(child));
         }
 
-        static void SetChildPageRef(TChild& child, TPageLocation, IPageWriter& pager) {
-            child.PageId_ = pager.GetWrittenPageId(0);
+        static void SetChildPageRef(TChild& child, const TPageLocation&, IPageWriter& pager) {
+            child.PageId_ = pager.GetLastWrittenPageId(0);
         }
 
-        static void SetChildPageRef(TChildV2& child, TPageLocation location, IPageWriter&) {
+        static void SetChildPageRef(TChildV2& child, const TPageLocation& location, IPageWriter&) {
             child.Offset_ = location.Offset;
             child.Size_ = location.Size;
             child.Crc32_ = location.Crc32;

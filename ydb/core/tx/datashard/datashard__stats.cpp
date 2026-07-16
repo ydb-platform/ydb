@@ -83,7 +83,7 @@ public:
         Y_ENSURE(false, "IPages::Locate(TPart*, ...) shouldn't be used here");
     }
 
-    const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override {
+    const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
         Y_ENSURE(groupId.IsMain(), "Unsupported column group");
 
         auto partStore = CheckedCast<const TPartStore*>(part);

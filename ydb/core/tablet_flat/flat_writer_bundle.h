@@ -73,7 +73,7 @@ namespace NWriter {
         TPageId WriteOuter(TSharedData page) override
         {
             Blocks.back()->Write(std::move(page), EPage::Opaque);
-            return Blocks.back()->GetWrittenPageId(Groups.size());
+            return Blocks.back()->GetLastWrittenPageId(Groups.size());
         }
 
         void WriteInplace(TPageId page, TArrayRef<const char> body) override
@@ -81,9 +81,9 @@ namespace NWriter {
             Blocks[0]->WriteInplace(page, body);
         }
 
-        ui32 GetWrittenPageId(ui32 group) const noexcept override
+        ui32 GetLastWrittenPageId(ui32 group) const noexcept override
         {
-            return Blocks[group]->GetWrittenPageId(group);
+            return Blocks[group]->GetLastWrittenPageId(group);
         }
 
         NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) override

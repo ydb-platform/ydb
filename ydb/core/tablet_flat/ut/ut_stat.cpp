@@ -16,7 +16,7 @@ namespace {
     using namespace NTest;
 
     struct TTouchEnv : public NTest::TTestEnv {
-        const TSharedData* TryGetPage(const TPart *part, TPageLocation location, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
         {
             auto page = NTest::TTestEnv::TryGetPage(part, location, groupId);
 

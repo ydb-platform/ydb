@@ -90,7 +90,7 @@ NTable::NPage::TPageLocation TMeta::GetLocation(ui32 pageId) const
     return NTable::NPage::TPageLocation::FromByteOffset(offset, size, static_cast<NTable::NPage::EPage>(Extra[pageId].Type), Extra[pageId].Crc32);
 }
 
-TBorder TMeta::Bounds(NTable::NPage::TPageLocation location) const
+TBorder TMeta::Bounds(const NTable::NPage::TPageLocation& location) const
 {
     Y_ENSURE(!location.Offset.IsMax());
     if (!location.Offset.IsByteOffset()) {

@@ -33,7 +33,7 @@ namespace {
             return { size, { page, 0 }, { page, size } };
         }
 
-        inline TBorder Bounds(NTable::NPage::TPageLocation location) const noexcept
+        inline TBorder Bounds(const NTable::NPage::TPageLocation& location) const noexcept
         {
             return Bounds(location.Offset.AsPageIndex());
         }
@@ -647,12 +647,12 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         struct TByteOffsetStore : public IPages {
             THashMap<TPageOffset, TSharedData> Map;
 
-            void Add(TPageLocation loc, TSharedData data)
+            void Add(const TPageLocation& loc, TSharedData data)
             {
                 Map[loc.Offset] = std::move(data);
             }
 
-            const TSharedData* TryGetPage(const TPart*, TPageLocation location, TGroupId) override
+            const TSharedData* TryGetPage(const TPart*, const TPageLocation& location, TGroupId) override
             {
                 auto it = Map.find(location.Offset);
                 return it != Map.end() ? &it->second : nullptr;

@@ -124,13 +124,13 @@ namespace NTest {
             return { true, Get(part, room, ref) };
         }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageLocation location, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
         {
             return CheckedCast<const TPartStore*>(part)->Store->GetPage(groupId.Index, location.Offset);
         }
 
     protected:
-        ui32 ResolvePageId(const TPart *part, TPageLocation location, TGroupId groupId) const {
+        ui32 ResolvePageId(const TPart *part, const TPageLocation& location, TGroupId groupId) const {
             if (location.Offset.IsByteOffset()) {
                 return CheckedCast<const TPartStore*>(part)->Store->ResolveByteOffset(groupId.Index, location.Offset.AsByteOffset());
             }

@@ -99,7 +99,7 @@ namespace {
             return { Page(page).Size, { page, 0 }, { page, ui32(Page(page).Size) } };
         }
 
-        NPageCollection::TBorder Bounds(TPageLocation location) const override {
+        NPageCollection::TBorder Bounds(const TPageLocation& location) const override {
             if (location.Offset.IsByteOffset()) {
                 auto it = ByteOffsetToPageId.find(location.Offset.AsByteOffset());
                 if (it == ByteOffsetToPageId.end()) {
@@ -122,7 +122,7 @@ namespace {
             Y_TABLET_ERROR("Unexpected Verify(...) call");
         }
 
-        bool Verify(TPageLocation location, TArrayRef<const char> data) const override {
+        bool Verify(const TPageLocation& location, TArrayRef<const char> data) const override {
             return data.size() == location.Size;
         }
 

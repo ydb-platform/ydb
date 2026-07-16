@@ -875,7 +875,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     TPage* EnsurePage(TCollection& collection,
-        TPageLocation location, ECacheMode initialMode) {
+        const TPageLocation& location, ECacheMode initialMode) {
         TPage* page = collection.PageSet.FindPage(location.Offset);
 
         if (!page) {

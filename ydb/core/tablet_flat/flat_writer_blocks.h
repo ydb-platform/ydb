@@ -106,7 +106,7 @@ namespace NWriter {
             return location;
         }
 
-        ui32 GetWrittenPageId(ui32 /*group*/) const noexcept
+        ui32 GetLastWrittenPageId(ui32 /*group*/) const noexcept
         {
             /* LastPageId captures the most recent AddPage() return value.
                In v2 mode, for structural pages, it returns the correct compacted index (1-based after skip entry).

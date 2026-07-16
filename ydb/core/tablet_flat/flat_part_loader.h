@@ -58,7 +58,7 @@ namespace NTable {
                 Part = part;
             }
 
-            const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override
+            const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
             {
                 Y_ENSURE(part == Part, "Unsupported part");
                 Y_ENSURE(groupId.IsMain(), "Unsupported column group");

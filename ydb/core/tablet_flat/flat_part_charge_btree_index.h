@@ -795,11 +795,11 @@ private:
     }
 
 private:
-    const TSharedData* TryGetDataPage(NPage::TPageLocation location, TGroupId groupId) const {
+    const TSharedData* TryGetDataPage(const NPage::TPageLocation& location, TGroupId groupId) const {
         return Env->TryGetPage(Part, location, groupId);
     }
 
-    bool HasDataPage(NPage::TPageLocation location, TGroupId groupId) const {
+    bool HasDataPage(const NPage::TPageLocation& location, TGroupId groupId) const {
         return bool(Env->TryGetPage(Part, location, groupId));
     }
 

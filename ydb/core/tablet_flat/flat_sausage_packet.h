@@ -63,12 +63,12 @@ namespace NPageCollection {
                 && Meta.GetPageChecksum(page) == Checksum(body);
         }
 
-        TBorder Bounds(TPageLocation location) const override
+        TBorder Bounds(const TPageLocation& location) const override
         {
             return Meta.Bounds(location);
         }
 
-        bool Verify(TPageLocation location, TArrayRef<const char> data) const override
+        bool Verify(const TPageLocation& location, TArrayRef<const char> data) const override
         {
             return data.size() == location.Size && Checksum(data) == location.Crc32;
         }

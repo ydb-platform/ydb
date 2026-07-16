@@ -836,7 +836,7 @@ namespace NTable {
         TPageId WriteGetId(TSharedData page, EPage type, ui32 group = 0)
         {
             WritePage(std::move(page), type, group);
-            return Pager.GetWrittenPageId(group);
+            return Pager.GetLastWrittenPageId(group);
         }
 
         void Save(TSharedData raw, NPage::TGroupId groupId) override
@@ -892,7 +892,7 @@ namespace NTable {
                 Current.Coded += raw.size(); /* after encoding */
 
                 auto location = WritePage(raw, EPage::DataPage, groupId.Index);
-                auto page = Pager.GetWrittenPageId(groupId.Index);
+                auto page = Pager.GetLastWrittenPageId(groupId.Index);
 
                 if (WriteFlatIndex) {
                     // N.B. non-main groups have no key

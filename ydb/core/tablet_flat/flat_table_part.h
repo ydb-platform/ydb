@@ -49,9 +49,9 @@ namespace NTable {
     };
 
     /// Version-agnostic child reference builder — works for V1 and V2 nodes.
-    inline TPageRef BuildPageRef(const NPage::TBtreeIndexNode& node, NPage::TRecIdx pos, bool isLeafLevel) {
+    inline TPageRef BuildPageRef(const NPage::TBtreeIndexNode& node, NPage::TRecIdx pos, bool isDataPage) {
         if (node.GetStoredVersion() == NPage::TBtreeIndexNode::FormatVersionV2) {
-            auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
+            auto type = isDataPage ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
             return node.GetChildLocationV2(pos, type);
         }
         return node.GetChildPageId(pos);

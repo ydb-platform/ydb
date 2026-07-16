@@ -396,8 +396,7 @@ namespace NFwd {
             if (levelId + 2 < Levels.size()) { // next level is index
                 NPage::TBtreeIndexNode node(page.Data);
                 for (auto pos : xrange(node.GetChildrenCount())) {
-                    auto ref = BuildPageRef(node, pos, /* isLeafLevel */ false);
-                    auto childLoc = ResolvePageLocation(Part, ref, TGroupId{0});
+                    auto childLoc = GetChildLocation(node, pos, /* isLeafLevel */ false);
                     IndexPageLocator.Add(childLoc.Offset, GroupId, levelId + 1);
                 }
             }
@@ -425,6 +424,14 @@ namespace NFwd {
                 default:
                     Y_TABLET_ERROR("Unknown page type");
             }
+        }
+
+        NPage::TPageLocation GetChildLocation(const NPage::TBtreeIndexNode& node, NPage::TRecIdx pos, bool isLeafLevel) const {
+            if (node.GetStoredVersion() == NPage::TBtreeIndexNode::FormatVersionV2) {
+                auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
+                return node.GetChildLocationV2(pos, type);
+            }
+            return Part->GetPageLocation(node.GetChildPageId(pos), isLeafLevel ? GroupId : NPage::TGroupId{});
         }
 
         void DropPagesBefore(TLevel& level, TPageOffset offset)
@@ -471,14 +478,13 @@ namespace NFwd {
                         if (node.GetChildRowCount(pos) <= BeginRowId) {
                             continue;
                         }
-                        auto ref = BuildPageRef(node, pos, isLeaf);
-                        auto locGroup = isLeaf ? GroupId : TGroupId{0};
-                        auto childLoc = ResolvePageLocation(Part, ref, locGroup);
+                        auto childLoc = GetChildLocation(node, pos, isLeaf);
                         Y_ENSURE(!nextLevel.Queue || nextLevel.Queue.back().Offset < childLoc.Offset);
-                        nextLevel.Queue.push_back(
-                            {childLoc.Offset, childLoc.Size, node.GetChildDataSize(pos), childLoc.Crc32});
-                        nextLevel.BeginOffset = Min(nextLevel.BeginOffset, childLoc.Offset);
-                        nextLevel.EndOffset = Max(nextLevel.EndOffset, childLoc.Offset);
+                        nextLevel.Queue.push_back({childLoc.Offset, childLoc.Size, node.GetChildDataSize(pos), childLoc.Crc32});
+                        if (nextLevel.BeginOffset == TPageOffset::Max()) {
+                            nextLevel.BeginOffset = childLoc.Offset;
+                        }
+                        nextLevel.EndOffset = childLoc.Offset;
                         if (node.GetChildRowCount(pos) >= EndRowId) {
                             break;
                         }

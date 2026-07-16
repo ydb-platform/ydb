@@ -133,7 +133,7 @@ namespace NFwd {
             return Pending == 0;
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
             auto type = location.Type;
 

@@ -84,7 +84,7 @@ public:
         , PartStore(partStore)
     { }
 
-    const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override {
+    const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
         Y_ENSURE(part == &PartStore, "Unexpected part in sticky preload");
         Y_ENSURE(groupId.Index < PartStore.PageCollections.size(), "Group out of range");
 
@@ -97,13 +97,13 @@ public:
             return &NSharedCache::TPinnedPageRef(PinnedBodies.back()).GetData();
         }
 
-        Misses[pageCollection->Id].insert(location);
+        Misses[pageCollection->Id].push_back(location);
         return nullptr;
     }
 
-    using THashSetOfLocation = THashSet<TPageLocation, NTable::NPage::TPageLocationByOffsetHash, NTable::NPage::TPageLocationByOffsetEq>;
+    using TLocationVector = TVector<TPageLocation>;
 
-    THashMap<TLogoBlobID, THashSetOfLocation> Misses;
+    THashMap<TLogoBlobID, TLocationVector> Misses;
 
 private:
     NTable::IPages::TResult Locate(const TMemTable*, ui64, ui32) override {
@@ -127,19 +127,6 @@ struct TStickyPreloadState {
     TVector<NTable::NPage::TGroupId> DataGroupIds;
     TLogoBlobID IndexCollectionId;
 };
-
-THashMap<TLogoBlobID, TVector<NTable::NPage::TPageLocation>>
-DrainStickyPreloadMisses(THashMap<TLogoBlobID, TStickyPreloadEnv::THashSetOfLocation>& misses)
-{
-    THashMap<TLogoBlobID, TVector<NTable::NPage::TPageLocation>> result;
-    for (auto& [pageCollectionId, pages_] : misses) {
-        TVector<NTable::NPage::TPageLocation> pages(pages_.begin(), pages_.end());
-        std::sort(pages.begin(), pages.end());
-        result.emplace(pageCollectionId, std::move(pages));
-    }
-    misses.clear();
-    return result;
-}
 
 class TMemTableMemoryConsumersCollection : public NTable::IMemTableMemoryConsumersCollection {
 public:
@@ -1598,6 +1585,7 @@ void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView, cons
 
     auto partStore = partView.As<NTable::TPartStore>();
     TVector<std::pair<NTable::NPage::TGroupId, const NTable::NPage::TBtreeIndexMeta*>> v2Groups;
+    TVector<size_t> stickyGroupIndices;
 
     for (size_t groupIndex : xrange(partView->GroupsCount)) {
         bool stickyGroup = false;
@@ -1609,21 +1597,26 @@ void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView, cons
         }
 
         if (stickyGroup) {
+            stickyGroupIndices.push_back(groupIndex);
+
             auto groupId = NTable::NPage::TGroupId(groupIndex);
             const NTable::NPage::TBtreeIndexMeta* meta =
                 partStore->IndexPages.HasBTree() ? &partStore->IndexPages.GetBTree(groupId) : nullptr;
             if (meta && meta->HasV2Root()) {
                 v2Groups.emplace_back(groupId, meta);
             }
-            // Structural pages or V1 (if not V2)
-            Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
-                NBlockIO::EPriority::Bkgr, partStore->PageCollections[groupIndex]->PageCollection, partStore->GetPages(groupIndex)),
-                0, ui64(ERequestTypeCookie::StickyPages));
         }
     }
 
+    // Start V2 BTree preload first
     if (!v2Groups.empty()) {
         StartStickyBTreePreload(*partStore, v2Groups);
+    }
+
+    for (size_t groupIndex : stickyGroupIndices) {
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
+            NBlockIO::EPriority::Bkgr, partStore->PageCollections[groupIndex]->PageCollection, partStore->GetPages(groupIndex)),
+            0, ui64(ERequestTypeCookie::StickyPages));
     }
 }
 
@@ -1686,8 +1679,8 @@ void TExecutor::DriveStickyBTreePreload(TStickyPreloadState* state) {
 
     // Some pages are still missing — request them. The StickyPages result
     // handler will re-drive this state when the pages arrive.
-    auto toLoad = DrainStickyPreloadMisses(env.Misses);
-    for (auto& [pageCollectionId, locations] : toLoad) {
+    for (auto& [pageCollectionId, locations] : env.Misses) {
+        std::sort(locations.begin(), locations.end());
         auto* pageCollection = PrivatePageCache->FindPageCollection(pageCollectionId);
         Y_DEBUG_ABORT_UNLESS(pageCollection, "Sticky preload references unknown page collection");
         if (!pageCollection) {

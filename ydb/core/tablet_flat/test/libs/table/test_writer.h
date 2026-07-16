@@ -235,9 +235,9 @@ namespace NTest {
             Back().WriteInplace(page, body);
         }
 
-        ui32 GetWrittenPageId(ui32 group) const noexcept override
+        ui32 GetLastWrittenPageId(ui32 group) const noexcept override
         {
-            return Store->GetWrittenPageId(group);
+            return Store->GetLastWrittenPageId(group);
         }
 
         NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) override

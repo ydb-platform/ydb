@@ -37,10 +37,10 @@ namespace {
         ui32 Total() const noexcept override { return 0; }
         NPageCollection::TInfo Page(ui32) const override { return {0, 0}; }
         NPageCollection::TBorder Bounds(ui32) const override { Y_TABLET_ERROR("Not implemented"); }
-        NPageCollection::TBorder Bounds(TPageLocation) const override { Y_TABLET_ERROR("Not implemented"); }
+        NPageCollection::TBorder Bounds(const TPageLocation&) const override { Y_TABLET_ERROR("Not implemented"); }
         NPageCollection::TGlobId Glob(ui32) const override { Y_TABLET_ERROR("Not implemented"); }
         bool Verify(ui32, TArrayRef<const char>) const override { return true; }
-        bool Verify(TPageLocation, TArrayRef<const char>) const override { return true; }
+        bool Verify(const TPageLocation&, TArrayRef<const char>) const override { return true; }
         size_t BackingSize() const noexcept override { return 0; }
 
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override {
@@ -197,7 +197,7 @@ namespace {
         }
 
         // AsPageIndex: test collection uses FromPageIndex, so the offset encodes a page index
-        NPageCollection::TBorder Bounds(TPageLocation location) const override {
+        NPageCollection::TBorder Bounds(const TPageLocation& location) const override {
             return { location.Size, { 0, location.Offset.AsPageIndex() }, { 0, location.Offset.AsPageIndex() + (ui32)location.Size } };
         }
 
@@ -209,7 +209,7 @@ namespace {
             return true;
         }
 
-        bool Verify(TPageLocation location, TArrayRef<const char> data) const override {
+        bool Verify(const TPageLocation& location, TArrayRef<const char> data) const override {
             return data.size() == location.Size;
         }
 

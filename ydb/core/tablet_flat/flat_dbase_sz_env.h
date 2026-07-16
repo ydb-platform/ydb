@@ -26,12 +26,12 @@ namespace NTable {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
             auto *info = partStore->Locate(lob, ref);
-            AddPageSize(info->PageCollection.Get(), info->PageCollection->GetLocation(ref));
+            AddPageSize(info, info->GetLocation(ref));
 
             return { true, nullptr };
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
             auto *collection = partStore->PageCollections.at(groupId.Index).Get();
@@ -45,7 +45,7 @@ namespace NTable {
                     // if these pages are not in memory, data won't be counted in precharge
                     return Env->TryGetPage(part, location, groupId);
                 default:
-                    AddPageSize(collection->PageCollection.Get(), location);
+                    AddPageSize(collection, location);
                     return nullptr;
             }
         }
@@ -55,7 +55,7 @@ namespace NTable {
         }
 
     private:
-        void AddPageSize(const NPageCollection::IPageCollection *collection, TPageLocation location)
+        void AddPageSize(const TPageCollection *collection, const TPageLocation& location)
         {
             if (Touched[collection].insert(location.Offset).second) {
                 Pages++;
@@ -65,7 +65,7 @@ namespace NTable {
 
     private:
         IPages* Env;
-        THashMap<const NPageCollection::IPageCollection*, THashSet<TPageOffset>> Touched;
+        THashMap<const TPageCollection*, THashSet<TPageOffset>> Touched;
         ui64 Pages = 0;
         ui64 Bytes = 0;
     };

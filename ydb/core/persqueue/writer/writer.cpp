@@ -426,9 +426,12 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
         TString error;
         if (!BasicCheck(record, error)) {
-            ERROR("CmdAbortDeferredStaging failed: " << error);
+            YDB_LOG_ERROR("CmdAbortDeferredStaging failed",
+                {"logPrefix", LOG_PREFIX},
+                {"error", error});
         } else if (!record.GetPartitionResponse().HasCmdAbortDeferredStagingResult()) {
-            ERROR("CmdAbortDeferredStaging: absent result");
+            YDB_LOG_ERROR("CmdAbortDeferredStaging: absent result",
+                {"logPrefix", LOG_PREFIX});
         }
 
         if (UpsertRollbackPending) {
@@ -510,7 +513,9 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
 
     void HandleUpsertPermanentFailure(const TString& reason) {
         UpsertRollbackPending = true;
-        ERROR("Upsert destination failed: " << reason);
+        YDB_LOG_ERROR("Upsert destination failed",
+            {"logPrefix", LOG_PREFIX},
+            {"error", reason});
         AbortDeferredStaging();
     }
 

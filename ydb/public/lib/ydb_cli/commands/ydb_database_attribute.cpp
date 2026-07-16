@@ -71,7 +71,7 @@ void TCommandDatabaseAttributeSet::Parse(TConfig& config) {
 
         if (value.empty()) {
             throw TMisuseException()
-                << "Bad attribure '" + attr + "'. Attribute value cannot be empty";
+                << "Bad attribute '" + attr + "'. Attribute value cannot be empty";
         }
 
         Attributes[items.at(0)] = value;

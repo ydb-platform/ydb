@@ -59,7 +59,7 @@ public:
         : TPhysicalOpBuilder(ctx, pos) {
     }
 
-    virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin) = 0;
+    virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) = 0;
 };
 
 class TPhysicalUnaryOpBuilderWithMemLimit: public TPhysicalOpBuilder {

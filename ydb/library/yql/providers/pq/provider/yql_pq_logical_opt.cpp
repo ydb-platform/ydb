@@ -70,6 +70,28 @@ void GetUsedWatermarkColumnNames(const TExprBase& expr, std::unordered_set<TStri
     }
 }
 
+void GetUsedWatermarkGeneratorColumnNames(
+    std::unordered_set<TString>& usedColumnNames,
+    const TPqState& state
+) {
+    static constexpr auto RequiredKeys = std::to_array<std::string_view>({
+        "cluster",
+        "partition_id",
+        "write_time",
+    });
+
+    for (const auto& key : RequiredKeys) {
+        const auto descriptor = GetPqMetaFieldDescriptorByKey(
+            TString(key),
+            state.AddTransparentPrefixToTransparentSystemColumns,
+            state.EnableUserAttributesInTopicQuery,
+            state.ForbidYqlSysColumnsAndSystemMetadata
+        );
+        YQL_ENSURE(descriptor, "Unexpected pq metadata key: " << key);
+        usedColumnNames.emplace(descriptor->SysColumn);
+    }
+}
+
 TVector<TCoNameValueTuple> DropUnusedMetadata(
     const TPqTopic& pqTopic,
     const std::unordered_set<TString>& usedColumnNames,
@@ -219,6 +241,7 @@ public:
             const auto watermarkExpr = maybeWatermarkExpr.Cast();
             GetUsedWatermarkColumnNames(watermarkExpr, usedColumnNames);
         }
+        GetUsedWatermarkGeneratorColumnNames(usedColumnNames, *State_);
 
         const auto oldRowType = pqTopic.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         const auto oldRowColumnsCount = oldRowType->GetSize();
@@ -412,7 +435,7 @@ public:
                 }
             }
         }
-        
+
         TString sharedReadingPridicateSerializedProto;
         if (UseSharedReadingForTopic(dqPqTopicSource)) {
             // Push predicate only if enabled shared reading, because this optimisation may produce double topic reading
@@ -425,7 +448,7 @@ public:
                     return node;
                 }
                 YQL_ENSURE(predicateProto.SerializeToString(&sharedReadingPridicateSerializedProto));
-            }   
+            }
         }
 
         bool isPartitionListUpdated = false;
@@ -605,7 +628,7 @@ private:
                     .Seal()
                     .Build();
             }
-            
+
             if (!containsMemberCached(left) && !isConstant(left) && !replaces.contains(left.Get())) {
                 replaces[left.Get()] = ctx.Builder(exprNode->Pos())
                     .Callable("EvaluateExpr")
@@ -669,7 +692,7 @@ private:
                 item->SetEnd(treeMax);
             }
         }
-        TString result; 
+        TString result;
         YQL_ENSURE(proto.SerializeToString(&result));
         return {result, false};
     }

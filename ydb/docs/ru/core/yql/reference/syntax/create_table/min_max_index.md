@@ -26,7 +26,7 @@ CREATE TABLE `<table_name>` (
 
 Создание min_max-индекса для уже существующей таблицы описано в разделе [`ALTER TABLE ADD INDEX`](../alter_table/indexes.md#local-min-max).
 
-## Пример
+## Пример {#example}
 
 ```yql
 CREATE TABLE events (

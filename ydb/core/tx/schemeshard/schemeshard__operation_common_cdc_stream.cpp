@@ -153,7 +153,7 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
     auto path = context.SS->PathsById.at(pathId);
 
     Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-    auto& table = context.SS->Tables.Update(pathId, context.MemChanges);
+    auto& table = context.SS->Tables.UpdateUntracked(pathId);
 
     NIceDb::TNiceDb db(context.GetDB());
 
@@ -179,7 +179,7 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
 
     if (versionCtx.IsIndexImplTable) {
         if (context.SS->Indexes.contains(versionCtx.ParentPathId)) {
-            auto& index = context.SS->Indexes.Update(versionCtx.ParentPathId, context.MemChanges);
+            auto& index = context.SS->Indexes.UpdateUntracked(versionCtx.ParentPathId);
             ui64 targetVersion = table->AlterVersion;
             if (index->AlterVersion < targetVersion) {
                 index->AlterVersion = targetVersion;
@@ -228,7 +228,7 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
             if (!context.SS->Indexes.contains(childPathId)) {
                 continue;
             }
-            auto& index = context.SS->Indexes.Update(childPathId, context.MemChanges);
+            auto& index = context.SS->Indexes.UpdateUntracked(childPathId);
             if (index->AlterVersion < targetVersion) {
                 index->AlterVersion = targetVersion;
                 if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {

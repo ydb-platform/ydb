@@ -173,7 +173,7 @@ public:
         context.SS->SnapshotsStepIds[OperationId.GetTxId()] = step;
         context.SS->PersistSnapshotStepId(db, OperationId.GetTxId(), step);
 
-        auto& tableInfo = context.SS->Tables.Update(txState->TargetPathId, context.MemChanges);
+        auto& tableInfo = context.SS->Tables.UpdateUntracked(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
         context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
 

@@ -60,7 +60,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->PersistCdcStream(db, pathId);
-        context.SS->CdcStreams.Update(pathId, context.MemChanges)->FinishAlter();
+        context.SS->CdcStreams.UpdateUntracked(pathId)->FinishAlter();
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
@@ -240,7 +240,7 @@ protected:
         auto path = context.SS->PathsById.at(pathId);
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto& table = context.SS->Tables.Update(pathId, context.MemChanges);
+        auto& table = context.SS->Tables.UpdateUntracked(pathId);
 
         auto& notice = *tx.MutableAlterCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());

@@ -198,7 +198,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        context.SS->Sequences.Set({.Path = pathId, .Value = alterData, .Changes = context.MemChanges});
+        context.SS->Sequences.SetUntracked(pathId, alterData);
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 

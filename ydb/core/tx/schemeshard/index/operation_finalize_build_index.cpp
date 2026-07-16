@@ -154,7 +154,7 @@ public:
 
         context.SS->PersistDropSnapshot(db, snapshotTxId, tableId);
 
-        auto& tableInfo = context.SS->Tables.Update(txState->TargetPathId, context.MemChanges);
+        auto& tableInfo = context.SS->Tables.UpdateUntracked(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
 
         for(auto& column: tableInfo->Columns) {

@@ -99,7 +99,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     continue;
                 }
 
-                auto& table = context.SS->Tables.Update(tablePathId, context.MemChanges);
+                auto& table = context.SS->Tables.UpdateUntracked(tablePathId);
 
                 // InitAlterData() sets AlterVersion = CurrentVersion + 1 and also sets CoordinatedSchemaVersion
                 table->InitAlterData(OperationId);
@@ -273,7 +273,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     continue;
                 }
 
-                auto& table = context.SS->Tables.Update(implTablePathId, context.MemChanges);
+                auto& table = context.SS->Tables.UpdateUntracked(implTablePathId);
                 if (!table->AlterData) {
                     LOG_W("SyncIndexSchemaVersions: No AlterData for table: " << implTablePathId);
                     continue;
@@ -311,7 +311,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                         ui64 targetVersion = coordVersion;
 
                         if (context.SS->Indexes.at(indexPathId)->AlterVersion < targetVersion) {
-                            auto& index = context.SS->Indexes.Update(indexPathId, context.MemChanges);
+                            auto& index = context.SS->Indexes.UpdateUntracked(indexPathId);
                             index->AlterVersion = targetVersion;
                             if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
                                 index->AlterData->AlterVersion = targetVersion;

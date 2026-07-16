@@ -110,6 +110,8 @@ public:
 
     // Insert/assign (acquires on new key) and record the matching undo.
     V& Set(TSetArgs args) {
+        Y_VERIFY_DEBUG_S(args.Changes.IsArmed(),
+            "tracked Set on " << Reason << " outside an armed propose; use SetUntracked (see I3)");
         auto it = Map.find(args.Path);
         if (it == Map.end()) {
             args.Changes.RecordSelfRefUndo([this, id = args.Path]() { UndoErase(id); });
@@ -146,6 +148,8 @@ public:
 
     // Mutable access that records a deduped undo snapshot. The only tracked way to mutate.
     V& Update(const TPathId& id, TMemoryChanges& changes) {
+        Y_VERIFY_DEBUG_S(changes.IsArmed(),
+            "tracked Update on " << Reason << " outside an armed propose; use UpdateUntracked (see I3)");
         V& slot = Map.at(id);
         if (changes.NeedsUpdateSnapshot(this, id)) {
             changes.RecordSelfRefUndo([this, id, snap = SelfRefUndoClone(slot)]() {

@@ -167,7 +167,7 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto& table = context.SS->Tables.Update(pathId, context.MemChanges);
+        auto& table = context.SS->Tables.UpdateUntracked(pathId);
 
         NIceDb::TNiceDb db(context.GetDB());
 

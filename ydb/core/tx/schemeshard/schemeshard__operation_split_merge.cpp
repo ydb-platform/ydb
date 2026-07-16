@@ -1136,7 +1136,7 @@ public:
 
         TPathId pathId = txState->TargetPathId;
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto& tableInfo = context.SS->Tables.Update(pathId, context.MemChanges);
+        auto& tableInfo = context.SS->Tables.UpdateUntracked(pathId);
         Y_ABORT_UNLESS(tableInfo);
 
         // Undo the in-memory changes made by Propose() using inverse operations.

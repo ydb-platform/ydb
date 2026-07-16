@@ -93,7 +93,7 @@ public:
         secretPath->StepCreated = step;
         context.SS->PersistCreateStep(db, secretPathId, step);
 
-        context.SS->Secrets.Set({.Path = secretPathId, .Value = alterData, .Changes = context.MemChanges});
+        context.SS->Secrets.SetUntracked(secretPathId, alterData);
         context.SS->PersistSecretAlterRemove(db, secretPathId);
         context.SS->PersistSecret(db, secretPathId, *alterData);
 

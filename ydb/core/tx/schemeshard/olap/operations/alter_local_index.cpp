@@ -46,7 +46,7 @@ public:
         auto indexData = context.SS->Indexes.at(path->PathId);
         Y_ABORT_UNLESS(indexData->AlterData, "AlterData must be valid after TTableIndexInfo::Create");
         context.SS->PersistTableIndex(db, path->PathId);
-        context.SS->Indexes.Set({.Path = path->PathId, .Value = indexData->AlterData, .Changes = context.MemChanges});
+        context.SS->Indexes.SetUntracked(path->PathId, indexData->AlterData);
 
         auto parentPath = TPath::Init(path->PathId, context.SS).Parent();
         ++parentPath->DirAlterVersion;

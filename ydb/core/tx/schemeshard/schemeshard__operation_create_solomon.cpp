@@ -117,7 +117,7 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSolomonVolume);
 
-        auto& solomonVol = context.SS->SolomonVolumes.Update(txState->TargetPathId, context.MemChanges);
+        auto& solomonVol = context.SS->SolomonVolumes.UpdateUntracked(txState->TargetPathId);
         Y_VERIFY_S(solomonVol, "solomon volume is null. PathId: " << txState->TargetPathId);
         Y_ABORT_UNLESS(solomonVol->Partitions.size() == txState->Shards.size(),
                  "%" PRIu64 "solomon shards expected, %" PRIu64 " created",

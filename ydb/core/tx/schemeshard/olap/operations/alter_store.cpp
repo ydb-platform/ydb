@@ -215,7 +215,7 @@ public:
         alterData->AlterBody.Clear();
         alterData->ColumnTables = storeInfo->ColumnTables;
         alterData->ColumnTablesUnderOperation = storeInfo->ColumnTablesUnderOperation;
-        context.SS->OlapStores.Set({.Path = pathId, .Value = alterData, .Changes = context.MemChanges});
+        context.SS->OlapStores.SetUntracked(pathId, alterData);
 
         context.SS->PersistOlapStoreAlterRemove(db, pathId);
         context.SS->PersistOlapStore(db, pathId, *alterData);

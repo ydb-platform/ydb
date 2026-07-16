@@ -121,10 +121,6 @@ enum class EExpectedResult {
 
 static constexpr ui32 PORTION_ROWS = 80 * 1000;
 
-<<<<<<< HEAD
-void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::TTypeId ttlColumnTypeId)
-{
-=======
 // Ticks the shard's mediator time forward by one plan step via an empty PlanCommit (updating planStep
 // in place). Internal TTL/tiering actualization commits at GetOutdatedStep()+1 (i.e. planStep+1); with
 // no coordinator running in these tests, that snapshot never arrives on its own, so we advance it here
@@ -135,7 +131,6 @@ void AdvancePlanStep(TTestBasicRuntime& runtime, TActorId& sender, TPlanStep& pl
 }
 
 void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::TTypeId ttlColumnTypeId) {
->>>>>>> 9fe03f9ab63 (Fix everything in CS part 1 (#46175))
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     csControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());

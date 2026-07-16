@@ -8,13 +8,13 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-// User-facing tracing: the user channel emits its own tree (separate trace-id) that is a curated,
-// pruned projection of the dev Wilson tree. Execution phases (Execute -> Resolve/RunTasks) are live
-// spans from the executer; the dev tree must stay unaffected when the user channel is off.
+// User-facing tracing: the user channel emits its own curated tree (separate trace-id) with
+// user-language phases (Execute -> Prepare/Run). Execution spans are live from the executer; the
+// dev Wilson tree must stay unaffected, and nothing is emitted when the user channel is off.
 namespace NKikimr {
 
 using namespace Tests;
-using namespace NWilson;
+using namespace NWilson;    
 
 Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
@@ -81,15 +81,17 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         // Dev and user channels are independent trees (distinct trace-ids).
         UNIT_ASSERT_VALUES_EQUAL(2, uploader->Traces.size());
 
-        auto* userRoot = FindRootChild(*uploader, "QUERY_ACTION_EXECUTE");
+        auto* userRoot = FindRootChild(*uploader, "UPSERT");
         UNIT_ASSERT_C(userRoot, "user-facing root span missing");
         UNIT_ASSERT_C(FindRootChild(*uploader, "Session.query.QUERY_ACTION_EXECUTE"), "dev root span missing");
 
-        // Live executer phase in the user tree, with resolve/run children.
+        // Live executer phase in the user tree: Execute groups a Prepare (resolve) node and a Run node.
         auto execute = userRoot->BFSFindOne("Execute");
         UNIT_ASSERT_C(execute, "user Execute phase missing (executer live span)");
-        UNIT_ASSERT_C(execute->get().BFSFindOne("RunTasks"), "user RunTasks phase missing");
-        UNIT_ASSERT_C(execute->get().BFSFindOne("ResolveTables"), "user ResolveTables phase missing");
+        UNIT_ASSERT_C(execute->get().BFSFindOne("Run"), "user Run phase missing");
+        auto prepare = execute->get().FindOne("Prepare");
+        UNIT_ASSERT_C(prepare, "user Prepare group missing");
+        UNIT_ASSERT_C(prepare->get().BFSFindOne("ResolveTables"), "ResolveTables not under Prepare");
 
         // Compile is derived post-hoc as a top-level phase under the user root.
         UNIT_ASSERT_C(userRoot->FindOne("Compile"), "user Compile phase missing");
@@ -109,7 +111,7 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
 
         UNIT_ASSERT(uploader->BuildTraceTrees());
         UNIT_ASSERT_VALUES_EQUAL(1, uploader->Traces.size()); // dev only
-        UNIT_ASSERT_C(!FindRootChild(*uploader, "QUERY_ACTION_EXECUTE"), "user tree emitted with channel off");
+        UNIT_ASSERT_C(!FindRootChild(*uploader, "UPSERT"), "user tree emitted with channel off");
         UNIT_ASSERT_C(FindRootChild(*uploader, "Session.query.QUERY_ACTION_EXECUTE"), "dev root span missing");
     }
 }

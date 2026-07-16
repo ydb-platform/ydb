@@ -24,8 +24,8 @@ public:
     virtual bool CanBeDictionaryEncoded() const = 0;
 
     // Read path - wrap the physical element `index` as a logical value view (a native scalar for
-    // Double/Bool/String, or a BinaryJson blob for BinaryJson). The view aliases `array`, which must
-    // outlive it; all logical conversions (scalar projection, ToJsonValue, ToBinaryJson) live on the view.
+    // Double/Bool/String, or a BinaryJson blob for BinaryJson).
+    // The view aliases `array`, which must outlive it.
     virtual TJsonValueView ReadValueView(const arrow::Array& array, const i64 index) const = 0;
     // Approximate size of element `index` for accounting: variable for binary values, fixed for scalar types.
     virtual ui32 GetElementSize(const arrow::Array& array, const i64 index) const = 0;

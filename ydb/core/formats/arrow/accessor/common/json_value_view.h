@@ -26,8 +26,6 @@ public:
     // Expected to be used only for containers, but no checks enforce that.
     std::optional<TStringBuf> GetBinaryJsonBlobOptional() const;
 
-    // Translate the value to a JSON value (for document reconstruction) or a BinaryJson blob. A native
-    // scalar is materialized; a BinaryJson blob is parsed/copied.
     NJson::TJsonValue ToJsonValue() const;
     NBinaryJson::TBinaryJson ToBinaryJson() const;
 private:

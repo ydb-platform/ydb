@@ -126,6 +126,7 @@ THolder<NEvents::TDataEvents::TEvLockRows> TKqpStreamLockWorker::BuildLockReques
     lockRequest->Record.SetLockId(Settings.LockTxId);
     lockRequest->Record.SetLockNodeId(Settings.LockNodeId);
     lockRequest->Record.SetLockMode(Settings.LockMode);
+    lockRequest->Record.SetSkipAbsent(Settings.SkipAbsent);
 
     TTableId tableId(Settings.Table.GetOwnerId(), Settings.Table.GetTableId(), Settings.Table.GetVersion());
     lockRequest->SetTableId(tableId);
@@ -291,15 +292,19 @@ void TKqpStreamLockWorker::AddLockResult(ui64 requestId, NEvents::TDataEvents::T
     
     const auto& lockedKeys = record.GetLockedKeys();
     const auto& modifiedKeys = record.GetModifiedKeys();
+    const auto& skippedAbsentKeys = record.GetSkippedAbsentKeys();
 
     THashSet<ui64> lockedSet(lockedKeys.begin(), lockedKeys.end());
     THashSet<ui64> modifiedSet(modifiedKeys.begin(), modifiedKeys.end());
+    THashSet<ui64> skippedAbsentSet(skippedAbsentKeys.begin(), skippedAbsentKeys.end());
 
     batchInfo.LockedFlags.resize(batchInfo.BatchSize, false);
     batchInfo.ModifiedFlags.resize(batchInfo.BatchSize, false);
     for (size_t i = 0; i < batchInfo.BatchSize; ++i) {
-        AFL_ENSURE(lockedSet.contains(i)); // TODO: that's wrong, deleted rows shouldn't be locked
-        batchInfo.LockedFlags[i] = true;
+        const bool locked = lockedSet.contains(i);
+        const bool skippedAbsent = skippedAbsentSet.contains(i);
+        AFL_ENSURE(locked || skippedAbsent);
+        batchInfo.LockedFlags[i] = locked;
         batchInfo.ModifiedFlags[i] = modifiedSet.contains(i);
     }
 
@@ -316,12 +321,12 @@ void TKqpStreamLockWorker::ProcessRowsByLockResult(ui64 requestId, TProcessRowCa
     AFL_ENSURE(batchInfo.LockResultReceived);
 
     for (size_t i = 0; i < batchInfo.BatchSize; ++i) {
-        if (!batchInfo.LockedFlags[i]) {
-            continue;
+        if (batchInfo.LockedFlags[i]) {
+            NUdf::TUnboxedValue row = ConvertRowToUnboxedValue(batchInfo.Rows[i]);
+            callback(row, true, batchInfo.ModifiedFlags[i]);
+        } else {
+            callback({}, false, batchInfo.ModifiedFlags[i]);
         }
-        bool modified = batchInfo.ModifiedFlags[i];
-        NUdf::TUnboxedValue row = ConvertRowToUnboxedValue(batchInfo.Rows[i]);
-        callback(row, modified);
     }
 
     BatchesByRequestId.erase(it);
@@ -337,11 +342,10 @@ void TKqpStreamLockWorker::ProcessRowsByLockResult(ui64 requestId, TProcessRowCa
     AFL_ENSURE(batchInfo.LockResultReceived);
 
     for (size_t i = 0; i < batchInfo.BatchSize; ++i) {
-        if (!batchInfo.LockedFlags[i]) {
-            continue;
-        }
-        bool modified = batchInfo.ModifiedFlags[i];
-        callback(batchInfo.Rows[i], modified);
+        callback(
+            batchInfo.Rows[i],
+            batchInfo.LockedFlags[i],
+            batchInfo.ModifiedFlags[i]);
     }
 
     BatchesByRequestId.erase(it);

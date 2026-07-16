@@ -3284,11 +3284,22 @@ public:
         // 1. Since TTxReadContinue scheduled, shard was ready.
         // 2. If shards changes the state, it must cancel iterators and we will
         // not find our readId ReadIterators.
+        //
+        // One exception: There is a small window between the start of the split and
+        // the iterator cancellation where we are removing locks (see TTxStartSplit)
+        // In this case we don't execute the read as well to avoid spurious ABORTED errors.
         auto it = Self->ReadIteratorsByLocalReadId.find(LocalReadId);
         if (it == Self->ReadIteratorsByLocalReadId.end()) {
             // read has been aborted
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ReadContinue for iterator# " << LocalReadId
                 << " didn't find state");
+            return true;
+        }
+
+        if (Self->SplitStarted) {
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
+                Self->TabletID() << " ReadContinue for iterator# " << LocalReadId
+                << " is going to be cancelled soon due to split, skipping");
             return true;
         }
 

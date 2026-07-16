@@ -470,6 +470,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQuer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithMultipleWrites
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithPrecompute
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithProcess+EnableKqpConstraintsTransformer
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithTwoGroupByHopsOnSameKey
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.WritingInLocalYdbTablesWithCheckpoints
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithRowCountBackPressure
 ydb/core/kqp/ut/indexes KqpStreamIndexes.SecondaryNullDelete
@@ -679,6 +680,7 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.TypedProdu
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.WithoutPartitionWithRestart
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Table
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopics_2_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopics_2_Table
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_Demo_27_Query
@@ -697,6 +699,7 @@ ydb/public/sdk/cpp/tests/unit/client/table TableTest.CreateTableWithMetricsSetti
 ydb/services/metadata/secret/ut Secret.Simple
 ydb/services/persqueue_v1/ut TPersQueueTest.BillingRequestUnits
 ydb/services/persqueue_v1/ut TPersQueueTest.CheckDecompressionTasksWithoutSession
+ydb/services/persqueue_v1/ut TPersQueueTest.ConsumerAvailabilityPeriodCleanup
 ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestWriteStat1stClassTopicAPI
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.MixedGrantsInBatch
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringAbsoluteTopicRelativeTransferPath
@@ -983,6 +986,21 @@ ydb/tests/fq/s3 test_streaming_join.py.TestStreamingJoin.test_grace_join[v1-clie
 ydb/tests/fq/streaming test_scalar_topic_write.py.TestScalarTopicWriteInYdb.test_mixed_valid_invalid_statements[False]
 ydb/tests/fq/streaming test_scalar_topic_write.py.TestScalarTopicWriteInYdb.test_mixed_valid_invalid_statements[True]
 ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_precompute_recovery[False]
+ydb/tests/fq/streaming_optimize py3test.[test_sql_negative.py */*] chunk
+ydb/tests/fq/streaming_optimize py3test.[test_sql_streaming.py */*] chunk
+ydb/tests/fq/streaming_optimize test_sql_negative.py.test[hopping_window-GroupByHoppingWindowPolicyBad-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_negative.py.test[hopping_window-GroupByHoppingWindowTimeLimitBad-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_negative.py.test[watermarks-bad_column-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_negative.py.test[watermarks-bad_pushdown-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_negative.py.test[watermarks-bad_type-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHop-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hop-GroupByHopPercentile-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hopping_window-GroupByHoppingWindowExprKey-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[hopping_window-GroupByHoppingWindowTimeExtractorUnusedColumns-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[pq-ReadTopic-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[pq-ReadTopicWithMetadataWithFilter-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[pq-ReadWriteTopic-default.txt]
+ydb/tests/fq/streaming_optimize test_sql_streaming.py.test[watermarks-watermark_over_unused_column-default.txt]
 ydb/tests/fq/yds test_disposition.py.TestDisposition.test_disposition_fresh[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_3_sessions
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_start_new_query
@@ -1194,6 +1212,7 @@ ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_rename_table_
 ydb/tests/olap/s3_import test_tpch_import.py.TestS3TpchImport.test_import_and_export
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
+ydb/tests/stress/kv_volume_tool/tests py3test.sole chunk
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test

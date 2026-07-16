@@ -154,10 +154,10 @@ private:
     }
 
     ///
-    /// Check Predicate HasAppName
+    /// Check Predicate HasAppName — strict string equality.
     ///
-    static bool MatchesAppName(const std::optional<NResourcePool::TRegexPredicate>& predicate, const TString& appName) {
-        return !predicate || predicate->Match(appName);
+    static bool MatchesAppName(const std::optional<TString>& expected, const TString& appName) {
+        return !expected || *expected == appName;
     }
 
     ///

@@ -8,6 +8,12 @@
 #include <map>
 
 namespace NYql {
+
+inline const TString& DqStrippedSuffied() {
+    static const TString suffix(".s");
+    return suffix;
+}
+
 namespace NCommon {
 
 struct TResultFormatSettings {

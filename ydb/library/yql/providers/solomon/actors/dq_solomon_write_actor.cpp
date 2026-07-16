@@ -571,7 +571,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
     const THashMap<TString, TString>& secureParams,
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     i64 freeSpace,
     bool enableStreamingQueriesCounters)
 {
@@ -582,7 +582,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
         .Shard = std::move(settings),
     };
 
-    auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
+    auto credentialsProviderFactory = credentialsFactory->Create(token);
     auto credentialsProvider = credentialsProviderFactory->CreateProvider();
 
     TDqSolomonWriteActor* actor = new TDqSolomonWriteActor(
@@ -599,7 +599,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
     return {actor, actor};
 }
 
-void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters) {
+void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters) {
     factory.RegisterSink<NSo::NProto::TDqSolomonShard>("SolomonSink",
         [credentialsFactory, counters, enableStreamingQueriesCounters](
             NYql::NSo::NProto::TDqSolomonShard&& settings,

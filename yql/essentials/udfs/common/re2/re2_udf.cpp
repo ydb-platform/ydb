@@ -1,3 +1,4 @@
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
@@ -53,7 +54,7 @@ ui64 GetFailProbability() {
 }
 
 bool ShouldFailOnInvalidRegexp(const std::string_view regexp, NYql::TLangVersion currentLangVersion) {
-    if (currentLangVersion >= NYql::MakeLangVersion(2025, 3)) {
+    if (currentLangVersion >= NYql::NFeature::ValidateRegexp.MinLangVer) {
         return true;
     }
     THashType hash = GetStringHash(regexp) % 100;

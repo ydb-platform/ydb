@@ -1,6 +1,7 @@
 #pragma once
 
-#include "yql_pq_provider_impl.h"
+#include "yql_pq_provider.h"
+
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/ast/yql_pos_handle.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
@@ -22,5 +23,11 @@ void FillSettingsWithResolvedYdsIds(
     const TDatabaseResolverResponse::TDatabaseDescriptionMap& fullResolvedIds);
 
 NNodes::TMaybeNode<NNodes::TExprBase> FindSetting(TExprNode::TPtr settings, TStringBuf name);
+
+TMaybe<std::pair<NNodes::TCoLambda, ui64>> SplitWatermarkExpr(
+    const NNodes::TCoLambda& watermark,
+    const TPqState& state,
+    TExprContext& ctx
+);
 
 } // namespace NYql

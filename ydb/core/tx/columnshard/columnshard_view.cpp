@@ -592,14 +592,16 @@ TString RenderLwTraceShardLinks(
 }
 
 TString RenderScanTracesPage(ui64 tabletId, ui32 nodeId) {
+    const TString nodeIdStr = ToString(nodeId);
     const TString tabletIdStr = ToString(tabletId);
     const TString traceUrl = RenderLwTraceShardLogUrl("YDB_CS_SCAN", "StartScan", tabletId, nodeId);
     TStringStream html;
     html << "<h3>Traces for all scans on shard</h3>";
     html << "<p>Trace source: <a href=\"" << TEscapeHtml(traceUrl) << "\">" << TEscapeHtml(traceUrl) << "</a></p>";
     html << "<p><a href=\"app?TabletID=" << tabletIdStr << "\">Back</a></p>";
-    html << R"(<script language="javascript" type="text/javascript" src="../columnshard/plotly-2.35.2.min.js"></script>)";
-    html << R"(<script language="javascript" type="text/javascript" src="../columnshard/scan-trace-viz.js"></script>)";
+    html << "<script language=\"javascript\" type=\"text/javascript\" src=\"/node/" << nodeIdStr
+         << "/columnshard/plotly-2.35.2.min.js\"></script>";
+    html << "<script language=\"javascript\" type=\"text/javascript\" src=\"/node/" << nodeIdStr << "/columnshard/scan-trace-viz.js\"></script>";
     html << "<div id=\"scan-trace-viz\" style=\"width:100%;\"></div>";
     html << "<script>renderScanTraceVisualization('" << EscapeJsString(traceUrl) << "', 'scan-trace-viz');</script>";
     return html.Str();

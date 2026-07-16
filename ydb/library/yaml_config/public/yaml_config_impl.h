@@ -13,6 +13,8 @@ public:
     bool operator<(const TLabelSet& other) const { return Name < other.Name; }
 };
 
+using TElementsTags = THashMap<TString, TString>;
+
 TString GetKey(const NFyaml::TNodeRef& node, TString key);
 
 bool Fit(const TSelector& selector, const TSet<TNamedLabel>& labels);
@@ -71,9 +73,12 @@ void ApplySelectors(NFyaml::TDocument& doc, const TSet<TNamedLabel>& labels);
  *    parser-created tags, or TUserDataHolder-owned TString for SetTag tags)
  *  - when the source document is destroyed, that backing memory is freed
  *    and the copied node's tag token becomes a dangling reference
- *  - this function recursively re-sets every tag via SetTag, which allocates
+ *  - this function recursively re-assigns every tag via SetTag, which allocates
  *    a fresh fy_input and TUserDataHolder per node in the target document
  */
-void DeepCopyTags(NFyaml::TNodeRef node);
+void DeepCopyTags(NFyaml::TNodeRef rootNode);
+
+void SaveNodesTags(NFyaml::TNodeRef rootNode, TElementsTags& tags);
+void RestoreNodesTags(NFyaml::TNodeRef rootNode, const TElementsTags& tags);
 
 } // namespace NKikimr::NYamlConfig

@@ -2745,7 +2745,7 @@ void SortByRegexes(std::vector<std::string>& values, const std::vector<NRe2::TRe
 {
     auto valueToRank = [&] (const std::string& value) -> size_t {
         for (size_t index = 0; index < regexes.size(); ++index) {
-            if (NRe2::TRe2::FullMatch(NRe2::StringPiece(value), *regexes[index])) {
+            if (NRe2::TRe2::FullMatch(re2::StringPiece(value), *regexes[index])) {
                 return index;
             }
         }

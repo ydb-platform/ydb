@@ -99,10 +99,11 @@ public:
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
+                                                                           Schema::LoginSids::SidHash,  // explicitly erase deprecated field
                                                                            Schema::LoginSids::PasswordHashes,
                                                                            Schema::LoginSids::IsEnabled,
                                                                            Schema::LoginSids::FailedAttemptCount>(
-                                                                            sid.Type, sid.PasswordHashes, sid.IsEnabled, sid.FailedLoginAttemptCount);
+                                                                            sid.Type, "", sid.PasswordHashes, sid.IsEnabled, sid.FailedLoginAttemptCount);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
                         AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);

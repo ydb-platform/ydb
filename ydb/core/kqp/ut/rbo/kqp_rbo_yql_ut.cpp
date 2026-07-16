@@ -4080,7 +4080,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(rewrittenAggregate->KeyColumns.size(), 1);
         UNIT_ASSERT(rewrittenAggregate->KeyColumns.front() == TInfoUnit("key"));
 
-        ComputeRequiredProps(root, /*props=*/0, testContext.RboCtx, "Focused push rename");
+        ComputeRequiredProps(root, ERuleProperties::RequireOutputIUs, testContext.RboCtx, "Focused push rename");
         const auto aggregateOutput = rewrittenAggregate->GetOutputIUs();
         UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("total")) != aggregateOutput.end());
         UNIT_ASSERT(std::find(aggregateOutput.begin(), aggregateOutput.end(), TInfoUnit("sum_value")) == aggregateOutput.end());
@@ -6119,6 +6119,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                             {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
     }
 
+    Y_UNIT_TEST(TPCH_YQL_Q21_NewRBO) {
+        RunTPCH_YqlSingleQueryTest(21);
+    }
+
     Y_UNIT_TEST(TPCDS_YQL) {
         // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
         RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13, 15, 16, 18, 19, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 40, 42, 43, 45, 46, 48,
@@ -7793,6 +7797,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 select t1.a from `/Root/t1` as t1;
             )",
+            // Simple query with a fallback pragma
+            R"(
+                PRAGMA ydb.OptFallbackToLegacyOptimizer = 'true';
+                select t1.a from `/Root/t1` as t1;
+            )"
         };
 
         return queries;
@@ -7802,7 +7811,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         // Represents the number of successes and fails for each query with new RBO compiler pipeline.
         std::vector<std::pair<ui32, ui32>> expectedCompileCounters = {
             {0, 1},
-            {1, 0}
+            {1, 0},
+            {0, 1}
         };
 
         return expectedCompileCounters;
@@ -7810,14 +7820,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(FallbackToYqlEnabled) {
         // All queries should succeded because fallback to yql is enabled.
-        const std::vector<bool> expectedResult{true, true};
+        const std::vector<bool> expectedResult{true, true, true};
         TestFallbackToYql(/*fallbackToYqlEnabled=*/true, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
                           expectedResult);
     }
 
     Y_UNIT_TEST(FallbackToYqlDisabled) {
         // First 2 queries should fail because fallback to yql is disabled.
-        const std::vector<bool> expectedResult{false, true};
+        const std::vector<bool> expectedResult{false, true, false};
         TestFallbackToYql(/*fallbackToYqlEnabled=*/false, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
                           expectedResult);
     }

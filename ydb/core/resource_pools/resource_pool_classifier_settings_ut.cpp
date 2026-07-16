@@ -37,20 +37,24 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         UNIT_ASSERT_VALUES_EQUAL(settings.MemberName, "test@user");
     }
 
-    Y_UNIT_TEST(RegexPredicateParsing) {
+    Y_UNIT_TEST(PredicateParsing) {
+        // Verify the parser dispatches to the right overload for each predicate's field type.
+        // Glob semantics themselves live in regex_predicate_ut.cpp.
         TClassifierSettings settings;
         auto propertiesMap = settings.GetPropertiesMap();
 
-        std::visit(TClassifierSettings::TParser{"ydb-ui|ydb-cli"}, propertiesMap["has_app_name"]);
+        std::visit(TClassifierSettings::TParser{"my_app"}, propertiesMap["has_app_name"]);
+        std::visit(TClassifierSettings::TParser{"/Root/db/orders_*"}, propertiesMap["has_full_scan"]);
+        std::visit(TClassifierSettings::TParser{"/Root/db/archive/*"}, propertiesMap["has_path"]);
+
         UNIT_ASSERT(settings.HasAppName.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(settings.HasAppName->Pattern, "ydb-ui|ydb-cli");
-    }
+        UNIT_ASSERT_VALUES_EQUAL(*settings.HasAppName, "my_app");
 
-    Y_UNIT_TEST(RegexPredicateInvalidPattern) {
-        TClassifierSettings settings;
-        auto propertiesMap = settings.GetPropertiesMap();
+        UNIT_ASSERT(settings.HasFullScan.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(settings.HasFullScan->Pattern, "/Root/db/orders_*");
 
-        UNIT_ASSERT_EXCEPTION(std::visit(TClassifierSettings::TParser{"[invalid"}, propertiesMap["has_app_name"]), yexception);
+        UNIT_ASSERT(settings.HasPath.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(settings.HasPath->Pattern, "/Root/db/archive/*");
     }
 
     Y_UNIT_TEST(SettingsExtracting) {
@@ -66,24 +70,30 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["member_name"]), "test@user");
     }
 
-    Y_UNIT_TEST(RegexPredicateExtracting) {
+    Y_UNIT_TEST(PredicateRoundTripExtracting) {
         TClassifierSettings settings;
         auto propertiesMap = settings.GetPropertiesMap();
 
-        // Parse then extract — must round-trip the original pattern
-        std::visit(TClassifierSettings::TParser{"ydb-.*"}, propertiesMap["has_app_name"]);
+        // Parse then extract — must round-trip the raw user string (literal / glob).
+        std::visit(TClassifierSettings::TParser{"ydb-cli"}, propertiesMap["has_app_name"]);
+        std::visit(TClassifierSettings::TParser{"/Root/db/orders_*"}, propertiesMap["has_full_scan"]);
+        std::visit(TClassifierSettings::TParser{"/Root/db/archive/*"}, propertiesMap["has_path"]);
 
         TClassifierSettings::TExtractor extractor;
-        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_app_name"]), "ydb-.*");
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_app_name"]), "ydb-cli");
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_full_scan"]), "/Root/db/orders_*");
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_path"]), "/Root/db/archive/*");
     }
 
-    Y_UNIT_TEST(RegexPredicateExtractingEmpty) {
+    Y_UNIT_TEST(PredicateExtractingEmpty) {
         TClassifierSettings settings;
         auto propertiesMap = settings.GetPropertiesMap();
 
         // Not set — should extract as empty string
         TClassifierSettings::TExtractor extractor;
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_app_name"]), "");
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_full_scan"]), "");
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_path"]), "");
     }
 
     Y_UNIT_TEST(ActionParsing) {

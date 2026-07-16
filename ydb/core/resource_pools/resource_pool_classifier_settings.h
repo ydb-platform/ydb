@@ -43,7 +43,9 @@ struct TClassifierSettings : public TSettingsBase {
     i64 Rank = -1;  // -1 = max rank + CLASSIFIER_RANK_OFFSET
     TString ResourcePool = DEFAULT_POOL_ID;
     std::optional<TString> MemberName;
-    std::optional<TRegexPredicate> HasAppName;
+    std::optional<TString> HasAppName;
+    std::optional<TRegexPredicate> HasFullScan;
+    std::optional<TRegexPredicate> HasPath;
     std::optional<EClassifierAction> Action;
 };
 

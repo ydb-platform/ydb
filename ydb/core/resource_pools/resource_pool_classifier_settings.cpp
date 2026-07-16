@@ -30,7 +30,7 @@ void TClassifierSettings::TParser::operator()(std::optional<TRegexPredicate>* se
     if (Value.empty()) {
         setting->reset();
     } else {
-        *setting = TRegexPredicate::Compile(Value);
+        *setting = TRegexPredicate::FromGlob(Value);
     }
 }
 
@@ -82,6 +82,8 @@ std::unordered_map<TString, TClassifierSettings::TProperty> TClassifierSettings:
         {"resource_pool", &ResourcePool},
         {"member_name", &MemberName},
         {"has_app_name", &HasAppName},
+        {"has_full_scan", &HasFullScan},
+        {"has_path", &HasPath},
         {"action", &Action}
     };
     return properties;

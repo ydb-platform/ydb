@@ -7,6 +7,21 @@
 
 namespace NKikimr::NKqp {
 
+namespace {
+void ExecuteAlter(TKikimrRunner& kikimr, const TString& alterQuery) {
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+    AFL_VERIFY(alterResult.GetStatus() == NYdb::EStatus::SUCCESS)("error", alterResult.GetIssues().ToString());
+}
+
+// Internal modifications (e.g. compaction/eviction results) are committed at GetOutdatedStep()+1 (LastPlannedStep+1),
+// so that no active scan can see them. To make the latest internal modification visible to the next test scans/reads,
+// we move the plan step forward by issuing a benign, non-critical schema change.
+void AdvancePlanStep(TKikimrRunner& kikimr) {
+    ExecuteAlter(kikimr, "ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`false`);");
+}
+}   // namespace
+
 TConclusionStatus TRestartTabletsCommand::DoExecute(TKikimrRunner& kikimr) {
     auto csController = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
     for (auto&& i : csController->GetShardActualIds()) {
@@ -63,7 +78,7 @@ TConclusionStatus TStopCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
+TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& kikimr) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
     AFL_VERIFY(controller);
     AFL_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::Compaction));
@@ -86,6 +101,9 @@ TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     AFL_VERIFY(compactions < controller->GetCompactionFinishedCounter().Val());
 
     controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    // Make the just-compacted portions visible to the next test scans/reads.
+    AdvancePlanStep(kikimr);
     return TConclusionStatus::Success();
 }
 

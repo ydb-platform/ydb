@@ -32,6 +32,15 @@ static void ExecQuery(TKikimrRunner& kikimr, bool useQueryService, const TString
     }
 }
 
+// Internal modifications (e.g. actualization/compaction results) are committed at GetOutdatedStep()+1
+// (LastPlannedStep+1), so that no active scan can see them. To make the latest internal modification visible
+// to the following scans/reads, we move the plan step forward by issuing a benign, non-critical schema change.
+static void AdvancePlanStep(TKikimrRunner& kikimr, bool useQueryService, const TString& objectPath = "/Root/olapStore", const TString& objectType = "TABLESTORE") {
+    ExecQuery(kikimr, useQueryService,
+        TStringBuilder() << "ALTER OBJECT `" << objectPath << "` (TYPE " << objectType
+                         << ") SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`false`);");
+}
+
 static void ExecQueryExpectErrorContains(TKikimrRunner& kikimr, bool useQueryService, const TString& query, TStringBuf needle) {
     if (useQueryService) {
         auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
@@ -153,6 +162,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         ExecQuery(kikimr, UseQueryService, "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
         csController->WaitActualization(TDuration::Seconds(10));
+        // Make the actualized portions (with index data) visible to the following scan.
+        AdvancePlanStep(kikimr, UseQueryService);
         {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(
@@ -1591,6 +1602,8 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
         csController->WaitActualization(TDuration::Seconds(10));
+        // Make the actualized portions (with index data) visible to the following scan.
+        AdvancePlanStep(kikimr, UseQueryService);
         {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(

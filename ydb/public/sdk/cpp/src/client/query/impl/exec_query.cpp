@@ -267,6 +267,10 @@ private:
         for (const auto& row : inRsProto.rows()) {
             *resultSet.mutable_rows()->Add() = row;
         }
+
+        if (inRsProto.truncated()) {
+            resultSet.set_truncated(true);
+        }
     }
 
     void CollectArrowBytes(Ydb::ResultSet& resultSet, Ydb::ResultSet& mutableInRsProto, uint64_t index) {

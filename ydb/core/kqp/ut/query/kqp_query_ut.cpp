@@ -1506,7 +1506,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         constexpr ui32 rowsLimit = 5;
         auto settings = NYdb::NQuery::TExecuteQuerySettings()
-            .OutputChunkMaxSize(100)
+            .OutputChunkMaxSize(40)
             .RowsLimit(rowsLimit);
 
         auto it = db.StreamExecuteQuery(Q_(R"(

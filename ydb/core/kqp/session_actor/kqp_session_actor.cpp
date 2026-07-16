@@ -348,7 +348,9 @@ public:
             ev, QueryId, Settings.Database, Settings.ApplicationName, Settings.Cluster, Settings.DbCounters, Settings.LongSession,
             Settings.TableService, Settings.QueryService, SessionId, AppData()->MonotonicTimeProvider->Now(), Settings.MutableExecuterConfig->RuntimeParameterSizeLimit.load());
         if (auto rowsLimit = QueryState->GetRowsLimit()) {
-            FillSettings.RowsLimitPerWrite = *rowsLimit;
+            // RowsLimitPerWrite is incremented by one before Take(n+1) in the result provider,
+            // so the DQ executer must be allowed to stream one extra row for truncation detection.
+            FillSettings.RowsLimitPerWrite = *rowsLimit + 1;
         } else {
             FillSettings.RowsLimitPerWrite = Config->_ResultRowsLimit.Get();
         }

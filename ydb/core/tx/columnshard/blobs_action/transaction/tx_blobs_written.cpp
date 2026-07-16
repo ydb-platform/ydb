@@ -16,10 +16,19 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
     TInstant startTransactionTime = TInstant::Now();
     TMemoryProfileGuard mpg("TTxBlobsWritingFinished::Execute");
     txc.DB.NoMoreReadsForTx();
+<<<<<<< HEAD
     CommitSnapshot = Self->GetCurrentSnapshotForInternalModification();
     NActors::TLogContextGuard logGuard =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "execute");
     ACFL_DEBUG("event", "start_execute");
+=======
+    CommitSnapshot = Self->GetSnapshotForNoTxWrites();
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS,
+        {"tabletId", Self->TabletID()},
+        {"txState", "execute"});
+    YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+        {"event", "start_execute"});
+>>>>>>> 9fe03f9ab63 (Fix everything in CS part 1 (#46175))
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
     const auto minReadSnapshot = Self->GetMinSnapshotForNewReads();
 

@@ -185,7 +185,7 @@ NOlap::TSnapshot TColumnShard::GetMaxReadVersion() const {
         // the same snapshot is used by bulk upsert and aborts
         // aborts are fine, but be careful with bulk upsert,
         // it must correctly break conflicting serializable txs
-        return GetCurrentSnapshotForInternalModification();
+        return GetOutdatedSnapshot();
     }
 }
 

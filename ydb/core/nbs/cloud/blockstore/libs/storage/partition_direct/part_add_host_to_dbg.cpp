@@ -277,7 +277,7 @@ void TPartitionActor::HandleAddHostToDBG(
 
     const auto* msg = ev->Get();
     const size_t dbgId = msg->DirectBlockGroupId;
-    THostIndex newHostIndex = msg->DirectBlockGroupId;
+    THostIndex newHostIndex = msg->NewHostIndex;
 
     LOG_INFO(
         ctx,

@@ -622,7 +622,7 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr reque
     if (expectedCookies.empty()) {
         ProcessRequests(ctx);
     } else {
-        YDB_LOG_WARN("Still in accepting after receive TEvPartitionWriter::TEvWriteAccepted cause cookies are",
+        YDB_LOG_WARN("Still in accepting after receive TEvPartitionWriter::TEvWriteAccepted cause cookies are expected",
             {"logPrefix", LogPrefix()},
             {"expected", JoinSeq(", ", expectedCookies)});
     }
@@ -637,7 +637,7 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr request,
         auto sender = request->Sender;
 
         if (WriterDied(sender, EKafkaErrors::UNKNOWN_SERVER_ERROR, request->Get()->GetError().Reason)) {
-            YDB_LOG_DEBUG("Produce actor: Received TEvPartitionWriter::TEvInitResult for with",
+            YDB_LOG_DEBUG("Produce actor: Received TEvPartitionWriter::TEvInitResult for with error",
                 {"logPrefix", LogPrefix()},
                 {"sender", sender},
                 {"error", request->Get()->GetError().Reason});

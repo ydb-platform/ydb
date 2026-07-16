@@ -18,15 +18,15 @@ public:
         , Join(join) {
     }
 
-    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin) override;
+    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) override;
 
 private:
-    TExprNode::TPtr BuildPhysicalJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoins);
+    TExprNode::TPtr BuildPhysicalJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoins, const TTypeAnnotationContext& typesCtx);
     TExprNode::TPtr BuildCrossJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput);
     void PrepareJoinKeys(TVector<TString>& leftJoinKeys, TVector<TString>& rightJoinKeys, TModifyKeysList& remapLeft, TModifyKeysList& remapRight,
                          THashMap<TString, TString>& leftColumnRemap, THashMap<TString, TString>& rightColumnRemap, TVector<TString>& leftJoinKeyRenames,
                          TVector<TString>& rightJoinKeyRenames, const TStructExprType* leftInputType, const TStructExprType* rightInputType, const bool outer,
-                         const EJoinSide joinSide);
+                         const EJoinSide joinSide, const TTypeAnnotationContext& typesCtx);
     TExprNode::TPtr PrepareJoinSide(TExprNode::TPtr input, const TVector<TInfoUnit>& colNames, TVector<TString>& joinKeys, const TModifyKeysList& remap,
                                     const bool filterNulls);
     TExprNode::TPtr SqueezeJoinInputToDict(TExprNode::TPtr input, const ui32 width, const TVector<ui32>& joinKeys, const bool withPayloads);

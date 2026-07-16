@@ -172,7 +172,7 @@ void MyFunction() {
     }
     ...
     YDB_LOG_NOTICE("MyFunction successed",
-        context);
+        {"details", context});
 }
 ```
 В этом примере к сообщению с текстом `MyFunction successed` будет прикреплены параметр `details.path=100`.

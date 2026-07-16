@@ -448,12 +448,14 @@ public:
             }
         }
 
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+        const TPathId pathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, pathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        dstPath.MaterializeLeaf(owner, pathId);
+        result->SetPathId(pathId.LocalPathId);
 
         context.SS->TabletCounters->Simple()[COUNTER_OLAP_STORE_COUNT].Add(1);
 
-        TPathId pathId = dstPath.Base()->PathId;
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateOlapStore, pathId);
 
         ApplySharding(OperationId.GetTxId(), pathId, storeInfo, channelsBindings, txState, context.SS);

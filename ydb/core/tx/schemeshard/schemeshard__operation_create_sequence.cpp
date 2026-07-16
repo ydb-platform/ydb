@@ -499,11 +499,13 @@ public:
             }
         }
 
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath->PathId.LocalPathId);
+        const TPathId pathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, pathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        dstPath.MaterializeLeaf(owner, pathId);
+        result->SetPathId(pathId.LocalPathId);
         context.SS->TabletCounters->Simple()[COUNTER_SEQUENCE_COUNT].Add(1);
 
-        TPathId pathId = dstPath->PathId;
         dstPath->CreateTxId = OperationId.GetTxId();
         dstPath->LastTxId = OperationId.GetTxId();
         dstPath->PathState = TPathElement::EPathState::EPathStateCreate;

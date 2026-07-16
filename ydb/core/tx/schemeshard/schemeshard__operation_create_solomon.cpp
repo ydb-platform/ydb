@@ -346,8 +346,11 @@ public:
             }
         }
 
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+        const TPathId pathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, pathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        dstPath.MaterializeLeaf(owner, pathId);
+        result->SetPathId(pathId.LocalPathId);
 
         TPathElement::TPtr newSolomon = dstPath.Base();
         newSolomon->CreateTxId = OperationId.GetTxId();

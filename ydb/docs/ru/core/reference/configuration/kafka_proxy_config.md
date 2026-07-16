@@ -8,6 +8,7 @@
 || Параметр | Тип | Значение по умолчанию | Описание ||
 || `enable_kafka_proxy` | bool | `false` | Включает или отключает Kafka Proxy. ||
 || `listening_port` | int32 | `9092` | Порт, на котором будет доступен Kafka API. ||
+|| `listening_address` | string | `[::]` | Сетевой адрес, на котором Kafka Proxy принимает входящие соединения. Значение `[::]` — все интерфейсы (dual-stack), `127.0.0.1` или `[::1]` — только localhost. ||
 || `transaction_timeout_ms` | uint32 | `300000` (5 минут) | Максимальный таймаут для Kafka транзакций, после которого транзакция будет отменена. ||
 || `auto_create_topics_enable` | bool | `false` | Включает автоматическое создание топиков при обращении к ним. Аналог [такой же опции](https://kafka.apache.org/documentation/#brokerconfigs_auto.create.topics.enable) в Apache Kafka. ||
 || `auto_create_consumers_enable` | bool | `true` | Включает автоматическое заведение консьюмеров при обращении к ним. ||
@@ -26,6 +27,7 @@
 kafka_proxy_config:
   enable_kafka_proxy: true
   listening_port: 9092
+  listening_address: "[::]"
   transaction_timeout_ms: 300000 # 5 минут
   auto_create_topics_enable: true
   auto_create_consumers_enable: true

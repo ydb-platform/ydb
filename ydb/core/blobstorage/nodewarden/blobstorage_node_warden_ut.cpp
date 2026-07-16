@@ -1448,7 +1448,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             auto* group = serviceSet->AddGroups();
             FillGroup(group, VDiskId.GroupGeneration);
 
-            FillVDisk(serviceSet->AddVDisks());
+            FillDDisk(serviceSet->AddVDisks());
 
             NodeWardenId = Runtime.Register(CreateBSNodeWarden(nodeWardenConfig.Release()), NodeId);
             Runtime.RegisterService(MakeBlobStorageNodeWardenID(NodeId), NodeWardenId);
@@ -1479,7 +1479,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             location->SetPDiskGuid(12345);
         }
 
-        void FillVDisk(NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk* vdisk) const {
+        void FillDDisk(NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk* vdisk) const {
             VDiskIDFromVDiskID(VDiskId, vdisk->MutableVDiskID());
             FillLocation(vdisk->MutableVDiskLocation());
             vdisk->SetStoragePoolName("ddisk-pool");
@@ -1502,18 +1502,18 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             UNIT_ASSERT_C(predicate(), description);
         }
 
-        void DeleteVDisk() {
+        void DeleteDDisk() {
             UNIT_ASSERT(Runtime.WrapInActorContext(NodeWardenId, [&](IActor* actor) {
                 NKikimrBlobStorage::TNodeWardenServiceSet serviceSet;
                 auto* vdisk = serviceSet.AddVDisks();
-                FillVDisk(vdisk);
+                FillDDisk(vdisk);
                 vdisk->SetEntityStatus(NKikimrBlobStorage::DESTROY);
                 dynamic_cast<NStorage::TNodeWarden*>(actor)->ApplyServiceSet(
                     serviceSet, true, false, false, "test");
             }));
         }
 
-        void RestartVDisk() {
+        void RestartDDisk() {
             Runtime.Send(new IEventHandle(NodeWardenId, {}, new TEvBlobStorage::TEvAskRestartVDisk(PDiskId, VDiskId)),
                 NodeId);
         }
@@ -1538,7 +1538,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TDDiskLifecycleTestSetup setup;
         const TActorId actorId = setup.LookupDDiskActor();
 
-        setup.DeleteVDisk();
+        setup.DeleteDDisk();
         setup.DispatchUntil([&] { return !setup.IsActorAlive(actorId); },
             "DDisk actor must stop after its VDisk is deleted");
     }
@@ -1547,7 +1547,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TDDiskLifecycleTestSetup setup;
         const TActorId previousActorId = setup.LookupDDiskActor();
 
-        setup.RestartVDisk();
+        setup.RestartDDisk();
         setup.DispatchUntil([&] {
             const TActorId currentActorId = setup.LookupDDiskActor();
             return currentActorId && currentActorId != previousActorId;
@@ -1561,8 +1561,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TDDiskLifecycleTestSetup setup;
         const TActorId previousActorId = setup.LookupDDiskActor();
 
-        setup.RestartVDisk();
-        setup.RestartVDisk();
+        setup.RestartDDisk();
+        setup.RestartDDisk();
         setup.DispatchUntil([&] {
             const TActorId currentActorId = setup.LookupDDiskActor();
             return currentActorId && currentActorId != previousActorId;

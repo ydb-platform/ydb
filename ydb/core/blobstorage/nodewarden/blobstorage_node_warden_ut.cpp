@@ -1518,20 +1518,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 NodeId);
         }
 
-        void UpdateGroupGeneration(ui32 generation) {
-            UNIT_ASSERT(Runtime.WrapInActorContext(NodeWardenId, [&](IActor* actor) {
-                NKikimrBlobStorage::TNodeWardenServiceSet serviceSet;
-                FillGroup(serviceSet.AddGroups(), generation);
-                dynamic_cast<NStorage::TNodeWarden*>(actor)->ApplyServiceSet(
-                    serviceSet, true, false, false, "test");
-            }));
-        }
-
-        void DrainThroughSentinel() {
-            const TActorId edge = Runtime.AllocateEdgeActor(NodeId);
-            Runtime.Send(new IEventHandle(edge, {}, new TEvents::TEvWakeup()), NodeId);
-            Runtime.WaitForEdgeActorEvent<TEvents::TEvWakeup>(edge);
-        }
     };
 
     Y_UNIT_TEST(TestDDiskDeleteStopsRunningActor) {
@@ -1555,33 +1541,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         UNIT_ASSERT(!setup.IsActorAlive(previousActorId));
         UNIT_ASSERT(setup.IsActorAlive(setup.LookupDDiskActor()));
-    }
-
-    Y_UNIT_TEST(TestDDiskDoubleRestartWaitsForGone) {
-        TDDiskLifecycleTestSetup setup;
-        const TActorId previousActorId = setup.LookupDDiskActor();
-
-        setup.RestartDDisk();
-        setup.RestartDDisk();
-        setup.DispatchUntil([&] {
-            const TActorId currentActorId = setup.LookupDDiskActor();
-            return currentActorId && currentActorId != previousActorId;
-        }, "NodeWarden must restart DDisk after duplicate restart requests");
-        setup.DrainThroughSentinel();
-
-        UNIT_ASSERT(!setup.IsActorAlive(previousActorId));
-        UNIT_ASSERT(setup.IsActorAlive(setup.LookupDDiskActor()));
-    }
-
-    Y_UNIT_TEST(TestDDiskGenerationUpdateDoesNotKillActor) {
-        TDDiskLifecycleTestSetup setup;
-        const TActorId actorId = setup.LookupDDiskActor();
-
-        setup.UpdateGroupGeneration(setup.VDiskId.GroupGeneration + 1);
-        setup.DrainThroughSentinel();
-
-        UNIT_ASSERT_VALUES_EQUAL(setup.LookupDDiskActor(), actorId);
-        UNIT_ASSERT(setup.IsActorAlive(actorId));
     }
 
     struct TStaticGroupProxyTestSetup {

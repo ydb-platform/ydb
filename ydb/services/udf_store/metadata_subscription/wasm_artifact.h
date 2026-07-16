@@ -19,8 +19,10 @@ public:
     static inline const TString SourceMd5ColName = "source_md5";
     static inline const TString VersionColName = "version";
     static inline const TString FormatColName = "format";
-    static inline const TString WasmDataColName = "wasm_data";
-    static inline const TString ObjectCodeColName = "object_code";
+    static inline const TString WasmDataSizeColName = "wasm_data_size";
+    static inline const TString WasmDataChunkCountColName = "wasm_data_chunk_count";
+    static inline const TString ObjectCodeSizeColName = "object_code_size";
+    static inline const TString ObjectCodeChunkCountColName = "object_code_chunk_count";
     static inline const TString CompiledAtColName = "compiled_at";
 
     YDB_ACCESSOR_DEF(TString, Id);
@@ -28,8 +30,10 @@ public:
     YDB_ACCESSOR_DEF(TString, SourceMd5);
     YDB_ACCESSOR_DEF(ui64, Version);
     YDB_ACCESSOR_DEF(TString, Format);
-    YDB_ACCESSOR_DEF(TString, WasmData);
-    YDB_ACCESSOR_DEF(TString, ObjectCode);
+    YDB_ACCESSOR_DEF(ui64, WasmDataSize);
+    YDB_ACCESSOR_DEF(ui64, WasmDataChunkCount);
+    YDB_ACCESSOR_DEF(ui64, ObjectCodeSize);
+    YDB_ACCESSOR_DEF(ui64, ObjectCodeChunkCount);
     YDB_ACCESSOR_DEF(ui64, CompiledAt);
 
 public:

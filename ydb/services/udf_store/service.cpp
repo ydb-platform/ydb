@@ -209,8 +209,11 @@ void TUdfStoreService::UnloadWasmUdfsDependingOnLibrary(const TString& libraryNa
 
 void TUdfStoreService::Bootstrap() {
     WasmSourceTablePath = GetWasmSourceTablePath();
+    WasmSourceChunksTablePath = GetWasmSourceChunksTablePath();
     LibrarySourceTablePath = GetLibrarySourceTablePath();
+    LibrarySourceChunksTablePath = GetLibrarySourceChunksTablePath();
     ArtifactTablePath = GetArtifactTablePath(LocalCpuSpec);
+    ArtifactChunksTablePath = GetArtifactChunksTablePath(LocalCpuSpec);
     MetaTablePath = TUdfMeta::GetBehaviour()->GetStorageTablePath();
 
     Become(&TUdfStoreService::StateMain);
@@ -218,7 +221,10 @@ void TUdfStoreService::Bootstrap() {
 }
 
 void TUdfStoreService::EnsureArtifactTable() {
-    Register(new TWasmArtifactTableInitializer(SelfId(), ArtifactTablePath));
+    Register(new TWasmArtifactTableInitializer(
+        SelfId(),
+        ArtifactTablePath,
+        ArtifactChunksTablePath));
 }
 
 void TUdfStoreService::Handle(TEvStoreInitialized::TPtr& ev) {
@@ -454,7 +460,9 @@ void TUdfStoreService::FetchNextLibraryCompile() {
         pending.Name,
         LocalCpuSpec,
         LibrarySourceTablePath,
-        ArtifactTablePath));
+        LibrarySourceChunksTablePath,
+        ArtifactTablePath,
+        ArtifactChunksTablePath));
 }
 
 void TUdfStoreService::FetchNextWasmCompile() {
@@ -472,7 +480,9 @@ void TUdfStoreService::FetchNextWasmCompile() {
         pending.Manifest,
         LocalCpuSpec,
         WasmSourceTablePath,
+        WasmSourceChunksTablePath,
         ArtifactTablePath,
+        ArtifactChunksTablePath,
         MetaTablePath));
 }
 
@@ -492,6 +502,7 @@ void TUdfStoreService::FetchNextWasmLoad() {
         pending.Md5,
         pending.Manifest,
         ArtifactTablePath,
+        ArtifactChunksTablePath,
         FunctionRegistry));
 }
 

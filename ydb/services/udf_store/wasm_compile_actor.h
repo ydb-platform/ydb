@@ -16,8 +16,11 @@ private:
 
     enum class EStep {
         ReadWasmSource,
+        ReadWasmChunks,
         ReadLibraryArtifact,
+        DeleteArtifactChunks,
         UpsertModuleArtifact,
+        WriteArtifactChunk,
         UpdateMetaReady,
         UpdateMetaFailed,
     };
@@ -27,7 +30,9 @@ private:
     TString Manifest_;
     TString CpuSpec_;
     TString WasmSourceTablePath_;
+    TString WasmSourceChunksTablePath_;
     TString ArtifactTablePath_;
+    TString ArtifactChunksTablePath_;
     TString MetaTablePath_;
 
     EStep Step_ = EStep::ReadWasmSource;
@@ -35,7 +40,10 @@ private:
     NWasm::TWasmManifest ParsedManifest_;
     size_t NextLibraryIndex_ = 0;
     TString PendingLibraryName_;
-    TString ModuleObjectCode_;
+    TString ModuleKind_;
+    NTableQuery::TWasmArtifactRow ArtifactRow_;
+    TVector<NTableQuery::TPendingChunkWrite> PendingChunkWrites_;
+    size_t NextChunkWriteIndex_ = 0;
     TString ErrorMessage_;
 
     void ExecuteQuery(const TString& yql, bool readOnly);
@@ -48,6 +56,9 @@ private:
     void StartNextLibrary();
     void CompileUserModule();
     void ValidateExports();
+    void StartWriteChunks();
+    void WriteNextChunk();
+    void FailAndPersist(const TString& message);
 
 public:
     TWasmCompileActor(
@@ -56,14 +67,18 @@ public:
         const TString& manifest,
         const TString& cpuSpec,
         const TString& wasmSourceTablePath,
+        const TString& wasmSourceChunksTablePath,
         const TString& artifactTablePath,
+        const TString& artifactChunksTablePath,
         const TString& metaTablePath)
         : ReplyTo_(replyTo)
         , Md5_(md5)
         , Manifest_(manifest)
         , CpuSpec_(cpuSpec)
         , WasmSourceTablePath_(wasmSourceTablePath)
+        , WasmSourceChunksTablePath_(wasmSourceChunksTablePath)
         , ArtifactTablePath_(artifactTablePath)
+        , ArtifactChunksTablePath_(artifactChunksTablePath)
         , MetaTablePath_(metaTablePath)
     {}
 

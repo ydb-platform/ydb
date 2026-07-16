@@ -34,3 +34,8 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    abi
+    sdk
+)

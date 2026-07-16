@@ -11,6 +11,7 @@ SRCS(
     wasm_compile_actor.cpp
     wasm_library_compile_actor.cpp
     wasm_artifact_load_actor.cpp
+    blob_chunks.cpp
 )
 
 PEERDIR(

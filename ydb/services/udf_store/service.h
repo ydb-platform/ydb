@@ -41,8 +41,11 @@ private:
     TString WasmCpuSpecOverride;
     TString LocalCpuSpec;
     TString WasmSourceTablePath;
+    TString WasmSourceChunksTablePath;
     TString LibrarySourceTablePath;
+    TString LibrarySourceChunksTablePath;
     TString ArtifactTablePath;
+    TString ArtifactChunksTablePath;
     TString MetaTablePath;
     std::shared_ptr<TSnapshot> CurrentSnapshot;
 

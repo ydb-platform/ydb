@@ -86,6 +86,7 @@ ydb/core/kqp/executer_actor/ut unittest.sole chunk
 ydb/core/kqp/rm_service/ut KqpRm.ConcurrentChannels
 ydb/core/kqp/rm_service/ut KqpRm.ConcurrentTasks
 ydb/core/kqp/ut/arrow unittest.[*/*] chunk
+ydb/core/kqp/ut/indexes/fulltext unittest.[*/*] chunk
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery-EnableIndexStreamWrite
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
@@ -165,6 +166,8 @@ ydb/core/transfer/ut/transfer_metrics unittest.sole chunk
 ydb/core/tx/columnshard/backup/iscan/ut IScan.MultiExport
 ydb/core/tx/columnshard/backup/iscan/ut IScan.ShouldRejectParquetExportWithEncryption
 ydb/core/tx/columnshard/backup/iscan/ut IScan.UploaderExport
+ydb/core/tx/schemeshard/ut_set_column_constraint SetNotNullTest.CancelAtLockingStage
+ydb/core/tx/schemeshard/ut_set_column_constraint unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.RemoveStoragePoolBeforeDroppingTablet
 ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_prestable-26-3_to_stable-26-2-1-row]
 ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_stable-26-2-1_to_prestable-26-3-row]
@@ -457,6 +460,7 @@ ydb/tests/functional/replication Replication.TopicAutopartitioning
 ydb/tests/functional/replication unittest.sole chunk
 ydb/tests/functional/serverless test_serverless.py.test_discovery_exclusive_nodes[enable_alter_database_create_hive_first--false-enable_pool_encryption--false]
 ydb/tests/functional/serverless test_serverless.py.test_discovery_exclusive_nodes[enable_alter_database_create_hive_first--false-enable_pool_encryption--true]
+ydb/tests/functional/serverless test_serverless.py.test_discovery_exclusive_nodes[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
 ydb/tests/functional/serverless test_serverless.py.test_discovery_exclusive_nodes[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
 ydb/tests/functional/statistics py3test.[test_analyze.py */*] chunk
 ydb/tests/functional/statistics test_analyze.py.test_basic

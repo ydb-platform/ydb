@@ -122,7 +122,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                 }
 
                 YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
-                    {"#_ss.Str", ss.Str()});
+                    {"debugString", ss.Str()});
             }
         }
     }

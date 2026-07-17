@@ -138,11 +138,11 @@ public:
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
             YDB_LOG_NOTICE("Done",
                 {"debug", Debug()},
-                {"#_ToShortDebugString(Response->Record)", ToShortDebugString(Response->Record)});
+                {"responseRecord", ToShortDebugString(Response->Record)});
         } else {
             YDB_LOG_ERROR("Failed",
                 {"debug", Debug()},
-                {"#_ToShortDebugString(Response->Record)", ToShortDebugString(Response->Record)});
+                {"responseRecord", ToShortDebugString(Response->Record)});
         }
         Send(ResponseActorId, Response.Release());
 
@@ -298,7 +298,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, c
 
         YDB_LOG_NOTICE("Starting TRecomputeKMeansScan row version",
             {"tabletId", TabletID()},
-            {"#_ToShortDebugString(request)", ToShortDebugString(request)},
+            {"requestRecord", ToShortDebugString(request)},
             {"rowVersion", rowVersion});
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -317,8 +317,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, c
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
                 YDB_LOG_ERROR("Rejecting TRecomputeKMeansScan bad request with response",
                     {"tabletId", TabletID()},
-                    {"#_ToShortDebugString(request)", ToShortDebugString(request)},
-                    {"#_ToShortDebugString(response->Record)", ToShortDebugString(response->Record)});
+                    {"requestRecord", ToShortDebugString(request)},
+                    {"responseRecord", ToShortDebugString(response->Record)});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

@@ -58,9 +58,9 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
 
     if (! IsAccepted) {
         YDB_LOG_ERROR_CTX(ctx, "Ignore old txIds for step outdated step at tablet",
-            {"#_num_0", JoinStrings(txIds.begin(), txIds.end(), ", ")},
+            {"txIdList", JoinStrings(txIds.begin(), txIds.end(), ", ")},
             {"step", step},
-            {"#_Self->Pipeline.OutdatedCleanupStep", Self->Pipeline.OutdatedCleanupStep()},
+            {"outdatedCleanupStep", Self->Pipeline.OutdatedCleanupStep()},
             {"tabletId", Self->TabletID()});
         Self->IncCounter(COUNTER_PLAN_STEP_IGNORED);
         return true;
@@ -71,7 +71,7 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
             {"txId", txId},
             {"step", step},
             {"tabletId", Self->TabletID()},
-            {"#_Ev->Get()->Record", Ev->Get()->Record});
+            {"eventRecord", Ev->Get()->Record});
     }
 
     // We already know that max observed step is at least this step, avoid
@@ -94,7 +94,7 @@ void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
         THolder<TEvTxProcessing::TEvPlanStepAck> ack =
             MakeHolder<TEvTxProcessing::TEvPlanStepAck>(Self->TabletID(), step, kv.second.begin(), kv.second.end());
         YDB_LOG_DEBUG_CTX(ctx, "Sending",
-            {"#_ack->ToString", ack->ToString()});
+            {"ack", ack->ToString()});
 
         ctx.Send(kv.first, ack.Release()); // Ack to Tx coordinator
     }
@@ -102,7 +102,7 @@ void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
     THolder<TEvTxProcessing::TEvPlanStepAccepted> accepted =
         MakeHolder<TEvTxProcessing::TEvPlanStepAccepted>(Self->TabletID(), step);
     YDB_LOG_DEBUG_CTX(ctx, "Sending",
-        {"#_accepted->ToString", accepted->ToString()});
+        {"accepted", accepted->ToString()});
 
     ctx.Send(Ev->Sender, accepted.Release()); // Reply to the mediator
 

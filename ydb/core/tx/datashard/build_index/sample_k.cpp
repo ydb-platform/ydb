@@ -233,11 +233,11 @@ public:
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
             YDB_LOG_NOTICE("Done",
                 {"debug", Debug()},
-                {"#_ToShortDebugString(Response->Record)", ToShortDebugString(Response->Record)});
+                {"responseRecord", ToShortDebugString(Response->Record)});
         } else {
             YDB_LOG_ERROR("Failed",
                 {"debug", Debug()},
-                {"#_ToShortDebugString(Response->Record)", ToShortDebugString(Response->Record)});
+                {"responseRecord", ToShortDebugString(Response->Record)});
         }
         Send(ResponseActorId, Response.Release());
 
@@ -346,7 +346,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
                 YDB_LOG_ERROR("Rejecting TSampleKScan bad request with response",
                     {"tabletId", TabletID()},
                     {"request", request.ShortDebugString()},
-                    {"#_ToShortDebugString(response->Record)", ToShortDebugString(response->Record)});
+                    {"responseRecord", ToShortDebugString(response->Record)});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

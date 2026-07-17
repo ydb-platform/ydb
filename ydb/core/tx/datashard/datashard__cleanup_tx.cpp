@@ -17,7 +17,7 @@ public:
         if (!Self->IsStateActive()) {
             YDB_LOG_INFO_CTX(ctx, "Cleanup tx at non-ready tablet state",
                 {"tabletId", Self->TabletID()},
-                {"#_Self->State", Self->State});
+                {"state", Self->State});
             Self->CleanupQueue.Reset(ctx);
             return true;
         }
@@ -38,7 +38,7 @@ public:
                 }
                 YDB_LOG_INFO_CTX(ctx, "Cleaned up old txs at TxInFly",
                     {"tabletId", Self->TabletID()},
-                    {"#_Self->TxInFly", Self->TxInFly()});
+                    {"txInFly", Self->TxInFly()});
                 Self->IncCounter(COUNTER_TX_PROGRESS_CLEANUP);
                 Self->ExecuteCleanupTx(ctx);
                 return true;
@@ -111,7 +111,7 @@ public:
         if (!Self->IsStateActive()) {
             YDB_LOG_INFO_CTX(ctx, "Cleanup volatile tx at non-ready tablet state",
                 {"tabletId", Self->TabletID()},
-                {"#_Self->State", Self->State});
+                {"state", Self->State});
             return true;
         }
 
@@ -119,7 +119,7 @@ public:
             YDB_LOG_INFO_CTX(ctx, "Cleaned up volatile tx at TxInFly",
                 {"txId", TxId},
                 {"tabletId", Self->TabletID()},
-                {"#_Self->TxInFly", Self->TxInFly()});
+                {"txInFly", Self->TxInFly()});
             Self->IncCounter(COUNTER_TX_PROGRESS_CLEANUP);
 
             if (!Replies.empty()) {

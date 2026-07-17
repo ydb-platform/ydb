@@ -249,7 +249,7 @@ public:
             sent += records.size();
 
             YDB_LOG_DEBUG_CTX(ctx, "Send change records",
-                {"#_records.size", records.size()},
+                {"recordsCount", records.size()},
                 {"to", to},
                 {"tablet", Self->TabletID()});
             ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvRecords(std::move(records)));
@@ -263,7 +263,7 @@ public:
             forgotten += records.size();
 
             YDB_LOG_DEBUG_CTX(ctx, "Forget change records",
-                {"#_records.size", records.size()},
+                {"recordsCount", records.size()},
                 {"to", to},
                 {"tablet", Self->TabletID()});
             ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvForgetRecords(std::move(records)));

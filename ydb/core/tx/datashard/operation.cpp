@@ -65,7 +65,7 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
     if (it != CoverageBuilders().end()) {
         if (it->second->AddResult(btList)) {
             YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Filled readset",
-                {"#_*this", *this},
+                {"operation", *this},
                 {"from", rsKey.From},
                 {"to", rsKey.To},
                 {"origin", rsKey.Origin});
@@ -77,7 +77,7 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
         }
     } else {
         YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Discarded readset",
-            {"#_*this", *this},
+            {"operation", *this},
             {"from", rsKey.From},
             {"to", rsKey.To},
             {"origin", rsKey.Origin});

@@ -90,7 +90,7 @@ TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at found next planned operation is executing on unit",
             {"tabletId", DataShard.TabletID()},
             {"operation", *op},
-            {"#_op->GetCurrentUnit", op->GetCurrentUnit()});
+            {"currentUnit", op->GetCurrentUnit()});
         return nullptr;
     }
 

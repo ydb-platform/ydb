@@ -415,7 +415,7 @@ class TCdcWorker
 
         YDB_LOG_INFO("Wait worker(s)",
             {"logPrefix", GetLogPrefix()},
-            {"#_Pending.size", Pending.size()});
+            {"pendingCount", Pending.size()});
 
         Workers = std::move(workers);
         Become(&TThis::StateWork);

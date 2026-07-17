@@ -22,7 +22,7 @@ public:
 
         YDB_LOG_DEBUG_CTX(ctx, "Got TEvSchemaChangedResult from SS",
             {"tabletId", Self->TabletID()},
-            {"#_dup_#_Self->TabletID", Self->TabletID()});
+            {"dupTabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
         Self->Pipeline.CompleteSchemaTx(db, TxId);

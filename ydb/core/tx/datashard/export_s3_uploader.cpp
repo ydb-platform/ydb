@@ -168,8 +168,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         YDB_LOG_NOTICE("[Export]",
             {"logPrefix", LogPrefix()},
             {"proxy", (cfg.proxyScheme == Aws::Http::Scheme::HTTPS ? "https://" : "http://")},
-            {"#_cfg.proxyHost", cfg.proxyHost},
-            {"#_cfg.proxyPort", cfg.proxyPort});
+            {"proxyHost", cfg.proxyHost},
+            {"proxyPort", cfg.proxyPort});
 
         Restart();
     }

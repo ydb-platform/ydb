@@ -257,9 +257,9 @@ void TValidatedWriteTxOperation::SetTxKeys(const TUserTable& tableInfo, ui64 tab
         Matrix.GetSubmatrix(rowIdx, rowIdx, 0, tableInfo.KeyColumnIds.size() - 1, keyCells);
 
         YDB_LOG_TRACE("Table write point",
-            {"#_tableInfo.Path", tableInfo.Path},
+            {"tablePath", tableInfo.Path},
             {"shard", tabletId},
-            {"#_DebugPrintPoint(tableInfo.KeyColumnTypes, keyCells, *AppData()->TypeRegistry)", DebugPrintPoint(tableInfo.KeyColumnTypes, keyCells, *AppData()->TypeRegistry)});
+            {"key", DebugPrintPoint(tableInfo.KeyColumnTypes, keyCells, *AppData()->TypeRegistry)});
 
         TTableRange tableRange(keyCells);
         keyValidator.AddWriteRange(TableId, tableRange, tableInfo.KeyColumnTypes, columnsWrites, isErase);
@@ -537,7 +537,7 @@ void TWriteOperation::DbStoreLocksAccessLog(NTable::TDatabase& txcDb)
     db.Table<Schema::TxArtifacts>().Key(GetTxId()).Update(NIceDb::TUpdate<Schema::TxArtifacts::Locks>(vecData));
 
     YDB_LOG_TRACE("Storing locks for",
-        {"#_vec.size", vec.size()},
+        {"vectorSize", vec.size()},
         {"txid", GetTxId()},
         {"tabletId", TabletId});
 }
@@ -617,7 +617,7 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, NTable::TDat
 
     YDB_LOG_DEBUG("Tx at restored its data",
         {"txId", GetTxId()},
-        {"#_self->TabletID", self->TabletID()});
+        {"tabletId", self->TabletID()});
 
     return ERestoreDataStatus::Ok;
 }

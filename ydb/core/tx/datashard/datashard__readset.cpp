@@ -97,9 +97,9 @@ namespace NKikimr::NDataShard {
         // Note that, active tx will send "delayed" ACK after tx complete
         if (Ack || NoDataReply) {
             YDB_LOG_DEBUG_CTX(ctx, "Send RS",
-                {"#_num_0", Ack && NoDataReply ? "Ack+Reply" : Ack ? "Ack" : "Reply"},
+                {"replyType", Ack && NoDataReply ? "Ack+Reply" : Ack ? "Ack" : "Reply"},
                 {"tabletId", Self->TabletID()},
-                {"#_Ev->Get()->ToString().data", Ev->Get()->ToString().data()});
+                {"eventString", Ev->Get()->ToString().data()});
 
             struct TSendState : public TThrRefBase {
                 TDataShard* Self;

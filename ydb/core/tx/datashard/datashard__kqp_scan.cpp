@@ -112,7 +112,7 @@ private:
             {"gen", ev->Get()->Generation},
             {"tablet", DatashardActorId},
             {"freeSpace", ev->Get()->FreeSpace},
-            {"#_ChunksLimiter.DebugString", ChunksLimiter.DebugString()});
+            {"chunksLimiter", ChunksLimiter.DebugString()});
 
         YQL_ENSURE(ev->Get()->Generation == Generation, "expected: " << Generation << ", got: " << ev->Get()->Generation);
 
@@ -319,7 +319,7 @@ private:
     EScan Exhausted() override {
         YDB_LOG_DEBUG("Range of exhausted: try next one. next",
             {"currentRange", CurrentRange},
-            {"#_TableRanges.size", TableRanges.size()},
+            {"tableRangesCount", TableRanges.size()},
             {"table", TablePath},
             {"range", DebugPrintRange(                 TableInfo->KeyColumnTypes, TableRanges[CurrentRange].ToTableRange(), *AppData()->TypeRegistry                 )},
             {"nextRange", ((CurrentRange + 1) >= TableRanges.size() ? "<none>" : DebugPrintRange(                 TableInfo->KeyColumnTypes, TableRanges[CurrentRange + 1].ToTableRange(), *AppData()->TypeRegistry                 ))});

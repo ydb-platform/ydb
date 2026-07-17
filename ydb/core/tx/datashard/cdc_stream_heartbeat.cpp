@@ -73,7 +73,7 @@ public:
 
     void Complete(const TActorContext&) override {
         YDB_LOG_INFO("[CdcStreamHeartbeat] Enqueue change record(s)",
-            {"#_ChangeRecords.size", ChangeRecords.size()},
+            {"changeRecordsCount", ChangeRecords.size()},
             {"tablet", Self->TabletID()});
         Self->EnqueueChangeRecords(std::move(ChangeRecords));
         Self->EmitHeartbeats();

@@ -134,10 +134,10 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
 
     YDB_LOG_DEBUG_CTX(ctx, "Propose scheme transaction at tablet txId ssId seqNo",
         {"tabletId", DataShard.TabletID()},
-        {"#_op->GetTxId", op->GetTxId()},
-        {"#_activeTx->GetSchemeShardId", activeTx->GetSchemeShardId()},
-        {"#_seqNo.Generation", seqNo.Generation},
-        {"#_seqNo.Round", seqNo.Round});
+        {"txId", op->GetTxId()},
+        {"schemeShardId", activeTx->GetSchemeShardId()},
+        {"generation", seqNo.Generation},
+        {"round", seqNo.Round});
 
     // Preserve new seqno to correctly filter out tx duplicates.
     DataShard.UpdateLastSchemeOpSeqNo(seqNo, txc);
@@ -224,7 +224,7 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
     op->SetMaxStep(Max<ui64>());
 
     YDB_LOG_DEBUG_CTX(ctx, "Prepared scheme transaction txId at tablet",
-        {"#_op->GetTxId", op->GetTxId()},
+        {"txId", op->GetTxId()},
         {"tabletId", DataShard.TabletID()});
 
     BuildResult(op)->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
@@ -266,8 +266,8 @@ bool TCheckSchemeTxUnit::HasDuplicate(TActiveTransaction *activeTx, const TStrin
     YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Ignoring duplicate at tablet txId currentTxId",
         {"kind", kind},
         {"tabletId", DataShard.TabletID()},
-        {"#_activeTx->GetTxId", activeTx->GetTxId()},
-        {"#_Pipeline.CurrentSchemaTxId", Pipeline.CurrentSchemaTxId()});
+        {"activeTxId", activeTx->GetTxId()},
+        {"currentSchemaTxId", Pipeline.CurrentSchemaTxId()});
     BuildResult(activeTx)->SetSchemeTxDuplicate(Pipeline.CurrentSchemaTxId() == activeTx->GetTxId());
 
     return true;
@@ -286,8 +286,8 @@ bool TCheckSchemeTxUnit::HasConflicts(TActiveTransaction *activeTx, const TStrin
             {"kind", kind},
             {"conflicting", conflicting},
             {"tabletId", DataShard.TabletID()},
-            {"#_activeTx->GetTxId", activeTx->GetTxId()},
-            {"#_Pipeline.CurrentSchemaTxId", Pipeline.CurrentSchemaTxId()});
+            {"activeTxId", activeTx->GetTxId()},
+            {"currentSchemaTxId", Pipeline.CurrentSchemaTxId()});
         BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
 
         return true;
@@ -305,8 +305,8 @@ bool TCheckSchemeTxUnit::HasPathId(TActiveTransaction *activeTx, const T &op, co
     YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Description has no PathId at tablet txId currentTxId",
         {"kind", kind},
         {"tabletId", DataShard.TabletID()},
-        {"#_activeTx->GetTxId", activeTx->GetTxId()},
-        {"#_Pipeline.CurrentSchemaTxId", Pipeline.CurrentSchemaTxId()});
+        {"activeTxId", activeTx->GetTxId()},
+        {"currentSchemaTxId", Pipeline.CurrentSchemaTxId()});
     BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
 
     return false;
@@ -409,7 +409,7 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
     default:
         YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Unknown scheme tx type detected at tablet txId txBody",
             {"tabletId", DataShard.TabletID()},
-            {"#_activeTx->GetTxId", activeTx->GetTxId()},
+            {"activeTxId", activeTx->GetTxId()},
             {"tx", tx.ShortDebugString()});
         BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
     }
@@ -479,8 +479,8 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
         if (alter.ColumnsSize() || alter.DropColumnsSize()) {
             YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Ignoring alter, combine freeze with other actions is forbiden, tablet txId currentTxId",
                 {"tabletId", DataShard.TabletID()},
-                {"#_activeTx->GetTxId", activeTx->GetTxId()},
-                {"#_Pipeline.CurrentSchemaTxId", Pipeline.CurrentSchemaTxId()});
+                {"activeTxId", activeTx->GetTxId()},
+                {"currentSchemaTxId", Pipeline.CurrentSchemaTxId()});
             BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST);
             return false;
         }
@@ -488,8 +488,8 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
         if (DataShard.IsFollower()) {
             YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Ignoring alter, attempt to freeze follower, tablet txId currentTxId",
                 {"tabletId", DataShard.TabletID()},
-                {"#_activeTx->GetTxId", activeTx->GetTxId()},
-                {"#_Pipeline.CurrentSchemaTxId", Pipeline.CurrentSchemaTxId()});
+                {"activeTxId", activeTx->GetTxId()},
+                {"currentSchemaTxId", Pipeline.CurrentSchemaTxId()});
             BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST);
             return false;
         }
@@ -692,7 +692,7 @@ bool TCheckSchemeTxUnit::CheckFinalizeBuildIndex(TActiveTransaction *activeTx) {
     if (DataShard.GetSnapshotManager().FindAvailable(snapshotKey) == nullptr) {
         YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "FinalizeBuildIndex description has unexisting snapshot key. Tablet txId pathId snapshotKey",
             {"tabletId", DataShard.TabletID()},
-            {"#_activeTx->GetTxId", activeTx->GetTxId()},
+            {"activeTxId", activeTx->GetTxId()},
             {"pathId", pathId},
             {"snapshotKey", snapshotKey});
         BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);

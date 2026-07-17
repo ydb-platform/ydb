@@ -145,9 +145,9 @@ public:
             YDB_LOG_DEBUG("Read columns scan result for table rows, bytes (event size",
                 {"tabletId", TabletId},
                 {"tableName", TableName},
-                {"#_]", Rows},
+                {"rows", Rows},
                 {"bytes", Bytes},
-                {"#_Result->Record.GetBlocks().size", Result->Record.GetBlocks().size()},
+                {"blocksCount", Result->Record.GetBlocks().size()},
                 {"shardFinished", ShardFinished});
         } else {
             YDB_LOG_NOTICE("Read columns scan failed for table",

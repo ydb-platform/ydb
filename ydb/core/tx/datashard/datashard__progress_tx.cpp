@@ -21,7 +21,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
         Self->IncCounter(COUNTER_TX_PROGRESS_SHARD_INACTIVE);
         YDB_LOG_INFO_CTX(ctx, "Progress tx at non-ready tablet state",
             {"tabletId", Self->TabletID()},
-            {"#_Self->State", Self->State});
+            {"state", Self->State});
         Y_ENSURE(!ActiveOp, "Unexpected ActiveOp at inactive shard " << Self->TabletID());
         Self->PlanQueue.Reset(ctx);
         return true;
@@ -49,7 +49,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
             Self->IncCounter(COUNTER_TX_PROGRESS_IDLE);
             YDB_LOG_INFO_CTX(ctx, "No tx to execute at TxInFly",
                 {"tabletId", Self->TabletID()},
-                {"#_Self->TxInFly", Self->TxInFly()});
+                {"txInFly", Self->TxInFly()});
             return true;
         }
 

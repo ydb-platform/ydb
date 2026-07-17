@@ -158,8 +158,8 @@ bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActor
         NIceDb::TNiceDb db(txc.DB);
         YDB_LOG_DEBUG_CTX(ctx, "DataShard persisting started state actor id in generation",
             {"tabletId", Self->TabletID()},
-            {"#_Self->InMemoryStateActorId", Self->InMemoryStateActorId},
-            {"#_Self->Generation", Self->Generation()});
+            {"inMemoryStateActorId", Self->InMemoryStateActorId},
+            {"generation", Self->Generation()});
         Self->PersistSys(db, Schema::Sys_InMemoryStateActorId, Self->InMemoryStateActorId);
         Self->PersistSys(db, Schema::Sys_InMemoryStateGeneration, Self->Generation());
     }
@@ -906,7 +906,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     if (FollowerState.LastSysUpdate < lastSysUpdate) {
         YDB_LOG_DEBUG_CTX(ctx, "Updating sys metadata on follower, tabletId prev current",
             {"tabletID", TabletID()},
-            {"#_FollowerState.LastSysUpdate", FollowerState.LastSysUpdate},
+            {"lastSysUpdate", FollowerState.LastSysUpdate},
             {"lastSysUpdate", lastSysUpdate});
 
         bool ready = true;
@@ -923,7 +923,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     if (FollowerState.LastSchemeUpdate < lastSchemeUpdate) {
         YDB_LOG_DEBUG_CTX(ctx, "Updating tables metadata on follower, tabletId prev current",
             {"tabletID", TabletID()},
-            {"#_FollowerState.LastSchemeUpdate", FollowerState.LastSchemeUpdate},
+            {"lastSchemeUpdate", FollowerState.LastSchemeUpdate},
             {"lastSchemeUpdate", lastSchemeUpdate});
 
         struct TRow {
@@ -994,7 +994,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     if (FollowerState.LastSnapshotsUpdate < lastSnapshotsUpdate) {
         YDB_LOG_DEBUG_CTX(ctx, "Updating snapshots metadata on follower, tabletId prev current",
             {"tabletID", TabletID()},
-            {"#_FollowerState.LastSnapshotsUpdate", FollowerState.LastSnapshotsUpdate},
+            {"lastSnapshotsUpdate", FollowerState.LastSnapshotsUpdate},
             {"lastSnapshotsUpdate", lastSnapshotsUpdate});
 
         NIceDb::TNiceDb db(txc.DB);

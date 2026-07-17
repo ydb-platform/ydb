@@ -243,8 +243,8 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
                                          GetMvccVersion()).Ready;
 
         YDB_LOG_TRACE("Run precharge on table columns",
-            {"#_tableInfo->Name", tableInfo->Name},
-            {"#_num_0", JoinSeq(", ", columnTags)},
+            {"tableName", tableInfo->Name},
+            {"columnTags", JoinSeq(", ", columnTags)},
             {"range", DebugPrintRange(key.KeyColumnTypes, key.Range, *AppData()->TypeRegistry)},
             {"itemsLimit", key.RangeLimits.ItemsLimit},
             {"bytesLimit", key.RangeLimits.BytesLimit},

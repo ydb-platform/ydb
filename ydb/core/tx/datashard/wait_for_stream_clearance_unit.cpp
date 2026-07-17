@@ -97,7 +97,7 @@ EExecutionStatus TWaitForStreamClearanceUnit::Execute(TOperation::TPtr op,
         op->SetProcessDisconnectsFlag();
 
         YDB_LOG_TRACE_CTX(ctx, "Requested stream clearance",
-            {"#_tx->GetStreamSink", tx->GetStreamSink()},
+            {"streamSink", tx->GetStreamSink()},
             {"operation", *op},
             {"tabletId", DataShard.TabletID()});
     }

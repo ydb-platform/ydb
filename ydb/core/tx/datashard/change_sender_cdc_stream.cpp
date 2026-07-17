@@ -69,7 +69,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         if (!result.IsSuccess()) {
             YDB_LOG_ERROR("Error",
                 {"logPrefix", GetLogPrefix()},
-                {"#_'Init'", result.GetError()});
+                {"initError", result.GetError()});
             return Leave();
         }
 
@@ -174,7 +174,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         if (!result.IsSuccess()) {
             YDB_LOG_ERROR("Error",
                 {"logPrefix", GetLogPrefix()},
-                {"#_'Write'", result.DumpError()});
+                {"writeError", result.DumpError()});
             return Leave();
         }
 

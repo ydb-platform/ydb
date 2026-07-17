@@ -53,9 +53,9 @@ EExecutionStatus TTruncateUnit::Execute(
     Y_ENSURE(version);
 
     YDB_LOG_TRACE_CTX(actorCtx, "TTruncateUnit::Execute. Changing SchemaVersion. TableId New SchemaVersion TxId",
-        {"#_pathId.LocalPathId", pathId.LocalPathId},
+        {"localPathId", pathId.LocalPathId},
         {"version", version},
-        {"#_op->GetTxId", op->GetTxId()});
+        {"txId", op->GetTxId()});
 
     auto tableId = pathId.LocalPathId;
     Y_ENSURE(DataShard.GetUserTables().contains(tableId));
@@ -65,7 +65,7 @@ EExecutionStatus TTruncateUnit::Execute(
         {"tabletId", DataShard.TabletID()},
         {"tableId", tableId},
         {"localTid", localTid},
-        {"#_op->GetTxId", op->GetTxId()});
+        {"txId", op->GetTxId()});
 
     // break locks
     TDataShardLocksDb locksDb(DataShard, txc);
@@ -111,7 +111,7 @@ EExecutionStatus TTruncateUnit::Execute(
 
     YDB_LOG_DEBUG_CTX(actorCtx, "TTruncateUnit::Execute - Finished successfully. TableId TxId - Operation COMPLETED",
         {"tableId", tableId},
-        {"#_op->GetTxId", op->GetTxId()});
+        {"txId", op->GetTxId()});
 
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }

@@ -887,7 +887,7 @@ namespace NKikimr::NDataShard {
 
             if (data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
                 YDB_LOG_TRACE("Processed readset with decision from to at tablet",
-                    {"#_ui32(data.GetDecision())", ui32(data.GetDecision())},
+                    {"decision", ui32(data.GetDecision())},
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
                     {"tabletId", Self->TabletID()});
@@ -898,8 +898,8 @@ namespace NKikimr::NDataShard {
                 YDB_LOG_TRACE("Processed readset from to with step expecting treating like abort due to divergence at tablet",
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
-                    {"#_record.GetStep", record.GetStep()},
-                    {"#_info->Version.Step", info->Version.Step},
+                    {"step", record.GetStep()},
+                    {"step", info->Version.Step},
                     {"tabletId", Self->TabletID()});
                 return false;
             }

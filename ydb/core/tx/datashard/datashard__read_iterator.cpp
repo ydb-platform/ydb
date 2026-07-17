@@ -995,11 +995,11 @@ public:
                 {"bytesInResult", BytesInResult},
                 {"deletedRowSkips", DeletedRowSkips},
                 {"invisibleRowSkips", InvisibleRowSkips},
-                {"#_Quota.Rows", State.Quota.Rows},
-                {"#_Quota.Bytes", State.Quota.Bytes},
-                {"#_State.TotalRows", State.TotalRows},
-                {"#_State.TotalRowsLimit", State.TotalRowsLimit},
-                {"#_State.MaxRowsInResult", State.MaxRowsInResult});
+                {"quotaRows", State.Quota.Rows},
+                {"quotaBytes", State.Quota.Bytes},
+                {"totalRows", State.TotalRows},
+                {"totalRowsLimit", State.TotalRowsLimit},
+                {"maxRowsInResult", State.MaxRowsInResult});
             Self->IncCounterReadIteratorLastKeyReset();
         }
 
@@ -1418,14 +1418,14 @@ void TReadIteratorState::ForwardScanEvent(std::unique_ptr<IEventHandle>&& ev, ui
     if (ScanActorId) {
         YDB_LOG_TRACE("Forwarding to scan actor",
             {"tabletId", tabletId},
-            {"#_ev->GetTypeName", ev->GetTypeName()},
+            {"eventType", ev->GetTypeName()},
             {"scanActorId", ScanActorId});
         ev->Rewrite(ev->GetTypeRewrite(), ScanActorId);
         TActivationContext::Send(ev.release());
     } else {
         YDB_LOG_TRACE("Scheduling for scan",
             {"tabletId", tabletId},
-            {"#_ev->GetTypeName", ev->GetTypeName()},
+            {"eventType", ev->GetTypeName()},
             {"scanId", ScanId});
         ScanPendingEvents.push_back(std::move(ev));
     }
@@ -2530,7 +2530,7 @@ public:
             YDB_LOG_TRACE_CTX(ctx, "Read throttled, rescheduling continue after",
                 {"tabletId", Self->TabletID()},
                 {"iterator", state.ReadId},
-                {"#_*ThrottleDelay", *ThrottleDelay});
+                {"throttleDelay", *ThrottleDelay});
             return;
         }
 
@@ -2940,7 +2940,7 @@ private:
                 {"tabletId", Self->TabletID()},
                 {"lock", lock.LockId},
                 {"counter", lock.Counter},
-                {"#_state.PathId", state.PathId});
+                {"pathId", state.PathId});
         }
     }
 };
@@ -2966,7 +2966,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_TRACE_CTX(ctx, "TTxReadViaPipeline execute at FollowerId",
             {"tablet", Self->TabletID()},
-            {"#_Self->FollowerId", Self->FollowerId()});
+            {"followerId", Self->FollowerId()});
 
         auto readIt = Self->ReadIteratorsByLocalReadId.find(LocalReadId);
         if (readIt == Self->ReadIteratorsByLocalReadId.end() && !Op) {
@@ -3068,8 +3068,8 @@ public:
                     if (!state.ReadVersion.IsMax()) {
                         YDB_LOG_TRACE_CTX(ctx, "Changed HEAD read",
                             {"tabletId", Self->TabletID()},
-                            {"#_num_0", (state.IsHeadRead ? "non-repeatable" : "repeatable")},
-                            {"#_state.ReadVersion", state.ReadVersion});
+                            {"readMode", (state.IsHeadRead ? "non-repeatable" : "repeatable")},
+                            {"readVersion", state.ReadVersion});
                     }
                 } else {
                     bool snapshotFound = false;
@@ -3972,7 +3972,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext&
     if (it == ReadIterators.end()) {
         YDB_LOG_DEBUG_CTX(ctx, "ReadAck from on missing",
             {"tabletID", TabletID()},
-            {"#_ev->Sender", ev->Sender},
+            {"sender", ev->Sender},
             {"iterator", record});
         return;
     }
@@ -4039,7 +4039,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext&
         {"tabletID", TabletID()},
         {"iterator", readId},
         {"record", record},
-        {"#_num_0", (wasExhausted ? "read continued" : "quota updated")},
+        {"readStatus", (wasExhausted ? "read continued" : "quota updated")},
         {"bytesLeft", state.Quota.Bytes},
         {"rowsLeft", state.Quota.Rows});
 }

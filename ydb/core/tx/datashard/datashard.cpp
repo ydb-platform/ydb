@@ -212,7 +212,7 @@ void TDataShard::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorCo
 
     YDB_LOG_INFO_CTX(ctx, "Reason",
         {"onTabletStop", TabletID()},
-        {"#_msg->GetReason", msg->GetReason()});
+        {"reason", msg->GetReason()});
 
     if (!IsFollower() && GetState() == TShardState::Ready) {
         if (!Stopping) {
@@ -397,7 +397,7 @@ TDuration TDataShard::ReadOnlyLeaseDuration() {
 void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
     YDB_LOG_INFO_CTX(ctx, "TDataShard::OnActivateExecutor: tablet actor",
         {"tabletID", TabletID()},
-        {"#_ctx.SelfID", ctx.SelfID});
+        {"selfId", ctx.SelfID});
 
     InitControls();
 
@@ -447,7 +447,7 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
 
     Become(&TThis::StateWork);
     YDB_LOG_INFO_CTX(ctx, "Switched to work state tabletId",
-        {"#_DatashardStateName(State)", DatashardStateName(State)},
+        {"state", DatashardStateName(State)},
         {"tabletID", TabletID()});
 
     if (State == TShardState::Ready && DstSplitDescription) {
@@ -488,7 +488,7 @@ void TDataShard::SendRegistrationRequestTimeCast(const TActorContext &ctx) {
     if (!ProcessingParams) {
         YDB_LOG_DEBUG_CTX(ctx, "Not sending time cast registration request in state missing processing params",
             {"tabletID", TabletID()},
-            {"#_DatashardStateName(State)", DatashardStateName(State)});
+            {"state", DatashardStateName(State)});
         return;
     }
 
@@ -498,16 +498,16 @@ void TDataShard::SendRegistrationRequestTimeCast(const TActorContext &ctx) {
         // We don't have all the necessary info yet
         YDB_LOG_DEBUG_CTX(ctx, "Not sending time cast registration request in state",
             {"tabletID", TabletID()},
-            {"#_DatashardStateName(State)", DatashardStateName(State)});
+            {"state", DatashardStateName(State)});
         return;
     }
 
     YDB_LOG_INFO_CTX(ctx, "Send registration request to time cast tabletId mediators count is coordinators count is buckets per mediator",
-        {"#_DatashardStateName(State)", DatashardStateName(State)},
+        {"state", DatashardStateName(State)},
         {"tabletID", TabletID()},
-        {"#_ProcessingParams->MediatorsSize", ProcessingParams->MediatorsSize()},
-        {"#_ProcessingParams->CoordinatorsSize", ProcessingParams->CoordinatorsSize()},
-        {"#_ProcessingParams->GetTimeCastBucketsPerMediator", ProcessingParams->GetTimeCastBucketsPerMediator()});
+        {"mediatorsSize", ProcessingParams->MediatorsSize()},
+        {"coordinatorsSize", ProcessingParams->CoordinatorsSize()},
+        {"timeCastBucketsPerMediator", ProcessingParams->GetTimeCastBucketsPerMediator()});
 
     RegistrationSended = true;
     ctx.Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvRegisterTablet(TabletID(), *ProcessingParams));
@@ -595,7 +595,7 @@ void TDataShard::SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEven
     for (auto& x : delayedAcks) {
         YDB_LOG_DEBUG_CTX(ctx, "Send delayed Ack RS Ack",
             {"tabletID", TabletID()},
-            {"#_x->ToString().data", x->ToString().data()});
+            {"eventString", x->ToString().data()});
         ctx.Send(x.Release());
         IncCounter(COUNTER_ACK_SENT_DELAYED);
     }
@@ -614,7 +614,7 @@ void TDataShard::GetCleanupReplies(TOperation* op, std::vector<std::unique_ptr<I
         YDB_LOG_DEBUG("Cleanup at Ack RS",
             {"txId", op->GetTxId()},
             {"tabletID", TabletID()},
-            {"#_x->ToString", x->ToString()});
+            {"eventString", x->ToString()});
         cleanupReplies.emplace_back(x.Release());
         IncCounter(COUNTER_ACK_SENT_DELAYED);
     }
@@ -743,14 +743,14 @@ public:
                 {"step", Step},
                 {"txId", TxId},
                 {"tabletId", Self->TabletID()},
-                {"#_dup_#_Self->TabletID", Self->TabletID()},
+                {"dupTabletId", Self->TabletID()},
                 {"error", error});
         } else {
             YDB_LOG_DEBUG("Complete from at tablet send result to client ms, ms",
                 {"step", Step},
                 {"txId", TxId},
                 {"tabletId", Self->TabletID()},
-                {"#_dup_#_Self->TabletID", Self->TabletID()},
+                {"dupTabletId", Self->TabletID()},
                 {"target", Target},
                 {"execLatency", Result->Record.GetExecLatency()},
                 {"proposeLatency", Result->Record.GetProposeLatency()});
@@ -801,14 +801,14 @@ public:
                 {"step", Step},
                 {"txId", TxId},
                 {"tabletId", Self->TabletID()},
-                {"#_dup_#_Self->TabletID", Self->TabletID()},
+                {"dupTabletId", Self->TabletID()},
                 {"error", WriteResult->GetError()});
         } else {
             YDB_LOG_DEBUG("Complete volatile write from at tablet send result to client",
                 {"step", Step},
                 {"txId", TxId},
                 {"tabletId", Self->TabletID()},
-                {"#_dup_#_Self->TabletID", Self->TabletID()},
+                {"dupTabletId", Self->TabletID()},
                 {"target", Target});
         }
 
@@ -858,7 +858,7 @@ void TDataShard::SendResult(const TActorContext &ctx,
         {"step", step},
         {"txId", txId},
         {"tabletID", TabletID()},
-        {"#_dup_TabletID", TabletID()},
+        {"dupTabletId", TabletID()},
         {"target", target},
         {"execLatency", res->Record.GetExecLatency()},
         {"proposeLatency", res->Record.GetProposeLatency()});
@@ -890,7 +890,7 @@ void TDataShard::SendWriteResult(const TActorContext& ctx, std::unique_ptr<NEven
         {"step", step},
         {"txId", txId},
         {"tabletID", TabletID()},
-        {"#_dup_TabletID", TabletID()},
+        {"dupTabletId", TabletID()},
         {"target", target});
 
     LWTRACK(ProposeTransactionSendResult, result->GetOrbit());
@@ -1694,9 +1694,9 @@ void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
 
     YDB_LOG_INFO_CTX(ctx, "Sending notify to schemeshard txId state TxInFly",
         {"tabletID", TabletID()},
-        {"#_op->TabletId", op->TabletId},
+        {"targetTabletId", op->TabletId},
         {"txId", txId},
-        {"#_DatashardStateName(State)", DatashardStateName(State)},
+        {"state", DatashardStateName(State)},
         {"txInFly", TxInFly()});
 
     if (op->IsDrop()) {
@@ -2174,7 +2174,7 @@ TUserTable::TPtr TDataShard::AlterUserTable(const TActorContext& ctx, TTransacti
         YDB_LOG_ERROR_CTX(ctx, "Cannot alter datashard for table",
             {"tabletID", TabletID()},
             {"tableId", tableId},
-            {"#_strError.data", strError.data()});
+            {"errorMessage", strError.data()});
     }
 
     NIceDb::TNiceDb db(txc.DB);
@@ -2296,7 +2296,7 @@ void TDataShard::SnapshotComplete(TIntrusivePtr<NTabletFlatExecutor::TTableSnaps
         YDB_LOG_DEBUG_CTX(ctx, "Got snapshot in active state at for table txId",
             {"tabletID", TabletID()},
             {"tableId", tableId},
-            {"#_stepOrder.TxId", stepOrder.TxId});
+            {"txId", stepOrder.TxId});
 
         op->AddInputSnapshot(snapContext);
         Pipeline.AddCandidateOp(op);
@@ -3092,9 +3092,9 @@ void TDataShard::Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorCo
 
 void TDataShard::Handle(TEvDataShard::TEvSchemaChangedResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Handle TEvSchemaChangedResult datashard state",
-        {"#_ev->Get()->Record.GetTxId", ev->Get()->Record.GetTxId()},
+        {"txId", ev->Get()->Record.GetTxId()},
         {"tabletID", TabletID()},
-        {"#_DatashardStateName(State)", DatashardStateName(State)});
+        {"state", DatashardStateName(State)});
     Execute(CreateTxSchemaChanged(ev), ctx);
 }
 
@@ -3102,7 +3102,7 @@ void TDataShard::Handle(TEvDataShard::TEvStateChangedResult::TPtr& ev, const TAc
     Y_UNUSED(ev);
     YDB_LOG_DEBUG_CTX(ctx, "Handle TEvStateChangedResult datashard state",
         {"tabletID", TabletID()},
-        {"#_DatashardStateName(State)", DatashardStateName(State)});
+        {"state", DatashardStateName(State)});
     // TODO: implement
     NTabletPipe::CloseAndForgetClient(SelfId(), StateReportPipe);
 }
@@ -3524,7 +3524,7 @@ void TDataShard::Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorCont
     if (!CheckMediatorAuthorisation(srcMediatorId)) {
         YDB_LOG_CRIT_CTX(ctx, "Tablet receive PlanStep from unauthorized mediator",
             {"tabletID", TabletID()},
-            {"#_ev->Get()->Record.GetStep", ev->Get()->Record.GetStep()},
+            {"step", ev->Get()->Record.GetStep()},
             {"srcMediatorId", srcMediatorId});
         HandlePoison(ctx);
         return;
@@ -3657,7 +3657,7 @@ void TDataShard::Handle(TEvPrivate::TEvRegisterScanActor::TPtr &ev, const TActor
     if (!op->IsReadTable()) {
         YDB_LOG_INFO_CTX(ctx, "Cannot register scan actor for op of kind",
             {"txId", txId},
-            {"#_op->GetKind", op->GetKind()});
+            {"opKind", op->GetKind()});
         return;
     }
 
@@ -3732,11 +3732,11 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
             if (!ev->Get()->Dead) {
                 YDB_LOG_DEBUG_CTX(ctx, "Resending loan returns",
                     {"tabletID", TabletID()},
-                    {"#_ev->Get()->TabletId", ev->Get()->TabletId});
+                    {"sourceTabletId", ev->Get()->TabletId});
                 LoanReturnTracker.ResendLoans(ev->Get()->TabletId, ctx);
             } else {
                 YDB_LOG_DEBUG_CTX(ctx, "Auto-Acking loan returns to dead",
-                    {"#_ev->Get()->TabletId", ev->Get()->TabletId},
+                    {"sourceTabletId", ev->Get()->TabletId},
                     {"tabletID", TabletID()});
                 LoanReturnTracker.AutoAckLoans(ev->Get()->TabletId, ctx);
             }
@@ -3796,7 +3796,7 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActo
     if (LoanReturnTracker.Has(ev->Get()->TabletId, ev->Get()->ClientId)) {
         YDB_LOG_DEBUG_CTX(ctx, "Resending loan returns",
             {"tabletID", TabletID()},
-            {"#_ev->Get()->TabletId", ev->Get()->TabletId});
+            {"sourceTabletId", ev->Get()->TabletId});
         LoanReturnTracker.ResendLoans(ev->Get()->TabletId, ctx);
         return;
     }
@@ -3834,12 +3834,12 @@ void TDataShard::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActor
 
     if (!msg->Connected) {
         YDB_LOG_NOTICE_CTX(ctx, "Client pipe to tablet from failed to connect",
-            {"#_msg->TabletId", msg->TabletId},
+            {"clientTabletId", msg->TabletId},
             {"tabletID", TabletID()},
-            {"#_(IsDeleted", (msg->IsDeleted ? "true" : "false")});
+            {"isDeleted", (msg->IsDeleted ? "true" : "false")});
     } else {
         YDB_LOG_DEBUG_CTX(ctx, "Client pipe to tablet from is reset",
-            {"#_msg->TabletId", msg->TabletId},
+            {"clientTabletId", msg->TabletId},
             {"tabletID", TabletID()});
     }
 
@@ -3915,7 +3915,7 @@ void TDataShard::RestartPipeRS(ui64 tabletId, TPersistentTablet& state, const TA
 
 void TDataShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Server connected",
-        {"#_num_0", (IsFollower() ? Sprintf("follower %u ", FollowerId()) : "leader ")},
+        {"rolePrefix", (IsFollower() ? Sprintf("follower %u ", FollowerId()) : "leader ")},
         {"tablet", ev->Get()->TabletId},
         {"clientId", ev->Get()->ClientId},
         {"serverId", ev->Get()->ServerId},
@@ -3933,7 +3933,7 @@ void TDataShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActo
 
 void TDataShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Server disconnected",
-        {"#_num_0", (IsFollower() ? Sprintf("follower %u ", FollowerId()) : "leader ")},
+        {"rolePrefix", (IsFollower() ? Sprintf("follower %u ", FollowerId()) : "leader ")},
         {"tablet", ev->Get()->TabletId},
         {"clientId", ev->Get()->ClientId},
         {"serverId", ev->Get()->ServerId},
@@ -3959,7 +3959,7 @@ void TDataShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TA
 void TDataShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Got TEvMediatorTimecast::TEvRegisterTabletResult at time",
         {"tabletID", TabletID()},
-        {"#_ev->Get()->Entry->Get(TabletID())", ev->Get()->Entry->Get(TabletID())});
+        {"entryValue", ev->Get()->Entry->Get(TabletID())});
     Y_ENSURE(ev->Get()->TabletId == TabletID());
     MediatorTimeCastEntry = ev->Get()->Entry;
     Y_ENSURE(MediatorTimeCastEntry);
@@ -3975,9 +3975,9 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvSubscribeReadStepResult::TPtr& e
     auto* msg = ev->Get();
     YDB_LOG_DEBUG_CTX(ctx, "Got TEvMediatorTimecast::TEvSubscribeReadStepResult at coordinator last step next step",
         {"tabletID", TabletID()},
-        {"#_msg->CoordinatorId", msg->CoordinatorId},
-        {"#_msg->LastReadStep", msg->LastReadStep},
-        {"#_msg->NextReadStep", msg->NextReadStep});
+        {"coordinatorId", msg->CoordinatorId},
+        {"lastReadStep", msg->LastReadStep},
+        {"nextReadStep", msg->NextReadStep});
     auto it = CoordinatorSubscriptionById.find(msg->CoordinatorId);
     Y_ENSURE(it != CoordinatorSubscriptionById.end(),
         "Unexpected TEvSubscribeReadStepResult for coordinator " << msg->CoordinatorId);
@@ -4487,7 +4487,7 @@ void TDataShard::Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const 
         YDB_LOG_CRIT_CTX(ctx, "Shard couldn't get path for table with status",
             {"tabletID", TabletID()},
             {"pathId", pathId},
-            {"#_rec.GetStatus", rec.GetStatus()});
+            {"recordStatus", rec.GetStatus()});
         return;
     }
     Execute(new TTxStoreTablePath(this, pathId, rec.GetPath()), ctx);
@@ -4733,7 +4733,7 @@ void TDataShard::Handle(TEvDataShard::TEvAsyncJobComplete::TPtr &ev, const TActo
     if (op) {
         YDB_LOG_DEBUG_CTX(ctx, "Found op at cookie",
             {"tabletID", TabletID()},
-            {"#_ev->Cookie", ev->Cookie});
+            {"cookie", ev->Cookie});
 
         if (op->IsWaitingForAsyncJob()) {
             op->SetAsyncJobResult(ev->Get()->Prod);
@@ -4742,7 +4742,7 @@ void TDataShard::Handle(TEvDataShard::TEvAsyncJobComplete::TPtr &ev, const TActo
     } else {
         YDB_LOG_ERROR_CTX(ctx, "AsyncJob complete at for unknown tx",
             {"tabletID", TabletID()},
-            {"#_ev->Cookie", ev->Cookie});
+            {"cookie", ev->Cookie});
     }
 
     // Continue current Tx

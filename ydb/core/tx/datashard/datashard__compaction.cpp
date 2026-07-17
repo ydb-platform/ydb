@@ -23,9 +23,9 @@ public:
         if (!Self->IsStateActive()) {
             YDB_LOG_WARN_CTX(ctx, "Compaction tx at non-ready tablet with cookie state requested",
                 {"tabletId", Self->TabletID()},
-                {"#_Ev->Cookie", Ev->Cookie},
-                {"#_Self->State", Self->State},
-                {"#_Ev->Sender", Ev->Sender});
+                {"cookie", Ev->Cookie},
+                {"state", Self->State},
+                {"sender", Ev->Sender});
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 record.GetPathId().GetOwnerId(),
@@ -40,7 +40,7 @@ public:
         if (Self->GetPathOwnerId() != pathId.OwnerId) {
             YDB_LOG_WARN_CTX(ctx, "Compaction with cookie of not owned self path owner",
                 {"tabletId", Self->TabletID()},
-                {"#_Ev->Cookie", Ev->Cookie},
+                {"cookie", Ev->Cookie},
                 {"pathId", pathId},
                 {"id", Self->GetPathOwnerId()});
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
@@ -56,9 +56,9 @@ public:
         if (it == Self->TableInfos.end()) {
             YDB_LOG_WARN_CTX(ctx, "Compaction with cookie of unknown requested",
                 {"tabletId", Self->TabletID()},
-                {"#_Ev->Cookie", Ev->Cookie},
+                {"cookie", Ev->Cookie},
                 {"pathId", pathId},
-                {"#_Ev->Sender", Ev->Sender});
+                {"sender", Ev->Sender});
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
@@ -77,7 +77,7 @@ public:
             // but in some rare cases like schemeshard restart we can
             YDB_LOG_DEBUG_CTX(ctx, "Compaction of with cookie of requested contains borrowed parts, failed",
                 {"tablet", Self->TabletID()},
-                {"#_Ev->Cookie", Ev->Cookie},
+                {"cookie", Ev->Cookie},
                 {"path", pathId},
                 {"from", Ev->Sender});
 
@@ -96,7 +96,7 @@ public:
             // but in some rare cases like schemeshard restart we can
             YDB_LOG_DEBUG_CTX(ctx, "Compaction of with cookie of requested contains loaned parts, failed",
                 {"tablet", Self->TabletID()},
-                {"#_Ev->Cookie", Ev->Cookie},
+                {"cookie", Ev->Cookie},
                 {"path", pathId},
                 {"from", Ev->Sender});
 
@@ -118,7 +118,7 @@ public:
             // nothing to compact
             YDB_LOG_DEBUG_CTX(ctx, "Compaction of with cookie of requested is not needed",
                 {"tablet", Self->TabletID()},
-                {"#_Ev->Cookie", Ev->Cookie},
+                {"cookie", Ev->Cookie},
                 {"path", pathId},
                 {"from", Ev->Sender});
 
@@ -136,11 +136,11 @@ public:
         if (compactionId) {
             YDB_LOG_INFO_CTX(ctx, "Started with cookie of requested",
                 {"compaction", compactionId},
-                {"#_Ev->Cookie", Ev->Cookie},
+                {"cookie", Ev->Cookie},
                 {"tabletId", Self->TabletID()},
                 {"tableId", tableId},
                 {"localTid", localTid},
-                {"#_Ev->Sender", Ev->Sender},
+                {"sender", Ev->Sender},
                 {"partsCount", stats.PartCount},
                 {"memtableSize", stats.MemDataSize},
                 {"memtableWaste", stats.MemDataWaste},
@@ -207,7 +207,7 @@ void TDataShard::CompactionComplete(ui32 tableId, const TActorContext &ctx) {
         {"tablet", TabletID()},
         {"table", tableId},
         {"edge", finishedInfo.Edge},
-        {"#_finishedInfo.FullCompactionTs", finishedInfo.FullCompactionTs});
+        {"fullCompactionTs", finishedInfo.FullCompactionTs});
 
     TLocalPathId localPathId = InvalidLocalPathId;
     if (tableId >= Schema::MinLocalTid) {

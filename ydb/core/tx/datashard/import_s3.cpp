@@ -721,7 +721,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             {"logPrefix", LogPrefix()},
             {"key", key},
             {"range", range.first},
-            {"#_range.second", range.second});
+            {"rangeEnd", range.second});
 
         auto request = Model::GetObjectRequest()
             .WithKey(key)
@@ -888,9 +888,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         YDB_LOG_TRACE("[Import]",
             {"logPrefix", LogPrefix()},
-            {"#_processed-bytes", ProcessedBytes},
-            {"#_content-length", ContentLength},
-            {"#_body-size", msg.Body.size()});
+            {"processedBytes", ProcessedBytes},
+            {"contentLength", ContentLength},
+            {"bodySize", msg.Body.size()});
 
         *Counters.BytesReceived += msg.Body.size();
         Counters.LatencyRead.Finish(Now());

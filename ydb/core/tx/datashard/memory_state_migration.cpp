@@ -184,7 +184,7 @@ private:
                 auto* row = Locks.FindPtr(protoRange.GetLockId());
                 if (!row) {
                     YDB_LOG_CRIT("Received lock range for a missing lock",
-                        {"#_protoRange.GetLockId", protoRange.GetLockId()});
+                        {"rangeLockId", protoRange.GetLockId()});
                     Failed();
                     return;
                 }
@@ -197,7 +197,7 @@ private:
                 auto* row = Locks.FindPtr(protoConflict.GetLockId());
                 if (!row) {
                     YDB_LOG_CRIT("Received lock conflict for a missing lock",
-                        {"#_protoConflict.GetLockId", protoConflict.GetLockId()});
+                        {"conflictLockId", protoConflict.GetLockId()});
                     Failed();
                     return;
                 }
@@ -207,7 +207,7 @@ private:
                 auto* row = Locks.FindPtr(protoVolatileDep.GetLockId());
                 if (!row) {
                     YDB_LOG_CRIT("Received volatile dependency for a missing lock",
-                        {"#_protoVolatileDep.GetLockId", protoVolatileDep.GetLockId()});
+                        {"volatileDepLockId", protoVolatileDep.GetLockId()});
                     Failed();
                     return;
                 }

@@ -378,7 +378,7 @@ public:
         if (Response) {
             YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan][ change record(s)",
                 {"tabletID", TabletID()},
-                {"#_ChangeRecords.size", ChangeRecords.size()},
+                {"changeRecordsCount", ChangeRecords.size()},
                 {"streamPathId", Request->Get()->StreamPathId});
 
             Self->EnqueueChangeRecords(std::move(ChangeRecords), Request->Get()->ReservationCookie);

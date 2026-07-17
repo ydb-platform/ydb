@@ -173,7 +173,7 @@ protected:
     template <typename TAddRow>
     EScan FeedImpl([[maybe_unused]] TArrayRef<const TCell> key, const TRow& /*row*/, TAddRow&& addRow) {
         // YDB_LOG_TRACE("Feed key",
-        //     {"#_DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry)", DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry)},
+        //     {"key", DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry)},
         //     {"debug", Debug()});
 
         addRow();
@@ -281,11 +281,11 @@ public:
         if (progress->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
             YDB_LOG_NOTICE("Done",
                 {"debug", Debug()},
-                {"#_progress->Record", progress->Record.ShortDebugString()});
+                {"progressRecord", progress->Record.ShortDebugString()});
         } else {
             YDB_LOG_ERROR("Failed",
                 {"debug", Debug()},
-                {"#_progress->Record", progress->Record.ShortDebugString()});
+                {"progressRecord", progress->Record.ShortDebugString()});
         }
         this->Send(ProgressActorId, progress.Release());
 
@@ -358,7 +358,7 @@ protected:
         YDB_LOG_DEBUG("Handle TEvUploadRowsResponse",
             {"debug", Debug()},
             {"uploader", Uploader},
-            {"#_ev->Sender", ev->Sender});
+            {"sender", ev->Sender});
 
         if (Uploader) {
             Y_ENSURE(Uploader == ev->Sender,
@@ -428,7 +428,7 @@ protected:
         }
 
         YDB_LOG_DEBUG("Upload, last key",
-            {"#_DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry)", DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry)},
+            {"lastKey", DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry)},
             {"debug", Debug()});
 
         auto actor = NTxProxy::CreateUploadRowsInternal(
@@ -884,7 +884,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
                 YDB_LOG_ERROR("Rejecting TBuildIndexScan bad request with response",
                     {"tabletId", TabletID()},
                     {"request", request.ShortDebugString()},
-                    {"#_response->Record", response->Record.ShortDebugString()});
+                    {"responseRecord", response->Record.ShortDebugString()});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

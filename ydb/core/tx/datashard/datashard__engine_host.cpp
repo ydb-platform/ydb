@@ -541,7 +541,7 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
                     {"txId", txId},
                     {"operation", operation},
                     {"line", line},
-                    {"#_num_0", backtrace ? backtrace->PrintToString().data() : ""});
+                    {"backtrace", backtrace ? backtrace->PrintToString().data() : ""});
             };
     }
 }

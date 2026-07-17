@@ -23,8 +23,8 @@ public:
         if (!Self->IsStateActive()) {
             YDB_LOG_WARN_CTX(ctx, "Vacuum tx at non-ready tablet state requested",
                 {"tabletId", Self->TabletID()},
-                {"#_Self->State", Self->State},
-                {"#_Ev->Sender", Ev->Sender});
+                {"state", Self->State},
+                {"sender", Ev->Sender});
             Response = std::make_unique<TEvDataShard::TEvVacuumResult>(
                 record.GetVacuumGeneration(),
                 Self->TabletID(),
@@ -35,7 +35,7 @@ public:
         if (Self->Executor()->HasLoanedParts()) {
             YDB_LOG_WARN_CTX(ctx, "Vacuum of has borrowed parts requested",
                 {"tablet", Self->TabletID()},
-                {"#_Ev->Sender", Ev->Sender});
+                {"sender", Ev->Sender});
             Response = std::make_unique<TEvDataShard::TEvVacuumResult>(
                 record.GetVacuumGeneration(),
                 Self->TabletID(),
@@ -52,7 +52,7 @@ public:
         if (lastGen >= record.GetVacuumGeneration()) {
             YDB_LOG_DEBUG_CTX(ctx, "Vacuum of for requested generation requested already completed last persisted Vacuum",
                 {"tablet", Self->TabletID()},
-                {"#_record.GetVacuumGeneration", record.GetVacuumGeneration()},
+                {"vacuumGeneration", record.GetVacuumGeneration()},
                 {"from", Ev->Sender},
                 {"generation", lastGen});
             Response = std::make_unique<TEvDataShard::TEvVacuumResult>(

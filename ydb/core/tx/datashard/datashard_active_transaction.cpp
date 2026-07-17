@@ -527,7 +527,7 @@ void TActiveTransaction::DbStoreLocksAccessLog(ui64 tabletId,
         .Update(NIceDb::TUpdate<Schema::TxArtifacts::Locks>(vecData));
 
     YDB_LOG_TRACE_CTX(ctx, "Storing locks",
-        {"#_vec.size", vec.size()},
+        {"vectorSize", vec.size()},
         {"txid", GetTxId()},
         {"tabletId", tabletId});
 }
@@ -607,7 +607,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
 
     YDB_LOG_DEBUG_CTX(ctx, "Tx at restored its data",
         {"txId", GetTxId()},
-        {"#_self->TabletID", self->TabletID()});
+        {"tabletId", self->TabletID()});
 
     return ERestoreDataStatus::Ok;
 }

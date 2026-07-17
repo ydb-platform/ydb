@@ -130,11 +130,11 @@ public:
         if (rec.GetStatus() == NKikimrIndexBuilder::DONE) {
             YDB_LOG_NOTICE("Done",
                 {"debug", Debug()},
-                {"#_ToShortDebugString(rec)", ToShortDebugString(rec)});
+                {"record", ToShortDebugString(rec)});
         } else {
             YDB_LOG_ERROR("Failed",
                 {"debug", Debug()},
-                {"#_ToShortDebugString(rec)", ToShortDebugString(rec)});
+                {"record", ToShortDebugString(rec)});
         }
 
         TActivationContext::Send(ResponseActorId, std::move(response));
@@ -277,7 +277,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
                 YDB_LOG_ERROR("Rejecting TValidateUniqueIndexScan bad request with response",
                     {"tabletId", TabletID()},
                     {"request", request.ShortDebugString()},
-                    {"#_ToShortDebugString(response->Record)", ToShortDebugString(response->Record)});
+                    {"responseRecord", ToShortDebugString(response->Record)});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

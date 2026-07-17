@@ -113,8 +113,8 @@ public:
         BuildResult(op)->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
 
         YDB_LOG_DEBUG_CTX(ctx, "Prepared transaction txId at tablet",
-            {"#_op->GetKind", op->GetKind()},
-            {"#_op->GetTxId", op->GetTxId()},
+            {"opKind", op->GetKind()},
+            {"txId", op->GetTxId()},
             {"tabletId", DataShard.TabletID()});
         return EExecutionStatus::Executed;
     }

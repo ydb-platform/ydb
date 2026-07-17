@@ -76,7 +76,7 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
         YDB_LOG_CRIT_CTX(ctx, "Exception while preparing out-readsets for KQP transaction",
             {"operation", *op},
             {"tabletId", DataShard.TabletID()},
-            {"#_e.what", e.what()});
+            {"exceptionMessage", e.what()});
         if (op->IsImmediate()) {
             writeOp->ReleaseTxData(txc);
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Tx was terminated: " << e.what());

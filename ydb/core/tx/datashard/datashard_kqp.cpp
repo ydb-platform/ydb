@@ -94,11 +94,11 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
         auto lock = sysLocks.GetLock(lockKey);
         if (lock.Generation != lockProto.GetGeneration() || lock.Counter != lockProto.GetCounter()) {
             YDB_LOG_TRACE("ValidateLocks: broken lock expected found",
-                {"#_lockProto.GetLockId", lockProto.GetLockId()},
-                {"#_lockProto.GetGeneration", lockProto.GetGeneration()},
-                {"#_lockProto.GetCounter", lockProto.GetCounter()},
-                {"#_lock.Generation", lock.Generation},
-                {"#_lock.Counter", lock.Counter});
+                {"lockId", lockProto.GetLockId()},
+                {"lockGeneration", lockProto.GetGeneration()},
+                {"lockCounter", lockProto.GetCounter()},
+                {"lockGeneration", lock.Generation},
+                {"lockCounter", lock.Counter});
             brokenLocks.emplace_back(lockProto);
         }
     }
@@ -287,7 +287,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
             if (data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
                 // Explicit decision that is not a commit, need to abort
                 YDB_LOG_TRACE("Processed decision",
-                    {"#_ui32(data.GetDecision())", ui32(data.GetDecision())},
+                    {"decision", ui32(data.GetDecision())},
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
                     {"txId", txId});

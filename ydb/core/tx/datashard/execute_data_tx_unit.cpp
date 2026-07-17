@@ -127,7 +127,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
             YDB_LOG_TRACE_CTX(ctx, "Operation at requested more memory",
                 {"operation", *op},
                 {"tabletId", DataShard.TabletID()},
-                {"#_txc.GetRequestedMemory", txc.GetRequestedMemory()});
+                {"requestedMemory", txc.GetRequestedMemory()});
 
             DataShard.IncCounter(COUNTER_TX_WAIT_RESOURCE);
             return EExecutionStatus::Restart;
@@ -182,8 +182,8 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         YDB_LOG_TRACE_CTX(ctx, "Operation at exceeded memory limit and requests more for the next try",
             {"operation", *op},
             {"tabletId", DataShard.TabletID()},
-            {"#_txc.GetMemoryLimit", txc.GetMemoryLimit()},
-            {"#_txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR", txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR});
+            {"memoryLimit", txc.GetMemoryLimit()},
+            {"memoryLimitWithFactor", txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR});
 
         txc.NotEnoughMemory();
         DataShard.IncCounter(DataShard.NotEnoughMemoryCounter(txc.GetNotEnoughMemoryCount()));
@@ -319,7 +319,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
     YDB_LOG_TRACE_CTX(ctx, "Executed operation at tablet with status",
         {"operation", *op},
         {"tabletId", DataShard.TabletID()},
-        {"#_result->GetStatus", result->GetStatus()});
+        {"resultStatus", result->GetStatus()});
 
     auto& counters = tx->GetDataTx()->GetCounters();
 

@@ -19,7 +19,7 @@ public:
 
         const auto pathId = TPathId::FromProto(record.GetPathId());
         YDB_LOG_INFO_CTX(ctx, "TEvCompactBorrowed request from for table at tablet",
-            {"#_Ev->Sender", Ev->Sender},
+            {"sender", Ev->Sender},
             {"pathId", pathId},
             {"tabletId", Self->TabletID()});
 
@@ -48,7 +48,7 @@ public:
 
         for (auto tableToCompact : tablesToCompact) {
             YDB_LOG_DEBUG_CTX(ctx, "TEvCompactBorrowed request from for table starting compaction for local table at tablet",
-                {"#_Ev->Sender", Ev->Sender},
+                {"sender", Ev->Sender},
                 {"pathId", pathId},
                 {"tableToCompact", tableToCompact},
                 {"tabletId", Self->TabletID()});
@@ -61,7 +61,7 @@ public:
                 Self->CompactBorrowedWaiters[tableToCompact].push_back(waiter);
             } else {
                 YDB_LOG_DEBUG_CTX(ctx, "TEvCompactBorrowed request from for table can not be compacted at tablet",
-                    {"#_Ev->Sender", Ev->Sender},
+                    {"sender", Ev->Sender},
                     {"pathId", pathId},
                     {"tabletId", Self->TabletID()});
             }
@@ -69,7 +69,7 @@ public:
 
         if (waiter->CompactingTables.empty()) { // none has been triggered
             YDB_LOG_DEBUG_CTX(ctx, "TEvCompactBorrowed request from for table has no parts for borrowed compaction at tablet",
-                {"#_Ev->Sender", Ev->Sender},
+                {"sender", Ev->Sender},
                 {"pathId", pathId},
                 {"tabletId", Self->TabletID()});
             ctx.Send(Ev->Sender, std::move(nothingToCompactResult));

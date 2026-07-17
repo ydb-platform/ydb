@@ -357,9 +357,9 @@ inline void FailScan(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::T
     YDB_LOG_ERROR_COMP(NKikimrServices::BUILD_INDEX, "Unhandled exception",
         {"logScanType", logScanType},
         {"tabletId", tabletId},
-        {"#_TypeName(exc)", TypeName(exc)},
-        {"#_exc.what", exc.what()},
-        {"#_TBackTrace::FromCurrentException().PrintToString", TBackTrace::FromCurrentException().PrintToString()});
+        {"exceptionType", TypeName(exc)},
+        {"exceptionMessage", exc.what()},
+        {"backtrace", TBackTrace::FromCurrentException().PrintToString()});
 
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true)->Inc();
 

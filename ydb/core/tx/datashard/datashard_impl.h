@@ -2462,10 +2462,10 @@ private:
             };
 
             YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Sending snapshot for split opId from datashard to datashard size",
-                {"#_ev->Record.GetOperationCookie", ev->Record.GetOperationCookie()},
-                {"#_ev->Record.GetSrcTabletId", ev->Record.GetSrcTabletId()},
+                {"operationCookie", ev->Record.GetOperationCookie()},
+                {"srcTabletId", ev->Record.GetSrcTabletId()},
                 {"dstTabletId", dstTabletId},
-                {"#_fnCalcTotalSize(*ev)", fnCalcTotalSize(*ev)});
+                {"totalSize", fnCalcTotalSize(*ev)});
 
             NTabletPipe::SendData(ctx, PipesToDstShards[dstTabletId], ev.Release());
         }
@@ -3568,7 +3568,7 @@ protected:
     void ReportState(const TActorContext &ctx, ui32 state) {
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Reporting state to schemeshard",
             {"tabletID", TabletID()},
-            {"#_DatashardStateName(State)", DatashardStateName(State)},
+            {"state", DatashardStateName(State)},
             {"currentSchemeShardId", CurrentSchemeShardId});
         Y_ENSURE(state != TShardState::Offline || !HasSharedBlobs(),
                  "Datashard " << TabletID() << " tried to go offline while having shared blobs");
@@ -3612,7 +3612,7 @@ protected:
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats register new pipe at datashard FollowerId TableInfos size",
                     {"tabletID", TabletID()},
                     {"followerId", FollowerId()},
-                    {"#_TableInfos.size", TableInfos.size()});
+                    {"tableInfosCount", TableInfos.size()});
 
                 NTabletPipe::TClientConfig clientConfig;
                 DbStatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));

@@ -34,7 +34,7 @@ public:
         YDB_LOG_DEBUG_CTX(ctx, "Received split OpId at state",
             {"tabletId", Self->TabletID()},
             {"opId", opId},
-            {"#_DatashardStateName(Self->State)", DatashardStateName(Self->State)});
+            {"state", DatashardStateName(Self->State)});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -103,7 +103,7 @@ public:
             for (const TActorId& ackTo : Self->SrcAckSplitTo) {
                 YDB_LOG_DEBUG_CTX(ctx, "Ack split to schemeshard",
                     {"tabletId", Self->TabletID()},
-                    {"#_Self->SrcSplitOpId", Self->SrcSplitOpId});
+                    {"srcSplitOpId", Self->SrcSplitOpId});
                 ctx.Send(ackTo, new TEvDataShard::TEvSplitAck(Self->SrcSplitOpId, Self->TabletID()));
             }
         } else {
@@ -200,9 +200,9 @@ public:
                 Y_ENSURE(str.empty(), #table " table is not empty when starting Split at tablet " << Self->TabletID() << " : \n" << str.Str()); \
             } else if (!str.empty()) { \
                 YDB_LOG_ERROR_CTX(ctx, "", \
-                    {"#_num_0", #table " table is not empty when starting Split at tablet "}, \
+                    {"tableLabel", #table " table is not empty when starting Split at tablet "}, \
                     {"tabletId", Self->TabletID()}, \
-                    {"#_str.Str", str.Str()}); \
+                    {"nonEmptyRows", str.Str()}); \
             } \
         }
 
@@ -356,7 +356,7 @@ public:
                     YDB_LOG_DEBUG_CTX(ctx, "BorrowSnapshot: table snapshot size is total snapshot size is for split OpId",
                         {"tabletId", Self->TabletID()},
                         {"localTableId", localTableId},
-                        {"#_snapBody.size", snapBody.size()},
+                        {"snapBodySize", snapBody.size()},
                         {"totalSnapshotSize", totalSnapshotSize},
                         {"opId", opId});
                 }
@@ -454,7 +454,7 @@ public:
     void Complete(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Sending snapshots from src for split OpId",
             {"tabletId", Self->TabletID()},
-            {"#_Self->SrcSplitOpId", Self->SrcSplitOpId});
+            {"srcSplitOpId", Self->SrcSplitOpId});
         Self->SplitSrcSnapshotSender.DoSend(ctx);
         if (ChangeExchangeSplit) {
             Self->KillChangeSender(ctx);

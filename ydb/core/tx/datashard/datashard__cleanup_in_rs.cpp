@@ -60,7 +60,7 @@ public:
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveOldInReadSets::Complete outdated read sets remain",
-            {"#_Self->InRSToRemove.size", Self->InRSToRemove.size()},
+            {"inRsToRemoveCount", Self->InRSToRemove.size()},
             {"tabletId", Self->TabletID()});
 
         if (!Self->InRSToRemove.empty()) {
@@ -138,7 +138,7 @@ public:
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxCheckInReadSets::Complete found read sets to remove",
-            {"#_Self->InRSToRemove.size", Self->InRSToRemove.size()},
+            {"inRsToRemoveCount", Self->InRSToRemove.size()},
             {"tabletId", Self->TabletID()});
 
         if (!Self->InRSToRemove.empty()) {

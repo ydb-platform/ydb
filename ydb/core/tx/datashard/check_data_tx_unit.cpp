@@ -65,9 +65,9 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
     } else {
         Y_ENSURE(dataTx->RequirePrepare());
         YDB_LOG_DEBUG_CTX(ctx, "Require prepare Tx",
-            {"#_op->GetTxId", op->GetTxId()},
+            {"txId", op->GetTxId()},
             {"tabletId", DataShard.TabletID()},
-            {"#_dataTx->GetErrors", dataTx->GetErrors()});
+            {"errors", dataTx->GetErrors()});
     }
 
     // Check if we are out of space and tx wants to update user
@@ -319,8 +319,8 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "Prepared transaction txId at tablet",
-            {"#_op->GetKind", op->GetKind()},
-            {"#_op->GetTxId", op->GetTxId()},
+            {"opKind", op->GetKind()},
+            {"txId", op->GetTxId()},
             {"tabletId", DataShard.TabletID()});
     }
 

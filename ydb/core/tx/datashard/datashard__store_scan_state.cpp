@@ -39,8 +39,8 @@ bool TDataShard::TTxStoreScanState::Execute(TTransactionContext &txc,
 
     YDB_LOG_TRACE_CTX(ctx, "Persist scan progress for key size status",
         {"txId", txId},
-        {"#_event->LastKey.size", event->LastKey.size()},
-        {"#_event->StatusCode", event->StatusCode},
+        {"lastKeySize", event->LastKey.size()},
+        {"statusCode", event->StatusCode},
         {"tabletId", Self->TabletID()});
 
     auto binaryIssues = SerializeIssues(event->Issues);

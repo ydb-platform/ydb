@@ -88,7 +88,7 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
     if (DataShard.GetDataTxProfileLogThresholdMs()
         && duration.MilliSeconds() >= DataShard.GetDataTxProfileLogThresholdMs()) {
         YDB_LOG_WARN_CTX(ctx, "",
-            {"#_op->ExecutionProfileLogString(DataShard.TabletID())", op->ExecutionProfileLogString(DataShard.TabletID())});
+            {"executionProfile", op->ExecutionProfileLogString(DataShard.TabletID())});
     }
 
     if (DataShard.GetDataTxProfileBufferThresholdMs()

@@ -643,13 +643,13 @@ public:
                 {"debug", Debug()},
                 {"postingAdded", PostingEntriesAdded},
                 {"docsAdded", DocsEntriesAdded},
-                {"#_Response->Record", Response->Record.ShortDebugString()});
+                {"responseRecord", Response->Record.ShortDebugString()});
         } else {
             YDB_LOG_ERROR("Failed posting docs",
                 {"debug", Debug()},
                 {"postingAdded", PostingEntriesAdded},
                 {"docsAdded", DocsEntriesAdded},
-                {"#_Response->Record", Response->Record.ShortDebugString()});
+                {"responseRecord", Response->Record.ShortDebugString()});
         }
         Send(ResponseActorId, Response.Release());
 
@@ -700,7 +700,7 @@ protected:
             {"debug", Debug()},
             {"postingAdded", PostingEntriesAdded},
             {"docsAdded", DocsEntriesAdded},
-            {"#_ev->Sender", ev->Sender});
+            {"sender", ev->Sender});
 
         if (!Driver) {
             return;
@@ -740,14 +740,14 @@ protected:
         if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
             YDB_LOG_NOTICE("Got retriable error",
                 {"debug", Debug()},
-                {"#_Uploader.GetUploadStatus", Uploader.GetUploadStatus()});
+                {"uploadStatus", Uploader.GetUploadStatus()});
             ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
         YDB_LOG_NOTICE("Got error, abort scan",
             {"debug", Debug()},
-            {"#_Uploader.GetUploadStatus", Uploader.GetUploadStatus()});
+            {"uploadStatus", Uploader.GetUploadStatus()});
 
         Driver->Touch(EScan::Final);
     }
@@ -822,7 +822,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
                 YDB_LOG_ERROR("Rejecting TBuildFulltextIndexScan bad request with response",
                     {"tabletId", TabletID()},
                     {"request", request.ShortDebugString()},
-                    {"#_response->Record", response->Record.ShortDebugString()});
+                    {"responseRecord", response->Record.ShortDebugString()});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

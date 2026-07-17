@@ -196,8 +196,8 @@ public:
 
         YDB_LOG_DEBUG_CTX(ctx, "S3 Listing: start at key end at key last path: common",
             {"tabletId", Self->TabletID()},
-            {"#_num_0", JoinVectorIntoString(key, " ")},
-            {"#_num_1", JoinVectorIntoString(endKey, " ")},
+            {"startKey", JoinVectorIntoString(key, " ")},
+            {"endKey", JoinVectorIntoString(endKey, " ")},
             {"restarted", RestartCount-1},
             {"lastPath", LastPath},
             {"contents", Result->Record.ContentsRowsSize()},
@@ -299,7 +299,7 @@ public:
             YDB_LOG_TRACE_CTX(ctx, "Dump #_Self->TabletID, path, #_num_0",
                 {"tabletId", Self->TabletID()},
                 {"path", path},
-                {"#_num_0", (isLeafPath ? " -> " + DbgPrintTuple(value, *AppData(ctx)->TypeRegistry) : TString())});
+                {"leafPathDetails", (isLeafPath ? " -> " + DbgPrintTuple(value, *AppData(ctx)->TypeRegistry) : TString())});
 
             if (isLeafPath) {
                 ++stats.LeafRows;
@@ -465,7 +465,7 @@ public:
         YDB_LOG_DEBUG_CTX(ctx, "S3 Listing: finished description: common",
             {"tabletId", Self->TabletID()},
             {"status", Result->Record.GetStatus()},
-            {"#_Result->Record.GetErrorDescription", Result->Record.GetErrorDescription()},
+            {"errorDescription", Result->Record.GetErrorDescription()},
             {"contents", Result->Record.ContentsRowsSize()},
             {"prefixes", Result->Record.CommonPrefixesRowsSize()});
         ctx.Send(Ev->Sender, Result.Release());

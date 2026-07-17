@@ -82,8 +82,8 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
         YDB_LOG_TRACE_CTX(ctx, "Operation at exceeded memory limit and requests more for the next try",
             {"operation", *op},
             {"tabletId", DataShard.TabletID()},
-            {"#_txc.GetMemoryLimit", txc.GetMemoryLimit()},
-            {"#_txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR", txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR});
+            {"memoryLimit", txc.GetMemoryLimit()},
+            {"memoryLimitWithFactor", txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR});
 
         engine->ReleaseUnusedMemory();
         txc.RequestMemory(txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR);

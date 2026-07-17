@@ -221,11 +221,11 @@ public:
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
             YDB_LOG_NOTICE("Done",
                 {"debug", Debug()},
-                {"#_Response->Record", Response->Record.ShortDebugString()});
+                {"responseRecord", Response->Record.ShortDebugString()});
         } else {
             YDB_LOG_ERROR("Failed",
                 {"debug", Debug()},
-                {"#_Response->Record", Response->Record.ShortDebugString()});
+                {"responseRecord", Response->Record.ShortDebugString()});
         }
         Send(ResponseActorId, Response.Release());
 
@@ -352,7 +352,7 @@ protected:
     {
         YDB_LOG_DEBUG("Handle TEvUploadRowsResponse",
             {"debug", Debug()},
-            {"#_ev->Sender", ev->Sender});
+            {"sender", ev->Sender});
 
         if (!Driver) {
             return;
@@ -384,14 +384,14 @@ protected:
         if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
             YDB_LOG_NOTICE("Got retriable error",
                 {"debug", Debug()},
-                {"#_Uploader.GetUploadStatus", Uploader.GetUploadStatus()});
+                {"uploadStatus", Uploader.GetUploadStatus()});
             ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
         YDB_LOG_NOTICE("Got error, abort scan",
             {"debug", Debug()},
-            {"#_Uploader.GetUploadStatus", Uploader.GetUploadStatus()});
+            {"uploadStatus", Uploader.GetUploadStatus()});
 
         Driver->Touch(EScan::Final);
     }
@@ -425,7 +425,7 @@ protected:
 
             if (IsPrefixRowsValid) {
                 YDB_LOG_TRACE("FinishPrefix not finished, manually feeding saved rows",
-                    {"#_PrefixRows.GetRows", PrefixRows.GetRows()},
+                    {"prefixRows", PrefixRows.GetRows()},
                     {"debug", Debug()});
                 for (ui64 iteration = 0; ; iteration++) {
                     for (const auto& [key, row_] : *PrefixRows.GetRowsData()) {
@@ -710,7 +710,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
                 YDB_LOG_ERROR("Rejecting TLocalKMeansScan bad request with response",
                     {"tabletId", TabletID()},
                     {"request", request.ShortDebugString()},
-                    {"#_response->Record", response->Record.ShortDebugString()});
+                    {"responseRecord", response->Record.ShortDebugString()});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

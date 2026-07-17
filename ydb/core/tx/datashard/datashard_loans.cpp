@@ -43,8 +43,8 @@ public:
             // open a pipe to the part owner and send part metadata batch
             YDB_LOG_DEBUG_CTX(ctx, "Initiating parts return",
                 {"tabletId", Self->TabletID()},
-                {"#_batch.second", batch.second},
-                {"#_batch.first", batch.first});
+                {"batchEnd", batch.second},
+                {"batchStart", batch.first});
             Self->LoanReturnTracker.ReturnLoan(batch.first, batch.second, ctx);
         }
     }
@@ -189,7 +189,7 @@ public:
 
         YDB_LOG_INFO_CTX(ctx, "Initiating switch from to Offline state",
             {"tabletId", Self->TabletID()},
-            {"#_DatashardStateName(Self->State)", DatashardStateName(Self->State)});
+            {"state", DatashardStateName(Self->State)});
 
         Self->PurgeTxTables(txc);
 

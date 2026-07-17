@@ -17,8 +17,6 @@
 
 #include <util/generic/maybe.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
-
 namespace NKikimr::NDataShard {
 
 using ESenderType = TEvChangeExchange::ESenderType;
@@ -51,9 +49,8 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        YDB_LOG_DEBUG("HandleIndex TEvTxProxySchemeCache::TEvNavigateKeySetResult",
-            {"logPrefix", GetLogPrefix()},
-            {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
+        LOG_D("HandleIndex TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!AsDerived()->CheckNotEmpty(result)) {
             return;
@@ -78,8 +75,7 @@ private:
         }
 
         if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
-            YDB_LOG_DEBUG("Index is planned to drop, waiting for the EvRemoveSender command",
-                {"logPrefix", GetLogPrefix()});
+            LOG_D("Index is planned to drop, waiting for the EvRemoveSender command");
 
             return AsDerived()->OnIndexUnderRemove();
         }
@@ -191,16 +187,12 @@ class TAsyncIndexChangeSenderMain
     }
 
     void LogCritAndRetry(const TString& error) {
-        YDB_LOG_CRIT("",
-            {"logPrefix", GetLogPrefix()},
-            {"error", error});
+        LOG_C(error);
         Retry();
     }
 
     void LogWarnAndRetry(const TString& error) {
-        YDB_LOG_WARN("",
-            {"logPrefix", GetLogPrefix()},
-            {"error", error});
+        LOG_W(error);
         Retry();
     }
 
@@ -229,44 +221,32 @@ class TAsyncIndexChangeSenderMain
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         EnqueueRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         ForgetRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         OnReady(ev->Get()->PartitionId);
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         OnGone(ev->Get()->PartitionId);
     }
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         Y_ENSURE(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
@@ -274,9 +254,7 @@ class TAsyncIndexChangeSenderMain
     }
 
     void AutoRemove(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         RemoveRecords(std::move(ev->Get()->Records));
     }
 

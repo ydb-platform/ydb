@@ -3,8 +3,6 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/tablet/tablet_exception.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
-
 namespace NKikimr {
 namespace NDataShard {
 
@@ -23,13 +21,13 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         if (Self->State == TShardState::Offline) {
-            YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveOldInReadSets::Execute (skip)",
-                {"tabletId", Self->TabletID()});
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "TTxRemoveOldInReadSets::Execute (skip) at " << Self->TabletID());
             return true;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveOldInReadSets::Execute",
-            {"tabletId", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxRemoveOldInReadSets::Execute at " << Self->TabletID());
 
         NIceDb::TNiceDb db(txc.DB);
         ui64 removed = 0;
@@ -44,9 +42,8 @@ public:
                 break;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "Removing outdated read sets",
-            {"removed", removed},
-            {"tabletId", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "Removing " << removed << " outdated read sets from " << Self->TabletID());
 
         return true;
     }
@@ -54,18 +51,18 @@ public:
     void Complete(const TActorContext &ctx) override
     {
         if (Self->State == TShardState::Offline) {
-            YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveOldInReadSets::Complete (skip)",
-                {"tabletId", Self->TabletID()});
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "TTxRemoveOldInReadSets::Complete (skip) at " << Self->TabletID());
             return;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveOldInReadSets::Complete outdated read sets remain",
-            {"inRsToRemoveCount", Self->InRSToRemove.size()},
-            {"tabletId", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxRemoveOldInReadSets::Complete " << Self->InRSToRemove.size()
+                    << " outdated read sets remain at " << Self->TabletID());
 
         if (!Self->InRSToRemove.empty()) {
-            YDB_LOG_DEBUG_CTX(ctx, "Schedule TEvPrivate::TEvRemoveOldInReadSets",
-                {"REMOVALINTERVAL", REMOVAL_INTERVAL});
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                        "Schedule TEvPrivate::TEvRemoveOldInReadSets in " << REMOVAL_INTERVAL);
 
             auto shardCtx = ctx.MakeFor(Self->SelfId());
             shardCtx.Schedule(REMOVAL_INTERVAL, new TEvPrivate::TEvRemoveOldInReadSets);
@@ -90,13 +87,13 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         if (Self->State == TShardState::Offline) {
-            YDB_LOG_DEBUG_CTX(ctx, "TTxCheckInReadSets::Execute (skip)",
-                {"tabletId", Self->TabletID()});
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "TTxCheckInReadSets::Execute (skip) at " << Self->TabletID());
             return true;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "TTxCheckInReadSets::Execute",
-            {"tabletId", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxCheckInReadSets::Execute at " << Self->TabletID());
 
         NIceDb::TNiceDb db(txc.DB);
         auto rowset = db.Table<Schema::InReadSets>().Range().Select();
@@ -114,12 +111,12 @@ public:
 
                 Self->InRSToRemove.insert(TReadSetKey(txId, origin, from, to));
 
-                YDB_LOG_TRACE_CTX(ctx, "Found outdated InReadSet",
-                    {"tabletId", Self->TabletID()},
-                    {"txid", txId},
-                    {"origin", origin},
-                    {"from", from},
-                    {"to", to});
+                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
+                            "Found outdated InReadSet in " << Self->TabletID()
+                            << " txid=" << txId
+                            << " origin=" << origin
+                            << " from=" << from
+                            << " to=" << to);
             }
 
             if (!rowset.Next())
@@ -132,18 +129,18 @@ public:
     void Complete(const TActorContext &ctx) override
     {
         if (Self->State == TShardState::Offline) {
-            YDB_LOG_DEBUG_CTX(ctx, "TTxCheckInReadSets::Complete (skip)",
-                {"tabletId", Self->TabletID()});
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "TTxCheckInReadSets::Complete (skip) at " << Self->TabletID());
             return;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "TTxCheckInReadSets::Complete found read sets to remove",
-            {"inRsToRemoveCount", Self->InRSToRemove.size()},
-            {"tabletId", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxCheckInReadSets::Complete found " << Self->InRSToRemove.size()
+                    << " read sets to remove in " << Self->TabletID());
 
         if (!Self->InRSToRemove.empty()) {
-            YDB_LOG_DEBUG_CTX(ctx, "Schedule TEvPrivate::TEvRemoveOldInReadSets",
-                {"REMOVALINTERVAL", REMOVAL_INTERVAL});
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                        "Schedule TEvPrivate::TEvRemoveOldInReadSets in " << REMOVAL_INTERVAL);
 
             auto shardCtx = ctx.MakeFor(Self->SelfId());
             shardCtx.Schedule(REMOVAL_INTERVAL, new TEvPrivate::TEvRemoveOldInReadSets);

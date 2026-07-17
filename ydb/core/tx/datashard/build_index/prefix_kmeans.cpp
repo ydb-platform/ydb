@@ -20,8 +20,6 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
-
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
@@ -156,8 +154,7 @@ public:
         , DeferredSettings(request.GetSettings())
         , DeferredRounds(request.GetNeedsRounds())
     {
-        YDB_LOG_INFO("Create",
-            {"debug", Debug()});
+        LOG_I("Create " << Debug());
         NextCheckpointAtBytes = ScanSettings.GetMaxCheckpointBytes();
 
         const bool toBuild = request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD;
@@ -224,8 +221,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        YDB_LOG_INFO("Prepare",
-            {"debug", Debug()});
+        LOG_I("Prepare " << Debug());
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
@@ -260,13 +256,9 @@ public:
         }
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            YDB_LOG_NOTICE("Done",
-                {"debug", Debug()},
-                {"responseRecord", Response->Record.ShortDebugString()});
+            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
         } else {
-            YDB_LOG_ERROR("Failed",
-                {"debug", Debug()},
-                {"responseRecord", Response->Record.ShortDebugString()});
+            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
         }
         Send(ResponseActorId, Response.Release());
 
@@ -291,16 +283,13 @@ public:
 
     EScan PageFault() final
     {
-        YDB_LOG_TRACE("PageFault",
-            {"debug", Debug()});
+        LOG_T("PageFault " << Debug());
         return EScan::Feed;
     }
 
     EScan Seek(TLead& lead, ui64 seq) final
     {
-        YDB_LOG_TRACE("Seek",
-            {"seq", seq},
-            {"debug", Debug()});
+        LOG_T("Seek " << seq << " " << Debug());
 
         if (IsExhausted) {
             return Uploader.CanFinish()
@@ -315,8 +304,7 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
-        // YDB_LOG_TRACE("Feed",
-        //     {"debug", Debug()});
+        // LOG_T("Feed " << Debug());
 
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
@@ -351,8 +339,7 @@ public:
 
     EScan Exhausted() final
     {
-        YDB_LOG_TRACE("Exhausted",
-            {"debug", Debug()});
+        LOG_T("Exhausted " << Debug());
 
         if (!FinishPrefix()) {
             return EScan::Reset;
@@ -371,26 +358,22 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                YDB_LOG_ERROR("StateWork unexpected event",
-                    {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString()},
-                    {"debug", Debug()});
+                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
+                    << " event: " << ev->ToString() << " " << Debug());
         }
     }
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/)
     {
-        YDB_LOG_DEBUG("Retry upload",
-            {"debug", Debug()});
+        LOG_D("Retry upload " << Debug());
 
         Uploader.RetryUpload();
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
-        YDB_LOG_DEBUG("Handle TEvUploadRowsResponse",
-            {"debug", Debug()},
-            {"sender", ev->Sender});
+        LOG_D("Handle TEvUploadRowsResponse " << Debug()
+            << " ev->Sender: " << ev->Sender.ToString());
 
         if (!Driver) {
             return;
@@ -421,16 +404,12 @@ protected:
         }
 
         if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
-            YDB_LOG_NOTICE("Got retriable error",
-                {"debug", Debug()},
-                {"uploadStatus", Uploader.GetUploadStatus()});
+            LOG_N("Got retriable error, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
             ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
-        YDB_LOG_NOTICE("Got error, abort scan",
-            {"debug", Debug()},
-            {"uploadStatus", Uploader.GetUploadStatus()});
+        LOG_N("Got error, abort scan, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
 
         Driver->Touch(EScan::Final);
     }
@@ -466,16 +445,13 @@ protected:
         if (FinishPrefixImpl()) {
             PendingCheckpointKey = Prefix;
             StartNewPrefix();
-            YDB_LOG_TRACE("FinishPrefix finished",
-                {"debug", Debug()});
+            LOG_T("FinishPrefix finished " << Debug());
             return true;
         } else {
             IsFirstPrefixFeed = false;
 
             if (IsPrefixRowsValid) {
-                YDB_LOG_TRACE("FinishPrefix not finished, manually feeding saved rows",
-                    {"prefixRows", PrefixRows.GetRows()},
-                    {"debug", Debug()});
+                LOG_T("FinishPrefix not finished, manually feeding " << PrefixRows.GetRows() << " saved rows " << Debug());
                 for (ui64 iteration = 0; ; iteration++) {
                     for (const auto& [key, row_] : *PrefixRows.GetRowsData()) {
                         TSerializedCellVec row(row_);
@@ -484,19 +460,14 @@ protected:
                     if (FinishPrefixImpl()) {
                         PendingCheckpointKey = Prefix;
                         StartNewPrefix();
-                        YDB_LOG_TRACE("FinishPrefix finished in iterations",
-                            {"iteration", iteration},
-                            {"debug", Debug()});
+                        LOG_T("FinishPrefix finished in " << iteration << " iterations " << Debug());
                         return true;
                     } else {
-                        YDB_LOG_TRACE("FinishPrefix not finished in iterations",
-                            {"iteration", iteration},
-                            {"debug", Debug()});
+                        LOG_T("FinishPrefix not finished in " << iteration << " iterations " << Debug());
                     }
                 }
             } else {
-                YDB_LOG_TRACE("FinishPrefix not finished, rescanning rows",
-                    {"debug", Debug()});
+                LOG_T("FinishPrefix not finished, rescanning rows " << Debug());
             }
 
             return false;
@@ -702,10 +673,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
         auto response = MakeHolder<TEvDataShard::TEvPrefixKMeansResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        YDB_LOG_NOTICE("Starting TPrefixKMeansScan row version",
-            {"tabletId", TabletID()},
-            {"request", request.ShortDebugString()},
-            {"rowVersion", rowVersion});
+        LOG_N("Starting TPrefixKMeansScan TabletId: " << TabletID()
+            << " " << request.ShortDebugString()
+            << " row version " << rowVersion);
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
         if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -721,10 +691,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                YDB_LOG_ERROR("Rejecting TPrefixKMeansScan bad request with response",
-                    {"tabletId", TabletID()},
-                    {"request", request.ShortDebugString()},
-                    {"responseRecord", response->Record.ShortDebugString()});
+                LOG_E("Rejecting TPrefixKMeansScan bad request TabletId: " << TabletID()
+                    << " " << request.ShortDebugString()
+                    << " with response " << response->Record.ShortDebugString());
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

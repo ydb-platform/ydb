@@ -2,8 +2,6 @@
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
-
 namespace NKikimr::NDataShard {
 
     TDataShard::TTxReadSet::TTxReadSet(TDataShard *self, TEvTxProcessing::TEvReadSet::TPtr ev)
@@ -12,9 +10,9 @@ namespace NKikimr::NDataShard {
     {}
 
     bool TDataShard::TTxReadSet::Execute(TTransactionContext &txc, const TActorContext &ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "TTxReadSet::Execute at got read",
-            {"tabletId", Self->TabletID()},
-            {"set", Ev->Get()->ToString().data()});
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxReadSet::Execute at " << Self->TabletID() << " got read set: "
+                    << Ev->Get()->ToString().data());
 
         DoExecute(txc, ctx);
 
@@ -59,10 +57,9 @@ namespace NKikimr::NDataShard {
         if (!Self->IsStateActive()) {
             /// @warning Ack and allow sender to forget readset.
             /// It's possible till readsets can't passwthough splits-merges or other shard mutations.
-            YDB_LOG_WARN_CTX(ctx, "Allow sender to lose readset, state",
-                {"state", state},
-                {"tabletId", Self->TabletID()},
-                {"msg", msg});
+            LOG_WARN(ctx, NKikimrServices::TX_DATASHARD,
+                "Allow sender to lose readset, state %" PRIu32 " at %" PRIu64 " %s",
+                state, Self->TabletID(), msg.ToString().data());
             return;
         }
 
@@ -90,16 +87,16 @@ namespace NKikimr::NDataShard {
     }
 
     void TDataShard::TTxReadSet::Complete(const TActorContext &ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "TTxReadSet::Complete",
-            {"tabletId", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxReadSet::Complete at " << Self->TabletID());
 
         // If it was read set for non-active tx we should send ACK back after successful save in DB
         // Note that, active tx will send "delayed" ACK after tx complete
         if (Ack || NoDataReply) {
-            YDB_LOG_DEBUG_CTX(ctx, "Send RS",
-                {"replyType", Ack && NoDataReply ? "Ack+Reply" : Ack ? "Ack" : "Reply"},
-                {"tabletId", Self->TabletID()},
-                {"eventString", Ev->Get()->ToString().data()});
+            LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
+                      "Send RS %s at %" PRIu64 " %s",
+                      Ack && NoDataReply ? "Ack+Reply" : Ack ? "Ack" : "Reply",
+                      Self->TabletID(), Ev->Get()->ToString().data());
 
             struct TSendState : public TThrRefBase {
                 TDataShard* Self;

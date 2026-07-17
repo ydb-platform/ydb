@@ -2,8 +2,6 @@
 #include "datashard_active_transaction.h"
 #include "datashard_impl.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
-
 namespace NKikimr {
 namespace NDataShard {
 
@@ -181,9 +179,10 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
                 ui64 txId = rowset.GetValue<Schema::ScanProgress::TxId>();
                 TSchemaOperation* op = FindSchemaTx(txId);
                 if (!op) {
-                    YDB_LOG_WARN("Op was not found for persisted scan tx id on tablet",
-                        {"txId", txId},
-                        {"tabletId", Self->TabletID()});
+                    LOG_WARN_S(TlsActivationContext->AsActorContext(), NKikimrServices::TX_DATASHARD,
+                               "Op was not found for persisted scan tx id " << txId
+                               << " on tablet "
+                               << Self->TabletID());
                     continue;
                 }
                 op->ScanState.LastKey = rowset.GetValue<Schema::ScanProgress::LastKey>();
@@ -471,10 +470,8 @@ ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedSt
         if (maxStep > outdatedStep)
             break;
 
-        YDB_LOG_TRACE("Cleaning up tx with maxStep at outdatedStep",
-            {"txId", txId},
-            {"maxStep", maxStep},
-            {"outdatedStep", outdatedStep});
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Cleaning up tx " << txId << " with maxStep " << maxStep << " at outdatedStep " << outdatedStep);
 
         auto it = TxsInFly.find(txId);
         if (it != TxsInFly.end() && !it->second->HasVolatilePrepareFlag()) {
@@ -511,8 +508,8 @@ ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedSt
 bool TTransQueue::CleanupVolatile(ui64 txId) {
     auto it = TxsInFly.find(txId);
     if (it != TxsInFly.end() && it->second->HasVolatilePrepareFlag() && !it->second->GetStep()) {
-        YDB_LOG_TRACE("Cleaning up volatile tx ahead of time",
-            {"txId", txId});
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Cleaning up volatile tx " << txId << " ahead of time");
 
         // We don't call RemoveTxInFly to give caller a chance to work with the operation
         // Caller must call RemoveTxInFly on the transaction

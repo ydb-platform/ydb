@@ -20,8 +20,6 @@
 
 #include <library/cpp/json/json_writer.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
-
 namespace NKikimr::NDataShard {
 
 using namespace NPQ;
@@ -61,15 +59,11 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& result = *ev->Get();
         if (!result.IsSuccess()) {
-            YDB_LOG_ERROR("Error",
-                {"logPrefix", GetLogPrefix()},
-                {"initError", result.GetError()});
+            LOG_E("Error at 'Init': " << result.GetError().ToString());
             return Leave();
         }
 
@@ -115,9 +109,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     };
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         NKikimrClient::TPersQueueRequest request;
 
         for (auto recordPtr : ev->Get()->Records) {
@@ -166,32 +158,26 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& result = *ev->Get();
         if (!result.IsSuccess()) {
-            YDB_LOG_ERROR("Error",
-                {"logPrefix", GetLogPrefix()},
-                {"writeError", result.DumpError()});
+            LOG_E("Error at 'Write': " << result.DumpError());
             return Leave();
         }
 
         const auto& response = result.Record.GetPartitionResponse();
         if (response.GetCookie() != Cookie) {
-            YDB_LOG_ERROR("Cookie mismatch",
-                {"logPrefix", GetLogPrefix()},
-                {"expected", Cookie},
-                {"got", response.GetCookie()});
+            LOG_E("Cookie mismatch"
+                << ": expected# " << Cookie
+                << ", got# " << response.GetCookie());
             return Leave();
         }
 
         if (response.CmdWriteResultSize() != Pending.size()) {
-            YDB_LOG_ERROR("Write result size mismatch",
-                {"logPrefix", GetLogPrefix()},
-                {"expected", Pending.size()},
-                {"got", response.CmdWriteResultSize()});
+            LOG_E("Write result size mismatch"
+                << ": expected# " << Pending.size()
+                << ", got# " << response.CmdWriteResultSize());
             return Leave();
         }
 
@@ -204,10 +190,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                 continue;
             }
 
-            YDB_LOG_ERROR("SeqNo mismatch",
-                {"logPrefix", GetLogPrefix()},
-                {"expected", expected},
-                {"got", got});
+            LOG_E("SeqNo mismatch"
+                << ": expected# " << expected
+                << ", got# " << got);
             return Leave();
         }
 
@@ -245,8 +230,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Disconnected() {
-        YDB_LOG_DEBUG("Disconnected",
-            {"logPrefix", GetLogPrefix()});
+        LOG_D("Disconnected");
 
         if (CurrentStateFunc() != static_cast<TReceiveFunc>(&TThis::StateInit)) {
             return Leave();
@@ -257,8 +241,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Lost() {
-        YDB_LOG_WARN("Lost",
-            {"logPrefix", GetLogPrefix()});
+        LOG_W("Lost");
         Leave();
     }
 
@@ -414,16 +397,12 @@ class TCdcChangeSenderMain
     }
 
     void LogCritAndRetry(const TString& error) {
-        YDB_LOG_CRIT("",
-            {"logPrefix", GetLogPrefix()},
-            {"error", error});
+        LOG_C(error);
         Retry();
     }
 
     void LogWarnAndRetry(const TString& error) {
-        YDB_LOG_WARN("",
-            {"logPrefix", GetLogPrefix()},
-            {"error", error});
+        LOG_W(error);
         Retry();
     }
 
@@ -492,9 +471,8 @@ class TCdcChangeSenderMain
     void HandleCdcStream(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
-            {"logPrefix", GetLogPrefix()},
-            {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
+        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -523,8 +501,7 @@ class TCdcChangeSenderMain
         }
 
         if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
-            YDB_LOG_DEBUG("Stream is planned to drop, waiting for the EvRemoveSender command",
-                {"logPrefix", GetLogPrefix()});
+            LOG_D("Stream is planned to drop, waiting for the EvRemoveSender command");
 
             RemoveRecords();
             KillSenders();
@@ -564,9 +541,8 @@ class TCdcChangeSenderMain
     void HandleTopic(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
-            {"logPrefix", GetLogPrefix()},
-            {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
+        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -659,44 +635,32 @@ class TCdcChangeSenderMain
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         EnqueueRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         ForgetRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         OnReady(ev->Get()->PartitionId);
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         OnGone(ev->Get()->PartitionId);
     }
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         Y_ENSURE(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
@@ -704,9 +668,7 @@ class TCdcChangeSenderMain
     }
 
     void AutoRemove(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         RemoveRecords(std::move(ev->Get()->Records));
     }
 

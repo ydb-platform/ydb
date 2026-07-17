@@ -16,8 +16,6 @@
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
-
 namespace NKikimr {
 namespace NDataShard {
 
@@ -35,23 +33,19 @@ class TCdcPartitionWorker: public TActorBootstrapped<TCdcPartitionWorker> {
     }
 
     void Ack() {
-        YDB_LOG_INFO("Send ack",
-            {"logPrefix", GetLogPrefix()});
+        LOG_I("Send ack");
         Send(Parent, new TEvChangeExchange::TEvSplitAck());
         PassAway();
     }
 
     void Leave() {
-        YDB_LOG_INFO("Leave",
-            {"logPrefix", GetLogPrefix()});
+        LOG_I("Leave");
         Send(Parent, new TEvents::TEvGone());
         PassAway();
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& response = ev->Get()->Record;
 
@@ -75,16 +69,14 @@ class TCdcPartitionWorker: public TActorBootstrapped<TCdcPartitionWorker> {
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->TabletId == TabletId && ev->Get()->Status != NKikimrProto::OK) {
-            YDB_LOG_WARN("Pipe connection error",
-                {"logPrefix", GetLogPrefix()});
+            LOG_W("Pipe connection error");
             Leave();
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         if (ev->Get()->TabletId == TabletId) {
-            YDB_LOG_WARN("Pipe disconnected",
-                {"logPrefix", GetLogPrefix()});
+            LOG_W("Pipe disconnected");
             Leave();
         }
     }
@@ -180,8 +172,7 @@ class TCdcWorker
     }
 
     void Ack() {
-        YDB_LOG_INFO("Send ack",
-            {"logPrefix", GetLogPrefix()});
+        LOG_I("Send ack");
         Send(Parent, new TEvChangeExchange::TEvSplitAck());
         PassAway();
     }
@@ -214,16 +205,12 @@ class TCdcWorker
     }
 
     void LogCritAndRetry(const TString& error) {
-        YDB_LOG_CRIT("",
-            {"logPrefix", GetLogPrefix()},
-            {"error", error});
+        LOG_C(error);
         Retry();
     }
 
     void LogWarnAndRetry(const TString& error) {
-        YDB_LOG_WARN("",
-            {"logPrefix", GetLogPrefix()},
-            {"error", error});
+        LOG_W(error);
         Retry();
     }
 
@@ -283,9 +270,8 @@ class TCdcWorker
     void HandleCdcStream(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
-            {"logPrefix", GetLogPrefix()},
-            {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
+        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -310,8 +296,7 @@ class TCdcWorker
         }
 
         if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
-            YDB_LOG_NOTICE("Auto-ack (stream is planned to drop)",
-                {"logPrefix", GetLogPrefix()});
+            LOG_N("Auto-ack (stream is planned to drop)");
             return Ack();
         }
 
@@ -344,9 +329,8 @@ class TCdcWorker
     void HandleTopic(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
-            {"logPrefix", GetLogPrefix()},
-            {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
+        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -385,9 +369,8 @@ class TCdcWorker
                 workers.emplace(partitionId, it->second);
                 Workers.erase(it);
             } else {
-                YDB_LOG_TRACE("Register new worker",
-                    {"logPrefix", GetLogPrefix()},
-                    {"partitionId", partitionId});
+                LOG_T("Register new worker"
+                    << ": partitionId# " << partitionId);
 
                 const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId, SrcTabletId, DstTabletIds));
                 workers.emplace(partitionId, worker);
@@ -400,9 +383,8 @@ class TCdcWorker
             const auto& worker = kv.second;
 
             if (worker) {
-                YDB_LOG_TRACE("Kill stale worker",
-                    {"logPrefix", GetLogPrefix()},
-                    {"partitionId", partitionId});
+                LOG_T("Kill stale worker"
+                    << ": partitionId# " << partitionId);
 
                 Send(worker, new TEvents::TEvPoisonPill());
                 Pending.erase(worker);
@@ -413,9 +395,7 @@ class TCdcWorker
             return Ack();
         }
 
-        YDB_LOG_INFO("Wait worker(s)",
-            {"logPrefix", GetLogPrefix()},
-            {"pendingCount", Pending.size()});
+        LOG_I("Wait " << Pending.size() << " worker(s)");
 
         Workers = std::move(workers);
         Become(&TThis::StateWork);
@@ -426,22 +406,18 @@ class TCdcWorker
     }
 
     void Handle(TEvChangeExchange::TEvSplitAck::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
 
         auto it = Pending.find(ev->Sender);
         if (it == Pending.end()) {
-            YDB_LOG_WARN("Split ack from unknown worker",
-                {"logPrefix", GetLogPrefix()},
-                {"worker", ev->Sender});
+            LOG_W("Split ack from unknown worker"
+                << ": worker# " << ev->Sender);
             return;
         }
 
-        YDB_LOG_NOTICE("Split ack",
-            {"logPrefix", GetLogPrefix()},
-            {"worker", it->first},
-            {"partition", it->second});
+        LOG_N("Split ack"
+            << ": worker# " << it->first
+            << ", partition# " << it->second);
 
         Workers[it->second] = TActorId();
         Pending.erase(it);
@@ -452,22 +428,18 @@ class TCdcWorker
     }
 
     void Handle(TEvents::TEvGone::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
 
         auto it = Pending.find(ev->Sender);
         if (it == Pending.end()) {
-            YDB_LOG_WARN("Unknown worker has gone",
-                {"logPrefix", GetLogPrefix()},
-                {"worker", ev->Sender});
+            LOG_W("Unknown worker has gone"
+                << ": worker# " << ev->Sender);
             return;
         }
 
-        YDB_LOG_INFO("Worker has gone",
-            {"logPrefix", GetLogPrefix()},
-            {"worker", it->first},
-            {"partition", it->second});
+        LOG_I("Worker has gone"
+            << ": worker# " << it->first
+            << ", partition# " << it->second);
 
         Workers.erase(it->second);
         Pending.erase(it);
@@ -565,28 +537,23 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
     }
 
     void Ack() {
-        YDB_LOG_INFO("Send ack",
-            {"logPrefix", GetLogPrefix()});
+        LOG_I("Send ack");
         Send(DataShard.ActorId, new TEvChangeExchange::TEvSplitAck());
         PassAway();
     }
 
     void Handle(TEvChangeExchange::TEvSplitAck::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
 
         auto it = Pending.find(ev->Sender);
         if (it == Pending.end()) {
-            YDB_LOG_WARN("Split ack from unknown worker",
-                {"logPrefix", GetLogPrefix()},
-                {"worker", ev->Sender});
+            LOG_W("Split ack from unknown worker"
+                << ": worker# " << ev->Sender);
             return;
         }
 
-        YDB_LOG_NOTICE("Split ack",
-            {"logPrefix", GetLogPrefix()},
-            {"worker", ev->Sender});
+        LOG_N("Split ack"
+            << ": worker# " << ev->Sender);
 
         Workers.at(it->second).ActorId = TActorId();
         Pending.erase(it);
@@ -625,8 +592,7 @@ public:
 
     void Bootstrap() {
         if (!Workers) {
-            YDB_LOG_NOTICE("Auto-ack (no active worker)",
-                {"logPrefix", GetLogPrefix()});
+            LOG_N("Auto-ack (no active worker)");
             return Ack();
         }
 
@@ -634,9 +600,8 @@ public:
             const auto& pathId = kv.first;
             auto& worker = kv.second;
 
-            YDB_LOG_DEBUG("Register worker",
-                {"logPrefix", GetLogPrefix()},
-                {"pathId", pathId});
+            LOG_D("Register worker"
+                << ": pathId# " << pathId);
             Pending.emplace(RegisterWorker(pathId, worker), pathId);
         }
 

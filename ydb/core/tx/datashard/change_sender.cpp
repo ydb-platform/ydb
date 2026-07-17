@@ -16,8 +16,6 @@
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
-
 namespace NKikimr::NDataShard {
 
 class TChangeSender: public TActor<TChangeSender> {
@@ -71,9 +69,7 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         auto& records = ev->Get()->Records;
 
         if (!IsActive()) {
@@ -106,9 +102,7 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void Handle(TEvChangeExchange::TEvAddSender::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& msg = *ev->Get();
 
@@ -116,19 +110,17 @@ class TChangeSender: public TActor<TChangeSender> {
         if (it != Senders.end()) {
             Y_ENSURE(it->second.UserTableId == msg.UserTableId);
             Y_ENSURE(it->second.Type == msg.Type);
-            YDB_LOG_WARN("Trying to add duplicate sender",
-                {"logPrefix", GetLogPrefix()},
-                {"userTableId", msg.UserTableId},
-                {"type", msg.Type},
-                {"pathId", msg.PathId});
+            LOG_W("Trying to add duplicate sender"
+                << ": userTableId# " << msg.UserTableId
+                << ", type# " << msg.Type
+                << ", pathId# " << msg.PathId);
             return;
         }
 
-        YDB_LOG_NOTICE("Add sender",
-            {"logPrefix", GetLogPrefix()},
-            {"userTableId", msg.UserTableId},
-            {"type", msg.Type},
-            {"pathId", msg.PathId});
+        LOG_N("Add sender"
+            << ": userTableId# " << msg.UserTableId
+            << ", type# " << msg.Type
+            << ", pathId# " << msg.PathId);
 
         auto& sender = AddChangeSender(msg.PathId, msg.UserTableId, msg.Type);
         if (IsActive()) {
@@ -137,23 +129,19 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
         const auto& pathId = ev->Get()->PathId;
 
         auto it = Senders.find(pathId);
         if (it == Senders.end()) {
-            YDB_LOG_WARN("Trying to remove unknown sender",
-                {"logPrefix", GetLogPrefix()},
-                {"pathId", pathId});
+            LOG_W("Trying to remove unknown sender"
+                << ": pathId# " << pathId);
             return;
         }
 
-        YDB_LOG_NOTICE("Remove sender",
-            {"logPrefix", GetLogPrefix()},
-            {"type", it->second.Type},
-            {"pathId", it->first});
+        LOG_N("Remove sender"
+            << ": type# " << it->second.Type
+            << ", pathId# " << it->first);
 
         if (const auto& actorId = it->second.ActorId) {
             Send(actorId, new TEvChangeExchange::TEvRemoveSender(pathId));
@@ -163,9 +151,7 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void Handle(TEvChangeExchange::TEvActivateSender::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
 
         Become(&TThis::StateActive);
         LogPrefix.Clear();

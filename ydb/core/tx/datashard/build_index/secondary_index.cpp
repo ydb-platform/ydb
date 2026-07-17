@@ -28,8 +28,6 @@
 
 #include <deque>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
-
 namespace NKikimr::NDataShard {
 
 static std::shared_ptr<NTxProxy::TUploadTypes> BuildTypes(const TUserTable& tableInfo, const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings) {
@@ -172,9 +170,7 @@ protected:
 
     template <typename TAddRow>
     EScan FeedImpl([[maybe_unused]] TArrayRef<const TCell> key, const TRow& /*row*/, TAddRow&& addRow) {
-        // YDB_LOG_TRACE("Feed key",
-        //     {"key", DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry)},
-        //     {"debug", Debug()});
+        // LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
 
         addRow();
 
@@ -203,8 +199,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) override {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
-        YDB_LOG_INFO("Prepare",
-            {"debug", Debug()});
+        LOG_I("Prepare " << Debug());
 
         Driver = driver;
 
@@ -212,9 +207,7 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) override {
-        YDB_LOG_TRACE("Seek no",
-            {"seq", seq},
-            {"debug", Debug()});
+        LOG_T("Seek no " << seq << " " << Debug());
         if (seq) {
             if (!WriteBuf.IsEmpty()) {
                 return EScan::Sleep;
@@ -279,13 +272,9 @@ public:
         UploadStatusToMessage(progress->Record);
 
         if (progress->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            YDB_LOG_NOTICE("Done",
-                {"debug", Debug()},
-                {"progressRecord", progress->Record.ShortDebugString()});
+            LOG_N("Done " << Debug() << " " << progress->Record.ShortDebugString());
         } else {
-            YDB_LOG_ERROR("Failed",
-                {"debug", Debug()},
-                {"progressRecord", progress->Record.ShortDebugString()});
+            LOG_E("Failed " << Debug() << " " << progress->Record.ShortDebugString());
         }
         this->Send(ProgressActorId, progress.Release());
 
@@ -320,10 +309,10 @@ public:
     }
 
     EScan PageFault() override {
-        YDB_LOG_TRACE("Page fault ReadBuf WriteBuf",
-            {"readBufEmpty", ReadBuf.IsEmpty()},
-            {"writeBufEmpty", WriteBuf.IsEmpty()},
-            {"debug", Debug()});
+        LOG_T("Page fault"
+              << " ReadBuf empty: " << ReadBuf.IsEmpty()
+              << " WriteBuf empty: " << WriteBuf.IsEmpty()
+              << " " << Debug());
 
         if (!ReadBuf.IsEmpty() && WriteBuf.IsEmpty()) {
             ReadBuf.FlushTo(WriteBuf);
@@ -339,15 +328,12 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                YDB_LOG_ERROR("TBuildIndexScan: StateWork unexpected event",
-                    {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString()});
+                LOG_E("TBuildIndexScan: StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
         }
     }
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/) {
-        YDB_LOG_DEBUG("Retry upload",
-            {"debug", Debug()});
+        LOG_D("Retry upload " << Debug());
 
         if (!WriteBuf.IsEmpty()) {
             RetryUpload();
@@ -355,10 +341,10 @@ protected:
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx) {
-        YDB_LOG_DEBUG("Handle TEvUploadRowsResponse",
-            {"debug", Debug()},
-            {"uploader", Uploader},
-            {"sender", ev->Sender});
+        LOG_D("Handle TEvUploadRowsResponse "
+              << Debug()
+              << " Uploader: " << Uploader.ToString()
+              << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
             Y_ENSURE(Uploader == ev->Sender,
@@ -403,15 +389,13 @@ protected:
         }
 
         if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
-            YDB_LOG_NOTICE("Got retriable error",
-                {"debug", Debug()});
+            LOG_N("Got retriable error, " << Debug());
 
             ctx.Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
-        YDB_LOG_NOTICE("Got error, abort scan",
-            {"debug", Debug()});
+        LOG_N("Got error, abort scan, " << Debug());
 
         Driver->Touch(EScan::Final);
     }
@@ -427,9 +411,7 @@ protected:
             RetryCount = 0;
         }
 
-        YDB_LOG_DEBUG("Upload, last key",
-            {"lastKey", DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry)},
-            {"debug", Debug()});
+        LOG_D("Upload, last key " << DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry) << " " << Debug());
 
         auto actor = NTxProxy::CreateUploadRowsInternal(
             this->SelfId(),
@@ -862,10 +844,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
         auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
         FillScanResponseCommonFields(*response, request.GetId(), TabletID(), seqNo);
 
-        YDB_LOG_NOTICE("Starting TBuildIndexScan row version",
-            {"tabletId", TabletID()},
-            {"request", request.ShortDebugString()},
-            {"rowVersion", rowVersion});
+        LOG_N("Starting TBuildIndexScan TabletId: " << TabletID()
+            << " " << request.ShortDebugString()
+            << " row version " << rowVersion);
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
         if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -881,10 +862,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                YDB_LOG_ERROR("Rejecting TBuildIndexScan bad request with response",
-                    {"tabletId", TabletID()},
-                    {"request", request.ShortDebugString()},
-                    {"responseRecord", response->Record.ShortDebugString()});
+                LOG_E("Rejecting TBuildIndexScan bad request TabletId: " << TabletID()
+                    << " " << request.ShortDebugString()
+                    << " with response " << response->Record.ShortDebugString());
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

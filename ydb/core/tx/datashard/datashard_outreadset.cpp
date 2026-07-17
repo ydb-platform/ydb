@@ -3,8 +3,6 @@
 #include "datashard_outreadset.h"
 #include "datashard_impl.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
-
 namespace NKikimr {
 namespace NDataShard {
 
@@ -123,10 +121,9 @@ void TOutReadSets::AckForDeletedDestination(ui64 tabletId, ui64 seqNo, const TAc
     const TReadSetKey* rsInfo = CurrentReadSets.FindPtr(seqNo);
 
     if (!rsInfo) {
-        YDB_LOG_DEBUG_CTX(ctx, "Unknown seqNo for readset to tablet at tablet",
-            {"seqNo", seqNo},
-            {"tabletId", tabletId},
-            {"tabletId", Self->TabletID()});
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
+            "Unknown seqNo %" PRIu64 " for readset to tablet %" PRIu64 " at tablet %" PRIu64,
+            seqNo, tabletId, Self->TabletID());
         return;
     }
 
@@ -148,12 +145,9 @@ void TOutReadSets::SaveAck(const TActorContext &ctx, TAutoPtr<TEvTxProcessing::T
     ui64 consumer = ev->Record.GetTabletConsumer();
     ui64 txId = ev->Record.GetTxId();
 
-    YDB_LOG_DEBUG_CTX(ctx, "Receive RS Ack at source dest consumer txId",
-        {"tabletId", Self->TabletID()},
-        {"sender", sender},
-        {"dest", dest},
-        {"consumer", consumer},
-        {"txId", txId});
+    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
+        "Receive RS Ack at %" PRIu64 " source %" PRIu64 " dest %" PRIu64 " consumer %" PRIu64 " txId %" PRIu64,
+        Self->TabletID(), sender, dest, consumer, txId);
 
     ReadSetAcks.emplace_back(ev.Release());
 
@@ -181,13 +175,9 @@ void TOutReadSets::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx) {
         ui64 consumer = ev.Record.GetTabletConsumer();
         ui64 txId = ev.Record.GetTxId();
 
-        YDB_LOG_DEBUG_CTX(ctx, "Deleted RS at source dest consumer seqno txId",
-            {"tabletId", Self->TabletID()},
-            {"sender", sender},
-            {"dest", dest},
-            {"consumer", consumer},
-            {"seqno", seqno},
-            {"txId", txId});
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
+            "Deleted RS at %" PRIu64 " source %" PRIu64 " dest %" PRIu64 " consumer %" PRIu64 " seqno %" PRIu64" txId %" PRIu64,
+            Self->TabletID(), sender, dest, consumer, seqno, txId);
 
         RemoveReadSet(db, seqno);
     }

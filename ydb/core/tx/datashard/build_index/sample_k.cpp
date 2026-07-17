@@ -17,8 +17,6 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
-
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
@@ -95,8 +93,7 @@ public:
         , ResponseActorId(responseActorId)
         , Clusters(std::move(clusters))
     {
-        YDB_LOG_INFO("Create",
-            {"debug", Debug()});
+        LOG_I("Create " << Debug());
 
         NTable::TPos pos = 0;
         for (const auto& col: request.GetColumns()) {
@@ -125,8 +122,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
-        YDB_LOG_INFO("Prepare",
-            {"debug", Debug()});
+        LOG_I("Prepare " << Debug());
 
         Driver = driver;
 
@@ -134,9 +130,7 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) final {
-        YDB_LOG_TRACE("Seek",
-            {"seq", seq},
-            {"debug", Debug()});
+        LOG_T("Seek " << seq << " " << Debug());
 
         lead = Lead;
 
@@ -144,8 +138,7 @@ public:
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
-        // YDB_LOG_TRACE("Feed",
-        //       {"debug", Debug()});
+        // LOG_T("Feed " << Debug());
 
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
@@ -195,8 +188,7 @@ public:
 
     EScan Exhausted() final
     {
-        YDB_LOG_TRACE("Exhausted",
-            {"debug", Debug()});
+        LOG_T("Exhausted " << Debug());
 
         return EScan::Final;
     }
@@ -231,13 +223,9 @@ public:
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            YDB_LOG_NOTICE("Done",
-                {"debug", Debug()},
-                {"responseRecord", ToShortDebugString(Response->Record)});
+            LOG_N("Done " << Debug() << " " << ToShortDebugString(Response->Record));
         } else {
-            YDB_LOG_ERROR("Failed",
-                {"debug", Debug()},
-                {"responseRecord", ToShortDebugString(Response->Record)});
+            LOG_E("Failed " << Debug() << " " << ToShortDebugString(Response->Record));
         }
         Send(ResponseActorId, Response.Release());
 
@@ -268,10 +256,8 @@ private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             default:
-                YDB_LOG_ERROR("StateWork unexpected event",
-                    {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString()},
-                    {"debug", Debug()});
+                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
+                    << " event: " << ev->ToString() << " " << Debug());
         }
     }
 
@@ -324,10 +310,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         auto response = MakeHolder<TEvDataShard::TEvSampleKResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        YDB_LOG_NOTICE("Starting TSampleKScan row version",
-            {"tabletId", TabletID()},
-            {"request", request.ShortDebugString()},
-            {"rowVersion", rowVersion});
+        LOG_N("Starting TSampleKScan TabletId: " << TabletID()
+            << " " << request.ShortDebugString()
+            << " row version " << rowVersion);
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
         if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -343,10 +328,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                YDB_LOG_ERROR("Rejecting TSampleKScan bad request with response",
-                    {"tabletId", TabletID()},
-                    {"request", request.ShortDebugString()},
-                    {"responseRecord", ToShortDebugString(response->Record)});
+                LOG_E("Rejecting TSampleKScan bad request TabletId: " << TabletID()
+                    << " " << request.ShortDebugString()
+                    << " with response " << ToShortDebugString(response->Record));
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

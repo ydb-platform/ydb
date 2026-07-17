@@ -9,8 +9,6 @@
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/util/pb.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
-
 
 namespace NKikimr {
 namespace NDataShard {
@@ -52,7 +50,7 @@ private:
 };
 
 bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    YDB_LOG_DEBUG_CTX(ctx, "TDataShard::TTxInit::Execute");
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Execute");
 
     try {
         Self->State = TShardState::Unknown;
@@ -98,7 +96,7 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
 }
 
 void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
-    YDB_LOG_DEBUG_CTX(ctx, "TDataShard::TTxInit::Complete");
+    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Complete");
 }
 
 void TDataShard::OnInMemoryStateRestored(THashMap<ui64, TOperation::TPtr> migratedTxs) {
@@ -106,7 +104,7 @@ void TDataShard::OnInMemoryStateRestored(THashMap<ui64, TOperation::TPtr> migrat
 }
 
 bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    YDB_LOG_DEBUG_CTX(ctx, "TDataShard::TTxInitRestored::Execute");
+    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute");
 
     TDataShardLocksDb locksDb(*Self, txc);
     if (Self->SysLocks.RestorePersistentState(&locksDb)) {
@@ -114,7 +112,7 @@ bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActor
         // single commit, e.g. removing locks with a large number of conflicts
         // may result in large commits. Prefer starting a new transaction after
         // every change, but without waiting for each commit to succeed.
-        YDB_LOG_DEBUG_CTX(ctx, "TDataShard::TTxInitRestored::Execute: persistent lock state updated, rescheduling transaction");
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute: persistent lock state updated, rescheduling transaction");
         Self->OnInMemoryStateRestored(std::move(MigratedTxs));
         Rescheduled = true;
         return true;
@@ -156,10 +154,9 @@ bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActor
     // previous actor id.
     if (InMemoryStateActorStarted || Self->InMemoryStatePrevActorId && !Self->InMemoryStateActorId) {
         NIceDb::TNiceDb db(txc.DB);
-        YDB_LOG_DEBUG_CTX(ctx, "DataShard persisting started state actor id in generation",
-            {"tabletId", Self->TabletID()},
-            {"inMemoryStateActorId", Self->InMemoryStateActorId},
-            {"generation", Self->Generation()});
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "DataShard " << Self->TabletID()
+            << " persisting started state actor id " << Self->InMemoryStateActorId
+            << " in generation " << Self->Generation());
         Self->PersistSys(db, Schema::Sys_InMemoryStateActorId, Self->InMemoryStateActorId);
         Self->PersistSys(db, Schema::Sys_InMemoryStateGeneration, Self->Generation());
     }
@@ -172,7 +169,7 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
         return;
     }
 
-    YDB_LOG_DEBUG_CTX(ctx, "TDataShard::TTxInitRestored::Complete");
+    LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Complete");
 
     if (Self->InMemoryStateActor && InMemoryStateActorStarted) {
         Self->InMemoryStateActor->ConfirmPersistent();
@@ -208,20 +205,22 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
 
             if (scanInfo.ResponseType == static_cast<ui32>(EBuildIndexEventType::SecondaryIndexResponseFinal)) {
                 response->Record.ParseFromStringOrThrow(scanInfo.FinalProgressRecordSerialized);
-                YDB_LOG_NOTICE_CTX(ctx, "TTxInitRestored: resending persisted final build index progress to SchemeShard",
-                    {"buildId", buildId},
-                    {"tabletId", Self->TabletID()},
-                    {"schemeShardId", Self->CurrentSchemeShardId},
-                    {"responseType", scanInfo.ResponseType});
+                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxInitRestored: resending persisted final build index progress to SchemeShard"
+                    << ", buildId# " << buildId
+                    << ", tabletId# " << Self->TabletID()
+                    << ", schemeShardId# " << Self->CurrentSchemeShardId
+                    << ", responseType# " << scanInfo.ResponseType);
             } else if (scanInfo.ResponseType == static_cast<ui32>(EBuildIndexEventType::SecondaryIndexProgressResponse)) {
                 TScanRecord::TSeqNo seqNo = {scanInfo.SeqNoGeneration, scanInfo.SeqNoRound};
                 FillScanResponseCommonFields(*response, buildId, Self->TabletID(), seqNo);
                 response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
-                YDB_LOG_NOTICE_CTX(ctx, "TTxInitRestored: notifying SchemeShard of aborted index build scan",
-                    {"buildId", buildId},
-                    {"tabletId", Self->TabletID()},
-                    {"schemeShardId", Self->CurrentSchemeShardId},
-                    {"responseType", scanInfo.ResponseType});
+                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "TTxInitRestored: notifying SchemeShard of aborted index build scan"
+                    << ", buildId# " << buildId
+                    << ", tabletId# " << Self->TabletID()
+                    << ", schemeShardId# " << Self->CurrentSchemeShardId
+                    << ", responseType# " << scanInfo.ResponseType);
             } else {
                 Y_ENSURE(false, "Unknown ResponseType in IndexBuildScans: " << scanInfo.ResponseType);
             }
@@ -731,7 +730,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         Y_UNUSED(txc);
-        YDB_LOG_DEBUG_CTX(ctx, "TxInitSchema.Execute");
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Execute");
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -774,7 +773,7 @@ public:
             if (rawProcessingParams.empty()) {
                 auto *domain = AppData(ctx)->DomainsInfo->GetDomain();
                 NKikimrSubDomains::TProcessingParams params = ExtractProcessingParams(*domain);
-                YDB_LOG_DEBUG_CTX(ctx, "TxInitSchema.Execute Persist Sys_SubDomainInfo");
+                LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Execute Persist Sys_SubDomainInfo");
                 Self->PersistSys(db, Schema::Sys_SubDomainInfo, params.SerializeAsString());
             }
         }
@@ -788,7 +787,7 @@ public:
 
             if (pathOwnerId == INVALID_TABLET_ID && currentSchemeShardId != INVALID_TABLET_ID) {
                 pathOwnerId = currentSchemeShardId;
-                YDB_LOG_DEBUG_CTX(ctx, "TxInitSchema.Execute Persist Sys_PathOwnerId");
+                LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Execute Persist Sys_PathOwnerId");
                 Self->PersistSys(db, TDataShard::Schema::Sys_PathOwnerId, pathOwnerId);
             }
         }
@@ -797,7 +796,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "TxInitSchema.Complete");
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Complete");
         Self->Execute(Self->CreateTxInit(), ctx);
     }
 };
@@ -812,7 +811,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_INIT_SCHEMA_DEFAULTS; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "TxInitSchemaDefaults.Execute");
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchemaDefaults.Execute");
 
         if (Self->State == TShardState::Ready) {
             for (const auto& pr : Self->TableInfos) {
@@ -824,7 +823,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "TxInitSchemaDefaults.Complete");
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchemaDefaults.Complete");
     }
 };
 
@@ -904,10 +903,10 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     }
 
     if (FollowerState.LastSysUpdate < lastSysUpdate) {
-        YDB_LOG_DEBUG_CTX(ctx, "Updating sys metadata on follower, tabletId prev current",
-            {"tabletID", TabletID()},
-            {"lastSysUpdate", FollowerState.LastSysUpdate},
-            {"lastSysUpdate", lastSysUpdate});
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "Updating sys metadata on follower, tabletId " << TabletID()
+                << " prev " << FollowerState.LastSysUpdate
+                << " current " << lastSysUpdate);
 
         bool ready = true;
         ready &= SysGetUi64(db, Schema::Sys_PathOwnerId, PathOwnerId);
@@ -921,10 +920,10 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     }
 
     if (FollowerState.LastSchemeUpdate < lastSchemeUpdate) {
-        YDB_LOG_DEBUG_CTX(ctx, "Updating tables metadata on follower, tabletId prev current",
-            {"tabletID", TabletID()},
-            {"lastSchemeUpdate", FollowerState.LastSchemeUpdate},
-            {"lastSchemeUpdate", lastSchemeUpdate});
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "Updating tables metadata on follower, tabletId " << TabletID()
+                << " prev " << FollowerState.LastSchemeUpdate
+                << " current " << lastSchemeUpdate);
 
         struct TRow {
             TPathId TableId;
@@ -992,10 +991,10 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
 
     // N.B. follower with snapshots support may be loaded in datashard without a snapshots table
     if (FollowerState.LastSnapshotsUpdate < lastSnapshotsUpdate) {
-        YDB_LOG_DEBUG_CTX(ctx, "Updating snapshots metadata on follower, tabletId prev current",
-            {"tabletID", TabletID()},
-            {"lastSnapshotsUpdate", FollowerState.LastSnapshotsUpdate},
-            {"lastSnapshotsUpdate", lastSnapshotsUpdate});
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "Updating snapshots metadata on follower, tabletId " << TabletID()
+                << " prev " << FollowerState.LastSnapshotsUpdate
+                << " current " << lastSnapshotsUpdate);
 
         NIceDb::TNiceDb db(txc.DB);
         if (!SnapshotManager.ReloadSnapshots(db)) {

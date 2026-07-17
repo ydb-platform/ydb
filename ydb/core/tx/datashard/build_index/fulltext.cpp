@@ -21,8 +21,6 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
-
 namespace NKikimr::NDataShard {
 using namespace NTableIndex::NFulltext;
 using namespace NKikimr::NFulltext;
@@ -153,8 +151,7 @@ public:
             RequestedRange = TableRange;
         }
 
-        YDB_LOG_INFO("Create",
-            {"debug", Debug()});
+        LOG_I("Create " << Debug());
 
         Y_ENSURE(Request.settings().columns().size() == 1);
         TextColumn = Request.settings().columns().at(0).column();
@@ -316,8 +313,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        YDB_LOG_INFO("Prepare",
-            {"debug", Debug()});
+        LOG_I("Prepare " << Debug());
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
@@ -327,9 +323,7 @@ public:
 
     EScan Seek(TLead& lead, ui64 seq) final
     {
-        YDB_LOG_TRACE("Seek",
-            {"seq", seq},
-            {"debug", Debug()});
+        LOG_T("Seek " << seq << " " << Debug());
 
         if (seq) {
             return Uploader.CanFinish()
@@ -355,8 +349,7 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
-        // YDB_LOG_TRACE("Feed",
-        //       {"debug", Debug()});
+        // LOG_T("Feed " << Debug());
 
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
@@ -592,8 +585,7 @@ public:
 
     EScan PageFault() final
     {
-        YDB_LOG_TRACE("PageFault",
-            {"debug", Debug()});
+        LOG_T("PageFault " << Debug());
         return EScan::Feed;
     }
 
@@ -602,16 +594,13 @@ public:
         FlushAllTokens();
 
         if (JsonErrors > 0) {
-            YDB_LOG_WARN("Invalid JSON encountered in rows",
-                {"jsonErrors", JsonErrors},
-                {"debug", Debug()});
+            LOG_W("Invalid JSON encountered in " << JsonErrors << " rows " << Debug());
         }
-        YDB_LOG_DEBUG("Exhausted posting docs",
-            {"readRows", ReadRows},
-            {"docCount", DocCount},
-            {"postingAdded", PostingEntriesAdded},
-            {"docsAdded", DocsEntriesAdded},
-            {"debug", Debug()});
+        LOG_D("Exhausted ReadRows: " << ReadRows
+            << " DocCount: " << DocCount
+            << " posting added: " << PostingEntriesAdded
+            << " docs added: " << DocsEntriesAdded
+            << " " << Debug());
 
         // call Seek to wait uploads
         return EScan::Reset;
@@ -639,17 +628,15 @@ public:
         Uploader.Finish(record, status);
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            YDB_LOG_NOTICE("Done posting docs",
-                {"debug", Debug()},
-                {"postingAdded", PostingEntriesAdded},
-                {"docsAdded", DocsEntriesAdded},
-                {"responseRecord", Response->Record.ShortDebugString()});
+            LOG_N("Done " << Debug()
+                << " posting added: " << PostingEntriesAdded
+                << " docs added: " << DocsEntriesAdded
+                << " " << Response->Record.ShortDebugString());
         } else {
-            YDB_LOG_ERROR("Failed posting docs",
-                {"debug", Debug()},
-                {"postingAdded", PostingEntriesAdded},
-                {"docsAdded", DocsEntriesAdded},
-                {"responseRecord", Response->Record.ShortDebugString()});
+            LOG_E("Failed " << Debug()
+                << " posting added: " << PostingEntriesAdded
+                << " docs added: " << DocsEntriesAdded
+                << " " << Response->Record.ShortDebugString());
         }
         Send(ResponseActorId, Response.Release());
 
@@ -679,28 +666,24 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                YDB_LOG_ERROR("StateWork unexpected event",
-                    {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString()},
-                    {"debug", Debug()});
+                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
+                    << " event: " << ev->ToString() << " " << Debug());
         }
     }
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/)
     {
-        YDB_LOG_DEBUG("Retry upload",
-            {"debug", Debug()});
+        LOG_D("Retry upload " << Debug());
 
         Uploader.RetryUpload();
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
-        YDB_LOG_DEBUG("Handle TEvUploadRowsResponse posting docs",
-            {"debug", Debug()},
-            {"postingAdded", PostingEntriesAdded},
-            {"docsAdded", DocsEntriesAdded},
-            {"sender", ev->Sender});
+        LOG_D("Handle TEvUploadRowsResponse " << Debug()
+            << " posting added: " << PostingEntriesAdded
+            << " docs added: " << DocsEntriesAdded
+            << " ev->Sender: " << ev->Sender.ToString());
 
         if (!Driver) {
             return;
@@ -738,16 +721,12 @@ protected:
         }
 
         if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
-            YDB_LOG_NOTICE("Got retriable error",
-                {"debug", Debug()},
-                {"uploadStatus", Uploader.GetUploadStatus()});
+            LOG_N("Got retriable error, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
             ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
-        YDB_LOG_NOTICE("Got error, abort scan",
-            {"debug", Debug()},
-            {"uploadStatus", Uploader.GetUploadStatus()});
+        LOG_N("Got error, abort scan, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
 
         Driver->Touch(EScan::Final);
     }
@@ -800,10 +779,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         auto response = MakeHolder<TEvDataShard::TEvBuildFulltextIndexResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        YDB_LOG_NOTICE("Starting TBuildFulltextIndexScan row version",
-            {"tabletId", TabletID()},
-            {"request", request.ShortDebugString()},
-            {"rowVersion", rowVersion});
+        LOG_N("Starting TBuildFulltextIndexScan TabletId: " << TabletID()
+            << " " << request.ShortDebugString()
+            << " row version " << rowVersion);
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
         if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -819,10 +797,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                YDB_LOG_ERROR("Rejecting TBuildFulltextIndexScan bad request with response",
-                    {"tabletId", TabletID()},
-                    {"request", request.ShortDebugString()},
-                    {"responseRecord", response->Record.ShortDebugString()});
+                LOG_E("Rejecting TBuildFulltextIndexScan bad request TabletId: " << TabletID()
+                    << " " << request.ShortDebugString()
+                    << " with response " << response->Record.ShortDebugString());
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

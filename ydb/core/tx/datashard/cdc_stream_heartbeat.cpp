@@ -1,7 +1,9 @@
 #include "cdc_stream_heartbeat.h"
 #include "datashard_impl.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
+#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
 
 namespace NKikimr::NDataShard {
 
@@ -35,9 +37,9 @@ public:
             return true;
         }
 
-        YDB_LOG_INFO("[CdcStreamHeartbeat] Emit change records",
-            {"edge", Edge},
-            {"tablet", Self->TabletID()});
+        LOG_I("Emit change records"
+            << ": edge# " << Edge
+            << ", at tablet# " << Self->TabletID());
 
         NIceDb::TNiceDb db(txc.DB);
         const auto heartbeats = Self->GetCdcStreamHeartbeatManager().EmitHeartbeats(txc.DB, Edge);
@@ -72,9 +74,8 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_INFO("[CdcStreamHeartbeat] Enqueue change record(s)",
-            {"changeRecordsCount", ChangeRecords.size()},
-            {"tablet", Self->TabletID()});
+        LOG_I("Enqueue " << ChangeRecords.size() << " change record(s)"
+            << ": at tablet# " << Self->TabletID());
         Self->EnqueueChangeRecords(std::move(ChangeRecords));
         Self->EmitHeartbeats();
     }
@@ -82,8 +83,8 @@ public:
 }; // TTxCdcStreamEmitHeartbeats
 
 void TDataShard::EmitHeartbeats() {
-    YDB_LOG_DEBUG("[CdcStreamHeartbeat] Emit heartbeats",
-        {"tablet", TabletID()});
+    LOG_D("Emit heartbeats"
+        << ": at tablet# " << TabletID());
 
     if (State != TShardState::Ready) {
         return;

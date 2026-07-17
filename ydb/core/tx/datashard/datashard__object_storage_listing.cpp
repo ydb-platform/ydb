@@ -1,8 +1,6 @@
 #include "datashard_impl.h"
 #include <util/string/vector.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
-
 namespace NKikimr {
 namespace NDataShard {
 
@@ -150,14 +148,14 @@ public:
 
             if (Ev->Get()->Record.HasLastPath()) {
                 TString reqLastPath = Ev->Get()->Record.GetLastPath();
-
+                
                 key.emplace_back(reqLastPath, tableInfo.KeyColumnTypes[prefixSize].GetTypeId());
 
                 for (size_t i = 1; i < suffixColumns.GetCells().size(); ++i) {
                     size_t ki = prefixSize + i;
                     key.emplace_back(suffixColumns.GetCells()[i].Data(), suffixColumns.GetCells()[i].Size(), tableInfo.KeyColumnTypes[ki].GetTypeId());
                 }
-
+                
                 startAfterPath = reqLastPath;
             } else {
                 for (size_t i = 0; i < suffixColumns.GetCells().size(); ++i) {
@@ -194,14 +192,11 @@ public:
             endKeyInclusive = false;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "S3 Listing: start at key end at key last path: common",
-            {"tabletId", Self->TabletID()},
-            {"startKey", JoinVectorIntoString(key, " ")},
-            {"endKey", JoinVectorIntoString(endKey, " ")},
-            {"restarted", RestartCount-1},
-            {"lastPath", LastPath},
-            {"contents", Result->Record.ContentsRowsSize()},
-            {"prefixes", Result->Record.CommonPrefixesRowsSize()});
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " S3 Listing: start at key ("
+            << JoinVectorIntoString(key, " ") << "), end at key (" << JoinVectorIntoString(endKey, " ") << ")"
+            << " restarted: " << RestartCount-1 << " last path: \"" << LastPath << "\""
+            << " contents: " << Result->Record.ContentsRowsSize()
+            << " common prefixes: " << Result->Record.CommonPrefixesRowsSize());
 
         Result->Record.SetMoreRows(!IsKeyInRange(endKey, tableInfo));
 
@@ -238,7 +233,7 @@ public:
             for (const auto& colId : filter.columns()) {
                 filterColumnIds.push_back(colId);
             }
-
+            
             for (const auto& matchType : filter.matchtypes()) {
                 if (!NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_IsValid(matchType)) {
                     TString errorReason = Sprintf("Unknown match type %" PRIu32, matchType);
@@ -296,10 +291,8 @@ public:
             }
 
             TDbTupleRef value = iter->GetValues();
-            YDB_LOG_TRACE_CTX(ctx, "Dump #_Self->TabletID, path, #_num_0",
-                {"tabletId", Self->TabletID()},
-                {"path", path},
-                {"leafPathDetails", (isLeafPath ? " -> " + DbgPrintTuple(value, *AppData(ctx)->TypeRegistry) : TString())});
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " S3 Listing: "
+                "\"" << path << "\"" << (isLeafPath ? " -> " + DbgPrintTuple(value, *AppData(ctx)->TypeRegistry) : TString()));
 
             if (isLeafPath) {
                 ++stats.LeafRows;
@@ -349,7 +342,7 @@ public:
                             continue;
                         }
                     }
-
+                    
                     // Add a row with path column and all columns requested by user
                     Result->Record.AddContentsRows(newContentsRow);
                     if (++foundKeys >= maxKeys) {
@@ -366,7 +359,7 @@ public:
                         Y_ENSURE(columnId < value.Cells().size());
 
                         NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType matchType;
-
+                        
                         if (matchTypes.size() == filterColumnIds.size()) {
                             matchType = matchTypes[i];
                         } else {
@@ -400,7 +393,7 @@ public:
                         continue;
                     }
                 }
-
+                
                 // For prefix save only path
                 if (path > startAfterPath && path != lastCommonPath) {
                     LastCommonPath = path;
@@ -462,12 +455,11 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "S3 Listing: finished description: common",
-            {"tabletId", Self->TabletID()},
-            {"status", Result->Record.GetStatus()},
-            {"errorDescription", Result->Record.GetErrorDescription()},
-            {"contents", Result->Record.ContentsRowsSize()},
-            {"prefixes", Result->Record.CommonPrefixesRowsSize()});
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " S3 Listing: finished "
+                    << " status: " << Result->Record.GetStatus()
+                    << " description: \"" << Result->Record.GetErrorDescription() << "\""
+                    << " contents: " << Result->Record.ContentsRowsSize()
+                    << " common prefixes: " << Result->Record.CommonPrefixesRowsSize());
         ctx.Send(Ev->Sender, Result.Release());
 
         if (ListingSpan) {

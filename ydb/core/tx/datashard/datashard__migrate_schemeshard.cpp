@@ -1,7 +1,5 @@
 #include "datashard_txs.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
-
 namespace NKikimr {
 namespace NDataShard {
 
@@ -43,10 +41,8 @@ bool TDataShard::TTxMigrateSchemeShard::Execute(TTransactionContext& txc, const 
         return true;
     }
 
-    YDB_LOG_DEBUG_CTX(ctx, "Migrate SS from to at datashard",
-        {"currentId", currentId},
-        {"newId", newId},
-        {"tabletId", tabletId});
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "migrate SS from  " << currentId << " to " << newId << " at datashard " << tabletId);
 
     Self->PersistCurrentSchemeShardId(newId, txc);
     Self->ResetLastSchemeOpSeqNo(txc);

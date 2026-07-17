@@ -7,8 +7,6 @@
 
 #include <optional>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
-
 namespace NKikimr::NDataShard {
 
 using namespace NTabletFlatExecutor;
@@ -229,8 +227,8 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDB_LOG_INFO_CTX(ctx, "TTxRequestChangeRecords Execute",
-            {"tablet", Self->TabletID()});
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxRequestChangeRecords Execute"
+            << ": at tablet# " << Self->TabletID());
 
         NIceDb::TNiceDb db(txc.DB);
         if (!Precharge(db) || !Select(db)) {
@@ -248,10 +246,9 @@ public:
 
             sent += records.size();
 
-            YDB_LOG_DEBUG_CTX(ctx, "Send change records",
-                {"recordsCount", records.size()},
-                {"to", to},
-                {"tablet", Self->TabletID()});
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Send " << records.size() << " change records"
+                << ": to# " << to
+                << ", at tablet# " << Self->TabletID());
             ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvRecords(std::move(records)));
         }
 
@@ -262,10 +259,9 @@ public:
 
             forgotten += records.size();
 
-            YDB_LOG_DEBUG_CTX(ctx, "Forget change records",
-                {"recordsCount", records.size()},
-                {"to", to},
-                {"tablet", Self->TabletID()});
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Forget " << records.size() << " change records"
+                << ": to# " << to
+                << ", at tablet# " << Self->TabletID());
             ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvForgetRecords(std::move(records)));
         }
 
@@ -273,11 +269,11 @@ public:
             return sum + kv.second.size();
         });
 
-        YDB_LOG_INFO_CTX(ctx, "TTxRequestChangeRecords Complete",
-            {"sent", sent},
-            {"forgotten", forgotten},
-            {"left", left},
-            {"tablet", Self->TabletID()});
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxRequestChangeRecords Complete"
+            << ": sent# " << sent
+            << ", forgotten# " << forgotten
+            << ", left# " << left
+            << ", at tablet# " << Self->TabletID());
 
         Self->SetCounter(COUNTER_CHANGE_RECORDS_REQUESTED, left);
         Self->IncCounter(COUNTER_CHANGE_RECORDS_SENT, sent);
@@ -325,9 +321,9 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        YDB_LOG_INFO_CTX(ctx, "TTxRemoveChangeRecords Execute",
-            {"records", Self->ChangeRecordsToRemove.size()},
-            {"tablet", Self->TabletID()});
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxRemoveChangeRecords Execute"
+            << ": records# " << Self->ChangeRecordsToRemove.size()
+            << ", at tablet# " << Self->TabletID());
 
         if (!Self->ChangeRecordsToRemove) {
             FillActivationList();
@@ -349,10 +345,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_INFO_CTX(ctx, "TTxRemoveChangeRecords Complete",
-            {"removed", RemovedCount},
-            {"left", Self->ChangeRecordsToRemove.size()},
-            {"tablet", Self->TabletID()});
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxRemoveChangeRecords Complete"
+            << ": removed# " << RemovedCount
+            << ", left# " << Self->ChangeRecordsToRemove.size()
+            << ", at tablet# " << Self->TabletID());
 
         if (Self->ChangeRecordsToRemove) {
             Self->Execute(new TTxRemoveChangeRecords(Self), ctx);
@@ -392,8 +388,8 @@ public:
     }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
-        YDB_LOG_NOTICE_CTX(ctx, "TTxChangeExchangeSplitAck Execute",
-            {"tablet", Self->TabletID()});
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxChangeExchangeSplitAck Execute"
+            << ", at tablet# " << Self->TabletID());
 
         Y_ENSURE(!Self->ChangesQueue);
 
@@ -410,8 +406,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_NOTICE_CTX(ctx, "TTxChangeExchangeSplitAck Complete",
-            {"tablet", Self->TabletID()});
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxChangeExchangeSplitAck Complete"
+            << ", at tablet# " << Self->TabletID());
 
         for (const auto dstTabletId : ActivationList) {
             Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);

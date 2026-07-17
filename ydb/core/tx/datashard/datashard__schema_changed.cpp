@@ -1,7 +1,5 @@
 #include "datashard_txs.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
-
 namespace NKikimr {
 namespace NDataShard {
 
@@ -20,9 +18,8 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         TxId = Ev->Get()->Record.GetTxId();
 
-        YDB_LOG_DEBUG_CTX(ctx, "Got TEvSchemaChangedResult from SS",
-            {"tabletId", Self->TabletID()},
-            {"dupTabletId", Self->TabletID()});
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Got TEvSchemaChangedResult from SS at "
+                    << Self->TabletID());
 
         NIceDb::TNiceDb db(txc.DB);
         Self->Pipeline.CompleteSchemaTx(db, TxId);

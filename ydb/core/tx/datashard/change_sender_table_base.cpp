@@ -6,8 +6,6 @@
 #include <ydb/core/change_exchange/change_sender_monitoring.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
-
 namespace NKikimr::NDataShard {
 
 class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard> {
@@ -39,9 +37,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     }
 
     void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
 
         LeaderPipeCache = ev->Get()->Services.LeaderPipeCache;
         Handshake();
@@ -65,10 +61,9 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
 
     void Handle(TDataShard::TEvPrivate::TEvReadonlyLeaseConfirmation::TPtr& ev) {
         if (ev->Cookie != LeaseConfirmationCookie) {
-            YDB_LOG_WARN("Readonly lease confirmation cookie mismatch",
-                {"logPrefix", GetLogPrefix()},
-                {"expected", LeaseConfirmationCookie},
-                {"got", ev->Cookie});
+            LOG_W("Readonly lease confirmation cookie mismatch"
+                << ": expected# " << LeaseConfirmationCookie
+                << ", got# " << ev->Cookie);
             return;
         }
 
@@ -80,9 +75,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     }
 
     void Handshake(TEvChangeExchange::TEvStatus::TPtr& ev) {
-        YDB_LOG_DEBUG("Handshake",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handshake " << ev->Get()->ToString());
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
@@ -90,10 +83,9 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
             LastRecordOrder = record.GetLastRecordOrder();
             return Ready();
         default:
-            YDB_LOG_ERROR("Handshake status",
-                {"logPrefix", GetLogPrefix()},
-                {"status", static_cast<ui32>(record.GetStatus())},
-                {"reason", static_cast<ui32>(record.GetReason())});
+            LOG_E("Handshake status"
+                << ": status# " << static_cast<ui32>(record.GetStatus())
+                << ", reason# " << static_cast<ui32>(record.GetReason()));
             return Leave();
         }
     }
@@ -128,9 +120,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     };
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
 
         auto records = MakeHolder<TEvChangeExchange::TEvApplyRecords>();
         records->Record.SetOrigin(DataShard.TabletId);
@@ -207,9 +197,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     }
 
     void Handle(TEvChangeExchange::TEvStatus::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+        LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
@@ -218,10 +206,9 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
             return Ready();
         // TODO: REJECT?
         default:
-            YDB_LOG_ERROR("Apply status",
-                {"logPrefix", GetLogPrefix()},
-                {"status", static_cast<ui32>(record.GetStatus())},
-                {"reason", static_cast<ui32>(record.GetReason())});
+            LOG_E("Apply status"
+                << ": status# " << static_cast<ui32>(record.GetStatus())
+                << ", reason# " << static_cast<ui32>(record.GetReason()));
             return Leave();
         }
     }
@@ -238,10 +225,9 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
         ++Attempt;
         Delay = Min(2 * Delay, MaxDelay);
 
-        YDB_LOG_NOTICE("Retry",
-            {"logPrefix", GetLogPrefix()},
-            {"attempt", Attempt},
-            {"delay", Delay});
+        LOG_N("Retry"
+            << ": attempt# " << Attempt
+            << ", delay# " << Delay);
 
         const auto random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
         Schedule(Delay + random, new TEvents::TEvWakeup());

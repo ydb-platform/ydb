@@ -7,7 +7,7 @@ metadata:
   version: 0
 config:
   yaml_config_enabled: true
-  erasure: block-4-2 # erasue is the parameter that describes
+  erasure: block-4-2 # erasure is the parameter that describes
                      # the fault tolerance mode of the cluster.
                      # See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
   fail_domain_type: disk_scope

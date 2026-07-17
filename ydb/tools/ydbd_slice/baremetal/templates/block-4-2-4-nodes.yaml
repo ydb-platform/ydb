@@ -14,7 +14,7 @@ log:
 
 host_configs: # the list of available host configurations in the cluster.
 - drive:
-  - path: &disk_path_1 /dev/disk/by-partlabel/kikimr_nvme_01   # path of the first disk in the host configration.
+  - path: &disk_path_1 /dev/disk/by-partlabel/kikimr_nvme_01   # path of the first disk in the host configuration.
     type: SSD                                     # kind of the disk: available kinds are SSD, NVME or HDD
   - path: &disk_path_2 /dev/disk/by-partlabel/kikimr_nvme_02
     type: SSD
@@ -29,7 +29,7 @@ hosts:
                                 # if cluster is deployed using mirror-3-dc fault tolerance mode, all hosts must be distributed
                                 # across 3 datacenters.
     rack: '1'                   # string representing a rack identifier where the host is located.
-                                # if cluster is deployed using block-4-2 erasure, all hosts should be distrubited
+                                # if cluster is deployed using block-4-2 erasure, all hosts should be distributed
                                 # across at least 8 racks.
     # For testing purpose it does not really matter, where all hosts are located.
     # All hosts can be located in one datacenter and even in one rack.
@@ -97,8 +97,8 @@ domains:
 table_service_config:
   sql_version: 1
 
-sys:                      # the configuration of the actor system which descibes how cores of the instance are distributed
-  executors:              # accross different types of workloads in the instance.
+sys:                      # the configuration of the actor system which describes how cores of the instance are distributed
+  executors:              # across different types of workloads in the instance.
     system:               # system executor of the actor system. in this executor YDB launches system type of workloads, like system tablets
       threads: 9          # the number of threads allocated to system executor.
       spin_threshold: 1
@@ -110,7 +110,7 @@ sys:                      # the configuration of the actor system which descibes
       spin_threshold: 1
     io:                   # the io executor. In this executor launches sync operations and writes logs.
       threads: 1
-    ic:                   # the interconnect executor which YDB uses for network communications accross different nodes of the cluster.
+    ic:                   # the interconnect executor which YDB uses for network communications across different nodes of the cluster.
       threads: 3          # the number of threads allocated to the interconnect executor.
       max_threads: 5
       max_avg_ping_deviation: 500

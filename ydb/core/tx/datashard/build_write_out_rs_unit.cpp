@@ -74,8 +74,8 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
         return OnTabletNotReady(*writeOp, txc, ctx);
     } catch (const yexception& e) {
         YDB_LOG_CRIT_CTX(ctx, "Exception while preparing out-readsets for KQP transaction",
-            {"#_*op", *op},
-            {"#_DataShard.TabletID", DataShard.TabletID()},
+            {"operation", *op},
+            {"tabletId", DataShard.TabletID()},
             {"#_e.what", e.what()});
         if (op->IsImmediate()) {
             writeOp->ReleaseTxData(txc);
@@ -94,7 +94,7 @@ void TBuildWriteOutRSUnit::Complete(TOperation::TPtr, const TActorContext&) {}
 EExecutionStatus TBuildWriteOutRSUnit::OnTabletNotReady(TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx)
 {
     YDB_LOG_TRACE_CTX(ctx, "Tablet is not ready for execution",
-        {"#_DataShard.TabletID", DataShard.TabletID()},
+        {"tabletId", DataShard.TabletID()},
         {"writeOp", writeOp});
 
     DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);

@@ -126,7 +126,7 @@ void TOutReadSets::AckForDeletedDestination(ui64 tabletId, ui64 seqNo, const TAc
         YDB_LOG_DEBUG_CTX(ctx, "Unknown seqNo for readset to tablet at tablet",
             {"seqNo", seqNo},
             {"tabletId", tabletId},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
         return;
     }
 
@@ -149,7 +149,7 @@ void TOutReadSets::SaveAck(const TActorContext &ctx, TAutoPtr<TEvTxProcessing::T
     ui64 txId = ev->Record.GetTxId();
 
     YDB_LOG_DEBUG_CTX(ctx, "Receive RS Ack at source dest consumer txId",
-        {"#_Self->TabletID", Self->TabletID()},
+        {"tabletId", Self->TabletID()},
         {"sender", sender},
         {"dest", dest},
         {"consumer", consumer},
@@ -182,7 +182,7 @@ void TOutReadSets::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx) {
         ui64 txId = ev.Record.GetTxId();
 
         YDB_LOG_DEBUG_CTX(ctx, "Deleted RS at source dest consumer seqno txId",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"sender", sender},
             {"dest", dest},
             {"consumer", consumer},

@@ -145,7 +145,7 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
         YDB_LOG_DEBUG_CTX(ctx, "TX can't prepare (tablet's not ready) at tablet",
             {"0", 0},
             {"txId", TxId},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
         return false;
     }
 

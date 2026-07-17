@@ -259,7 +259,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
 
         YDB_LOG_NOTICE("Starting TValidateUniqueIndexScan",
             {"tabletId", TabletID()},
-            {"#_request", request.ShortDebugString()});
+            {"request", request.ShortDebugString()});
 
         if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
             VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
@@ -276,7 +276,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
                 YDB_LOG_ERROR("Rejecting TValidateUniqueIndexScan bad request with response",
                     {"tabletId", TabletID()},
-                    {"#_request", request.ShortDebugString()},
+                    {"request", request.ShortDebugString()},
                     {"#_ToShortDebugString(response->Record)", ToShortDebugString(response->Record)});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;

@@ -742,14 +742,14 @@ public:
             YDB_LOG_INFO("Complete from at tablet",
                 {"step", Step},
                 {"txId", TxId},
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_dup_#_Self->TabletID", Self->TabletID()},
                 {"error", error});
         } else {
             YDB_LOG_DEBUG("Complete from at tablet send result to client ms, ms",
                 {"step", Step},
                 {"txId", TxId},
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_dup_#_Self->TabletID", Self->TabletID()},
                 {"target", Target},
                 {"execLatency", Result->Record.GetExecLatency()},
@@ -800,14 +800,14 @@ public:
             YDB_LOG_INFO("Complete volatile write from at tablet",
                 {"step", Step},
                 {"txId", TxId},
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_dup_#_Self->TabletID", Self->TabletID()},
                 {"error", WriteResult->GetError()});
         } else {
             YDB_LOG_DEBUG("Complete volatile write from at tablet send result to client",
                 {"step", Step},
                 {"txId", TxId},
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_dup_#_Self->TabletID", Self->TabletID()},
                 {"target", Target});
         }

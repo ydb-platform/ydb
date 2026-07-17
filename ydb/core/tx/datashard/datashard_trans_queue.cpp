@@ -183,7 +183,7 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
                 if (!op) {
                     YDB_LOG_WARN("Op was not found for persisted scan tx id on tablet",
                         {"txId", txId},
-                        {"#_Self->TabletID", Self->TabletID()});
+                        {"tabletId", Self->TabletID()});
                     continue;
                 }
                 op->ScanState.LastKey = rowset.GetValue<Schema::ScanProgress::LastKey>();

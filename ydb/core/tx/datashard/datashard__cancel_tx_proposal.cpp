@@ -29,20 +29,20 @@ bool TDataShard::TTxCancelTransactionProposal::Execute(TTransactionContext &txc,
 {
     if (Self->IsFollower()) {
         YDB_LOG_ERROR_CTX(ctx, "Unexpected TTxCancelTransactionProposal at tablet follower txId",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"txId", TxId});
         return true;
     }
 
     if (Self->State == TShardState::Offline || Self->State == TShardState::PreOffline) {
         YDB_LOG_DEBUG_CTX(ctx, "Ignoring TTxCancelTransactionProposal at tablet txId because the tablet is going offline",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"txId", TxId});
         return true;
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Start TTxCancelTransactionProposal at tablet txId",
-        {"#_Self->TabletID", Self->TabletID()},
+        {"tabletId", Self->TabletID()},
         {"txId", TxId});
 
     NIceDb::TNiceDb db(txc.DB);

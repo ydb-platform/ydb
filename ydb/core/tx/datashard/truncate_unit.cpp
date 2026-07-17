@@ -62,7 +62,7 @@ EExecutionStatus TTruncateUnit::Execute(
     auto localTid = DataShard.GetUserTables().at(tableId)->LocalTid;
 
     YDB_LOG_DEBUG_CTX(actorCtx, "TTruncateUnit::Execute - About to TRUNCATE TABLE at TxId",
-        {"#_DataShard.TabletID", DataShard.TabletID()},
+        {"tabletId", DataShard.TabletID()},
         {"tableId", tableId},
         {"localTid", localTid},
         {"#_op->GetTxId", op->GetTxId()});

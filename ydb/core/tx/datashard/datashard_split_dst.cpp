@@ -112,7 +112,7 @@ public:
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
 
         YDB_LOG_DEBUG_CTX(ctx, "Ack init split/merge destination OpId",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"opId", opId});
 
         ctx.Send(ackTo, new TEvDataShard::TEvInitSplitMergeDestinationAck(opId, Self->TabletID()));
@@ -171,18 +171,18 @@ public:
 
         if (Self->State != TShardState::SplitDstReceivingSnapshot || !Self->ReceiveSnapshotsFrom.contains(srcTabletId)) {
             YDB_LOG_DEBUG_CTX(ctx, "Ignoring received snapshot for split/merge TxId from tabeltId",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"opId", opId},
                 {"srcTabletId", srcTabletId});
             return true;
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "Received snapshot for split/merge TxId from tabeltId",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"opId", opId},
             {"srcTabletId", srcTabletId});
         YDB_LOG_TRACE_CTX(ctx, "Received",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"snapshot", record.DebugString()});
 
         if (!Self->DstSplitSchemaInitialized) {
@@ -312,7 +312,7 @@ public:
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
 
         YDB_LOG_DEBUG_CTX(ctx, "Ack snapshot OpId",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"opId", opId});
 
         ctx.Send(ackTo, new TEvDataShard::TEvSplitTransferSnapshotAck(opId, Self->TabletID()));
@@ -375,7 +375,7 @@ public:
         auto* msg = Ev->Get();
 
         YDB_LOG_DEBUG_CTX(ctx, "Received ReplicationSourceOffsets from tablet for table",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"#_msg->SrcTabletId", msg->SrcTabletId},
             {"#_msg->PathId", msg->PathId});
 
@@ -385,7 +385,7 @@ public:
         {
             // Shouldn't really happen, but just ignore
             YDB_LOG_WARN_CTX(ctx, "Ignoring unexpected ReplicationSourceOffsets from tablet for table",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_msg->SrcTabletId", msg->SrcTabletId},
                 {"#_msg->PathId", msg->PathId});
             return true;
@@ -409,7 +409,7 @@ public:
         if (Self->State != TShardState::SplitDstReceivingSnapshot || !Self->ReceiveSnapshotsFrom.contains(msg->SrcTabletId)) {
             // We may have received snapshot from an old unsupported version
             YDB_LOG_WARN_CTX(ctx, "Ignoring valid ReplicationSourceOffsets from tablet for table due to unexpected state, possible protocol violation",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_msg->SrcTabletId", msg->SrcTabletId},
                 {"#_msg->PathId", msg->PathId});
             return true;
@@ -439,7 +439,7 @@ public:
         if (!Self->SrcTabletToRange.contains(msg->SrcTabletId)) {
             // This should be impossible, since shard list is constructed from source ranges
             YDB_LOG_WARN_CTX(ctx, "Ignoring valid ReplicationSourceOffsets from tablet for table without a known range description",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_msg->SrcTabletId", msg->SrcTabletId},
                 {"#_msg->PathId", msg->PathId});
             return true;
@@ -474,7 +474,7 @@ public:
         }
 
         YDB_LOG_TRACE_CTX(ctx, "Calculated ReplicationSourceOffsets range",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"#_EscapeC(range.From.GetBuffer())", EscapeC(range.From.GetBuffer())},
             {"#_num_0", (leftFull ? " (full)" : "")},
             {"#_EscapeC(range.To.GetBuffer())", EscapeC(range.To.GetBuffer())},
@@ -489,7 +489,7 @@ public:
                 range.To.GetCells(), PrefixModeRightBorderNonInclusive) >= 0)
         {
             YDB_LOG_WARN_CTX(ctx, "Ignoring ReplicationSourceOffsets from tablet for table with an incorrect range",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_msg->SrcTabletId", msg->SrcTabletId},
                 {"#_msg->PathId", msg->PathId});
             return true;
@@ -542,7 +542,7 @@ public:
             // Add the shard right border first
             if (!range.To.GetCells().empty() && !rightFull) {
                 YDB_LOG_TRACE_CTX(ctx, "Source adding right split at key",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"#_EscapeC(sourceName)", EscapeC(sourceName)},
                     {"#_EscapeC(range.To.GetBuffer())", EscapeC(range.To.GetBuffer())});
                 source.EnsureSplitKey(rdb, range.To);
@@ -551,7 +551,7 @@ public:
             for (auto it = itEnd; it != itBegin;) {
                 --it;
                 YDB_LOG_TRACE_CTX(ctx, "Source adding middle split at key offset",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"#_EscapeC(sourceName)", EscapeC(sourceName)},
                     {"#_EscapeC(it->SplitKey.GetBuffer())", EscapeC(it->SplitKey.GetBuffer())},
                     {"#_it->MaxOffset", it->MaxOffset});
@@ -561,7 +561,7 @@ public:
             --itBegin;
             const TSerializedCellVec& leftKey = leftFull ? TSerializedCellVec() : range.From;
             YDB_LOG_TRACE_CTX(ctx, "Source adding left split at key offset",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_EscapeC(sourceName)", EscapeC(sourceName)},
                 {"#_EscapeC(leftKey.GetBuffer())", EscapeC(leftKey.GetBuffer())},
                 {"#_itBegin->MaxOffset", itBegin->MaxOffset});
@@ -571,7 +571,7 @@ public:
             if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::TX_DATASHARD)) {
                 for (const auto* state : source.Offsets) {
                     YDB_LOG_TRACE_CTX(ctx, "Source split key offset",
-                        {"#_Self->TabletID", Self->TabletID()},
+                        {"tabletId", Self->TabletID()},
                         {"#_EscapeC(sourceName)", EscapeC(sourceName)},
                         {"#_EscapeC(state->SplitKey.GetBuffer())", EscapeC(state->SplitKey.GetBuffer())},
                         {"#_state->MaxOffset", state->MaxOffset});

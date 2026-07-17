@@ -161,12 +161,12 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
 
     YDB_LOG_TRACE_CTX(ctx, "Propose transaction complete txid at tablet send to client, propose ms",
         {"#_op->GetTxId", op->GetTxId()},
-        {"#_DataShard.TabletID", DataShard.TabletID()},
+        {"tabletId", DataShard.TabletID()},
         {"latency", duration.MilliSeconds()},
         {"status", res->GetStatus()});
 
     if (res->IsError()) {
-        LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_CompleteRequest), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
+        LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_CompleteRequest), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD,
                     "Errors while proposing transaction txid " << op->GetTxId()
                     << " at tablet " << DataShard.TabletID() << " " << res->GetError());
     }
@@ -224,8 +224,8 @@ void TFinishProposeWriteUnit::UpdateCounters(const TWriteOperation* writeOp, con
     } else {
         if (res->IsError()) {
             DataShard.IncCounter(COUNTER_WRITE_ERROR);
-            LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_UpdateCounters), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
-                        "Prepare transaction failed. txid " << writeOp->GetTxId() 
+            LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_UpdateCounters), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD,
+                        "Prepare transaction failed. txid " << writeOp->GetTxId()
                         << " at tablet " << DataShard.TabletID() << " errors: " << res->GetError());
         } else {
             DataShard.IncCounter(COUNTER_WRITE_IMMEDIATE);

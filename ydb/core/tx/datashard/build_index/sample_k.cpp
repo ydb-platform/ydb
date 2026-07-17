@@ -326,7 +326,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
 
         YDB_LOG_NOTICE("Starting TSampleKScan row version",
             {"tabletId", TabletID()},
-            {"#_request", request.ShortDebugString()},
+            {"request", request.ShortDebugString()},
             {"rowVersion", rowVersion});
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -345,7 +345,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
                 YDB_LOG_ERROR("Rejecting TSampleKScan bad request with response",
                     {"tabletId", TabletID()},
-                    {"#_request", request.ShortDebugString()},
+                    {"request", request.ShortDebugString()},
                     {"#_ToShortDebugString(response->Record)", ToShortDebugString(response->Record)});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;

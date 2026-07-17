@@ -985,7 +985,7 @@ public:
             state.LastProcessedKey && !LastProcessedKey)
         {
             YDB_LOG_CRIT("DataShard detected unexpected reset of LastProcessedKey",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"readId", State.ReadId},
                 {"lastSeqNo", State.SeqNo},
                 {"lastQuery", State.FirstUnprocessedQuery},
@@ -1824,7 +1824,7 @@ public:
 
         ++ExecuteCount;
         YDB_LOG_TRACE_CTX(ctx, "Execute",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"read", ExecuteCount},
             {"request", request->Record});
 
@@ -2432,7 +2432,7 @@ public:
         if (it == Self->ReadIteratorsByLocalReadId.end()) {
             // the one who removed the iterator should have replied to user
             YDB_LOG_TRACE_CTX(ctx, "Read has been invalidated before TReadOperation::SendResult()",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"iterator", LocalReadId});
             return;
         }
@@ -2442,7 +2442,7 @@ public:
 
         if (!Result) {
             YDB_LOG_DEBUG_CTX(ctx, "Read TReadOperation::Execute() finished without Result, aborting",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"iterator", state.ReadId});
             Result = MakeEvReadResult(ctx.SelfID.NodeId());
             SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, TStringBuilder()
@@ -2468,7 +2468,7 @@ public:
             record.SetReadId(state.ReadId.ReadId);
             record.SetSeqNo(state.SeqNo + 1);
             YDB_LOG_DEBUG_CTX(ctx, "Read TReadOperation::Execute() finished with error",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"iterator", state.ReadId},
                 {"aborting", record.DebugString()});
             Self->SendImmediateReadResult(state.ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
@@ -2482,7 +2482,7 @@ public:
         Y_ASSERT(BlockBuilder);
 
         YDB_LOG_TRACE_CTX(ctx, "Read sends quota quota total",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"iterator", state.ReadId},
             {"rowCount", Reader->GetRowsRead()},
             {"bytes", Reader->GetBytesRead()},
@@ -2509,7 +2509,7 @@ public:
         if (it == Self->ReadIteratorsByLocalReadId.end()) {
             // the one who removed the iterator should have reply to user
             YDB_LOG_DEBUG_CTX(ctx, "Read has been invalidated before TReadOperation::Complete()",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"iterator", LocalReadId});
             return;
         }
@@ -2517,7 +2517,7 @@ public:
         auto* request = state.Request;
 
         YDB_LOG_TRACE_CTX(ctx, "Complete after",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"read", state.ReadId},
             {"executionsCount", ExecuteCount});
 
@@ -2528,7 +2528,7 @@ public:
             state.ReadContinuePending = true;
             ctx.Schedule(*ThrottleDelay, new TEvDataShard::TEvReadContinue(LocalReadId));
             YDB_LOG_TRACE_CTX(ctx, "Read throttled, rescheduling continue after",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"iterator", state.ReadId},
                 {"#_*ThrottleDelay", *ThrottleDelay});
             return;
@@ -2553,12 +2553,12 @@ public:
             } else {
                 Self->IncCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT);
                 YDB_LOG_DEBUG_CTX(ctx, "Read exhausted",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"iterator", state.ReadId});
             }
         } else {
             YDB_LOG_TRACE_CTX(ctx, "Read finished in read",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"iterator", state.ReadId});
 
             request->ReadSpan.EndOk();
@@ -2937,7 +2937,7 @@ private:
             }
 
             YDB_LOG_DEBUG_CTX(ctx, "Acquired",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"lock", lock.LockId},
                 {"counter", lock.Counter},
                 {"#_state.PathId", state.PathId});
@@ -3067,7 +3067,7 @@ public:
                     }
                     if (!state.ReadVersion.IsMax()) {
                         YDB_LOG_TRACE_CTX(ctx, "Changed HEAD read",
-                            {"#_Self->TabletID", Self->TabletID()},
+                            {"tabletId", Self->TabletID()},
                             {"#_num_0", (state.IsHeadRead ? "non-repeatable" : "repeatable")},
                             {"#_state.ReadVersion", state.ReadVersion});
                     }
@@ -3320,7 +3320,7 @@ public:
         if (it == Self->ReadIteratorsByLocalReadId.end()) {
             // read has been aborted
             YDB_LOG_TRACE_CTX(ctx, "ReadContinue for didn't find state",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"iterator", LocalReadId});
             return true;
         }
@@ -3337,7 +3337,7 @@ public:
         if (state.IsExhausted()) {
             // iterator quota reduced and exhausted while ReadContinue was inflight
             YDB_LOG_TRACE_CTX(ctx, "ReadContinue for quota exhausted while rescheduling",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"iterator", state.ReadId});
             state.ReadContinuePending = false;
             Result.reset();
@@ -3366,7 +3366,7 @@ public:
         }
 
         YDB_LOG_TRACE_CTX(ctx, "ReadContinue",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"iterator", state.ReadId},
             {"firstUnprocessedQuery", state.FirstUnprocessedQuery});
 
@@ -3460,7 +3460,7 @@ public:
         Y_ASSERT(Result);
 
         YDB_LOG_TRACE_CTX(ctx, "ReadContinue",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"iterator", state.ReadId},
             {"firstUnprocessedQuery", state.FirstUnprocessedQuery});
 
@@ -3535,7 +3535,7 @@ public:
             if (!Self->ReadIteratorsByLocalReadId.contains(LocalReadId)) {
                 // the one who removed the iterator should have replied to the user
                 YDB_LOG_DEBUG_CTX(ctx, "Read has been invalidated before TTxReadContinue::Complete()",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"iterator", LocalReadId});
                 return;
             }
@@ -3594,7 +3594,7 @@ public:
                 addLock->SetPathId(state.PathId.LocalPathId);
 
                 YDB_LOG_DEBUG_CTX(ctx, "Read TTxReadContinue::Execute() found broken",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"iterator", state.ReadId},
                     {"lock", state.Lock->GetLockId()});
 
@@ -3643,7 +3643,7 @@ public:
 
         if (!Result) {
             YDB_LOG_DEBUG_CTX(ctx, "Read TTxReadContinue::Execute() finished without Result, aborting",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"iterator", state.ReadId});
 
             Result = MakeEvReadResult(ctx.SelfID.NodeId());
@@ -3662,7 +3662,7 @@ public:
             record.SetSeqNo(state.SeqNo + 1);
             record.SetReadId(state.ReadId.ReadId);
             YDB_LOG_DEBUG_CTX(ctx, "Read TTxReadContinue::Execute() finished with error",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"iterator", state.ReadId},
                 {"aborting", record.DebugString()});
             Self->SendImmediateReadResult(state.ReadId.Sender, Result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
@@ -3676,7 +3676,7 @@ public:
         Y_ASSERT(BlockBuilder);
 
         YDB_LOG_TRACE_CTX(ctx, "ReadContinue sends quota quota total",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"iterator", state.ReadId},
             {"rowCount", Reader->GetRowsRead()},
             {"bytes", Reader->GetBytesRead()},
@@ -3705,12 +3705,12 @@ public:
             } else if (!wasExhausted) {
                 Self->IncCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT);
                 YDB_LOG_DEBUG_CTX(ctx, "Read exhausted",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"iterator", state.ReadId});
             }
         } else {
             YDB_LOG_DEBUG_CTX(ctx, "Read finished in ReadContinue",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"iterator", state.ReadId});
 
             state.Request->ReadSpan.EndOk();

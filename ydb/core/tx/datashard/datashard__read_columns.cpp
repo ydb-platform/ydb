@@ -228,7 +228,7 @@ public:
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "Read",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"columns", Ev->Get()->Record});
 
         if (Self->State != TShardState::Ready &&

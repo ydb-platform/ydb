@@ -97,7 +97,7 @@ public:
         if (!IsWaiting(op)) {
             YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Starting a operation",
                 {"kind", GetKind()},
-                {"#_DataShard.TabletID", DataShard.TabletID()});
+                {"tabletId", DataShard.TabletID()});
 
             if (!Run(op, txc, ctx)) {
                 return EExecutionStatus::Executed;
@@ -110,7 +110,7 @@ public:
         if (HasResult(op)) {
             YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Complete",
                 {"kind", GetKind()},
-                {"#_DataShard.TabletID", DataShard.TabletID()});
+                {"tabletId", DataShard.TabletID()});
 
             ResetWaiting(op);
             if (ProcessResult(op, ctx)) {

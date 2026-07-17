@@ -690,7 +690,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
 
         YDB_LOG_NOTICE("Starting TLocalKMeansScan row version",
             {"tabletId", TabletID()},
-            {"#_request", request.ShortDebugString()},
+            {"request", request.ShortDebugString()},
             {"rowVersion", rowVersion});
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -709,7 +709,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
                 YDB_LOG_ERROR("Rejecting TLocalKMeansScan bad request with response",
                     {"tabletId", TabletID()},
-                    {"#_request", request.ShortDebugString()},
+                    {"request", request.ShortDebugString()},
                     {"#_response->Record", response->Record.ShortDebugString()});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;

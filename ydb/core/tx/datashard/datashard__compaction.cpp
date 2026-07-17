@@ -22,7 +22,7 @@ public:
 
         if (!Self->IsStateActive()) {
             YDB_LOG_WARN_CTX(ctx, "Compaction tx at non-ready tablet with cookie state requested",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_Ev->Cookie", Ev->Cookie},
                 {"#_Self->State", Self->State},
                 {"#_Ev->Sender", Ev->Sender});
@@ -39,7 +39,7 @@ public:
 
         if (Self->GetPathOwnerId() != pathId.OwnerId) {
             YDB_LOG_WARN_CTX(ctx, "Compaction with cookie of not owned self path owner",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_Ev->Cookie", Ev->Cookie},
                 {"pathId", pathId},
                 {"id", Self->GetPathOwnerId()});
@@ -55,7 +55,7 @@ public:
         auto it = Self->TableInfos.find(tableId);
         if (it == Self->TableInfos.end()) {
             YDB_LOG_WARN_CTX(ctx, "Compaction with cookie of unknown requested",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_Ev->Cookie", Ev->Cookie},
                 {"pathId", pathId},
                 {"#_Ev->Sender", Ev->Sender});
@@ -137,7 +137,7 @@ public:
             YDB_LOG_INFO_CTX(ctx, "Started with cookie of requested",
                 {"compaction", compactionId},
                 {"#_Ev->Cookie", Ev->Cookie},
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"tableId", tableId},
                 {"localTid", localTid},
                 {"#_Ev->Sender", Ev->Sender},

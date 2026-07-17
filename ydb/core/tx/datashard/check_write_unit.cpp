@@ -136,8 +136,8 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
             }
             ));
         YDB_LOG_DEBUG_CTX(ctx, "Prepared write transaction at tablet",
-            {"#_*op", *op},
-            {"#_DataShard.TabletID", DataShard.TabletID()});
+            {"operation", *op},
+            {"tabletId", DataShard.TabletID()});
     }
 
     return EExecutionStatus::Executed;

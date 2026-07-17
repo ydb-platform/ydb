@@ -19,7 +19,7 @@ TDataShard::TTxStoreTablePath::TTxStoreTablePath(TDataShard *self, ui64 pathId, 
 bool TDataShard::TTxStoreTablePath::Execute(TTransactionContext &txc, const TActorContext &ctx)
 {
     YDB_LOG_DEBUG_CTX(ctx, "TTxStoreTablePath::Execute",
-        {"#_Self->TabletID", Self->TabletID()});
+        {"tabletId", Self->TabletID()});
 
     Y_ENSURE(Self->TableInfos.contains(PathId));
 
@@ -38,7 +38,7 @@ bool TDataShard::TTxStoreTablePath::Execute(TTransactionContext &txc, const TAct
 void TDataShard::TTxStoreTablePath::Complete(const TActorContext &ctx)
 {
     YDB_LOG_DEBUG_CTX(ctx, "TTxStoreTablePath::Complete",
-        {"#_Self->TabletID", Self->TabletID()});
+        {"tabletId", Self->TabletID()});
 }
 
 }}

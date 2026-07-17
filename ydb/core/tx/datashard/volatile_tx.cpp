@@ -856,7 +856,7 @@ namespace NKikimr::NDataShard {
             YDB_LOG_WARN("Unexpected readset from to at tablet",
                 {"srcTabletId", srcTabletId},
                 {"dstTabletId", dstTabletId},
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
             return true;
         }
 
@@ -877,7 +877,7 @@ namespace NKikimr::NDataShard {
                 YDB_LOG_TRACE("Processed readset without data from to at tablet",
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
-                    {"#_Self->TabletID", Self->TabletID()});
+                    {"tabletId", Self->TabletID()});
                 return false;
             }
 
@@ -890,7 +890,7 @@ namespace NKikimr::NDataShard {
                     {"#_ui32(data.GetDecision())", ui32(data.GetDecision())},
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
-                    {"#_Self->TabletID", Self->TabletID()});
+                    {"tabletId", Self->TabletID()});
                 return false;
             }
 
@@ -900,7 +900,7 @@ namespace NKikimr::NDataShard {
                     {"dstTabletId", dstTabletId},
                     {"#_record.GetStep", record.GetStep()},
                     {"#_info->Version.Step", info->Version.Step},
-                    {"#_Self->TabletID", Self->TabletID()});
+                    {"tabletId", Self->TabletID()});
                 return false;
             }
 

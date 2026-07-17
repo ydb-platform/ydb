@@ -50,13 +50,13 @@ TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
 {
     if (Pipeline.OutOfOrderLimits()) {
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at out-of-order limits exceeded",
-            {"#_DataShard.TabletID", DataShard.TabletID()});
+            {"tabletId", DataShard.TabletID()});
         return nullptr;
     }
 
     if (!OpsInFly.size()) {
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at has no attached operations",
-            {"#_DataShard.TabletID", DataShard.TabletID()});
+            {"tabletId", DataShard.TabletID()});
         return nullptr;
     }
 
@@ -66,7 +66,7 @@ TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
 
     if (!op) {
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at couldn't find next planned operation after",
-            {"#_DataShard.TabletID", DataShard.TabletID()},
+            {"tabletId", DataShard.TabletID()},
             {"step", step},
             {"txId", txId});
         return nullptr;
@@ -74,22 +74,22 @@ TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
 
     if (op->IsInProgress()) {
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at found next planned operation which is already in progress",
-            {"#_DataShard.TabletID", DataShard.TabletID()},
-            {"#_*op", *op});
+            {"tabletId", DataShard.TabletID()},
+            {"operation", *op});
         return nullptr;
     }
 
     if (!Pipeline.CanRunOp(*op)) {
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at cannot run found next planned operation",
-            {"#_DataShard.TabletID", DataShard.TabletID()},
-            {"#_*op", *op});
+            {"tabletId", DataShard.TabletID()},
+            {"operation", *op});
         return nullptr;
     }
 
     if (op->GetCurrentUnit() != Kind) {
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at found next planned operation is executing on unit",
-            {"#_DataShard.TabletID", DataShard.TabletID()},
-            {"#_*op", *op},
+            {"tabletId", DataShard.TabletID()},
+            {"operation", *op},
             {"#_op->GetCurrentUnit", op->GetCurrentUnit()});
         return nullptr;
     }

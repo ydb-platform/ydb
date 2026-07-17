@@ -22,7 +22,7 @@ public:
 
         if (!Self->IsStateActive()) {
             YDB_LOG_WARN_CTX(ctx, "Vacuum tx at non-ready tablet state requested",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_Self->State", Self->State},
                 {"#_Ev->Sender", Ev->Sender});
             Response = std::make_unique<TEvDataShard::TEvVacuumResult>(

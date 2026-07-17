@@ -144,28 +144,28 @@ class TIncrRestoreChangeSenderMain
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         EnqueueRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         ForgetRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         OnReady(ev->Get()->PartitionId);
 
         if (NoMoreData && !HasPendingRecords() && IsAllSendersReadyOrUninit()) {
@@ -176,14 +176,14 @@ class TIncrRestoreChangeSenderMain
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         OnGone(ev->Get()->PartitionId);
     }
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         Y_ENSURE(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
@@ -193,7 +193,7 @@ class TIncrRestoreChangeSenderMain
     void Handle(TEvIncrementalRestoreScan::TEvNoMoreData::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         NoMoreData = true;
 
         if (!HasPendingRecords() && IsAllSendersReadyOrUninit()) {

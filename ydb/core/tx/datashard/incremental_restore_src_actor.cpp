@@ -128,7 +128,7 @@ public:
             {"subOpTxId", SubOpTxId},
             {"srcPathId", SrcPathId},
             {"dstPathId", DstPathId},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
     }
 
 private:

@@ -25,7 +25,7 @@ bool TDataShard::TTxStoreScanState::Execute(TTransactionContext &txc,
     if (!op) {
         YDB_LOG_INFO_CTX(ctx, "Cannot find op to persist scan state",
             {"txId", txId},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
         return false;
     }
 
@@ -33,7 +33,7 @@ bool TDataShard::TTxStoreScanState::Execute(TTransactionContext &txc,
     if (!schemaOp) {
         YDB_LOG_WARN_CTX(ctx, "Cannot find schema op to update scan state",
             {"txId", txId},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
         return false;
     }
 
@@ -41,7 +41,7 @@ bool TDataShard::TTxStoreScanState::Execute(TTransactionContext &txc,
         {"txId", txId},
         {"#_event->LastKey.size", event->LastKey.size()},
         {"#_event->StatusCode", event->StatusCode},
-        {"#_Self->TabletID", Self->TabletID()});
+        {"tabletId", Self->TabletID()});
 
     auto binaryIssues = SerializeIssues(event->Issues);
     NIceDb::TNiceDb db(txc.DB);

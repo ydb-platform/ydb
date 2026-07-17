@@ -644,7 +644,7 @@ public:
                 stats.HasSchemaChanges = hasSchemaChanges;
 
                 YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Skipped at datashard for tableId PartCount",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"tableId", tableId},
                     {"#_stats.DataStats", stats.DataStats},
                     {"#_stats.PartCount", stats.PartCount},

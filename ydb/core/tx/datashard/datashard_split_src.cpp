@@ -32,7 +32,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
         YDB_LOG_DEBUG_CTX(ctx, "Received split OpId at state",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"opId", opId},
             {"#_DatashardStateName(Self->State)", DatashardStateName(Self->State)});
 
@@ -102,7 +102,7 @@ public:
             // Send the Ack
             for (const TActorId& ackTo : Self->SrcAckSplitTo) {
                 YDB_LOG_DEBUG_CTX(ctx, "Ack split to schemeshard",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"#_Self->SrcSplitOpId", Self->SrcSplitOpId});
                 ctx.Send(ackTo, new TEvDataShard::TEvSplitAck(Self->SrcSplitOpId, Self->TabletID()));
             }
@@ -177,7 +177,7 @@ public:
 
         ui64 opId = Self->SrcSplitOpId;
         YDB_LOG_DEBUG_CTX(ctx, "Starting snapshot for split OpId",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"opId", opId});
 
         NIceDb::TNiceDb db(txc.DB);
@@ -201,7 +201,7 @@ public:
             } else if (!str.empty()) { \
                 YDB_LOG_ERROR_CTX(ctx, "", \
                     {"#_num_0", #table " table is not empty when starting Split at tablet "}, \
-                    {"#_Self->TabletID", Self->TabletID()}, \
+                    {"tabletId", Self->TabletID()}, \
                     {"#_str.Str", str.Str()}); \
             } \
         }
@@ -276,7 +276,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         ui64 opId = Self->SrcSplitOpId;
         YDB_LOG_DEBUG_CTX(ctx, "Snapshot complete for split OpId",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"opId", opId});
 
         Y_ENSURE(Self->State == TShardState::SplitSrcMakeSnapshot, "Datashard in unexpected state " << DatashardStateName(Self->State));
@@ -347,14 +347,14 @@ public:
 
                 if (snapBody.empty()) {
                     YDB_LOG_DEBUG_CTX(ctx, "BorrowSnapshot needs to load pages for table for split OpId",
-                        {"#_Self->TabletID", Self->TabletID()},
+                        {"tabletId", Self->TabletID()},
                         {"localTableId", localTableId},
                         {"opId", opId});
                     needToReadPages = true;
                 } else {
                     totalSnapshotSize += snapBody.size();
                     YDB_LOG_DEBUG_CTX(ctx, "BorrowSnapshot: table snapshot size is total snapshot size is for split OpId",
-                        {"#_Self->TabletID", Self->TabletID()},
+                        {"tabletId", Self->TabletID()},
                         {"localTableId", localTableId},
                         {"#_snapBody.size", snapBody.size()},
                         {"totalSnapshotSize", totalSnapshotSize},
@@ -427,7 +427,7 @@ public:
 
         if (needToReadPages) {
             YDB_LOG_DEBUG_CTX(ctx, "BorrowSnapshot is restarting for split OpId",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"opId", opId});
             return false;
         } else {
@@ -453,7 +453,7 @@ public:
 
     void Complete(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Sending snapshots from src for split OpId",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"#_Self->SrcSplitOpId", Self->SrcSplitOpId});
         Self->SplitSrcSnapshotSender.DoSend(ctx);
         if (ChangeExchangeSplit) {
@@ -491,7 +491,7 @@ public:
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
         ui64 dstTabletId = Ev->Get()->Record.GetTabletId();
         YDB_LOG_DEBUG_CTX(ctx, "Received snapshot Ack from dst for split OpId",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"dstTabletId", dstTabletId},
             {"opId", opId});
 
@@ -518,7 +518,7 @@ public:
             for (const TActorId& ackTo : Self->SrcAckSplitTo) {
                 ui64 opId = Self->SrcSplitOpId;
                 YDB_LOG_DEBUG_CTX(ctx, "Ack split to schemeshard",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"opId", opId});
                 ctx.Send(ackTo, new TEvDataShard::TEvSplitAck(opId, Self->TabletID()));
             }
@@ -567,7 +567,7 @@ public:
         for (const auto& [ackTo, opIds] : Waiters) {
             for (const ui64 opId : opIds) {
                 YDB_LOG_DEBUG_CTX(ctx, "Ack split partitioning changed to schemeshard",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"opId", opId});
                 ctx.Send(ackTo, new TEvDataShard::TEvSplitPartitioningChangedAck(opId, Self->TabletID()));
             }

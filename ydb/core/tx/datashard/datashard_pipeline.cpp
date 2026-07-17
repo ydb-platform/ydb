@@ -186,7 +186,7 @@ ECleanupStatus TPipeline::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx,
             YDB_LOG_ERROR_CTX(ctx, "TX is already executed or expired at tablet",
                 {"step", step},
                 {"txId", txId},
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
 
             ui64 lastStep = LastPlannedTx.Step;
             Y_ENSURE(lastStep >= step,
@@ -215,7 +215,7 @@ ECleanupStatus TPipeline::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx,
         case ECleanupStatus::None:
             if (!op || !CanRunOp(*op)) {
                 YDB_LOG_TRACE_CTX(ctx, "No cleanup at outdated step last cleanup",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"outdatedStep", outdatedStep},
                     {"lastCleanupTime", LastCleanupTime});
             }
@@ -248,9 +248,9 @@ bool TPipeline::IsReadyOp(TOperation::TPtr op)
     if (op->IsInProgress()) {
         YDB_LOG_CRIT_CTX(TActivationContext::AsActorContext(), "Found in-progress candidate operation executing",
             {"#_op->GetKind", op->GetKind()},
-            {"#_*op", *op},
+            {"operation", *op},
             {"#_op->GetCurrentUnit", op->GetCurrentUnit()},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
         return false;
     }
 
@@ -260,8 +260,8 @@ bool TPipeline::IsReadyOp(TOperation::TPtr op)
     if (op->IsExecutionPlanFinished()) {
         YDB_LOG_CRIT_CTX(TActivationContext::AsActorContext(), "Found finished candidate operation",
             {"#_op->GetKind", op->GetKind()},
-            {"#_*op", *op},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"operation", *op},
+            {"tabletId", Self->TabletID()});
         return false;
     }
 
@@ -272,7 +272,7 @@ bool TPipeline::IsReadyOp(TOperation::TPtr op)
 TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
 {
     YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "GetNextActiveOp at active active planned immediate planned",
-        {"#_Self->TabletID", Self->TabletID()},
+        {"tabletId", Self->TabletID()},
         {"#_num_0", (dryRun ? " (dry run)" : "")},
         {"#_ActiveOps.size", ActiveOps.size()},
         {"#_ActivePlannedOps.size", ActivePlannedOps.size()},
@@ -287,7 +287,7 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
         if (IsReadyOp(NextActiveOp)) {
             YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Return cached ready operation",
                 {"#_*NextActiveOp", *NextActiveOp},
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
 
             TOperation::TPtr res = NextActiveOp;
             if (!dryRun)
@@ -298,7 +298,7 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
                 {"#_NextActiveOp->GetKind", NextActiveOp->GetKind()},
                 {"#_*NextActiveOp", *NextActiveOp},
                 {"#_NextActiveOp->GetCurrentUnit", NextActiveOp->GetCurrentUnit()},
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
 
             NextActiveOp = nullptr;
         }
@@ -312,8 +312,8 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
 
         if (IsReadyOp(op)) {
             YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Found ready candidate operation",
-                {"#_*op", *op},
-                {"#_Self->TabletID", Self->TabletID()},
+                {"operation", *op},
+                {"tabletId", Self->TabletID()},
                 {"#_op->GetCurrentUnit", op->GetCurrentUnit()});
             if (dryRun)
                 NextActiveOp = op;
@@ -321,8 +321,8 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
         }
 
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Candidate operation at is not ready",
-            {"#_*op", *op},
-            {"#_Self->TabletID", Self->TabletID()},
+            {"operation", *op},
+            {"tabletId", Self->TabletID()},
             {"#_op->GetCurrentUnit", op->GetCurrentUnit()});
 
         checkedOps.insert(op);
@@ -336,14 +336,14 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
 
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Check candidate unit",
             {"#_unit.GetKind", unit.GetKind()},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         auto op = unit.FindReadyOperation();
         if (op) {
             YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Found ready operation in unit",
-                {"#_*op", *op},
+                {"operation", *op},
                 {"#_unit.GetKind", unit.GetKind()},
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
             if (dryRun)
                 NextActiveOp = op;
             return op;
@@ -351,7 +351,7 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
 
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Unit has no ready operations",
             {"#_unit.GetKind", unit.GetKind()},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         checkedUnits.insert(unit.GetKind());
         CandidateUnits.erase(*CandidateUnits.rbegin());
@@ -370,8 +370,8 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
             continue;
 
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Check active operation at on unit",
-            {"#_*op", *op},
-            {"#_Self->TabletID", Self->TabletID()},
+            {"operation", *op},
+            {"tabletId", Self->TabletID()},
             {"#_op->GetCurrentUnit", op->GetCurrentUnit()});
 
         bool ready = IsReadyOp(op);
@@ -381,16 +381,16 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
 
         if (ready) {
             YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "TryGetExistingTx at return waiting",
-                {"#_Self->TabletID", Self->TabletID()},
-                {"#_*op", *op});
+                {"tabletId", Self->TabletID()},
+                {"operation", *op});
             if (dryRun)
                 NextActiveOp = op;
             return op;
         }
 
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Active operation at is not ready",
-            {"#_*op", *op},
-            {"#_Self->TabletID", Self->TabletID()},
+            {"operation", *op},
+            {"tabletId", Self->TabletID()},
             {"#_op->GetCurrentUnit", op->GetCurrentUnit()});
     }
 
@@ -399,7 +399,7 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
 
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Check unit",
             {"#_unit.GetKind", unit.GetKind()},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         auto op = unit.FindReadyOperation();
 
@@ -408,9 +408,9 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
 
         if (op) {
             YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Found ready operation in unit",
-                {"#_*op", *op},
+                {"operation", *op},
                 {"#_unit.GetKind", unit.GetKind()},
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
             if (dryRun)
                 NextActiveOp = op;
             return op;
@@ -418,7 +418,7 @@ TOperation::TPtr TPipeline::GetNextActiveOp(bool dryRun)
 
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Unit has no ready operations",
             {"#_unit.GetKind", unit.GetKind()},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
     }
 
     return nullptr;
@@ -451,8 +451,8 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
             // This transaction would have been marked as logically complete
             if (!op->HasFlag(TTxFlags::BlockingImmediateOps)) {
                 YDB_LOG_TRACE("Adding BlockingImmediateOps for op",
-                    {"#_*op", *op},
-                    {"#_Self->TabletID", Self->TabletID()});
+                    {"operation", *op},
+                    {"tabletId", Self->TabletID()});
                 op->SetFlag(TTxFlags::BlockingImmediateOps);
             }
         } else if (version <= Self->SnapshotManager.GetIncompleteEdge() ||
@@ -461,8 +461,8 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
             // This transaction would have been marked as logically incomplete
             if (!op->HasFlag(TTxFlags::BlockingImmediateWrites)) {
                 YDB_LOG_TRACE("Adding BlockingImmediateWrites for op",
-                    {"#_*op", *op},
-                    {"#_Self->TabletID", Self->TabletID()});
+                    {"operation", *op},
+                    {"tabletId", Self->TabletID()});
                 op->SetFlag(TTxFlags::BlockingImmediateWrites);
             }
         }
@@ -472,15 +472,15 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
         bool isComplete = op->HasFlag(TTxFlags::BlockingImmediateOps);
         if (ActivePlannedOpsLogicallyCompleteEnd == ActivePlannedOps.end() && !isComplete) {
             YDB_LOG_TRACE("Operation is the new logically complete end",
-                {"#_*op", *op},
-                {"#_Self->TabletID", Self->TabletID()});
+                {"operation", *op},
+                {"tabletId", Self->TabletID()});
             ActivePlannedOpsLogicallyCompleteEnd = pr.first;
         }
         bool isIncomplete = isComplete || op->HasFlag(TTxFlags::BlockingImmediateWrites);
         if (ActivePlannedOpsLogicallyIncompleteEnd == ActivePlannedOps.end() && !isIncomplete) {
             YDB_LOG_TRACE("Operation is the new logically incomplete end",
-                {"#_*op", *op},
-                {"#_Self->TabletID", Self->TabletID()});
+                {"operation", *op},
+                {"tabletId", Self->TabletID()});
             ActivePlannedOpsLogicallyIncompleteEnd = pr.first;
         }
     }
@@ -502,8 +502,8 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
                << Self->TabletID() << " because it is already active");
 
     YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Activated operation",
-        {"#_*op", *op},
-        {"#_Self->TabletID", Self->TabletID()});
+        {"operation", *op},
+        {"tabletId", Self->TabletID()});
 
     AddCandidateUnit(EExecutionUnitKind::PlanQueue);
 }
@@ -615,7 +615,7 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
         ForgetTx(tx->GetTxId());
 
         YDB_LOG_DEBUG_CTX(ctx, "LoadTxDetails at got data tx from cache",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"#_tx->GetStep", tx->GetStep()},
             {"#_tx->GetTxId", tx->GetTxId()});
     } else if (tx->HasVolatilePrepareFlag()) {
@@ -627,7 +627,7 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
         keysCount = tx->ExtractKeys();
 
         YDB_LOG_DEBUG_CTX(ctx, "LoadTxDetails at loaded tx from memory keys",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"#_tx->GetStep", tx->GetStep()},
             {"#_tx->GetTxId", tx->GetTxId()},
             {"extracted", keysCount});
@@ -655,7 +655,7 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
         keysCount = tx->ExtractKeys();
 
         YDB_LOG_DEBUG_CTX(ctx, "LoadTxDetails at loaded tx from db keys",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"#_tx->GetStep", tx->GetStep()},
             {"#_tx->GetTxId", tx->GetTxId()},
             {"extracted", keysCount});
@@ -677,7 +677,7 @@ bool TPipeline::LoadWriteDetails(TTransactionContext& txc, const TActorContext& 
         ForgetTx(writeOp->GetTxId());
 
         YDB_LOG_DEBUG_CTX(ctx, "LoadWriteDetails at got data writeOp from cache",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"#_writeOp->GetStep", writeOp->GetStep()},
             {"#_writeOp->GetTxId", writeOp->GetTxId()});
     } else if (writeOp->HasVolatilePrepareFlag()) {
@@ -689,7 +689,7 @@ bool TPipeline::LoadWriteDetails(TTransactionContext& txc, const TActorContext& 
         keysCount = writeOp->ExtractKeys(txc.DB.GetScheme());
 
         YDB_LOG_DEBUG_CTX(ctx, "LoadWriteDetails at loaded writeOp from memory keys",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"#_writeOp->GetStep", writeOp->GetStep()},
             {"#_writeOp->GetTxId", writeOp->GetTxId()},
             {"extracted", keysCount});
@@ -715,7 +715,7 @@ bool TPipeline::LoadWriteDetails(TTransactionContext& txc, const TActorContext& 
         keysCount = writeOp->ExtractKeys(txc.DB.GetScheme());
 
         YDB_LOG_DEBUG_CTX(ctx, "LoadWriteDetails at loaded writeOp from db keys",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"#_writeOp->GetStep", writeOp->GetStep()},
             {"#_writeOp->GetTxId", writeOp->GetTxId()},
             {"extracted", keysCount});
@@ -770,7 +770,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
         YDB_LOG_INFO_CTX(ctx, "Outdated readset",
             {"step", step},
             {"txId", txId},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
         return true;
     }
 
@@ -787,7 +787,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
             {"#_Self->State", Self->State},
             {"step", step},
             {"txId", txId},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
         if (ack) {
             DelayedAcks[TStepOrder(step, txId)].push_back(std::move(ack));
         }
@@ -848,7 +848,7 @@ void TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     }
 
     YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Save read set",
-        {"#_Self->TabletID", Self->TabletID()},
+        {"tabletId", Self->TabletID()},
         {"txId", txId},
         {"origin", origin},
         {"from", from},
@@ -880,8 +880,8 @@ bool TPipeline::LoadInReadSets(TOperation::TPtr op,
     // of read set origins (datashards)
     for (const auto &kv : op->InReadSets()) {
         YDB_LOG_TRACE_CTX(ctx, "Prepare for loading readset",
-            {"#_*op", *op},
-            {"#_Self->TabletID", Self->TabletID()},
+            {"operation", *op},
+            {"tabletId", Self->TabletID()},
             {"source", kv.first.first},
             {"target", kv.first.second});
         op->CoverageBuilders()[kv.first].reset(new TBalanceCoverageBuilder());
@@ -889,8 +889,8 @@ bool TPipeline::LoadInReadSets(TOperation::TPtr op,
 
     YDB_LOG_TRACE_CTX(ctx, "Expected readsets",
         {"#_op->GetRemainReadSets", op->GetRemainReadSets()},
-        {"#_*op", *op},
-        {"#_Self->TabletID", Self->TabletID()});
+        {"operation", *op},
+        {"tabletId", Self->TabletID()});
 
     NIceDb::TNiceDb db(txc.DB);
 
@@ -914,8 +914,8 @@ bool TPipeline::LoadInReadSets(TOperation::TPtr op,
         TString track = rowset.GetValue<Schema::InReadSets::BalanceTrackList>();
 
         YDB_LOG_TRACE_CTX(ctx, "Read readset for at from DB",
-            {"#_*op", *op},
-            {"#_Self->TabletID", Self->TabletID()},
+            {"operation", *op},
+            {"tabletId", Self->TabletID()},
             {"origin", origin},
             {"from", from},
             {"to", to});
@@ -943,8 +943,8 @@ bool TPipeline::LoadInReadSets(TOperation::TPtr op,
 
     YDB_LOG_TRACE_CTX(ctx, "Remain read sets",
         {"#_op->GetRemainReadSets", op->GetRemainReadSets()},
-        {"#_*op", *op},
-        {"#_Self->TabletID", Self->TabletID()});
+        {"operation", *op},
+        {"tabletId", Self->TabletID()});
 
     op->SetLoadedInRSFlag();
 
@@ -1095,7 +1095,7 @@ void TPipeline::PlanTxImpl(ui64 step, ui64 txId, TTransactionContext &txc, const
         YDB_LOG_DEBUG_CTX(ctx, "Ignoring PlanStep for unknown txId at tablet",
             {"step", step},
             {"txId", txId},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
         return;
     }
 
@@ -1104,7 +1104,7 @@ void TPipeline::PlanTxImpl(ui64 step, ui64 txId, TTransactionContext &txc, const
             {"step", step},
             {"txId", txId},
             {"#_op->GetStep", op->GetStep()},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
         return;
     }
 
@@ -1183,7 +1183,7 @@ void TPipeline::CompleteTx(const TOperation::TPtr op, TTransactionContext& txc, 
         YDB_LOG_NOTICE_CTX(ctx, "Will send outdated delayed readset ack",
             {"#_pr.first.Step", pr.first.Step},
             {"#_pr.first.TxId", pr.first.TxId},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         for (auto& ack : pr.second) {
             op->AddDelayedAck(std::move(ack));
@@ -1371,7 +1371,7 @@ ECleanupStatus TPipeline::CleanupOutdated(NIceDb::TNiceDb& db, const TActorConte
         ForgetTx(txId);
         YDB_LOG_INFO_CTX(ctx, "Outdated Tx is cleaned at tablet and",
             {"txId", txId},
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"outdatedStep", outdatedStep});
     }
 
@@ -1641,7 +1641,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             tx->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
 
             YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Shard cannot parse tx",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_tx->GetTxId", tx->GetTxId()},
                 {"#_dataTx->GetErrors", dataTx->GetErrors()});
 
@@ -1672,14 +1672,14 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         if (tx->IsImmediate()) {
             if (Config.NoImmediate() || (Config.ForceOnlineRW() && !dataTx->ReadOnly())) {
                 YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Shard force immediate tx to online according to config",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"#_tx->GetTxId", tx->GetTxId()});
                 tx->SetForceOnlineFlag();
             } else if (tx->IsReadTable()) {
                 // Feature flag tells us txproxy supports immediate mode for ReadTable
             } else if (dataTx->RequirePrepare()) {
                 YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Shard force immediate tx to online because of SNAPSHOT_NOT_READY_YET status",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"#_tx->GetTxId", tx->GetTxId()});
                 tx->SetForceOnlineFlag();
             } else {
@@ -1786,7 +1786,7 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         if (Config.NoImmediate() || (Config.ForceOnlineRW())) {
             YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Force immediate writeOp to online according to config, at tablet",
                 {"#_writeOp->GetTxId", writeOp->GetTxId()},
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
             writeOp->SetForceOnlineFlag();
         } else {
             if (Config.DirtyImmediate())
@@ -1838,14 +1838,14 @@ EExecutionStatus TPipeline::RunExecutionUnit(TOperation::TPtr op, TTransactionCo
     auto &unit = GetExecutionUnit(op->GetCurrentUnit());
 
     YDB_LOG_TRACE_CTX(ctx, "Trying to execute at on unit",
-        {"#_*op", *op},
-        {"#_Self->TabletID", Self->TabletID()},
+        {"operation", *op},
+        {"tabletId", Self->TabletID()},
         {"#_unit.GetKind", unit.GetKind()});
 
     if (!unit.IsReadyToExecute(op)) {
         YDB_LOG_TRACE_CTX(ctx, "Operation at is not ready to execute on unit",
-            {"#_*op", *op},
-            {"#_Self->TabletID", Self->TabletID()},
+            {"operation", *op},
+            {"tabletId", Self->TabletID()},
             {"#_unit.GetKind", unit.GetKind()});
         return EExecutionStatus::Continue;
     }
@@ -1855,8 +1855,8 @@ EExecutionStatus TPipeline::RunExecutionUnit(TOperation::TPtr op, TTransactionCo
     op->AddExecutionTime(timer.GetTime());
 
     YDB_LOG_TRACE_CTX(ctx, "Execution status for at is",
-        {"#_*op", *op},
-        {"#_Self->TabletID", Self->TabletID()},
+        {"operation", *op},
+        {"tabletId", Self->TabletID()},
         {"status", status});
 
     if (status == EExecutionStatus::Executed
@@ -1878,14 +1878,14 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
         auto &unit = GetExecutionUnit(op->GetCurrentUnit());
 
         YDB_LOG_TRACE_CTX(ctx, "Trying to execute at on unit",
-            {"#_*op", *op},
-            {"#_Self->TabletID", Self->TabletID()},
+            {"operation", *op},
+            {"tabletId", Self->TabletID()},
             {"#_unit.GetKind", unit.GetKind()});
 
         if (!unit.IsReadyToExecute(op)) {
             YDB_LOG_TRACE_CTX(ctx, "Operation at is not ready to execute on unit",
-                {"#_*op", *op},
-                {"#_Self->TabletID", Self->TabletID()},
+                {"operation", *op},
+                {"tabletId", Self->TabletID()},
                 {"#_unit.GetKind", unit.GetKind()});
 
             return EExecutionStatus::Continue;
@@ -1895,8 +1895,8 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
 
         if (mightRestart && !canRestart) {
             YDB_LOG_TRACE_CTX(ctx, "Operation at cannot execute on unit because no more restarts are allowed",
-                {"#_*op", *op},
-                {"#_Self->TabletID", Self->TabletID()},
+                {"operation", *op},
+                {"tabletId", Self->TabletID()},
                 {"#_unit.GetKind", unit.GetKind()});
 
             return EExecutionStatus::Reschedule;
@@ -1915,8 +1915,8 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
         }
 
         YDB_LOG_TRACE_CTX(ctx, "Execution status for at is",
-            {"#_*op", *op},
-            {"#_Self->TabletID", Self->TabletID()},
+            {"operation", *op},
+            {"tabletId", Self->TabletID()},
             {"status", status});
 
         if (status == EExecutionStatus::Executed) {
@@ -1964,22 +1964,22 @@ void TPipeline::MoveToNextUnit(TOperation::TPtr op)
     GetExecutionUnit(op->GetCurrentUnit()).RemoveOperation(op);
 
     YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Advance execution plan for at executing on unit",
-        {"#_*op", *op},
-        {"#_Self->TabletID", Self->TabletID()},
+        {"operation", *op},
+        {"tabletId", Self->TabletID()},
         {"#_op->GetCurrentUnit", op->GetCurrentUnit()});
 
     op->AdvanceExecutionPlan();
     if (!op->IsExecutionPlanFinished()) {
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Add at to execution unit",
-            {"#_*op", *op},
-            {"#_Self->TabletID", Self->TabletID()},
+            {"operation", *op},
+            {"tabletId", Self->TabletID()},
             {"#_op->GetCurrentUnit", op->GetCurrentUnit()});
 
         GetExecutionUnit(op->GetCurrentUnit()).AddOperation(op);
     } else {
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Execution plan for at has finished",
-            {"#_*op", *op},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"operation", *op},
+            {"tabletId", Self->TabletID()});
     }
 }
 
@@ -1989,8 +1989,8 @@ void TPipeline::RunCompleteList(TOperation::TPtr op,
 {
     for (auto kind : completeList) {
         YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Complete execution for at on unit",
-            {"#_*op", *op},
-            {"#_Self->TabletID", Self->TabletID()},
+            {"operation", *op},
+            {"tabletId", Self->TabletID()},
             {"kind", kind});
 
         TInstant start = AppData()->TimeProvider->Now();
@@ -2211,7 +2211,7 @@ async<bool> TPipeline::WaitForSnapshot(const TRowVersion& snapshot) {
 
 void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "ActivateWaitingTxOps",
-        {"#_Self->TabletID", Self->TabletID()},
+        {"tabletId", Self->TabletID()},
         {"version", edge},
         {"txOps", (WaitingDataTxOps.empty() ? "empty" : ToString(WaitingDataTxOps.begin()->first.Step))},
         {"readIterators", (WaitingDataReadIterators.empty() ? "empty" : ToString(WaitingDataReadIterators.begin()->first.Step))},
@@ -2309,7 +2309,7 @@ void TPipeline::AddWaitingReadIterator(
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Put read to wait current unreliable",
-        {"#_Self->TabletID", Self->TabletID()},
+        {"tabletId", Self->TabletID()},
         {"iterator", readId},
         {"version", version},
         {"waitStep", waitStep},

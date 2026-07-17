@@ -98,8 +98,8 @@ EExecutionStatus TWaitForStreamClearanceUnit::Execute(TOperation::TPtr op,
 
         YDB_LOG_TRACE_CTX(ctx, "Requested stream clearance",
             {"#_tx->GetStreamSink", tx->GetStreamSink()},
-            {"#_*op", *op},
-            {"#_DataShard.TabletID", DataShard.TabletID()});
+            {"operation", *op},
+            {"tabletId", DataShard.TabletID()});
     }
 
     while (op->HasPendingInputEvents()) {
@@ -156,8 +156,8 @@ void TWaitForStreamClearanceUnit::Handle(TEvTxProcessing::TEvStreamClearanceResp
     if (op->IsWaitingForStreamClearance()) {
         if (ev->Get()->Record.GetCleared()) {
             YDB_LOG_TRACE_CTX(ctx, "Got stream clearance",
-                {"#_*op", *op},
-                {"#_DataShard.TabletID", DataShard.TabletID()});
+                {"operation", *op},
+                {"tabletId", DataShard.TabletID()});
             op->ResetWaitingForStreamClearanceFlag();
         } else {
             Abort(TStringBuilder() << "Got stream clearance reject for " << *op

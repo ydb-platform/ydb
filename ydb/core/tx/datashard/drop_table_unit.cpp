@@ -71,7 +71,7 @@ EExecutionStatus TDropTableUnit::Execute(TOperation::TPtr op,
         return EExecutionStatus::Executed;
 
     YDB_LOG_INFO_CTX(ctx, "Trying to DROP TABLE",
-        {"#_DataShard.TabletID", DataShard.TabletID()});
+        {"tabletId", DataShard.TabletID()});
 
     ui64 tableId = schemeTx.GetDropTable().GetId_Deprecated();
     if (schemeTx.GetDropTable().HasPathId()) {

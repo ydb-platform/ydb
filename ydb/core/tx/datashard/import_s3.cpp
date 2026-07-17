@@ -733,7 +733,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         YDB_LOG_DEBUG("[Import]",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
@@ -810,7 +810,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     void Handle(TEvDataShard::TEvS3DownloadInfo::TPtr& ev) {
         YDB_LOG_DEBUG("[Import]",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         const auto& info = ev->Get()->Info;
         if (!info.DataETag) {
@@ -872,7 +872,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     void Handle(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
         YDB_LOG_DEBUG("[Import]",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         auto& msg = *ev->Get();
         const auto& result = msg.Result;
@@ -903,7 +903,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     void HandleChecksum(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         YDB_LOG_DEBUG("[Import]",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
 
@@ -919,7 +919,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     void HandleChecksum(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
         YDB_LOG_DEBUG("[Import]",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         auto& msg = *ev->Get();
         const auto& result = msg.Result;
@@ -1072,7 +1072,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     void Handle(TEvDataShard::TEvS3DirectWriteBeginResult::TPtr& ev) {
         YDB_LOG_DEBUG("[Import]",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         auto* msg = ev->Get();
         if (!msg->Success) {
@@ -1145,7 +1145,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     void Handle(TEvDataShard::TEvS3DirectWriteFinishResult::TPtr& ev) {
         YDB_LOG_DEBUG("[Import]",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         auto* msg = ev->Get();
         if (!msg->Success) {
@@ -1204,7 +1204,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     void Handle(TEvDataShard::TEvS3UploadRowsResponse::TPtr& ev) {
         YDB_LOG_DEBUG("[Import]",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         *Counters.BytesWritten += RequestBuilder.GetCellBytes();
         Counters.LatencyWrite.Finish(Now());

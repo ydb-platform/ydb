@@ -66,7 +66,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
     const ui64 schemaVersion = createTableTx.HasTableSchemaVersion() ? createTableTx.GetTableSchemaVersion() : 0u;
 
     YDB_LOG_INFO_CTX(ctx, "Trying to CREATE TABLE at schema",
-        {"#_DataShard.TabletID", DataShard.TabletID()},
+        {"tabletId", DataShard.TabletID()},
         {"tableId", tableId},
         {"version", schemaVersion});
 

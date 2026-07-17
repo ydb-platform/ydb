@@ -66,7 +66,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
         Y_ENSURE(dataTx->RequirePrepare());
         YDB_LOG_DEBUG_CTX(ctx, "Require prepare Tx",
             {"#_op->GetTxId", op->GetTxId()},
-            {"#_DataShard.TabletID", DataShard.TabletID()},
+            {"tabletId", DataShard.TabletID()},
             {"#_dataTx->GetErrors", dataTx->GetErrors()});
     }
 
@@ -321,7 +321,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
         YDB_LOG_DEBUG_CTX(ctx, "Prepared transaction txId at tablet",
             {"#_op->GetKind", op->GetKind()},
             {"#_op->GetTxId", op->GetTxId()},
-            {"#_DataShard.TabletID", DataShard.TabletID()});
+            {"tabletId", DataShard.TabletID()});
     }
 
     return EExecutionStatus::Executed;

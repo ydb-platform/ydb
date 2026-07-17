@@ -73,7 +73,7 @@ class TChangeSender: public TActor<TChangeSender> {
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         auto& records = ev->Get()->Records;
 
         if (!IsActive()) {
@@ -108,7 +108,7 @@ class TChangeSender: public TActor<TChangeSender> {
     void Handle(TEvChangeExchange::TEvAddSender::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         const auto& msg = *ev->Get();
 
@@ -139,7 +139,7 @@ class TChangeSender: public TActor<TChangeSender> {
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
         const auto& pathId = ev->Get()->PathId;
 
         auto it = Senders.find(pathId);
@@ -165,7 +165,7 @@ class TChangeSender: public TActor<TChangeSender> {
     void Handle(TEvChangeExchange::TEvActivateSender::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         Become(&TThis::StateActive);
         LogPrefix.Clear();

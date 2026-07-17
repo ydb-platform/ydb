@@ -21,7 +21,7 @@ public:
         YDB_LOG_INFO_CTX(ctx, "TEvCompactBorrowed request from for table at tablet",
             {"#_Ev->Sender", Ev->Sender},
             {"pathId", pathId},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         auto nothingToCompactResult = MakeHolder<TEvDataShard::TEvCompactBorrowedResult>(Self->TabletID(), pathId);
 
@@ -35,7 +35,7 @@ public:
             return true;
         }
         const TUserTable& tableInfo = *it->second;
-     
+
         THashSet<ui32> tablesToCompact;
         if (txc.DB.HasBorrowed(tableInfo.LocalTid, Self->TabletID())) {
             tablesToCompact.insert(tableInfo.LocalTid);
@@ -51,7 +51,7 @@ public:
                 {"#_Ev->Sender", Ev->Sender},
                 {"pathId", pathId},
                 {"tableToCompact", tableToCompact},
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
 
             if (Self->Executor()->CompactBorrowed(tableToCompact)) {
                 Self->IncCounter(COUNTER_TX_COMPACT_BORROWED);
@@ -63,7 +63,7 @@ public:
                 YDB_LOG_DEBUG_CTX(ctx, "TEvCompactBorrowed request from for table can not be compacted at tablet",
                     {"#_Ev->Sender", Ev->Sender},
                     {"pathId", pathId},
-                    {"#_Self->TabletID", Self->TabletID()});
+                    {"tabletId", Self->TabletID()});
             }
         }
 
@@ -71,7 +71,7 @@ public:
             YDB_LOG_DEBUG_CTX(ctx, "TEvCompactBorrowed request from for table has no parts for borrowed compaction at tablet",
                 {"#_Ev->Sender", Ev->Sender},
                 {"pathId", pathId},
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
             ctx.Send(Ev->Sender, std::move(nothingToCompactResult));
         }
 

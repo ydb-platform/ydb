@@ -164,14 +164,14 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
 
     YDB_LOG_TRACE_CTX(ctx, "Propose transaction complete txid at tablet send to client, ms, ms",
         {"#_op->GetTxId", op->GetTxId()},
-        {"#_DataShard.TabletID", DataShard.TabletID()},
+        {"tabletId", DataShard.TabletID()},
         {"execLatency", res->Record.GetExecLatency()},
         {"proposeLatency", duration.MilliSeconds()},
         {"status", res->GetStatus()});
 
     TString errors = res->GetError();
     if (errors.size()) {
-        LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_CompleteRequest), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD, 
+        LOG_LOG_S_THROTTLE(DataShard.GetLogThrottler(TDataShard::ELogThrottlerType::FinishProposeUnit_CompleteRequest), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD,
                     "Errors while proposing transaction txid " << op->GetTxId()
                     << " at tablet " << DataShard.TabletID() << " status: "
                     << res->GetStatus() << " errors: " << errors);

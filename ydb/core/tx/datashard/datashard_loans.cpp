@@ -42,7 +42,7 @@ public:
         for (const auto& batch : perTabletParts) {
             // open a pipe to the part owner and send part metadata batch
             YDB_LOG_DEBUG_CTX(ctx, "Initiating parts return",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_batch.second", batch.second},
                 {"#_batch.first", batch.first});
             Self->LoanReturnTracker.ReturnLoan(batch.first, batch.second, ctx);
@@ -84,7 +84,7 @@ public:
             TLogoBlobID partMeta = LogoBlobIDFromLogoBlobID(Ev->Get()->Record.GetPartMetadata(i));
             PartMetaVec.push_back(partMeta);
             YDB_LOG_DEBUG_CTX(ctx, "Got returned parts",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"partMetaVec", PartMetaVec},
                 {"fromTabletId", FromTabletId});
 
@@ -98,7 +98,7 @@ public:
         // Send Ack
         TActorId ackTo = Ev->Sender;
         YDB_LOG_DEBUG_CTX(ctx, "Ack parts return to tablet",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"partMetaVec", PartMetaVec},
             {"fromTabletId", FromTabletId});
 
@@ -138,7 +138,7 @@ public:
 
     void Complete(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Parts return ack processed",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"partMetaVec", PartMetaVec});
         for (const auto& partMeta : PartMetaVec) {
             Self->LoanReturnTracker.LoanDone(partMeta, ctx);
@@ -188,7 +188,7 @@ public:
         Y_ENSURE(Self->TransQueue.GetSchemaOperations().empty(), "Cannot go offline while there is a schema Tx in flight at tablet " << Self->TabletID());
 
         YDB_LOG_INFO_CTX(ctx, "Initiating switch from to Offline state",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"#_DatashardStateName(Self->State)", DatashardStateName(Self->State)});
 
         Self->PurgeTxTables(txc);

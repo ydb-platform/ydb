@@ -704,7 +704,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
 
         YDB_LOG_NOTICE("Starting TPrefixKMeansScan row version",
             {"tabletId", TabletID()},
-            {"#_request", request.ShortDebugString()},
+            {"request", request.ShortDebugString()},
             {"rowVersion", rowVersion});
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -723,7 +723,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
                 YDB_LOG_ERROR("Rejecting TPrefixKMeansScan bad request with response",
                     {"tabletId", TabletID()},
-                    {"#_request", request.ShortDebugString()},
+                    {"request", request.ShortDebugString()},
                     {"#_response->Record", response->Record.ShortDebugString()});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;

@@ -156,8 +156,8 @@ EExecutionStatus TReadTableScanUnit::Execute(TOperation::TPtr op,
         auto *result = CheckedCast<TReadTableProd*>(op->ScanResult().Get());
 
         YDB_LOG_TRACE_CTX(ctx, "ReadTable scan complete",
-            {"#_*op", *op},
-            {"#_DataShard.TabletID", DataShard.TabletID()},
+            {"operation", *op},
+            {"tabletId", DataShard.TabletID()},
             {"error", result->Error},
             {"isFatalError", result->IsFatalError});
 

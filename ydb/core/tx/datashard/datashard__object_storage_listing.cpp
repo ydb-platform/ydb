@@ -150,14 +150,14 @@ public:
 
             if (Ev->Get()->Record.HasLastPath()) {
                 TString reqLastPath = Ev->Get()->Record.GetLastPath();
-                
+
                 key.emplace_back(reqLastPath, tableInfo.KeyColumnTypes[prefixSize].GetTypeId());
 
                 for (size_t i = 1; i < suffixColumns.GetCells().size(); ++i) {
                     size_t ki = prefixSize + i;
                     key.emplace_back(suffixColumns.GetCells()[i].Data(), suffixColumns.GetCells()[i].Size(), tableInfo.KeyColumnTypes[ki].GetTypeId());
                 }
-                
+
                 startAfterPath = reqLastPath;
             } else {
                 for (size_t i = 0; i < suffixColumns.GetCells().size(); ++i) {
@@ -195,7 +195,7 @@ public:
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "S3 Listing: start at key end at key last path: common",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"#_num_0", JoinVectorIntoString(key, " ")},
             {"#_num_1", JoinVectorIntoString(endKey, " ")},
             {"restarted", RestartCount-1},
@@ -238,7 +238,7 @@ public:
             for (const auto& colId : filter.columns()) {
                 filterColumnIds.push_back(colId);
             }
-            
+
             for (const auto& matchType : filter.matchtypes()) {
                 if (!NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_IsValid(matchType)) {
                     TString errorReason = Sprintf("Unknown match type %" PRIu32, matchType);
@@ -297,7 +297,7 @@ public:
 
             TDbTupleRef value = iter->GetValues();
             YDB_LOG_TRACE_CTX(ctx, "Dump #_Self->TabletID, path, #_num_0",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"path", path},
                 {"#_num_0", (isLeafPath ? " -> " + DbgPrintTuple(value, *AppData(ctx)->TypeRegistry) : TString())});
 
@@ -349,7 +349,7 @@ public:
                             continue;
                         }
                     }
-                    
+
                     // Add a row with path column and all columns requested by user
                     Result->Record.AddContentsRows(newContentsRow);
                     if (++foundKeys >= maxKeys) {
@@ -366,7 +366,7 @@ public:
                         Y_ENSURE(columnId < value.Cells().size());
 
                         NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType matchType;
-                        
+
                         if (matchTypes.size() == filterColumnIds.size()) {
                             matchType = matchTypes[i];
                         } else {
@@ -400,7 +400,7 @@ public:
                         continue;
                     }
                 }
-                
+
                 // For prefix save only path
                 if (path > startAfterPath && path != lastCommonPath) {
                     LastCommonPath = path;
@@ -463,7 +463,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "S3 Listing: finished description: common",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"status", Result->Record.GetStatus()},
             {"#_Result->Record.GetErrorDescription", Result->Record.GetErrorDescription()},
             {"contents", Result->Record.ContentsRowsSize()},

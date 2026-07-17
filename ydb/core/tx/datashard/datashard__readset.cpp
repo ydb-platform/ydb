@@ -13,7 +13,7 @@ namespace NKikimr::NDataShard {
 
     bool TDataShard::TTxReadSet::Execute(TTransactionContext &txc, const TActorContext &ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "TTxReadSet::Execute at got read",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"set", Ev->Get()->ToString().data()});
 
         DoExecute(txc, ctx);
@@ -61,7 +61,7 @@ namespace NKikimr::NDataShard {
             /// It's possible till readsets can't passwthough splits-merges or other shard mutations.
             YDB_LOG_WARN_CTX(ctx, "Allow sender to lose readset, state",
                 {"state", state},
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"msg", msg});
             return;
         }
@@ -91,14 +91,14 @@ namespace NKikimr::NDataShard {
 
     void TDataShard::TTxReadSet::Complete(const TActorContext &ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "TTxReadSet::Complete",
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         // If it was read set for non-active tx we should send ACK back after successful save in DB
         // Note that, active tx will send "delayed" ACK after tx complete
         if (Ack || NoDataReply) {
             YDB_LOG_DEBUG_CTX(ctx, "Send RS",
                 {"#_num_0", Ack && NoDataReply ? "Ack+Reply" : Ack ? "Ack" : "Reply"},
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_Ev->Get()->ToString().data", Ev->Get()->ToString().data()});
 
             struct TSendState : public TThrRefBase {

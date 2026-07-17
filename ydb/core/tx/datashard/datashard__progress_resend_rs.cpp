@@ -14,7 +14,7 @@ namespace NDataShard {
 
     bool TDataShard::TTxProgressResendRS::Execute(TTransactionContext &txc, const TActorContext &ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Start TTxProgressResendRS at tablet",
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
         return Self->OutReadSets.ResendRS(txc, ctx, Seqno);
     }
 

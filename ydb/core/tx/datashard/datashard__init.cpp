@@ -157,7 +157,7 @@ bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActor
     if (InMemoryStateActorStarted || Self->InMemoryStatePrevActorId && !Self->InMemoryStateActorId) {
         NIceDb::TNiceDb db(txc.DB);
         YDB_LOG_DEBUG_CTX(ctx, "DataShard persisting started state actor id in generation",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"#_Self->InMemoryStateActorId", Self->InMemoryStateActorId},
             {"#_Self->Generation", Self->Generation()});
         Self->PersistSys(db, Schema::Sys_InMemoryStateActorId, Self->InMemoryStateActorId);

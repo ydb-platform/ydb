@@ -24,12 +24,12 @@ public:
     {
         if (Self->State == TShardState::Offline) {
             YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveOldInReadSets::Execute (skip)",
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
             return true;
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveOldInReadSets::Execute",
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
         ui64 removed = 0;
@@ -46,7 +46,7 @@ public:
 
         YDB_LOG_DEBUG_CTX(ctx, "Removing outdated read sets",
             {"removed", removed},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         return true;
     }
@@ -55,13 +55,13 @@ public:
     {
         if (Self->State == TShardState::Offline) {
             YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveOldInReadSets::Complete (skip)",
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
             return;
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveOldInReadSets::Complete outdated read sets remain",
             {"#_Self->InRSToRemove.size", Self->InRSToRemove.size()},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         if (!Self->InRSToRemove.empty()) {
             YDB_LOG_DEBUG_CTX(ctx, "Schedule TEvPrivate::TEvRemoveOldInReadSets",
@@ -91,12 +91,12 @@ public:
     {
         if (Self->State == TShardState::Offline) {
             YDB_LOG_DEBUG_CTX(ctx, "TTxCheckInReadSets::Execute (skip)",
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
             return true;
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxCheckInReadSets::Execute",
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
         auto rowset = db.Table<Schema::InReadSets>().Range().Select();
@@ -115,7 +115,7 @@ public:
                 Self->InRSToRemove.insert(TReadSetKey(txId, origin, from, to));
 
                 YDB_LOG_TRACE_CTX(ctx, "Found outdated InReadSet",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"txid", txId},
                     {"origin", origin},
                     {"from", from},
@@ -133,13 +133,13 @@ public:
     {
         if (Self->State == TShardState::Offline) {
             YDB_LOG_DEBUG_CTX(ctx, "TTxCheckInReadSets::Complete (skip)",
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
             return;
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxCheckInReadSets::Complete found read sets to remove",
             {"#_Self->InRSToRemove.size", Self->InRSToRemove.size()},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         if (!Self->InRSToRemove.empty()) {
             YDB_LOG_DEBUG_CTX(ctx, "Schedule TEvPrivate::TEvRemoveOldInReadSets",

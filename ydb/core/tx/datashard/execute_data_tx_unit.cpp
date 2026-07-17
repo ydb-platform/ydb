@@ -125,8 +125,8 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         ui64 consumed = tx->GetDataTx()->GetTxSize() + engine->GetMemoryAllocated();
         if (MaybeRequestMoreTxMemory(consumed, txc)) {
             YDB_LOG_TRACE_CTX(ctx, "Operation at requested more memory",
-                {"#_*op", *op},
-                {"#_DataShard.TabletID", DataShard.TabletID()},
+                {"operation", *op},
+                {"tabletId", DataShard.TabletID()},
                 {"#_txc.GetRequestedMemory", txc.GetRequestedMemory()});
 
             DataShard.IncCounter(COUNTER_TX_WAIT_RESOURCE);
@@ -180,8 +180,8 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         }
     } catch (const TMemoryLimitExceededException&) {
         YDB_LOG_TRACE_CTX(ctx, "Operation at exceeded memory limit and requests more for the next try",
-            {"#_*op", *op},
-            {"#_DataShard.TabletID", DataShard.TabletID()},
+            {"operation", *op},
+            {"tabletId", DataShard.TabletID()},
             {"#_txc.GetMemoryLimit", txc.GetMemoryLimit()},
             {"#_txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR", txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR});
 
@@ -197,8 +197,8 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         return EExecutionStatus::Restart;
     } catch (const TNotReadyTabletException&) {
         YDB_LOG_TRACE_CTX(ctx, "Tablet is not ready for execution",
-            {"#_DataShard.TabletID", DataShard.TabletID()},
-            {"#_*op", *op});
+            {"tabletId", DataShard.TabletID()},
+            {"operation", *op});
 
         DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 
@@ -208,8 +208,8 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
         return EExecutionStatus::Restart;
     } catch (const TRollbackAndWaitException&) {
         YDB_LOG_TRACE_CTX(ctx, "Tablet needs to wait for dependencies",
-            {"#_DataShard.TabletID", DataShard.TabletID()},
-            {"#_*op", *op});
+            {"tabletId", DataShard.TabletID()},
+            {"operation", *op});
 
         tx->GetDataTx()->ResetCollectedChanges();
         tx->ReleaseTxData(txc, ctx);
@@ -317,15 +317,15 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
     }
 
     YDB_LOG_TRACE_CTX(ctx, "Executed operation at tablet with status",
-        {"#_*op", *op},
-        {"#_DataShard.TabletID", DataShard.TabletID()},
+        {"operation", *op},
+        {"tabletId", DataShard.TabletID()},
         {"#_result->GetStatus", result->GetStatus()});
 
     auto& counters = tx->GetDataTx()->GetCounters();
 
     YDB_LOG_TRACE_CTX(ctx, "Datashard execution counters",
-        {"#_*op", *op},
-        {"#_DataShard.TabletID", DataShard.TabletID()},
+        {"operation", *op},
+        {"tabletId", DataShard.TabletID()},
         {"counters", counters});
 
     KqpUpdateDataShardStatCounters(DataShard, counters);
@@ -380,8 +380,8 @@ void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorConte
     for (const auto& lock : locks) {
         if (lock.IsError()) {
             YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Lock is not set for at lock",
-                {"#_*op", *op},
-                {"#_DataShard.TabletID", DataShard.TabletID()},
+                {"operation", *op},
+                {"tabletId", DataShard.TabletID()},
                 {"lock", lock});
         }
         op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,

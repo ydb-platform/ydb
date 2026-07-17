@@ -99,7 +99,7 @@ public:
     void Start(TEvIncrementalRestoreScan::TEvServe::TPtr& ev) {
         YDB_LOG_DEBUG("Handle TEvIncrementalRestoreScan::TEvServe",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         // Store/update the actorId on each command receipt (handles SchemeShard restarts)
         OperatorActorId = ev->Sender;
@@ -110,7 +110,7 @@ public:
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         TVector<TChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
 
@@ -126,7 +126,7 @@ public:
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         for (auto recordId : ev->Get()->Records) {
             PendingRecords.erase(recordId);
@@ -138,7 +138,7 @@ public:
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
         YDB_LOG_DEBUG("Handle TEvIncrementalRestoreScan::TEvFinished",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         Driver->Touch(EScan::Final);
     }

@@ -41,7 +41,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         LeaderPipeCache = ev->Get()->Services.LeaderPipeCache;
         Handshake();
@@ -82,7 +82,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     void Handshake(TEvChangeExchange::TEvStatus::TPtr& ev) {
         YDB_LOG_DEBUG("Handshake",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
@@ -130,7 +130,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         auto records = MakeHolder<TEvChangeExchange::TEvApplyRecords>();
         records->Record.SetOrigin(DataShard.TabletId);
@@ -209,7 +209,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     void Handle(TEvChangeExchange::TEvStatus::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {

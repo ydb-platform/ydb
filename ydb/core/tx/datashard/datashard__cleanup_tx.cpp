@@ -16,7 +16,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (!Self->IsStateActive()) {
             YDB_LOG_INFO_CTX(ctx, "Cleanup tx at non-ready tablet state",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_Self->State", Self->State});
             Self->CleanupQueue.Reset(ctx);
             return true;
@@ -37,7 +37,7 @@ public:
                     ReplyTs = Self->ConfirmReadOnlyLease();
                 }
                 YDB_LOG_INFO_CTX(ctx, "Cleaned up old txs at TxInFly",
-                    {"#_Self->TabletID", Self->TabletID()},
+                    {"tabletId", Self->TabletID()},
                     {"#_Self->TxInFly", Self->TxInFly()});
                 Self->IncCounter(COUNTER_TX_PROGRESS_CLEANUP);
                 Self->ExecuteCleanupTx(ctx);
@@ -54,7 +54,7 @@ public:
 
         if (expireSnapshotsAllowed && Self->GetSnapshotManager().RemoveExpiredSnapshots(ctx.Now(), txc)) {
             YDB_LOG_DEBUG_CTX(ctx, "Removed expired snapshots",
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
         }
 
         const bool needFutureCleanup = Self->TxInFly() > 0 || expireSnapshotsAllowed;
@@ -68,7 +68,7 @@ public:
         // as a workaround for possible bugs with missing progress calls
         if (Self->Pipeline.CanRunAnotherOp()) {
             YDB_LOG_DEBUG_CTX(ctx, "Can run another op at scheduling plan queue progress",
-                {"#_Self->TabletID", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
             Self->PlanQueue.Progress(ctx);
         }
 
@@ -110,7 +110,7 @@ public:
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (!Self->IsStateActive()) {
             YDB_LOG_INFO_CTX(ctx, "Cleanup volatile tx at non-ready tablet state",
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_Self->State", Self->State});
             return true;
         }
@@ -118,7 +118,7 @@ public:
         if (Self->Pipeline.CleanupVolatile(TxId, ctx, Replies)) {
             YDB_LOG_INFO_CTX(ctx, "Cleaned up volatile tx at TxInFly",
                 {"txId", TxId},
-                {"#_Self->TabletID", Self->TabletID()},
+                {"tabletId", Self->TabletID()},
                 {"#_Self->TxInFly", Self->TxInFly()});
             Self->IncCounter(COUNTER_TX_PROGRESS_CLEANUP);
 

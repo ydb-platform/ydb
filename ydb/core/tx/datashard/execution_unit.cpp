@@ -191,7 +191,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         }
 
         YDB_LOG_NOTICE_CTX(ctx, "Tablet rejecting tx due to split",
-            {"#_DataShard.TabletID", DataShard.TabletID()});
+            {"tabletId", DataShard.TabletID()});
 
         op->Abort();
         return true;
@@ -251,7 +251,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         }
 
         YDB_LOG_NOTICE_CTX(ctx, "Tablet rejecting tx due to changes queue overflow",
-            {"#_DataShard.TabletID", DataShard.TabletID()});
+            {"tabletId", DataShard.TabletID()});
 
         op->Abort();
         return true;

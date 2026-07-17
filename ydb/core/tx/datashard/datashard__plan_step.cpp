@@ -61,7 +61,7 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
             {"#_num_0", JoinStrings(txIds.begin(), txIds.end(), ", ")},
             {"step", step},
             {"#_Self->Pipeline.OutdatedCleanupStep", Self->Pipeline.OutdatedCleanupStep()},
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
         Self->IncCounter(COUNTER_PLAN_STEP_IGNORED);
         return true;
     }
@@ -70,7 +70,7 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
         YDB_LOG_DEBUG_CTX(ctx, "Planned transaction txId at step at tablet",
             {"txId", txId},
             {"step", step},
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"#_Ev->Get()->Record", Ev->Get()->Record});
     }
 

@@ -154,7 +154,7 @@ public:
             YDB_LOG_DEBUG_CTX(ctx, "Prepared transaction txId at tablet",
                 {"#_op->GetKind", op->GetKind()},
                 {"#_op->GetTxId", op->GetTxId()},
-                {"#_DataShard.TabletID", DataShard.TabletID()});
+                {"tabletId", DataShard.TabletID()});
         }
 
         return EExecutionStatus::Executed;

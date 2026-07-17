@@ -51,7 +51,7 @@ class TCdcPartitionWorker: public TActorBootstrapped<TCdcPartitionWorker> {
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         const auto& response = ev->Get()->Record;
 
@@ -428,7 +428,7 @@ class TCdcWorker
     void Handle(TEvChangeExchange::TEvSplitAck::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         auto it = Pending.find(ev->Sender);
         if (it == Pending.end()) {
@@ -454,7 +454,7 @@ class TCdcWorker
     void Handle(TEvents::TEvGone::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         auto it = Pending.find(ev->Sender);
         if (it == Pending.end()) {
@@ -574,7 +574,7 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
     void Handle(TEvChangeExchange::TEvSplitAck::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ev", ev->Get()->ToString()});
 
         auto it = Pending.find(ev->Sender);
         if (it == Pending.end()) {

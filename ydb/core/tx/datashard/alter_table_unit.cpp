@@ -154,7 +154,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     Y_ENSURE(version);
 
     YDB_LOG_INFO_CTX(ctx, "Trying to ALTER TABLE at version",
-        {"#_DataShard.TabletID", DataShard.TabletID()},
+        {"tabletId", DataShard.TabletID()},
         {"version", version});
 
     TPathId tableId(DataShard.GetPathOwnerId(), alterTableTx.GetId_Deprecated());

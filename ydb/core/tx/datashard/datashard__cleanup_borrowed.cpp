@@ -213,7 +213,7 @@ public:
 
     bool Execute(NTabletFlatExecutor::TTransactionContext &, const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "HTTP request",
-            {"#_Self->TabletID", Self->TabletID()},
+            {"tabletId", Self->TabletID()},
             {"url", Ev->Get()->PathInfo()});
 
         auto cgi = Ev->Get()->Cgi();

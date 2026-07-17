@@ -2531,60 +2531,22 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         TestCheckColumnsNotNull(runtime, movedTablePath, {{"value", true}});
     }
 
-    Y_UNIT_TEST(CopyTableWithBackupWhileValidating) {
-        TTestBasicRuntime runtime;
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
-
-        TTestEnv env(runtime);
-        TString root = "/MyRoot";
-
-        ui64 txId = 100;
-        TString tableName = "Table";
-        TString tablePath = root + "/" + tableName;
-        TString copyTablePath = root + "/TableBackup";
-
-        TestCreateTable(runtime, ++txId, root, TStringBuilder() << R"(
-              Name: ")" << tableName << R"("
-              Columns { Name: "key"   Type: "Uint32" }
-              Columns { Name: "value" Type: "Utf8"   }
-              KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest> validateBlocker(runtime);
-
-        ui64 setConstraintTxId = ++txId;
-        AsyncSetColumnConstraint(
-            runtime, setConstraintTxId,
-            TTestTxConfig::SchemeShard,
-            root,
-            tablePath,
-            {"value"});
-
-        runtime.WaitFor("block validate request", [&]{ return validateBlocker.size() > 0; });
-
-        ui64 copyTx = ++txId;
-        TestConsistentCopyTables(runtime, copyTx, root, R"(
-            CopyTableDescriptions {
-                SrcPath: "/MyRoot/Table"
-                DstPath: "/MyRoot/TableBackup"
-                IsBackup: true
-            }
-        )");
-
-        TestDescribeResult(DescribePath(runtime, copyTablePath), {NLs::PathExist});
-
-        validateBlocker.Stop();
-        validateBlocker.Unblock();
-
-        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
-
-        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
-        TestCheckColumnsNotNull(runtime, copyTablePath, {{"value", false}});
-    }
-
     Y_UNIT_TEST(CopyTableNoBackupWhileValidating) {
+        /*
+            The test is based on the following idea.
+
+            There are essentially two different ways CopyTable can be invoked:
+
+            1. As a standalone operation initiated by the user.
+            2. Internally, as part of a Backup meta-operation.
+
+            For a standalone CopyTable, it is fine to fail the request and tell the user that the table is currently locked
+            by another long-running operation.In that scenario, CopyTable is a single explicit operation that the user can simply retry.
+            This is also the case where CopyTable is expected to check whether the table is locked by other schema operations.
+
+            This test covers the first scenario.        
+        */
+
         TTestBasicRuntime runtime;
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
@@ -2648,6 +2610,74 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         TestDescribeResult(DescribePath(runtime, copyTablePath), {NLs::PathExist});
         TestCheckColumnsNotNull(runtime, copyTablePath, {{"value", true}});
+    }
+
+    Y_UNIT_TEST(CopyTableWithBackupWhileValidating) {
+        /*
+            The test is based on the following idea.
+
+            There are essentially two different ways CopyTable can be invoked:
+
+            1. As a standalone operation initiated by the user.
+            2. Internally, as part of a Backup meta-operation.
+
+            For CopyTable calls made as part of Backup, however, we should not do that.
+            If ConsistentCopyTable gets blocked by other operations during a backup, it may lead to a large number of retries.
+            Each retry effectively means trying to copy all tables in the database again, which is a very expensive and long-running operation.
+            So the practical way to avoid such retries is to make the new long-running operation pause and wait until the backup’s CopyTable finishes.
+
+            This test covers the second scenario.        
+        */
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+        TString root = "/MyRoot";
+
+        ui64 txId = 100;
+        TString tableName = "Table";
+        TString tablePath = root + "/" + tableName;
+        TString copyTablePath = root + "/TableBackup";
+
+        TestCreateTable(runtime, ++txId, root, TStringBuilder() << R"(
+              Name: ")" << tableName << R"("
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest> validateBlocker(runtime);
+
+        ui64 setConstraintTxId = ++txId;
+        AsyncSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        runtime.WaitFor("block validate request", [&]{ return validateBlocker.size() > 0; });
+
+        ui64 copyTx = ++txId;
+        TestConsistentCopyTables(runtime, copyTx, root, R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table"
+                DstPath: "/MyRoot/TableBackup"
+                IsBackup: true
+            }
+        )");
+
+        TestDescribeResult(DescribePath(runtime, copyTablePath), {NLs::PathExist});
+
+        validateBlocker.Stop();
+        validateBlocker.Unblock();
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+        TestCheckColumnsNotNull(runtime, copyTablePath, {{"value", false}});
     }
 
     Y_UNIT_TEST(SetNotNullFailsWhileCopyTableInProgress) {

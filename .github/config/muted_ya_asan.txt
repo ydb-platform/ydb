@@ -7,10 +7,6 @@ ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
 ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Block42
-ydb/core/blobstorage/ut_blobstorage/ut_balancing unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnRange
-ydb/core/blobstorage/ut_blobstorage/ut_bridge unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
@@ -48,13 +44,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.HugeBlobsWit
 ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.SmallBlobsNoDonor
 ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.SmallBlobsWithDonor
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneByOne
-ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneByOneWithReconnects
-ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk unittest.[*/*] chunk
-ydb/core/blobstorage/ut_vdisk TBsDbStat.ChaoticParallelWrite_DbStat
-ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/blobstorage/ut_vdisk2 unittest.[*/*] chunk
-ydb/core/graph/shard/ut unittest.sole chunk
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestGetRecordsCbor
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestAuthMatrixForGetQueueUrlXmlSqs
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch
@@ -120,41 +110,22 @@ ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
 ydb/core/load_test/ut_ycsb ReadLoad.ShouldReadIterate
-ydb/core/mind/hive/ut THiveTest.TestServerlessComputeResourcesMode
 ydb/core/mind/hive/ut THiveTestWithTenants.TestDrain
-ydb/core/mind/hive/ut unittest.[*/*] chunk
-ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldSwitchHostToOfflineAndBack
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
-ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
-ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCounters
-ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCountersWithKeepMessageOrder
-ydb/core/persqueue/pqtablet/quota/ut TWriteQuoterTests.WaitMessagesQuota
-ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
-ydb/core/persqueue/public/describer/ut TDescriberTests.CDC
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicNotCanonizedPath
-ydb/core/persqueue/public/describer/ut TDescriberTests.TopicNotTopic
-ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithoutDatabase
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
-ydb/core/persqueue/public/mlp/ut TMLPWriterTests.Deduplicated_Reboot
-ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteToAutopartitioningTopic
-ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteTwoMessage_Deduplicated
 ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteTwoMessage_OnePartition
-ydb/core/persqueue/public/mlp/ut TMLPWriterTests.WriteTwoMessage_TwoPartition
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.Commit_WithSession_ToPastParentPartition
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySession_AutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk WithSDK.DescribeConsumer
-ydb/core/quoter/ut QuoterWithKesusTest.AllocationStatistics
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
 ydb/core/tablet_flat/ut TIterator.GetKeyWithVersionSkips
-ydb/core/tablet_flat/ut TLegacy.StatsIter
-ydb/core/tablet_flat/ut TPageHandleTest.PinnedRef
+ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
+ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPartitioning
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
-ydb/core/tx/columnshard/backup/iscan/ut IScan.MultiExport
-ydb/core/tx/columnshard/backup/iscan/ut IScan.ShouldRejectParquetExportWithEncryption
-ydb/core/tx/columnshard/backup/iscan/ut unittest.sole chunk
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranuleStrKey_PKUtf8
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKDatetime
 ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
@@ -162,39 +133,17 @@ ydb/core/tx/datashard/build_index/ut unittest.sole chunk
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-0-1
 ydb/core/tx/datashard/ut_stats DataShardStats.SplitByLoadSuggestedKeyIsEmptyOnNotEnoughData-0-0
 ydb/core/tx/datashard/ut_stats unittest.sole chunk
-ydb/core/tx/schemeshard/ut_full_backup unittest.sole chunk
-ydb/core/tx/schemeshard/ut_login TSchemeShardLoginTest.CheckThatLockedOutParametersIsRestoredFromLocalDb
-ydb/core/tx/schemeshard/ut_metrics unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTableWithLocalBloomIndexes
 ydb/core/tx/schemeshard/ut_restore TRestoreTests.ShouldHandleOverloadedShard
-ydb/core/tx/schemeshard/ut_serverless TSchemeShardServerLess.StorageBilling
-ydb/core/tx/schemeshard/ut_serverless unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_subdomain TSchemeShardSubDomainTest.SimultaneousCreateTenantTable
-ydb/core/tx/tiering/ut ColumnShardTiers.DSConfigsWithQueryServiceDdl
-ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
-ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-false
 ydb/core/viewer/ut Viewer.PutRecordViewer
 ydb/core/viewer/ut Viewer.QueryExecuteScript
-ydb/core/ymq/actor/cloud_events/cloud_events_ut unittest.sole chunk
-ydb/core/ymq/actor/yc_search_ut TIndexProcesorTests.TestSingleCreateQueueEvent
 ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
 ydb/library/actors/interconnect/ut DynamicProxy.RaceCheck10
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHiddenCopy
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_CloseTimeout
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeData
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.TypedProducer_BasicWrite
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut Describe.DescribePartitionPermissions
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.WithoutPartitionWithRestart
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopics_2_Query
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopics_2_Table
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.WriteToTopic_Demo_27_Query
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.RetryOverheadOnHappyPath
 ydb/public/sdk/cpp/tests/unit/client/driver CppGrpcClientSimpleTest.WithoutDiscoveryClientLevel
 ydb/public/sdk/cpp/tests/unit/client/driver CppGrpcClientSimpleTest.WithoutDiscoveryDriverLevel
@@ -206,7 +155,6 @@ ydb/public/sdk/cpp/tests/unit/client/table TableTest.CreateTableWithMetricsSetti
 ydb/services/persqueue_v1/ut TPersQueueTest.BillingRequestUnits
 ydb/services/persqueue_v1/ut TPersQueueTest.CheckDecompressionTasksWithoutSession
 ydb/services/persqueue_v1/ut TPersQueueTest.ConsumerAvailabilityPeriodCleanup
-ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestWriteStat1stClassTopicAPI
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringAbsoluteTopicRelativeTransferPath
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringFakeTopicPath
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTableTopicTransferPath

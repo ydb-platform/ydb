@@ -3028,8 +3028,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         std::vector<std::string> queries = {
             R"(
                 -- Lookup join выбирается, так как join по ключу второй таблицы
-<<<<<<< HEAD
-<<<<<<< HEAD
                 SELECT t1.Value1, t2.Value2
                 FROM `/Root/Table` as t1 
                 inner join 
@@ -3053,14 +3051,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 inner join 
                 `/Root/Table2` as t2 on (t1.Value1 = t2.Value1)
                 order by t1.Value1, t2.Value2;
-=======
-                SELECT t1.a, t2.a 
-                FROM `/Root/t1` as t1 
-                inner join 
-                `/Root/t2` as t2 on t1.a = t2.a 
-                order by t1.a, t2.a;
->>>>>>> 5a76c042902 (Added a number of index tests)
-=======
+            "),
+            R"(
                 SELECT t1.Value1, t2.Value2
                 FROM `/Root/Table` as t1 
                 inner join 
@@ -3084,24 +3076,16 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 inner join 
                 `/Root/Table2` as t2 on (t1.Value1 = t2.Value1)
                 order by t1.Value1, t2.Value2;
->>>>>>> 68d14801683 (Added more tests)
             )",
         };
 
         std::vector<std::string> results = {
-<<<<<<< HEAD
-<<<<<<< HEAD
             R"([[["5"];["15"]];[["6"];["15"]];[["7"];["15"]];[["8"];["15"]]])",
             R"([[["1"];["15"]];[["5"];["15"]]])",
             R"([[["1"];["1"]];[["2"];["2"]];[["3"];["3"]];[["4"];["4"]]])",
-=======
-            R"([[0;0];[1;1];[2;2]])",
->>>>>>> 5a76c042902 (Added a number of index tests)
-=======
             R"([[["5"];["15"]];[["6"];["15"]];[["7"];["15"]];[["8"];["15"]]])",
             R"([[["1"];["15"]];[["5"];["15"]]])",
             R"([[["1"];["1"]];[["2"];["2"]];[["3"];["3"]];[["4"];["4"]]])",
->>>>>>> 68d14801683 (Added more tests)
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

@@ -112,11 +112,6 @@ private:
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 
-    void SendAllocateDDiskForAddHost(
-        const NActors::TActorContext& ctx,
-        size_t dbgId,
-        THostIndex newHostIndex);
-
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
@@ -160,6 +155,10 @@ private:
         const TEvPartitionDirectPrivate::TEvFastPathServiceStopped::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandlePoisonByBlockedGeneration(
+        const TEvPartitionDirectPrivate::TEvPoison::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleAddHostToDBG(
         const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -168,14 +167,18 @@ private:
     // request is invalid; true if it may proceed.
     bool ValidateAddHostToDBGRequest(
         const NActors::TActorContext& ctx,
-        size_t dbgId);
-
+        size_t dbgId,
+        THostIndex newHostIndex);
     void RejectAddHost(
         const NActors::TActorContext& ctx,
         size_t dbgId,
         const TString& message);
+    void SendAllocateDDiskForAddHost(
+        const NActors::TActorContext& ctx,
+        size_t dbgId,
+        THostIndex newHostIndex);
 
-    TTabletInfo MakeMonTabletInfo();
+    [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
 
     void Start(
         const NActors::TActorContext& ctx,

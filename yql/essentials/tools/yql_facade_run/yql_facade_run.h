@@ -91,6 +91,7 @@ public:
     bool AnsiLexer = false;
     bool TestAntlr4 = false;
     bool AssumeYdbOnClusterWithSlash = false;
+    bool AutoUseYqlLibs = false;
     bool TestSqlFormat = false;
     bool TestLexers = false;
     bool TestComplete = false;

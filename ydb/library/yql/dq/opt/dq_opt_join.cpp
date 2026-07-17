@@ -1381,6 +1381,7 @@ TExprBase DqBuildHashJoin(
     EHashJoinMode mode,
     TExprContext& ctx,
     IOptimizationContext& optCtx,
+    TTypeAnnotationContext& typeCtx,
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin,
@@ -1438,7 +1439,7 @@ TExprBase DqBuildHashJoin(
             } else if (rightKind){
                 commonType = JoinDryKeyType(!filter, keyType2, keyType1, ctx);
             } else {
-                commonType = JoinCommonDryKeyType(join.Pos(), !filter, keyType1, keyType2, ctx);
+                commonType = JoinCommonDryKeyType(join.Pos(), !filter, keyType1, keyType2, ctx, typeCtx);
             }
 
             if (commonType) {

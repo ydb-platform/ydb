@@ -71,16 +71,12 @@ namespace NYql::NDq {
 
         void Bootstrap() {
             Become(&TGenericReadActor::StateFunc);
-            if (!TokenProvider_->IsReady()) {
-                TokenProvider_->Subscribe([
-                    actorSystem = TActivationContext::ActorSystem(),
-                    selfId = SelfId()
-                ]() {
-                    actorSystem->Send(selfId, new NActors::TEvents::TEvWakeup());
-                });
-                return;
-            }
-            Startup();
+            TokenProvider_->Subscribe([
+                actorSystem = TActivationContext::ActorSystem(),
+                selfId = SelfId()
+            ]() {
+                actorSystem->Send(selfId, new NActors::TEvents::TEvWakeup());
+            });
         }
 
         void Startup() {

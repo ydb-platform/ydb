@@ -1547,7 +1547,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         // See ShouldRequestDDiskAllocationForAddedHost for the throwaway
         // sender.
-        auto addHost = [&](ui64 dbgId)
+        auto addHost = [&](size_t dbgId, size_t newHostIndex)
         {
             const TActorId sender = runtime->AllocateEdgeActor(
                 env.Settings.ControllerNodeId,
@@ -1556,7 +1556,9 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             env.Runtime->SendToPipe(
                 partition,
                 sender,
-                new TEvPartitionDirectPrivate::TEvAddHostToDBG(dbgId, 5),
+                new TEvPartitionDirectPrivate::TEvAddHostToDBG(
+                    dbgId,
+                    newHostIndex),
                 0,
                 TTestActorSystem::GetPipeConfigWithRetries());
             runtime->DestroyActor(sender);
@@ -1567,8 +1569,8 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         // Grow DBG 0, then DBG 1: each add sees its own group at the default
         // size and grows only it.
-        addHost(0);
-        addHost(1);
+        addHost(0, 5);
+        addHost(1, 5);
 
         UNIT_ASSERT_VALUES_EQUAL(2u, roundTrips.size());
         UNIT_ASSERT_VALUES_EQUAL(0u, roundTrips[0].DbgId);
@@ -1589,7 +1591,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         // A third add probes DBG 0 after DBG 1's add: the partition must still
         // carry DBG 0's grown connections (request 7), and BSController must
         // still hold its 6-disk group (result 7).
-        addHost(0);
+        addHost(0, 6);
 
         UNIT_ASSERT_VALUES_EQUAL(3u, roundTrips.size());
         UNIT_ASSERT_VALUES_EQUAL(0u, roundTrips[2].DbgId);
@@ -1613,7 +1615,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         WaitForTabletBoot(env);
         env.Sim(TDuration::Seconds(10));
 
-        addHost(0);
+        addHost(0, 7);
 
         UNIT_ASSERT_VALUES_EQUAL(4u, roundTrips.size());
         UNIT_ASSERT_VALUES_EQUAL(0u, roundTrips[3].DbgId);

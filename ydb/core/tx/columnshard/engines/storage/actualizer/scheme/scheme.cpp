@@ -103,6 +103,7 @@ void TSchemeActualizer::DoExtractTasks(
                         {"event", "cannot_add_portion"},
                         {"reason", "limit_exceeded"},
                         {"context", tasksContext.DebugString()});
+                    TSchemeGlobalCounters::OnSkipNotReadyWrite();
                     limitExceeded = true;
                     break;
                 case TTieringProcessContext::EAddPortionResult::PORTION_LOCKED:

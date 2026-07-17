@@ -8,7 +8,7 @@ from devtools.yamaker.project import GNUMakeNixProject
 
 def post_install(self):
     own_compat = os.path.join(self.arcdir, "compat")
-    # provide strlcpy 
+    # provide strlcpy
     for p, m in self.yamakes.items():
         if own_compat in m.ADDINCL:
             m.ADDINCL.remove(own_compat)

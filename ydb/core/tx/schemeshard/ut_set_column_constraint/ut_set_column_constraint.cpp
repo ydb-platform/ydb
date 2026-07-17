@@ -2540,11 +2540,11 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             1. As a standalone operation initiated by the user.
             2. Internally, as part of a Backup meta-operation.
 
+            This test covers the first scenario.        
+
             For a standalone CopyTable, it is fine to fail the request and tell the user that the table is currently locked
             by another long-running operation.In that scenario, CopyTable is a single explicit operation that the user can simply retry.
             This is also the case where CopyTable is expected to check whether the table is locked by other schema operations.
-
-            This test covers the first scenario.        
         */
 
         TTestBasicRuntime runtime;
@@ -2621,12 +2621,15 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             1. As a standalone operation initiated by the user.
             2. Internally, as part of a Backup meta-operation.
 
-            For CopyTable calls made as part of Backup, however, we should not do that.
-            If ConsistentCopyTable gets blocked by other operations during a backup, it may lead to a large number of retries.
-            Each retry effectively means trying to copy all tables in the database again, which is a very expensive and long-running operation.
-            So the practical way to avoid such retries is to make the new long-running operation pause and wait until the backup’s CopyTable finishes.
+            This test covers the second scenario.
 
-            This test covers the second scenario.        
+            When CopyTable is invoked as part of Backup, it should not fail just because the table is locked by another
+            long-running operation. If ConsistentCopyTable gets blocked this way during a backup, it may lead to a large
+            number of retries. Each retry effectively means trying to copy all tables in the database again, which is a very
+            expensive and long-running operation.
+
+            Therefore, the practical way to avoid such retries is to make the new long-running operation pause and wait
+            until the backup's CopyTable finishes.
         */
         TTestBasicRuntime runtime;
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);

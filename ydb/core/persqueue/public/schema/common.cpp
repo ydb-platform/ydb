@@ -435,6 +435,28 @@ TResult AddConsumer(
         return period.error();
     }
 
+    // Per-consumer read quota for a single partition is stored in TPartitionConfig.ReadQuota keyed by consumer name.
+    if (consumerConfig.read_speed_bytes_per_second() < 0) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "read_speed_bytes_per_second can't be negative, provided " << consumerConfig.read_speed_bytes_per_second()};
+    }
+    if (consumerConfig.partition_read_burst_bytes() < 0) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_read_burst_bytes can't be negative, provided " << consumerConfig.partition_read_burst_bytes()};
+    }
+    if (consumerConfig.read_speed_messages_per_second() < 0) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "read_speed_messages_per_second can't be negative, provided " << consumerConfig.read_speed_messages_per_second()};
+    }
+    if (consumerConfig.partition_read_burst_messages() < 0) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_read_burst_messages can't be negative, provided " << consumerConfig.partition_read_burst_messages()};
+    }
+    if (consumerConfig.read_speed_bytes_per_second() || consumerConfig.partition_read_burst_bytes()
+            || consumerConfig.read_speed_messages_per_second() || consumerConfig.partition_read_burst_messages()) {
+        auto* readQuota = NPQ::GetOrAddReadQuota(*config, consumerName);
+        readQuota->SetSpeedInBytesPerSecond(consumerConfig.read_speed_bytes_per_second());
+        readQuota->SetBurstSize(consumerConfig.partition_read_burst_bytes());
+        readQuota->SetSpeedInMessagesPerSecond(consumerConfig.read_speed_messages_per_second());
+        readQuota->SetBurstSizeInMessages(consumerConfig.partition_read_burst_messages());
+    }
+
     if (consumersAdvancedMonitoringSettings) {
         consumersAdvancedMonitoringSettings->UpdateConsumerConfig(consumerConfig.name(), *consumer);
     }

@@ -267,6 +267,8 @@ struct TTabletPreparationParameters {
     std::optional<uint32_t> metricsLevel;
     std::optional<TString> monitoringProjectId;
     bool AddDefaultConsumer{true};
+    ui32 readSpeed{0};
+    ui32 readSpeedInMessages{0};
 };
 
 struct TConsumerPreparationParameters {
@@ -274,6 +276,9 @@ struct TConsumerPreparationParameters {
     bool Important = false;
     std::optional<uint32_t> MetricsLevel;
     std::optional<TString> MonitoringProjectId;
+
+    std::optional<ui64> ReadSpeedInBytesPerSecond;
+    std::optional<ui64> ReadSpeedInMessagesPerSecond;
 };
 
 void PQTabletPrepare(

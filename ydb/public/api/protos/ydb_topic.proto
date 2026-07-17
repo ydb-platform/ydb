@@ -942,7 +942,7 @@ message Consumer {
 
     // Burst size for read by this consumer from a single partition, in bytes.
     // Zero value means default limit.
-    int64 read_burst_bytes = 12 [(Ydb.value) = ">= 0"];
+    int64 partition_read_burst_bytes = 12 [(Ydb.value) = ">= 0"];
 
     // Read quota for this consumer for a single partition, in messages per second.
     // Zero value means default limit.
@@ -950,7 +950,7 @@ message Consumer {
 
     // Burst size for read by this consumer from a single partition, in messages.
     // Zero value means default limit.
-    int64 read_burst_messages = 14 [(Ydb.value) = ">= 0"];
+    int64 partition_read_burst_messages = 14 [(Ydb.value) = ">= 0"];
 }
 
 // Consumer alter description.
@@ -989,13 +989,13 @@ message AlterConsumer {
     optional int64 set_read_speed_bytes_per_second = 11 [(Ydb.value) = ">= 0"];
 
     // Set burst size for read by this consumer from a single partition, in bytes.
-    optional int64 set_read_burst_bytes = 12 [(Ydb.value) = ">= 0"];
+    optional int64 set_partition_read_burst_bytes = 12 [(Ydb.value) = ">= 0"];
 
     // Set read quota for this consumer for a single partition, in messages per second.
     optional int64 set_read_speed_messages_per_second = 13 [(Ydb.value) = ">= 0"];
 
     // Set burst size for read by this consumer from a single partition, in messages.
-    optional int64 set_read_burst_messages = 14 [(Ydb.value) = ">= 0"];
+    optional int64 set_partition_read_burst_messages = 14 [(Ydb.value) = ">= 0"];
 }
 
 enum AutoPartitioningStrategy {
@@ -1168,16 +1168,16 @@ message CreateTopicRequest {
     int64 partition_total_read_burst_messages = 20 [(Ydb.value) = ">= 0"];
 
     // Read speed for reading a single partition without a consumer, in bytes per second.
-    int64 partition_no_consumer_read_speed_bytes_per_second = 21 [(Ydb.value) = ">= 0"];
+    int64 partition_read_without_consumer_speed_bytes_per_second = 21 [(Ydb.value) = ">= 0"];
 
     // Burst size for reading a single partition without a consumer, in bytes.
-    int64 partition_no_consumer_read_burst_bytes = 22 [(Ydb.value) = ">= 0"];
+    int64 partition_read_without_consumer_burst_bytes = 22 [(Ydb.value) = ">= 0"];
 
     // Read speed for reading a single partition without a consumer, in messages per second.
-    int64 partition_no_consumer_read_speed_messages_per_second = 23 [(Ydb.value) = ">= 0"];
+    int64 partition_read_without_consumer_speed_messages_per_second = 23 [(Ydb.value) = ">= 0"];
 
     // Burst size for reading a single partition without a consumer, in messages.
-    int64 partition_no_consumer_read_burst_messages = 24 [(Ydb.value) = ">= 0"];
+    int64 partition_read_without_consumer_burst_messages = 24 [(Ydb.value) = ">= 0"];
 }
 
 // Create topic response sent from server to client.
@@ -1336,16 +1336,16 @@ message DescribeTopicResult {
     int64 partition_total_read_burst_messages = 22;
 
     // Read speed for reading a single partition without a consumer, in bytes per second.
-    int64 partition_no_consumer_read_speed_bytes_per_second = 23;
+    int64 partition_read_without_consumer_speed_bytes_per_second = 23;
 
     // Burst size for reading a single partition without a consumer, in bytes.
-    int64 partition_no_consumer_read_burst_bytes = 24;
+    int64 partition_read_without_consumer_burst_bytes = 24;
 
     // Read speed for reading a single partition without a consumer, in messages per second.
-    int64 partition_no_consumer_read_speed_messages_per_second = 25;
+    int64 partition_read_without_consumer_speed_messages_per_second = 25;
 
     // Burst size for reading a single partition without a consumer, in messages.
-    int64 partition_no_consumer_read_burst_messages = 26;
+    int64 partition_read_without_consumer_burst_messages = 26;
 }
 
 // Describe partition request sent from client to server.
@@ -1546,16 +1546,16 @@ message AlterTopicRequest {
     optional int64 set_partition_total_read_burst_messages = 23 [(Ydb.value) = ">= 0"];
 
     // Set read speed for reading a single partition without a consumer, in bytes per second. Must be less than database limit.
-    optional int64 set_partition_no_consumer_read_speed_bytes_per_second = 24 [(Ydb.value) = ">= 0"];
+    optional int64 set_partition_read_without_consumer_speed_bytes_per_second = 24 [(Ydb.value) = ">= 0"];
 
     // Set burst size for reading a single partition without a consumer, in bytes. Must be less than database limit.
-    optional int64 set_partition_no_consumer_read_burst_bytes = 25 [(Ydb.value) = ">= 0"];
+    optional int64 set_partition_read_without_consumer_burst_bytes = 25 [(Ydb.value) = ">= 0"];
 
     // Set read speed for reading a single partition without a consumer, in messages per second. Must be less than database limit.
-    optional int64 set_partition_no_consumer_read_speed_messages_per_second = 26 [(Ydb.value) = ">= 0"];
+    optional int64 set_partition_read_without_consumer_speed_messages_per_second = 26 [(Ydb.value) = ">= 0"];
 
     // Set burst size for reading a single partition without a consumer, in messages. Must be less than database limit.
-    optional int64 set_partition_no_consumer_read_burst_messages = 27 [(Ydb.value) = ">= 0"];
+    optional int64 set_partition_read_without_consumer_burst_messages = 27 [(Ydb.value) = ">= 0"];
 }
 
 // Update topic response sent from server to client.

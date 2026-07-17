@@ -4,7 +4,7 @@ LIBRARY()
 
 VERSION(2.1.13)
 
-ORIGINAL_SOURCE(https://github.com/libevent/libevent/releases/download/release-2.1.13-stable/libevent-2.1.13-stable.tar.gz)
+ORIGINAL_SOURCE(https://github.com/libevent/libevent/archive/release-2.1.13-stable.tar.gz)
 
 LICENSE(
     BSD-3-Clause AND

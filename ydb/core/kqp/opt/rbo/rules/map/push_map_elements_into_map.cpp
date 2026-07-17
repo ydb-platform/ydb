@@ -228,24 +228,24 @@ TPushMapElementsIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
 
     auto bottomMap = CastOperator<TOpMap>(topMap->GetInput());
     const auto bottomInputIUs = bottomMap->GetInput()->GetOutputIUs();
-    auto bottomElements = bottomMap->MapElements;
+    auto bottomElements = bottomMap->GetMapElements();
 
-    auto pushed = MakeElementMask(topMap->MapElements.size());
+    auto pushed = MakeElementMask(topMap->GetMapElements().size());
 
-    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
-        const auto& mapElement = topMap->MapElements[idx];
+    for (size_t idx = 0; idx < topMap->GetMapElements().size(); ++idx) {
+        const auto& mapElement = topMap->GetMapElements()[idx];
         if (CanMoveToBottomInput(mapElement, bottomInputIUs, *bottomMap)) {
             pushed.Set(idx);
         }
     }
-    PruneUnsafePushableElements(*bottomMap, topMap->MapElements, pushed);
-    const auto renameMap = BuildRenameMap(topMap->MapElements, pushed);
+    PruneUnsafePushableElements(*bottomMap, topMap->GetMapElements(), pushed);
+    const auto renameMap = BuildRenameMap(topMap->GetMapElements(), pushed);
 
     TVector<TMapElement> topElements;
     // Map(Map(input, bottomElements), topElements) ->
     // Map(input, bottomElements + movable top elements), with non-movable top elements left above.
-    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
-        const auto& mapElement = topMap->MapElements[idx];
+    for (size_t idx = 0; idx < topMap->GetMapElements().size(); ++idx) {
+        const auto& mapElement = topMap->GetMapElements()[idx];
         if (pushed.Get(idx)) {
             bottomElements.push_back(mapElement);
             continue;
@@ -254,7 +254,7 @@ TPushMapElementsIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
         topElements.push_back(mapElement);
     }
 
-    if (bottomElements.size() == bottomMap->MapElements.size()) {
+    if (bottomElements.size() == bottomMap->GetMapElements().size()) {
         return input;
     }
 
@@ -263,14 +263,14 @@ TPushMapElementsIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
             element.SetExpression(element.GetExpression().ApplyRenames(renameMap));
         }
     }
-    bottomMap->MapElements = std::move(bottomElements);
-    props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
+    bottomMap->SetMapElements(std::move(bottomElements));
+    props.Subplans.RenameExternalReferences(renameMap, ctx.ExprCtx);
 
     if (topElements.empty()) {
         return bottomMap;
     }
 
-    return MakeIntrusive<TOpMap>(bottomMap, topMap->Pos, topElements, topMap->Ordered);
+    return MakeIntrusive<TOpMap>(bottomMap, topMap->Pos, topElements, topMap->IsOrdered());
 }
 
 } // namespace NKqp

@@ -117,7 +117,7 @@ bool IsSuitableToExtractAndPushRanges(const TIntrusivePtr<IOperator>& input) {
         return false;
     }
 
-    const auto type = filter->FilterExpr.Node->GetTypeAnn();
+    const auto type = filter->GetFilterExpression().Node->GetTypeAnn();
     if (!type || type->GetKind() == ETypeAnnotationKind::Pg) {
         return false;
     }
@@ -220,7 +220,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         return input;
     }
 
-    auto lambda = TCoLambda(GetLambdaForRangeExtractor(filter->FilterExpr.Node, read->Type, rboCtx));
+    auto lambda = TCoLambda(GetLambdaForRangeExtractor(filter->GetFilterExpression().Node, read->Type, rboCtx));
     auto originalLambda = rboCtx.ExprCtx.DeepCopyLambda(*lambda.Ptr());
     // Predicate extract lib requires constraints.
     auto arg = lambda.Args().Arg(0).Ptr();

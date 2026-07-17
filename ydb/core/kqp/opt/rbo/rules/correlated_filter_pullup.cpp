@@ -33,7 +33,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
 
     auto deps = CastOperator<TOpAddDependencies>(filter->GetInput());
 
-    auto conjuncts = filter->FilterExpr.SplitConjunct();
+    auto conjuncts = filter->GetFilterExpression().SplitConjunct();
 
     // Select a subset of conditions that cover all dependencies
     TVector<TExpression> dependentSubset;
@@ -73,14 +73,14 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
         auto map = CastOperator<TOpMap>(input);
         const auto newMapInputIUs = remainingFilter->GetOutputIUs();
 
-        for (const auto& mapEl : map->MapElements) {
+        for (const auto& mapEl : map->GetMapElements()) {
             if (!mapEl.DependsOnlyOn(newMapInputIUs)) {
                 return false;
             }
         }
 
         // Stop if we compute something from one of the dependent columns, except for Just
-        for (const auto & mapEl : map->MapElements) {
+        for (const auto & mapEl : map->GetMapElements()) {
             for (const auto & iu : mapEl.GetExpression().GetInputIUs(false, true)) {
                 if (correlated.contains(iu)) {
                     if (!mapEl.IsColumnAccess() && !mapEl.GetExpression().IsSingleCallable({"Just"})) {
@@ -102,11 +102,11 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
 
         if (!addToMap.empty()) {
             for (const auto & add : addToMap) {
-                map->MapElements.push_back(TMapElement(add, add, map->Pos, &ctx.ExprCtx, &props));
+                map->AddMapElement(TMapElement(add, add, map->Pos, &ctx.ExprCtx, &props));
             }
         }
 
-        filter->FilterExpr = newExpr;
+        filter->SetFilterExpression(newExpr);
         map->SetInput(remainingFilter);
         deps->SetInput(map);
         input = filter;
@@ -130,7 +130,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
             }
         }
 
-        filter->FilterExpr = newExpr;
+        filter->SetFilterExpression(newExpr);
         aggregate->SetInput(remainingFilter);
         deps->SetInput(aggregate);
         input = filter;

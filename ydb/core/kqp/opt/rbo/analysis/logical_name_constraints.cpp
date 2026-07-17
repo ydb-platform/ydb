@@ -212,7 +212,7 @@ TInfoUnitConstraintSet MakeAllNamesConstraint() {
 
 TInfoUnitConstraintSet GetMapHiddenInputNames(const TOpMap& map) {
     TInfoUnitConstraintSet result;
-    for (const auto& mapElement : map.MapElements) {
+    for (const auto& mapElement : map.GetMapElements()) {
         if (mapElement.IsRename()) {
             result.UnionWith(mapElement.GetRename());
         }

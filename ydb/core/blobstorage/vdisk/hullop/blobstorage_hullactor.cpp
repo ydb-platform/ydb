@@ -280,6 +280,9 @@ namespace NKikimr {
         void HandleWakeup(const TActorContext& ctx) {
             Y_VERIFY_S(CompactionScheduled, HullDs->HullCtx->VCtx->VDiskLogPrefix);
             CompactionScheduled = false;
+            if (!HullDs->HullCtx->VCfg->MaxActiveCompactionsPerPDisk) {
+                CancelOrReleaseCompactionTokenIfNeeded(ctx);
+            }
             UpdateTimingMetrics(ctx);
             if (ctx.Monotonic() >= NextCompactionWakeup) {
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Try to schedule compactions");
@@ -494,6 +497,7 @@ namespace NKikimr {
             switch (CompactionTokenState) {
                 case ECompactionTokenState::Requested:
                 case ECompactionTokenState::Acquired:
+                case ECompactionTokenState::InProgress:
                     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: cancelling or releasing compaction token", PDiskSignatureForHullDbKey<TKey>().ToString().data()));
                     ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(
                         Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, true));

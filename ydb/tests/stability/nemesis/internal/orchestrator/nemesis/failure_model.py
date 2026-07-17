@@ -28,6 +28,11 @@ from typing import Iterable
 
 import yaml
 
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import (
+    ChaosTarget,
+    TargetKind,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,7 +41,6 @@ class ImpactScope(enum.Enum):
 
     NODE = "node"
     DISK = "disk"
-    NETWORK = "network"
     RACK = "rack"
     DATACENTER = "datacenter"
     PILE = "pile"
@@ -58,7 +62,7 @@ class GuardMode(enum.Enum):
 
 # Scopes that collapse to "one fail domain = the host's rack".
 _HOST_LEVEL_SCOPES = frozenset(
-    {ImpactScope.NODE, ImpactScope.DISK, ImpactScope.NETWORK, ImpactScope.RACK}
+    {ImpactScope.NODE, ImpactScope.DISK, ImpactScope.RACK}
 )
 
 # Fallback recovery window (seconds) when a nemesis type has no ``auto_recovery_sec`` annotation.
@@ -191,15 +195,18 @@ class _Impairment:
 
     execution_id: str
     racks: set[str]
+    identity_key: str
     deadline: float | None
 
 
 class FailureModelGuard:
-    """Tracks impaired fail domains (racks) and validates new chaos against the failure model.
+    """Tracks impaired fail domains (racks) and filters candidates against the failure model.
 
-    Only ``FULL``-mode injects are recorded; ``PREFILTER_ONLY`` / ``BYPASS`` are not counted.
-    Each impairment carries a recovery deadline so auto-recovering faults release their budget
-    without an explicit extract; expired impairments are purged lazily on every read/write.
+    Safety is applied at plan time via :meth:`filter_safe` (no dispatch-time veto).
+    ``record_inject`` / ``record_extract`` update the touched set after dispatch.
+    Tablet targets contribute no fail-domain racks.
+
+    Assumes a single active nemesis in MVP (no allocate/reserve locks across types).
     """
 
     def __init__(self, topology: ClusterTopologyModel) -> None:
@@ -213,7 +220,7 @@ class FailureModelGuard:
 
     # -- rack resolution ----------------------------------------------------
 
-    def _racks_for(self, host: str, scope: ImpactScope) -> set[str]:
+    def _racks_for_host(self, host: str, scope: ImpactScope) -> set[str]:
         """Fail domains (rack keys) touched by injecting ``scope`` on ``host``."""
         if scope == ImpactScope.DATACENTER:
             dc = self._topology.dc_of(host)
@@ -225,6 +232,15 @@ class FailureModelGuard:
         # PILE / UNKNOWN: fall back to the host's rack (best effort).
         rack = self._topology.rack_of(host)
         return {rack if rack is not None else self._synthetic_key(host)}
+
+    def _racks_for_target(self, target: ChaosTarget, scope: ImpactScope) -> set[str]:
+        if target.kind is TargetKind.TABLET:
+            return set()
+        if target.kind is TargetKind.DATACENTER or scope == ImpactScope.DATACENTER:
+            dc = target.group_id or self._topology.dc_of(target.host)
+            racks = self._topology.racks_in_dc(dc)
+            return set(racks) if racks else {self._synthetic_key(target.host)}
+        return self._racks_for_host(target.host, scope)
 
     @staticmethod
     def _synthetic_key(host: str) -> str:
@@ -243,6 +259,10 @@ class FailureModelGuard:
         for imp in self._impairments:
             active |= imp.racks
         return active
+
+    def _touched_keys(self, now: float) -> set[str]:
+        self._purge_expired(now)
+        return {imp.identity_key for imp in self._impairments}
 
     # -- tolerance check ----------------------------------------------------
 
@@ -269,76 +289,112 @@ class FailureModelGuard:
 
     # -- public API ---------------------------------------------------------
 
-    def can_inject(self, host: str, scope: ImpactScope) -> bool:
-        if not self.enabled:
-            return True
-        now = time.monotonic()
-        with self._lock:
-            hypothetical = self._active_racks(now) | self._racks_for(host, scope)
-            return self._is_tolerable(hypothetical)
+    def filter_safe(
+        self,
+        candidates: Iterable[ChaosTarget],
+        scope: ImpactScope,
+    ) -> list[ChaosTarget]:
+        """Return candidates that would not exceed the failure budget given current impairments.
 
-    def filter_safe_hosts(self, hosts: Iterable[str], scope: ImpactScope) -> list[str]:
+        Also drops already-touched identities (same ChaosTarget.identity_key).
+        When the guard is disabled, returns all candidates unchanged.
+        """
+        candidates = list(candidates)
         if not self.enabled:
-            return list(hosts)
+            return candidates
         now = time.monotonic()
-        safe: list[str] = []
+        safe: list[ChaosTarget] = []
         with self._lock:
             active = self._active_racks(now)
-            for host in hosts:
-                hypothetical = active | self._racks_for(host, scope)
-                if self._is_tolerable(hypothetical):
-                    safe.append(host)
+            touched = self._touched_keys(now)
+            for target in candidates:
+                if target.identity_key() in touched:
+                    continue
+                racks = self._racks_for_target(target, scope)
+                if not racks:
+                    # e.g. TABLET — always safe for erasure budget
+                    safe.append(target)
+                    continue
+                if self._is_tolerable(active | racks):
+                    safe.append(target)
         return safe
+
+    def filter_safe_hosts(self, hosts: Iterable[str], scope: ImpactScope) -> list[str]:
+        """Legacy wrapper: host strings → HOST targets → filter → host strings."""
+        targets = self.filter_safe(
+            [ChaosTarget.for_host(h) for h in hosts],
+            scope,
+        )
+        return [t.host for t in targets]
 
     def record_inject(
         self,
         execution_id: str,
-        host: str,
+        target: ChaosTarget | str,
         scope: ImpactScope,
         recovery_sec: float | None = DEFAULT_RECOVERY_SEC,
     ) -> None:
-        """Mark ``host``'s fail domain(s) impaired.
+        """Mark ``target``'s fail domain(s) impaired after a successful plan/dispatch.
 
-        ``recovery_sec``: auto-release window; after it elapses the impairment is dropped even
-        without an extract. ``None`` holds it until an explicit extract (toggle faults).
+        ``recovery_sec``: auto-release window; ``None`` holds until an explicit extract.
+        ``target`` may be a hostname string (legacy) or :class:`ChaosTarget`.
         """
         if not self.enabled:
             return
-        racks = self._racks_for(host, scope)
+        chaos_target = (
+            target if isinstance(target, ChaosTarget) else ChaosTarget.for_host(str(target))
+        )
+        racks = self._racks_for_target(chaos_target, scope)
+        if not racks and chaos_target.kind is TargetKind.TABLET:
+            return
         deadline = None if recovery_sec is None else time.monotonic() + float(recovery_sec)
         with self._lock:
-            # Idempotent re-inject: replace any prior record for this execution.
             self._impairments = [
                 imp for imp in self._impairments if imp.execution_id != execution_id
             ]
             self._impairments.append(
-                _Impairment(execution_id=execution_id, racks=racks, deadline=deadline)
+                _Impairment(
+                    execution_id=execution_id,
+                    racks=racks,
+                    identity_key=chaos_target.identity_key(),
+                    deadline=deadline,
+                )
             )
 
-    def record_extract(self, execution_id: str, host: str, scope: ImpactScope) -> None:
+    def record_extract(
+        self,
+        execution_id: str,
+        target: ChaosTarget | str,
+        scope: ImpactScope,
+    ) -> None:
         """Release the impairment recorded for ``execution_id`` (early recovery)."""
         if not self.enabled:
             return
+        chaos_target = (
+            target if isinstance(target, ChaosTarget) else ChaosTarget.for_host(str(target))
+        )
         with self._lock:
             before = len(self._impairments)
             self._impairments = [
                 imp for imp in self._impairments if imp.execution_id != execution_id
             ]
             if len(self._impairments) == before:
-                # Untracked execution (e.g. after restart): best-effort drop by racks.
-                racks = self._racks_for(host, scope)
-                self._impairments = [
-                    imp for imp in self._impairments if not (imp.racks <= racks)
-                ]
+                racks = self._racks_for_target(chaos_target, scope)
+                if racks:
+                    self._impairments = [
+                        imp for imp in self._impairments if not (imp.racks <= racks)
+                    ]
 
     def snapshot(self) -> dict:
         now = time.monotonic()
         with self._lock:
             active = sorted(self._active_racks(now))
+            touched = sorted(self._touched_keys(now))
             return {
                 "enabled": self.enabled,
                 "erasure": self._topology.tolerance.erasure,
                 "impaired_racks": active,
+                "touched_targets": touched,
                 "tracked_executions": len(self._impairments),
             }
 

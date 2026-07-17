@@ -96,6 +96,41 @@ Nemesis supports several categories of fault injection:
 - **Datacenter** — stop all nodes in a datacenter (multi-DC clusters)
 - **Bridge pile** — stop all nodes in a bridge pile (bridge-enabled clusters)
 
+## Chaos targets and failure model
+
+Planning is entity-based (`ChaosTarget`), not host-only. Dispatch still goes to an agent host; the target says what to hit on that host (or cluster-wide for tablets).
+
+| `target_kind` | Meaning |
+|---|---|
+| `host` | whole machine (time skew; network isolation if enabled) |
+| `node` / `slot` / `disk` | YDB process / tenant slot / drive |
+| `tablet` | Hive / tablet API (usually `guard_mode=BYPASS`) |
+| `datacenter` / `pile` | topology fanout |
+
+**Flow (one active nemesis at a time):**
+
+```text
+ClusterInventory.entities(kind)
+  → FailureModelGuard.filter_safe(...)
+  → planner.scheduled_tick(candidates)
+  → dispatch (payload includes chaos_target)
+  → record_inject / record_extract
+```
+
+There is **no** dispatch-time `can_inject` veto. Safety is plan-time `filter_safe` plus post-dispatch accounting. Erasure rules come from `cluster.yaml` (`static_erasure`, `location.rack` / `data_center`): e.g. `block-4-2` ≤ 2 racks, `mirror-3-dc` = 1 full DC + 1 rack elsewhere.
+
+**Catalog fields** (in `cluster_entries.py`): `target_kind`, `impact_scope`, `guard_mode` (`FULL` / `PREFILTER_ONLY` / `BYPASS`), optional `auto_recovery_sec`, `supports_manual`.
+
+**Agent contract:** node/slot/disk runners require explicit ids in `chaos_target` (`node_id`, `slot_idx`, `ic_port`) — no hostname guessing.
+
+**UI / API:**
+
+- History shows the target (not only host)
+- Manual Run lists nodes/slots when `supports_manual` and `target_kind` need them; types with `supports_manual: false` (network, time skew, rolling restart, bridge pile) are schedule-only
+- `GET /api/inventory` — hosts/nodes/slots used for planning
+
+More detail: `CHAOS_TARGET_IMPLEMENTATION_PLAN.md`.
+
 ## Extending Nemesis
 
 ### Adding a New Fault Type
@@ -131,6 +166,10 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "runner": MyCustomNemesis(),
         "schedule": 300,  # default interval in seconds
         "ui_group": "MyGroup",  # must exist in NEMESIS_UI_GROUPS
+        "target_kind": TargetKind.NODE,  # what planners select
+        "impact_scope": ImpactScope.NODE,  # failure-model projection
+        "guard_mode": GuardMode.FULL,
+        # "supports_manual": False,  # if planner.manual() is unsupported
         # Optional: specify a custom planner
         # "planner_cls": MyCustomPlanner,
         # "planner_factory": lambda key: MyCustomPlanner(key),
@@ -162,7 +201,8 @@ __all__ = [
 
 ### Custom Planners
 
-By default, Nemesis uses `DefaultRandomHostPlanner` which injects faults on a random host per tick. For more complex behavior, create a custom planner.
+By default, Nemesis uses `DefaultRandomHostPlanner`, which picks one random **candidate**
+(`ChaosTarget` of the type's `target_kind`) per tick. For more complex behavior, create a custom planner.
 
 Then register it in `cluster_entries.py`:
 

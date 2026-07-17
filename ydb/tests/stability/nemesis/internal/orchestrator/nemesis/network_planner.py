@@ -6,7 +6,11 @@ import random
 from dataclasses import dataclass, field
 
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, dispatch, fanout
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import (
+    NemesisPlannerBase,
+    normalize_candidates,
+)
 
 # Payloads — keep in sync with NetworkNemesis actor (catalog)
 PAYLOAD_INJECT = {"op": "isolate_node"}
@@ -30,26 +34,27 @@ class NetworkNemesisPlanner(NemesisPlannerBase):
         self._state = _NetworkIsolationState(max_affected=max_affected)
         self.nemesis_type = "NetworkNemesis"
 
-    def scheduled_tick(self, hosts: list[str]) -> list[DispatchCommand]:
-        if not hosts:
+    def scheduled_tick(self, candidates: list[ChaosTarget]) -> list[DispatchCommand]:
+        targets = normalize_candidates(candidates)
+        if not targets:
             return []
-        inject_target: str | None = None
-        extract_targets: list[str] | None = None
+        inject_target: ChaosTarget | None = None
+        extract_hosts: list[str] | None = None
         with self._lock:
             if len(self._state.isolated_hosts) >= self._state.max_affected:
-                extract_targets = list(self._state.isolated_hosts)
+                extract_hosts = list(self._state.isolated_hosts)
                 self._state.isolated_hosts.clear()
             else:
-                avail = [h for h in hosts if h not in self._state.isolated_hosts]
+                avail = [t for t in targets if t.host not in self._state.isolated_hosts]
                 if not avail:
                     return []
                 inject_target = random.choice(avail)
-                self._state.isolated_hosts.add(inject_target)
+                self._state.isolated_hosts.add(inject_target.host)
         if inject_target is not None:
             return [dispatch(self.nemesis_type, inject_target, "inject", self.PAYLOAD_INJECT)]
-        if not extract_targets:
+        if not extract_hosts:
             return []
-        return fanout(self.nemesis_type, extract_targets, "extract", self.PAYLOAD_EXTRACT)
+        return fanout(self.nemesis_type, extract_hosts, "extract", self.PAYLOAD_EXTRACT)
 
     def manual(self, host, action, payload=None):  # noqa: D401
         """Disabled: planner relies on cross-tick state (isolated_hosts) for correctness."""

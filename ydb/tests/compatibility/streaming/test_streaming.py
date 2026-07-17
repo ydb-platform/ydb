@@ -234,7 +234,9 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
 class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
+        # setupt
         yield from self.setup_cluster()
+        # teardown
 
     @link_test_case("#27924")
     @pytest.mark.parametrize("external", [True, False])

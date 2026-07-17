@@ -191,10 +191,12 @@ class OrchestratorNemesisSchedule:
         try:
             payload = dict(cmd.payload or {})
             payload["host"] = cmd.host
+            payload["chaos_target"] = cmd.target.to_dict()
             body = {
                 "type": cmd.nemesis_type,
                 "action": cmd.action,
                 "payload": payload,
+                "target": cmd.target.to_dict(),
             }
             if self._is_local_host(cmd.host):
                 create_process_helper(
@@ -202,7 +204,12 @@ class OrchestratorNemesisSchedule:
                     cmd.action,
                     payload=payload,
                 )
-                logger.debug("Started %s on local host (%s)", cmd.nemesis_type, cmd.action)
+                logger.debug(
+                    "Started %s on local host (%s) target=%s",
+                    cmd.nemesis_type,
+                    cmd.action,
+                    cmd.target.identity_key(),
+                )
             else:
                 port = self._get_app_port()
                 requests.post(
@@ -217,6 +224,7 @@ class OrchestratorNemesisSchedule:
                         "type": cmd.nemesis_type,
                         "action": cmd.action,
                         "host": cmd.host,
+                        "target": cmd.target.to_dict(),
                         "execution_id": cmd.execution_id,
                         "scenario_id": cmd.scenario_id,
                         "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -234,34 +242,24 @@ class OrchestratorNemesisSchedule:
             return
         logger.info("Disable schedule: %d extract dispatch(es) for %s", len(cmds), process_type)
         for cmd in cmds:
-            self.dispatch_command(cmd, track_history=True)
+            self._dispatch_and_record(cmd)
 
-    def _dispatch_guarded(self, cmd: DispatchCommand) -> None:
-        """Post-filter safety net (Variant A) used only by scheduled ticks.
-
-        For FULL-mode types: veto injects that would violate the failure model, and record
-        inject/extract impact. PREFILTER_ONLY / BYPASS types dispatch as-is (no veto, no record).
-        """
+    def _dispatch_and_record(self, cmd: DispatchCommand) -> None:
+        """Dispatch a planned command and record FULL-mode impact (no veto)."""
+        self.dispatch_command(cmd, track_history=True)
         guard = self._failure_guard
         if guard is None or not guard.enabled or guard_mode_for(cmd.nemesis_type) is not GuardMode.FULL:
-            self.dispatch_command(cmd, track_history=True)
             return
-
         scope = impact_scope_for(cmd.nemesis_type)
         if cmd.action == "extract":
-            self.dispatch_command(cmd, track_history=True)
-            guard.record_extract(cmd.execution_id, cmd.host, scope)
-            return
-
-        if not guard.can_inject(cmd.host, scope):
-            logger.warning(
-                "VETOED by failure model: %s (%s) on %s", cmd.nemesis_type, scope.value, cmd.host
+            guard.record_extract(cmd.execution_id, cmd.target, scope)
+        elif cmd.action == "inject":
+            guard.record_inject(
+                cmd.execution_id,
+                cmd.target,
+                scope,
+                recovery_sec=recovery_sec_for(cmd.nemesis_type),
             )
-            return
-        self.dispatch_command(cmd, track_history=True)
-        guard.record_inject(
-            cmd.execution_id, cmd.host, scope, recovery_sec=recovery_sec_for(cmd.nemesis_type)
-        )
 
     def _run_planned_tick(self, process_type: str) -> None:
         hosts = self._get_hosts()
@@ -271,10 +269,7 @@ class OrchestratorNemesisSchedule:
             return
         logger.info("Running %d dispatch(es) for %s", len(cmds), process_type)
         with ThreadPoolExecutor(max_workers=min(len(cmds), 10)) as executor:
-            futures = [
-                executor.submit(self._dispatch_guarded, cmd)
-                for cmd in cmds
-            ]
+            futures = [executor.submit(self._dispatch_and_record, cmd) for cmd in cmds]
             for future in as_completed(futures):
                 try:
                     future.result()

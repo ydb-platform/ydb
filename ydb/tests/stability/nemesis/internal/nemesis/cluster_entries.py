@@ -67,6 +67,7 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model imp
     GuardMode,
     ImpactScope,
 )
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import TargetKind
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -136,18 +137,21 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
 
     # --- core nemesis (network / node / time skew) --------------------------
-    out["NetworkNemesis"] = {
-        "runner": NetworkNemesis(),
-        "schedule": 200,
-        "ui_group": "NetworkNemesis",
-        "planner_cls": NetworkNemesisPlanner,
-        "impact_scope": ImpactScope.NETWORK,
-        "guard_mode": GuardMode.PREFILTER_ONLY,
-    }
+    # out["NetworkNemesis"] = {
+    #     "runner": NetworkNemesis(),
+    #     "schedule": 200,
+    #     "ui_group": "NetworkNemesis",
+    #     "planner_cls": NetworkNemesisPlanner,
+    #     "target_kind": TargetKind.HOST,
+    #     "impact_scope": ImpactScope.NODE,
+    #     "guard_mode": GuardMode.PREFILTER_ONLY,
+    #     "supports_manual": False,
+    # }
     out["KillNodeNemesis"] = {
         "runner": KillNodeNemesis(),
         "schedule": 200,
         "ui_group": "NodeNemesis",
+        "target_kind": TargetKind.NODE,
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
         "auto_recovery_sec": 20,
@@ -166,8 +170,10 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "planner_factory": lambda nemesis_type_key, params=None: RollingRestartNemesisPlanner(
             **(params or {})
         ),
+        "target_kind": TargetKind.NODE,
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.PREFILTER_ONLY,
+        "supports_manual": False,
         "params": [
             {
                 "name": "nodes_per_step",
@@ -199,8 +205,10 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "schedule": 400,
         "ui_group": "NetworkNemesis",
         "planner_cls": TimeSkewNemesisPlanner,
-        "impact_scope": ImpactScope.NETWORK,
+        "target_kind": TargetKind.HOST,
+        "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.PREFILTER_ONLY,
+        "supports_manual": False,
     }
 
     # --- tablet kills -------------------------------------------------------
@@ -209,14 +217,16 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
             "runner": cls(),
             "schedule": sched,
             "ui_group": _TABLET_UI_GROUP,
+            "target_kind": TargetKind.TABLET,
             "impact_scope": ImpactScope.NODE,
-            "guard_mode": GuardMode.FULL,
+            "guard_mode": GuardMode.BYPASS,
         }
 
     out["KickTabletsFromNodeNemesis"] = {
         "runner": ClusterKickTabletsFromNodeNemesis(),
         "schedule": 200,
         "ui_group": _TABLET_UI_GROUP,
+        "target_kind": TargetKind.NODE,
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
     }
@@ -224,8 +234,9 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "runner": ClusterReBalanceTabletsNemesis(),
         "schedule": 120,
         "ui_group": _TABLET_UI_GROUP,
+        "target_kind": TargetKind.TABLET,
         "impact_scope": ImpactScope.NODE,
-        "guard_mode": GuardMode.FULL,
+        "guard_mode": GuardMode.BYPASS,
     }
 
     # One scheduled type per tablet kind is enough (orchestrator picks hosts at random per tick).
@@ -234,15 +245,17 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
             "runner": ClusterChangeTabletGroupNemesis(tt, channels=()),
             "schedule": 120,
             "ui_group": _TABLET_UI_GROUP,
+            "target_kind": TargetKind.TABLET,
             "impact_scope": ImpactScope.NODE,
-            "guard_mode": GuardMode.FULL,
+            "guard_mode": GuardMode.BYPASS,
         }
         out[f"BulkChangeTabletGroup_{tt.name}"] = {
             "runner": ClusterBulkChangeTabletGroupNemesis(tt, percent=None, channels=()),
             "schedule": 180,
             "ui_group": _TABLET_UI_GROUP,
+            "target_kind": TargetKind.TABLET,
             "impact_scope": ImpactScope.NODE,
-            "guard_mode": GuardMode.FULL,
+            "guard_mode": GuardMode.BYPASS,
         }
 
     # --- daemon kills -------------------------------------------------------
@@ -252,6 +265,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "runner": ClusterKillSlotDaemonNemesis(),
         "schedule": 120,
         "ui_group": _UI_GROUP,
+        "target_kind": TargetKind.SLOT,
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
         "auto_recovery_sec": 90,
@@ -260,6 +274,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "runner": ClusterKillNodeDaemonNemesis(),
         "schedule": 180,
         "ui_group": _UI_GROUP,
+        "target_kind": TargetKind.NODE,
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
         "auto_recovery_sec": 90,
@@ -271,6 +286,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "schedule": 300,
         "ui_group": _UI_GROUP,
         "planner_factory": _serial_staggered_node_planner_factory,
+        "target_kind": TargetKind.NODE,
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.PREFILTER_ONLY,
     }
@@ -279,23 +295,25 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "schedule": 300,
         "ui_group": _UI_GROUP,
         "planner_factory": _serial_staggered_slot_planner_factory,
+        "target_kind": TargetKind.SLOT,
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.PREFILTER_ONLY,
     }
 
     # --- disk / rolling / stop-start / suspend ------------------------------
-    for wire, cls, sched, scope in (
-        ("SafelyBreakDiskNemesis", ClusterSafelyBreakDiskNemesis, 400, ImpactScope.DISK),
-        ("SafelyCleanupDisksNemesis", ClusterSafelyCleanupDisksNemesis, 400, ImpactScope.DISK),
-        # ("RollingUpdateClusterNemesis", ClusterRollingUpdateNemesis, 120, ImpactScope.NODE),
-        ("StopStartNodeNemesis", ClusterStopStartNodeNemesis, 400, ImpactScope.NODE),
-        ("SuspendNodeNemesis", ClusterSuspendNodeNemesis, 800, ImpactScope.NODE),
+    for wire, cls, sched, scope, tkind in (
+        ("SafelyBreakDiskNemesis", ClusterSafelyBreakDiskNemesis, 400, ImpactScope.DISK, TargetKind.DISK),
+        ("SafelyCleanupDisksNemesis", ClusterSafelyCleanupDisksNemesis, 400, ImpactScope.DISK, TargetKind.DISK),
+        # ("RollingUpdateClusterNemesis", ClusterRollingUpdateNemesis, 120, ImpactScope.NODE, TargetKind.NODE),
+        ("StopStartNodeNemesis", ClusterStopStartNodeNemesis, 400, ImpactScope.NODE, TargetKind.NODE),
+        ("SuspendNodeNemesis", ClusterSuspendNodeNemesis, 800, ImpactScope.NODE, TargetKind.NODE),
     ):
         out[wire] = {
             "runner": cls(),
             "schedule": sched,
             "ui_group": _UI_GROUP,
             "planner_factory": _pinned_planner_factory,
+            "target_kind": tkind,
             "impact_scope": scope,
             "guard_mode": GuardMode.PREFILTER_ONLY,
         }
@@ -361,8 +379,10 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
                 "schedule": sched,
                 "ui_group": _BRIDGE_UI_GROUP,
                 "planner_factory": _bridge_pile_fanout_planner_factory,
+                "target_kind": TargetKind.PILE,
                 "impact_scope": ImpactScope.PILE,
                 "guard_mode": GuardMode.BYPASS,
+                "supports_manual": False,
             }
 
     return extra

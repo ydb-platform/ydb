@@ -26,6 +26,7 @@
         :processes="processes"
         :schedule-status="scheduleStatus"
         :process-types="processTypes"
+        :inventory="inventory"
       ></nemesis-group-accordion>
     </div>
 
@@ -69,7 +70,7 @@
                 <tr>
                   <th>Type</th>
                   <th>Action</th>
-                  <th>Host</th>
+                  <th>Target</th>
                   <th>Time</th>
                 </tr>
               </thead>
@@ -81,7 +82,7 @@
                       {{ entry.action }}
                     </span>
                   </td>
-                  <td class="font-mono text-xs">{{ entry.host }}</td>
+                  <td class="font-mono text-xs">{{ formatTarget(entry) }}</td>
                   <td class="text-xs opacity-70">{{ new Date(entry.timestamp).toLocaleTimeString() }}</td>
                 </tr>
                 <tr v-if="scheduleHistory.length === 0">
@@ -124,6 +125,7 @@
       const scheduleStatus = ref({}) // Schedule status for all nemesis types
       const wardenResults = ref({}) // Warden check results per host
       const wardenLoading = ref(false)
+      const inventory = ref({ hosts: [], nodes: [], slots: [] })
 
       // Axios interceptor for global error handling
       axios.interceptors.response.use(
@@ -144,6 +146,36 @@
         }
       )
 
+      function formatTarget(entry) {
+        const t = entry && entry.target
+        if (!t) {
+          return entry.host || ''
+        }
+        const kind = t.kind || 'host'
+        if (kind === 'node') {
+          const id = t.node_id != null ? `node=${t.node_id}` : ''
+          const port = t.ic_port != null ? `ic=${t.ic_port}` : ''
+          return [kind, entry.host || t.host, id, port].filter(Boolean).join(' ')
+        }
+        if (kind === 'slot') {
+          const id = t.slot_idx != null ? `slot=${t.slot_idx}` : ''
+          const port = t.ic_port != null ? `ic=${t.ic_port}` : ''
+          return [kind, entry.host || t.host, id, port].filter(Boolean).join(' ')
+        }
+        if (kind === 'disk') {
+          const id = t.node_id != null ? `node=${t.node_id}` : ''
+          const path = t.disk_path ? t.disk_path : ''
+          return [kind, entry.host || t.host, id, path].filter(Boolean).join(' ')
+        }
+        if (kind === 'tablet') {
+          return t.tablet_id != null ? `tablet=${t.tablet_id}` : `tablet @${t.host || entry.host}`
+        }
+        if (kind === 'datacenter' || kind === 'pile') {
+          return `${kind}=${t.group_id || '?'} @${t.host || entry.host}`
+        }
+        return `${kind} ${t.host || entry.host || ''}`
+      }
+
       function get_hosts_health() {
         return axios
           .get('/api/hosts/health')
@@ -153,6 +185,16 @@
           })
           .catch(err => {
             hostsFetchError.value = err
+          })
+      }
+
+      function get_inventory() {
+        axios.get('/api/inventory')
+          .then(response => {
+            inventory.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch inventory', err)
           })
       }
 
@@ -248,6 +290,7 @@
 
       // Initial load
       get_hosts_health()
+      get_inventory()
       get_process_types()
       get_grouped_process_types()
       get_all_processes()
@@ -259,6 +302,7 @@
       // Poll every 5 seconds
       setInterval(() => {
         get_hosts_health()
+        get_inventory()
         get_all_processes()
         get_healthcheck()
         get_schedule_history()
@@ -279,6 +323,8 @@
         scheduleStatus,
         wardenResults,
         wardenLoading,
+        inventory,
+        formatTarget,
         getProcessesByType,
         runWardenChecks
       }

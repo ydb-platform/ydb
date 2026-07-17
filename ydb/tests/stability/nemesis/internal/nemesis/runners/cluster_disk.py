@@ -14,24 +14,29 @@ from ydb.core.protos.blobstorage_config_pb2 import TConfigResponse
 
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
 from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import MonitoredAgentActor
+from ydb.tests.stability.nemesis.internal.nemesis.runners.target_payload import target_from_payload
 
 
-def _resolve_node_id_and_node(cluster, host: str | None) -> Tuple[int | None, Any]:
+def _resolve_node_id_and_node(cluster, host: str | None, node_id: int | None = None) -> Tuple[int | None, Any]:
     """
-    Map orchestrator ``payload['host']`` (same as dispatch target) to harness ``(node_id, node)``.
-    Hostnames must match cluster.yaml ``host`` / ``name`` (short hostname fallback).
+    Map orchestrator target to harness ``(node_id, node)``.
+    Prefers explicit ``node_id``; else match ``host`` against cluster.yaml hosts.
     """
+    if node_id is not None:
+        node = cluster.nodes.get(node_id)
+        if node is not None:
+            return node_id, node
     if not host or not str(host).strip():
         return None, None
     h = str(host).strip()
-    for node_id, node in cluster.nodes.items():
+    for nid, node in cluster.nodes.items():
         if node.host == h:
-            return node_id, node
+            return nid, node
     h_short = h.split(".")[0]
-    for node_id, node in cluster.nodes.items():
+    for nid, node in cluster.nodes.items():
         nh = node.host.split(".")[0] if "." in node.host else node.host
         if nh == h_short:
-            return node_id, node
+            return nid, node
     return None, None
 
 
@@ -147,11 +152,15 @@ class ClusterSafelyCleanupDisksNemesis(MonitoredAgentActor):
         cluster = require_external_cluster()
         if not self._state_ready(cluster):
             return
-        node_id, node = _resolve_node_id_and_node(cluster, _host_from_payload(payload))
+        target = target_from_payload(payload)
+        node_id_hint = target.node_id if target is not None else None
+        host = (target.host if target is not None else None) or _host_from_payload(payload)
+        node_id, node = _resolve_node_id_and_node(cluster, host, node_id_hint)
         if node is None:
             self._logger.error(
-                "SafelyCleanupDisks: unknown host %r (not in cluster.yaml nodes)",
-                _host_from_payload(payload),
+                "SafelyCleanupDisks: unknown host %r / node_id %r (not in cluster.yaml nodes)",
+                host,
+                node_id_hint,
             )
             return
         self._logger.info("SafelyCleanupDisks on node_id=%s host=%s", node_id, node.host)
@@ -220,11 +229,15 @@ class ClusterSafelyBreakDiskNemesis(MonitoredAgentActor):
         cluster = require_external_cluster()
         if not self._state_ready(cluster):
             return
-        node_id, _node = _resolve_node_id_and_node(cluster, _host_from_payload(payload))
+        target = target_from_payload(payload)
+        node_id_hint = target.node_id if target is not None else None
+        host = (target.host if target is not None else None) or _host_from_payload(payload)
+        node_id, _node = _resolve_node_id_and_node(cluster, host, node_id_hint)
         if node_id is None:
             self._logger.error(
-                "SafelyBreakDisk: unknown host %r (not in cluster.yaml nodes)",
-                _host_from_payload(payload),
+                "SafelyBreakDisk: unknown host %r / node_id %r (not in cluster.yaml nodes)",
+                host,
+                node_id_hint,
             )
             return
         self.extract_fault(payload)

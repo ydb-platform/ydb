@@ -41,6 +41,7 @@ ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerW
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic
 ydb/tests/functional/sqs/migration/compatibility/large ydb.tests.functional.sqs.large.test_leader_start_inflight.py.TestSqsMultinodeCluster.test_limit_leader_start_inflight[tables_format_v0-std]
 ydb/tests/functional/sqs/migration/finished/large ydb.tests.functional.sqs.large.test_leader_start_inflight.py.TestSqsMultinodeCluster.test_limit_leader_start_inflight[tables_format_v0-std]
+ydb/tests/functional/sqs/migration/topic_creation/multinode ydb.tests.functional.sqs.multinode.test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[kick_tablets-fifo]
 ydb/tests/functional/sqs/migration/topic_creation/multinode ydb.tests.functional.sqs.multinode.test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[kick_tablets-std]
 ydb/tests/functional/sqs/migration/topic_creation/multinode ydb.tests.functional.sqs.multinode.test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[stop_node-fifo]
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk

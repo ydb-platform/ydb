@@ -54,15 +54,7 @@ bool TTxSetDown::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxSetDown::Complete(const TActorContext& ctx) {
-<<<<<<< HEAD
-    BLOG_D("THive::TTxSetDown(" << NodeId << ")::Complete");
-=======
-    YDB_LOG_DEBUG("THive::TTxSetDown::Complete setting node down state",
-        {"logPrefix", GetLogPrefix()},
-        {"nodeId", NodeId},
-        {"down", Down},
-        {"SideEffects", SideEffects});
->>>>>>> b2f814d8959 (fix set down on disconnected nodes (#46334))
+    BLOG_D("THive::TTxSetDown(" << NodeId << ")::Complete SideEffects: " << SideEffects);
     SideEffects.Complete(ctx);
 }
 

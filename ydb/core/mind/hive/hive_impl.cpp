@@ -3075,16 +3075,11 @@ std::optional<TActorId> THive::GetPipeToTenantHive(const TNodeInfo* nodeInfo) {
     if (!nodeInfo) {
         return std::nullopt;
     }
-<<<<<<< HEAD
-    TDomainInfo* domainInfo = FindDomain(nodeInfo->ServicedDomains.front());
+    TDomainInfo* domainInfo = FindDomain(nodeInfo->GetServicedDomain());
     if (!domainInfo || domainInfo->HiveId == 0 || domainInfo->HiveId == TabletID()) {
         return std::nullopt;
     }
     return domainInfo->GetPipeToHive(this);
-=======
-    TDomainInfo* domainInfo = FindDomain(nodeInfo->GetServicedDomain());
-    return GetPipeToTenantHive(domainInfo);
->>>>>>> b2f814d8959 (fix set down on disconnected nodes (#46334))
 }
 
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)

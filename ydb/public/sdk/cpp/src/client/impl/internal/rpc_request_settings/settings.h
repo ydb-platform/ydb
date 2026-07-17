@@ -18,6 +18,7 @@ struct TRpcRequestSettings {
         UseDiscoveryEndpoint            // Use single discovery endpoint
     } EndpointPolicy = TEndpointPolicy::UsePreferredEndpointOptionally;
     bool UseAuth = true;
+    bool UseDiscoveryBuildInfo = false;
     NYdb::TDeadline Deadline = NYdb::TDeadline::Max();
     std::string TraceParent;
 

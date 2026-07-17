@@ -190,10 +190,12 @@ std::string CreateSDKBuildInfoWithObservability(bool tracingEnabled, bool metric
     return result;
 }
 
-std::string BuildFullBuildInfo(const IConnectionsParams& params) {
-    auto result = CreateSDKBuildInfoWithObservability(
-        static_cast<bool>(params.GetTraceProvider()),
-        static_cast<bool>(params.GetExternalMetricRegistry()));
+std::string BuildFullBuildInfo(const IConnectionsParams& params, bool includeObservability) {
+    auto result = includeObservability
+        ? CreateSDKBuildInfoWithObservability(
+            static_cast<bool>(params.GetTraceProvider()),
+            static_cast<bool>(params.GetExternalMetricRegistry()))
+        : CreateSDKBuildInfo();
     auto extra = params.GetBuildInfoExtra();
     if (!extra.empty()) {
         result += ';';
@@ -351,7 +353,8 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
 #endif
     , MetricRegistry_(params->GetExternalMetricRegistry())
     , TraceProvider_(params->GetTraceProvider())
-    , BuildInfo_(BuildFullBuildInfo(*params))
+    , BuildInfo_(BuildFullBuildInfo(*params, false))
+    , DiscoveryBuildInfo_(BuildFullBuildInfo(*params, true))
     , NetworkThreadsNum_(params->GetNetworkThreadsNum())
     , UsePerChannelTcpConnection_(params->GetUsePerChannelTcpConnection())
     , GRpcClientLow_(NetworkThreadsNum_)
@@ -607,6 +610,7 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
 
     TRpcRequestSettings rpcSettings;
     rpcSettings.Deadline = TDeadline::AfterDuration(GET_ENDPOINTS_TIMEOUT);
+    rpcSettings.UseDiscoveryBuildInfo = true;
 
     RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse>(
         std::move(request),
@@ -769,7 +773,9 @@ TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestS
 
     static const std::string clientPid = GetClientPIDHeaderValue();
 
-    meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, BuildInfo_});
+    meta.Aux.push_back({
+        YDB_SDK_BUILD_INFO_HEADER,
+        requestSettings.UseDiscoveryBuildInfo ? DiscoveryBuildInfo_ : BuildInfo_});
     meta.Aux.push_back({YDB_CLIENT_PID, clientPid});
     meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end());
 

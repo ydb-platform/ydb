@@ -27,6 +27,7 @@
 #include <util/stream/mem.h>
 
 #include <atomic>
+#include <chrono>
 #include <utility>
 #include <variant>
 
@@ -1914,6 +1915,56 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnCreateNewDecompressi
 }
 
 template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionTaskFinished() {
+    Y_ABORT_UNLESS(DecompressionTasksInflight > 0);
+    if (--DecompressionTasksInflight == 0) {
+        DecompressionTasksInflightCondVar.notify_all();
+    }
+}
+
+template<bool UseMigrationProtocol>
+bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::WaitAllDecompressionTasks(TInstant deadline) const {
+    const TDuration timeout = deadline - TInstant::Now();
+    if (timeout <= TDuration::Zero()) {
+        return DecompressionTasksInflight.load() == 0;
+    }
+
+    std::unique_lock guard(DecompressionTasksInflightMutex);
+    return DecompressionTasksInflightCondVar.wait_for(
+        guard,
+        std::chrono::microseconds(timeout.MicroSeconds()),
+        [&] {
+            return DecompressionTasksInflight.load() == 0;
+        });
+}
+
+template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ClearAllPartitionStreamEvents() {
+    TDeferredActions<UseMigrationProtocol> deferred;
+    std::vector<TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>>> streams;
+    std::vector<TRawPartitionStreamEventQueue<UseMigrationProtocol>> deferredDelete;
+    {
+        std::lock_guard guard(Lock);
+        streams.reserve(PartitionStreams.size());
+        for (auto& [_, partitionStream] : PartitionStreams) {
+            streams.push_back(partitionStream);
+        }
+    }
+
+    deferredDelete.reserve(streams.size());
+    for (auto& stream : streams) {
+        std::lock_guard guard(stream->GetLock());
+        if (stream->HasEvents()) {
+            deferredDelete.push_back(stream->ExtractQueue());
+        }
+    }
+
+    for (auto& queue : deferredDelete) {
+        queue.Cleanup(deferred);
+    }
+}
+
+template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionInfoDestroy(i64 compressedSize, i64 decompressedSize, i64 messagesCount, i64 serverBytesSize)
 {
 
@@ -1942,9 +1993,6 @@ template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount, i64 serverBytesSize) {
 
     TDeferredActions<UseMigrationProtocol> deferred;
-
-    Y_ABORT_UNLESS(DecompressionTasksInflight > 0);
-    --DecompressionTasksInflight;
 
     *Settings.Counters_->BytesRead += decompressedSize;
     *Settings.Counters_->BytesReadCompressed += sourceSize;
@@ -3597,6 +3645,10 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
     if (bool expected = false; !Ready->Abandoned.compare_exchange_strong(expected, true)) {
         // Message is dropped due to partition stream cancellation, we should release decompressed memory
         parent->OnUserRetrievedEvent(DecompressedSize, messagesProcessed);
+    }
+
+    if (auto session = parent->CbContext->LockShared()) {
+        session->OnDecompressionTaskFinished();
     }
 }
 

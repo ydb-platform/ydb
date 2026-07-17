@@ -6,6 +6,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
+#include <util/string/escape.h>
+
 #include <ydb/library/actors/core/log.h>
 
 #include <yql/essentials/types/binary_json/read.h>
@@ -16,8 +18,11 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 namespace {
 
 NBinaryJson::TBinaryJson ToBinaryJson(const NJson::TJsonValue& json) {
-    auto result = NBinaryJson::SerializeToBinaryJson(NJson::WriteJson(&json, false));
-    AFL_VERIFY(std::holds_alternative<NBinaryJson::TBinaryJson>(result));
+    auto dumpedJson = NJson::WriteJson(&json, false);
+    auto result = NBinaryJson::SerializeToBinaryJson(dumpedJson);
+    if (std::holds_alternative<TString>(result)) {
+        AFL_VERIFY(false)("error", std::get<TString>(result))("type", json.GetType())("input_dump", EscapeC(dumpedJson));
+    }
     return std::get<NBinaryJson::TBinaryJson>(std::move(result));
 }
 

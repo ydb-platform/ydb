@@ -94,6 +94,10 @@ public:
     virtual TConclusion<std::unique_ptr<TPartialReadResult>> GetBatch() override;
     virtual void PrepareResults() override;
 
+    virtual std::shared_ptr<arrow::RecordBatch> PopProgressWatermark() override {
+        return Context->PopProgressWatermark();
+    }
+
     virtual TConclusion<bool> ReadNextInterval() override;
 
 private:

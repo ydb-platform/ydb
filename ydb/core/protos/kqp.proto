@@ -824,6 +824,8 @@ message TEvRemoteScanData {
     optional bool RequestedBytesLimitReached = 11 [default = false];
     optional uint32 AvailablePacks = 12;
     optional TEvKqpScanCursor LastCursor = 13;
+    // Serialized full PK progress watermark: no more matching rows better than this key
+    optional bytes ProgressWatermark = 14;
 }
 
 message TEvRemoteScanDataAck {

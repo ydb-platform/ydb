@@ -969,6 +969,61 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         CompareYson(expectedYson, ysonResult);
     }
 
+    Y_UNIT_TEST(PKDescScanWithOlapWatermarks) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 128);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto selectQuery = TString(R"(
+            --!syntax_v1
+            PRAGMA kikimr.KqpCollectOlapWatermarks = "true";
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable` ORDER BY `timestamp` DESC LIMIT 4;
+        )");
+
+        auto it = tableClient.StreamExecuteScanQuery(selectQuery).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        auto ysonResult = CollectStreamResult(it).ResultSetYson;
+        auto expectedYson = TString(R"([
+            [1000127u];
+            [1000126u];
+            [1000125u];
+            [1000124u]
+        ])");
+        CompareYson(expectedYson, ysonResult);
+
+        // Filtered Top-N with watermarks must match baseline without pragma
+        auto filteredWithPragma = TString(R"(
+            --!syntax_v1
+            PRAGMA kikimr.KqpCollectOlapWatermarks = "true";
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable`
+            WHERE resource_id = "5"u
+            ORDER BY `timestamp` DESC LIMIT 2;
+        )");
+        auto filteredWithoutPragma = TString(R"(
+            --!syntax_v1
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable`
+            WHERE resource_id = "5"u
+            ORDER BY `timestamp` DESC LIMIT 2;
+        )");
+
+        auto itWith = tableClient.StreamExecuteScanQuery(filteredWithPragma).GetValueSync();
+        UNIT_ASSERT_C(itWith.IsSuccess(), itWith.GetIssues().ToString());
+        auto withYson = CollectStreamResult(itWith).ResultSetYson;
+
+        auto itWithout = tableClient.StreamExecuteScanQuery(filteredWithoutPragma).GetValueSync();
+        UNIT_ASSERT_C(itWithout.IsSuccess(), itWithout.GetIssues().ToString());
+        auto withoutYson = CollectStreamResult(itWithout).ResultSetYson;
+
+        CompareYson(withoutYson, withYson);
+    }
+
     Y_UNIT_TEST(CheckEarlyFilterOnEmptySelect) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);

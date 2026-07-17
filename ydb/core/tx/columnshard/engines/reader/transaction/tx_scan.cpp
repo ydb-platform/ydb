@@ -89,6 +89,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
         TReadDescription read(Self->TabletID(), snapshot, sorting);
         read.SetFakeSort(!request.HasReverse() && deduplicationEnabled);
+        if (request.GetCollectProgressWatermarks()) {
+            read.SetCollectProgressWatermarks(true);
+        }
         read.DeduplicationPolicy = deduplicationEnabled ? EDeduplicationPolicy::PREVENT_DUPLICATES : EDeduplicationPolicy::ALLOW_DUPLICATES;
         read.GroupedMemoryLimiterOperator =
             request.GetCSScanPolicy() == "EXPORT" ? EScanGroupedMemoryLimiterOperator::Deduplication : EScanGroupedMemoryLimiterOperator::Scan;
@@ -187,6 +190,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 Self->Counters.GetScanCounters().OnReadMetadata((TAppData::TimeProvider->Now() - buildReadMetadataStart));
                 if (!request.HasReverse() && deduplicationEnabled) {
                     (*newRange)->SetFakeSort(true);
+                }
+                if (read.GetCollectProgressWatermarks() && !(*newRange)->GetFakeSort() && (*newRange)->IsSorted()) {
+                    (*newRange)->SetCollectProgressWatermarks(true);
                 }
                 readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
             } else {

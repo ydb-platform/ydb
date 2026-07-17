@@ -25,7 +25,13 @@ std::vector<std::unique_ptr<TComputeTaskData>> TShardScannerInfo::OnReceiveData(
     AFL_ENSURE(!DataChunksInFlightCount)("data_chunks_in_flightCount", DataChunksInFlightCount);
     std::vector<std::unique_ptr<TComputeTaskData>> result;
     if (data.IsEmpty()) {
-        AFL_ENSURE(data.Finished);
+        if (!data.Finished) {
+            // Progress-only watermark: ack shard but do not forward empty pack to compute
+            DataChunksInFlightCount = 0;
+            NeedAck = true;
+            DoAck();
+            return result;
+        }
         result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(TabletId, data)));
     } else if (data.SplittedBatches.size() > 1) {
         AFL_ENSURE(data.ArrowBatch);

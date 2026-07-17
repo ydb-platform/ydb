@@ -76,6 +76,9 @@ private:
     // Returns true if it was able to produce new batch
     bool ProduceResults() noexcept;
 
+    // Sends progress-only watermark when no row batch is ready
+    bool ProduceProgressWatermark() noexcept;
+
     void ContinueProcessing();
 
     void HandleScan(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) noexcept;

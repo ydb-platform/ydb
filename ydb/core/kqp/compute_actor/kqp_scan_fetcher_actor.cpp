@@ -58,6 +58,14 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
                                           : NScheme::TTypeInfo(typeId);
         KeyColumnTypes.push_back(typeInfo);
     }
+    CollectProgressWatermarks = Meta.GetCollectProgressWatermarks() && Meta.GetItemsLimit() > 0 &&
+        Meta.HasOptionalSorting() &&
+        (Meta.GetOptionalSorting() == (ui32)NYql::ERequestSorting::ASC ||
+            Meta.GetOptionalSorting() == (ui32)NYql::ERequestSorting::DESC);
+    if (CollectProgressWatermarks) {
+        SortDescending = Meta.GetOptionalSorting() == (ui32)NYql::ERequestSorting::DESC;
+        BestKeys = std::multiset<TOwnedCellVec, TKeyLess>(TKeyLess{&KeyColumnTypes});
+    }
 }
 
 TVector<NKikimr::TSerializedTableRange> TKqpScanFetcherActor::BuildSerializedTableRanges(
@@ -490,6 +498,10 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
     }
     ev->Record.SetItemsLimit(Meta.GetItemsLimit());
 
+    if (Meta.GetCollectProgressWatermarks()) {
+        ev->Record.SetCollectProgressWatermarks(true);
+    }
+
     if (Meta.GroupByColumnNamesSize()) {
         ev->Record.MutableComputeShardingPolicy()->SetShardsCount(ComputeActorIds.size());
         for (auto&& i : Meta.GetGroupByColumnNames()) {
@@ -530,6 +542,10 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
 
     AFL_ENSURE(state->ActorId == ev->Sender)("expected", state->ActorId)("got", ev->Sender);
 
+    if (CollectProgressWatermarks) {
+        ProcessProgressWatermarks(state->TabletId, msg);
+    }
+
     state->LastKey = std::move(msg.LastKey);
     state->LastCursorProto = std::move(msg.LastCursorProto);
     const ui64 rowsCount = msg.GetRowsCount();
@@ -543,6 +559,7 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
         "in flight scans", InFlightShards.GetScansCount())("cursor", state->CursorDebugString())(
         "in flight shards", InFlightShards.GetShardsCount())("delayed_for_seconds_by_ratelimiter", latency.SecondsFloat())(
         "tablet_id", state->TabletId)("locks", msg.LocksInfo.Locks.size())("broken locks", msg.LocksInfo.BrokenLocks.size());
+
     auto shardScanner = InFlightShards.GetShardScannerVerified(state->TabletId);
     auto tasksForCompute = shardScanner->OnReceiveData(msg, shardScanner);
     AFL_ENSURE(tasksForCompute.size() == 1 || tasksForCompute.size() == 0 || tasksForCompute.size() == ComputeActorIds.size())(
@@ -560,8 +577,11 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
         "EVLOGKQP:" << IsAggregationRequest << "/" << Meta.GetItemsLimit() << "/" << InFlightShards.GetTotalRowsCount() << "/" << rowsCount);
     if (msg.Finished) {
         Stats.CompleteShard(state);
+        ShardWatermarks.erase(state->TabletId);
         InFlightShards.StopScanner(state->TabletId);
         StartTableScan();
+    } else if (CollectProgressWatermarks) {
+        TryAbortDominatedShards();
     }
 }
 
@@ -693,6 +713,72 @@ void TKqpScanFetcherActor::CheckFinish() {
         CA_LOG_D("EVLOGKQP(max_in_flight:" << MaxInFlight << ")" << Endl << InFlightShards.GetDurationStats() << Endl
                                            << InFlightShards.StatisticsToString());
         PassAway();
+    }
+}
+
+void TKqpScanFetcherActor::ProcessProgressWatermarks(ui64 tabletId, const TEvKqpCompute::TEvScanData& msg) {
+    const TOwnedCellVec& watermark = !msg.ProgressWatermark.empty() ? msg.ProgressWatermark : msg.LastKey;
+    if (!watermark.empty()) {
+        if (watermark.size() != KeyColumnTypes.size()) {
+            AFL_WARN(NKikimrServices::KQP_COMPUTE)("event", "watermark_size_mismatch")("tablet_id", tabletId)(
+                "watermark_size", watermark.size())("key_size", KeyColumnTypes.size());
+        } else {
+            ShardWatermarks[tabletId] = watermark;
+        }
+    }
+
+    const ui64 rowsCount = msg.GetRowsCount();
+    if (rowsCount == 0 || watermark.empty() || watermark.size() != KeyColumnTypes.size()) {
+        return;
+    }
+
+    // Conservative: treat each row in a sorted batch as having the batch-worst key
+    for (ui64 i = 0; i < rowsCount; ++i) {
+        BestKeys.insert(watermark);
+        if (BestKeys.size() > Meta.GetItemsLimit()) {
+            if (SortDescending) {
+                BestKeys.erase(BestKeys.begin());
+            } else {
+                BestKeys.erase(std::prev(BestKeys.end()));
+            }
+        }
+    }
+}
+
+void TKqpScanFetcherActor::TryAbortDominatedShards() {
+    if (BestKeys.size() < Meta.GetItemsLimit()) {
+        return;
+    }
+    const TOwnedCellVec& boundary = SortDescending ? *BestKeys.begin() : *BestKeys.rbegin();
+
+    TVector<ui64> toAbort;
+    InFlightShards.ForEachShardScanner([&](ui64 tabletId, const std::shared_ptr<TShardScannerInfo>& scanner) {
+        if (scanner->IsFinished() || scanner->Stopped()) {
+            return;
+        }
+        auto it = ShardWatermarks.find(tabletId);
+        if (it == ShardWatermarks.end() || it->second.size() != KeyColumnTypes.size()) {
+            return;
+        }
+        const int cmp = CompareTypedCellVectors(
+            it->second.data(), boundary.data(), KeyColumnTypes.data(), KeyColumnTypes.size());
+        // DESC: remaining keys <= watermark; abort if watermark <= boundary
+        // ASC: remaining keys >= watermark; abort if watermark >= boundary
+        const bool dominated = SortDescending ? (cmp <= 0) : (cmp >= 0);
+        if (dominated) {
+            toAbort.push_back(tabletId);
+        }
+    });
+
+    for (ui64 tabletId : toAbort) {
+        CA_LOG_D("Abort shard " << tabletId << " dominated by top-N watermark boundary");
+        Stats.CompleteShard(InFlightShards.GetShardStateVerified(tabletId));
+        ShardWatermarks.erase(tabletId);
+        InFlightShards.StopScanner(tabletId);
+    }
+    if (!toAbort.empty()) {
+        StartTableScan();
+        CheckFinish();
     }
 }
 

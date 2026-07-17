@@ -54,6 +54,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
 
     TOwnedCellVec LastKey;
     NKikimrKqp::TEvKqpScanCursor LastCursorProto;
+    TOwnedCellVec ProgressWatermark;
     TScanStatistics CurrentStats;
     TDuration CpuTime;
     TDuration WaitTime;
@@ -124,6 +125,9 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
         ev->RequestedBytesLimitReached = pbEv->Record.GetRequestedBytesLimitReached();
         ev->LastKey = TOwnedCellVec(TSerializedCellVec(pbEv->Record.GetLastKey()).GetCells());
         ev->LastCursorProto = pbEv->Record.GetLastCursor();
+        if (pbEv->Record.HasProgressWatermark()) {
+            ev->ProgressWatermark = TOwnedCellVec(TSerializedCellVec(pbEv->Record.GetProgressWatermark()).GetCells());
+        }
         if (pbEv->Record.HasAvailablePacks()) {
             ev->AvailablePacks = pbEv->Record.GetAvailablePacks();
         }
@@ -158,6 +162,9 @@ private:
             Remote->Record.SetPageFault(PageFault);
             Remote->Record.SetLastKey(TSerializedCellVec::Serialize(LastKey));
             *Remote->Record.MutableLastCursor() = LastCursorProto;
+            if (!ProgressWatermark.empty()) {
+                Remote->Record.SetProgressWatermark(TSerializedCellVec::Serialize(ProgressWatermark));
+            }
             if (AvailablePacks) {
                 Remote->Record.SetAvailablePacks(*AvailablePacks);
             }

@@ -250,6 +250,8 @@ message TKqpTransaction {
         optional EReadType ReadType = 14;
         repeated string GroupByColumnNames = 15;
         optional uint32 OptionalSorting = 16;
+        // When true, column shards report progress watermarks for Top-N early abort
+        optional bool CollectProgressWatermarks = 17;
     }
 
     optional EKqpTransactionType Type = 1;
@@ -2178,6 +2180,8 @@ message TEvKqpScan {
     optional NKikimrDataEvents.ELockMode LockMode = 28;
     optional double CpuGroupThreadsLimit = 29;
     optional string CpuGroupName = 30;
+    // When true, column shards report progress watermarks for Top-N early abort
+    optional bool CollectProgressWatermarks = 31;
 }
 
 message TEvCompactTable {

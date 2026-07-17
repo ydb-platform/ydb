@@ -650,6 +650,7 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
             NKikimrMiniKQL::TType minikqlProtoResultType;
             ConvertYdbTypeToMiniKQLType(operation.GetReadOlapRange().GetResultType(), minikqlProtoResultType);
             readSettings.ResultType = ImportTypeFromProto(minikqlProtoResultType, typeEnv);
+            readSettings.CollectProgressWatermarks = operation.GetReadOlapRange().GetCollectProgressWatermarks();
             break;
         }
 

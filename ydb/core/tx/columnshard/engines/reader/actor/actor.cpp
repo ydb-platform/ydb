@@ -400,11 +400,34 @@ bool TColumnShardScan::ProduceResults() noexcept {
         Result->LastKey = ConvertLastKey(CurrentLastReadKey->GetPKCursor()->ToBatch());
     }
     Result->LastCursorProto = CurrentLastReadKey->SerializeToProto();
+    if (ReadMetadataRange->GetCollectProgressWatermarks() && !Result->LastKey.empty()) {
+        Result->ProgressWatermark = Result->LastKey;
+    }
     SendResult(false, false, result.GetSourceId());
     ScanIterator->OnSentDataFromInterval(result.GetNotFinishedInterval());
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"stage", "finished"},
         {"iterator", ScanIterator->DebugString()});
+    return true;
+}
+
+bool TColumnShardScan::ProduceProgressWatermark() noexcept {
+    if (Finished || !ScanIterator || !ChunksLimiter.HasMore()) {
+        return false;
+    }
+    if (!ReadMetadataRange->GetCollectProgressWatermarks() || ReadMetadataRange->GetFakeSort() || !ReadMetadataRange->IsSorted()) {
+        return false;
+    }
+    auto keyBatch = ScanIterator->PopProgressWatermark();
+    if (!keyBatch) {
+        return false;
+    }
+    // Progress-only message: do not carry over byte accounting from a prior data pack
+    Rows = 0;
+    Bytes = 0;
+    MakeResult(0);
+    Result->ProgressWatermark = ConvertLastKey(keyBatch);
+    SendResult(false, false, 0);
     return true;
 }
 
@@ -417,6 +440,10 @@ void TColumnShardScan::ContinueProcessing() {
     }
     // Send new results if there is available capacity
     while (ScanIterator && ProduceResults()) {
+    }
+    // At most one progress watermark per ack window (MaxChunksCount == 1)
+    if (ScanIterator && AckReceivedInstant) {
+        ProduceProgressWatermark();
     }
     if (!!AckReceivedInstant) {
         LastResultInstant = TMonotonic::Now();
@@ -445,6 +472,9 @@ void TColumnShardScan::ContinueProcessing() {
                 } else if (!*hasMoreData) {
                     break;
                 }
+            }
+            if (ScanIterator && AckReceivedInstant) {
+                ProduceProgressWatermark();
             }
         }
     }

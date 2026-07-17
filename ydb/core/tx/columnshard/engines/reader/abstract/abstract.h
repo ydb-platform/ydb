@@ -3,6 +3,10 @@
 #include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
 
+namespace arrow {
+class RecordBatch;
+}
+
 namespace NKikimr::NOlap::NReader {
 
 class TScanIteratorBase {
@@ -32,6 +36,10 @@ public:
 
     virtual bool Finished() const = 0;
     virtual TConclusion<std::unique_ptr<TPartialReadResult>> GetBatch() = 0;
+
+    virtual std::shared_ptr<arrow::RecordBatch> PopProgressWatermark() {
+        return nullptr;
+    }
 
     virtual void PrepareResults() {
     }

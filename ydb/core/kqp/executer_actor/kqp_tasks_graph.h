@@ -367,6 +367,7 @@ struct TTaskMeta {
         TKqpOlapProgram OlapProgram;
         TVector<NScheme::TTypeInfo> ResultColumnsTypes;
         std::vector<std::string> GroupByColumnNames;
+        bool CollectProgressWatermarks = false;
     };
 
     TReadInfo ReadInfo;

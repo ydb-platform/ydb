@@ -370,6 +370,13 @@ public:
         }
     }
 
+    template <typename TFunc>
+    void ForEachShardScanner(TFunc&& func) {
+        for (auto&& itTablet : ShardScanners) {
+            func(itTablet.first, itTablet.second);
+        }
+    }
+
     void PingAllScanners() {
         for (auto&& itTablet : ShardScanners) {
             itTablet.second->PingIfNeeded();

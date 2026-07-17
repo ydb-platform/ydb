@@ -1,5 +1,7 @@
 #include "limit_sorted.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/source.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NTrivial {
@@ -47,6 +49,12 @@ void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<NCommon:
         {"max", GetMaxInFlight()},
         {"inFlightLimit", InFlightLimit},
         {"count", GetSourcesInFlightCount()});
+    if (Context->GetCommonContext()->GetReadMetadata()->GetCollectProgressWatermarks() &&
+        !Context->GetCommonContext()->GetReadMetadata()->GetFakeSort() && Context->GetCommonContext()->GetReadMetadata()->IsSorted())
+    {
+        // Coarse watermark: no unread matching rows better than portion finish bound
+        Context->GetCommonContext()->EnqueueProgressWatermark(source->GetAs<TPortionDataSource>()->GetFinish().GetValue().ToBatch());
+    }
     if (source->GetAs<IDataSource>()->GetResultRecordsCount() < Limit && InFlightLimit < GetMaxInFlight()) {
         InFlightLimit = Min(2 * InFlightLimit, GetMaxInFlight());
     }

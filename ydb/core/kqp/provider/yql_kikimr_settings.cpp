@@ -69,6 +69,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     REGISTER_SETTING(*this, KqpPushOlapProcess);
     REGISTER_SETTING(*this, KqpForceImmediateEffectsExecution);
+    REGISTER_SETTING(*this, KqpCollectOlapWatermarks);
 
     /* Compile time */
     REGISTER_SETTING(*this, _CommitPerShardKeysSizeLimitBytes);
@@ -235,6 +236,10 @@ bool TKikimrSettings::DisableLlvmForUdfStages() const {
 
 bool TKikimrSettings::HasOptDisableTopSort() const {
     return GetFlagValue(OptDisableTopSort.Get());
+}
+
+bool TKikimrSettings::HasKqpCollectOlapWatermarks() const {
+    return GetFlagValue(KqpCollectOlapWatermarks.Get());
 }
 
 bool TKikimrSettings::HasOptDisableSqlInToJoin() const {

@@ -1,5 +1,5 @@
 # YDB configuration options and their values
-# are described in documentaion https://ydb.tech/en/docs/deploy/configuration/config
+# are described in documentation: https://ydb.tech/en/docs/deploy/configuration/config
 
 metadata:
   kind: MainConfig

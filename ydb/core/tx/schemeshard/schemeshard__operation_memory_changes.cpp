@@ -126,20 +126,20 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->PathsById[id] = elem;
         } else {
             // Paths snapshots own the counter rollback: the parent ref dies with
-            // the erased element; SelfDbRef is dropped disarmed, not released.
-            if (auto refIt = ss->SelfDbRefs.find(id); refIt != ss->SelfDbRefs.end()) {
+            // the erased element; OwnDbRef is dropped disarmed, not released.
+            if (auto refIt = ss->OwnDbRefs.find(id); refIt != ss->OwnDbRefs.end()) {
                 refIt->second.DetachWithoutRelease();
-                ss->SelfDbRefs.erase(refIt);
+                ss->OwnDbRefs.erase(refIt);
             }
             ss->PathsById.erase(id);
         }
         Paths.pop();
     }
 
-    // Self-ref map rollbacks recorded by TSelfRefMap::Set, undone LIFO.
-    while (SelfRefUndos) {
-        SelfRefUndos.top()();
-        SelfRefUndos.pop();
+    // Self-ref map rollbacks recorded by TDbRefMap::Set, undone LIFO.
+    while (DbRefUndos) {
+        DbRefUndos.top()();
+        DbRefUndos.pop();
     }
 
     while (TablesWithSnapshots) {
@@ -269,7 +269,7 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     }
 
 #ifndef NDEBUG
-    ss->DebugCheckSelfRefIntegrity();
+    ss->DebugCheckDbRefIntegrity();
 #endif
 }
 

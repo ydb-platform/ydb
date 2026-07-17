@@ -1734,7 +1734,7 @@ void TOperation::AddPart(ISubOperation::TPtr part) {
 
 bool TOperation::AddPublishingPath(TSchemeShard* ss, TPathId pathId, ui64 version) {
     Y_ABORT_UNLESS(!IsReadyToNotify());
-    return Publications.emplace(TPublishPath(pathId, version), TPathRef(ss, pathId, "publish path")).second;
+    return Publications.emplace(TPublishPath(pathId, version), TPathDbRef(ss, pathId, "publish path")).second;
 }
 
 bool TOperation::IsPublished() const {

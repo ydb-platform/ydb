@@ -87,7 +87,7 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     TStack<TSharedShardEntry> SharedShardEntries;
 
 
-    TStack<std::function<void()>> SelfRefUndos;
+    TStack<std::function<void()>> DbRefUndos;
 
     // Dedup: at most one value snapshot per (self-ref map, path) per tx, so
     // repeated Update() on the same object doesn't re-copy it.
@@ -157,11 +157,11 @@ public:
     void GrabSharedShard(TSchemeShard* ss, const TShardIdx& shardIdx, const TPathId& pathId);
 
 
-    // TSelfRefMap::Set records its own rollback closure here (undone LIFO),
+    // TDbRefMap::Set records its own rollback closure here (undone LIFO),
     // replacing the per-map GrabNew*/Grab* + UnDo branches.
-    void RecordSelfRefUndo(std::function<void()> undo) {
+    void RecordDbRefUndo(std::function<void()> undo) {
         if (Armed) {
-            SelfRefUndos.push(std::move(undo));
+            DbRefUndos.push(std::move(undo));
         }
     }
 

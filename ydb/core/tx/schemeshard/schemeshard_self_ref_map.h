@@ -17,7 +17,7 @@ namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
 
-namespace NSelfRefDetail {
+namespace NDbRefDetail {
     template <class P> struct TConstView;
     template <class T> struct TConstView<TIntrusivePtr<T>> { using type = TIntrusiveConstPtr<T>; };
     template <class T> struct TConstView<TIntrusiveConstPtr<T>> { using type = TIntrusiveConstPtr<T>; };
@@ -27,14 +27,14 @@ namespace NSelfRefDetail {
 // Clone a value for an undo snapshot; TTableInfo uses DeepCopy (COW-shares its
 // partitioning), other types copy-construct.
 template <class T>
-TIntrusivePtr<T> SelfRefUndoClone(const TIntrusivePtr<T>& p) {
+TIntrusivePtr<T> DbRefUndoClone(const TIntrusivePtr<T>& p) {
     return p ? TIntrusivePtr<T>(new T(*p)) : TIntrusivePtr<T>();
 }
 template <class T>
-std::shared_ptr<T> SelfRefUndoClone(const std::shared_ptr<T>& p) {
+std::shared_ptr<T> DbRefUndoClone(const std::shared_ptr<T>& p) {
     return p ? std::make_shared<T>(*p) : std::shared_ptr<T>();
 }
-inline TIntrusivePtr<TTableInfo> SelfRefUndoClone(const TIntrusivePtr<TTableInfo>& p) {
+inline TIntrusivePtr<TTableInfo> DbRefUndoClone(const TIntrusivePtr<TTableInfo>& p) {
     return p ? TTableInfo::DeepCopy(*p) : TIntrusivePtr<TTableInfo>();
 }
 
@@ -43,10 +43,10 @@ inline TIntrusivePtr<TTableInfo> SelfRefUndoClone(const TIntrusivePtr<TTableInfo
 // TTLEnabledTables aliases that object by raw pointer and must stay in sync;
 // operator= on the TSimpleRefCount base is a no-op, so the live refcount is kept.
 template <class V>
-void SelfRefUndoRestoreSlot(V& slot, const V& snap) {
+void DbRefUndoRestoreSlot(V& slot, const V& snap) {
     slot = snap;
 }
-inline void SelfRefUndoRestoreSlot(TIntrusivePtr<TTableInfo>& slot, const TIntrusivePtr<TTableInfo>& snap) {
+inline void DbRefUndoRestoreSlot(TIntrusivePtr<TTableInfo>& slot, const TIntrusivePtr<TTableInfo>& snap) {
     if (slot && snap) {
         *slot = *snap;
     } else {
@@ -55,9 +55,9 @@ inline void SelfRefUndoRestoreSlot(TIntrusivePtr<TTableInfo>& slot, const TIntru
 }
 
 // Teardown interface: maps self-register so Clear() iterates one registry.
-class ISelfRefMap {
+class IDbRefMap {
 public:
-    virtual ~ISelfRefMap() = default;
+    virtual ~IDbRefMap() = default;
     virtual void clear() = 0;
 
     // Debug: every entry points at a live path.
@@ -72,14 +72,14 @@ public:
 // Set/Update record undo and belong to the armed propose phase; SetUntracked/
 // UpdateUntracked/erase are for other phases (init, plan-step, progress, stats).
 template <class V>
-class TSelfRefMap : public ISelfRefMap {
+class TDbRefMap : public IDbRefMap {
     using TInner = THashMap<TPathId, V>;
 
 public:
     using iterator = typename TInner::iterator;
     using const_iterator = typename TInner::const_iterator;
     using value_type = typename TInner::value_type;
-    using TConstView = typename NSelfRefDetail::TConstView<V>::type;
+    using TConstView = typename NDbRefDetail::TConstView<V>::type;
 
     // Designated-initializer args: Foo.Set({.Path=id, .Value=info, .Changes=ctx.MemChanges}).
     struct TSetArgs {
@@ -90,7 +90,7 @@ public:
 
     // Self-registers at construction (registration can't be missed); `reason`
     // is the map's name, logged on each DbRefCount change.
-    TSelfRefMap(TRefLabel reason, TSchemeShard* ss, TVector<ISelfRefMap*>& registry)
+    TDbRefMap(TRefLabel reason, TSchemeShard* ss, TVector<IDbRefMap*>& registry)
         : Reason(reason)
         , SS(ss)
     {
@@ -98,13 +98,13 @@ public:
     }
 
     // Non-copyable/movable: registered by address; a copy would double-acquire.
-    TSelfRefMap(const TSelfRefMap&) = delete;
-    TSelfRefMap& operator=(const TSelfRefMap&) = delete;
-    TSelfRefMap(TSelfRefMap&&) = delete;
-    TSelfRefMap& operator=(TSelfRefMap&&) = delete;
+    TDbRefMap(const TDbRefMap&) = delete;
+    TDbRefMap& operator=(const TDbRefMap&) = delete;
+    TDbRefMap(TDbRefMap&&) = delete;
+    TDbRefMap& operator=(TDbRefMap&&) = delete;
 
     // Teardown drops entries without releasing (the counters die with the shard).
-    ~TSelfRefMap() override = default;
+    ~TDbRefMap() override = default;
 
     const TInner& AsMap() const {
         return Map;
@@ -119,11 +119,11 @@ public:
             Y_VERIFY_DEBUG_S(args.Changes.IsPathTracked(args.Path),
                 "Set(" << Reason.c_str() << ") acquires a ref on " << args.Path
                 << " but the path was not grabbed in this tx; GrabNewPath/GrabPath it first");
-            args.Changes.RecordSelfRefUndo([this, id = args.Path]() { UndoErase(id); });
+            args.Changes.RecordDbRefUndo([this, id = args.Path]() { UndoErase(id); });
             it = Map.emplace(args.Path, std::move(args.Value)).first;
             AcquirePathDbRef(SS, args.Path, Reason);
         } else {
-            args.Changes.RecordSelfRefUndo([this, id = args.Path, old = it->second]() { UndoRestore(id, old); });
+            args.Changes.RecordDbRefUndo([this, id = args.Path, old = it->second]() { UndoRestore(id, old); });
             it->second = std::move(args.Value);
         }
         return it->second;
@@ -159,7 +159,7 @@ public:
             "tracked Update on " << Reason.c_str() << " outside an armed propose; use UpdateUntracked");
         V& slot = Map.at(id);
         if (changes.NeedsUpdateSnapshot(this, id)) {
-            changes.RecordSelfRefUndo([this, id, snap = SelfRefUndoClone(slot)]() {
+            changes.RecordDbRefUndo([this, id, snap = DbRefUndoClone(slot)]() {
                 UndoRestoreInPlace(id, snap);
             });
         }
@@ -232,7 +232,7 @@ private:
     void UndoRestoreInPlace(const TPathId& id, const V& snap) {
         auto it = Map.find(id);
         if (it != Map.end()) {
-            SelfRefUndoRestoreSlot(it->second, snap);
+            DbRefUndoRestoreSlot(it->second, snap);
         }
     }
 

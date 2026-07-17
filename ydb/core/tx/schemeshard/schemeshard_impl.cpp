@@ -713,10 +713,10 @@ void TSchemeShard::Clear() {
         txState.DisarmPathRefs();
     }
     // ParentRefHeld bits die with their path elements below; nothing to disarm.
-    for (auto& [pathId, ref] : SelfDbRefs) {
+    for (auto& [pathId, ref] : OwnDbRefs) {
         ref.DetachWithoutRelease();
     }
-    SelfDbRefs.clear();
+    OwnDbRefs.clear();
     for (auto& [txId, pub] : Publications) {
         for (auto& [key, ref] : pub.Paths) {
             ref.DetachWithoutRelease();
@@ -730,7 +730,7 @@ void TSchemeShard::Clear() {
 
     PathsById.clear();
 
-    for (auto* selfRefMap : SelfRefMaps) {
+    for (auto* selfRefMap : DbRefMaps) {
         selfRefMap->clear();
     }
 
@@ -791,13 +791,13 @@ void TSchemeShard::Clear() {
     TabletCounters->Percentile()[COUNTER_SHARDS_WITH_ROW_DELETES].Clear();
 }
 
-void TSchemeShard::AcquireSelfDbRef(const TPathId& pathId, TRefLabel reason) {
-    const bool inserted = SelfDbRefs.emplace(pathId, TPathRef(this, pathId, reason)).second;
+void TSchemeShard::AcquireOwnDbRef(const TPathId& pathId, TRefLabel reason) {
+    const bool inserted = OwnDbRefs.emplace(pathId, TPathDbRef(this, pathId, reason)).second;
     Y_VERIFY_S(inserted, "Duplicate self db ref, pathId: " << pathId << ", reason: " << reason.c_str());
 }
 
-void TSchemeShard::ReleaseSelfDbRef(const TPathId& pathId) {
-    SelfDbRefs.erase(pathId);
+void TSchemeShard::ReleaseOwnDbRef(const TPathId& pathId) {
+    OwnDbRefs.erase(pathId);
 }
 
 void TSchemeShard::IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug) {
@@ -844,9 +844,9 @@ void TSchemeShard::DecrementPathDbRefCount(const TPathId& pathId, const TStringB
     }
 }
 
-void TSchemeShard::DebugCheckSelfRefIntegrity() const {
+void TSchemeShard::DebugCheckDbRefIntegrity() const {
     auto pathExists = [this](const TPathId& id) { return PathsById.contains(id); };
-    for (const auto* selfRefMap : SelfRefMaps) {
+    for (const auto* selfRefMap : DbRefMaps) {
         selfRefMap->DebugCheckConsistency(pathExists);
     }
 
@@ -856,12 +856,12 @@ void TSchemeShard::DebugCheckSelfRefIntegrity() const {
     auto bumpId = [&](const TPathId& id) {
         ++counted[id];
     };
-    auto bump = [&](const TPathRef& ref) {
+    auto bump = [&](const TPathDbRef& ref) {
         if (ref) {
             bumpId(ref.GetPathId());
         }
     };
-    for (const auto* selfRefMap : SelfRefMaps) {
+    for (const auto* selfRefMap : DbRefMaps) {
         selfRefMap->DebugForEachRef(bumpId);
     }
     for (const auto& [id, path] : PathsById) {
@@ -869,7 +869,7 @@ void TSchemeShard::DebugCheckSelfRefIntegrity() const {
             bumpId(path->ParentPathId);
         }
     }
-    for (const auto& [id, ref] : SelfDbRefs) {
+    for (const auto& [id, ref] : OwnDbRefs) {
         bump(ref);
     }
     for (const auto& [opId, txState] : TxInFlight) {
@@ -4762,7 +4762,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
     ColumnTables.Drop(pathId);
-    ReleaseSelfDbRef(pathId);
+    ReleaseOwnDbRef(pathId);
 
     auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
     Send(SysPartitionStatsCollector, ev.Release());

@@ -21,19 +21,19 @@ TVector<TTableShardInfo> MakeShards(ui32 n, ui64 ownerId = 1) {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TSelfRefMapTest) {
+Y_UNIT_TEST_SUITE(TDbRefMapTest) {
 
     // at() must hand out a read-only view of whatever smart pointer the map holds:
     // TIntrusivePtr -> TIntrusiveConstPtr, std::shared_ptr -> shared_ptr<const>.
     Y_UNIT_TEST(ConstViewTypeMapping) {
         static_assert(std::is_same_v<
-            NSelfRefDetail::TConstView<TIntrusivePtr<TTableInfo>>::type,
+            NDbRefDetail::TConstView<TIntrusivePtr<TTableInfo>>::type,
             TIntrusiveConstPtr<TTableInfo>>);
         static_assert(std::is_same_v<
-            NSelfRefDetail::TConstView<TIntrusiveConstPtr<TTableInfo>>::type,
+            NDbRefDetail::TConstView<TIntrusiveConstPtr<TTableInfo>>::type,
             TIntrusiveConstPtr<TTableInfo>>);
         static_assert(std::is_same_v<
-            NSelfRefDetail::TConstView<std::shared_ptr<TOlapStoreInfo>>::type,
+            NDbRefDetail::TConstView<std::shared_ptr<TOlapStoreInfo>>::type,
             std::shared_ptr<const TOlapStoreInfo>>);
     }
 
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(TSelfRefMapTest) {
         TTableInfo::TPtr orig(new TTableInfo());
         orig->SetPartitioning(MakeShards(3));
 
-        TTableInfo::TPtr clone = SelfRefUndoClone(orig);
+        TTableInfo::TPtr clone = DbRefUndoClone(orig);
 
         UNIT_ASSERT(clone);
         UNIT_ASSERT_UNEQUAL(clone.Get(), orig.Get());
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(TSelfRefMapTest) {
         TTableInfo::TPtr orig(new TTableInfo());
         orig->SetPartitioning(MakeShards(2));
 
-        TTableInfo::TPtr clone = SelfRefUndoClone(orig);
+        TTableInfo::TPtr clone = DbRefUndoClone(orig);
         UNIT_ASSERT_EQUAL(&clone->GetPartitionStore(), &orig->GetPartitionStore()); // shared
 
         // Mutate orig's cond-erase in place — must copy-on-write away from the clone.
@@ -77,6 +77,6 @@ Y_UNIT_TEST_SUITE(TSelfRefMapTest) {
 
     Y_UNIT_TEST(UndoCloneNullIsNull) {
         TTableInfo::TPtr nul;
-        UNIT_ASSERT(!SelfRefUndoClone(nul));
+        UNIT_ASSERT(!DbRefUndoClone(nul));
     }
 }

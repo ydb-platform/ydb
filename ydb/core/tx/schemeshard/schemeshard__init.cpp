@@ -4230,7 +4230,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 auto tableInfo = Self->ColumnTables.BuildNew(pathId, std::make_shared<TColumnTableInfo>(alterVersion,
                     std::move(description), std::move(storeSharding)));
-                Self->AcquireSelfDbRef(pathId, "type info record");
+                Self->AcquireOwnDbRef(pathId, "type info record");
 
                 if (!tableInfo->IsStandalone()) {
                     auto itStore = Self->OlapStores.find(tableInfo->GetOlapStorePathIdVerified());
@@ -5034,7 +5034,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     operation->AddPublishingPath(Self, pathId, version);
                 } else {
                     Self->Publications[txId].Paths.emplace(
-                        std::make_pair(pathId, version), TPathRef(Self, pathId, "publish path"));
+                        std::make_pair(pathId, version), TPathDbRef(Self, pathId, "publish path"));
                 }
 
                 Publications[txId].push_back(pathId);
@@ -6550,7 +6550,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 #ifndef NDEBUG
         // After init rebuilds all references, DbRefCounts must reconcile —
         // catches restoration drift at load time.
-        Self->DebugCheckSelfRefIntegrity();
+        Self->DebugCheckDbRefIntegrity();
 #endif
         return true;
     }

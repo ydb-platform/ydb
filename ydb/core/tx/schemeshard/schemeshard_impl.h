@@ -264,7 +264,7 @@ public:
 
     // In RO mode we don't accept any modifications from users but process all in-flight operations in normal way
     bool IsReadOnlyMode = false;
-    // Set at the start of destruction so TPathRef::Release() during member
+    // Set at the start of destruction so TPathDbRef::Release() during member
     // teardown does not touch already-destroyed members (PathsById,
     // CleanDroppedPathsCandidates, ...).
     bool IsBeingDestroyed = false;
@@ -289,12 +289,12 @@ public:
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
 
-    // Every TSelfRefMap below registers here from its constructor (it takes
+    // Every TDbRefMap below registers here from its constructor (it takes
     // `this` and this list), so Clear() disarms+drops them all by iteration and
     // a map cannot be declared without being registered.
-    TVector<ISelfRefMap*> SelfRefMaps;
+    TVector<IDbRefMap*> DbRefMaps;
 
-    TSelfRefMap<TTableInfo::TPtr> Tables{"Tables", this, SelfRefMaps};
+    TDbRefMap<TTableInfo::TPtr> Tables{"Tables", this, DbRefMaps};
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
 
     // Batch processing for conditional erase responses
@@ -304,11 +304,11 @@ public:
     TDuration CondEraseResponseBatchMaxTime = TDuration::MilliSeconds(100);
     ui32 MaxTTLShardsInFlight = 0;
 
-    TSelfRefMap<TTableIndexInfo::TPtr> Indexes{"Indexes", this, SelfRefMaps};
-    TSelfRefMap<TCdcStreamInfo::TPtr> CdcStreams{"CdcStreams", this, SelfRefMaps};
-    TSelfRefMap<TSequenceInfo::TPtr> Sequences{"Sequences", this, SelfRefMaps};
-    TSelfRefMap<TReplicationInfo::TPtr> Replications{"Replications", this, SelfRefMaps};
-    TSelfRefMap<TBlobDepotInfo::TPtr> BlobDepots{"BlobDepots", this, SelfRefMaps};
+    TDbRefMap<TTableIndexInfo::TPtr> Indexes{"Indexes", this, DbRefMaps};
+    TDbRefMap<TCdcStreamInfo::TPtr> CdcStreams{"CdcStreams", this, DbRefMaps};
+    TDbRefMap<TSequenceInfo::TPtr> Sequences{"Sequences", this, DbRefMaps};
+    TDbRefMap<TReplicationInfo::TPtr> Replications{"Replications", this, DbRefMaps};
+    TDbRefMap<TBlobDepotInfo::TPtr> BlobDepots{"BlobDepots", this, DbRefMaps};
 
     THashMap<TPathId, TTxId> TablesWithSnapshots;
     THashMap<TTxId, TSet<TPathId>> SnapshotTables;
@@ -316,25 +316,25 @@ public:
 
     THashMap<TPathId, TTxId> LockedPaths;
 
-    TSelfRefMap<TTopicInfo::TPtr> Topics{"Topics", this, SelfRefMaps};
-    TSelfRefMap<TRtmrVolumeInfo::TPtr> RtmrVolumes{"RtmrVolumes", this, SelfRefMaps};
-    TSelfRefMap<TSolomonVolumeInfo::TPtr> SolomonVolumes{"SolomonVolumes", this, SelfRefMaps};
+    TDbRefMap<TTopicInfo::TPtr> Topics{"Topics", this, DbRefMaps};
+    TDbRefMap<TRtmrVolumeInfo::TPtr> RtmrVolumes{"RtmrVolumes", this, DbRefMaps};
+    TDbRefMap<TSolomonVolumeInfo::TPtr> SolomonVolumes{"SolomonVolumes", this, DbRefMaps};
     // Also mutated untracked in armed propose in a few places (extsubdomain dual-tracking).
-    TSelfRefMap<TSubDomainInfo::TPtr> SubDomains{"SubDomains", this, SelfRefMaps};
-    TSelfRefMap<TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes{"BlockStoreVolumes", this, SelfRefMaps};
-    TSelfRefMap<TFileStoreInfo::TPtr> FileStoreInfos{"FileStoreInfos", this, SelfRefMaps};
-    TSelfRefMap<TKesusInfo::TPtr> KesusInfos{"KesusInfos", this, SelfRefMaps};
-    TSelfRefMap<TOlapStoreInfo::TPtr> OlapStores{"OlapStores", this, SelfRefMaps};
-    TSelfRefMap<TExternalTableInfo::TPtr> ExternalTables{"ExternalTables", this, SelfRefMaps};
-    TSelfRefMap<TExternalDataSourceInfo::TPtr> ExternalDataSources{"ExternalDataSources", this, SelfRefMaps};
-    TSelfRefMap<TViewInfo::TPtr> Views{"Views", this, SelfRefMaps};
-    TSelfRefMap<TResourcePoolInfo::TPtr> ResourcePools{"ResourcePools", this, SelfRefMaps};
-    TSelfRefMap<TBackupCollectionInfo::TPtr> BackupCollections{"BackupCollections", this, SelfRefMaps};
-    TSelfRefMap<TSysViewInfo::TPtr> SysViews{"SysViews", this, SelfRefMaps};
-    TSelfRefMap<TSecretInfo::TPtr> Secrets{"Secrets", this, SelfRefMaps};
-    TSelfRefMap<TStreamingQueryInfo::TPtr> StreamingQueries{"StreamingQueries", this, SelfRefMaps};
+    TDbRefMap<TSubDomainInfo::TPtr> SubDomains{"SubDomains", this, DbRefMaps};
+    TDbRefMap<TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes{"BlockStoreVolumes", this, DbRefMaps};
+    TDbRefMap<TFileStoreInfo::TPtr> FileStoreInfos{"FileStoreInfos", this, DbRefMaps};
+    TDbRefMap<TKesusInfo::TPtr> KesusInfos{"KesusInfos", this, DbRefMaps};
+    TDbRefMap<TOlapStoreInfo::TPtr> OlapStores{"OlapStores", this, DbRefMaps};
+    TDbRefMap<TExternalTableInfo::TPtr> ExternalTables{"ExternalTables", this, DbRefMaps};
+    TDbRefMap<TExternalDataSourceInfo::TPtr> ExternalDataSources{"ExternalDataSources", this, DbRefMaps};
+    TDbRefMap<TViewInfo::TPtr> Views{"Views", this, DbRefMaps};
+    TDbRefMap<TResourcePoolInfo::TPtr> ResourcePools{"ResourcePools", this, DbRefMaps};
+    TDbRefMap<TBackupCollectionInfo::TPtr> BackupCollections{"BackupCollections", this, DbRefMaps};
+    TDbRefMap<TSysViewInfo::TPtr> SysViews{"SysViews", this, DbRefMaps};
+    TDbRefMap<TSecretInfo::TPtr> Secrets{"Secrets", this, DbRefMaps};
+    TDbRefMap<TStreamingQueryInfo::TPtr> StreamingQueries{"StreamingQueries", this, DbRefMaps};
     THashSet<TPathId> TableInBackupCollections;
-    TSelfRefMap<TTestShardSetInfo::TPtr> TestShardSets{"TestShardSets", this, SelfRefMaps};
+    TDbRefMap<TTestShardSetInfo::TPtr> TestShardSets{"TestShardSets", this, DbRefMaps};
 
     TTempDirsState TempDirsState;
 
@@ -347,7 +347,7 @@ public:
     THashMap<TTxId, TOperation::TPtr> Operations;
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
-    THashMap<TPathId, TPathRef> SelfDbRefs; // path's own type info record ref
+    THashMap<TPathId, TPathDbRef> OwnDbRefs; // path's own type info record ref
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
 
     // Simplified state tracking for sequential incremental restore
@@ -813,13 +813,13 @@ public:
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, TString& value, TString defValue = TString());
     bool ReadSysValue(NIceDb::TNiceDb& db, ui64 sysTag, ui64& value, ui64 defVal = 0);
 
-    void AcquireSelfDbRef(const TPathId& pathId, TRefLabel reason);
-    void ReleaseSelfDbRef(const TPathId& pathId);
+    void AcquireOwnDbRef(const TPathId& pathId, TRefLabel reason);
+    void ReleaseOwnDbRef(const TPathId& pathId);
     void IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
     void DecrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
 
     // Debug-only: assert every self-ref map is consistent with PathsById.
-    void DebugCheckSelfRefIntegrity() const;
+    void DebugCheckDbRefIntegrity() const;
 
     // incompatible changes
     void BumpIncompatibleChanges(NIceDb::TNiceDb& db, ui64 incompatibleChange);

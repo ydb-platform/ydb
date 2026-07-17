@@ -181,7 +181,7 @@ private:
     bool AckPublish(
         NIceDb::TNiceDb& db,
         TTxId txId, TPathId pathId, ui64 version,
-        TMap<std::pair<TPathId, ui64>, TPathRef>& paths,
+        TMap<std::pair<TPathId, ui64>, TPathDbRef>& paths,
         const TActorContext& ctx
     ) {
         auto it = paths.lower_bound({pathId, 0});

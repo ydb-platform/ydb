@@ -34,6 +34,7 @@ TKikimrRunner KikimrJsonRowIdCompact() {
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
     settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
     settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
     return TKikimrRunner(settings);
 }
 

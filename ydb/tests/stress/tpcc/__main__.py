@@ -13,6 +13,8 @@ if __name__ == '__main__':
     parser.add_argument('--warehouses', default=100, type=int, help='Number of warehouses')
     parser.add_argument('--path', default='tpcc_workload', help='Table path prefix')
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
+    parser.add_argument('--phase', choices=['prepare', 'run', 'clean'], default=None,
+                        help='Phase to run: prepare (init+import), run, clean. If omitted, all phases run in sequence.')
 
     args = parser.parse_args()
 
@@ -26,5 +28,15 @@ if __name__ == '__main__':
         )
 
     workload = YdbTpccWorkload(args.endpoint, args.database, duration=args.duration, warehouses=args.warehouses, tables_prefix=args.path)
-    workload.start()
-    workload.join()
+    if args.phase == 'prepare':
+        workload.import_data()
+    elif args.phase == 'run':
+        workload.start()
+        workload.join()
+    elif args.phase == 'clean':
+        workload.clean_data()
+    else:
+        workload.import_data()
+        workload.start()
+        workload.join()
+        workload.clean_data()

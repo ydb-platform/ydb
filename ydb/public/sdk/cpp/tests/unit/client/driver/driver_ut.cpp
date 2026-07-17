@@ -14,11 +14,7 @@
 #include <util/generic/mapfindptr.h>
 
 #include <atomic>
-<<<<<<< HEAD
-=======
 #include <functional>
-#include <memory>
->>>>>>> f7303ada674 (async provider initialisation (#46135))
 
 #include <google/protobuf/text_format.h>
 
@@ -82,38 +78,6 @@ namespace {
         return builder.BuildAndStart();
     }
 
-<<<<<<< HEAD
-=======
-    class TCountingCredentialsProvider final : public ICredentialsProvider {
-    public:
-        std::string GetAuthInfo() const override {
-            return "token";
-        }
-
-        bool IsValid() const override {
-            return true;
-        }
-    };
-
-    class TCountingCredentialsProviderFactory final : public ICredentialsProviderFactory {
-    public:
-        explicit TCountingCredentialsProviderFactory(std::atomic_int& providerCount)
-            : ProviderCount_(providerCount)
-        {}
-
-        TCredentialsProviderPtr CreateProvider() const override {
-            ++ProviderCount_;
-            return std::make_shared<TCountingCredentialsProvider>();
-        }
-
-        std::string GetClientIdentity() const override {
-            return "same-credentials";
-        }
-
-    private:
-        std::atomic_int& ProviderCount_;
-    };
-
     class TDeferredCredentialsFactory final : public ICredentialsProviderFactory {
     public:
         TDeferredCredentialsFactory()
@@ -136,7 +100,6 @@ namespace {
         NThreading::TPromise<TCredentialsProviderPtr> Provider_;
     };
 
->>>>>>> f7303ada674 (async provider initialisation (#46135))
 } // namespace
 
 Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {

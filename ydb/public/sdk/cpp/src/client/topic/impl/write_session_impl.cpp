@@ -81,12 +81,7 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
-<<<<<<< HEAD
-    , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
-=======
     , PrevToken(DbDriverState->GetCredentialsProvider() ? DbDriverState->GetCredentialsProvider()->GetAuthInfo() : "")
-    , MaxBlockMessageCount(Settings.BatchFlushMessageCount_)
->>>>>>> f7303ada674 (async provider initialisation (#46135))
     , InitSeqNoPromise(NThreading::NewPromise<uint64_t>())
     , WakeupInterval(
             Settings.BatchFlushInterval_.value_or(TDuration::Zero()) ?

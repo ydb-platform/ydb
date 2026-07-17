@@ -99,28 +99,12 @@ public:
         return std::make_shared<TCredentialsProvider>(Params_, std::move(facility));
     }
 
-<<<<<<< HEAD
-=======
     NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
         return CreateProviderAsyncImpl(
             Params_, Params_.SystemServiceAccountCredentials->CreateProviderAsync(facility),
             facility);
     }
 
-    std::string GetClientIdentity() const override final {
-        return NIam::NDetail::MakeClientIdentity(
-            "TIamServiceCredentialsProviderFactory",
-            Params_,
-            TService::service_full_name(),
-            Params_.ServiceId,
-            Params_.MicroserviceId,
-            Params_.ResourceId,
-            Params_.ResourceType,
-            Params_.TargetServiceAccountId,
-            Params_.SystemServiceAccountCredentials->GetClientIdentity());
-    }
-
->>>>>>> f7303ada674 (async provider initialisation (#46135))
 private:
     TIamServiceParams Params_;
 };

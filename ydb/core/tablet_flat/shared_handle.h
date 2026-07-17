@@ -334,10 +334,12 @@ public:
 
     TSharedPageRef(
             TIntrusivePtr<TSharedPageHandle> handle,
-            TIntrusivePtr<TSharedPageGCList> gcList) noexcept
+            TIntrusivePtr<TSharedPageGCList> gcList,
+            NTable::NPage::EPage type = NTable::NPage::EPage::Undef) noexcept
         : Handle(std::move(handle))
         , GCList(std::move(gcList))
         , Used(false)
+        , Type(type)
     { }
 
     ~TSharedPageRef() {
@@ -348,6 +350,7 @@ public:
         : Handle(ref.Handle)
         , GCList(ref.GCList)
         , Used(false)
+        , Type(ref.Type)
     {
         if (ref.Used) {
             Y_ENSURE(Use());
@@ -358,6 +361,7 @@ public:
         : Handle(std::move(ref.Handle))
         , GCList(std::move(ref.GCList))
         , Used(std::exchange(ref.Used, false))
+        , Type(ref.Type)
     { }
 
     TSharedPageRef& operator=(const TSharedPageRef& ref) {
@@ -365,6 +369,7 @@ public:
             Drop();
             Handle = ref.Handle;
             GCList = ref.GCList;
+            Type = ref.Type;
             if (ref.Used) {
                 Y_ENSURE(Use());
             }
@@ -379,6 +384,7 @@ public:
             Handle = std::move(ref.Handle);
             GCList = std::move(ref.GCList);
             Used = std::exchange(ref.Used, false);
+            Type = ref.Type;
         }
 
         return *this;
@@ -386,9 +392,10 @@ public:
 
     static TSharedPageRef MakeUsed(
         TIntrusivePtr<TSharedPageHandle> handle,
-        TIntrusivePtr<TSharedPageGCList> gcList) noexcept
+        TIntrusivePtr<TSharedPageGCList> gcList,
+        NTable::NPage::EPage type = NTable::NPage::EPage::Undef) noexcept
     {
-        TSharedPageRef ref(std::move(handle), std::move(gcList));
+        TSharedPageRef ref(std::move(handle), std::move(gcList), type);
         ref.Use();
         return ref;
     }
@@ -407,6 +414,14 @@ public:
 
     bool IsUsed() const {
         return Used;
+    }
+
+    NTable::NPage::EPage GetType() const noexcept {
+        return Type;
+    }
+
+    void SetType(NTable::NPage::EPage type) noexcept {
+        Type = type;
     }
 
     /**
@@ -475,6 +490,7 @@ private:
     TIntrusivePtr<TSharedPageHandle> Handle;
     TIntrusivePtr<TSharedPageGCList> GCList;
     bool Used;
+    NTable::NPage::EPage Type = NTable::NPage::EPage::Undef;
 };
 
 /**

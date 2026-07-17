@@ -469,7 +469,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 if (doTraceLog) {
                     pagesFromCacheTraceLog.push_back(location.Offset);
                 }
-                readyPages.emplace_back(location.Offset, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList));
+                readyPages.emplace_back(location.Offset, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList, location.Type));
                 break;
             case PageStateNo:
                 ++pagesToRequestCount;
@@ -1053,7 +1053,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             auto &readyPage = request->ReadyPages[index];
             Y_ENSURE(readyPage.Offset == page->Offset);
-            readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
+            readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList, page->Type);
 
             if (--request->PendingBlocks == 0) {
                 SendResult(*request);
@@ -1115,7 +1115,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             if (page->State == PageStateLoaded) { // page may be evicted before NotifyInMemOwner call
                 readyLoadedPages.emplace_back(
                     page->Offset,
-                    TSharedPageRef::MakeUsed(page, SharedCachePages->GCList));
+                    TSharedPageRef::MakeUsed(page, SharedCachePages->GCList, page->Type));
             }
         }
 

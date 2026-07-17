@@ -407,7 +407,7 @@ private:
 
     void HandleFree(TEvents::TEvUndelivered::TPtr& ev) {
         const ui64 round = ev->Cookie;
-        YDB_LOG_DEBUG("Undelivered message from round",
+        YDB_LOG_DEBUG("Undelivered message",
             {"tabletId", TabletInfo->TabletID},
             {"tabletType", GetTabletTypeName()},
             {"sender", ev->Sender},
@@ -425,7 +425,7 @@ private:
     void HandleFree(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         const ui32 node = ev->Get()->NodeId;
         const ui64 round = ev->Cookie;
-        YDB_LOG_DEBUG("Node disconnected from round",
+        YDB_LOG_DEBUG("Node disconnected",
             {"tabletId", TabletInfo->TabletID},
             {"tabletType", GetTabletTypeName()},
             {"nodeId", node},
@@ -452,7 +452,7 @@ private:
             return true;
         }
 
-        YDB_LOG_DEBUG("Applying alien tablet state",
+        YDB_LOG_DEBUG("Applying alien",
             {"tabletId", TabletInfo->TabletID},
             {"tabletType", GetTabletTypeName()},
             {"nodeId", alien.NodeId()},
@@ -675,7 +675,7 @@ private:
     void HandleWatch(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         const ui32 node = ev->Get()->NodeId;
         const ui64 round = ev->Cookie;
-        YDB_LOG_DEBUG("Node disconnected from round",
+        YDB_LOG_DEBUG("Node disconnected",
             {"tabletId", TabletInfo->TabletID},
             {"tabletType", GetTabletTypeName()},
             {"nodeId", node},

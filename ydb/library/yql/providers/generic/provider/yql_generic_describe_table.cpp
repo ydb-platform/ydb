@@ -457,11 +457,15 @@ TIssues TGenericDescribeTableTransformer::DescribeTableFromConnector(const TGene
                     desc->Schema = result.Response->schema();
                     promise.SetValue();
                 } catch(const std::exception&) {
-                    promise.SetException(std::current_exception());
+                    desc->Issues.AddIssue(
+                            NYql::TIssue(TStringBuilder() << "Call DescribeTable for table " << tableAddress.ToString() << ": " << CurrentExceptionMessage()));
+                    promise.SetValue();
                 }
             });
         } catch(const std::exception&) {
-            promise.SetException(std::current_exception());
+            desc->Issues.AddIssue(
+                    NYql::TIssue(TStringBuilder() << "Call FillCredentials for table " << tableAddress.ToString() << ": " << CurrentExceptionMessage()));
+            promise.SetValue();
         }
     });
 

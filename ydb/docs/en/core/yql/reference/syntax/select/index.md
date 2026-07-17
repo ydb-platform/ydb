@@ -30,7 +30,7 @@ The result of the `SELECT` query is evaluated as follows:
 {% endif %}
 
 * computed [SAMPLE](sample.md) / [TABLESAMPLE](sample.md)
-* [FLATTEN COLUMNS](flatten.md#flatten-columns) or [](flatten.md) is applied; aliases defined in `FLATTEN BY` become visible after this point.
+* [FLATTEN COLUMNS](flatten.md#flatten-columns) or [FLATTEN BY](flatten.md) is applied; aliases defined in `FLATTEN BY` become visible after this point.
 
 {% if feature_join %}
 
@@ -77,7 +77,7 @@ When `PRAGMA OrderedColumns;` is enabled, the order of columns is preserved in t
 
 {% endif %}
 
-* The order of depends on the execution mode of [`UNION ALL`](union.md#union-all)
+* The order of `UNION ALL` depends on the execution mode of [UNION ALL](union.md#union-all);
 * the order of columns for [AS_TABLE](from_as_table.md) is not defined.
 
 ## Combination of queries {#combining-queries}

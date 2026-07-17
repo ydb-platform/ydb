@@ -439,7 +439,7 @@ An access subject can be a [user](#access-user) or a [group](#access-group).
 - Monitoring
 - Administration.
 
-The access level for a subject is configured using [access control lists](#access-level-list).
+The access level for a subject is configured using [access level lists](#access-level-list).
 
 ### Access Level List {#access-level-list}
 
@@ -447,7 +447,7 @@ The access level for a subject is configured using [access control lists](#acces
 
 In {{ ydb-short-name }}, there are [several such lists](../reference/configuration/security_config.md#security-access-levels) that define who has which [access levels](#access-level).
 
-Detailed information about access control lists, their hierarchy, and principles of operation is provided in the [Access control lists](../security/authorization.md#access-level-lists) section of the authorization documentation.
+Detailed information about access level lists, their hierarchy, and principles of operation is provided in the [Access level lists](../security/authorization.md#access-level-lists) section of the authorization documentation.
 
 ### Owner {#access-owner}
 

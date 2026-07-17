@@ -14,3 +14,7 @@ SRCS(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    no_llvm
+)

@@ -2681,6 +2681,16 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
         TestCheckColumnsNotNull(runtime, copyTablePath, {{"value", false}});
+
+        {
+            const auto describeResult = DescribePath(runtime, tablePath);
+            const auto& columns = describeResult.GetPathDescription().GetTable().GetColumns();
+            for (const auto& column : columns) {
+                if (column.GetName() == "value") {
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetSetNotNullInProgress(), false);
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST(SetNotNullFailsWhileCopyTableInProgress) {

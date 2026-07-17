@@ -10,6 +10,10 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <ydb/public/api/protos/ydb_scripting.pb.h>
+
+#include <util/string/builder.h>
+
 namespace NKafka {
 
 using namespace NActors;
@@ -29,8 +33,12 @@ void TKafkaMetadataService::Bootstrap(const NActors::TActorContext&) {
     }
 }
 
+TString TKafkaMetadataService::BuildTablePath(const TString& databasePath, const TString& tableName) {
+    return "/" + databasePath + "/.metadata/" + tableName;
+}
+
 TString TKafkaMetadataService::GetTablePath(const TString& tableName) const {
-    return "/" + DatabasePath + "/.metadata/" + tableName;
+    return BuildTablePath(DatabasePath, tableName);
 }
 
 void TKafkaMetadataService::InitializeConsumerMembersTable() {
@@ -342,6 +350,14 @@ void TKafkaMetadataService::Handle(TEvPrivate::TEvTableCreated::TPtr& ev, const 
         return;
     }
 
+    if (status == Ydb::StatusIds::ALREADY_EXISTS) {
+        LOG_INFO_S(ctx, NKikimrServices::KAFKA_PROXY,
+            "Kafka metadata table '" << msg->TableName << "' already exists, skipping modifications and migration");
+        ++ProcessedRequests;
+        ReplyIfRequired(ctx);
+        return;
+    }
+
     LOG_INFO_S(ctx, NKikimrServices::KAFKA_PROXY,
         "Kafka metadata table '" << msg->TableName << "' is created (status "
             << Ydb::StatusIds::StatusCode_Name(status) << "), enabling autopartitioning");
@@ -361,9 +377,179 @@ void TKafkaMetadataService::Handle(TEvPrivate::TEvTableAltered::TPtr& ev, const 
         return;
     }
 
+    if ((msg->TableName == "kafka_consumer_groups" || msg->TableName == "kafka_consumer_members"
+            || msg->TableName == "kafka_transactional_producers") && ShouldMigrate()) {
+        LOG_INFO_S(ctx, NKikimrServices::KAFKA_PROXY,
+            "Kafka metadata table '" << msg->TableName << "' autopartitioning enabled (status "
+                << Ydb::StatusIds::StatusCode_Name(status) << "), migrating rows from '"
+                << BuildTablePath(SourceDatabasePath, msg->TableName) << "'");
+        SendMigrationReadRequest(msg->TableName);
+        return;
+    }
+
     LOG_INFO_S(ctx, NKikimrServices::KAFKA_PROXY,
         "Kafka metadata table '" << msg->TableName << "' autopartitioning enabled (status "
             << Ydb::StatusIds::StatusCode_Name(status) << "), applying read-only ACL");
+
+    SendReadOnlyAclRequest(msg->TableName);
+}
+
+bool TKafkaMetadataService::ShouldMigrate() const {
+    return !SourceDatabasePath.empty() && SourceDatabasePath != DatabasePath;
+}
+
+TString TKafkaMetadataService::YqlType(const Ydb::Type& type) {
+    if (type.has_optional_type()) {
+        return YqlType(type.optional_type().item()) + "?";
+    }
+    switch (type.type_id()) {
+        case Ydb::Type::BOOL: return "Bool";
+        case Ydb::Type::INT16: return "Int16";
+        case Ydb::Type::UINT32: return "Uint32";
+        case Ydb::Type::INT64: return "Int64";
+        case Ydb::Type::UINT64: return "Uint64";
+        case Ydb::Type::DATETIME: return "Datetime";
+        case Ydb::Type::STRING: return "String";
+        case Ydb::Type::UTF8: return "Utf8";
+        default: return {};
+    }
+}
+
+void TKafkaMetadataService::SendMigrationReadRequest(const TString& tableName) {
+    const TString sourceTablePath = BuildTablePath(SourceDatabasePath, tableName);
+    KAFKA_LOG_D("Reading rows to migrate from " << sourceTablePath);
+
+    Ydb::Scripting::ExecuteYqlRequest request;
+    request.set_script(TStringBuilder()
+        << "--!syntax_v1\n"
+        << "DECLARE $database AS Utf8;\n"
+        << "SELECT * FROM `" << sourceTablePath << "`\n"
+        << "WHERE database = $database;");
+    {
+        Ydb::TypedValue database;
+        database.mutable_type()->set_type_id(Ydb::Type::UTF8);
+        database.mutable_value()->set_text_value(DatabasePath);
+        (*request.mutable_parameters())["$database"] = std::move(database);
+    }
+
+    using TExecuteYqlRpc =
+        NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Scripting::ExecuteYqlRequest, Ydb::Scripting::ExecuteYqlResponse>;
+
+    auto* actorSystem = TActivationContext::ActorSystem();
+    const TActorId selfId = SelfId();
+
+    auto future = NKikimr::NRpcService::DoLocalRpc<TExecuteYqlRpc>(
+        std::move(request),
+        SourceDatabasePath,
+        NACLib::TSystemUsers::Metadata().SerializeAsString(),
+        actorSystem,
+        /*internalCall*/ true);
+
+    future.Subscribe([actorSystem, selfId, tableName](const NThreading::TFuture<Ydb::Scripting::ExecuteYqlResponse>& f) {
+        const auto& operation = f.GetValue().operation();
+        Ydb::ResultSet resultSet;
+        TString error;
+        if (operation.status() != Ydb::StatusIds::SUCCESS) {
+            error = operation.DebugString();
+        } else {
+            Ydb::Scripting::ExecuteYqlResult result;
+            operation.result().UnpackTo(&result);
+            if (result.result_sets_size() > 0) {
+                resultSet = std::move(*result.mutable_result_sets(0));
+            }
+        }
+        actorSystem->Send(selfId, new TEvPrivate::TEvMigrationRead(tableName, operation.status(), error, std::move(resultSet)));
+    });
+}
+
+void TKafkaMetadataService::SendMigrationUpsertRequest(const TString& tableName, const Ydb::ResultSet& resultSet) {
+    const TString targetTablePath = GetTablePath(tableName);
+    const ui64 rowCount = resultSet.rows_size();
+    KAFKA_LOG_D("Upserting " << rowCount << " migrated rows into " << targetTablePath);
+
+    TStringBuilder structFields;
+    TStringBuilder columnNames;
+    Ydb::TypedValue rows;
+    auto* structType = rows.mutable_type()->mutable_list_type()->mutable_item()->mutable_struct_type();
+    for (int i = 0; i < resultSet.columns_size(); ++i) {
+        const auto& column = resultSet.columns(i);
+        auto* member = structType->add_members();
+        member->set_name(column.name());
+        *member->mutable_type() = column.type();
+        if (i > 0) {
+            structFields << ", ";
+            columnNames << ", ";
+        }
+        structFields << column.name() << ": " << YqlType(column.type());
+        columnNames << column.name();
+    }
+    for (const auto& row : resultSet.rows()) {
+        *rows.mutable_value()->add_items() = row;
+    }
+
+    Ydb::Scripting::ExecuteYqlRequest request;
+    request.set_script(TStringBuilder()
+        << "--!syntax_v1\n"
+        << "DECLARE $rows AS List<Struct<" << structFields << ">>;\n"
+        << "UPSERT INTO `" << targetTablePath << "`\n"
+        << "SELECT " << columnNames << "\n"
+        << "FROM AS_TABLE($rows);");
+    (*request.mutable_parameters())["$rows"] = std::move(rows);
+
+    using TExecuteYqlRpc =
+        NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Scripting::ExecuteYqlRequest, Ydb::Scripting::ExecuteYqlResponse>;
+
+    auto* actorSystem = TActivationContext::ActorSystem();
+    const TActorId selfId = SelfId();
+
+    auto future = NKikimr::NRpcService::DoLocalRpc<TExecuteYqlRpc>(
+        std::move(request),
+        DatabasePath,
+        NACLib::TSystemUsers::Metadata().SerializeAsString(),
+        actorSystem,
+        /*internalCall*/ true);
+
+    future.Subscribe([actorSystem, selfId, tableName, rowCount](const NThreading::TFuture<Ydb::Scripting::ExecuteYqlResponse>& f) {
+        const auto& operation = f.GetValue().operation();
+        const TString error = operation.status() == Ydb::StatusIds::SUCCESS ? TString{} : operation.DebugString();
+        actorSystem->Send(selfId, new TEvPrivate::TEvMigrationWritten(tableName, operation.status(), error, rowCount));
+    });
+}
+
+void TKafkaMetadataService::Handle(TEvPrivate::TEvMigrationRead::TPtr& ev, const TActorContext& ctx) {
+    const auto* msg = ev->Get();
+
+    if (msg->Status != Ydb::StatusIds::SUCCESS) {
+        LOG_ERROR_S(ctx, NKikimrServices::KAFKA_PROXY,
+            "Failed to read rows of table '" << msg->TableName << "' to migrate for database '" << DatabasePath
+                << "': " << msg->Error << ". Proceeding without migration.");
+        SendReadOnlyAclRequest(msg->TableName);
+        return;
+    }
+
+    if (msg->ResultSet.rows_size() == 0) {
+        LOG_INFO_S(ctx, NKikimrServices::KAFKA_PROXY,
+            "No rows of table '" << msg->TableName << "' to migrate into database '" << DatabasePath
+                << "', applying read-only ACL");
+        SendReadOnlyAclRequest(msg->TableName);
+        return;
+    }
+
+    SendMigrationUpsertRequest(msg->TableName, msg->ResultSet);
+}
+
+void TKafkaMetadataService::Handle(TEvPrivate::TEvMigrationWritten::TPtr& ev, const TActorContext& ctx) {
+    const auto* msg = ev->Get();
+
+    if (msg->Status != Ydb::StatusIds::SUCCESS) {
+        LOG_ERROR_S(ctx, NKikimrServices::KAFKA_PROXY,
+            "Failed to migrate " << msg->RowCount << " rows of table '" << msg->TableName << "' into database '"
+                << DatabasePath << "': " << msg->Error << ". Proceeding without migration.");
+    } else {
+        LOG_INFO_S(ctx, NKikimrServices::KAFKA_PROXY,
+            "Migrated " << msg->RowCount << " rows of table '" << msg->TableName << "' into database '"
+                << DatabasePath << "', applying read-only ACL");
+    }
 
     SendReadOnlyAclRequest(msg->TableName);
 }
@@ -395,22 +581,23 @@ void TKafkaMetadataService::ReplyIfRequired(const TActorContext& ctx) {
 }
 
 static bool TryRequestMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath,
-                                             TKafkaMetadataService::ETables tables, const TActorContext& ctx) {
+                                             const TString& sourceDatabasePath, TKafkaMetadataService::ETables tables,
+                                             const TActorContext& ctx) {
     if (!NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions() || status != Ydb::StatusIds::SCHEME_ERROR) {
         return false;
     }
 
     LOG_DEBUG_S(ctx, NKikimrServices::KAFKA_PROXY, TStringBuilder() << "Kafka metadata tables are missing for database '" << databasePath
             << "'. Requesting their creation and asking the client to retry.");
-    ctx.Register(new TKafkaMetadataService(databasePath, tables));
+    ctx.Register(new TKafkaMetadataService(databasePath, tables, sourceDatabasePath));
     return true;
 }
 
-bool TryRequestConsumerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const TActorContext& ctx) {
-    return TryRequestMetadataTablesCreation(status, databasePath, TKafkaMetadataService::ETables::ConsumerGroupsAndMembers, ctx);
+bool TryRequestConsumerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const TString& sourceDatabasePath, const TActorContext& ctx) {
+    return TryRequestMetadataTablesCreation(status, databasePath, sourceDatabasePath, TKafkaMetadataService::ETables::ConsumerGroupsAndMembers, ctx);
 }
 
-bool TryRequestProducerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const TActorContext& ctx) {
-    return TryRequestMetadataTablesCreation(status, databasePath, TKafkaMetadataService::ETables::TransactionalProducers, ctx);
+bool TryRequestProducerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const TString& sourceDatabasePath, const TActorContext& ctx) {
+    return TryRequestMetadataTablesCreation(status, databasePath, sourceDatabasePath, TKafkaMetadataService::ETables::TransactionalProducers, ctx);
 }
 } // namespace NKafka

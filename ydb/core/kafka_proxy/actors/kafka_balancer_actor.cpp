@@ -127,7 +127,7 @@ void TKafkaBalancerActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const
     const auto& record = ev->Get()->Record;
     auto status = record.GetYdbStatus();
 
-    if (TryRequestConsumerMetadataTablesCreation(status, GetMetadataDatabasePath(), ctx)) {
+    if (TryRequestConsumerMetadataTablesCreation(status, GetMetadataDatabasePath(), Context->ResourceDatabasePath, ctx)) {
         SendResponseFail(ctx, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
             "Kafka metadata tables are not initialized yet. Please retry.");
         return;

@@ -135,7 +135,7 @@ namespace NKafka {
         if (kafkaErr != EKafkaErrors::NONE_ERROR) {
             auto kqpQueryError = TStringBuilder() <<" Kqp error. Status# " << status << ", ";
 
-            if (TryRequestProducerMetadataTablesCreation(status, GetMetadataDatabasePath(), ctx)) {
+            if (TryRequestProducerMetadataTablesCreation(status, GetMetadataDatabasePath(), Context->ResourceDatabasePath, ctx)) {
                 SendResponseFail(COORDINATOR_NOT_AVAILABLE, kqpQueryError);
                 Die(ctx);
                 return;

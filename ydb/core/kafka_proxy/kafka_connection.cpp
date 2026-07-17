@@ -568,6 +568,11 @@ protected:
 
     void Handle(TEvKafka::TEvResponse::TPtr response, const TActorContext& ctx) {
         auto r = response->Get();
+        if (r->ErrorCode == EKafkaErrors::COORDINATOR_NOT_AVAILABLE &&
+            Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableServerlessTransactions())) {
+            KAFKA_LOG_I("EnableServerlessTransactions feature flag changed; closing connection so the client reconnects and rebinds Kafka metadata tables.");
+            CloseConnection = true;
+        }
         Reply(r->CorrelationId, r->Response, r->ErrorCode, ctx);
     }
 

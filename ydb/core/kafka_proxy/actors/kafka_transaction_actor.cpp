@@ -149,8 +149,8 @@ namespace NKafka {
         const TString metadataDatabasePath = GetMetadataDatabasePath();
         KAFKA_LOG_D("TTransactionActor metadataDatabasePath=" << metadataDatabasePath);
         const auto ydbStatus = ev->Get()->Record.GetYdbStatus();
-        bool requestedTableCreation = TryRequestProducerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ctx)
-                || TryRequestConsumerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ctx);
+        bool requestedTableCreation = TryRequestProducerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ResourceDatabasePath, ctx)
+                || TryRequestConsumerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ResourceDatabasePath, ctx);
         if (requestedTableCreation) {
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
                 "Kafka metadata tables are not initialized yet. Please retry.");

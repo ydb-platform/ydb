@@ -157,7 +157,7 @@ void TKafkaOffsetCommitActor::SendGenerationCheckRequest(const TActorContext& ct
 void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     KAFKA_LOG_D("KafkaOffsetCommitActor Context->DatabasePath=" << Context->DatabasePath);
-    if (TryRequestConsumerMetadataTablesCreation(record.GetYdbStatus(), GetMetadataDatabasePath(), ctx)) {
+    if (TryRequestConsumerMetadataTablesCreation(record.GetYdbStatus(), GetMetadataDatabasePath(), Context->ResourceDatabasePath, ctx)) {
         Error = COORDINATOR_NOT_AVAILABLE;
         SendFailedForAllPartitions(Error, ctx);
         return;
@@ -187,7 +187,7 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TP
     }
 
     auto tableGeneration = parser.ColumnParser("generation").GetUint64();
-    if (tableGeneration != static_cast<ui64>(Message->GenerationId)) {
+    if (tableGeneration > static_cast<ui64>(Message->GenerationId)) {
         KAFKA_LOG_I("Generation mismatch for group# " << Message->GroupId.value()
             << ". Expected# " << Message->GenerationId
             << ", got# " << tableGeneration);

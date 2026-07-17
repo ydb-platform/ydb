@@ -8,6 +8,7 @@
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 
 namespace NKafka {
 
@@ -20,8 +21,9 @@ public:
         TransactionalProducers,
     };
 
-    TKafkaMetadataService(const TString& databasePath, ETables tables)
+    TKafkaMetadataService(const TString& databasePath, ETables tables, const TString& sourceDatabasePath = {})
         : DatabasePath(databasePath)
+        , SourceDatabasePath(sourceDatabasePath)
         , TablesType(tables) {}
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -32,6 +34,8 @@ private:
             EvTableCreated = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
             EvTableAltered,
             EvAclModified,
+            EvMigrationRead,
+            EvMigrationWritten,
             EvEnd
         };
 
@@ -67,6 +71,32 @@ private:
             const Ydb::StatusIds::StatusCode Status;
             const TString Error;
         };
+
+        struct TEvMigrationRead: public NActors::TEventLocal<TEvMigrationRead, EvMigrationRead> {
+            TEvMigrationRead(const TString& tableName, Ydb::StatusIds::StatusCode status, const TString& error, Ydb::ResultSet&& resultSet)
+                : TableName(tableName)
+                , Status(status)
+                , Error(error)
+                , ResultSet(std::move(resultSet)) {}
+
+            const TString TableName;
+            const Ydb::StatusIds::StatusCode Status;
+            const TString Error;
+            const Ydb::ResultSet ResultSet;
+        };
+
+        struct TEvMigrationWritten: public NActors::TEventLocal<TEvMigrationWritten, EvMigrationWritten> {
+            TEvMigrationWritten(const TString& tableName, Ydb::StatusIds::StatusCode status, const TString& error, ui64 rowCount)
+                : TableName(tableName)
+                , Status(status)
+                , Error(error)
+                , RowCount(rowCount) {}
+
+            const TString TableName;
+            const Ydb::StatusIds::StatusCode Status;
+            const TString Error;
+            const ui64 RowCount;
+        };
     };
 
     STATEFN(StateWork) {
@@ -74,9 +104,12 @@ private:
             HFunc(TEvPrivate::TEvTableCreated, Handle);
             HFunc(TEvPrivate::TEvTableAltered, Handle);
             HFunc(TEvPrivate::TEvAclModified, Handle);
+            HFunc(TEvPrivate::TEvMigrationRead, Handle);
+            HFunc(TEvPrivate::TEvMigrationWritten, Handle);
         }
     }
 
+    static TString BuildTablePath(const TString& databasePath, const TString& tableName);
     TString GetTablePath(const TString& tableName) const;
 
     void InitializeConsumerMembersTable();
@@ -88,18 +121,26 @@ private:
     void SendReadOnlyAclRequest(const TString& tableName);
     void SendModifyPermissionsRequest(Ydb::Scheme::ModifyPermissionsRequest&& request, const TString& tableName);
 
+    bool ShouldMigrate() const;
+    void SendMigrationReadRequest(const TString& tableName);
+    void SendMigrationUpsertRequest(const TString& tableName, const Ydb::ResultSet& resultSet);
+    static TString YqlType(const Ydb::Type& type);
+
     void Handle(TEvPrivate::TEvTableCreated::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvTableAltered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAclModified::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvMigrationRead::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvMigrationWritten::TPtr& ev, const TActorContext& ctx);
     void ReplyIfRequired(const TActorContext& ctx);
 
     const TString DatabasePath;
+    const TString SourceDatabasePath;
     const ETables TablesType;
     ui32 TablesToCreate = 0;
     ui32 ProcessedRequests = 0;
 };
 
-bool TryRequestConsumerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const NActors::TActorContext& ctx);
-bool TryRequestProducerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const NActors::TActorContext& ctx);
+bool TryRequestConsumerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const TString& sourceDatabasePath, const NActors::TActorContext& ctx);
+bool TryRequestProducerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const TString& sourceDatabasePath, const NActors::TActorContext& ctx);
 
 } // NKafka

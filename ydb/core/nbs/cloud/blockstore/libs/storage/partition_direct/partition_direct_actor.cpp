@@ -46,22 +46,19 @@ TPartitionActor::TPartitionActor(
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "%s TPartitionActor: initialization started",
+        "%s initialization started",
         LogTitle.GetWithTime().c_str());
 }
 
 TPartitionActor::~TPartitionActor() = default;
 
-void TPartitionActor::PassAway()
+void TPartitionActor::OnDetach(const TActorContext& ctx)
 {
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "TPartitionActor: before detach");
-}
-
-void TPartitionActor::OnDetach(const TActorContext& ctx)
-{
+        "%s OnDetach",
+        LogTitle.GetWithTime().c_str());
     Die(ctx);
 }
 
@@ -70,6 +67,13 @@ void TPartitionActor::OnTabletDead(
     const TActorContext& ctx)
 {
     Y_UNUSED(ev);
+
+    LOG_INFO(
+        NActors::TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "%s OnTabletDead",
+        LogTitle.GetWithTime().c_str());
+
     Die(ctx);
 }
 
@@ -640,11 +644,13 @@ STFUNC(TPartitionActor::StateWork)
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_DEBUG_S(
+                LOG_ERROR(
                     TActivationContext::AsActorContext(),
                     NKikimrServices::NBS_PARTITION,
-                    "Unhandled event type: " << ev->GetTypeRewrite()
-                                             << " event: " << ev->ToString());
+                    "%s Unhandled event type: %u event %s ",
+                    LogTitle.GetWithTime().c_str(),
+                    ev->GetTypeRewrite(),
+                    ev->ToString().c_str());
             }
             break;
     }

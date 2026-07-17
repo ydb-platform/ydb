@@ -137,7 +137,7 @@ FROM
 
 При чтении можно запрашивать служебные поля и [пользовательские атрибуты сообщений](../datamodel/topic.md#message):
 
-| Поле | [Тип](../../reference/types/index.md) | Описание |
+| Поле | [Тип](../../yql/reference/types/index.md) | Описание |
 |------|-----|----------|
 | `__ydb_create_time` | `Timestamp` | Время создания сообщения |
 | `__ydb_write_time` | `Timestamp` | Время записи сообщения в топик |

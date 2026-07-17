@@ -1,12 +1,12 @@
-# Topic read and write formats
+# Data formats for reading/writing from topics
 
-This section describes data formats for [streaming queries](../../concepts/glossary.md#streaming-query) supported in {{ ydb-full-name }} when reading from topics, and supported [YQL types](../../yql/reference/types/index.md) for each format.
+This section describes the data formats of [streaming queries](../../concepts/glossary.md#streaming-query) supported in {{ydb-full-name}} when reading from topics, and the list of supported [YQL types](../../yql/reference/types/index.md) for each data format.
 
-## Supported formats {#formats}
+## Supported data formats {#formats}
 
-{{ ydb-short-name }} supports built-in formats (predefined defaults) and custom formats that you configure for specific tasks.
+{{ ydb-short-name }} supports built-in data formats (predefined by default) and custom formats (configurable by the user for specific tasks).
 
-Built-in formats:
+The list of built-in data formats in {{ ydb-short-name }} is given below:
 
 - [`csv_with_names`](#csv_with_names)
 - [`tsv_with_names`](#tsv_with_names)
@@ -16,15 +16,19 @@ Built-in formats:
 - [`parquet`](#parquet)
 - [`raw`](#raw)
 
-[Examples of parsing custom formats](#parsing).
+[Examples of parsing data in custom formats](#parsing).
 
+<<<<<<< HEAD
 In the examples on this page, `ydb_source` is a pre-created [external data source](../../concepts/datamodel/external_data_source.md), `input_topic` and `output_topic` are topics available through it, and `output_table` is a {{ ydb-short-name }} table.
+=======
+In the examples on this page, `input_topic` and `output_topic` are [topics](../../concepts/datamodel/topic.md) in the current database, and `output_table` is a {{ ydb-short-name }} table. For topics in another database, see [local and external topics](../../concepts/query_execution/topics.md#local-external-topics).
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
-## Write formats {#write_formats}
+## Formats for writing data {#write_formats}
 
 When writing to a topic, `SELECT` must return a single column of type `String`, `Utf8`, `Json`, or `Yson`. The column cannot be `Optional`.
 
-Single-column write:
+Writing a single column:
 
 ```sql
 CREATE STREAMING QUERY write_string_example AS
@@ -45,7 +49,12 @@ DO BEGIN
 END DO
 ```
 
+<<<<<<< HEAD
 To write multiple columns, serialize them to JSON:
+=======
+
+To write multiple columns, serialize them into JSON:
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 ```sql
 CREATE STREAMING QUERY write_json_example AS
@@ -67,15 +76,24 @@ DO BEGIN
 END DO
 ```
 
+<<<<<<< HEAD
 See also: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
+=======
 
-## Read formats {#read_formats}
+For more details on functions: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
+## Formats for reading data {#read_formats}
+
+<<<<<<< HEAD
 ### `csv_with_names` {#csv_with_names}
+=======
+### csv_with_names format {#csv_with_names}
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
-Based on [CSV](https://en.wikipedia.org/wiki/Comma-separated_values). Values are comma-separated; the first line contains column names.
+This format is based on the [CSV](https://en.wikipedia.org/wiki/Comma-separated_values) format. Data is placed in columns separated by commas, with column names in the first row.
 
-Example payload (one message):
+Example data (in a single message):
 
 ```text
 Year,Manufacturer,Model,Price
@@ -107,11 +125,16 @@ DO BEGIN
 END DO
 ```
 
+<<<<<<< HEAD
 ### `tsv_with_names` {#tsv_with_names}
+=======
 
-Based on [TSV](https://en.wikipedia.org/wiki/Tab-separated_values). Values are tab-separated (`0x9`); the first line contains column names.
+### tsv_with_names format {#tsv_with_names}
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
-Example payload (one message):
+This format is based on the [TSV](https://en.wikipedia.org/wiki/Tab-separated_values) format. Data is placed in columns separated by tab characters (code `0x9`), with column names in the first row.
+
+Example data (in a single message):
 
 ```text
 Year    Manufacturer    Model   Price
@@ -143,11 +166,16 @@ DO BEGIN
 END DO
 ```
 
+<<<<<<< HEAD
 ### `json_list` {#json_list}
+=======
 
-Based on [JSON](https://en.wikipedia.org/wiki/JSON). Each message must be a JSON **array** of objects.
+### json_list format {#json_list}
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
-Valid example:
+This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data. In this format, each message must be a JSON array of objects.
+
+Example of correct data (as a list of JSON objects):
 
 ```json
 [
@@ -156,7 +184,12 @@ Valid example:
 ]
 ```
 
+<<<<<<< HEAD
 Invalid example (separate objects per line, not wrapped in an array):
+=======
+
+Example of incorrect data (each message contains a separate JSON object, but these objects are not combined into a list):
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
@@ -187,19 +220,33 @@ DO BEGIN
 END DO
 ```
 
+<<<<<<< HEAD
 ### `json_each_row` {#json_each_row}
 
 Based on [JSON](https://en.wikipedia.org/wiki/JSON). Each message must be a single JSON **object**. Common for systems like Apache Kafka or [{{ ydb-full-name }} topics](../../concepts/datamodel/topic.md).
 
 Multiple separate JSON objects in one message are not supported; a JSON array is also not supported.
+=======
 
-Valid example (one message):
+### json_each_row format {#json_each_row}
+
+This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data. In this format, each message must be a JSON object. This format is used when transferring data through streaming systems, such as Apache Kafka or [{{ydb-full-name}} Topics](../../concepts/datamodel/topic.md).
+Multiple separate JSONs in a single message are not supported; a JSON list is also not supported.
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
+
+Example of correct data (in a single message):
 
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
 ```
 
+<<<<<<< HEAD
 Invalid example (two objects in one message):
+=======
+
+Example of incorrect data:
+
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
@@ -230,25 +277,35 @@ DO BEGIN
 END DO
 ```
 
+<<<<<<< HEAD
 ### `json_as_string` {#json_as_string}
+=======
 
-Based on [JSON](https://en.wikipedia.org/wiki/JSON).
+### json_as_string format {#json_as_string}
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
-Each message may contain:
+This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data.
 
-- One JSON object per line in valid JSON representation;
-- Or objects combined into a list.
+In this format, each message must contain:
 
-`json_as_string` does not split the JSON document into fields; each message is one JSON object (or one line). Useful when the set of fields varies between rows.
+- A correctly represented JSON object in each individual line of the file
+- JSON objects in correct representation combined into a list.
 
-Valid examples:
+The `json_as_string` format does not split the input JSON document into fields, but represents each message as a single JSON object (or a single line). This format is convenient when the list of fields is not the same across all rows and can vary.
+
+Example of correct data:
 
 ```json
 { "Year": 1997, "Attrs": { "Manufacturer": "Man_1", "Model": "Model_1" }, "Price": 3000.0 }
 { "Year": 1999, "Attrs": { "Manufacturer": "Man_2", "Model": "Model_2" }, "Price": 4900.00 }
 ```
 
+<<<<<<< HEAD
 In this format the schema must be a single column of an allowed type — see [below](#schema).
+=======
+
+In this format, the schema of the read data must consist of only one column with one of the allowed data types; see [below](#schema) for details.
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 Example query:
 
@@ -271,9 +328,14 @@ DO BEGIN
 END DO
 ```
 
+<<<<<<< HEAD
 ### `parquet` {#parquet}
+=======
 
-Reads message payloads in [Apache Parquet](https://parquet.apache.org) format.
+### parquet format {#parquet}
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
+
+This format allows reading the contents of messages in [Apache Parquet](https://parquet.apache.org) format.
 
 Example query:
 
@@ -299,9 +361,16 @@ DO BEGIN
 END DO
 ```
 
+<<<<<<< HEAD
 ### `raw` {#raw}
 
 Reads message payloads as raw bytes. Default schema: `SCHEMA(Data String)`.
+=======
+
+### raw format {#raw}
+
+This format allows reading the contents of messages as-is, in "raw" form. Data read in this way can be processed using [YQL](../../yql/reference/udf/list/string). Default schema: `SCHEMA(Data String)`.
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 Example query:
 
@@ -324,7 +393,14 @@ DO BEGIN
 END DO
 ```
 
+<<<<<<< HEAD
 ### Supported schema types {#schema}
+=======
+
+### Supported data types {#schema}
+
+Table of all supported types in the query schema:
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 | Type | csv_with_names | tsv_with_names | json_list | json_each_row | json_as_string | parquet | raw |
 |------|------------------|----------------|-----------|---------------|----------------|---------|-----|
@@ -332,6 +408,7 @@ END DO
 | `Bool` | ✓ | ✓ | ✓ | ✓ | | ✓ | |
 | `DyNumber` | | | | | | | |
 | `String`, `Utf8` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+<<<<<<< HEAD
 | `Json` | | | | | ✓ | | ✓ |
 | `JsonDocument` | | | | | | | |
 | `Yson` | | | | | | | |
@@ -339,13 +416,22 @@ END DO
 | `Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDatetime`, `TzTimestamp` | | | | | | | |
 | `Interval` | | | | | | | |
 | `Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDatetime64`, `TzTimestamp64` | | | | | | | |
+=======
+| `Json` |  |  |  |  | ✓ |  | ✓ |
+| `JsonDocument` |  |  |  |  |  |  |  |
+| `Yson` |  |  |  |  |  |  |  |
+| `Uuid` |  |  |  | ✓ |  |  |  |
+| `Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp` |  |  |  |  |  |  |  |
+| `Interval` |  |  |  |  |  |  |  |
+| `Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64` |  |  |  |  |  |  |  |
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 | `Optional<T>` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 ## Parsing custom formats {#parsing}
 
 ### JSON with built-in functions {#json_builtins}
 
-Sample data:
+Example data:
 
 ```json
 {"key": 1997, "value": "42"}
@@ -373,9 +459,18 @@ DO BEGIN
 END DO
 ```
 
+<<<<<<< HEAD
 See [JSON_VALUE](../../yql/reference/builtins/json.md#json_value).
 
 ### JSON with Yson {#json_yson}
+=======
+
+For more details about functions: [JSON_VALUE](../../yql/reference/builtins/json.md#json_value).
+
+### Parsing JSON with the Yson library {#json_yson}
+
+Example data ( [Change Data Capture](../../concepts/cdc.md) format):
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 Sample data ([Change Data Capture](../../concepts/cdc.md) style):
 
@@ -417,16 +512,26 @@ DO BEGIN
 END DO
 ```
 
+<<<<<<< HEAD
 See also:
+=======
+
+For more details on functions:
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 - [Yson::ConvertTo](../../yql/reference/udf/list/yson#ysonconvertto)
 - [FLATTEN COLUMNS](../../yql/reference/syntax/select/flatten.md#flatten-columns).
 
 ### DSV (TSKV) {#dsv}
 
-Sample data:
+Example data:
 
+<<<<<<< HEAD
 ```text
+=======
+
+```json
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 name=Elena  uid=95792365232151958
 name=Denis  uid=78086244452810046
 name=Mikhail    uid=70609792906901286
@@ -456,7 +561,12 @@ DO BEGIN
 END DO
 ```
 
+<<<<<<< HEAD
 See also:
+=======
+
+For more details on functions:
+>>>>>>> ac24e5289e4 (Auto-translate docs from PR #39856 (#46871))
 
 - [String::SplitToList](../../yql/reference/udf/list/string.md#splittolist)
 - [DictLookup](../../yql/reference/builtins/dict.md#dictlookup)

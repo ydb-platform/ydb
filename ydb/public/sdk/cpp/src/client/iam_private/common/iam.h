@@ -2,6 +2,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/common/generic_provider.h>
 
+#include <library/cpp/threading/future/core/coroutine_traits.h>
+
 namespace NYdb::inline Dev {
 
 template<typename TRequest, typename TResponse, typename TService>
@@ -40,14 +42,33 @@ private:
         // because TSimpleCoreFacility allows only one periodic task.
         TCredentialsProvider(const TIamServiceParams& params,
                              std::weak_ptr<ICoreFacility> outerFacility,
-                             TCredentialsProviderPtr authProvider)
+                             TCredentialsProviderPtr authProvider,
+                             bool waitForToken = true)
             : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
                 MakeRequestFiller(params),
                 MakeRpc(),
                 std::move(outerFacility),
-                std::move(authProvider))
+                std::move(authProvider),
+                waitForToken)
         {}
     };
+
+    static NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsyncImpl(
+        TIamServiceParams params,
+        NThreading::TFuture<TCredentialsProviderPtr> authProvider,
+        std::weak_ptr<ICoreFacility> facility,
+        std::shared_ptr<ICoreFacility> ownedFacility = {})
+    {
+        auto serviceProvider = std::make_shared<TCredentialsProvider>(
+            params, std::move(facility), co_await authProvider, false);
+        auto ready = serviceProvider->GetReadyFuture();
+        TCredentialsProviderPtr provider = std::move(serviceProvider);
+        if (ownedFacility) {
+            provider = std::make_shared<TOwningFacilityCredentialsProvider>(
+                std::move(ownedFacility), std::move(provider));
+        }
+        co_return co_await ready.Return(std::move(provider));
+    }
 
 public:
     TIamServiceCredentialsProviderFactory(const TIamServiceParams& params)
@@ -56,7 +77,7 @@ public:
 
     // Deprecated. Kept for backward compatibility — see comment on TIamJwtCredentialsProviderFactory.
     // The nested auth provider gets its own facility (via a recursive no-arg CreateProvider() that
-    // returns a TOwningFacilityCredentialsProvider). Sharing a TSimpleCoreFacility between two gRPC
+    // owns its private facility). Sharing a TSimpleCoreFacility between two gRPC
     // IAM providers would abort: each one registers a periodic task and the facility allows only one.
     TCredentialsProviderPtr CreateProvider() const override final {
         auto authProvider = Params_.SystemServiceAccountCredentials->CreateProvider();
@@ -67,8 +88,21 @@ public:
             std::move(outerFacility), std::move(serviceProvider));
     }
 
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const override {
+        auto outerFacility = CreateSimpleCoreFacility();
+        return CreateProviderAsyncImpl(
+            Params_, Params_.SystemServiceAccountCredentials->CreateProviderAsync(),
+            outerFacility, outerFacility);
+    }
+
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
         return std::make_shared<TCredentialsProvider>(Params_, std::move(facility));
+    }
+
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
+        return CreateProviderAsyncImpl(
+            Params_, Params_.SystemServiceAccountCredentials->CreateProviderAsync(facility),
+            facility);
     }
 
     std::string GetClientIdentity() const override final {

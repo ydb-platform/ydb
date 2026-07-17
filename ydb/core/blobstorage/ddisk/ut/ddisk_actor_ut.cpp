@@ -306,6 +306,54 @@ std::unique_ptr<TEventHandle<NDDisk::TEvWriteResult>> DoWrite(TTestContext& ctx,
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDDiskActorTest) {
+    Y_UNIT_TEST(PoisonNotifiesNodeWardenImmediately) {
+        TTestContext ctx;
+        ctx.Runtime.RegisterService(MakeBlobStorageNodeWardenID(NodeId), ctx.Edge);
+
+        const TDiskHandle disk = ctx.CreateDDisk(43, 1);
+        const TActorId ddiskActorId =
+            ctx.Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(disk.ServiceId);
+        const TActorId persistentBufferActorId =
+            ctx.Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(disk.PBServiceId);
+        UNIT_ASSERT(ddiskActorId);
+        UNIT_ASSERT(persistentBufferActorId);
+
+        std::unique_ptr<IEventHandle> blockedPersistentBufferPoison;
+        ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (!blockedPersistentBufferPoison &&
+                    ev->GetTypeRewrite() == TEvents::TSystem::Poison &&
+                    ev->Recipient == persistentBufferActorId) {
+                blockedPersistentBufferPoison = std::move(ev);
+                return false;
+            }
+            return true;
+        };
+
+        SendToDDisk(ctx, disk.ServiceId, new TEvents::TEvPoison());
+        ui32 eventsProcessed = 0;
+        ctx.Runtime.Sim([&] {
+            return !blockedPersistentBufferPoison && ++eventsProcessed <= 200;
+        });
+        UNIT_ASSERT_C(blockedPersistentBufferPoison, "DDisk must poison its persistent buffer actor");
+        UNIT_ASSERT(!ctx.Runtime.WrapInActorContext(ddiskActorId, [](IActor*) {}));
+        UNIT_ASSERT(ctx.Runtime.WrapInActorContext(persistentBufferActorId, [](IActor*) {}));
+
+        ctx.Runtime.FilterFunction = {};
+        const auto gone = WaitFromDDisk<TEvents::TEvGone>(ctx);
+
+        ctx.Runtime.Send(std::move(blockedPersistentBufferPoison), NodeId);
+
+        UNIT_ASSERT_VALUES_EQUAL(gone->Sender, ddiskActorId);
+        UNIT_ASSERT(!ctx.Runtime.WrapInActorContext(ddiskActorId, [](IActor*) {}));
+        ui32 persistentBufferEventsProcessed = 0;
+        ctx.Runtime.Sim([&] {
+            return ctx.Runtime.WrapInActorContext(persistentBufferActorId, [](IActor*) {})
+                && ++persistentBufferEventsProcessed <= 200;
+        });
+        UNIT_ASSERT_C(!ctx.Runtime.WrapInActorContext(persistentBufferActorId, [](IActor*) {}),
+            "Persistent buffer must stop after receiving poison");
+    }
+
     Y_UNIT_TEST(SessionValidation) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(1, 1);

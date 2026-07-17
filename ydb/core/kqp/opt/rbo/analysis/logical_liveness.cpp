@@ -24,6 +24,7 @@ public:
         }
 
         AddLiveColumns(root.GetInput(), rootColumns);
+        SeedStageConnectionLiveness(root);
         Propagate();
     }
 
@@ -87,6 +88,33 @@ public:
     }
 
 private:
+    void SeedStageConnectionLiveness(TOpRoot& root) {
+        for (const auto& iter : root) {
+            const auto& parent = iter.Current;
+            for (const auto& child : parent->Children) {
+                if (!parent->Props.StageId || !child->Props.StageId
+                    || *parent->Props.StageId == *child->Props.StageId)
+                {
+                    continue;
+                }
+
+                const auto producerStageId = static_cast<ui32>(*child->Props.StageId);
+                const auto consumerStageId = static_cast<ui32>(*parent->Props.StageId);
+                const auto& connections = Props.StageGraph.GetConnections(producerStageId, consumerStageId);
+
+                TInfoUnitSet required;
+                for (const auto& connection : connections) {
+                    AddInfoUnits(required, connection->GetUsedIUs());
+                }
+                if (required.empty()) {
+                    continue;
+                }
+
+                AddLiveColumns(child, required);
+            }
+        }
+    }
+
     void Enqueue(const TIntrusivePtr<IOperator>& op) {
         if (op && Queued.insert(op.get()).second) {
             Queue.push_back(op);

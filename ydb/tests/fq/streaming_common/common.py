@@ -46,7 +46,7 @@ def get_ydb_config(request):
         "enable_topics_sql_io_operations",
         "enable_streaming_queries_pq_sink_deduplication",
         "enable_external_data_source_auth_method_iam",
-        "allow_ydb_requests_without_database"
+        "allow_ydb_requests_without_database",
     }
     if enable_shared_reading_in_streaming_queries:
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
@@ -58,6 +58,18 @@ def get_ydb_config(request):
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
     else:
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
+
+    replication_config = {}
+    if is_compatibility_tests:
+        replication_config = {
+            "iam_service_control": {
+                "endpoint": os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666"),
+                "service_id": "ydb",
+                "microservice_id": "data-plane",
+                "resource_type": "resource-manager.cloud",
+                "enable_ssl": False,
+            },
+        }
 
     config = KikimrConfigGenerator(
         erasure=Erasure.NONE,
@@ -74,19 +86,12 @@ def get_ydb_config(request):
             "enable_watermarks_advanced": enable_watermarks_advanced,
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
             "enable_compile_cache_warmup": False,
+            "enable_channel_memory_tracking": False,
         },
-        replication_config={
-            "iam_service_control": {
-                "endpoint": os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666"),
-                "service_id": "ydb",
-                "microservice_id": "data-plane",
-                "resource_type": "resource-manager.cloud",
-          #      "enable_ssl": False,
-            },
-        },
+        replication_config=replication_config,
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=False,
-        log_prefix="logfile_main_"
+        log_prefix="logfile_main_",
     )
 
     config.yaml_config["log_config"]["default_level"] = 8
@@ -150,18 +155,14 @@ class Kikimr:
         self.first_node = random.choice(list(self.cluster.slots.values()))
         self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", f"/{config.domain_name}")
         self.ydb_client = YdbClient(
-            database=self.endpoint.database,
-            endpoint=f"grpc://{self.endpoint.endpoint}",
-            enable_discovery=False#enable_discovery,
+            database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}", enable_discovery=False
         )
         self.ydb_client.wait_connection()
 
     def recreate_driver(self):
         self.ydb_client.stop()
         self.ydb_client = YdbClient(
-            database=self.endpoint.database,
-            endpoint=f"grpc://{self.endpoint.endpoint}",
-            enable_discovery=False#enable_discovery,
+            database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}", enable_discovery=False
         )
         self.ydb_client.wait_connection()
 

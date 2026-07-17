@@ -5,6 +5,7 @@ ydb/core/blobstorage/ddisk/ut TDDiskActorTest.LateOutdatedSyncReadResultDoesNotL
 ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Block42
 ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_balancing unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepot.LoadPutAndRead
 ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepot.VerifiedRandom
 ydb/core/blobstorage/ut_blobstorage/ut_blob_depot unittest.sole chunk
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnDiscover
@@ -105,6 +106,7 @@ ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublic
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql-EnableIndexStreamWrite
+ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexDeniesTableModificationsSql-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme unittest.[*/*] chunk
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/kqp/ut/service unittest.[*/*] chunk
@@ -431,6 +433,7 @@ ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_result_offset_limit
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_set_result
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_streaming_query
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_stop_idempotency
+ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestLoadFromSeveralStates
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/backup Backup.UuidValue
 ydb/tests/functional/benchmarks_init py3test.[test_generator.py */*] chunk
@@ -1091,6 +1094,7 @@ ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_5.test_tpch[8]
 ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_5.test_tpch[9]
 ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnCompression.test_alter_to_compression[zstd_20_compression-algorithm=zstd,level=20]
 ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnCompression.test_alter_zstd_level_from_0_to_19_compression
+ydb/tests/olap/scenario py3test.[*/*] chunk
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
 ydb/tests/stress/backup/tests test_workload.py.TestYdbBackupWorkload.test
 ydb/tests/stress/cdc/tests test_workload.py.TestYdbWorkload.test

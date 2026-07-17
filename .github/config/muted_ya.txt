@@ -44,10 +44,6 @@ ydb/public/sdk/cpp/tests/integration/topic gtest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffset
 ydb/services/persqueue_v1/ut unittest.[*/*] chunk
-ydb/tests/compatibility/common test_data_type.py.TestDataType.test_data_type[restart_prestable-26-3_to_prestable-26-3-COLUMN]
-ydb/tests/compatibility/common test_data_type.py.TestDataType.test_data_type[restart_prestable-26-3_to_prestable-26-3-ROW]
-ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_prestable-26-3_to_prestable-26-3-COLUMN]
-ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_prestable-26-3_to_prestable-26-3-ROW]
 ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_prestable-26-4_to_prestable-26-4-COLUMN]
 ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_prestable-26-4_to_stable-26-3-1-COLUMN]
 ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_stable-26-3-1_to_prestable-26-4-COLUMN]
@@ -84,6 +80,7 @@ ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFi
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
 ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation
+ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation_name_with_symbols
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_multiple_disks_creation
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[fifo]

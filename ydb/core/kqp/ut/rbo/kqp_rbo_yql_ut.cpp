@@ -3051,7 +3051,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 inner join 
                 `/Root/Table2` as t2 on (t1.Value1 = t2.Value1)
                 order by t1.Value1, t2.Value2;
-            "),
+            )",
             R"(
                 SELECT t1.Value1, t2.Value2
                 FROM `/Root/Table` as t1 

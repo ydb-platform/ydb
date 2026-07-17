@@ -215,14 +215,6 @@ public:
             settings.Add(std::move(dateFormat));
         }
 
-        if (auto watermarkAdjustLateEvents = topicKeyParser.GetWatermarkAdjustLateEvents()) {
-            settings.Add(std::move(watermarkAdjustLateEvents));
-        }
-
-        if (auto watermarkDropLateEvents = topicKeyParser.GetWatermarkDropLateEvents()) {
-            settings.Add(std::move(watermarkDropLateEvents));
-        }
-
         if (auto watermarkGranularity = topicKeyParser.GetWatermarkGranularity()) {
             settings.Add(std::move(watermarkGranularity));
         }

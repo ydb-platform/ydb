@@ -1691,12 +1691,12 @@ public:
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
-            YDB_LOG_INFO_CTX(ctx, "Started cluster aggregation request",
+            YDB_LOG_INFO_CTX(ctx, "Started cluster aggregation request v1",
                 {"initiator", Initiator},
                 {"selfId", ctx.SelfID},
                 {"workerId", WorkerId});
         } else {
-            YDB_LOG_INFO_CTX(ctx, "Spawning worker actors",
+            YDB_LOG_INFO_CTX(ctx, "Spawning worker actors v1",
                 {"selfId", ctx.SelfID});
             for (ui32 i = 0; i < WorkerId; ++i) {
                 ctx.Register(new TClusterLabeledCountersAggregatorActorV1(ctx.SelfID, TabletType, WorkerId, i));
@@ -1999,12 +1999,12 @@ public:
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
-            YDB_LOG_INFO_CTX(ctx, "Started cluster aggregation request",
+            YDB_LOG_INFO_CTX(ctx, "Started cluster aggregation request v2",
                 {"initiator", Initiator},
                 {"selfId", ctx.SelfID},
                 {"workerId", WorkerId});
         } else {
-            YDB_LOG_INFO_CTX(ctx, "Spawning worker actors",
+            YDB_LOG_INFO_CTX(ctx, "Spawning worker actors v2",
                 {"selfId", ctx.SelfID});
             for (ui32 i = 0; i < WorkerId; ++i) {
                 ctx.Register(new TClusterLabeledCountersAggregatorActorV2(ctx.SelfID, TabletType, Group, WorkerId, i));

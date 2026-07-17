@@ -62,6 +62,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
     ForsetiOpPieceSize = TControlWrapper(Cfg->IoPieceSizeBytes, 1, Cfg->BufferPoolBufferSizeBytes);
     ForsetiOpPieceSizeCached = ForsetiOpPieceSize;
+    EnableFreeChunksSortingHDD = TControlWrapper(Cfg->SortFreeChunksHDD, 0, 1);
     UseNoopSchedulerSSD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
     UseNoopSchedulerHDD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
 
@@ -2810,6 +2811,7 @@ bool TPDisk::Initialize() {
             REGISTER_LOCAL_CONTROL(ForsetiMilliBatchSize);
             REGISTER_LOCAL_CONTROL(ForsetiMaxLogBatchNs);
             REGISTER_LOCAL_CONTROL(ForsetiOpPieceSize);
+            REGISTER_LOCAL_CONTROL(EnableFreeChunksSortingHDD);
             icb->RegisterSharedControl(UseNoopSchedulerHDD, "PDiskControls.UseNoopSchedulerHDD");
             icb->RegisterSharedControl(UseNoopSchedulerSSD, "PDiskControls.UseNoopSchedulerSSD");
 
@@ -3793,6 +3795,10 @@ void TPDisk::Update() {
             while (!ForsetiScheduler.IsEmpty()) {
                 GetJobsFromForsetti();
             }
+        }
+
+        if (!PDiskCategory.IsSolidState()) { // HDD
+            Keeper.SetFreeChunksSortingEnabled(EnableFreeChunksSortingHDD);
         }
 
         // Switch the scheduler when possible

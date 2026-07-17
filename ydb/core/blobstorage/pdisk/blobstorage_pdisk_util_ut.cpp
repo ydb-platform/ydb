@@ -3,6 +3,7 @@
 #include "blobstorage_pdisk_chunk_id_formatter.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_driveestimator.h"
+#include "blobstorage_pdisk_free_chunks.h"
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_sectorrestorator.h"
@@ -24,6 +25,24 @@
 namespace NKikimr { namespace NPDisk {
 
 Y_UNIT_TEST_SUITE(TPDiskUtil) {
+
+    Y_UNIT_TEST(FreeChunksSortingCanBeToggled) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
+        auto counter = counters->GetCounter("FreeChunks");
+        TFreeChunks freeChunks(counter, 3);
+
+        freeChunks.SetSortingEnabled(false);
+        freeChunks.Push(5);
+        freeChunks.Push(1);
+        UNIT_ASSERT_VALUES_EQUAL(freeChunks.Pop(), 5);
+
+        freeChunks.Push(4);
+        freeChunks.Push(2);
+        freeChunks.Push(3);
+        freeChunks.SetSortingEnabled(true);
+        UNIT_ASSERT_VALUES_EQUAL(freeChunks.Pop(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(freeChunks.Pop(), 2);
+    }
 
     Y_UNIT_TEST(AtomicBlockCounterFunctional) {
         TAtomicBlockCounter counter;

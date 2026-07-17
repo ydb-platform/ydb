@@ -938,6 +938,27 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT_C(!result.GetCommitTimestamp().has_value(), "Commit timestamp should not be present for read-only query");
     }
 
+    Y_UNIT_TEST(StrictSerializable_CommitTimestamp_ReadOnly_ExplicitCommit) {
+        TKikimrSettings settings;
+        settings.SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto beginResult = session.BeginTransaction(NYdb::NQuery::TTxSettings::StrictSerializableRW()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(beginResult.GetStatus(), EStatus::SUCCESS, beginResult.GetIssues().ToString());
+        auto tx = beginResult.GetTransaction();
+
+        auto execResult = session.ExecuteQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 100u;
+        )", NYdb::NQuery::TTxControl::Tx(tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+
+        auto commitResult = tx.Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+        UNIT_ASSERT_C(!commitResult.GetCommitTimestamp().has_value(), "Commit timestamp should not be present for read-only explicit commit");
+    }
+
     Y_UNIT_TEST(StrictSerializable_CommitTimestamp_SerializableRW) {
         TKikimrSettings settings;
         settings.SetEnableStrictSerializableIsolation(true);

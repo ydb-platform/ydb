@@ -221,7 +221,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                         std::move(commitTimestamp)
                     ));
                 } else {
-                    self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}, std::move(stats), {}));
+                    self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}, std::move(stats), {}));  // No commit timestamp on error
                 }
 
                 return;

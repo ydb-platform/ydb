@@ -16,7 +16,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/metrics
     ydb/public/sdk/cpp/src/client/query/impl
     ydb/public/sdk/cpp/src/client/result
-    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/types
     ydb/public/sdk/cpp/src/client/types/operation
 )
 

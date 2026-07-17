@@ -11,6 +11,7 @@
 #include "blobstorage_pdisk_ut_defs.h"
 #include "blobstorage_pdisk_util_atomicblockcounter.h"
 #include "blobstorage_pdisk_util_flightcontrol.h"
+#include "blobstorage_pdisk_util_idlecounter.h"
 #include "blobstorage_pdisk_util_sector.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
@@ -21,6 +22,7 @@
 #include <util/stream/null.h>
 #include <util/system/tempfile.h>
 #include <cstring>
+#include <thread>
 
 namespace NKikimr { namespace NPDisk {
 
@@ -116,143 +118,167 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         auto count = c->GetCounter("l_count");
 
         // functional
-        l.Set(true, 1);
+        l.Set(true);
         UNIT_ASSERT_EQUAL(state->Val(), 1);
         UNIT_ASSERT_EQUAL(count->Val(), 1);
-        l.Set(false, 2);
+        l.Set(false);
         UNIT_ASSERT_EQUAL(state->Val(), 0);
         UNIT_ASSERT_EQUAL(count->Val(), 1);
-        l.Set(false, 3);
+        l.Set(false);
         UNIT_ASSERT_EQUAL(state->Val(), 0);
         UNIT_ASSERT_EQUAL(count->Val(), 1);
-        l.Set(true, 4);
+        l.Set(true);
         UNIT_ASSERT_EQUAL(state->Val(), 1);
         UNIT_ASSERT_EQUAL(count->Val(), 2);
-        l.Set(true, 5);
+        l.Set(true);
         UNIT_ASSERT_EQUAL(state->Val(), 1);
         UNIT_ASSERT_EQUAL(count->Val(), 2);
 
-        // Single reordering
-        l.Set(true, 7);
-        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        // state computed by a callable under the lock
+        bool current = false;
+        l.Set([&] { return current; });
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
         UNIT_ASSERT_EQUAL(count->Val(), 2);
-        l.Set(false, 6);
+        current = true;
+        l.Set([&] { return current; });
         UNIT_ASSERT_EQUAL(state->Val(), 1);
         UNIT_ASSERT_EQUAL(count->Val(), 3);
-
-        // Multiple reorderings
-        l.Set(false, 8);
-        UNIT_ASSERT_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_EQUAL(count->Val(), 3);
-        l.Set(true, 12);
-        UNIT_ASSERT_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_EQUAL(count->Val(), 3);
-        l.Set(false, 13);
-        UNIT_ASSERT_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_EQUAL(count->Val(), 3);
-        l.Set(true, 14);
-        UNIT_ASSERT_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_EQUAL(count->Val(), 3);
-        l.Set(false, 11);
-        UNIT_ASSERT_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_EQUAL(count->Val(), 3);
-        l.Set(true, 10);
-        UNIT_ASSERT_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_EQUAL(count->Val(), 3);
-        l.Set(true, 9);
-        UNIT_ASSERT_EQUAL(state->Val(), 1);
-        UNIT_ASSERT_EQUAL(count->Val(), 6);
-
-        // Multiple reorderings with pause
-        l.Set(false, 15);
-        UNIT_ASSERT_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_EQUAL(count->Val(), 6);
-        l.Set(false, 17);
-        UNIT_ASSERT_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_EQUAL(count->Val(), 6);
-        l.Set(true, 18);
-        UNIT_ASSERT_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_EQUAL(count->Val(), 6);
-        l.Set(true, 20);
-        UNIT_ASSERT_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_EQUAL(count->Val(), 6);
-        l.Set(true, 22);
-        UNIT_ASSERT_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_EQUAL(count->Val(), 6);
-        l.Set(false, 21);
-        UNIT_ASSERT_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_EQUAL(count->Val(), 6);
-        l.Set(true, 16);
-        UNIT_ASSERT_EQUAL(state->Val(), 1);
-        UNIT_ASSERT_EQUAL(count->Val(), 8);
-        l.Set(false, 19);
-        UNIT_ASSERT_EQUAL(state->Val(), 1);
-        UNIT_ASSERT_EQUAL(count->Val(), 10);
-
-        // Resizing
-        l.Set(false, 23);
-        UNIT_ASSERT_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_EQUAL(count->Val(), 10);
-        ui16 seqno = 24; // skip one
-        for (int i = 0; i < 199; i++) {
-            l.Set(i % 2 == 1 , ++seqno);
-            UNIT_ASSERT_EQUAL(count->Val(), 10);
-        }
-        l.Set(true, 24); // place missed one
-        UNIT_ASSERT_EQUAL(state->Val(), 0);
-        UNIT_ASSERT_EQUAL(count->Val(), 110);
-
-        { // Seqno overflow
-            ui64 N = 3ull << 16ull;
-            i64 cnt = count->Val();
-            for (ui64 i = 0; i < N; i++) {
-                bool st = (i % 3 == 0);
-                l.Set(st, ++seqno);
-                if (st) {
-                    cnt++;
-                }
-                UNIT_ASSERT_EQUAL(count->Val(), cnt);
-            }
-            UNIT_ASSERT_EQUAL(state->Val(), 0);
-        }
-
-        { // Seqno overflow and reorderings with max possible size
-            i64 cnt = count->Val();
-            i64 cntStart = cnt;
-            ui16 missedSeqno = ++seqno;
-            bool st = false;
-            UNIT_ASSERT(missedSeqno > 10);
-            while (seqno != missedSeqno - 2) { // one for missed and one for initial
-                bool stPrev = st;
-                st = (seqno % 5 == 0);
-                l.Set(st, ++seqno);
-                if (st && !stPrev) {
-                    cnt++;
-                }
-                UNIT_ASSERT_EQUAL(count->Val(), cntStart);
-            }
-            l.Set(false, missedSeqno); // place missed one
-            UNIT_ASSERT_EQUAL((bool)state->Val(), st);
-            UNIT_ASSERT_EQUAL(count->Val(), cnt);
-        }
     }
 
-    Y_UNIT_TEST(LightOverflow) {
+    Y_UNIT_TEST(LightConcurrent) {
+        // Concurrent writers update and publish shared state under the light's
+        // lock, so every mutation is reflected in the final state.
         TLight l;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
         l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l"));
         auto state = c->GetCounter("l_state");
         auto count = c->GetCounter("l_count");
 
-        { // Seqno overflow
-            ui64 seqno = 0;
-            ui64 N = 3ull << 16ull;
-            for (ui64 i = 0; i < N; i++) {
-                l.Set(false, seqno);
-                ++seqno;
-            }
-            UNIT_ASSERT_EQUAL(state->Val(), 0);
+        i64 inFlight = 0;
+        TVector<std::thread> threads;
+        for (ui32 t = 0; t < 8; ++t) {
+            threads.emplace_back([&] {
+                for (ui32 i = 0; i < 10000; ++i) {
+                    l.Set([&] {
+                        ++inFlight;
+                        return inFlight > 0;
+                    });
+                    l.Set([&] {
+                        --inFlight;
+                        return inFlight > 0;
+                    });
+                }
+            });
         }
+        for (std::thread& thread : threads) {
+            thread.join();
+        }
+        UNIT_ASSERT_EQUAL(inFlight, 0);
+        UNIT_ASSERT_GT(count->Val(), 0);
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+    }
+
+    Y_UNIT_TEST(IdleCounterMergesOverlappingTasks) {
+        // Tasks overlapping in time must form one continuous busy period:
+        // a task finishing while another is in flight must not blink the light
+        TLight light;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
+        light.Initialize(c, TLightCounterConfig::WithDefaultLightSet("idle"));
+        auto state = c->GetCounter("idle_state"); // 1 = idle
+        auto count = c->GetCounter("idle_count"); // number of idle periods
+        TIdleCounter tasks(light);
+
+        tasks.Increment(); // task 1 starts
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        Sleep(TDuration::MilliSeconds(200));
+        tasks.Increment(); // task 2 starts
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        tasks.Decrement(); // task 1 ends, task 2 is still in flight
+        UNIT_ASSERT_EQUAL(state->Val(), 0); // no idle blink
+        UNIT_ASSERT_EQUAL(count->Val(), 0);
+        Sleep(TDuration::MilliSeconds(200));
+        tasks.Decrement(); // task 2 ends
+        UNIT_ASSERT_EQUAL(state->Val(), 1); // the single merged busy period is over
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+        // All elapsed time belongs to the busy (green) period, none to idle (red)
+        UNIT_ASSERT_GE(light.GetGreenMs(), 300);
+        UNIT_ASSERT_EQUAL(light.GetRedMs(), 0);
+
+        // Task ends signaled in reverse order (a stalled thread): the refcount
+        // does not care which task an event belongs to, still one busy period
+        tasks.Increment(); // task 3 starts
+        tasks.Increment(); // task 4 starts
+        tasks.Decrement(); // task 4 ends first
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+        tasks.Decrement(); // task 3 ends last
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 2);
+    }
+
+    Y_UNIT_TEST(PDiskMonL6Staleness) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
+        THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
+        auto state = counters->GetSubgroup("subsystem", "state")->GetCounter("L6_state");
+
+        // A fresh operation that exceeded the reordering threshold turns L6 on
+        AtomicSet(mon->LastDoneOperationTimestamp, HPNow());
+        AtomicSet(mon->LastOperationReordered, 1);
+        mon->UpdateL6();
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+
+        // The periodic update recomputes the state from shared data, so it
+        // cannot overwrite a fresh operation with a stale force-off decision
+        mon->UpdateLights();
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+
+        // The claim expires when no operation completed for too long
+        AtomicSet(mon->LastDoneOperationTimestamp,
+                HPNow() - HPCyclesMs(ui64(TPDiskMon::L6StalenessSec * 1000) + 1000));
+        mon->UpdateLights();
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+
+        // A fresh operation below the threshold keeps L6 off
+        AtomicSet(mon->LastDoneOperationTimestamp, HPNow());
+        AtomicSet(mon->LastOperationReordered, 0);
+        mon->UpdateL6();
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+    }
+
+    Y_UNIT_TEST(BackpressureLightMergesOverlappingStalls) {
+        // Mirrors the L7 usage in TCompletionThreadsPool: every stalled thread
+        // increments the counter on entry and decrements it on exit inside Set
+        // callbacks, so the light must burn until the last thread leaves
+        TLight l;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> c(new ::NMonitoring::TDynamicCounters());
+        l.Initialize(c, TLightCounterConfig::WithDefaultLightSet("l7"));
+        auto state = c->GetCounter("l7_state"); // 1 = backpressure
+        auto count = c->GetCounter("l7_count"); // number of backpressure periods
+
+        ui64 stalled = 0;
+        auto enter = [&] { ++stalled; return true; };
+        auto leave = [&] { return --stalled > 0; };
+
+        l.Set(enter); // thread A hits the full queue
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+        l.Set(enter); // thread B hits it too
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+        l.Set(leave); // A wakes up and leaves, B is still stalled
+        UNIT_ASSERT_EQUAL(state->Val(), 1); // no blink off
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+        l.Set(leave); // B leaves
+        UNIT_ASSERT_EQUAL(state->Val(), 0); // the single merged period is over
+        UNIT_ASSERT_EQUAL(count->Val(), 1);
+
+        // A later stall opens a distinct period
+        l.Set(enter);
+        UNIT_ASSERT_EQUAL(state->Val(), 1);
+        UNIT_ASSERT_EQUAL(count->Val(), 2);
+        l.Set(leave);
+        UNIT_ASSERT_EQUAL(state->Val(), 0);
+        UNIT_ASSERT_EQUAL(count->Val(), 2);
     }
 
     Y_UNIT_TEST(DriveEstimator) {

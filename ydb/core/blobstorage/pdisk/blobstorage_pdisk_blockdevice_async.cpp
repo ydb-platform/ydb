@@ -156,9 +156,9 @@ class TRealBlockDevice : public IBlockDevice {
                 if (totalSize >= MaxQueuedActions) {
                     // We have a risk to run out of buffers from BufferPool, so MaxQueuedActions is expected
                     // to counter that
-                    Device.Mon.L7.Set(true, AtomicGetAndIncrement(SeqnoL7));
+                    Device.Mon.L7.Set([this] { ++StalledSchedulers; return true; });
                     Sleep(TDuration::MilliSeconds(1));
-                    Device.Mon.L7.Set(false, AtomicGetAndIncrement(SeqnoL7));
+                    Device.Mon.L7.Set([this] { return --StalledSchedulers > 0; });
                     continue;
                 }
 
@@ -217,7 +217,7 @@ class TRealBlockDevice : public IBlockDevice {
     private:
         TRealBlockDevice &Device;
         const size_t MaxQueuedActions;
-        TAtomic SeqnoL7 = 0;
+        ui64 StalledSchedulers = 0; // Threads sleeping in backpressure; only accessed from L7 Set callbacks
     };
 
     class TSubmitThreadBase : public TThread {
@@ -519,8 +519,8 @@ class TRealBlockDevice : public IBlockDevice {
                     completionAction->FlushAction = nullptr;
                 }
                 Device.CompletionThreads->Schedule(completionAction);
-                auto seqnoL6 = AtomicGetAndIncrement(Device.Mon.SeqnoL6);
-                Device.Mon.L6.Set(duration > Device.Reordering, seqnoL6);
+                AtomicSet(Device.Mon.LastOperationReordered, duration > Device.Reordering);
+                Device.Mon.UpdateL6();
             }
 
             if (isSeekExpected) {

@@ -100,8 +100,8 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT_IF_EXTENDED(StateGroup, LastOwnerId, false);
     COUNTER_INIT_IF_EXTENDED(StateGroup, PendingYardInits, false);
 
-    SeqnoL6 = 0;
     LastDoneOperationTimestamp = 0;
+    LastOperationReordered = 0;
 
     // device subgroup
     COUNTER_INIT(DeviceGroup, DeviceBytesRead, true);
@@ -433,14 +433,19 @@ void TPDiskMon::UpdatePercentileTrackers() {
     MaxDeviceInFlightWrites.Update();
 }
 
-void TPDiskMon::UpdateLights() {
-    if (HPSecondsFloat(std::abs(HPNow() - AtomicGet(LastDoneOperationTimestamp))) > 15.0) {
-        auto seqnoL6 = AtomicGetAndIncrement(SeqnoL6);
-        L6.Set(false, seqnoL6);
-    }
+void TPDiskMon::UpdateL6() {
+    // Both the completion threads and the periodic update recompute the state
+    // from shared data under the light's lock, so a writer that acquired the
+    // lock later can never overwrite the state with an older observation
+    L6.Set([this] {
+        return AtomicGet(LastOperationReordered)
+            && HPSecondsFloat(std::abs(HPNow() - AtomicGet(LastDoneOperationTimestamp))) <= L6StalenessSec;
+    });
+}
 
-    L6. Update();
-    L7. Update();
+void TPDiskMon::UpdateLights() {
+    UpdateL6();
+    L7.Update();
     IdleLight.Update();
 }
 

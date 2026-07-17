@@ -179,6 +179,7 @@ WHERE
 
 
 Пример использования пользовательских атрибутов:
+
 ```yql
 SELECT
     count(*) as error_count

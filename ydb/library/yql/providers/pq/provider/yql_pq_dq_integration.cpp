@@ -844,7 +844,7 @@ public:
         if (!useSharedReading && maybeWatermark) {
             const auto watermark = maybeWatermark.Cast();
 
-            const auto eventTimeAndDelay = SplitWatermarkExpr(ctx.GetPosition(pqReadTopic.Pos()), ctx, watermark, wrSettings);
+            const auto eventTimeAndDelay = SplitWatermarkExpr(watermark, *State_, ctx);
             if (!eventTimeAndDelay) {
                 return {};
             }

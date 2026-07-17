@@ -256,7 +256,8 @@ namespace {
         TVector<TFtRow> rows;
 
         NTest::TWrapPart wrap(eggs);
-        wrap.Make(new NTest::TTestEnv);
+        NTest::TTestEnv env;
+        wrap.Make(&env);
 
         auto ready = wrap.Seek(TArrayRef<const TCell>(), ESeek::Lower);
         while (ready == EReady::Data) {

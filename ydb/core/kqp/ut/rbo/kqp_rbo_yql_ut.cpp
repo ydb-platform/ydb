@@ -3028,6 +3028,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         std::vector<std::string> queries = {
             R"(
                 -- Lookup join выбирается, так как join по ключу второй таблицы
+<<<<<<< HEAD
                 SELECT t1.Value1, t2.Value2
                 FROM `/Root/Table` as t1 
                 inner join 
@@ -3051,13 +3052,24 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 inner join 
                 `/Root/Table2` as t2 on (t1.Value1 = t2.Value1)
                 order by t1.Value1, t2.Value2;
+=======
+                SELECT t1.a, t2.a 
+                FROM `/Root/t1` as t1 
+                inner join 
+                `/Root/t2` as t2 on t1.a = t2.a 
+                order by t1.a, t2.a;
+>>>>>>> 5a76c042902 (Added a number of index tests)
             )",
         };
 
         std::vector<std::string> results = {
+<<<<<<< HEAD
             R"([[["5"];["15"]];[["6"];["15"]];[["7"];["15"]];[["8"];["15"]]])",
             R"([[["1"];["15"]];[["5"];["15"]]])",
             R"([[["1"];["1"]];[["2"];["2"]];[["3"];["3"]];[["4"];["4"]]])",
+=======
+            R"([[0;0];[1;1];[2;2]])",
+>>>>>>> 5a76c042902 (Added a number of index tests)
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -7032,6 +7044,63 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+    Y_UNIT_TEST(JoinsWithCorrelatedOn) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                id      int,
+                key_a   int,
+                ref_2   int,   -- _q_001_f_002rref
+                ref_3   int,    -- _q_001_f_003rref
+                PRIMARY KEY(id)
+            );
+
+            CREATE TABLE `/Root/s1` (
+                id      int,
+                flag    int,    -- __ydb_2_52
+                PRIMARY KEY(id)
+            );
+
+            CREATE TABLE `/Root/t4` (
+                id      int,
+                key_a   int,
+                ref_2   int,    -- _q_001_f_002rref
+                PRIMARY KEY(id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t4.id
+                FROM `/Root/t1` as t1
+                LEFT JOIN `/Root/s1` as s1
+                    ON t1.key_a = s1.id
+                LEFT JOIN `/Root/t4` as t4
+                    ON  t4.key_a = t1.key_a
+                    AND t4.ref_2 = (CASE WHEN s1.flag = 1
+                                        THEN t1.ref_3
+                                        ELSE t1.ref_2 END);
+            )",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 

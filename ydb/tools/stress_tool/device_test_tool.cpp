@@ -262,6 +262,8 @@ int main(int argc, char **argv) {
         Cout << ydb_logo << Flush;
     }
 
+    const bool pathsProvided = !paths.empty();
+    
     // For client mode, and for server mode when running as an interconnect
     // responder (no real devices), paths can be empty; use a dummy for TPerfTestConfig.
     if ((clientMode || serverMode) && paths.empty()) {

@@ -297,14 +297,6 @@ public:
             Y_UNREACHABLE();
         }
 
-        // Do NOT call Progress() right away when we just subscribed to a conflicting
-        // operation's completion: Progress() would immediately re-allocate a TxId and
-        // resend the very same proposal, which (while the conflicting copy is still
-        // running) would just fail again and again in a tight synchronous loop,
-        // starving the conflicting operation's own actor mailbox turns and preventing
-        // it from ever finishing. Instead, wait for TEvNotifyTxCompletionResult on the
-        // dependency txId - TTxReplyCompleted will call Progress() for us exactly once
-        // that happens.
         if (!waitingForDependency) {
             Progress(BuildId);
         }

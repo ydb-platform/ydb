@@ -95,7 +95,7 @@ protected:
             {"databaseOwner", TBase::DatabaseOwner},
             {"userSid", (UserToken ? UserToken->GetUserSID() : "empty")},
             {"requireAdministratorAccess", RequireUserAdministratorAccess},
-            {"admin", isAdmin});
+            {"isAdmin", isAdmin});
 
         if (RequireUserAdministratorAccess && !isAdmin) {
             TBase::ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "Administrator access is required");
@@ -171,7 +171,7 @@ protected:
         }
 
         YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::SYSTEM_VIEWS, "TAuthScanBase::HandleNavigateResult: received navigate result",
-            {"navigateRequest", request->ToString(*AppData()->TypeRegistry)});
+            {"navigateResult", request->ToString(*AppData()->TypeRegistry)});
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 

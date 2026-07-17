@@ -39,7 +39,7 @@ namespace NKikimr::NStorage {
         if (vdisk.RuntimeData) {
             vdiskRunning = true;
             vdisk.TIntrusiveListItem<TVDiskRecord, TGroupRelationTag>::Unlink();
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdisk.GetVDiskServiceId(), {}, nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdisk.RuntimeData->ActorId, {}, nullptr, 0));
             vdisk.RuntimeData.reset();
         }
 
@@ -430,6 +430,8 @@ namespace NKikimr::NStorage {
 
         vdisk.RuntimeData.emplace(TVDiskRecord::TRuntimeData{
             .GroupInfo = groupInfo,
+            .ActorId = actorId,
+            .ServiceId = vdiskServiceId,
             .OrderNumber = groupInfo->GetOrderNumber(TVDiskIdShort(vdiskId)),
             .DonorMode = donorMode,
             .ReadOnly = readOnly,
@@ -601,7 +603,7 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(newInfo->GroupID == currentInfo->GroupID);
 
         const ui32 orderNumber = vdisk.RuntimeData->OrderNumber;
-        const TActorId vdiskServiceId = vdisk.GetVDiskServiceId();
+        const TActorId vdiskServiceId = vdisk.RuntimeData->ServiceId;
 
         if (newInfo->GetActorId(orderNumber) != vdiskServiceId) {
             // this disk is in donor mode, we don't care about generation change; donor modes are operated by BSC solely

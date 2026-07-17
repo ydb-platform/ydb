@@ -65,11 +65,15 @@ runs:
               --dist-cache-evict-bins
             )
           fi
+          # EXPERIMENT: ydb/tests/functional/ydb_cli temporarily removed to
+          # verify whether its PY3TEST integration tests actually contribute
+          # to coverage. If line_pct drops significantly vs. previous runs
+          # (~15.97%), functional tests were working and this line goes back.
+          # If line_pct stays roughly the same, they were not contributing.
           ./ya make "${params[@]}" \
             ydb/apps/ydb \
             ydb/public/lib/ydb_cli \
-            ydb/library/workload \
-            ydb/tests/functional/ydb_cli
+            ydb/library/workload
         }
 
         MERGE_HEAD=$(git rev-parse HEAD)

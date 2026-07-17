@@ -62,6 +62,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
     ForsetiOpPieceSize = TControlWrapper(Cfg->IoPieceSizeBytes, 1, Cfg->BufferPoolBufferSizeBytes);
     ForsetiOpPieceSizeCached = ForsetiOpPieceSize;
+    EnableFreeChunksSortingHDD = TControlWrapper(Cfg->SortFreeChunksHDD, 0, 1);
     UseNoopSchedulerSSD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
     UseNoopSchedulerHDD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
 
@@ -194,7 +195,7 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
                                 (fromOffset, targetOffset), (toOffset, targetOffset + FormatSectorSize));
 
                         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer->Data(), FormatSectorSize);
-                        BlockDevice->PwriteSync(buffer->Data(), FormatSectorSize, targetOffset, 
+                        BlockDevice->PwriteSync(buffer->Data(), FormatSectorSize, targetOffset,
                                 TReqId(TReqId::RestoreFormatOnRead, 0), nullptr);
                     }
                 }
@@ -2899,6 +2900,7 @@ bool TPDisk::Initialize() {
             REGISTER_LOCAL_CONTROL(ForsetiMilliBatchSize);
             REGISTER_LOCAL_CONTROL(ForsetiMaxLogBatchNs);
             REGISTER_LOCAL_CONTROL(ForsetiOpPieceSize);
+            REGISTER_LOCAL_CONTROL(EnableFreeChunksSortingHDD);
             icb->RegisterSharedControl(UseNoopSchedulerHDD, "PDiskControls.UseNoopSchedulerHDD");
             icb->RegisterSharedControl(UseNoopSchedulerSSD, "PDiskControls.UseNoopSchedulerSSD");
             icb->RegisterSharedControl(SemiStrictSpaceIsolation, "PDiskControls.SemiStrictSpaceIsolation");
@@ -3891,6 +3893,10 @@ void TPDisk::Update() {
             TColor::E colorBorder = GetColorBorderIcb();
             Keeper.SetColorBorder(colorBorder);
             SemiStrictSpaceIsolationCached = currentIsolation;
+        }
+
+        if (!PDiskCategory.IsSolidState()) { // HDD
+            Keeper.SetFreeChunksSortingEnabled(EnableFreeChunksSortingHDD);
         }
 
         // Switch the scheduler when possible

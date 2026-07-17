@@ -119,10 +119,13 @@ NThreading::TFuture<NConnector::NApi::TDescribeTableRequest> TGenericDescribeTab
                 .emplace(clusterConfig.name(), credentialsProviderFactory->CreateProviderAsync())
                 .first;
     }
-    return providersIt->second.Apply([request=std::move(request)](const NThreading::TFuture<NYdb::TCredentialsProviderPtr>& future) mutable {
+    return providersIt->second.Apply([](const NThreading::TFuture<NYdb::TCredentialsProviderPtr>& future) mutable {
         auto provider = future.GetValue(); // Don't extract!
+        return provider->GetAuthInfoAsync();
+    }).Apply([request=std::move(request)](const NThreading::TFuture<std::string>& f1) mutable {
+        NThreading::TFuture<std::string> f2(f1);
+        TString iamToken = f2.ExtractValueSync();
         auto dsi = request.mutable_data_source_instance();
-        TString iamToken = provider->GetAuthInfo();
         Y_ENSURE(iamToken, "empty IAM token");
         *dsi->mutable_credentials()->mutable_token()->mutable_value() = std::move(iamToken);
         *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";

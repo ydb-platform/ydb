@@ -33,25 +33,21 @@ namespace NYql::NDq {
             return {};
         }
 
-        *dsi.mutable_credentials()->mutable_token()->mutable_type() = "IAM";
-
-        // 3. Otherwise use credentials provider to get token from Token Accessor
-
-        Y_ENSURE(IsReady());
-        auto credentialsProvider = AsyncCredentialsProvider_.GetValue();
-
-        Y_ENSURE(credentialsProvider, "CredentialsProvider is not initialized");
-
-        std::string iamToken;
         try {
-            iamToken = credentialsProvider->GetAuthInfo();
+            // 3. Otherwise use credentials provider to get token from Token Accessor
+            Y_ENSURE(IsReady());
+            auto credentialsProvider = AsyncCredentialsProvider_.GetValue();
+            Y_ENSURE(credentialsProvider, "CredentialsProvider is not initialized");
+
+            std::string iamToken = credentialsProvider->GetAuthInfo();
+
+            *dsi.mutable_credentials()->mutable_token()->mutable_type() = "IAM";
+            *dsi.mutable_credentials()->mutable_token()->mutable_value() = std::move(iamToken);
+            return {};
         } catch (const std::exception& e) {
             YQL_CLOG(ERROR, ProviderGeneric) << "FillCredentials: " << e.what();
             return TString(e.what());
         }
-
-        *dsi.mutable_credentials()->mutable_token()->mutable_value() = std::move(iamToken);
-        return {};
     }
 
     bool TGenericCredentialsProvider::IsReady() const {

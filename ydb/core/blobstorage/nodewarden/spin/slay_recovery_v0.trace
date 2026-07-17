@@ -1,0 +1,72 @@
+[BSC] persist desired DESTROY and send ServiceSet(DESTROY)
+[NodeWarden] receive ServiceSet(DESTROY)
+[NodeWarden] poison VDisk and erase it from LocalVDisks
+[NodeWarden] send TEvSlay round=1
+[Scenario] BSC initiates ServiceSet(RESTART)
+[VDisk] receive Poison and stop actor
+[BSC] initiate PDisk restart and notify NodeWarden
+[NodeWarden] apply BSC-authorized ServiceSet(RESTART)
+[PDisk] restart drops queued TEvSlay round=1
+[PDisk] notify NodeWarden that restart finished
+[Scenario] no control-plane restart after the loss
+[Scenario] injected failures are over
+[ERROR] PDisk restarted, but DESTROY slay is orphaned: LocalVDisks=0 SlayInFlight=1 identity=0
+pan:1: assertion violated ( !(nw_slay_inflight)||(q_len(nw_to_pdisk)>0)) (at depth 39)
+spin: trail ends after 39 steps
+#processes 5:
+ 39:	proc 0 (:init:)  slay_recovery_v0.pml:279 (state  7)
+		-end-
+ 39:	proc 1 (BSC)  slay_recovery_v0.pml:76 (state 37) (invalid end state)
+		nw_to_bsc?DESTROYED
+		nw_to_bsc?REGISTER_NODE
+		nw_to_bsc?ASK_BSC_RESTART
+		scenario_to_bsc?REQUEST_PDISK_RESTART
+		scenario_to_bsc?RESTART_BSC
+ 39:	proc 2 (NodeWarden)  slay_recovery_v0.pml:163 (state 36) (invalid end state)
+		(1)
+ 39:	proc 3 (VDisk)  slay_recovery_v0.pml:207 (state  4) (invalid end state)
+		nw_to_vdisk?POISON
+ 39:	proc 4 (PDisk)  slay_recovery_v0.pml:215 (state 18) (invalid end state)
+		scenario_to_pdisk?REQUEST_SELF_RESTART
+		restart_pdisk?REQUEST_PDISK_RESTART
+		((pdisk_restart_finished&&(len(nw_to_pdisk)>0)))
+global vars:
+	mtype  SERVICE_SET_DESTROY:	13
+	mtype  POISON:	12
+	mtype  SLAY:	11
+	mtype  SLAY_OK:	10
+	mtype  DESTROYED:	9
+	mtype  REGISTER_NODE:	8
+	mtype  REQUEST_SELF_RESTART:	7
+	mtype  ASK_WARDEN_RESTART:	6
+	mtype  ASK_BSC_RESTART:	5
+	mtype  REQUEST_PDISK_RESTART:	4
+	mtype  PDISK_RESTARTED:	3
+	mtype  RESTART_BSC:	2
+	mtype  RESTART_NODE:	1
+	chan bsc_to_nw (=1):	len 0:
+	chan nw_to_bsc (=2):	len 0:
+	chan nw_to_vdisk (=3):	len 0:
+	chan nw_to_pdisk (=4):	len 0:
+	chan pdisk_to_nw (=5):	len 0:
+	chan restart_pdisk (=6):	len 0:
+	chan scenario_to_bsc (=7):	len 0:
+	chan scenario_to_nw (=8):	len 0:
+	chan scenario_to_pdisk (=9):	len 0:
+	bit    bsc_desires_destroy:	1
+	bit    bsc_pending:	1
+	bit    bsc_reported_destroyed:	0
+	bit    nw_local_vdisk:	0
+	bit    nw_slay_inflight:	1
+	bit    nw_pdisk_restart_inflight:	0
+	byte   nw_round:	1
+	bit    pdisk_owner_present:	1
+	bit    first_slay_sent:	1
+	bit    pdisk_restart_finished:	1
+	bit    bsc_restart_finished:	0
+	bit    node_restart_finished:	0
+	bit    scenario_finished:	1
+local vars proc 2 (NodeWarden):
+	byte   reply_round:	0
+local vars proc 4 (PDisk):
+	byte   request_round:	1

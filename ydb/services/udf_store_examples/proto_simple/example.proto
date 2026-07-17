@@ -1,0 +1,7 @@
+syntax = "proto2";
+
+package NProtoSimpleExample;
+
+message TMessage {
+    optional int64 value = 1;
+}

@@ -37,5 +37,6 @@ END()
 
 RECURSE(
     abi
+    protobuf
     sdk
 )

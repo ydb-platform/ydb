@@ -178,6 +178,7 @@ THashSet<TString> CollectWasmExports(TStringBuf bytes, EBytecodeFormat format) {
     if (format == EBytecodeFormat::HumanReadable) {
         Module module;
         module.featureSpec.memory64 = true;
+        module.featureSpec.table64 = true;
         module.featureSpec.exceptionHandling = true;
         std::vector<WAST::Error> errors;
         if (!WAST::parseModule(bytes.data(), bytes.size() + 1, module, errors)) {
@@ -193,6 +194,7 @@ THashSet<TString> CollectWasmExports(TStringBuf bytes, EBytecodeFormat format) {
 
     auto featureSpec = FeatureSpec();
     featureSpec.memory64 = true;
+    featureSpec.table64 = true;
     featureSpec.exceptionHandling = true;
     auto loadError = WASM::LoadError();
     Runtime::ModuleRef wasmModule;

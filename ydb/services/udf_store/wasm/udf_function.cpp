@@ -291,7 +291,8 @@ void TWasmSoModule::BuildFunctionTypeInfo(
 }
 
 TUniquePtr<IUdfModule> BuildWasmSoModule(TWasmCompartmentStatePtr state) {
-    return TUniquePtr<IUdfModule>(new TWasmSoModule(std::move(state), state->ModuleName));
+    TString moduleName = state->ModuleName;
+    return TUniquePtr<IUdfModule>(new TWasmSoModule(std::move(state), std::move(moduleName)));
 }
 
 } // namespace NKikimr::NUdfStore::NWasm

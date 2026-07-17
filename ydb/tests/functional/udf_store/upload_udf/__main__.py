@@ -33,6 +33,10 @@ def _uint64(value: int):
     return (value, ydb.PrimitiveType.Uint64.proto)
 
 
+def _json(value: str):
+    return (value, ydb.PrimitiveType.Json.proto)
+
+
 def _kv_tool() -> str:
     path = os.environ.get("YDB_KV_VOLUME_TOOL_PATH")
     if not path:
@@ -190,7 +194,7 @@ def _upsert_udf_row(
         "$version": _uint64(version),
     }
     if udf_type == "WASM":
-        params["$manifest"] = manifest
+        params["$manifest"] = _json(manifest)
         params["$compile_status"] = compile_status or "pending"
         query = (
             "DECLARE $md5 AS Utf8; "

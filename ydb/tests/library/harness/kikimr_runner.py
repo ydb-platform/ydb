@@ -806,7 +806,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             node.start()
 
     def restart_slots(self):
-        for slot in self.slots.values():
+        for slot in list(self.slots.values()):
             slot.stop()
             slot.start()
 

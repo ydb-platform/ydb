@@ -413,6 +413,7 @@ class KiKiMRClusterInterface(object):
         if token is not None:
             req.set_user_token(token)
 
+        assert storage_units_to_add or storage_units_to_remove
         if storage_units_to_add:
             for pool_type, count in storage_units_to_add.items():
                 req.add_storage_groups_to_add(pool_type, count)

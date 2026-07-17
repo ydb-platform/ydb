@@ -250,11 +250,11 @@ TCommandConfigReplace::TCommandConfigReplace(
 
 void TCommandConfigReplace::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration")
+    config.Opts->AddLongOption('f', "filename", "Path to the file containing configuration")
         .Required().RequiredArgument("[config.yaml]").StoreResult(&Filename);
-    config.Opts->AddLongOption("ignore-local-validation", "Ignore local config applicability checks")
+    config.Opts->AddLongOption("ignore-local-validation", "Ignore local config validation checks")
         .StoreTrue(&IgnoreCheck);
-    config.Opts->AddLongOption("dry-run", "Check config applicability")
+    config.Opts->AddLongOption("dry-run", "Validate the config without applying changes")
         .StoreTrue(&DryRun);
     config.Opts->AddLongOption("allow-unknown-fields", "Allow fields not present in config")
         .StoreTrue(&AllowUnknownFields);
@@ -618,11 +618,11 @@ TCommandConfigVolatileAdd::TCommandConfigVolatileAdd()
 
 void TCommandConfigVolatileAdd::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption('f', "filename", "filename to set")
+    config.Opts->AddLongOption('f', "filename", "Path to the file containing configuration")
         .Required().RequiredArgument("[config.yaml]").StoreResult(&Filename);
-    config.Opts->AddLongOption("ignore-local-validation", "Ignore local config applicability checks")
+    config.Opts->AddLongOption("ignore-local-validation", "Ignore local config validation checks")
         .StoreTrue(&IgnoreCheck);
-    config.Opts->AddLongOption("dry-run", "Check config applicability")
+    config.Opts->AddLongOption("dry-run", "Validate the config without applying changes")
         .StoreTrue(&DryRun);
     config.SetFreeArgsNum(0);
 

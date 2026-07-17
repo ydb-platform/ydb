@@ -2,12 +2,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fwd.h>
 
-<<<<<<< HEAD
-=======
-#include <functional>
 #include <library/cpp/threading/future/future.h>
 
->>>>>>> f7303ada674 (async provider initialisation (#46135))
 #include <memory>
 #include <string>
 #include <utility>

@@ -550,25 +550,11 @@ public:
         return std::make_shared<TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
     }
 
-<<<<<<< HEAD
-=======
-    std::string GetClientIdentity() const override final {
-        return NIam::NDetail::MakeClientIdentity(
-            "TIamJwtCredentialsProviderFactory",
-            Params_,
-            TService::service_full_name(),
-            Params_.JwtParams.AccountId,
-            Params_.JwtParams.KeyId,
-            Params_.JwtParams.PubKey,
-            Params_.JwtParams.PrivKey);
-    }
-
     NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
         return NPrivate::CreateGrpcIamCredentialsProviderAsync<
             TIamJwtCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
     }
 
->>>>>>> f7303ada674 (async provider initialisation (#46135))
 private:
     TIamJwtParams Params_;
 };
@@ -596,22 +582,11 @@ public:
         return std::make_shared<TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
     }
 
-<<<<<<< HEAD
-=======
-    std::string GetClientIdentity() const override final {
-        return NIam::NDetail::MakeClientIdentity(
-            "TIamOAuthCredentialsProviderFactory",
-            Params_,
-            TService::service_full_name(),
-            Params_.OAuthToken);
-    }
-
     NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const override {
         return NPrivate::CreateGrpcIamCredentialsProviderAsync<
             TIamOAuthCredentialsProvider<TRequest, TResponse, TService>>(Params_, std::move(facility));
     }
 
->>>>>>> f7303ada674 (async provider initialisation (#46135))
 private:
     TIamOAuth Params_;
 };

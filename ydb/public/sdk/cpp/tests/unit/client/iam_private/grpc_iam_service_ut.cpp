@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
 #include <exception>
 #include <future>
@@ -44,27 +45,6 @@ public:
         return grpc::Status::OK;
     }
 };
-
-<<<<<<< HEAD
-} // namespace
-
-=======
-using TJwtFactory = TIamJwtCredentialsProviderFactory<
-    CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>;
-
-using TOAuthFactory = TIamOAuthCredentialsProviderFactory<
-    CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>;
-
-TIamServiceParams MakeServiceParams(TCredentialsProviderFactoryPtr nestedFactory) {
-    TIamServiceParams params;
-    params.ServiceId = "unit-test-service";
-    params.MicroserviceId = "unit-test-microservice";
-    params.ResourceId = "unit-test-resource";
-    params.ResourceType = "unit-test-resource-type";
-    params.TargetServiceAccountId = "unit-test-target";
-    params.SystemServiceAccountCredentials = std::move(nestedFactory);
-    return params;
-}
 
 class TFlakyIamServiceStub final : public IamTokenService::Service {
 public:
@@ -114,70 +94,6 @@ TTestOAuthFactory MakeOAuthFactory() {
 
 } // namespace
 
-TEST(IamCredentialsProviderIdentity, IdentityIsValueBased) {
-    const auto jwtParams = MakeJwtParams("iam.example:443");
-    const auto firstJwtFactory = std::make_shared<TJwtFactory>(jwtParams);
-    const auto secondJwtFactory = std::make_shared<TJwtFactory>(jwtParams);
-    const auto jwtIdentity = firstJwtFactory->GetClientIdentity();
-    EXPECT_EQ(jwtIdentity, secondJwtFactory->GetClientIdentity());
-    auto differentJwtParams = jwtParams;
-    differentJwtParams.JwtParams.KeyId = "different-key";
-    EXPECT_NE(jwtIdentity, TJwtFactory(differentJwtParams).GetClientIdentity());
-
-    const auto oauthParams = MakeOAuthParams("iam.example:443");
-    const auto firstOAuthFactory = std::make_shared<TOAuthFactory>(oauthParams);
-    const auto secondOAuthFactory = std::make_shared<TOAuthFactory>(oauthParams);
-    const auto oauthIdentity = firstOAuthFactory->GetClientIdentity();
-    EXPECT_EQ(oauthIdentity, secondOAuthFactory->GetClientIdentity());
-    auto differentOAuthParams = oauthParams;
-    differentOAuthParams.OAuthToken = "different-token";
-    EXPECT_NE(oauthIdentity, TOAuthFactory(differentOAuthParams).GetClientIdentity());
-
-    auto firstServiceParams = MakeServiceParams(firstJwtFactory);
-    const auto firstServiceFactory = CreateIamServiceCredentialsProviderFactory(firstServiceParams);
-    const auto secondServiceFactory = CreateIamServiceCredentialsProviderFactory(
-        MakeServiceParams(secondJwtFactory));
-    const auto serviceIdentity = firstServiceFactory->GetClientIdentity();
-    EXPECT_EQ(serviceIdentity, secondServiceFactory->GetClientIdentity());
-    firstServiceParams.Endpoint = "different-iam.example:443";
-    EXPECT_NE(
-        serviceIdentity,
-        CreateIamServiceCredentialsProviderFactory(firstServiceParams)->GetClientIdentity());
-}
-
-TEST(IamServiceCredentialsProvider, NoArgProviderIsCachedAcrossFactoryInstances) {
-    TIamServiceStub stub;
-    TIamGrpcServer server(&stub);
-    ASSERT_TRUE(server.Start());
-
-    const auto jwtParams = MakeJwtParams(server.Endpoint());
-    auto firstServiceParams = MakeServiceParams(std::make_shared<TJwtFactory>(jwtParams));
-    firstServiceParams.Endpoint = server.Endpoint();
-    firstServiceParams.EnableSsl = false;
-    firstServiceParams.RequestTimeout = TDuration::Seconds(5);
-
-    auto secondServiceParams = MakeServiceParams(std::make_shared<TJwtFactory>(jwtParams));
-    secondServiceParams.Endpoint = server.Endpoint();
-    secondServiceParams.EnableSsl = false;
-    secondServiceParams.RequestTimeout = TDuration::Seconds(5);
-
-    auto firstProvider = CreateIamServiceCredentialsProviderFactory(firstServiceParams)->CreateProvider();
-    auto secondProvider = CreateIamServiceCredentialsProviderFactory(secondServiceParams)->CreateProvider();
-
-    EXPECT_EQ(firstProvider, secondProvider);
-    EXPECT_EQ(firstProvider->GetAuthInfo(), "outer-service-token");
-    EXPECT_EQ(stub.GetCreateRequestCount(), 1);
-    EXPECT_EQ(stub.GetCreateForServiceRequestCount(), 1);
-
-    secondServiceParams.TargetServiceAccountId = "another-target";
-    auto differentProvider = CreateIamServiceCredentialsProviderFactory(secondServiceParams)->CreateProvider();
-    EXPECT_NE(firstProvider, differentProvider);
-    EXPECT_EQ(stub.GetCreateRequestCount(), 1);
-    EXPECT_EQ(stub.GetCreateForServiceRequestCount(), 2);
-
-    server.Stop();
-}
-
 TEST(IamCredentialsProvider, AsyncCreationFailsWithExpiredFacility) {
     auto future = MakeOAuthFactory().CreateProviderAsync(std::weak_ptr<ICoreFacility>{});
 
@@ -214,7 +130,6 @@ TEST(IamCredentialsProvider, AsyncCreationRetriesTransientIamFailure) {
     server.Stop();
 }
 
->>>>>>> f7303ada674 (async provider initialisation (#46135))
 // Regression test for the deprecated no-arg CreateProvider() on the IAM service-account
 // factory with a nested gRPC JWT auth provider. Before the fix, both providers shared a single
 // TSimpleCoreFacility, each registered a periodic refresh task, and TSimpleCoreFacility's

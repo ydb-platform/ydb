@@ -36,7 +36,7 @@ namespace NTabletPipe {
         }
 
         void Bootstrap(const TActorContext& ctx) {
-            YDB_LOG_DEBUG_CTX(ctx, "Client bootstrap",
+            YDB_LOG_DEBUG_CTX(ctx, "Bootstrap",
                 {"tabletId", TabletId},
                 {"selfId", ctx.SelfID});
 

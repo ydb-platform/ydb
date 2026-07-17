@@ -751,7 +751,7 @@ public:
             storeInfo->ColumnTablesUnderOperation.insert(pathId);
             context.SS->PersistColumnTable(db, pathId, *pending);
             context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
-            context.SS->AcquireSelfDbRef(pathId, "type info record");
+            context.SS->AcquireOwnDbRef(pathId, "type info record");
 
             if (parentPath.Base()->HasActiveChanges()) {
                 TTxId parentTxId = parentPath.Base()->PlannedToCreate()
@@ -805,7 +805,7 @@ public:
 
             context.SS->PersistColumnTable(db, pathId, *pending);
             context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
-            context.SS->AcquireSelfDbRef(pathId, "type info record");
+            context.SS->AcquireOwnDbRef(pathId, "type info record");
 
             if (parentPath.Base()->HasActiveChanges()) {
                 TTxId parentTxId = parentPath.Base()->PlannedToCreate()

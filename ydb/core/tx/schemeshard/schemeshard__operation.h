@@ -44,7 +44,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
     TDeque<TProposeShards> ShardsProposes;
 
     using TPublishPath = std::pair<TPathId, ui64>;
-    using TPublicationPaths = TMap<TPublishPath, TPathRef>;
+    using TPublicationPaths = TMap<TPublishPath, TPathDbRef>;
     TPublicationPaths Publications;
 
     TSet<TSubTxId> ReadyToProposeParts;

@@ -4,13 +4,13 @@
 
 namespace NKikimr::NSchemeShard {
 
-void TPathRef::Acquire() {
+void TPathDbRef::Acquire() {
     if (SS) {
         SS->IncrementPathDbRefCount(PathId, Reason.c_str());
     }
 }
 
-void TPathRef::Release() {
+void TPathDbRef::Release() {
     if (SS) {
         SS->DecrementPathDbRefCount(PathId, Reason.c_str());
         SS = nullptr;

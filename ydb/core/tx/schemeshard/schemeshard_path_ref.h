@@ -25,11 +25,11 @@ private:
 // Owning handle for a path's DbRefCount reference: ctor acquires, dtor releases,
 // copy re-acquires, move transfers. DetachWithoutRelease() drops it without
 // releasing (a Paths snapshot owns the counter, or at shutdown).
-class TPathRef {
+class TPathDbRef {
 public:
-    TPathRef() = default;
+    TPathDbRef() = default;
 
-    TPathRef(TSchemeShard* ss, const TPathId& pathId, TRefLabel reason)
+    TPathDbRef(TSchemeShard* ss, const TPathId& pathId, TRefLabel reason)
         : SS(ss)
         , PathId(pathId)
         , Reason(reason)
@@ -37,7 +37,7 @@ public:
         Acquire();
     }
 
-    TPathRef(const TPathRef& other)
+    TPathDbRef(const TPathDbRef& other)
         : SS(other.SS)
         , PathId(other.PathId)
         , Reason(other.Reason)
@@ -45,7 +45,7 @@ public:
         Acquire();
     }
 
-    TPathRef(TPathRef&& other) noexcept
+    TPathDbRef(TPathDbRef&& other) noexcept
         : SS(other.SS)
         , PathId(other.PathId)
         , Reason(other.Reason)
@@ -53,7 +53,7 @@ public:
         other.SS = nullptr;
     }
 
-    TPathRef& operator=(const TPathRef& other) {
+    TPathDbRef& operator=(const TPathDbRef& other) {
         if (this != &other) {
             Release();
             SS = other.SS;
@@ -64,7 +64,7 @@ public:
         return *this;
     }
 
-    TPathRef& operator=(TPathRef&& other) noexcept {
+    TPathDbRef& operator=(TPathDbRef&& other) noexcept {
         if (this != &other) {
             Release();
             SS = other.SS;
@@ -75,7 +75,7 @@ public:
         return *this;
     }
 
-    ~TPathRef() {
+    ~TPathDbRef() {
         Release();
     }
 
@@ -114,7 +114,7 @@ private:
 };
 
 // Acquire/release a path's DbRefCount without an owning handle, for containers
-// (TSelfRefMap) whose membership is the reference. `reason` must be a string literal.
+// (TDbRefMap) whose membership is the reference. `reason` must be a string literal.
 void AcquirePathDbRef(TSchemeShard* ss, const TPathId& pathId, TRefLabel reason);
 void ReleasePathDbRef(TSchemeShard* ss, const TPathId& pathId, TRefLabel reason);
 

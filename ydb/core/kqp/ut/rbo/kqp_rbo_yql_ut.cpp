@@ -3029,6 +3029,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 -- Lookup join выбирается, так как join по ключу второй таблицы
 <<<<<<< HEAD
+<<<<<<< HEAD
                 SELECT t1.Value1, t2.Value2
                 FROM `/Root/Table` as t1 
                 inner join 
@@ -3059,10 +3060,36 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 `/Root/t2` as t2 on t1.a = t2.a 
                 order by t1.a, t2.a;
 >>>>>>> 5a76c042902 (Added a number of index tests)
+=======
+                SELECT t1.Value1, t2.Value2
+                FROM `/Root/Table` as t1 
+                inner join 
+                `/Root/Table2` as t2 on t1.Key = t2.Key
+                WHERE t2.Value2 = '15'
+                order by t1.Value1, t2.Value2;
+            )",
+            R"(
+                -- Lookup join выбирается с помощью индекса Index2_12
+                SELECT t1.Value1, t2.Value2
+                FROM `/Root/Table` as t1 
+                inner join 
+                `/Root/Table2` as t2 on (t1.SubKey1 = t2.SubKey1 AND t1.SubKey2 = t2.SubKey2)
+                WHERE t2.Value1 = '15'
+                order by t1.Value1, t2.Value2;
+            )",
+            R"(
+                -- Lookup join не выбирается - ни таблица ни индекс не подходят
+                SELECT t1.Value1, t2.Value2
+                FROM `/Root/Table` as t1 
+                inner join 
+                `/Root/Table2` as t2 on (t1.Value1 = t2.Value1)
+                order by t1.Value1, t2.Value2;
+>>>>>>> 68d14801683 (Added more tests)
             )",
         };
 
         std::vector<std::string> results = {
+<<<<<<< HEAD
 <<<<<<< HEAD
             R"([[["5"];["15"]];[["6"];["15"]];[["7"];["15"]];[["8"];["15"]]])",
             R"([[["1"];["15"]];[["5"];["15"]]])",
@@ -3070,6 +3097,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 =======
             R"([[0;0];[1;1];[2;2]])",
 >>>>>>> 5a76c042902 (Added a number of index tests)
+=======
+            R"([[["5"];["15"]];[["6"];["15"]];[["7"];["15"]];[["8"];["15"]]])",
+            R"([[["1"];["15"]];[["5"];["15"]]])",
+            R"([[["1"];["1"]];[["2"];["2"]];[["3"];["3"]];[["4"];["4"]]])",
+>>>>>>> 68d14801683 (Added more tests)
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

@@ -19,8 +19,8 @@ namespace NYql::NDq {
 
         // FillCredentials sets the credentials to access the remote datasource into the DataSourceInstance object.
         // It can be either IAM-token or login + password for basic auth.
-        // Returns string containing error, if it happened.
-        // Requires IsReady(). May throw exceptions.
+        // Returns empty string on success or (non-empty) an error message.
+        // Requires IsReady().
         TString FillCredentials(NYql::TGenericDataSourceInstance& dsi) const;
 
         // Return true when provider is ready to serve requests

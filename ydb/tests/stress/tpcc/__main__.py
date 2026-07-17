@@ -15,6 +15,8 @@ if __name__ == '__main__':
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
     parser.add_argument('--phase', choices=['prepare', 'run', 'clean'], default=None,
                         help='Phase to run: prepare (init+import), run, clean. If omitted, all phases run in sequence.')
+    parser.add_argument('--tx-mode', default=None,
+                        help='Transaction mode. "mixed" sets serializable/snapshot weights (30/70); any other value is passed through to the CLI.')
 
     args = parser.parse_args()
 
@@ -27,7 +29,7 @@ if __name__ == '__main__':
             level=logging.INFO
         )
 
-    workload = YdbTpccWorkload(args.endpoint, args.database, duration=args.duration, warehouses=args.warehouses, tables_prefix=args.path)
+    workload = YdbTpccWorkload(args.endpoint, args.database, duration=args.duration, warehouses=args.warehouses, tables_prefix=args.path, tx_mode=args.tx_mode)
     if args.phase == 'prepare':
         workload.import_data()
     elif args.phase == 'run':

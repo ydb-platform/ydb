@@ -548,7 +548,7 @@ Both views contain the same set of fields:
 | `IntervalEnd` | The end time of the minute or hour interval for which the statistics were collected.<br/>Type: `Timestamp`.<br/>Key: `0`. |
 | `Rank` | The rank of the partition within the interval (by `LocksBroken`).<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `TabletId` | ID of the tablet serving the partition.<br/>Type: `Uint64`. |
-| `FollowerId` | ID of the tablet [replica](../concepts/glossary.md#tablet-follower). A value of 0 means the leader.<br/>Type: `Uint32` |
+| `FollowerId` | ID of the [replica](../concepts/glossary.md#tablet-follower) of the tablet of the partition. A value of 0 means the leader.<br/>Type: `Uint32` |
 | `Path` | Full path to the table.<br/>Type: `Utf8`. |
 | `LocksAcquired` | Number of "key range" locks set in this interval.<br/>Type: `Uint64`. |
 | `LocksWholeShard` | Number of "whole partition" locks set in this interval.<br/>Type: `Uint64`. |

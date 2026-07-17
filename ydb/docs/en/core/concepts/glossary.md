@@ -48,7 +48,7 @@ A **hybrid node** is a process that simultaneously performs both the role of a [
 
 ### Distributed Storage {#distributed-storage}
 
-**Distributed Storage**, **Blob storage**, or **BlobStorage** is a distributed fault-tolerant data storage layer in {{ ydb-short-name }}. It has a specialized API designed for storing immutable data fragments of a [tablet](#tablet).
+**Distributed Storage**, **Distributed storage**, **Blob storage**, or **BlobStorage** is a distributed fault-tolerant data storage layer in {{ ydb-short-name }}. It has a specialized API designed for storing immutable data fragments of a [tablet](#tablet).
 
 Many terms related to the [implementation of distributed storage](#distributed-storage-implementation) are discussed below.
 
@@ -68,7 +68,7 @@ The static group may require special attention during major cluster maintenance,
 
 #### Dynamic Group {#dynamic-group}
 
-Regular storage groups that are not [static](#static-group) are called **dynamic groups**. They are called dynamic because they can be created and deleted on the fly while the [cluster](#cluster) is running.
+Regular storage groups that are not [static](#static-group) are called **dynamic groups** or **dynamic group**. They are called dynamic because they can be created and deleted on the fly while the [cluster](#cluster) is running.
 
 #### Virtual Storage Group {#virtual-storage-groups}
 
@@ -80,7 +80,7 @@ A **storage pool** is a set of data storage devices with similar characteristics
 
 ### Actor {#actor}
 
-The [actor model](https://ru.wikipedia.org/wiki/%D0%9C%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C_%D0%B0%D0%BA%D1%82%D0%BE%D1%80%D0%BE%D0%B2) is one of the main approaches to concurrency used in {{ ydb-short-name }}. In this model, **actors** are lightweight user-space processes that can have and modify their private state but can only affect each other indirectly through message passing. {{ ydb-short-name }} has its own implementation of this model, which is described [below](#actor-implementation).
+The [actor model](https://ru.wikipedia.org/wiki/%D0%9C%D0%BE%D0%B4%D0%B5%D0%BB%D1%8C_%D0%B0%D0%BA%D1%82%D0%BE%D1%80%D0%BE%D0%B2) is one of the main approaches to concurrency used in {{ ydb-short-name }}. In this model, **actors** or **actor** are lightweight user-space processes that can have and modify their private state but can only affect each other indirectly through message passing. {{ ydb-short-name }} has its own implementation of this model, which is described [below](#actor-implementation).
 
 In {{ ydb-short-name }}, actors with reliably persisted state are called [tablets](#tablet).
 
@@ -231,7 +231,7 @@ Full-text search capabilities and index parameters are described in the articles
 
 #### JSON index {#json-index}
 
-**JSON index** — is an additional data structure used to accelerate predicates with the functions [JSON_EXISTS](../yql/reference/builtins/json.md#json_exists) and [JSON_VALUE](../yql/reference/builtins/json.md#json_value) on a column of type `Json` or `JsonDocument`. Unlike traditional secondary indexes, which are optimized for equality or range searches on individual table columns, a JSON index works with arbitrary [JsonPath](../yql/reference/builtins/json.md#jsonpath) paths inside a JSON document.
+A **JSON index** is an additional data structure used to accelerate predicates with the functions [JSON_EXISTS](../yql/reference/builtins/json.md#json_exists) and [JSON_VALUE](../yql/reference/builtins/json.md#json_value) on a column of type `Json` or `JsonDocument`. Unlike traditional secondary indexes, which are optimized for equality or range searches on individual table columns, a JSON index works with arbitrary [JsonPath](../yql/reference/builtins/json.md#jsonpath) paths inside a JSON document.
 
 A JSON index, like a [full-text index](#fulltext-index), is implemented on top of an [inverted index](https://ru.wikipedia.org/wiki/%D0%98%D0%BD%D0%B2%D0%B5%D1%80%D1%82%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%BD%D1%8B%D0%B9_%D0%B8%D0%BD%D0%B4%D0%B5%D0%BA%D1%81), but uses its own JSON document tokenizer. JSON search capabilities are described in the articles {#T} and {#T}.
 
@@ -275,7 +275,7 @@ Views can be user-defined or system.
 
 #### System views {#system-view}
 
-**System views** are special views automatically created by the system for monitoring the state of a database and cluster. They are located in the special `.sys` directory in the root folder of each database. System views for databases are described in [{#T}](../dev/system-views.md); system views for a cluster, as well as access management issues, are described in [{#T}](../devops/observability/system-views.md).
+**System views** are special views automatically created by the system for monitoring the state of a database and cluster. They are located in the special `.sys` directory in the root directory of each database. System views for databases are described in [{#T}](../dev/system-views.md); system views for a cluster, as well as access management issues, are described in [{#T}](../devops/observability/system-views.md).
 
 ### Topic {#topic}
 
@@ -426,15 +426,15 @@ The **cluster schema root** is the root element of the [namespace {{ ydb-short-n
 
 ### Schema object {#scheme-object}
 
-A database schema consists of **schema objects**, which can be databases, [tables](#table) (including [external tables](#external-table)), [topics](#topic), [folders](#folder), and so on.
+A database schema consists of **schema objects**, which can be databases, [tables](#table) (including [external tables](#external-table)), [topics](#topic), [directories](#folder), and so on.
 
-For organizational convenience, schema objects form a hierarchy using [folders](#folder).
+For organizational convenience, schema objects form a hierarchy using [directories](#folder).
 
 ### Folder {#folder}
 
 As in file systems, a **folder** or **directory** is a container for [schema objects](#scheme-object).
 
-Folders can contain subfolders, and such nesting can be of arbitrary depth.
+Directories can contain subdirectories, and such nesting can be of arbitrary depth.
 
 ### Access object {#access-object}
 
@@ -586,10 +586,10 @@ A **tablet candidate** is one of the election participants that wants to become 
 
 ### ### Tablet replica {#tablet-follower}
 
-A **tablet follower** (also known as a **hot standby**) is a copy of the [tablet leader](#tablet-leader) that applies the log of commands accepted by the leader (with some delay). A tablet can have zero or more followers. Followers perform two main functions:
+A **tablet replica**, also known as a **tablet follower** or **hot standby**, is a copy of the [tablet leader](#tablet-leader) that applies the log of commands accepted by the leader (with some delay). A tablet can have zero or more replicas. Replicas perform two main functions:
 
-* In case the leader terminates or fails, followers are the preferred [candidates](#tablet-candidate) for the new leader role, as they can become the leader much faster than other candidates because they have applied most of the log.
-* Followers can respond to read-only requests if the client explicitly selects an optional relaxed transaction mode that allows stale reads.
+* In case the leader terminates or fails, replicas are the preferred [candidates](#tablet-candidate) for the new leader role, as they can become the leader much faster than other candidates because they have applied most of the log.
+* Replicas can respond to read‑only requests if the client explicitly selects an optional relaxed transaction mode that allows stale reads.
 
 ### ### Tablet generation {#tablet-generation}
 
@@ -727,14 +727,14 @@ Additionally, there is a **root SchemeShard** that stores information about data
 
 ### Slot {#slot}
 
-A **slot** in {{ ydb-short-name }} can be used in two contexts:
+A **Slot** in {{ ydb-short-name }} can be used in two contexts:
 
 * **Slot** — a portion of server resources allocated to run one {{ ydb-short-name }} [node](#node). The typical slot size is 10 CPU cores and 50 GB of RAM. Slots are used if the {{ ydb-short-name }} cluster is deployed on servers or virtual machines with sufficient resources to host multiple slots.
 * **VDisk slot** or **VSlot** — a share of a [PDisk](#pdisk) that can be allocated to one of the [VDisk](#vdisk) instances.
 
 ### State storage {#state-storage}
 
-**State storage** or **StateStorage** is a distributed service that stores information about tablets, namely:
+**State storage**, **state storage** or **StateStorage** is a distributed service that stores information about tablets, namely:
 
 * The current tablet leader or its absence.
 * Tablet replicas.
@@ -877,9 +877,9 @@ As in many other database management systems, queries in {{ ydb-short-name }} ca
 
 The **prepare phase** is a transaction phase during which the transaction body is registered on all participating shards.
 
-#### Execute phase {#execute-stage}
+#### Execution phase {#execute-stage}
 
-The **execute phase** is a transaction phase during which the scheduled transaction is executed and a response is generated.
+The **execution phase** is a transaction phase during which the scheduled transaction is executed and a response is generated.
 
 In some cases, instead of [preparation](#prepare-stage) and execution, the transaction is executed immediately and a response is generated. For example, this happens for transactions that affect only one shard or for consistent reads from a data snapshot.
 
@@ -889,11 +889,11 @@ For read-only transactions, similar to "read uncommitted" in other database mana
 
 #### Read-write set {#rw-set}
 
-A **read-write set**, **RW-set**, or **RW-set** is a set of data that will participate in the execution of a [distributed transaction](#transactions). It combines the read set data that will be read and the write set for which modifications will be made.
+A **read-write set**, **RW-set**, is a set of data that will participate in the execution of a [distributed transaction](#transactions). It combines the read set data that will be read and the write set for which modifications will be made.
 
 #### Read set {#read-set}
 
-A **read set**, **ReadSet data**, or **ReadSet data** is what the participating shards send during transaction execution. For data transactions, it may contain information about the state of [optimistic locks](#optimistic-locking), the shard's readiness to commit, or a decision to cancel the transaction.
+A **read set**, **ReadSet data**, is what the participating shards send during transaction execution. For data transactions, it may contain information about the state of [optimistic locks](#optimistic-locking), the shard's readiness to commit, or a decision to cancel the transaction.
 
 #### Transaction proxies {#transaction-proxy}
 
@@ -931,7 +931,7 @@ MiniKQL is a low-level language. End users of the system only see queries in [YQ
 
 ### Global schema {#global-schema}
 
-**Global schema**, **database schema**, or **global schema** is the schema of all data stored in a [database](#database). It consists of [tables](#table) and other entities such as [topics](#topic). The metadata about these entities is called the global schema. The term is used in contrast to **local schema**, which refers to the data schema inside a [tablet](#tablet). {{ ydb-short-name }} users never see the local schema and work only with the global schema.
+**Global schema**, **global scheme**, or **database schema** is the schema of all data stored in a [database](#database). It consists of [tables](#table) and other entities such as [topics](#topic). The metadata about these entities is called the global schema. The term is used in contrast to **local schema**, which refers to the data schema inside a [tablet](#tablet). {{ ydb-short-name }} users never see the local schema and work only with the global schema.
 
 ### KiKiMR {#kikimr}
 

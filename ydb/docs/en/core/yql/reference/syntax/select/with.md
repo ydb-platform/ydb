@@ -27,7 +27,7 @@ When working with [external file data sources](../../../../concepts/datamodel/ex
 
 {% endif %}
 
-When reading from a [topic](../../../../concepts/datamodel/topic.md) in [streaming queries](../../../../dev/streaming-query/index.md), you can specify watermarks parameters:
+When reading from a [topic](../../../../concepts/datamodel/topic.md) in [streaming queries](../../../../dev/streaming-query/index.md), you can specify watermark parameters:
 
 {% include notitle [x](../../../../_includes/watermark_parameters.md) %}
 

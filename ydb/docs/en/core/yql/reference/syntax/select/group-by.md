@@ -84,7 +84,7 @@ The ability to specify a name for a column or expression in `GROUP BY .. AS foo`
 
 ## GROUP BY ... SessionWindow() {#session-window}
 
-YQL supports grouping by sessions. In addition to regular expressions in `GROUP BY`, you can add a special function `SessionWindow`:
+YQL supports grouping by sessions. In addition to ordinary expressions in `GROUP BY`, you can add a special function `SessionWindow`:
 
 
 ```yql
@@ -360,7 +360,7 @@ GROUP BY
 
 ## GROUP BY ... HoppingWindow {#group-by-hopping_window}
 
-groups events by overlapping time windows (hopping windows), similar to [GROUP BY `HoppingWindow`](#group-by-hop). It is supported both in [analytical queries on tables](#hopping-window-table) and in [streaming queries on topics](#hopping-window-topic). The main difference from `HOP` is that in streaming queries, `HoppingWindow` uses the [watermarks](../../../../dev/streaming-query/watermarks.md) mechanism to determine when a window closes instead of the fixed `delay` parameter.
+`HoppingWindow` groups events by overlapping time windows (hopping windows), similar to [GROUP BY HOP](#group-by-hop). It is supported both in [analytical queries on tables](#hopping-window-table) and in [streaming queries on topics](#hopping-window-topic). The main difference from `HOP` is that in streaming queries, `HoppingWindow` uses the [watermarks](../../../../dev/streaming-query/watermarks.md) mechanism to determine when a window closes instead of the fixed `delay` parameter.
 
 
 ```yql

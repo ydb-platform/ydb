@@ -637,10 +637,18 @@ namespace {
             }
         }
 
+        if (columnType.GetKind() != ETypeAnnotationKind::Pg && !columnType.IsOptionalOrNull() && exprType->IsOptionalOrNull()) {
+            ctx.AddError(TIssue(ctx.GetPosition(lambda.Pos()),
+                TStringBuilder() << "Generated column " << columnName << " is declared NOT NULL, but its expression can evaluate to NULL"
+                                 << " (type " << *exprType << "). Make the expression non-nullable, for example with COALESCE,"
+                                 << " or declare the column nullable"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus ValidateGeneratedColumns(TKiCreateTable create, TKikimrTableMetadata& meta, TExprContext& ctx,
+    IGraphTransformer::TStatus ValidateGeneratedColumns(const TKiCreateTable& create, TKikimrTableMetadata& meta, TExprContext& ctx,
         TTypeAnnotationContext& typeCtx, const TString& cluster, TKikimrSessionContext& sessionCtx)
     {
         THashSet<TString> generatedColumns;
@@ -665,7 +673,13 @@ namespace {
         for (auto item : create.Columns()) {
             auto columnTuple = item.Cast<TExprList>();
             auto name = columnTuple.Item(0).Cast<TCoAtom>().Value();
+
             const auto* columnType = columnTuple.Item(1).Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            const auto* columnMeta = meta.Columns.FindPtr(name);
+            if (columnMeta && columnMeta->NotNull && columnType->GetKind() != ETypeAnnotationKind::Pg) {
+                columnType = &RemoveOptionality(*columnType);
+            }
+
             rowTypeItems.push_back(ctx.MakeType<TItemExprType>(name, columnType));
         }
 

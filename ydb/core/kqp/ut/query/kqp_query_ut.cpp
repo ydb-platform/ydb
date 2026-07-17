@@ -1510,9 +1510,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             .RowsLimit(rowsLimit);
 
         auto it = db.StreamExecuteQuery(Q_(R"(
-            SELECT * FROM AS_TABLE(ListMap(ListFromRange(1, 101), ($x) -> {
-                RETURN AsStruct($x AS key);
-            }));
+            SELECT * FROM `/Root/EightShard` WHERE Text = "Value2";
         )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
 

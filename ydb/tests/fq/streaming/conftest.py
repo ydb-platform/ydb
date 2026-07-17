@@ -42,9 +42,6 @@ class KikimrRollingUpgrade(Kikimr):
             endpoint=f"grpc://{stable_endpoint.endpoint}",
             enable_discovery=False,
         )
-        logger.info(f" stable_endpoint.database {stable_endpoint.database}")
-        logger.info(f" stable_endpoint.endpoint {stable_endpoint.endpoint}")
-
         self.ydb_client.wait_connection()
         self.first_node = stable_node
         self.endpoint = stable_endpoint
@@ -122,8 +119,8 @@ def kikimr(request):
 
     main_binary_path = kikimr_driver_path()
 
-    logger.info(f"main_binary_path {main_binary_path}")
-    logger.info(f"init_stable_binary_path {init_stable_binary_path}")
+    logger.info(f"Main binary path: {main_binary_path}")
+    logger.info(f"Stable binary path: {init_stable_binary_path}")
 
     set_test_env(request)
     config = get_ydb_config(request)

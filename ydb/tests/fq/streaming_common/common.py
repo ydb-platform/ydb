@@ -60,7 +60,7 @@ def get_ydb_config(request):
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
 
     replication_config = {}
-    if is_compatibility_tests:
+    if not is_compatibility_tests:
         replication_config = {
             "iam_service_control": {
                 "endpoint": os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666"),
@@ -86,7 +86,6 @@ def get_ydb_config(request):
             "enable_watermarks_advanced": enable_watermarks_advanced,
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
             "enable_compile_cache_warmup": False,
-            "enable_channel_memory_tracking": False,
         },
         replication_config=replication_config,
         default_clusteradmin="root@builtin",

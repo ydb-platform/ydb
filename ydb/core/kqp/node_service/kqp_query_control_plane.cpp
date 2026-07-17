@@ -425,7 +425,7 @@ public:
 
         if (StatsMode == NYql::NDqProto::DQ_STATS_MODE_NONE) {
             StatsMode = runtimeSettings.GetStatsMode();
-            if (EnableChannelMemoryTracking && StatsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
+            if (false/*EnableChannelMemoryTracking*/ && StatsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
                 StatsReportPeriod = reportStatsSettings.MinInterval;
 
                 auto channelCounters = Counters_->GetChannelCounters();

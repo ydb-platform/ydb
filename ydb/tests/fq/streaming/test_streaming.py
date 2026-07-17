@@ -408,26 +408,43 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_limit(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
-        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_shared_reading_limit", local_topics, entity_name, partitions_count=10, shared=True)
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"shared_reading_limit{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=10,
+            shared=True,
+        )
 
-        sql = f"""SELECT time FROM {input_name}
-            WITH (
-                STREAMING = "TRUE",
-                FORMAT = "json_each_row",
-                SCHEMA = (time String NOT NULL)
-            )
-            WHERE time like "%lunch%"
-            LIMIT 1"""
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT time FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(time String NOT NULL))
+                WHERE time like "%lunch%";
+                INSERT INTO {out} SELECT time FROM $in;
+            END DO;'''
 
-        future1 = kikimr.ydb_client.query_async(sql)
-        future2 = kikimr.ydb_client.query_async(sql)
-        time.sleep(3)
+        query_name1 = f"test_read_topic_shared_reading_limit1_{local_topics!s:.1}"
+        query_name2 = f"test_read_topic_shared_reading_limit2_{local_topics!s:.1}"
+        kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
+        kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
+        path1 = f"/Root/{query_name1}"
+        path2 = f"/Root/{query_name2}"
+        self.wait_completed_checkpoints(kikimr, path1)
+        self.wait_completed_checkpoints(kikimr, path2)
+
         data = ['{"time": "lunch time"}']
+        expected_data = ['lunch time', 'lunch time']
         self.write_stream(data, endpoint=endpoint)
-        result_sets1 = future1.result()
-        result_sets2 = future2.result()
-        assert result_sets1[0].rows[0]['time'] == b'lunch time'
-        assert result_sets2[0].rows[0]['time'] == b'lunch time'
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        sql_drop = R'''DROP STREAMING QUERY `{query_name}`;'''
+        kikimr.ydb_client.query(sql_drop.format(query_name=query_name1))
+        kikimr.ydb_client.query(sql_drop.format(query_name=query_name2))
 
     @pytest.mark.parametrize(
         "kikimr",

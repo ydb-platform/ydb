@@ -121,7 +121,8 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                     }
                 }
 
-                LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
+                YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+                    {"debugString", ss.Str()});
             }
         }
     }
@@ -149,7 +150,8 @@ inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletI
         return ss.Str();
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"logFn", logFn()});
 }
 
 template <typename TxResult>
@@ -168,7 +170,8 @@ inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui
         return ss.Str();
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::DATA_INTEGRITY, "",
+        {"logFn", logFn()});
 }
 
 }

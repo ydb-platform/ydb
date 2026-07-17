@@ -55,7 +55,7 @@ struct TIssueInfo {
     }
 };
 
-bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
+bool HasJsonContent(const NHttp::THttpIncomingRequest* request) {
     if (request->Method == "POST") {
         const TStringBuf header = request->ContentType.Before(';');
         return header.empty() || AsciiEqualsIgnoreCase(header, "application/json"); // by default we will try to parse json, no error will be generated if parsing fails
@@ -63,7 +63,7 @@ bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
     return false;
 }
 
-TString GetDatabase(NHttp::THttpIncomingRequest* request) {
+TString GetDatabase(const NHttp::THttpIncomingRequest* request) {
     NHttp::TUrlParameters urlParams(request->URL);
     TString database = urlParams["database"];
     if (database) {
@@ -87,18 +87,21 @@ void LogAuthorizedHttpRequest(
     const TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
     const NACLib::TUserToken* userToken = (result && result->UserToken) ? result->UserToken.Get() : nullptr;
     const TString accessLevel = AccessLevelToString(GetHighestAccessLevel(appData, userToken));
+    const TString database = GetDatabase(&request);
     YDB_LOG_NOTICE(
         "Send request"
             << " [" << address << "]"
             << " " << user
             << " " << request.Method
             << " " << request.URL
-            << " highest_access_level=" << accessLevel,
+            << " highest_access_level=" << accessLevel
+            << " database=" << database,
         {"address", address},
         {"user", user},
         {"method", request.Method},
         {"url", request.URL},
-        {"highest_access_level", accessLevel});
+        {"highest_access_level", accessLevel},
+        {"database", database});
 }
 
 const Ydb::Issue::IssueMessage* FindDeepestIssue(const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues) {

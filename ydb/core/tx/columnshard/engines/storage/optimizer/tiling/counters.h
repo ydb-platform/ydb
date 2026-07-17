@@ -4,6 +4,8 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#include <atomic>
+
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 static constexpr ui32 TILING_LAYERS_COUNT = 10;
@@ -13,13 +15,12 @@ private:
     using TBase = NColumnShard::TPortionCategoryCounterAgents;
 
 public:
-    const std::shared_ptr<NColumnShard::TValueAggregationAgent> NotBoredCount;
+    const std::shared_ptr<std::atomic<i64>> NotBoredNodeCount = std::make_shared<std::atomic<i64>>(0);
     const NColumnShard::TIncrementalHistogram OverloadHistogram;
     const NColumnShard::TIncrementalHistogram WidthHistogram;
 
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, categoryName)
-        , NotBoredCount(TBase::GetValueAutoAggregations("ByGranule/Level/NotBored"))
         , OverloadHistogram(base.GetModuleId(), "ByLevel/Overload", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
         , WidthHistogram(base.GetModuleId(), "ByLevel/Width", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
     {
@@ -29,7 +30,7 @@ public:
 class TPortionCategoryCounters: public NColumnShard::TPortionCategoryCounters {
 private:
     using TBase = NColumnShard::TPortionCategoryCounters;
-    std::shared_ptr<NColumnShard::TValueAggregationClient> NotBoredCount;
+    std::shared_ptr<std::atomic<i64>> NotBoredNodeCount;
     std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> OverloadHistogram;
     std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> WidthHistogram;
     std::optional<ui64> LastOverload;
@@ -37,8 +38,8 @@ private:
 public:
     TPortionCategoryCounters(TPortionCategoryCounterAgents& agents)
         : TBase(agents)
-        , NotBoredCount(agents.NotBoredCount->GetClient())
-        , OverloadHistogram(agents.WidthHistogram.BuildGuard())
+        , NotBoredNodeCount(agents.NotBoredNodeCount)
+        , OverloadHistogram(agents.OverloadHistogram.BuildGuard())
         , WidthHistogram(agents.WidthHistogram.BuildGuard())
     {
     }
@@ -47,18 +48,18 @@ public:
         if (LastOverload) {
             OverloadHistogram->Sub(*LastOverload, 1);
             if (*LastOverload > 0) {
-                NotBoredCount->Add(-1);
+                NotBoredNodeCount->fetch_sub(1);
             }
         }
         OverloadHistogram->Add(overload, 1);
         if (overload > 0) {
-            NotBoredCount->Add(1);
+            NotBoredNodeCount->fetch_add(1);
         }
         LastOverload = overload;
     }
 
-    i32 GetNotBoredCount() const {
-        return NotBoredCount->GetValueSimple();
+    i64 GetNotBoredCount() const {
+        return NotBoredNodeCount->load();
     }
 
     void AddWidth(const ui64 width) {

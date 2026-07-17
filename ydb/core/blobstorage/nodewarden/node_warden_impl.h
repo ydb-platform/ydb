@@ -459,6 +459,8 @@ namespace NKikimr::NStorage {
             // Runtime configuration of VDisk.
             struct TRuntimeData {
                 TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
+                TActorId ActorId;
+                TActorId ServiceId;
                 ui32 OrderNumber;
                 bool DonorMode;
                 bool ReadOnly;

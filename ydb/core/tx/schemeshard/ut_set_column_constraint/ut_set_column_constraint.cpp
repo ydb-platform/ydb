@@ -2531,9 +2531,10 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         TestCheckColumnsNotNull(runtime, movedTablePath, {{"value", true}});
     }
 
-    Y_UNIT_TEST(CopyTableFailsWhileValidating) {
+    Y_UNIT_TEST(CopyTableWithBackupWhileValidating) {
         TTestBasicRuntime runtime;
-        // We dont set log priority for this test because of timeout
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
 
         TTestEnv env(runtime);
         TString root = "/MyRoot";
@@ -2568,7 +2569,6 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             CopyTableDescriptions {
                 SrcPath: "/MyRoot/Table"
                 DstPath: "/MyRoot/TableBackup"
-                OmitIndexes: true
                 IsBackup: true
             }
         )");
@@ -2584,9 +2584,76 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         TestCheckColumnsNotNull(runtime, copyTablePath, {{"value", false}});
     }
 
+    Y_UNIT_TEST(CopyTableNoBackupWhileValidating) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+        TString root = "/MyRoot";
+
+        ui64 txId = 100;
+        TString tableName = "Table";
+        TString tablePath = root + "/" + tableName;
+        TString copyTablePath = root + "/TableBackup";
+
+        TestCreateTable(runtime, ++txId, root, TStringBuilder() << R"(
+              Name: ")" << tableName << R"("
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvValidateRowConditionRequest> validateBlocker(runtime);
+
+        ui64 setConstraintTxId = ++txId;
+        AsyncSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        runtime.WaitFor("block validate request", [&]{ return validateBlocker.size() > 0; });
+
+        ui64 copyTx1 = ++txId;
+        TestConsistentCopyTables(runtime, copyTx1, root, R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table"
+                DstPath: "/MyRoot/TableBackup"
+                IsBackup: false
+            }
+        )", {NKikimrScheme::StatusMultipleModifications});
+        env.TestWaitNotification(runtime, copyTx1);
+
+        TestDescribeResult(DescribePath(runtime, copyTablePath), {NLs::PathNotExist});
+
+        validateBlocker.Stop();
+        validateBlocker.Unblock();
+
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+
+        ui64 copyTx2 = ++txId;
+        TestConsistentCopyTables(runtime, copyTx2, root, R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Table"
+                DstPath: "/MyRoot/TableBackup"
+                IsBackup: false
+            }
+        )");
+        env.TestWaitNotification(runtime, copyTx2);
+
+        TestDescribeResult(DescribePath(runtime, copyTablePath), {NLs::PathExist});
+        TestCheckColumnsNotNull(runtime, copyTablePath, {{"value", true}});
+    }
+
     Y_UNIT_TEST(SetNotNullFailsWhileCopyTableInProgress) {
         TTestBasicRuntime runtime;
-        // We dont set log priority for this test because of timeout
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
 
         TTestEnv env(runtime);
         TString root = "/MyRoot";

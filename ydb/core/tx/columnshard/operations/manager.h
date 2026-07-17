@@ -211,7 +211,10 @@ public:
     TWriteOperation::TPtr GetOperationByInsertWriteIdVerified(const TInsertWriteId insertWriteId) const {
         auto it = InsertWriteIdToOpWriteId.find(insertWriteId);
         AFL_VERIFY(it != InsertWriteIdToOpWriteId.end())("write_id", insertWriteId);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "ask_by_insert_id")("write_id", insertWriteId)("operation_id", it->second);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+            {"event", "ask_by_insert_id"},
+            {"writeId", insertWriteId},
+            {"operationId", it->second});
         return GetOperationVerified(it->second);
     }
 
@@ -220,8 +223,10 @@ public:
         AFL_VERIFY(op->GetInsertWriteIds() == insertions)("operation_data", JoinSeq(", ", op->GetInsertWriteIds()))(
             "expected", JoinSeq(", ", insertions));
         for (auto&& i : insertions) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "add_write_id_to_operation_id")("write_id", i)(
-                "operation_id", operationId);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                {"event", "add_write_id_to_operation_id"},
+                {"writeId", i},
+                {"operationId", operationId});
             InsertWriteIdToOpWriteId.emplace(i, operationId);
         }
     }
@@ -249,13 +254,12 @@ public:
         TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot);
     void CommitTransactionOnComplete(TColumnShard& owner, const ui64 txId, const ui64 lockId, const NOlap::TSnapshot& snapshot);
     void LinkTransactionOnExecute(TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc);
-    void PersistLock(TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc);
     void LinkTransactionOnComplete(const ui64 lockId, const ui64 txId);
     void AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc);
     void AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId, const ui64 lockId);
 
-    void BreakConflictingTxs(const TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc);
-    void BreakConflictingTxs(const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc);
+    void BreakConflictingTxs(const TLockFeatures& lock);
+    void BreakConflictingTxs(const ui64 lockId);
 
     std::optional<ui64> GetLockForTx(const ui64 txId) const;
 

@@ -48,6 +48,8 @@
 {% include [import-additional-params.md](import-additional-params.md) %}
 - `--list`: Перечислить объекты в существующей выгрузке.
 
+{% include [import-resource-broker-note.md](import-resource-broker-note.md) %}
+
 ## Выполнение загрузки {#exec}
 
 {% include [server-import-workflow.md](server-import-workflow.md) %}

@@ -17,14 +17,14 @@ Y_UNIT_TEST_LLVM(TestSimple) {
                                                                {ui64(2), ui64(20)},
                                                                {ui64(3), ui64(30)},
                                                            });
-    const auto flow = pb.ToFlow(list);
+    const auto flow = pb.ToFlow(list, {});
 
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
     });
 
     const auto wideStream = pb.FromFlow(wideFlow);
-    const auto newWideFlow = pb.ToFlow(wideStream);
+    const auto newWideFlow = pb.ToFlow(wideStream, {});
 
     const auto narrowFlow = pb.NarrowMap(newWideFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return pb.Sub(items[1], items[0]);

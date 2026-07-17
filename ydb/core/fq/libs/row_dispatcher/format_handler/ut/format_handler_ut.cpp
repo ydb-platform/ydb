@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         CheckError(
             MakeClient(
-                {{"data_2", "[ListType; [DataType; String]]"}},
+                {{"data_2", "[EmptyListType; [DataType; String]]"}},
                 "",
                 "",
                 EmptyCheck(),

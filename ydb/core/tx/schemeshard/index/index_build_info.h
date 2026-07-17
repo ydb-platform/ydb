@@ -352,6 +352,8 @@ public:
     std::vector<TShardIdx> DoneShards;
     ui32 MaxInProgressShards = 32;
 
+    THashSet<TTxId> DependencyTxIds; // volatile set of concurrent tx(s)
+
     TMeteringStats Processed = TMeteringStatsHelper::ZeroValue();
     TMeteringStats Billed = TMeteringStatsHelper::ZeroValue();
 
@@ -1015,13 +1017,28 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     constexpr static ui32 MaxInProgressValidationShards = 10;
 
     bool ValidationFailed = false;  // true if any shard found NULL values
+    bool IsCancelled = false;
+    TString CancellationReason;
 
     bool IsDone() const override {
         return OperationState == EOperationState::Done;
     }
 
+    bool IsCloseToCompletion() const {
+        return OperationState == EOperationState::Done
+            || OperationState == EOperationState::Unlocking
+            || OperationState == EOperationState::Finishing;
+    }
+
     bool IsSetColumnConstraint() const override {
         return true;
+    }
+
+    void MarkAsCancelled(TString&& reason) {
+        if (!IsCancelled) {
+            IsCancelled = true;
+            CancellationReason = std::move(reason);
+        }
     }
 };
 

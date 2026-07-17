@@ -4,6 +4,9 @@
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
+#include <ydb/core/tx/columnshard/transactions/transactions/tx_finish_async.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -17,8 +20,11 @@ bool TRestoreTransactionOperator::DoParse(TColumnShard& owner, const TString& da
     }
 
     if (const auto* completedTx = owner.LastCompletedBackupTransactionsByTxId.FindPtr(GetTxId())) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "restore_already_completed")("tx_id", GetTxId())(
-            "success", completedTx->GetOpResult().GetSuccess())("explain", completedTx->GetOpResult().GetExplain());
+        YDB_LOG_INFO("",
+            {"event", "restore_already_completed"},
+            {"txId", GetTxId()},
+            {"success", completedTx->GetOpResult().GetSuccess()},
+            {"explain", completedTx->GetOpResult().GetExplain()});
         AlreadyCompleted = true;
         return true;
     }
@@ -41,7 +47,8 @@ TRestoreTransactionOperator::TProposeResult TRestoreTransactionOperator::DoStart
     if (!owner.GetBackgroundSessionsManager()->HasTask(task)) {
         TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
         if (!TxAddTask) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_add_task");
+            YDB_LOG_ERROR("",
+                {"event", "cannot_add_task"});
             return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, "Cannot add restore task");
         }
         AFL_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));
@@ -51,11 +58,25 @@ TRestoreTransactionOperator::TProposeResult TRestoreTransactionOperator::DoStart
     return TProposeResult();
 }
 
-void TRestoreTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& ctx) {
+void TRestoreTransactionOperator::DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) {
     if (!TaskExists && TxAddTask) {
         TxAddTask->Complete(ctx);
         TxAddTask.reset();
     }
+
+    if (AlreadyCompleted) {
+        owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()), ctx);
+        return;
+    }
+    if (!ImportTask) {
+        return;
+    }
+    const auto schemeShardLocalPathId = ImportTask->GetSchemeShardLocalPathId();
+    if (!owner.GetBackgroundSessionsManager()->IsSessionComplete(ImportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()))) {
+        return;
+    }
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "restore_session_complete_finish_async_propose")("tx_id", GetTxId());
+    owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()), ctx);
 }
 
 bool TRestoreTransactionOperator::ProgressOnExecute(
@@ -162,15 +183,7 @@ TString TRestoreTransactionOperator::DoDebugString() const {
 }
 
 bool TRestoreTransactionOperator::DoIsAsync() const {
-    return !AlreadyCompleted;
-}
-
-bool TRestoreTransactionOperator::DoIsProposeReplyReady(TColumnShard& owner) const {
-    if (AlreadyCompleted || !ImportTask) {
-        return true;
-    }
-    const auto schemeShardLocalPathId = ImportTask->GetSchemeShardLocalPathId();
-    return owner.GetBackgroundSessionsManager()->IsSessionComplete(ImportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
+    return true;
 }
 
 TString TRestoreTransactionOperator::DoGetOpType() const {

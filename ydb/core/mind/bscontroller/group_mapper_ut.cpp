@@ -17,6 +17,7 @@ class TTestContext {
         ui32 BodyId;
         ui32 NumSlots;
         ui32 SlotSizeInUnits;
+        std::optional<TString> DiskScope;
 
         TPDiskRecord(ui32 dataCenterId, ui32 roomId, ui32 rackId, ui32 bodyId, ui32 slotSizeInUnits = 0u)
             : DataCenterId(dataCenterId)
@@ -502,6 +503,7 @@ public:
                 .SpaceAvailable = 0,
                 .Operational = !nonoperationalDisks.contains(pair.first),
                 .Decommitted = decommittedDataCenter == pair.second.DataCenterId,
+                .DiskScope = pair.second.DiskScope,
             });
         }
     }
@@ -584,8 +586,10 @@ public:
             for (ui32 failDomain = 0; failDomain < geom.GetNumFailDomainsPerFailRealm(); ++failDomain) {
                 for (ui32 vdisk = 0; vdisk < geom.GetNumVDisksPerFailDomain(); ++vdisk) {
                     const auto pdiskId = group[failRealm][failDomain][vdisk];
+                    const TPDiskRecord& record = PDisks.at(pdiskId);
                     pdisks[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper,
-                            PDisks.at(pdiskId).GetLocation(),
+                            record.GetLocation(),
+                            record.DiskScope,
                             pdiskId,
                             geom
                     );

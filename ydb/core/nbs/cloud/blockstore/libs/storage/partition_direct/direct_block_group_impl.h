@@ -11,9 +11,11 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
 
@@ -21,6 +23,17 @@
 #include <ydb/core/mind/bscontroller/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+// State of a logical session (lock) with a DDisk.
+// Sessions are used only for DDisk connections.
+enum class EDDiskSessionState
+{
+    NotLocked,
+    Locked,
+    Broken,
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -126,7 +139,13 @@ public:
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
-    ui64 GetDDiskSessionSeqNo(size_t index) const;
+    void OnAddHostResult(
+        const NProto::TError& error,
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
 
     // IHostStateController implementation
     void SetHostState(
@@ -134,21 +153,14 @@ public:
         EHostState oldState,
         EHostState newState) override;
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
+    void QueryAddHost() override;
 
 private:
+    friend struct TDBGFixture;
     using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
     using EConnectionType = NTransport::THostConnection::EConnectionType;
     using TDDiskIdToHostIndex =
         TMap<NKikimrBlobStorage::NDDisk::TDDiskId, THostIndex, TDDiskIdLess>;
-
-    // State of a logical session (lock) with a DDisk.
-    // Sessions are used only for DDisk connections.
-    enum class EDDiskSessionState
-    {
-        NotLocked,
-        Locked,
-        Broken,
-    };
 
     struct TDDiskConnection
     {
@@ -165,10 +177,19 @@ private:
 
         void ResetSession();
         [[nodiscard]] const TFuture& GetFuture() const;
+        [[nodiscard]] TString DebugPrint() const;
     };
 
     void DoEstablishConnections();
     void DoEstablishConnection(size_t index, EConnectionType connectionType);
+
+    // Live AddHost: grow all vchunks and the Oracle to the new connection.
+    void SyncHostsWithConnections();
+
+    // Catch one vchunk / the Oracle up to the current connection count.
+    void GrowVChunkToConnections(TVChunk& vChunk);
+    void GrowOracleToConnections();
+
     void OnConnectionEstablished(
         EConnectionType connectionType,
         size_t index,
@@ -179,6 +200,11 @@ private:
 
     [[nodiscard]] bool HasPBufferQuorum() const;
     [[nodiscard]] bool HasLockedQuorum() const;
+
+    [[nodiscard]] bool IsInitialized() const
+    {
+        return InitialReadyPromise.HasValue();
+    }
 
     void DoListPBuffers();
     void OnPBuffersListed(const TAggregatedListPBufferResponse& response);
@@ -191,6 +217,7 @@ private:
         TDuration executionTime);
 
     TDBGFlushResponse HandleSyncWithPBufferResponse(
+        THostIndex ddiskHostIndex,
         const TEvSyncResult& response,
         size_t segmentCount);
 
@@ -224,7 +251,14 @@ private:
 
     [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
 
-    TDBGDumpResponse DoDebugPrintDirtyMap();
+    void HandleBlockedGeneration(THostIndex hostIndex, TStringBuf context);
+
+    [[nodiscard]] TDBGDumpResponse DoDebugPrintDirtyMap() const;
+
+    [[nodiscard]] TDbgSnapshot DoBuildMonSnapshot() const;
+
+    [[nodiscard]] TConnectionSnapshot MakeConnectionSnapshot(
+        size_t hostIndex) const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;
@@ -242,6 +276,8 @@ private:
     TDDiskIdToHostIndex PBufferIdToHostIndex;
     TVector<TVChunkWeakPtr> VChunks;
     TOracle Oracle;
+
+    bool BlockedGenerationDetected = false;
 
     // One-shot signal of the FIRST time the locked quorum was reached. Used
     // ONLY to gate the synchronous tablet start (wait for readiness before

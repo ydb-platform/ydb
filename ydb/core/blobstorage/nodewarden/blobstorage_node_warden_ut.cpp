@@ -706,6 +706,28 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         });
     }
 
+    CUSTOM_UNIT_TEST(TestStopAggregatorRemovesReportedStats) {
+        TTestActorSystem runtime(1);
+        runtime.Start();
+
+        TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(
+            new TNodeWardenConfig(static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
+        const TActorId nodeWarden = runtime.Register(CreateBSNodeWarden(nodeWardenConfig.Release()), 1);
+
+        runtime.WrapInActorContext(nodeWarden, [](IActor* wardenActor) {
+            auto& warden = *dynamic_cast<NStorage::TNodeWarden*>(wardenActor);
+            const TActorId vdiskServiceId = MakeBlobStorageVDiskID(1, 2, 3);
+
+            warden.RunningVDiskServiceIds.insert(vdiskServiceId);
+            warden.PerAggregatorInfo.emplace(vdiskServiceId, NStorage::TNodeWarden::TAggregatorInfo{42, {}});
+
+            warden.StopAggregator(vdiskServiceId);
+
+            UNIT_ASSERT(!warden.RunningVDiskServiceIds.contains(vdiskServiceId));
+            UNIT_ASSERT(!warden.PerAggregatorInfo.contains(vdiskServiceId));
+        });
+    }
+
     CUSTOM_UNIT_TEST(TestSendToInvalidGroupId) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, "", nullptr);
@@ -1070,7 +1092,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         if (expectedRelativeError > 0) {
             UNIT_ASSERT_LE_C(abs(unitSizeRelativeError), expectedRelativeError,
-                TStringBuilder() << "abs(" << unitSizeRelativeError << ") < " << expectedRelativeError
+                TStringBuilder() << "abs(" << unitSizeRelativeError << ") <= " << expectedRelativeError
             );
         }
     }
@@ -1085,6 +1107,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TestInferPDiskSlotCount(50000, 1000, 16, 13, 4u, 0.039);
         TestInferPDiskSlotCount(50000, 100, 16, 16, 32u, 0.024);
         TestInferPDiskSlotCount(18000, 200, 16, 11, 8u, 0.023);
+        TestInferPDiskSlotCount(200, 1000, 16, 1, 1u, 0.8);
+        TestInferPDiskSlotCount(999, 1000, 16, 1, 1u, 0.001);
+        TestInferPDiskSlotCount(1499, 1000, 16, 1, 1u, 0.499);
+        TestInferPDiskSlotCount(1500, 1000, 16, 2, 1u, 0.25);
 
         for (ui32 maxSlots = 1; maxSlots <= 24; maxSlots++) {
             for (ui64 i = 1; i <= 1024; i++) {

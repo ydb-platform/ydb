@@ -268,11 +268,7 @@ non_pk_types = {
     "Yson": lambda i: "[{}]".format(i),
 }
 
-types_not_supported_yet_in_columnshard = {
-    "DyNumber",
-    "UUID",
-    "Interval"
-}
+types_not_supported_yet_in_columnshard = set()
 
 non_comparable_types = {
     "Yson",

@@ -4,6 +4,9 @@
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
+#include <ydb/core/tx/columnshard/transactions/transactions/tx_finish_async.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -17,17 +20,20 @@ bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& dat
     }
 
     if (const auto* completedTx = owner.LastCompletedBackupTransactionsByTxId.FindPtr(GetTxId())) {
-        if (completedTx->GetOpResult().GetSuccess()) {
-            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "backup_already_completed")("tx_id", GetTxId())(
-                "success", completedTx->GetOpResult().GetSuccess())("explain", completedTx->GetOpResult().GetExplain());
-            AlreadyCompleted = true;
-        }
+        YDB_LOG_INFO("",
+            {"event", "backup_already_completed"},
+            {"txId", GetTxId()},
+            {"success", completedTx->GetOpResult().GetSuccess()},
+            {"explain", completedTx->GetOpResult().GetExplain()});
+        AlreadyCompleted = true;
         return true;
     }
 
     TConclusion<NOlap::NExport::TIdentifier> id = NOlap::NExport::TIdentifier::BuildFromProto(txBody);
     if (!id) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_id")("problem", id.GetErrorMessage());
+        YDB_LOG_ERROR("",
+            {"event", "cannot_parse_id"},
+            {"problem", id.GetErrorMessage()});
         return false;
     }
     auto schema = owner.TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(
@@ -55,7 +61,8 @@ TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::DoStartPr
     if (!owner.GetBackgroundSessionsManager()->HasTask(task)) {
         TxAddTask = owner.GetBackgroundSessionsManager()->TxAddTask(task);
         if (!TxAddTask) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_add_task");
+            YDB_LOG_ERROR("",
+                {"event", "cannot_add_task"});
             return TProposeResult(NKikimrTxColumnShard::EResultStatus::ERROR, "Cannot add backup task");
         }
         AFL_VERIFY(TxAddTask->Execute(txc, NActors::TActivationContext::AsActorContext()));
@@ -65,11 +72,25 @@ TBackupTransactionOperator::TProposeResult TBackupTransactionOperator::DoStartPr
     return TProposeResult();
 }
 
-void TBackupTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& ctx) {
+void TBackupTransactionOperator::DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) {
     if (!TaskExists && TxAddTask) {
         TxAddTask->Complete(ctx);
         TxAddTask.reset();
     }
+
+    if (AlreadyCompleted) {
+        owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()), ctx);
+        return;
+    }
+    if (!ExportTask) {
+        return;
+    }
+    const auto pathId = ExportTask->GetIdentifier().GetSchemeShardLocalPathId();
+    if (!owner.GetBackgroundSessionsManager()->IsSessionComplete(ExportTask->GetClassName(), ::ToString(pathId.GetRawValue()))) {
+        return;
+    }
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "backup_session_complete_finish_async_propose")("tx_id", GetTxId());
+    owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()), ctx);
 }
 
 bool TBackupTransactionOperator::ProgressOnExecute(
@@ -79,11 +100,7 @@ bool TBackupTransactionOperator::ProgressOnExecute(
     }
     AFL_VERIFY(!TxRemove);
     const auto schemeShardLocalPathId = ExportTask->GetIdentifier().GetSchemeShardLocalPathId();
-    const TString sessionId = ::ToString(schemeShardLocalPathId.GetRawValue());
-    if (!owner.GetBackgroundSessionsManager()->IsSessionComplete(ExportTask->GetClassName(), sessionId)) {
-        return true;
-    }
-    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), sessionId);
+    auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
 
     NKikimrTxColumnShard::TCompletedBackupTransaction backupTx;
     backupTx.SetTxId(GetTxId());
@@ -91,7 +108,7 @@ bool TBackupTransactionOperator::ProgressOnExecute(
     opResult.SetSuccess(status.Success);
     opResult.SetExplain(status.ErrorMessage);
 
-    TxRemove = owner.GetBackgroundSessionsManager()->TxRemove(ExportTask->GetClassName(), sessionId);
+    TxRemove = owner.GetBackgroundSessionsManager()->TxRemove(ExportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
     NIceDb::TNiceDb db(txc.DB);
 
     const auto tableId = owner.TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
@@ -180,15 +197,7 @@ TString TBackupTransactionOperator::DoDebugString() const {
 }
 
 bool TBackupTransactionOperator::DoIsAsync() const {
-    return !AlreadyCompleted;
-}
-
-bool TBackupTransactionOperator::DoIsProposeReplyReady(TColumnShard& owner) const {
-    if (AlreadyCompleted || !ExportTask) {
-        return true;
-    }
-    const auto schemeShardLocalPathId = ExportTask->GetIdentifier().GetSchemeShardLocalPathId();
-    return owner.GetBackgroundSessionsManager()->IsSessionComplete(ExportTask->GetClassName(), ::ToString(schemeShardLocalPathId.GetRawValue()));
+    return true;
 }
 
 TString TBackupTransactionOperator::DoGetOpType() const {

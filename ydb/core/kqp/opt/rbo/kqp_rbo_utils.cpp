@@ -90,6 +90,18 @@ bool JoinOutputsRight(const TString& joinKind) {
     return joinKind != "LeftOnly" && joinKind != "LeftSemi";
 }
 
+TString GetValidJoinKind(const TString& joinKind) {
+    const auto joinKindLowered = to_lower(joinKind);
+    if (joinKindLowered == "left") {
+        return "Left";
+    } else if (joinKindLowered == "inner") {
+        return "Inner";
+    } else if (joinKindLowered == "cross") {
+        return "Cross";
+    }
+    return joinKind;
+}
+
 TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {
     TVector<TInfoUnit> res;
     for (const auto& unit : left) {

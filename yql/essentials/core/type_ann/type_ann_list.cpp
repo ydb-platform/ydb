@@ -2663,7 +2663,7 @@ namespace {
                 input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
                 return IGraphTransformer::TStatus::Ok;
             }
-            auto commonType = CommonType<false>(input->Pos(), input->Child(idx1)->GetTypeAnn(), input->Child(idx2)->GetTypeAnn(), ctx.Expr);
+            auto commonType = CommonType<false>(input->Pos(), input->Child(idx1)->GetTypeAnn(), input->Child(idx2)->GetTypeAnn(), ctx.Expr, ctx.Types);
             if (!commonType)
                 return IGraphTransformer::TStatus::Error;
             if (ETypeAnnotationKind::Optional == commonType->GetKind()) {
@@ -2729,7 +2729,7 @@ namespace {
                 return status;
             }
         } else {
-            commonType = CommonType<false>(input->Pos(), input->Child(0U)->GetTypeAnn(), input->Child(1U)->GetTypeAnn(), ctx.Expr);
+            commonType = CommonType<false>(input->Pos(), input->Child(0U)->GetTypeAnn(), input->Child(1U)->GetTypeAnn(), ctx.Expr, ctx.Types);
             if (!commonType)
                 return IGraphTransformer::TStatus::Error;
 
@@ -3164,7 +3164,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus SelectOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus SelectOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         const bool checkHashes = !input->IsCallable("UnionAll") && !input->IsCallable("UnionMerge");
         switch (input->ChildrenSize()) {
             case 0U:
@@ -3253,7 +3253,7 @@ namespace {
         TPositionHandle pos,
         const TExprNode::TListType& children,
         const TStructExprType*& resultStructType,
-        TContext& ctx,
+        TExtContext& ctx,
         const bool areHashesChecked,
         bool& isUniversal)
     {
@@ -3292,7 +3292,7 @@ namespace {
                     }
 
 
-                    if (const auto commonType = CommonType<false, true>(input.Pos(), p.first, item->GetItemType(), ctx.Expr)) {
+                    if (const auto commonType = CommonType<false, true>(input.Pos(), p.first, item->GetItemType(), ctx.Expr, ctx.Types)) {
                         p.first = commonType;
                         ++p.second;
                         continue;
@@ -3413,7 +3413,7 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
                 for (size_t i = 0; i < childTypes.size(); ++i) {
-                    if (const auto commonType = CommonType<false>(child->Pos(), resultTypes[i], childTypes[i], ctx.Expr))
+                    if (const auto commonType = CommonType<false>(child->Pos(), resultTypes[i], childTypes[i], ctx.Expr, ctx.Types))
                         resultTypes[i] = commonType;
                     else
                         return IGraphTransformer::TStatus::Error;
@@ -3549,7 +3549,7 @@ namespace {
         }
 
         if constexpr (!IsStrict) {
-            if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr)) {
+            if (const auto commonType = CommonTypeForChildren(*input, ctx.Expr, ctx.Types)) {
                 if (const auto status = ConvertChildrenToType(input, commonType, ctx.Expr, ctx.Types); status != IGraphTransformer::TStatus::Ok)
                     return status;
             } else
@@ -4369,6 +4369,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    template<bool LPartitionsByKeys>
     IGraphTransformer::TStatus PartitionsByKeysWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
@@ -4381,8 +4382,15 @@ namespace {
         }
 
         const TTypeAnnotationNode* itemType = nullptr;
-        if (!EnsureNewSeqType<false>(input->Head(), ctx.Expr, &itemType)) {
-            return IGraphTransformer::TStatus::Error;
+        if constexpr (LPartitionsByKeys) {
+            if (!EnsureListType(input->Head(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            itemType = input->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        } else {
+            if (!EnsureNewSeqType<false>(input->Head(), ctx.Expr, &itemType)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         auto& lambdaKeySelector = input->ChildRef(1);
@@ -4450,7 +4458,11 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!UpdateLambdaAllArgumentsTypes(lambdaFinalHandler, { input->Head().GetTypeAnn() }, ctx.Expr)) {
+        const auto lambdaFinalHandlerArgType = LPartitionsByKeys
+            ? ctx.Expr.MakeType<TStreamExprType>(itemType)
+            : input->Head().GetTypeAnn();
+
+        if (!UpdateLambdaAllArgumentsTypes(lambdaFinalHandler, { lambdaFinalHandlerArgType }, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4467,9 +4479,16 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(lambdaFinalHandler->GetTypeAnn());
+        if constexpr (LPartitionsByKeys) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(&GetSeqItemType(*lambdaFinalHandler->GetTypeAnn())));
+        } else {
+            input->SetTypeAnn(lambdaFinalHandler->GetTypeAnn());
+        }
         return IGraphTransformer::TStatus::Ok;
     }
+
+    template IGraphTransformer::TStatus PartitionsByKeysWrapper<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    template IGraphTransformer::TStatus PartitionsByKeysWrapper<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
     IGraphTransformer::TStatus ReverseWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
@@ -9595,12 +9614,13 @@ namespace {
 
     IGraphTransformer::TStatus WatermarkGeneratorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         auto source = input->Child(TCoWatermarkGenerator::idx_Input);
         auto& watermarkExtractor = input->ChildRef(TCoWatermarkGenerator::idx_WatermarkExtractor);
+        auto watermarkSettings = input->Child(TCoWatermarkGenerator::idx_WatermarkSettings);
 
         if (source->GetTypeAnn() && source->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
             input->SetTypeAnn(source->GetTypeAnn());
@@ -9628,6 +9648,28 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
         if (!EnsureSpecificDataType(*watermarkExtractor, EDataSlot::Timestamp, ctx.Expr, /* allowOptional = */ true)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureValidSettings(
+            *watermarkSettings,
+            {
+                "watermarklatearrivaldelay",
+                "watermarkgranularity",
+                "watermarkidletimeout",
+            },
+            [](TStringBuf name, TExprNode& node, TExprContext& ctx) -> bool {
+                Y_UNUSED(name);
+                if (!EnsureArgsCount(node, 2, ctx)) {
+                    return false;
+                }
+                if (!EnsureAtom(node.Tail(), ctx)) {
+                    return false;
+                }
+                return true;
+            },
+            ctx.Expr
+        )) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -9728,7 +9770,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus SqlCombineWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus SqlCombineWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -9774,7 +9816,7 @@ namespace {
 
         const auto leftKeyType = leftInput->Child(3U)->GetTypeAnn();
         const auto rightKeyType = rightInput->Child(3U)->GetTypeAnn();
-        const auto commonKeyType = CommonType<false>(input->Pos(), leftKeyType, rightKeyType, ctx.Expr, /*warn=*/true);
+        const auto commonKeyType = CommonType<false>(input->Pos(), leftKeyType, rightKeyType, ctx.Expr, ctx.Types, /*warn=*/true);
         if (!commonKeyType) {
             return IGraphTransformer::TStatus::Error;
         }

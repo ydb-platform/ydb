@@ -377,6 +377,27 @@
             "uri": "https://{canondata_backend}/1899731/db557cf50e84fba5e07ed252ed220f77f5fa9cc9/resource.tar.gz#test.test_blocks-coalesce_multi_optional_data_type-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[blocks-way_struct_optional-default.txt-Debug]": [
+        {
+            "checksum": "5bda2472507fe17d1aa30ba516ae1027",
+            "size": 568,
+            "uri": "https://{canondata_backend}/1942415/95c93e48853bd9d70f7a5f12c832168772f87017/resource.tar.gz#test.test_blocks-way_struct_optional-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[blocks-way_struct_optional-default.txt-Peephole]": [
+        {
+            "checksum": "948e927b4225621093cf770e996a9d79",
+            "size": 726,
+            "uri": "https://{canondata_backend}/1942415/95c93e48853bd9d70f7a5f12c832168772f87017/resource.tar.gz#test.test_blocks-way_struct_optional-default.txt-Peephole_/opt.yql"
+        }
+    ],
+    "test.test[blocks-way_struct_optional-default.txt-Results]": [
+        {
+            "checksum": "955246e8c3dcfd68e16e278a4bfb9bfc",
+            "size": 1082,
+            "uri": "https://{canondata_backend}/1942415/95c93e48853bd9d70f7a5f12c832168772f87017/resource.tar.gz#test.test_blocks-way_struct_optional-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[case-case_many_val--Debug]": [
         {
             "checksum": "291fd94793b3188fe2e609ff400be242",
@@ -493,14 +514,14 @@
         {
             "checksum": "91294751a47cfcb87a5a3af5e0db632c",
             "size": 1564,
-            "uri": "https://{canondata_backend}/1899731/db557cf50e84fba5e07ed252ed220f77f5fa9cc9/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1925842/486531303c5d3ec35ed8056fbdb4be070aadc061/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[expr-cast_decimal-default.txt-Results]": [
         {
             "checksum": "7bede4f19295253e7740f658c336afed",
             "size": 14064,
-            "uri": "https://{canondata_backend}/1899731/db557cf50e84fba5e07ed252ed220f77f5fa9cc9/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Results_/results.txt"
+            "uri": "https://{canondata_backend}/1925842/486531303c5d3ec35ed8056fbdb4be070aadc061/resource.tar.gz#test.test_expr-cast_decimal-default.txt-Results_/results.txt"
         }
     ],
     "test.test[expr-dict_comp-default.txt-Debug]": [

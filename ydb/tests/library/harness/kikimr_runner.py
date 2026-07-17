@@ -77,11 +77,10 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.mon_uses_https = self.__configurator.monitoring_tls_cert_path is not None
         self.ic_port = port_allocator.ic_port
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
-        self.pgwire_port = port_allocator.pgwire_port
         self.http_proxy_port = None
         self.kafka_api_port = None
         if configurator.kafka_proxy_enabled:
-            self.kafka_api_port = port_allocator.kafka_api_port
+            self.kafka_api_port = configurator.get_kafka_api_port(node_id)
         if not configurator.simple_config and configurator.http_proxy_enabled:
             self.http_proxy_port = port_allocator.http_proxy_port
         self.sqs_port = None
@@ -153,9 +152,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         if hasattr(self, 'grpc_ssl_port') and self.grpc_ssl_port:
             ports_status["grpc_ssl_port"] = self.is_port_listening(self.grpc_ssl_port)
-
-        if hasattr(self, 'pgwire_port') and self.pgwire_port:
-            ports_status["pgwire_port"] = self.is_port_listening(self.pgwire_port)
 
         if hasattr(self, 'sqs_port') and self.sqs_port:
             ports_status["sqs_port"] = self.is_port_listening(self.sqs_port)
@@ -284,9 +280,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             command.append(
                 "--mon-ca=%s" % self.__configurator.monitoring_tls_ca_path
             )
-
-        if os.environ.get("YDB_ALLOCATE_PGWIRE_PORT", "") == "true":
-            command.append("--pgwire-port=%d" % self.pgwire_port)
 
         if self.__encryption_key is not None:
             command.extend(["--key-file", self.__encryption_key])

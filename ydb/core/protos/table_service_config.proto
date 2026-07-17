@@ -218,6 +218,10 @@ message TTableServiceConfig {
         optional uint64 MaxTotalBytesQuotaStreamLookup = 10 [default = 2684354560]; // 5_MB * 512
         optional uint64 MaxInFlightReadsStreamLookup = 11 [default = 50];
         optional uint64 MaxBytesPerFetchStreamLookup = 12 [default = 268435456]; // 256_MB
+
+        // Per-actor memory controls for pessimistic locks issued by StreamLookupActor
+        // (LOCK_AND_LOOKUP strategy under READ_COMMITTED_RW isolation).
+        optional uint64 MaxInFlightLocksStreamLookup = 13 [default = 50];
     }
 
     message TIteratorReadQuotaSettings {

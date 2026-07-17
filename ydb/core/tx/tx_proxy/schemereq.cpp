@@ -121,9 +121,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     THolder<TEvSchemeShardPropose> MakePropose(ui64 schemeshardIdToRequest) {
         auto request = MakeHolder<TEvSchemeShardPropose>(TxId, schemeshardIdToRequest);
 
-        if (UserToken) {
-            request->Record.SetOwner(UserToken->GetUserSID());
-        }
+        request->Record.SetOwner(ChooseAppropriateOwner(request->Record, AppData(), UserToken));
 
         request->Record.SetPeerName(GetRequestProto().GetPeerName());
         if (GetRequestEv().HasModifyScheme()) {
@@ -1291,6 +1289,20 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         return msg;
     }
 
+    // If the missing access includes GrantAccessRights and permissions are managed via IDM,
+    // the message returned to the user points the user to use IDM instead.
+    TString MakeAccessDeniedError(const TActorContext& ctx, const TVector<TString>& path, ui32 neededAccess) {
+        const TString msg = MakeAccessDeniedError(ctx, path, TStringBuilder()
+            << "with access " << NACLib::AccessRightsToString(neededAccess)
+        );
+
+        if ((neededAccess & NACLib::EAccessRights::GrantAccessRights) && AppData()->FeatureFlags.GetEnableIdmPermissionsManagement()) {
+            return "All access rights are managed via roles in IDM, please use IDM to change them";
+        } else {
+            return msg;
+        }
+    }
+
     void InterpretResolveError(const NSchemeCache::TSchemeCacheNavigate* navigate, const TActorContext &ctx) {
         for (const auto& entry: navigate->ResultSet) {
             switch (entry.Status) {
@@ -1495,6 +1507,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                         return false;
                     }
                 }
+
+                // Admins can always change ACLs
+                allowACLBypass = isAdmin;
             } else if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain) {
                 if (IsDB(entry) && !IsClusterAdministrator) {
                     const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
@@ -1522,9 +1537,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
 
             if (!entry.SecurityObject->CheckAccess(access, *UserToken)) {
-                const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
-                    << "with access " << NACLib::AccessRightsToString(access)
-                );
+                const auto errString = MakeAccessDeniedError(ctx, entry.Path, access);
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
                 return false;
@@ -1729,19 +1742,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {
                 auto& targetUser = *alterLogin.MutableCreateUser();
                 if (targetUser.GetHashedPassword()) {
-                    // to support compatibility between old and new hash formats
+                    // an old-format hash may come e.g. from a local backup restore;
                     // TODO: remove after the end of old format support in local backups
-                    auto hashes = NLogin::ConvertHashes(targetUser.GetHashedPassword());
-                    if (hashes) {
-                        targetUser.SetPassword(std::move(hashes->OldHashFormat));
-                        targetUser.SetIsHashedPassword(true);
-                        targetUser.SetHashedPassword(std::move(hashes->NewHashFormat));
-                    } else {
-                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                            "Unsupported format of hashed password");
-                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::PreconditionFailed, nullptr, &issue, ctx);
-                        return Die(ctx);
+                    if (NLogin::IsOldFormatHash(targetUser.GetHashedPassword())) {
+                        targetUser.SetHashedPassword(NLogin::ConvertOldFormatHash(targetUser.GetHashedPassword()));
                     }
+                    targetUser.ClearPassword();
                 } else {
                     RunPasswordHasher(ctx, targetUser.GetUser(), targetUser.GetPassword());
                     return;
@@ -1752,19 +1758,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             {
                 auto& targetUser = *alterLogin.MutableModifyUser();
                 if (targetUser.HasHashedPassword()) {
-                    // to support compatibility between old and new hash formats
+                    // an old-format hash may come e.g. from a local backup restore;
                     // TODO: remove after the end of old format support in local backups
-                    auto hashes = NLogin::ConvertHashes(targetUser.GetHashedPassword());
-                    if (hashes) {
-                        targetUser.SetPassword(std::move(hashes->OldHashFormat));
-                        targetUser.SetIsHashedPassword(true);
-                        targetUser.SetHashedPassword(std::move(hashes->NewHashFormat));
-                    } else {
-                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                            "Unsupported format of hashed password");
-                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::PreconditionFailed, nullptr, &issue, ctx);
-                        return Die(ctx);
+                    if (NLogin::IsOldFormatHash(targetUser.GetHashedPassword())) {
+                        targetUser.SetHashedPassword(NLogin::ConvertOldFormatHash(targetUser.GetHashedPassword()));
                     }
+                    targetUser.ClearPassword();
                 } else if (targetUser.HasPassword()) {
                     RunPasswordHasher(ctx, targetUser.GetUser(), targetUser.GetPassword());
                     return;
@@ -1795,8 +1794,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto& targetUser = *alterLogin.MutableCreateUser();
             targetUser.SetUser(std::move(computedHashes->PreparedUsername));
-            targetUser.SetPassword(std::move(computedHashes->ArgonHash));
-            targetUser.SetIsHashedPassword(true);
+            targetUser.ClearPassword();
             targetUser.SetHashedPassword(std::move(computedHashes->Hashes));
             break;
         }
@@ -1804,8 +1802,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         {
             auto& targetUser = *alterLogin.MutableModifyUser();
             targetUser.SetUser(std::move(computedHashes->PreparedUsername));
-            targetUser.SetPassword(std::move(computedHashes->ArgonHash));
-            targetUser.SetIsHashedPassword(true);
+            targetUser.ClearPassword();
             targetUser.SetHashedPassword(std::move(computedHashes->Hashes));
             break;
         }

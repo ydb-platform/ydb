@@ -240,6 +240,14 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(startRes->Get()->Status, NKikimrProto::OK);
     }
 
+    // Real-thread runtime: DDisk/PDisk complete trailing chunk-reserve refills and
+    // chunk-map log replies asynchronously after write replies return to the edge.
+    // Wait a quiet window so RestartPDisk does not deliver INVALID_ROUND for those
+    // still-in-flight owner-stamped ops (which would Terminate the DDisk early).
+    void QuiesceInFlightPDiskOps(TDuration quietWindow = TDuration::MilliSeconds(200)) {
+        Sleep(quietWindow);
+    }
+
     void ForceCutLog(ui32 diskIdx) {
         Runtime->Send(new IEventHandle(Disks[diskIdx].DDiskServiceId, Edge,
             new NPDisk::TEvCutLog(0, 0, Max<ui64>(), 0, 0, 0, 0)));
@@ -1112,15 +1120,20 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 // SAME PDisk 0 (different VDisk owner, different SlotId) and tablet 3 writes to it --
 // this proves the restarted PDisk is functional through a fresh owner.
 //
+// Before RestartPDisk we quiesce trailing owner-stamped PDisk traffic from phase 1
+// (chunk-reserve refill / chunk-map log). Otherwise those replies can arrive after
+// restart as INVALID_ROUND and Terminate the zombie DDisk before the page-1 writes
+// that this test expects to still succeed.
+//
 // Variant restartDDisk == false (zombie):
 //   The original DDisk slot 0 keeps running. Its OwnerRound is now stale, so the first
 //   reply it gets back from PDisk for any owner-stamped request will be INVALID_ROUND,
 //   and CheckPDiskReply switches it to StateFuncTerminate. From that point client
-//   requests are silently dropped (no reply). We attempt vchunk 0 page 1 writes
-//   (uring mode bypasses PDisk for raw writes, PDisk fallback hits TEvChunkWriteRaw and
-//   zombifies immediately) and then vchunk 1 page 0 writes (chunk reservation always
-//   goes through PDisk, so this is guaranteed to zombify and produce no reply in
-//   either uring or PDisk-fallback mode). The test must NOT crash.
+//   requests are silently dropped (no reply). We attempt vchunk 0 page 1 writes first:
+//   the chunk is already committed, so uring bypasses PDisk and ChunkWriteRaw (PDisk
+//   fallback) does not enforce OwnerRound — both modes still get a reply. Then vchunk 1
+//   page 0 writes need a fresh chunk reservation that always goes through PDisk, so this
+//   is guaranteed to zombify and produce no reply in either mode. The test must NOT crash.
 //
 // Variant restartDDisk == true (warden-style recovery):
 //   After the PDisk restart we also restart DDisk slot 0; the new DDisk instance uses
@@ -1177,6 +1190,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     writeBlock(0, creds1, baseTabletId + 0, 0, 0);
     writeBlock(0, creds2, baseTabletId + 1, 0, 0);
 
+    // Finish trailing chunk-reserve refill / log replies from phase 1 before restarting
+    // PDisk, so the zombie path is not Terminated by INVALID_ROUND on those replies
+    // before the page-1 writes below.
+    ctx.QuiesceInFlightPDiskOps();
+
     // Phase 2: restart PDisk 0 in place. DDisk slot 0 is still alive but its owner
     // round and reserved chunks are stale relative to the freshly-rebuilt PDisk state.
     ctx.RestartPDisk(0);
@@ -1220,7 +1238,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     // After that the actor silently drops all further messages.
     //
     // Writes to vchunk 0 page 1 succeed in both modes: the chunk is already
-    // committed, so PDisk does not check OwnerRound for raw chunk I/O.
+    // committed, so uring bypasses PDisk and ChunkWriteRaw does not enforce
+    // OwnerRound. QuiesceInFlightPDiskOps above ensures we are not already
+    // Terminated by a trailing phase-1 reserve/log reply.
     writeBlock(0, creds1, baseTabletId + 0, 0, 1);
     writeBlock(0, creds2, baseTabletId + 1, 0, 1);
 

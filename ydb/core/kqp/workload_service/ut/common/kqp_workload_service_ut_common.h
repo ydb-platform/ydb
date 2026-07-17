@@ -32,6 +32,7 @@ struct TQueryRunnerSettings {
     FLUENT_SETTING_DEFAULT(TString, UserSID, "user@" BUILTIN_SYSTEM_DOMAIN);
     FLUENT_SETTING_DEFAULT(TVector<TString>, GroupSIDs, {});
     FLUENT_SETTING_DEFAULT(TString, Database, "");
+    FLUENT_SETTING_DEFAULT(TString, ApplicationName, "");
 
     // Runner settings
     FLUENT_SETTING_DEFAULT(bool, HangUpDuringExecution, false);
@@ -156,6 +157,13 @@ public:
     virtual TTenantInfo GetSharedTenantInfo() const = 0;
     virtual TTenantInfo GetServerlessTenantInfo() const = 0;
 };
+
+// Common classifier helpers
+
+void WaitForClassifierFail(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings, const TString& poolId);
+void WaitForClassifierFail(TIntrusivePtr<IYdbSetup> ydb, const TString& query, const TQueryRunnerSettings& settings, const TString& poolId);
+void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings);
+void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TString& query, const TQueryRunnerSettings& settings);
 
 // Test queries
 

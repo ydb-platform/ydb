@@ -19,6 +19,7 @@ public:
         securityConfig.AddViewerAllowedSIDs("viewer");
         securityConfig.AddMonitoringAllowedSIDs("monitoring");
         securityConfig.AddAdministrationAllowedSIDs("admin");
+        AppData.AdministrationAllowedSIDs = {"admin"};
     }
 
     const TAppData* GetAppData() const {
@@ -168,12 +169,19 @@ Y_UNIT_TEST_SUITE(AuthAccessLevel) {
         UNIT_ASSERT_EQUAL(GetHighestAccessLevel(fixture.GetAppData(), nullptr), EAccessLevel::None);
     }
 
+    Y_UNIT_TEST(UnknownSid) {
+        TStrictDatabaseOnlyFixture fixture;
+        NACLib::TUserToken token({ .UserSID = "unknown" });
+        UNIT_ASSERT_EQUAL(GetHighestAccessLevel(fixture.GetAppData(), &token), EAccessLevel::None);
+    }
+
     Y_UNIT_TEST(EmptyTokenWithEmptyDatabaseAllowedSids) {
         TAppData appData(0, 0, 0, 0, TMap<TString, ui32>{}, nullptr, nullptr, nullptr, nullptr);
         auto& securityConfig = *appData.DomainsConfig.MutableSecurityConfig();
         securityConfig.AddViewerAllowedSIDs("viewer");
         securityConfig.AddMonitoringAllowedSIDs("monitoring");
         securityConfig.AddAdministrationAllowedSIDs("admin");
+        appData.AdministrationAllowedSIDs = {"admin"};
 
         UNIT_ASSERT_EQUAL(GetHighestAccessLevel(&appData, nullptr), EAccessLevel::Database);
         UNIT_ASSERT_EQUAL(GetHighestAccessLevel(&appData, ""), EAccessLevel::Database);
@@ -185,6 +193,7 @@ Y_UNIT_TEST_SUITE(AuthAccessLevel) {
         securityConfig.AddDatabaseAllowedSIDs("database");
         securityConfig.AddViewerAllowedSIDs("viewer");
         securityConfig.AddAdministrationAllowedSIDs("admin");
+        appData.AdministrationAllowedSIDs = {"admin"};
 
         UNIT_ASSERT_EQUAL(GetHighestAccessLevel(&appData, nullptr), EAccessLevel::Monitoring);
     }
@@ -196,6 +205,7 @@ Y_UNIT_TEST_SUITE(AuthAccessLevel) {
         securityConfig.AddViewerAllowedSIDs("admin");
         securityConfig.AddMonitoringAllowedSIDs("admin");
         securityConfig.AddAdministrationAllowedSIDs("admin");
+        appData.AdministrationAllowedSIDs = {"admin"};
         NACLib::TUserToken token({ .UserSID = "admin"});
         UNIT_ASSERT_EQUAL(GetHighestAccessLevel(&appData, &token), EAccessLevel::Administration);
         UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(&appData, token.SerializeAsString()), false);
@@ -208,6 +218,7 @@ Y_UNIT_TEST_SUITE(AuthAccessLevel) {
         securityConfig.AddViewerAllowedSIDs("viewer");
         securityConfig.AddMonitoringAllowedSIDs("monitoring");
         securityConfig.AddAdministrationAllowedSIDs("admin");
+        appData.AdministrationAllowedSIDs = {"admin"};
         NACLib::TUserToken token({ .UserSID = "user", .GroupSIDs = {"database", "viewer", "monitoring", "admin"} });
         UNIT_ASSERT_EQUAL(GetHighestAccessLevel(&appData, &token), EAccessLevel::Administration);
         UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(&appData, token.SerializeAsString()), false);

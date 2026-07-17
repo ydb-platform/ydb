@@ -72,7 +72,7 @@ bool IsAdministrator(const TAppData* appData, const NACLib::TUserToken* userToke
 
 EAccessLevel GetHighestAccessLevel(const TAppData* appData, const NACLib::TUserToken* userToken) {
     const auto& securityConfig = appData->DomainsConfig.GetSecurityConfig();
-    const bool isAdministrationAllowed = IsTokenAllowed(userToken, securityConfig.GetAdministrationAllowedSIDs());
+    const bool isAdministrationAllowed = IsAdministrator(appData, userToken);
     const bool isMonitoringAllowed = isAdministrationAllowed
         || IsTokenAllowed(userToken, securityConfig.GetMonitoringAllowedSIDs());
     const bool isViewerAllowed = isMonitoringAllowed
@@ -82,7 +82,7 @@ EAccessLevel GetHighestAccessLevel(const TAppData* appData, const NACLib::TUserT
 
     // The order of checks is important: we want to return the highest level that is allowed.
     // I.e. if a user is in any sids list, but the administration allowed sids list is empty,
-    // we need to return the EMinimalAccessLevel::Administration access level.
+    // we need to return the EAccessLevel::Administration access level.
     if (isAdministrationAllowed) {
         return EAccessLevel::Administration;
     }

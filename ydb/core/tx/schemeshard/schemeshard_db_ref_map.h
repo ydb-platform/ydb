@@ -1,6 +1,6 @@
 #pragma once
 
-#include "schemeshard_path_ref.h"
+#include "schemeshard_path_db_ref.h"
 #include "schemeshard__operation_memory_changes.h"
 
 #include <ydb/core/scheme/scheme_pathid.h>

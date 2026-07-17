@@ -1,4 +1,4 @@
-#include "schemeshard_path_ref.h"
+#include "schemeshard_path_db_ref.h"
 
 #include "schemeshard_impl.h"
 

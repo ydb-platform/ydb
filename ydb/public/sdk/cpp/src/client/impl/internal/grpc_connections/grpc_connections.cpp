@@ -175,27 +175,16 @@ std::string CreateSDKBuildInfo() {
     return std::string("ydb-cpp-sdk/") + GetSdkSemver();
 }
 
-namespace {
-
-std::string CreateSDKBuildInfoWithObservability(bool tracingEnabled, bool metricsEnabled) {
+std::string BuildFullBuildInfo(const IConnectionsParams& params, bool includeObservability) {
     auto result = CreateSDKBuildInfo();
-    if (tracingEnabled) {
+    if (includeObservability && params.GetTraceProvider()) {
         result += " ydb-sdk-tracing/";
         result += NObservability::kTracingChainVersion;
     }
-    if (metricsEnabled) {
+    if (includeObservability && params.GetExternalMetricRegistry()) {
         result += " ydb-sdk-metrics/";
         result += NObservability::kMetricsChainVersion;
     }
-    return result;
-}
-
-std::string BuildFullBuildInfo(const IConnectionsParams& params, bool includeObservability) {
-    auto result = includeObservability
-        ? CreateSDKBuildInfoWithObservability(
-            static_cast<bool>(params.GetTraceProvider()),
-            static_cast<bool>(params.GetExternalMetricRegistry()))
-        : CreateSDKBuildInfo();
     auto extra = params.GetBuildInfoExtra();
     if (!extra.empty()) {
         result += ';';
@@ -203,8 +192,6 @@ std::string BuildFullBuildInfo(const IConnectionsParams& params, bool includeObs
     }
     return result;
 }
-
-} // namespace
 
 template<class TDerived>
 class TScheduledObject : public TThrRefBase {

@@ -362,7 +362,7 @@ int main(int argc, char **argv) {
         }
 
         // DDisk test: real device paths (--path) are required.
-        if (serverMode && paths.empty()) {
+        if (serverMode && !pathsProvided) {
             Cerr << "Error: --server requires at least one --path (DDisk mode)" << Endl;
             return 1;
         }

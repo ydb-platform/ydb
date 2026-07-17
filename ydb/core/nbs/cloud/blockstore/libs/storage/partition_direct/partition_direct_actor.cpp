@@ -640,8 +640,6 @@ STFUNC(TPartitionActor::StateWork)
             TEvPartitionDirectPrivate::TEvPoison,
             HandlePoisonByBlockedGeneration);
 
-        HFunc(NMon::TEvRemoteHttpInfo, HandleHttpInfo);
-
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 LOG_ERROR(

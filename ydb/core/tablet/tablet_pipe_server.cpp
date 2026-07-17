@@ -69,7 +69,7 @@ namespace NTabletPipe {
             const auto& record = msg.Record;
             Y_ABORT_UNLESS(record.GetTabletId() == TabletId);
             const TActorId sender = ActorIdFromProto(record.GetSender());
-            YDB_LOG_DEBUG_CTX(ctx, "TPipeServerConnection::Push: pushing event to queue",
+            YDB_LOG_DEBUG_CTX(ctx, "Pushing event to queue",
                 {"tabletId", TabletId},
                 {"sender", sender},
                 {"eventType", record.GetType()},
@@ -100,7 +100,7 @@ namespace NTabletPipe {
             ctx.Send(result.release());
 
             if (ui64 seqNo = record.GetSeqNo()) {
-                YDB_LOG_TRACE_CTX(ctx, "TPipeServerConnection::HandleMessage: applying new remote seqNo",
+                YDB_LOG_TRACE_CTX(ctx, "Applying new remote seqNo",
                     {"tabletId", TabletId},
                     {"seqNo", seqNo});
                 MaxForwardedSeqNo = Max(MaxForwardedSeqNo, seqNo);
@@ -110,7 +110,7 @@ namespace NTabletPipe {
         void Handle(TEvTabletPipe::TEvMessage::TPtr& ev, const TActorContext& ctx) {
             auto* msg = ev->Get();
             const auto& originalSender = msg->Sender;
-            YDB_LOG_DEBUG_CTX(ctx, "TPipeServerConnection::HandleMessage: forwarding message to tablet",
+            YDB_LOG_DEBUG_CTX(ctx, "Forwarding message to tablet",
                 {"tabletId", TabletId},
                 {"sender", originalSender},
                 {"eventType", ev->Type},
@@ -135,7 +135,7 @@ namespace NTabletPipe {
             ctx.Send(result.Release());
 
             if (ui64 seqNo = msg->GetSeqNo()) {
-                YDB_LOG_TRACE_CTX(ctx, "TPipeServerConnection::HandleMessage: applying new local seqNo",
+                YDB_LOG_TRACE_CTX(ctx, "Applying new local seqNo",
                     {"tabletId", TabletId},
                     {"seqNo", seqNo});
                 MaxForwardedSeqNo = Max(MaxForwardedSeqNo, seqNo);
@@ -144,7 +144,7 @@ namespace NTabletPipe {
 
         void HandleSend(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
             const auto& originalSender = ev->Recipient;
-            YDB_LOG_DEBUG_CTX(ctx, "TPipeServerConnection::HandleSend: sending event to tablet",
+            YDB_LOG_DEBUG_CTX(ctx, "Sending event to tablet",
                 {"tabletId", TabletId},
                 {"sender", originalSender},
                 {"eventType", ev->Type},
@@ -188,7 +188,7 @@ namespace NTabletPipe {
 
         void Handle(TEvTabletPipe::TEvPeerClosed::TPtr& ev, const TActorContext& ctx) {
             Y_ABORT_UNLESS(ev->Get()->Record.GetTabletId() == TabletId);
-            YDB_LOG_DEBUG_CTX(ctx, "TPipeServerConnection::HandlePeerClosed: peer closed connection",
+            YDB_LOG_DEBUG_CTX(ctx, "Peer closed connection",
                 {"tabletId", TabletId},
                 {"from", ev->Sender});
             Reset(ctx);
@@ -235,7 +235,7 @@ namespace NTabletPipe {
         }
 
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx) {
-            YDB_LOG_ERROR_CTX(ctx, "TPipeServerConnection::HandleNodeDisconnected: node disconnected",
+            YDB_LOG_ERROR_CTX(ctx, "Node disconnected",
                 {"tabletId", TabletId},
                 {"nodeId", ev->Get()->NodeId});
             NeedUnsubscribe = false;
@@ -244,7 +244,7 @@ namespace NTabletPipe {
 
         void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
             // Either interconnect session or remote client no longer exist
-            YDB_LOG_INFO_CTX(ctx, "TPipeServerConnection::HandleUndelivered: event undelivered",
+            YDB_LOG_INFO_CTX(ctx, "Event undelivered",
                 {"tabletId", TabletId},
                 {"target", ev->Sender},
                 {"type", ev->Get()->SourceType},
@@ -302,7 +302,7 @@ namespace NTabletPipe {
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
             IActor* server = CreateServer(TabletId, clientId, ev->InterconnectSession, ev->Get()->Record.GetFeatures(), ev->Cookie);
             TActorId serverId = TActivationContext::Register(server);
-            YDB_LOG_DEBUG("TPipeServer::AcceptConnect: accepted connect request",
+            YDB_LOG_DEBUG("Accepted connect request",
                 {"tabletId", TabletId},
                 {"originator", ev->Sender});
             ServerIds.insert(serverId);
@@ -313,14 +313,14 @@ namespace NTabletPipe {
         void Reject(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, NKikimrProto::EReplyStatus status, bool leader) override {
             Y_ABORT_UNLESS(ev->Get()->Record.GetTabletId() == TabletId);
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
-            YDB_LOG_DEBUG("TPipeServer::RejectConnect: rejected connect request",
+            YDB_LOG_DEBUG("Rejected connect request",
                 {"tabletId", TabletId},
                 {"originator", ev->Sender});
             owner.Send(clientId, new TEvTabletPipe::TEvConnectResult(status, TabletId, clientId, TActorId(), leader, 0, {}));
         }
 
         void Stop(TActorIdentity owner) override {
-            YDB_LOG_DEBUG("TPipeServer::Stop: stopping pipe server",
+            YDB_LOG_DEBUG("Stopping pipe server",
                 {"tabletId", TabletId});
             for (const auto& serverId : ServerIds) {
                 owner.Send(serverId, new TEvTabletPipe::TEvShutdown);
@@ -330,7 +330,7 @@ namespace NTabletPipe {
         }
 
         void Detach(TActorIdentity owner) override {
-            YDB_LOG_DEBUG("TPipeServer::Detach: detaching pipe server",
+            YDB_LOG_DEBUG("Detaching pipe server",
                 {"tabletId", TabletId});
             for (const auto& serverId : ServerIds) {
                 CloseServer(owner, serverId);
@@ -346,7 +346,7 @@ namespace NTabletPipe {
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
             IActor* server = CreateServer(TabletId, clientId, ev->InterconnectSession, ev->Get()->Record.GetFeatures(), ev->Cookie);
             TActorId serverId = TActivationContext::Register(server);
-            YDB_LOG_DEBUG("TPipeServer::EnqueueConnect: enqueued connect request",
+            YDB_LOG_DEBUG("Enqueued connect request",
                 {"tabletId", TabletId},
                 {"originator", ev->Sender});
             ServerIds.insert(serverId);
@@ -355,7 +355,7 @@ namespace NTabletPipe {
         }
 
         void Activate(TActorIdentity owner, TActorId recipientId, bool leader, ui64 generation, const TString &versionInfo) override {
-            YDB_LOG_DEBUG("TPipeServer::Activate: activating pending connections",
+            YDB_LOG_DEBUG("Activating pending connections",
                 {"tabletId", TabletId});
             for (const auto& serverId : ActivatePending) {
                 ActivateServer(TabletId, serverId, owner, recipientId, leader, generation, versionInfo);

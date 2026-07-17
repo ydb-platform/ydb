@@ -292,7 +292,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             if (retryDelay) {
                 TDuration delay = (entry.LastResolved + retryDelay) - TActivationContext::Monotonic();
                 if (delay) {
-                    YDB_LOG_TRACE("TTabletResolver::TabletResolveLoop: sleeping before retry",
+                    YDB_LOG_TRACE("Sleeping before retry",
                         {"tabletId", tabletId},
                         {"delay", delay});
                     co_await AsyncSleepFor(delay);
@@ -300,12 +300,12 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             }
 
             {
-                YDB_LOG_TRACE("TTabletResolver::TabletResolveLoop: sending TEvLookup",
+                YDB_LOG_TRACE("Sending TEvLookup",
                     {"tabletId", tabletId});
                 auto ev = co_await LookupTablet(tabletId);
                 if (!ev) {
                     // StateStorage proxy is not configured on this node
-                    YDB_LOG_INFO("TTabletResolver::TabletResolveLoop: state storage proxy not configured",
+                    YDB_LOG_INFO("State storage proxy not configured",
                         {"tabletId", tabletId});
                     SendQueuedError(entry, NKikimrProto::ERROR);
                     break;
@@ -313,7 +313,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
                 auto* msg = ev->Get();
 
-                YDB_LOG_TRACE("TTabletResolver::TabletResolveLoop: received TEvInfo",
+                YDB_LOG_TRACE("Received TEvInfo",
                     {"tabletId", tabletId},
                     {"status", msg->Status},
                     {"event", msg->ToString()});
@@ -324,7 +324,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
             if (!entry.InCache) {
                 // This entry was evicted while resolving, stop processing
-                YDB_LOG_TRACE("TTabletResolver::TabletResolveLoop: stopped processing evicted entry",
+                YDB_LOG_TRACE("Stopped processing evicted entry",
                     {"tabletId", tabletId});
                 break;
             }
@@ -347,7 +347,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             co_await entry.Wakeup.Wait();
 
             if (!entry.InCache || entry.State == TEntry::StRemove) {
-                YDB_LOG_TRACE("TTabletResolver::TabletResolveLoop: stopped processing evicted entry",
+                YDB_LOG_TRACE("Stopped processing evicted entry",
                     {"tabletId", tabletId});
                 break;
             }
@@ -414,7 +414,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
 
         TEntry& entry = it->second;
-        YDB_LOG_TRACE("TTabletResolver::OnTabletProblem: processing tablet problem",
+        YDB_LOG_TRACE("Processing tablet problem",
             {"tabletId", tabletId},
             {"actorId", actorId},
             {"entryState", TEntry::StateToString(entry.State)});
@@ -429,7 +429,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
 
         if (entry.KnownLeader == actorId || entry.KnownLeaderTablet == actorId) {
-                    YDB_LOG_TRACE("TTabletResolver::OnTabletProblem: marking leader with a problem",
+                    YDB_LOG_TRACE("Marking leader with a problem",
                         {"tabletId", tabletId},
                         {"knownLeaderNodeId", entry.KnownLeader},
                         {"permanent", permanent});
@@ -443,7 +443,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         for (auto it = entry.KnownFollowers.begin(); it != entry.KnownFollowers.end(); ++it) {
             if (it->Follower == actorId || it->FollowerTablet == actorId) {
-                YDB_LOG_TRACE("TTabletResolver::OnTabletProblem: removing follower",
+                YDB_LOG_TRACE("Removing follower",
                     {"tabletId", tabletId},
                     {"followerNodeId", it->Follower});
                 entry.KnownFollowers.erase(it);
@@ -472,7 +472,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             subscription.State = NKikimrTabletBase::TEvTabletStateUpdate::StateUnknown;
 
             if (retryDelay) {
-                YDB_LOG_TRACE("TTabletResolver::TabletStateSubscriptionLoop: sleeping before retry",
+                YDB_LOG_TRACE("Sleeping before retry",
                     {"tabletId", tabletId},
                     {"actor", actorId},
                     {"retryDelay", retryDelay});
@@ -486,7 +486,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             if (actorId.NodeId() != SelfId().NodeId()) {
                 flags |= IEventHandle::FlagSubscribeOnSession;
             }
-            YDB_LOG_TRACE("TTabletResolver::TabletStateSubscriptionLoop: sending TEvTabletStateSubscribe",
+            YDB_LOG_TRACE("Sending TEvTabletStateSubscribe",
                 {"tabletId", tabletId},
                 {"actor", actorId},
                 {"seqNo", seqNo});
@@ -495,7 +495,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             bool subscribed = true;
             auto unsubscribe = [&]() {
                 if (subscribed) {
-                    YDB_LOG_TRACE("TTabletResolver::TabletStateSubscriptionLoop: sending TEvTabletStateUnsubscribe",
+                    YDB_LOG_TRACE("Sending TEvTabletStateUnsubscribe",
                         {"tabletId", tabletId},
                         {"actor", actorId},
                         {"seqNo", seqNo});
@@ -517,7 +517,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 if (!ev) {
                     // Node disconnected, start a new iteration
                     subscribed = false;
-                    YDB_LOG_TRACE("TTabletResolver::TabletStateSubscriptionLoop: node connection lost",
+                    YDB_LOG_TRACE("Node connection lost",
                         {"tabletId", tabletId},
                         {"actorId", actorId},
                         {"connectionStatus", (stream.HadConnect() ? "disconnected" : "failed to connect")});
@@ -532,7 +532,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                     case TEvents::TEvUndelivered::EventType: {
                         // Tablet actor doesn't exist (note: this will not be delivered after a disconnect)
                         subscribed = false;
-                        YDB_LOG_TRACE("TTabletResolver::TabletStateSubscriptionLoop: event undelivered, tablet actor permanently unavailable",
+                        YDB_LOG_TRACE("Event undelivered, tablet actor permanently unavailable",
                             {"tabletId", tabletId},
                             {"actorId", actorId});
                         OnTabletProblem(tabletId, actorId, /* permanent */ true);
@@ -541,7 +541,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                     case TEvTablet::TEvTabletStateUpdate::EventType: {
                         retryNumber = 0;
                         auto* msg = ev->Get<TEvTablet::TEvTabletStateUpdate>();
-                        YDB_LOG_TRACE("TTabletResolver::TabletStateSubscriptionLoop: received tablet state update",
+                        YDB_LOG_TRACE("Received tablet state update",
                             {"tabletId", tabletId},
                             {"actorId", actorId},
                             {"update", msg->ToString()});
@@ -710,7 +710,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             size_t winnerIndex = (winners.size() == 1 ? 0 : (AppData()->RandomProvider->GenRand64() % winners.size()));
             const TCandidate& winner = winners[winnerIndex];
 
-            YDB_LOG_DEBUG("TTabletResolver::SelectForward: selecting forward node",
+            YDB_LOG_DEBUG("Selecting forward node",
                 {"selfNodeId", selfNode},
                 {"selfDataCenter", dcName(selfDc)},
                 {"leaderDataCenter", dcName(leaderDc)},
@@ -745,7 +745,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             return std::make_pair(winner.KnownLeader, winner.KnownLeaderTablet);
         }
 
-        YDB_LOG_INFO("TTabletResolver::SelectForward: no forward candidates",
+        YDB_LOG_INFO("No forward candidates",
             {"selfNodeId", selfNode},
             {"selfDataCenter", dcName(selfDc)},
             {"leaderDataCenter", dcName(leaderDc)},
@@ -840,7 +840,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         entry.LastResolved = TActivationContext::Monotonic();
         entry.CacheEpoch = ++LastCacheEpoch;
 
-        YDB_LOG_DEBUG("TTabletResolver::ApplyEntry: applied tablet entry",
+        YDB_LOG_DEBUG("Applied tablet entry",
             {"tabletId", msg.TabletID},
             {"leaderNodeId", entry.KnownLeader},
             {"followerCount", entry.KnownFollowers.size()});
@@ -900,7 +900,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             if (entry.State == TEntry::StNormal) {
                 auto* pMaxProblemEpoch = NodeProblems.FindPtr(entry.KnownLeader.NodeId());
                 if (pMaxProblemEpoch && entry.CacheEpoch <= *pMaxProblemEpoch) {
-                    YDB_LOG_DEBUG("TTabletResolver::InvalidateEntry: delayed leader invalidation",
+                    YDB_LOG_DEBUG("Delayed leader invalidation",
                         {"tabletId", tabletId},
                         {"leaderNodeId", entry.KnownLeader});
                     entry.CurrentLeaderProblem = true;
@@ -912,7 +912,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             while (itSrc != entry.KnownFollowers.end()) {
                 auto* pMaxProblemEpoch = NodeProblems.FindPtr(itSrc->Follower.NodeId());
                 if (pMaxProblemEpoch && entry.CacheEpoch <= *pMaxProblemEpoch) {
-                    YDB_LOG_DEBUG("TTabletResolver::InvalidateEntry: delayed follower invalidation",
+                    YDB_LOG_DEBUG("Delayed follower invalidation",
                         {"tabletId", tabletId},
                         {"followerNodeId", itSrc->Follower});
                     ++itSrc;
@@ -941,7 +941,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         CheckDelayedNodeProblem(tabletId);
 
         TEntry& entry = GetEntry(tabletId);
-        YDB_LOG_DEBUG("TTabletResolver::Handle TEvForward: processing forward request",
+        YDB_LOG_DEBUG("Processing forward request",
             {"tabletId", tabletId},
             {"entryState", TEntry::StateToString(entry.State)},
             {"leader", entry.KnownLeader},
@@ -982,13 +982,13 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         // Note: avoid promoting tablet entry in the cache
         auto it = Tablets.find(tabletId);
         if (it == Tablets.end()) {
-            YDB_LOG_DEBUG("TTabletResolver::Handle TEvTabletProblem: tablet not cached",
+            YDB_LOG_DEBUG("Tablet not cached",
                 {"tabletId", tabletId});
             return;
         }
 
         TEntry& entry = it->second;
-        YDB_LOG_DEBUG("TTabletResolver::Handle TEvTabletProblem: processing tablet problem",
+        YDB_LOG_DEBUG("Processing tablet problem",
             {"tabletId", tabletId},
             {"actorId", msg->Actor},
             {"entryState", TEntry::StateToString(entry.State)});
@@ -1003,13 +1003,13 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         ui64& maxProblemEpoch = NodeProblems[nodeId];
         if (maxProblemEpoch < problemEpoch) {
-            YDB_LOG_DEBUG("TTabletResolver::Handle TEvNodeProblem: updated max problem epoch",
+            YDB_LOG_DEBUG("Updated max problem epoch",
                 {"nodeId", nodeId},
                 {"maxProblemEpoch", problemEpoch});
             maxProblemEpoch = problemEpoch;
             LastNodeProblemsUpdateEpoch = ++LastCacheEpoch;
         } else {
-            YDB_LOG_DEBUG("TTabletResolver::Handle TEvNodeProblem: ignored stale problem epoch",
+            YDB_LOG_DEBUG("Ignored stale problem epoch",
                 {"nodeId", nodeId},
                 {"problemEpoch", problemEpoch},
                 {"maxProblemEpoch", maxProblemEpoch});
@@ -1020,7 +1020,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         auto* msg = ev->Get();
         const ui64 tabletId = msg->Record.GetTabletID();
 
-        YDB_LOG_TRACE("TTabletResolver::Handle TEvPong: received pong",
+        YDB_LOG_TRACE("Received pong",
             {"tabletId", tabletId},
             {"actorId", ev->Sender},
             {"cookie", ev->Cookie});
@@ -1169,7 +1169,7 @@ public:
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvPrivate::TEvRefreshNodes, Handle);
             default:
-                YDB_LOG_WARN("TTabletResolver::StateWork: unexpected event",
+                YDB_LOG_WARN("Unexpected event",
                     {"eventType", Hex(ev->GetTypeRewrite())},
                     {"event", ev->ToString()});
                 break;

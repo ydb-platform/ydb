@@ -219,6 +219,7 @@ namespace NKikimr::NDDisk {
             auto partCookie = NextCookie++;
             auto msg = std::make_unique<TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
             msg->AddPayload(TRope(payload));
+            msg->Record.MutableChecksums()->CopyFrom(record.GetChecksums());
             auto pbServiceId = MakeBlobStoragePersistentBufferId(pbId.GetNodeId(), pbId.GetPDiskId(), pbId.GetDDiskSlotId());
             auto h = std::make_unique<IEventHandle>(pbServiceId, SelfId(), msg.release(), IEventHandle::FlagSubscribeOnSession, partCookie);
             TActivationContext::Send(h.release());

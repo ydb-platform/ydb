@@ -295,7 +295,11 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        request->AddPayload(std::move(rope));
+        request->AddPayloadThenChecksum(std::move(rope));
+        // TODO(RFC 006): checksums should be computed by the Partition and
+        // carried down to here rather than recomputed post-copy; computing it
+        // after SgListCopy only covers corruption from this point on and bakes
+        // in anything already wrong upstream of the copy.
 
         SendWithUndeliveryTracking(
             ctx,
@@ -432,7 +436,11 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        request->AddPayload(std::move(rope));
+        request->AddPayloadThenChecksum(std::move(rope));
+        // TODO(RFC 006): checksums should be computed by the Partition and
+        // carried down to here rather than recomputed post-copy; computing it
+        // after SgListCopy only covers corruption from this point on and bakes
+        // in anything already wrong upstream of the copy.
 
         SendWithUndeliveryTracking(
             ctx,

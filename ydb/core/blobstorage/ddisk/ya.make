@@ -25,6 +25,7 @@ LIBRARY()
         ydb/core/blobstorage/vdisk/common
         ydb/library/pdisk_io
         library/cpp/containers/absl
+        contrib/libs/xxhash
     )
 
 END()

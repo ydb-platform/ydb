@@ -219,6 +219,17 @@ namespace NKikimr::NDDisk {
                 NMonitoring::TDynamicCounters::TCounterPtr InMemoryCacheSize;
                 NMonitoring::THistogramPtr WriteBatchSize;
             } PersistentBuffer;
+
+            struct {
+                // External (non-internal) TEvWritePersistentBuffer requests received with no Checksums
+                // attached at all. Checksum validation is opt-in, so this tracks how far we are from being
+                // able to make it mandatory.
+                NMonitoring::TDynamicCounters::TCounterPtr WritesWithoutChecksums;
+                // Sender-supplied checksum mismatches detected on TEvWrite / TEvWritePersistentBuffer(s),
+                // i.e. rejections with TReplyStatus::CORRUPTED. Covers both the DDisk data path and the
+                // PersistentBuffer path, so it lives in its own subsystem rather than under PersistentBuffer.
+                NMonitoring::TDynamicCounters::TCounterPtr ChecksumMismatch;
+            } Checksums;
         };
 
         TCounters Counters;

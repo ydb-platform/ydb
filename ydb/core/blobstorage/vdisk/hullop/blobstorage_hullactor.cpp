@@ -26,7 +26,7 @@ namespace NKikimr {
                 if (!(ui32) Config->HullCompFullCompPeriodSec) {
                     return true;
                 }
-                return (TActivationContext::Now() - LastUpdateTime).Seconds() > (ui32) Config->HullCompFullCompPeriodSec; 
+                return (TActivationContext::Now() - LastUpdateTime).Seconds() > (ui32) Config->HullCompFullCompPeriodSec;
             }
 
             void Update() {
@@ -282,6 +282,9 @@ namespace NKikimr {
         void HandleWakeup(const TActorContext& ctx) {
             Y_VERIFY_S(CompactionScheduled, HullDs->HullCtx->VCtx->VDiskLogPrefix);
             CompactionScheduled = false;
+            if (!HullDs->HullCtx->VCfg->MaxActiveCompactionsPerPDisk) {
+                CancelOrReleaseCompactionTokenIfNeeded(ctx);
+            }
             UpdateTimingMetrics(ctx);
             if (ctx.Monotonic() >= NextCompactionWakeup) {
                 LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, "Try to schedule compactions");
@@ -409,6 +412,7 @@ namespace NKikimr {
 
             switch (action) {
                 case NHullComp::ActNothing: {
+                    CancelOrReleaseCompactionTokenIfNeeded(ctx);
                     // notify compaction completed
                     FullCompactionState.Compacted(ctx, CompactionTask->FullCompactionInfo);
                     // nothing to merge, try later
@@ -420,6 +424,7 @@ namespace NKikimr {
                 case NHullComp::ActDeleteSsts: {
                     Y_VERIFY_S(CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty(),
                         HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    CancelOrReleaseCompactionTokenIfNeeded(ctx);
                     if (CompactionTask->GetHugeBlobsToDelete().Empty() && CompactionTask->GetHugeBlobsAllocated().Empty()) {
                         AccountSelectedStrategy();
                         ApplyCompactionResult(ctx, {}, {}, 0);
@@ -450,6 +455,7 @@ namespace NKikimr {
                 case NHullComp::ActMoveSsts: {
                     Y_VERIFY_S(!CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty(),
                         HullDs->HullCtx->VCtx->VDiskLogPrefix);
+                    CancelOrReleaseCompactionTokenIfNeeded(ctx);
                     AccountSelectedStrategy();
                     ApplyCompactionResult(ctx, {}, {}, 0);
                     break;
@@ -459,8 +465,9 @@ namespace NKikimr {
                     LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                              VDISKP(HullDs->HullCtx->VCtx, "%s: level scheduled",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data()));
-                    
-                    if (CompactionTokenState == ECompactionTokenState::NotNeeded || !HullDs->HullCtx->VCfg->MaxActiveCompactionsPerPDisk) {
+
+                    if (CompactionTokenState == ECompactionTokenState::NotNeeded ||
+                            !HullDs->HullCtx->VCfg->MaxActiveCompactionsPerPDisk) {
                         CancelOrReleaseCompactionTokenIfNeeded(ctx);
                         LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP,
                              VDISKP(HullDs->HullCtx->VCtx, "%s: compaction token not needed, starting compaction",
@@ -469,7 +476,7 @@ namespace NKikimr {
                         RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains, CompactionTask->IsFullCompaction);
                         break;
                     }
-                    
+
                     if (CompactionTokenState == ECompactionTokenState::Acquired) {
                         CompactionTokenState = ECompactionTokenState::InProgress;
                         LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
@@ -499,12 +506,14 @@ namespace NKikimr {
             switch (CompactionTokenState) {
                 case ECompactionTokenState::Requested:
                 case ECompactionTokenState::Acquired:
+                case ECompactionTokenState::InProgress:
                     LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP,
                         VDISKP(HullDs->HullCtx->VCtx, "%s: cancelling pending compaction token request",
                             PDiskSignatureForHullDbKey<TKey>().ToString().data()));
                     ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(
                         Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, true));
                     CompactionTokenState = ECompactionTokenState::Idle;
+                    CompactionToken = 0;
                     CompactionWaitingStartTime = TMonotonic();
                     break;
                 default:
@@ -528,7 +537,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP,
                 VDISKP(HullDs->HullCtx->VCtx, "%s: compaction requested with priority %s",
                     PDiskSignatureForHullDbKey<TKey>().ToString().data(), priority.ToString().data()));
-        
+
         }
 
         void HandleBrokerUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
@@ -550,23 +559,22 @@ namespace NKikimr {
 
         void Handle(typename TEvCompactionTokenResult::TPtr &ev, const TActorContext &ctx) {
             if (CompactionTokenState == ECompactionTokenState::Idle) {
-                const TCompactionTokenId token = ev->Get()->Token;
                 ctx.Send(MakeBlobStorageCompBrokerID(), new TEvReleaseCompactionToken(
-                    Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, token));
+                    Config->BaseInfo.PDiskId, HullLogCtx->VCtx->GroupId, HullLogCtx->VCtx->ShortSelfVDisk, true));
                 return;
             }
 
             Y_VERIFY_S(CompactionTokenState == ECompactionTokenState::Requested,
                 HullDs->HullCtx->VCtx->VDiskLogPrefix << " Unexpected compaction token state: " << (int)CompactionTokenState);
-            
+
             CompactionToken = ev->Get()->Token;
             CompactionTokenState = ECompactionTokenState::Acquired;
             CompactionWaitingStartTime = TMonotonic();
-            
+
             LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                 VDISKP(HullDs->HullCtx->VCtx, "%s: got compaction token# %" PRIu64 ", scheduling compaction",
                     PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionToken));
-            
+
             ScheduleCompaction(ctx);
         }
 

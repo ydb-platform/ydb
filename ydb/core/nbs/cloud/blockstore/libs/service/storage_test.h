@@ -66,6 +66,15 @@ public:
         Y_UNUSED(reason);
         ++BlockedGenerationCount;
     }
+
+    bool TryAdvancePBufferBarrier(
+        const NActors::TActorId& pbufferServiceId,
+        ui64 lsn) override
+    {
+        Y_UNUSED(pbufferServiceId);
+        Y_UNUSED(lsn);
+        return true;
+    }
 };
 
 struct TTestStorage: public IStorage

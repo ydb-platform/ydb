@@ -426,6 +426,8 @@ TIssues TGenericDescribeTableTransformer::DescribeTableFromConnector(const TGene
         timeout = State_->Configuration->DescribeTableTimeout
     ](const NThreading::TFuture<NConnector::NApi::TDescribeTableRequest>& f1) mutable {
         try {
+            Y_ENSURE(client);
+
             NThreading::TFuture<NConnector::NApi::TDescribeTableRequest> f2(f1);
             auto request = f2.ExtractValueSync();
             desc->DataSourceInstance = request.data_source_instance();

@@ -43,11 +43,11 @@ from ydb.tests.stability.nemesis.internal.nemesis.runners import (
     ClusterSuspendNodeNemesis,
     # ClusterHardRebootHostNemesis,
     KillNodeNemesis,
-    NetworkNemesis,
+    # NetworkNemesis,
     TimeSkewNemesis,
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.network_planner import (
-    NetworkNemesisPlanner,
+    # NetworkNemesisPlanner,
     TimeSkewNemesisPlanner,
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.pinned_first_host_planner import (

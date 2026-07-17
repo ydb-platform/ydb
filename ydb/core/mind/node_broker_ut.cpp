@@ -19,6 +19,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -1051,6 +1052,50 @@ THashSet<ui32> GetNameserverDynamicNodeIds(TTestActorRuntime &runtime, TActorId 
         if (node.NodeId > maxStaticNodeId)
             ids.insert(node.NodeId);
     return ids;
+}
+
+// Subscribe to static node table changes with the given onlyAliveDynamicNodes
+// preference. The nameservice remembers the preference per subscriber and
+// re-notifies with a fresh nodes list (respecting the filter) whenever the
+// static node table changes.
+void SubscribeToStaticNodeChanges(TTestActorRuntime &runtime, TActorId subscriber,
+                                  bool onlyAliveDynamicNodes)
+{
+    runtime.Send(new IEventHandle(GetNameserviceActorId(), subscriber,
+        new TEvInterconnect::TEvListNodes(/* subscribeToStaticNodeChanges */ true,
+                                          onlyAliveDynamicNodes)));
+}
+
+// Grab the next nodes-list event delivered to a specific subscriber and return
+// the set of dynamic (non-static) node ids in it. Used to observe the list the
+// nameservice pushes to static-node-change subscribers.
+THashSet<ui32> GrabNameserverDynamicNodeIds(TTestActorRuntime &runtime, TActorId subscriber)
+{
+    ui32 maxStaticNodeId = runtime.GetAppData().DynamicNameserviceConfig->MaxStaticNodeId;
+    auto ev = runtime.GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(subscriber);
+    THashSet<ui32> ids;
+    for (auto &node : ev->Get()->Nodes)
+        if (node.NodeId > maxStaticNodeId)
+            ids.insert(node.NodeId);
+    return ids;
+}
+
+// Push a new static node table to the node-0 nameservice as if the node warden
+// delivered a self-managed storage config. When the table differs from the
+// current one the nameservice invalidates its caches and re-notifies every
+// static-node-change subscriber.
+void SetNameserverStaticNodes(TTestActorRuntime &runtime, TActorId sender,
+                              const TVector<ui32> &staticNodeIds)
+{
+    auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+    for (ui32 nodeId : staticNodeIds) {
+        auto *node = config->AddAllNodes();
+        node->SetNodeId(nodeId);
+        node->SetHost(Sprintf("static%u.local", nodeId));
+        node->SetPort(19000 + nodeId);
+    }
+    runtime.Send(new IEventHandle(GetNameserviceActorId(), sender,
+        new TEvNodeWardenStorageConfig(config, /* selfManagementEnabled */ true, nullptr)));
 }
 
 void GetNameserverNodesList(TTestActorRuntime &runtime,
@@ -5493,6 +5538,48 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
 
         UNIT_ASSERT(GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ false).contains(NODE1));
         UNIT_ASSERT(GetNameserverDynamicNodeIds(runtime, sender, /* onlyAlive */ true).contains(NODE1));
+    }
+
+    Y_UNIT_TEST(OnlyAliveDynamicNodesStaticNodeChangeSubscribers)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, {}, false, /* enableNodeBrokerLongLease */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        SetLeaseDuration(runtime, sender, TDuration::Minutes(5));
+
+        // Register a node and drive it into the Dead-but-not-expired window, so
+        // the alive-only and full lists disagree on whether it is served.
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+        WaitForEpochUpdate(runtime, sender);
+        WaitForEpochUpdate(runtime, sender);
+        CheckNodeLiveness(runtime, sender, NODE1, ENodeLiveness::Dead);
+
+        // Establish a known static node table baseline.
+        SetNameserverStaticNodes(runtime, sender, {1, 2});
+
+        // Two subscribers to static node changes with opposite
+        // onlyAliveDynamicNodes preferences.
+        TActorId subAll = runtime.AllocateEdgeActor();
+        TActorId subAlive = runtime.AllocateEdgeActor();
+        SubscribeToStaticNodeChanges(runtime, subAll, /* onlyAlive */ false);
+        SubscribeToStaticNodeChanges(runtime, subAlive, /* onlyAlive */ true);
+
+        // The initial list responses already respect each subscriber's filter:
+        // the full-list subscriber sees the dead node, the alive-only one does not.
+        UNIT_ASSERT(GrabNameserverDynamicNodeIds(runtime, subAll).contains(NODE1));
+        UNIT_ASSERT(!GrabNameserverDynamicNodeIds(runtime, subAlive).contains(NODE1));
+
+        // Change the static node table; both subscribers must be re-notified.
+        SetNameserverStaticNodes(runtime, sender, {1, 2, 3});
+
+        // Each re-notification must respect the onlyAliveDynamicNodes preference
+        // the subscriber originally requested (stored in StaticNodeChangeSubscribers):
+        // the dead node stays in the full-list subscriber's view and is hidden
+        // from the alive-only subscriber's view.
+        UNIT_ASSERT(GrabNameserverDynamicNodeIds(runtime, subAll).contains(NODE1));
+        UNIT_ASSERT(!GrabNameserverDynamicNodeIds(runtime, subAlive).contains(NODE1));
     }
 }
 

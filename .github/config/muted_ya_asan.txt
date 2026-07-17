@@ -14,6 +14,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.mirror3of4
 ydb/core/blobstorage/ut_blobstorage/ut_osiris unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestBlobSizeLimitAboveLimit
+ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestBlobSizeLimitBelowLimit
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestDisabling
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestEnabling
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestLoweringMemoryLimit
@@ -45,6 +46,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.GoodRequestGetRecordsCbor
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestAuthMatrixForGetQueueUrlXmlSqs
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithEmptyName
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatchInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatchNonExistentConsumerInFederation
@@ -84,6 +86,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueExis
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueFifo
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithBadQueueName
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithCustomConsumer
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithEmptyName
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteQueueNonExisting
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestEnableContentBasedDeduplicationMessageRateLimit
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestGetQueueAttributesFifo0Consumers
@@ -131,6 +134,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQuer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithProcess+EnableKqpConstraintsTransformer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.WritingInLocalYdbTablesWithCheckpoints
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithRowCountBackPressure
+ydb/core/kqp/ut/indexes KqpMultishardIndex.DataColumnWrite
 ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
@@ -160,12 +164,16 @@ ydb/core/kqp/ut/view TCreateAndDropViewTest.DropViewIfExists
 ydb/core/kqp/ut/view TCreateAndDropViewTest.ParsingSecurityInvoker
 ydb/core/kqp/ut/view TSelectFromViewTest.LeftJoinViewsWithNoMatch
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
+ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
+ydb/core/load_test/ut unittest.[*/*] chunk
 ydb/core/load_test/ut_ycsb ReadLoad.ShouldReadIterate
 ydb/core/mind/hive/ut THiveTestWithTenants.TestDrain
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicNotCanonizedPath
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithoutDatabase
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
+ydb/core/persqueue/public/mlp/ut TMLPWriterTests.Deduplicated_Reboot
+ydb/core/persqueue/public/mlp/ut unittest.sole chunk
 ydb/core/persqueue/ut/ut_with_sdk CommitOffset.Commit_WithSession_ToPastParentPartition
 ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySession_AutoscaleAwareSDK
 ydb/core/persqueue/ut/ut_with_sdk WithSDK.DescribeConsumer
@@ -173,6 +181,7 @@ ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
 ydb/core/tablet_flat/ut TIterator.GetKeyWithVersionSkips
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
+ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPartitioning
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
 ydb/core/tx/columnshard/backup/iscan/ut IScan.ShouldRejectParquetExportWithEncryption

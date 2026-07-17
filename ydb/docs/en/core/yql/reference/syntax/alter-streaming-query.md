@@ -1,6 +1,6 @@
 # ALTER STREAMING QUERY
 
-`ALTER STREAMING QUERY` changes settings{% if alter_streaming_query == true %} and query text {% endif %} of [streaming queries](../../../concepts/streaming-query.md) and controls their lifecycle (start and stop).
+`ALTER STREAMING QUERY` changes settings{% if alter_streaming_query == true %} and text {% endif %} of [streaming queries](../../../concepts/streaming-query/streaming-query.md), and also manages their state: starting and stopping.
 
 ## Syntax
 
@@ -33,42 +33,49 @@ ALTER STREAMING QUERY [IF EXISTS] <query_name> SET (
 
 ### Parameters
 
-* `IF EXISTS` — do not fail if the streaming query does not exist.
-* `query_name` — name of the streaming query to change.
-* `SET (<key> = <value>)` — optional list of settings to update.
+* `IF EXISTS` — do not output an error if the streaming query does not exist.
+* `query_name` — name of the streaming query to be modified.
+* `SET (<key> = <value>)` — list of streaming query settings to update, optional.
 
 {% if alter_streaming_query == true %}
-* `AS DO BEGIN ... END DO` — optional new streaming query text.
 
-You must specify a `SET` block, new query text, or both.
+* `AS DO BEGIN ... END DO` — new text of the streaming query, optional.
+
+You must specify the `SET` block, the new query text, or both parameters simultaneously.
 
 {% endif %}
 
-### Changing query settings
+### Changing query parameters
 
 Syntax:
+
 
 ```sql
 ALTER STREAMING QUERY [IF EXISTS] <query_name> SET (<key> = <value>)
 ```
 
+
 Available parameters:
 
 * `RUN = (TRUE|FALSE)` — start or stop the query.
-* `RESOURCE_POOL = <resource_pool_name>` — name of the [resource pool](../../../concepts/glossary.md#resource-pool) where the query runs.
+* `RESOURCE_POOL = <resource_pool_name>` — name of the [resource pool](../../../concepts/glossary.md#resource-pool) in which the query will run.
+
 {% if alter_streaming_query == true %}
-* `FORCE = (TRUE|FALSE)` — allow changing query text with aggregation state reset. Required for [text changes](#text-changing-examples).
+
+* `FORCE = (TRUE|FALSE)` — allow changing the query text with reset of aggregation state. Required when [changing the query text](#text-changing-examples).
+
 {% endif %}
 
-When you run `SET (RUN = TRUE)`, read offsets from topics and aggregation state are restored from a [checkpoint](../../../dev/streaming-query/checkpoints.md). If there is no checkpoint, reading starts from the latest data.
+When `SET (RUN = TRUE)` is executed, read offsets from the topic and aggregation function states are restored from the [checkpoint](../../../dev/streaming-query/checkpoints.md). If no checkpoint exists, reading starts from the most recent data.
 
-Examples of changing settings are [below](#parameters-changing-examples).
+See [below](#parameters-changing-examples) for examples of changing query parameters.
 
 {% if alter_streaming_query == true %}
 
-### Changing query text
+### Changing the query text
 
 Syntax:
+
 
 ```sql
 ALTER STREAMING QUERY [IF EXISTS] <query_name> AS
@@ -77,43 +84,49 @@ DO BEGIN
 END DO
 ```
 
+
 Where:
 
-* `<query_statement>` — new streaming query text. Limitations are in [{#T}](../../../concepts/streaming-query.md#limitations); examples are [below](#text-changing-examples).
+* `<query_statement>` — new text of the streaming query. Limitations are given in [{#T}](../../../concepts/streaming-query/streaming-query.md#limitations), examples — [below](#text-changing-examples).
 
 {% note warning %}
 
-Changing query text while fully preserving the [checkpoint](../../../dev/streaming-query/checkpoints.md) is under development. `FORCE = TRUE` is required.
+Support for changing the query text with full [checkpoint](../../../dev/streaming-query/checkpoints.md) migration is under development. The `FORCE = TRUE` setting is mandatory.
 
-If aggregation state cannot be restored, the command fails with:
+If restoring aggregation function states is impossible, the command will fail with an error:
+
 
 ```text
 Changing the query text will result in the loss of the checkpoint. Please use FORCE=true to change the request text
 ```
 
-After a change with `FORCE = TRUE`, only read offsets from topics are restored; aggregation state is reset.
+
+After changing with `FORCE = TRUE`, only read offsets from the topic are restored; aggregation states are reset.
 
 {% endnote %}
 
-If `RUN` is not specified in `SET`, the query keeps its running state. A running query is restarted with the new text.
+If the `RUN` setting is not specified in the `SET` block, the query retains its state. A running query will be restarted with the new text.
 
-Examples of changing text are [below](#text-changing-examples).
+See [below](#text-changing-examples) for examples of changing the query text.
 
 {% endif %}
 
 ## Permissions
 
-Streaming queries require [permission](./grant.md#permissions-list) `ALTER SCHEMA`. Example grant for `my_streaming_query`:
+Working with streaming queries requires the [permission](./grant.md#permissions-list) `ALTER SCHEMA`. An example of granting such a permission for query `my_streaming_query`:
+
 
 ```sql
 GRANT ALTER SCHEMA ON my_streaming_query TO `user@domain`
 ```
 
+
 ## Examples
 
-### Changing settings {#parameters-changing-examples}
+### Changing parameters {#parameters-changing-examples}
 
-Stop `my_streaming_query`:
+Stopping query `my_streaming_query`:
+
 
 ```sql
 ALTER STREAMING QUERY my_streaming_query SET (
@@ -121,7 +134,9 @@ ALTER STREAMING QUERY my_streaming_query SET (
 )
 ```
 
-Start `my_streaming_query` in [resource pool](../../../concepts/glossary.md#resource-pool) `my_resource_pool`:
+
+Starting query `my_streaming_query` in the [resource pool](../../../concepts/glossary.md#resource-pool) `my_resource_pool`:
+
 
 ```sql
 ALTER STREAMING QUERY my_streaming_query SET (
@@ -130,11 +145,13 @@ ALTER STREAMING QUERY my_streaming_query SET (
 )
 ```
 
+
 {% if alter_streaming_query == true %}
 
-### Changing query text {#text-changing-examples}
+### Changing the text {#text-changing-examples}
 
-Change the text of `my_streaming_query` and reset aggregation state. After start, only read offsets from topics are restored from the [checkpoint](../../../dev/streaming-query/checkpoints.md):
+Changing the text of query `my_streaming_query` with reset of aggregation state. After starting, only read offsets from the topic are restored from the [checkpoint](../../../dev/streaming-query/checkpoints.md):
+
 
 ```sql
 ALTER STREAMING QUERY my_streaming_query SET (
@@ -156,7 +173,8 @@ END DO
 
 ### Query status {#status-of-query}
 
-Current status is available in the `Status` column of the `.sys/streaming_queries` system view [{#T}](../../../dev/system-views.md#streaming_queries):
+The current query status is available in the `Status` column of the [.sys/streaming_queries](../../../dev/system-views.md) system table:
+
 
 ```sql
 SELECT
@@ -168,22 +186,23 @@ FROM
     `.sys/streaming_queries`
 ```
 
+
 Possible status values:
 
-1. `CREATING` — query is being created after `CREATE STREAMING QUERY`.
-2. `CREATED` — query exists but is not running (for example, `RUN = FALSE`).
-3. `STARTING` — query is starting.
-4. `RUNNING` — query is executing.
-5. `SUSPENDED` — query paused due to internal errors; the system will retry.
-6. `STOPPING` — query is stopping after `ALTER STREAMING QUERY ... SET (RUN = FALSE)`.
-7. `STOPPED` — query is stopped.
+1. `CREATING` — the query is being created after executing the `CREATE STREAMING QUERY` command.
+2. `CREATED` — the query is created but not started (for example, when `RUN = FALSE` is specified).
+3. `STARTING` — the query is starting.
+4. `RUNNING` — the query is running.
+5. `SUSPENDED` — the query is paused due to internal errors. The system will automatically retry starting.
+6. `STOPPING` — the query is stopping by the `ALTER STREAMING QUERY ... SET (RUN = FALSE)` command.
+7. `STOPPED` — the query is stopped.
 
-After successful DDL for create or alter, status is guaranteed to be `CREATED`, `STARTING`, `RUNNING`, `STOPPED`, or `SUSPENDED` depending on `RUN = (TRUE|FALSE)` and whether startup succeeded.
+It is guaranteed that at the time of successful completion of a DDL for creating or modifying a streaming query, the status will be `CREATED`, `STARTING`, `RUNNING`, `STOPPED`, or `SUSPENDED` depending on the `RUN = (TRUE|FALSE)` setting and the success of starting the query.
 
-More examples for other data formats: [{#T}](../../../dev/streaming-query/streaming-query-formats.md). For capabilities and limitations of streaming queries, see [{#T}](../../../concepts/streaming-query.md).
+Examples of processing data in other formats are given in the article [{#T}](../../../dev/streaming-query/streaming-query-formats.md). For more details on the capabilities and limitations of streaming queries, [see the documentation](../../../concepts/streaming-query/streaming-query.md).
 
 ## See also
 
-* [{#T}](../../../concepts/streaming-query.md)
+* [{#T}](../../../concepts/streaming-query/streaming-query.md)
 * [{#T}](create-streaming-query.md)
 * [{#T}](drop-streaming-query.md)

@@ -1,10 +1,10 @@
-# Debug reads from a topic
+# Debug reading from a topic
 
-When developing [streaming queries](../../concepts/streaming-query.md), it is often useful to inspect what arrives in a [topic](../../concepts/datamodel/topic.md) without creating a full streaming query. Run a regular `SELECT` with `STREAMING = TRUE`.
+When developing [streaming queries](../../concepts/streaming-query/streaming-query.md), it can be useful to quickly see what data is coming into a [topic](../../concepts/datamodel/topic.md) without creating a full streaming query. To do this, you can run a regular `SELECT` with the `STREAMING = TRUE` parameter.
 
 {% note warning %}
 
-For debugging and inspection only. For production, create streaming queries with [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md).
+This method is intended only for debugging and checking data in a topic. For production use, create streaming queries via [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md).
 
 {% endnote %}
 
@@ -17,9 +17,10 @@ In the examples:
 
 {% endnote %}
 
-## Raw reads
+## Reading raw data
 
-Simplest option — read messages in `raw` format without parsing:
+The simplest way is to read messages in `raw` format, without parsing the schema:
+
 
 ```sql
 SELECT
@@ -31,16 +32,18 @@ WITH (
     SCHEMA = (
         Data String
     ),
-    STREAMING = "TRUE"
+    STREAMING = TRUE
 )
 LIMIT 1
 ```
 
-`LIMIT` is required; without it the query never completes because it waits for new messages indefinitely.
 
-## JSON parsing
+The `LIMIT` parameter is required — without it, the query will not complete, as it will wait for new messages indefinitely.
 
-If the topic stores JSON, parse fields directly:
+## Reading with JSON parsing
+
+If the data in the topic is stored in JSON format, you can parse it by fields immediately:
+
 
 ```sql
 SELECT
@@ -54,13 +57,14 @@ WITH (
         Level String NOT NULL,
         Host String NOT NULL
     ),
-    STREAMING = "TRUE"
+    STREAMING = TRUE
 )
 LIMIT 5
 ```
 
+
 ## See also
 
-* [{#T}](../../concepts/streaming-query.md)
+* [{#T}](../../concepts/streaming-query/streaming-query.md)
 * [{#T}](../../dev/streaming-query/streaming-query-formats.md) — supported data formats
-* [{#T}](../../yql/reference/syntax/select/streaming.md) — `STREAMING = "TRUE"` in the YQL reference
+* [{#T}](../../yql/reference/syntax/select/streaming.md) — description of `STREAMING = TRUE` in the YQL reference

@@ -5,6 +5,11 @@ items:
   include:
     path: analytics/toc_p.yaml
     mode: link
+- name: Streaming processing
+  href: streaming-query/index.md
+  include:
+    path: streaming-query/toc_p.yaml
+    mode: link
 - name: Architecture
   href: architecture/index.md
   include:
@@ -19,8 +24,6 @@ items:
     mode: link
 - name: Cluster topology
   href: topology.md
-- name: Bridge mode
-  href: bridge.md
 - name: Query execution
   href: query_execution/index.md
   include:

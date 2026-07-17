@@ -723,9 +723,22 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            if (col.HasDefaultFromGenerated() && !col.GetDefaultFromGenerated().GetStored() && columnFamily && columnFamily->GetId() != 0) {
-                errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
-                return nullptr;
+            if (col.HasDefaultFromGenerated()) {
+                const bool stored = col.GetDefaultFromGenerated().GetStored();
+                if (stored && !featureFlags.EnableGeneratedStored) {
+                    errStr = Sprintf("STORED GENERATED columns are disabled. Column: %s", colName.c_str());
+                    return nullptr;
+                }
+
+                if (!stored && !featureFlags.EnableGeneratedVirtual) {
+                    errStr = Sprintf("VIRTUAL GENERATED columns are disabled. Column: %s", colName.c_str());
+                    return nullptr;
+                }
+
+                if (!stored && columnFamily && columnFamily->GetId() != 0) {
+                    errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
+                    return nullptr;
+                }
             }
 
             alterData->NextColumnId = Max(colId + 1, alterData->NextColumnId);

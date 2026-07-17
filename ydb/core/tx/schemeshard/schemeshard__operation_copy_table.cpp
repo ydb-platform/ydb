@@ -759,6 +759,8 @@ public:
             .EnableParameterizedDecimal = true,
             .EnableDetailedMetrics = true,
             .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
+            .EnableGeneratedStored = true,
+            .EnableGeneratedVirtual = true,
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);

@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(60)
 
 PEERDIR(
     library/cpp/getopt

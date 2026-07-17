@@ -219,31 +219,95 @@ public:
             return true;
         };
 
+        // Most modifications of the main table are forbidden while SetColumnConstraint
+        // holds its lock, however copying the table (e.g. for a backup) is allowed to
+        // proceed concurrently (see TCopyTable::Propose: CheckLocks is skipped for
+        // IsBackup copies). While such a copy is in flight the table has
+        // PathStateCopying, and our own internal sub-transactions (which are gated by
+        // NotUnderOperation()) may transiently fail with StatusMultipleModifications.
+        // Just like build_index does, retry the very same proposal once the copy is
+        // done instead of failing the whole operation.
+        // Waiting for the conflicting operation's completion notification, not for
+        // an immediate self-retry - see the comment on shouldRetry() below for why.
+        bool waitingForDependency = false;
+
+        auto shouldRetry = [&]() {
+            if (record.GetStatus() != NKikimrScheme::StatusMultipleModifications) {
+                return false;
+            }
+
+            auto it = Self->PathsById.find(operationInfo.TablePathId);
+            if (it == Self->PathsById.end() || it->second->PathState != NKikimrSchemeOp::EPathStateCopying) {
+                return false;
+            }
+
+            auto copyTxId = it->second->LastTxId;
+            LOG_I("TTxReplyModify : Waiting for txId " << copyTxId << " to retry SetColumnConstraint id# " << BuildId);
+            operationInfo.DependencyTxIds.insert(copyTxId);
+            Self->TxIdToDependentSetColumnConstraint[copyTxId].insert(BuildId);
+            Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(copyTxId)));
+            return true;
+        };
+
         if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Locking) {
             Y_ENSURE(txId == operationInfo.LockTxId);
-            operationInfo.LockTxStatus = record.GetStatus();
-            Self->PersistSetColumnConstraintLockTxStatus(db, operationInfo);
+            if (shouldRetry()) {
+                operationInfo.LockTxId = InvalidTxId;
+                Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
+                waitingForDependency = true;
+            } else {
+                operationInfo.LockTxStatus = record.GetStatus();
+                Self->PersistSetColumnConstraintLockTxStatus(db, operationInfo);
 
-            if (!replyOnCreation()) {
-                return false;
+                if (!replyOnCreation()) {
+                    return false;
+                }
             }
         } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites) {
             Y_ENSURE(txId == operationInfo.LockNullWritesTxId);
-            operationInfo.LockNullWritesTxStatus = record.GetStatus();
-            Self->PersistSetColumnConstraintLockNullWritesTxStatus(db, operationInfo);
+            if (shouldRetry()) {
+                operationInfo.LockNullWritesTxId = InvalidTxId;
+                Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
+                waitingForDependency = true;
+            } else {
+                operationInfo.LockNullWritesTxStatus = record.GetStatus();
+                Self->PersistSetColumnConstraintLockNullWritesTxStatus(db, operationInfo);
+            }
         } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Finishing) {
             Y_ENSURE(txId == operationInfo.UnlockNullWritesTxId);
-            operationInfo.UnlockNullWritesTxStatus = record.GetStatus();
-            Self->PersistSetColumnConstraintUnlockNullWritesTxStatus(db, operationInfo);
+            if (shouldRetry()) {
+                operationInfo.UnlockNullWritesTxId = InvalidTxId;
+                Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
+                waitingForDependency = true;
+            } else {
+                operationInfo.UnlockNullWritesTxStatus = record.GetStatus();
+                Self->PersistSetColumnConstraintUnlockNullWritesTxStatus(db, operationInfo);
+            }
         } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Unlocking) {
             Y_ENSURE(txId == operationInfo.UnlockTxId);
-            operationInfo.UnlockTxStatus = record.GetStatus();
-            Self->PersistSetColumnConstraintUnlockTxStatus(db, operationInfo);
+            if (shouldRetry()) {
+                operationInfo.UnlockTxId = InvalidTxId;
+                Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
+                waitingForDependency = true;
+            } else {
+                operationInfo.UnlockTxStatus = record.GetStatus();
+                Self->PersistSetColumnConstraintUnlockTxStatus(db, operationInfo);
+            }
         } else {
             Y_UNREACHABLE();
         }
 
-        Progress(BuildId);
+        // Do NOT call Progress() right away when we just subscribed to a conflicting
+        // operation's completion: Progress() would immediately re-allocate a TxId and
+        // resend the very same proposal, which (while the conflicting copy is still
+        // running) would just fail again and again in a tight synchronous loop,
+        // starving the conflicting operation's own actor mailbox turns and preventing
+        // it from ever finishing. Instead, wait for TEvNotifyTxCompletionResult on the
+        // dependency txId - TTxReplyCompleted will call Progress() for us exactly once
+        // that happens.
+        if (!waitingForDependency) {
+            Progress(BuildId);
+        }
         return true;
     }
 
@@ -271,6 +335,23 @@ public:
         const auto txId = CompletedTxId;
 
         auto* operationIdPtr = Self->TxIdToSetColumnConstraintOperations.FindPtr(txId);
+
+        if (Self->TxIdToDependentSetColumnConstraint.contains(txId)) {
+            THashSet<TIndexBuildId> deps = std::move(Self->TxIdToDependentSetColumnConstraint.at(txId));
+            Self->TxIdToDependentSetColumnConstraint.erase(txId);
+            for (auto& dependentBuildId : deps) {
+                LOG_I("TTxReplyCompleted txId: " << txId << " : trying to resume dependent SetColumnConstraint " << dependentBuildId);
+                if (auto* dependentOperationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(dependentBuildId)) {
+                    auto& dependentOperationInfo = **dependentOperationInfoPtr;
+                    dependentOperationInfo.DependencyTxIds.erase(txId);
+                    Progress(dependentBuildId);
+                }
+            }
+            if (!operationIdPtr) {
+                return true;
+            }
+        }
+
         if (!operationIdPtr) {
             LOG_I("TTxReplyCompleted: operation not found, txId# " << txId);
             return true;

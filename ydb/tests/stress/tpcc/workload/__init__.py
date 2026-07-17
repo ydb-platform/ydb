@@ -52,24 +52,27 @@ class YdbTpccWorkload(WorkloadBase):
         subprocess.run(cmd, check=True, text=True)
         print(f"End at {time.time()}")
 
-    def __loop(self):
-        # init
+    def import_data(self):
         self.cmd_run(
             self.get_command_prefix(['init', '--warehouses', self.warehouses])
         )
-        # import
         self.cmd_run(
             self.get_command_prefix(['import', '--no-tui', '--warehouses', self.warehouses])
         )
-        # run
+
+    def clean_data(self):
+        self.cmd_run(
+            self.get_command_prefix(['clean'])
+        )
+
+    def __loop(self):
         self.cmd_run(
             self.get_command_prefix(['run', '--no-tui', '--format', 'Json',
                                      '--time', f'{self.duration}s',
-                                     '--warehouses', self.warehouses])
-        )
-        # clean
-        self.cmd_run(
-            self.get_command_prefix(['clean'])
+                                     '--warehouses', self.warehouses,
+                                     '--tx-mode', 'mixed',
+                                     '--tx-mode-weight-serializable', '30',
+                                     '--tx-mode-weight-snapshot', '70'])
         )
 
     def get_workload_thread_funcs(self):

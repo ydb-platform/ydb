@@ -30,6 +30,7 @@ class StressRunExecutor:
         self.run_counter_lock = threading.Lock()
         self.run_counter = 0
         self.nodes = nodes
+        self.test_run_uuid = uuid.uuid4().hex[:8]
 
     def __substitute_variables_in_template(
         self,
@@ -49,6 +50,7 @@ class StressRunExecutor:
         - {timestamp} - run timestamp
         - {database} - run database without leading '/'
         - {uuid} - short UUID
+        - {test_run_uuid} - stable UUID shared across all nodes for this test run
 
         Args:
             command_args_template: Command line arguments template
@@ -79,6 +81,7 @@ class StressRunExecutor:
             "{timestamp}": str(timestamp),
             "{uuid}": short_uuid,
             "{global_run_id}": str(self.run_counter),
+            "{test_run_uuid}": self.test_run_uuid or "",
         }
 
         if "{slot_kafka_port}" in command_args_template:
@@ -309,6 +312,126 @@ class StressRunExecutor:
                     "workload_start_time": workload_start_time,
                     "deployed_nodes": deployed_nodes,
                 }
+
+    def run_pre_nemesis_commands(
+        self,
+        workload_params: dict,
+        deployed_nodes: dict,
+    ) -> None:
+        """Run pre-nemesis commands (e.g. data import) synchronously on all nodes.
+
+        Collects workloads that have 'pre_nemesis_args', runs them in parallel,
+        and waits for all to complete before returning.  Failures are logged but
+        do not abort the test.
+        """
+        tasks = []
+        for name, workload_config in workload_params.items():
+            if 'pre_nemesis_args' not in workload_config:
+                continue
+            if name not in deployed_nodes:
+                continue
+            for node in deployed_nodes[name].nodes:
+                tasks.append((name, workload_config, node))
+
+        if not tasks:
+            return
+
+        logging.info(f"Running pre-nemesis commands for {len(tasks)} node(s)")
+
+        def run_one(name, workload_config, node):
+            node_host = node['node'].host
+            run_config = {
+                "iteration_num": 0,
+                "node_host": node_host,
+                "duration": 3600,
+                "database": self.database,
+            }
+            run_name = f"{name}_{node_host}_pre_nemesis"
+            success, _, _, stderr, is_timeout = self._execute_single_workload_run(
+                node['binary_path'],
+                node['node'],
+                run_name,
+                ' '.join(workload_config['pre_nemesis_args']),
+                None,
+                run_config,
+            )
+            if not success:
+                logging.warning(
+                    f"Pre-nemesis command for {name} on {node_host} failed "
+                    f"(timeout={is_timeout}): {stderr[:200]}"
+                )
+            else:
+                logging.info(f"Pre-nemesis command for {name} on {node_host} succeeded")
+
+        with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+            futures = [executor.submit(run_one, name, wc, node) for name, wc, node in tasks]
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    logging.warning(f"Pre-nemesis command raised exception: {e}")
+
+        logging.info("Pre-nemesis commands completed")
+
+    def run_post_nemesis_commands(
+        self,
+        workload_params: dict,
+        deployed_nodes: dict,
+    ) -> None:
+        """Run post-nemesis commands (e.g. clean) synchronously on all nodes.
+
+        Collects workloads that have 'post_nemesis_args', runs them in parallel,
+        and waits for all to complete before returning.  Failures are logged but
+        do not abort the test.
+        """
+        tasks = []
+        for name, workload_config in workload_params.items():
+            if 'post_nemesis_args' not in workload_config:
+                continue
+            if name not in deployed_nodes:
+                continue
+            for node in deployed_nodes[name].nodes:
+                tasks.append((name, workload_config, node))
+
+        if not tasks:
+            return
+
+        logging.info(f"Running post-nemesis commands for {len(tasks)} node(s)")
+
+        def run_one(name, workload_config, node):
+            node_host = node['node'].host
+            run_config = {
+                "iteration_num": 0,
+                "node_host": node_host,
+                "duration": 3600,
+                "database": self.database,
+            }
+            run_name = f"{name}_{node_host}_post_nemesis"
+            success, _, _, stderr, is_timeout = self._execute_single_workload_run(
+                node['binary_path'],
+                node['node'],
+                run_name,
+                ' '.join(workload_config['post_nemesis_args']),
+                None,
+                run_config,
+            )
+            if not success:
+                logging.warning(
+                    f"Post-nemesis command for {name} on {node_host} failed "
+                    f"(timeout={is_timeout}): {stderr[:200]}"
+                )
+            else:
+                logging.info(f"Post-nemesis command for {name} on {node_host} succeeded")
+
+        with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+            futures = [executor.submit(run_one, name, wc, node) for name, wc, node in tasks]
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    logging.warning(f"Post-nemesis command raised exception: {e}")
+
+        logging.info("Post-nemesis commands completed")
 
     def _execute_single_workload_run(
         self,

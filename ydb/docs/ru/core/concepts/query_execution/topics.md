@@ -147,7 +147,7 @@ FROM
 | `__ydb_seq_no` | `Uint64` | Порядковый номер сообщения внутри группы |
 | `__ydb_user_attributes` | `Dict<String,String>` | [Пользовательские атрибуты сообщения](../datamodel/topic.md#message) |
 
-
+Пример использования служебных полей:
 
 ```yql
 SELECT

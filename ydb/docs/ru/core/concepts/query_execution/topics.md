@@ -135,7 +135,19 @@ FROM
 
 ### Служебные поля {#system-metadata}
 
-При чтении можно запрашивать служебные поля:
+При чтении можно запрашивать служебные поля и [пользовательские атрибуты сообщений](../datamodel/topic.md#message):
+
+| Поле | [Тип](../../reference/types/index.md) | Описание |
+|------|-----|----------|
+| `__ydb_create_time` | `Timestamp` | Время создания сообщения |
+| `__ydb_write_time` | `Timestamp` | Время записи сообщения в топик |
+| `__ydb_offset` | `Uint64` | Смещение сообщения в партиции |
+| `__ydb_partition_id` | `Uint64` | Номер партиции |
+| `__ydb_message_group_id` | `String` | Идентификатор группы сообщений |
+| `__ydb_seq_no` | `Uint64` | Порядковый номер сообщения внутри группы |
+| `__ydb_user_attributes` | `Dict<String,String>` | [Пользовательские атрибуты сообщения](../datamodel/topic.md#message) |
+
+
 
 ```yql
 SELECT
@@ -163,6 +175,16 @@ WHERE
         AND __ydb_offset >= 1000
         AND __ydb_offset <= 1100
         AND __ydb_write_time > CurrentUtcTimestamp() - Interval("PT2H");
+```
+
+
+Пример использования пользовательских атрибутов:
+```yql
+SELECT
+    count(*) as error_count
+FROM
+    input_topic  -- локальный топик; для внешнего: ext_source.input_topic
+where __ydb_user_attributes["type"] = "log" and __ydb_user_attributes["level"] = "error";
 ```
 
 ## Запись в топик {#topic-write}

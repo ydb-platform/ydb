@@ -369,8 +369,9 @@
         {"Index": 0, "Name": "Input",                 "Type": "TExprBase"},
         {"Index": 1, "Name": "WatermarkExtractor",    "Type": "TCoLambda"},
         {"Index": 2, "Name": "PartitionKeyExtractor", "Type": "TCoLambda"},
-        {"Index": 3, "Name": "WatermarkSettings",     "Type": "TCoNameValueTupleList"},
-        {"Index": 4, "Name": "PartitionKeys",         "Type": "TExprBase"}
+        {"Index": 3, "Name": "WriteTimeExtractor",    "Type": "TCoLambda"},
+        {"Index": 4, "Name": "WatermarkSettings",     "Type": "TCoNameValueTupleList"},
+        {"Index": 5, "Name": "PartitionKeys",         "Type": "TExprBase"}
       ]
     }
     ]

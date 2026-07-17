@@ -55,7 +55,7 @@ def prepare_feature_flags(extra_feature_flags, disabled_feature_flags):
 
 
 def prepare_table_service_config(table_service_config):
-    table_service_config = copy.copy(table_service_config)
+    table_service_config = copy.copy(table_service_config or {})
 
     if "enable_compile_cache_warmup" not in table_service_config:
         table_service_config["enable_compile_cache_warmup"] = False
@@ -143,7 +143,7 @@ class RestartToAnotherVersionFixture:
             use_in_memory_pdisks=kwargs.pop("use_in_memory_pdisks", False),
             extra_feature_flags=extra_feature_flags,
             disabled_feature_flags=disabled_feature_flags,
-            table_service_config=kwargs.pop("table_service_config", {}),
+            table_service_config=prepare_table_service_config(kwargs.pop("table_service_config", {})),
             **kwargs,
         )
 
@@ -229,7 +229,7 @@ class MixedClusterFixture:
             suppress_version_check=not all_versions_numbered,
             extra_feature_flags=extra_feature_flags,
             disabled_feature_flags=disabled_feature_flags,
-            table_service_config=kwargs.pop("table_service_config", {}),
+            table_service_config=prepare_table_service_config(kwargs.pop("table_service_config", {})),
             **kwargs,
         )
 
@@ -295,22 +295,38 @@ class RollingUpgradeAndDowngradeFixture:
         ) """
         timeout = 120  # seconds
         interval = 2  # seconds
+        request_timeout = 10  # seconds
+        settings = (
+            ydb.BaseRequestSettings()
+            .with_timeout(request_timeout)
+            .with_operation_timeout(request_timeout)
+            .with_cancel_after(request_timeout)
+        )
 
         start_time = time.time()
         last_exception = None
+        attempt = 0
         while time.time() - start_time < timeout:
+            attempt += 1
             try:
+                logger.info("Readiness check attempt %d", attempt)
                 with ydb.QuerySessionPool(self.driver) as session_pool:
-                    session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(max_retries=1))
+                    session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(max_retries=1), settings=settings)
                 break
             except Exception as e:
                 last_exception = e
+                logger.warning(
+                    "Readiness check attempt %d failed after %.1fs: %r",
+                    attempt,
+                    time.time() - start_time,
+                    e,
+                )
                 time.sleep(interval)
         else:
             raise last_exception
         query = """DROP TABLE `test_readiness`"""
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.execute_with_retries(query)
+            session_pool.execute_with_retries(query, settings=settings)
 
     def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
@@ -320,7 +336,7 @@ class RollingUpgradeAndDowngradeFixture:
             use_in_memory_pdisks=kwargs.pop("use_in_memory_pdisks", False),
             extra_feature_flags=extra_feature_flags,
             disabled_feature_flags=disabled_feature_flags,
-            table_service_config=kwargs.pop("table_service_config", {}),
+            table_service_config=prepare_table_service_config(kwargs.pop("table_service_config", {})),
             **kwargs,
         )
 

@@ -881,6 +881,20 @@
             "uri": "https://{canondata_backend}/1937424/d02bb271c9ab67557c669f52bc80a0a698a8a91e/resource.tar.gz#test.test_linear-dict_update-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[linear-if_linear_in_both_branches-default.txt-Debug]": [
+        {
+            "checksum": "1607f36ea9ecdfcb42497057dd135757",
+            "size": 502,
+            "uri": "https://{canondata_backend}/1942173/66f85a9a74bb0bbde708336221f2dcdc206cb82a/resource.tar.gz#test.test_linear-if_linear_in_both_branches-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-if_linear_in_both_branches-default.txt-Results]": [
+        {
+            "checksum": "625c71941f77af3192d4a1e85dbda0d4",
+            "size": 1161,
+            "uri": "https://{canondata_backend}/1600758/6bc98b791715a01a85c36c4ce80873589028ff7b/resource.tar.gz#test.test_linear-if_linear_in_both_branches-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[linear-opt_block1-default.txt-Debug]": [
         {
             "checksum": "fe1a89a4980b359a8d925ba3e872de22",
@@ -935,6 +949,20 @@
             "checksum": "5973a226b997b414148e8f112dee51c2",
             "size": 727,
             "uri": "https://{canondata_backend}/1937424/d02bb271c9ab67557c669f52bc80a0a698a8a91e/resource.tar.gz#test.test_pg-YQL_20895_having_depth_3-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[pg-collate_icu-default.txt-Debug]": [
+        {
+            "checksum": "1652b1b4cff4644c499e6dc69fee811c",
+            "size": 765,
+            "uri": "https://{canondata_backend}/1871102/3abca1c03e1dffe75d1d9477b6aa625e8d988fcc/resource.tar.gz#test.test_pg-collate_icu-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[pg-collate_icu-default.txt-Results]": [
+        {
+            "checksum": "b0b6a05f71c0ea34ff54854f875e6e0f",
+            "size": 1731,
+            "uri": "https://{canondata_backend}/1871102/3abca1c03e1dffe75d1d9477b6aa625e8d988fcc/resource.tar.gz#test.test_pg-collate_icu-default.txt-Results_/results.txt"
         }
     ],
     "test.test[pg-distinct_from_pg_null-default.txt-Debug]": [

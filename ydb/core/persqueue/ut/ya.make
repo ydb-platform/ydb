@@ -23,6 +23,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/persqueue/ut/common
+    ydb/core/persqueue/writer
     ydb/core/testlib/default
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
 
@@ -51,6 +52,8 @@ SRCS(
     partition_scale_manager_graph_cmp_ut.cpp
     utils_ut.cpp
     events_ut.cpp
+    write_id_ut.cpp
+    pqdata_transaction_compat_ut.cpp
 )
 
 RESOURCE(

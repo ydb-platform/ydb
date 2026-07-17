@@ -325,6 +325,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
@@ -501,6 +502,7 @@ protected:
             HFunc(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
             HFunc(TEvDataShard::TEvCancelBackup, Handle);
             HFunc(TEvDataShard::TEvCancelRestore, Handle);
+            HFunc(TEvDataShard::TEvCompactTable, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -544,7 +546,6 @@ private:
     ui64 LastExportNo = 0;
     THashMap<TSchemeShardLocalPathId, NKikimrTxColumnShard::TCompletedBackupTransaction> LastCompletedBackupTransactions;
     THashMap<ui64, NKikimrTxColumnShard::TCompletedBackupTransaction> LastCompletedBackupTransactionsByTxId;   // TxId -> BackupTransaction
-
     ui64 StatsReportRound = 0;
     TString OwnerPath;
 
@@ -571,7 +572,8 @@ private:
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
 
-    std::optional<ui64> ProgressTxInFlight;
+    ui64 InProgressTxId = 0;
+    bool ProgressTxScheduled = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
     TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
     TBackgroundController BackgroundController;
@@ -586,6 +588,17 @@ private:
 
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
+
+    // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring
+    // DataShard's CompactionWaiters: on restart/move the SchemeShard's persisted queue re-sends
+    // TEvCompactTable. Each waiter is answered with OK once the table has no intersecting portions.
+    struct TForcedCompactionWaiter {
+        TActorId Sender;
+        ui64 Cookie = 0;
+        TPathId SchemePathId;
+    };
+
+    THashMap<TInternalPathId, std::vector<TForcedCompactionWaiter>> ForcedCompactionWaiters;
     ui32 JitterIntervalMS = 200;
     ui32 BaseStatsEvInflight = 0;
     ui32 ExecutorStatsEvInflight = 0;
@@ -632,6 +645,7 @@ private:
 
     void SetupCompaction(const std::set<TInternalPathId>& pathIds);
     void TryScheduleCompaction(const std::set<TInternalPathId>& pathIds);
+    void RecheckForcedCompactions(const TActorContext& ctx);
     void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
     void StartCompactionTasksUpToLimit();
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
@@ -672,14 +686,26 @@ public:
         return TablesManager;
     }
 
-    void EnqueueProgressTx(const TActorContext& ctx, const std::optional<ui64> continueTxId);
+    void EnqueueProgressTx(const TActorContext& ctx, const ui64 continueTxId = 0);
 
     NOlap::TSnapshot GetLastTxSnapshot() const {
         return NOlap::TSnapshot(LastPlannedStep, LastPlannedTxId);
     }
 
-    NOlap::TSnapshot GetCurrentSnapshotForInternalModification() const {
+    NOlap::TSnapshot GetOutdatedSnapshot() const {
         return NOlap::TSnapshot::MaxForPlanStep(GetOutdatedStep());
+    }
+
+    // NoTxWrites may be visible sometimes to current reads. It is a bug, and we are going to fix it
+    // someday https://github.com/ydb-platform/ydb/issues/32061
+    NOlap::TSnapshot GetSnapshotForNoTxWrites() const {
+        return GetOutdatedSnapshot();
+    }
+
+    // Internal write MUST NOT be visible to current reads, so we must commit them strictly after
+    // the youngest possible read snapshot.
+    NOlap::TSnapshot GetCurrentSnapshotForInternalModification() const {
+        return NOlap::TSnapshot::MaxForPlanStep(GetOutdatedStep() + 1);
     }
 
     const std::shared_ptr<NOlap::NDataSharing::TSessionsManager>& GetSharingSessionsManager() const {

@@ -92,11 +92,12 @@ TString MakeUniqueColumnName(const TString& preferred, THashSet<TString>& usedNa
 // Map/Filter chains over a read use the read alias/table name as the CBO
 // relation name. Other boundary subtrees, e.g. Aggregate CD, use generated
 // _kqp_rbo_cbo_leaf_N names. Column names come from lineage when available,
-// otherwise from output IUs, and are uniquified per leaf.
+// otherwise from output IUs, and are uniquified across the CBO island.
 TCBOLeaf BuildCBOLeaf(
     const TIntrusivePtr<IOperator>& op,
     TCBOBoundaryEdge edge,
     THashSet<TString>& usedRelationNames,
+    THashSet<TString>& usedColumnNames,
     ui32& syntheticRelationId)
 {
     TCBOLeaf leaf = {
@@ -114,7 +115,6 @@ TCBOLeaf BuildCBOLeaf(
         leaf.RelationName = MakeSyntheticRelationName(syntheticRelationId, usedRelationNames);
     }
 
-    THashSet<TString> usedColumnNames;
     for (const auto& column : op->GetOutputIUs()) {
         TString cboColumnName;
         if (op->Props.Metadata) {
@@ -293,6 +293,7 @@ TVector<TCBOLeaf> BuildCBOLeaves(const TOpCBOTree& cboTree) {
     }
 
     THashSet<TString> usedRelationNames;
+    THashSet<TString> usedColumnNames;
     ui32 syntheticRelationId = 0;
     for (const auto& node : cboTree.TreeNodes) {
         for (ui32 childIndex = 0; childIndex < node->Children.size(); ++childIndex) {
@@ -301,7 +302,12 @@ TVector<TCBOLeaf> BuildCBOLeaves(const TOpCBOTree& cboTree) {
                 continue;
             }
 
-            leaves.push_back(BuildCBOLeaf(child, TCBOBoundaryEdge{node.Get(), childIndex}, usedRelationNames, syntheticRelationId));
+            leaves.push_back(BuildCBOLeaf(
+                child,
+                TCBOBoundaryEdge{node.Get(), childIndex},
+                usedRelationNames,
+                usedColumnNames,
+                syntheticRelationId));
         }
     }
 

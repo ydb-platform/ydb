@@ -85,9 +85,17 @@ private:
         TColumnDesc& operator=(TColumnDesc&&) noexcept = default;
     };
 
+    struct TMultiColumnStatDesc {
+        TString Name;
+        std::vector<TString> ColumnNames;
+        std::vector<ui32> ColumnIds;
+        std::vector<EStatType> Types;
+    };
+
     TString TableName;
     bool IsColumnTable = false;
     TVector<TColumnDesc> Columns;
+    TVector<TMultiColumnStatDesc> MultiColumnStatDescs;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     ui64 HiveId = 0;
 
@@ -140,6 +148,7 @@ private:
         // One of the following
         TSimpleColumnStatisticEval::TPtr SimpleStatEval;
         IStage2ColumnStatisticEval::TPtr Stage2StatEval;
+        IMultiColumnStatisticEval::TPtr MultiStatEval;
     };
 
     std::queue<TColumnStatEvalTask> PendingTasks;

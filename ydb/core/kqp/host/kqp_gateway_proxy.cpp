@@ -19,6 +19,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
+#include <ydb/services/metadata/manager/abstract.h>
 
 #include <util/generic/overloaded.h>
 
@@ -384,6 +385,30 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
     return true;
 }
 
+template <typename TTableDescProto>
+bool FillMultiColumnStatisticsDesc(TTableDescProto& tableDesc,
+    const TVector<TMultiColumnStatisticsDescription>& statisticsList, Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    for (const auto& statistics : statisticsList) {
+        auto* statisticsDesc = tableDesc.AddMultiColumnStatistics();
+        statisticsDesc->SetName(statistics.Name);
+        for (const auto& column : statistics.Columns) {
+            statisticsDesc->AddColumnNames(column);
+        }
+        for (const auto& type : statistics.Types) {
+            if (type == "COUNT_MIN_SKETCH") {
+                statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+            } else {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknown multi-column statistics type: " << type;
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp::TTableDescription& tableDesc,
     const TTableProfiles& profiles, Ydb::StatusIds::StatusCode& code, TString& error, TList<TString>& warnings)
 {
@@ -408,6 +433,11 @@ bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata, NKikimrSchemeOp
     if (!NGRpcService::FillCreateTableSettingsDesc(tableDesc, createTableProto, profiles, code, error, warnings)) {
         return false;
     }
+
+    if (!FillMultiColumnStatisticsDesc(tableDesc, metadata->MultiColumnStatistics, code, error)) {
+        return false;
+    }
+
     return true;
 }
 
@@ -738,6 +768,10 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
     }
 
     if (!FillCreateLocalIndexDesc(tableDesc, metadata->Indexes, code, error)) {
+        return false;
+    }
+
+    if (!FillMultiColumnStatisticsDesc(tableDesc, metadata->MultiColumnStatistics, code, error)) {
         return false;
     }
 
@@ -2269,6 +2303,10 @@ public:
     TFuture<TGenericResult> UpsertObject(const TString& cluster, const TUpsertObjectSettings& settings) override {
         CHECK_PREPARED_DDL(UpsertObject);
 
+        if (const auto rejected = CheckOldSecretCreationDisabled(settings.GetTypeId())) {
+            return MakeFuture(*rejected);
+        }
+
         if (IsPrepare()) {
             return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareUpsertObjectSchemeOperation));
         } else {
@@ -2278,6 +2316,10 @@ public:
 
     TFuture<TGenericResult> CreateObject(const TString& cluster, const TCreateObjectSettings& settings) override {
         CHECK_PREPARED_DDL(CreateObject);
+
+        if (const auto rejected = CheckOldSecretCreationDisabled(settings.GetTypeId())) {
+            return MakeFuture(*rejected);
+        }
 
         if (IsPrepare()) {
             return MakeFuture(PrepareObjectOperation(cluster, settings, &NMetadata::NModifications::IOperationsManager::PrepareCreateObjectSchemeOperation));
@@ -2495,42 +2537,107 @@ public:
         }
     }
 
-    TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) override {
-        CHECK_PREPARED_DDL(AlterColumnTable);
+    TFuture<TGenericResult> PrepareAlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req)
+    {
+        YQL_ENSURE(SessionCtx->Query().PreparingQuery);
 
-        try {
-            if (cluster != SessionCtx->GetCluster()) {
-                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
-            }
-            auto metadata = SessionCtx->Tables().GetTable(cluster, req.path()).Metadata;
+        const auto ops = GetAlterOperationKinds(&req);
+        if (ops.size() != 1) {
+            IKqpGateway::TGenericResult errResult;
+            errResult.AddIssue(NYql::TIssue("Unqualified alter column table request."));
+            errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
+            return MakeFuture(errResult);
+        }
 
-            NKikimrSchemeOp::TModifyScheme schemeTx;
+        const auto opType = *ops.begin();
 
+        auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+        auto& phyTx = *phyQuery.AddTransactions();
+        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+        if (opType == EAlterOperationKind::Compact) {
+            auto compactOp = phyTx.MutableSchemeOperation()->MutableCompactTable();
             Ydb::StatusIds::StatusCode code;
             TString error;
-            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, metadata, code, error)) {
+            if (!BuildAlterTableCompactRequest(&req, compactOp, code, error)) {
                 IKqpGateway::TGenericResult errResult;
                 errResult.AddIssue(NYql::TIssue(error));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
                 return MakeFuture(errResult);
             }
-
-            if (IsPrepare()) {
-                auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-                auto& phyTx = *phyQuery.AddTransactions();
-                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+        } else {
+            try {
+                auto metadata = SessionCtx->Tables().GetTable(cluster, req.path()).Metadata;
+                NKikimrSchemeOp::TModifyScheme schemeTx;
+                Ydb::StatusIds::StatusCode code;
+                TString error;
+                if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, metadata, code, error)) {
+                    IKqpGateway::TGenericResult errResult;
+                    errResult.AddIssue(NYql::TIssue(error));
+                    errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                    return MakeFuture(errResult);
+                }
                 phyTx.MutableSchemeOperation()->MutableAlterColumnTable()->Swap(&schemeTx);
-
-                TGenericResult result;
-                result.SetSuccess();
-                return MakeFuture(result);
-            } else {
-                return Gateway->ModifyScheme(std::move(schemeTx));
+            } catch (yexception& e) {
+                return MakeFuture(ResultFromException<TGenericResult>(e));
             }
         }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
+
+        TGenericResult result;
+        result.SetSuccess();
+        return MakeFuture(result);
+    }
+
+    TFuture<TGenericResult> AlterColumnTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req) override {
+        CHECK_PREPARED_DDL(AlterColumnTable);
+
+        auto tablePromise = NewPromise<TGenericResult>();
+
+        if (!IsPrepare()) {
+            SessionCtx->Query().PrepareOnly = false;
+            if (!SessionCtx->Query().PreparingQuery) {
+                SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+            }
+
+            if (SessionCtx->Query().PreparingQuery->MutablePhysicalQuery()->GetTransactions().size() > 0) {
+                auto code = Ydb::StatusIds::BAD_REQUEST;
+                auto error = TStringBuilder() << "multiple transactions are not supported for alter column table operation.";
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                tablePromise.SetValue(errResult);
+                return tablePromise.GetFuture();
+            }
         }
+
+        auto prepareFuture = PrepareAlterColumnTable(cluster, std::move(req));
+        if (IsPrepare())
+            return prepareFuture;
+
+        auto sessionCtx = SessionCtx;
+        auto gateway = Gateway;
+        prepareFuture.Subscribe([cluster, tablePromise, sessionCtx, gateway](const TFuture<IKqpGateway::TGenericResult>& future) mutable {
+            auto result = future.GetValue();
+            TPreparedQueryHolder::TConstPtr preparedQuery = std::make_shared<TPreparedQueryHolder>(sessionCtx->Query().PreparingQuery.release(), nullptr);
+            if (result.Success()) {
+                auto executeFuture = gateway->SendSchemeExecuterRequest(cluster, Nothing(), preparedQuery->GetPhyTx(0));
+                executeFuture.Subscribe([tablePromise](const TFuture<IKqpGateway::TGenericResult>& future) mutable {
+                    auto fresult = future.GetValue();
+                    if (fresult.Success()) {
+                        TGenericResult result;
+                        result.SetSuccess();
+                        tablePromise.SetValue(result);
+                    } else {
+                        tablePromise.SetValue(ResultFromIssues<TGenericResult>(fresult.Status(), fresult.Issues()));
+                    }
+                });
+                return;
+            } else {
+                tablePromise.SetValue(ResultFromIssues<TGenericResult>(result.Status(), result.Issues()));
+            }
+        });
+
+        return tablePromise.GetFuture();
     }
 
     TFuture<TGenericResult> CreateSequence(const TString& cluster,
@@ -3601,7 +3708,9 @@ public:
             } else {
                 op.SetValue(settings.Value);
             }
-            op.SetInheritPermissions(settings.InheritPermissions);
+            if (settings.InheritPermissions.has_value()) {
+                op.SetInheritPermissions(*settings.InheritPermissions);
+            }
         }
 
     private:
@@ -3701,6 +3810,18 @@ public:
     }
 
 private:
+    TMaybe<TGenericResult> CheckOldSecretCreationDisabled(const TString& typeId) const {
+        if (!AppData()->FeatureFlags.GetDisableOldSecretCreation() || to_lower(typeId) != "secret") {
+            return Nothing();
+        }
+        TGenericResult errResult;
+        const auto status = NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        errResult.SetStatus(status);
+        errResult.AddIssue(NYql::TIssue(NMetadata::NModifications::GetOldSecretCreationDisabledMessage())
+            .SetCode(status, NYql::TSeverityIds::S_ERROR));
+        return errResult;
+    }
+
     bool IsPrepare() const {
         if (!SessionCtx) {
             return false;

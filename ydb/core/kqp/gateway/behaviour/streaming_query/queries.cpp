@@ -23,6 +23,8 @@
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
+#include <yql/essentials/core/sql_types/hopping.h>
+
 #include <fmt/format.h>
 
 namespace NKikimr::NKqp {
@@ -292,6 +294,14 @@ public:
     static TStatus ValidateBool(const TString& name, const TString& value) {
         if (!IsIn({"true", "false"}, value)) {
             return TStatus::Fail(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << to_upper(name) << " property must be 'true' or 'false', but got: " << value);
+        }
+        return TStatus::Success();
+    }
+
+    template<typename T> requires (std::is_enum_v<T>)
+    static TStatus ValidateEnum(const TString& name, const TString& value) {
+        if (!TryFromString<T>(value)) {
+            return TStatus::Fail(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << to_upper(name) << " property got illegal value: " << value);
         }
         return TStatus::Success();
     }
@@ -1595,6 +1605,7 @@ public:
         NKikimrKqp::TStreamingQueryState InitialState;
         TPathId QueryPathId;
         ui64 QueryTextRevision = 0;
+        TString WatermarkLateEventsPolicy;
         std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
     };
 
@@ -1833,6 +1844,7 @@ private:
         ev->CheckpointId = State.GetCheckpointId();
         ev->StreamingQueryPath = QueryPath;
         ev->CustomerSuppliedId = State.GetCurrentExecutionId();
+        ev->WatermarkLateEventsPolicy = Settings.WatermarkLateEventsPolicy;
         ev->StreamingDisposition = Settings.StreamingDisposition;
 
         if (const auto statsPeriod = AppData()->QueryServiceConfig.GetProgressStatsPeriodMs()) {
@@ -1852,7 +1864,7 @@ private:
         auto& request = *record.MutableRequest();
         request.SetDatabase(Context.GetDatabase());
         request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
+        request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
         request.SetSyntax(Ydb::Query::SYNTAX_YQL_V1);
         request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
         request.SetKeepSession(false);
@@ -1974,11 +1986,12 @@ public:
     )
 
     void HandleRemove(TEvPrivate::TEvCleanupStreamingQueryResult::TPtr& ev) {
+        State = ev->Get()->Info;
+
         if (HandleResult(ev, "Cleanup streaming query")) {
             return;
         }
 
-        State = ev->Get()->Info;
         RemoveQuery();
     }
 
@@ -2031,11 +2044,12 @@ public:
     }
 
     void Handle(TEvPrivate::TEvStartStreamingQueryResult::TPtr& ev) {
+        State = ev->Get()->Info;
+
         if (HandleResult(ev, "Start streaming query")) {
             return;
         }
 
-        State = ev->Get()->Info;
         Finish(Ydb::StatusIds::SUCCESS);
     }
 
@@ -2160,6 +2174,7 @@ private:
             .InitialState = State,
             .QueryPathId = SchemeInfo.PathId,
             .QueryTextRevision = QuerySettings.QueryTextRevision,
+            .WatermarkLateEventsPolicy = QuerySettings.WatermarkLateEventsPolicy,
             .StreamingDisposition = QuerySettings.StreamingDisposition,
         }));
         LOG_D("Start TStartStreamingQueryTableActor " << startActorId);
@@ -2431,11 +2446,12 @@ public:
     }
 
     void HandleSync(TEvPrivate::TEvSyncStreamingQueryResult::TPtr& ev) {
+        TBase::QueryState = ev->Get()->State;
+
         if (TBase::HandleResult(ev, "Streaming query initialization (recover previous query state, try to repeat request)")) {
             return;
         }
 
-        TBase::QueryState = ev->Get()->State;
         if (!ev->Get()->ExistsInSS) {
             TBase::SchemeInfo = std::nullopt;
         }
@@ -2506,11 +2522,12 @@ public:
     }
 
     void Handle(TEvPrivate::TEvSyncStreamingQueryResult::TPtr& ev) {
+        QueryState = ev->Get()->State;
+
         if (HandleResult(ev, "Streaming query initialization")) {
             return;
         }
 
-        QueryState = ev->Get()->State;
         if (!ev->Get()->ExistsInSS) {
             SchemeInfo = std::nullopt;
         }
@@ -2590,6 +2607,7 @@ private:
         CHECK_STATUS(validator.SaveRequired(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
         CHECK_STATUS(validator.SaveDefault(EName::Run, "true", &TPropertyValidator::ValidateBool));
         CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, NResourcePool::DEFAULT_POOL_ID));
+        CHECK_STATUS(validator.SaveDefault(EName::WatermarkLateEventsPolicy, "drop", &TPropertyValidator::ValidateEnum<NYql::NHoppingWindow::EPolicy>));
         CHECK_STATUS(validator.SaveDefault(EName::StreamingDisposition, DefaultStreamingDisposition));
         CHECK_STATUS(validator.Save(
             EName::QueryTextRevision,
@@ -2648,11 +2666,12 @@ public:
     }
 
     void Handle(TEvPrivate::TEvSyncStreamingQueryResult::TPtr& ev) {
+        QueryState = ev->Get()->State;
+
         if (HandleResult(ev, "Streaming query alter")) {
             return;
         }
 
-        QueryState = ev->Get()->State;
         if (!ev->Get()->ExistsInSS) {
             SchemeInfo = std::nullopt;
         }
@@ -2702,6 +2721,7 @@ private:
         CHECK_STATUS_RET(force, validator.ExtractDefault(EName::Force, "false", &TPropertyValidator::ValidateBool));
         CHECK_STATUS_RET(queryText, validator.ExtractOptional(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
         CHECK_STATUS_RET(streamingDisposition, validator.ExtractOptional(EName::StreamingDisposition));
+        CHECK_STATUS_RET(watermarkLateEventsPolicy, validator.ExtractOptional(EName::WatermarkLateEventsPolicy, &TPropertyValidator::ValidateEnum<NYql::NHoppingWindow::EPolicy>));
 
         const auto queryTextValue = queryText.DetachResult();
         if (queryTextValue && force.GetResult() != "true") {
@@ -2716,10 +2736,14 @@ private:
             NYql::NPq::NProto::StreamingDisposition disposition;
             Y_VALIDATE(disposition.ParseFromString(*streamingDispositionValue), "Failed to parse StreamingDisposition");
             queryTestRevision += !disposition.has_from_last_checkpoint(); // Recompile query and drop checkpoint if disposition changed
+        } else if (watermarkLateEventsPolicy.GetResult()
+            && *watermarkLateEventsPolicy.GetResult() != (previousSettings.WatermarkLateEventsPolicy ? previousSettings.WatermarkLateEventsPolicy : "drop")) {
+            queryTestRevision++;
         }
 
         CHECK_STATUS(validator.Save(ESqlSettings::QUERY_TEXT_FEATURE, queryTextValue.value_or(previousSettings.QueryText)));
         CHECK_STATUS(validator.Save(EName::QueryTextRevision, ToString(queryTestRevision)));
+        CHECK_STATUS(validator.Save(EName::WatermarkLateEventsPolicy, watermarkLateEventsPolicy.GetResult().value_or(previousSettings.WatermarkLateEventsPolicy ? previousSettings.WatermarkLateEventsPolicy : "drop")));
         CHECK_STATUS(validator.Save(EName::StreamingDisposition, streamingDispositionValue.value_or(DefaultStreamingDisposition)));
 
         return validator.Finish();
@@ -2754,6 +2778,8 @@ public:
     }
 
     void Handle(TEvPrivate::TEvCleanupStreamingQueryResult::TPtr& ev) {
+        QueryState = ev->Get()->Info;
+
         if (HandleResult(ev, "Cleanup streaming query")) {
             return;
         }

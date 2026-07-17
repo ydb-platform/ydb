@@ -1,5 +1,6 @@
 #include "flat_executor_recovery.h"
 
+#include "flat_direct_part_writer.h"
 #include "flat_executor_backup_common.h"
 #include "flat_cxx_database.h"
 #include "flat_part_iface.h"
@@ -306,6 +307,8 @@ public:
     ui64 CompactMemTable(ui32) override { Y_TABLET_ERROR("Not supported"); }
     ui64 CompactTable(ui32) override { Y_TABLET_ERROR("Not supported"); }
     bool CompactTables() override { Y_TABLET_ERROR("Not supported"); }
+    THolder<TDirectPartWriter> BeginWritePart(ui32) override { Y_TABLET_ERROR("Not supported"); }
+    void ReleaseWritePart(ui32) override { Y_TABLET_ERROR("Not supported"); }
     void AllowBorrowedGarbageCompaction(ui32) override { Y_TABLET_ERROR("Not supported"); }
     void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase>) override { Y_TABLET_ERROR("Not supported"); }
     void SendUserAuxUpdateToFollowers(TString, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
@@ -323,6 +326,7 @@ public:
     void MoveSnapshot(const TTableSnapshotContext&, ui32, ui32) override { Y_TABLET_ERROR("Not supported"); }
     void ClearSnapshot(const TTableSnapshotContext&) override { Y_TABLET_ERROR("Not supported"); }
     void LoanTable(ui32, const TString&) override { Y_TABLET_ERROR("Not supported"); }
+    void AttachPart(ui32, THolder<TDirectPartResult>) override { Y_TABLET_ERROR("Not supported"); }
     void CleanupLoan(const TLogoBlobID&, ui64) override { Y_TABLET_ERROR("Not supported"); }
     void ConfirmLoan(const TLogoBlobID&, const TLogoBlobID&) override { Y_TABLET_ERROR("Not supported"); }
     void EnableReadMissingReferences() override { Y_TABLET_ERROR("Not supported"); }

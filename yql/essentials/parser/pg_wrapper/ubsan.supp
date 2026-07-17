@@ -3,6 +3,7 @@
 # Just ignore it instead of fixing since it is third party library.
 # It might be fixed in future versions of Postgres.
 function:pg_wrapper/postgresql/src/backend/utils/hash/dynahash.c
+function:pg_wrapper/postgresql/src/backend/utils/adt/formatting.c
 # Here simple integer overflow in third_party library. 
 # Just ignore it instead of fixing since it is third party library. 
 # It might be fixed in future versions of Postgres.

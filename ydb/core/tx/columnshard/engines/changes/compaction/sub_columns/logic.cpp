@@ -3,6 +3,8 @@
 
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NCompaction {
 
 const TSubColumnsMerger::TSettings& TSubColumnsMerger::GetSettings() const {
@@ -28,7 +30,9 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
     auto splitted = commonStats.SplitByVolume(GetSettings(), statRecordsCount);
     ResultColumnStats = splitted.ExtractColumns();
     ResultColumnStats->CreateJsonPathAccessorTrieCache();
-    //    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("columns", ResultColumnStats->DebugJson())("others", splitted.ExtractOthers().DebugJson());
+    //    YDB_LOG_ERROR("",
+    //          {"columns", ResultColumnStats->DebugJson()},
+    //          {"others", splitted.ExtractOthers().DebugJson()});
     RemapKeyIndex.RegisterColumnStats(*ResultColumnStats);
     for (auto&& i : OrderedIterators) {
         i.Start();
@@ -46,14 +50,13 @@ TColumnPortionResult TSubColumnsMerger::DoExecute(const TChunkMergeContext& cont
         const auto startRecord = [&](const ui32 /*sourceRecordIndex*/) {
             builder.StartRecord();
         };
-        const auto addKV = [&](const ui32 sourceKeyIndex, const std::string_view value, const bool isColumnKey) {
+        const auto addKV = [&](const ui32 sourceKeyIndex, const NArrow::NAccessor::NSubColumns::TGeneralIterator& iter, const bool isColumnKey) {
             auto commonKeyInfo = RemapKeyIndex.RemapIndex(sourceIdx, sourceKeyIndex, isColumnKey);
             if (commonKeyInfo.GetIsColumnKey()) {
-                builder.AddColumnKV(commonKeyInfo.GetCommonKeyIndex(), value);
-                columnStats.Add(value.size());
+                columnStats.Add(builder.AddColumnKV(commonKeyInfo.GetCommonKeyIndex(), iter));
             } else {
-                builder.AddOtherKV(commonKeyInfo.GetCommonKeyIndex(), value);
-                otherStats.Add(value.size());
+                const auto bj = iter.GetValueAsBinaryJson();
+                otherStats.Add(builder.AddOtherKV(commonKeyInfo.GetCommonKeyIndex(), TStringBuf(bj.data(), bj.size())));
             }
         };
         const auto finishRecord = [&]() {

@@ -91,6 +91,7 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
     ydb/library/security
     yql/essentials/minikql/comp_nodes/llvm16
+    ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/pq/gateway/dummy
     ydb/library/yql/providers/s3/actors_factory
     yt/yql/providers/yt/codec/codegen
@@ -108,7 +109,6 @@ PEERDIR(
     ydb/services/cms
     ydb/services/datastreams
     ydb/services/discovery
-    ydb/services/ext_index/service
     ydb/services/ymq
     ydb/core/tx/conveyor/service
     ydb/core/tx/priorities/service

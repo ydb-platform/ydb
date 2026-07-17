@@ -227,6 +227,7 @@ namespace {
             entry.Columns.clear();
             entry.NotNullColumns.clear();
             entry.Indexes.clear();
+            entry.MultiColumnStatistics.clear();
             entry.Sequences.clear();
             entry.CdcStreams.clear();
             entry.RTMRVolumeInfo.Drop();
@@ -834,6 +835,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Indexes.push_back(index);
             }
 
+            MultiColumnStatistics.reserve(tableDesc.MultiColumnStatisticsSize());
+            for (const auto& statistics : tableDesc.GetMultiColumnStatistics()) {
+                MultiColumnStatistics.push_back(statistics);
+            }
+
             Sequences.reserve(tableDesc.SequencesSize());
             for (const auto& sequence : tableDesc.GetSequences()) {
                 Sequences.push_back(sequence);
@@ -899,6 +905,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Y_ABORT_UNLESS(column != nullptr);
                 column->KeyOrder = i;
                 KeyColumnTypes[i] = column->PType;
+            }
+
+            MultiColumnStatistics.reserve(desc.MultiColumnStatisticsSize());
+            for (const auto& statistics : desc.GetMultiColumnStatistics()) {
+                MultiColumnStatistics.push_back(statistics);
             }
 
             if (pathDesc.HasDomainDescription()) {
@@ -2008,6 +2019,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.NotNullColumns = NotNullColumns;
             entry.SetNotNullInProgressColumns = SetNotNullInProgressColumns;
             entry.Indexes = Indexes;
+            entry.MultiColumnStatistics = MultiColumnStatistics;
             entry.CdcStreams = CdcStreams;
             entry.Sequences = Sequences;
             entry.DomainDescription = DomainDescription;
@@ -2289,6 +2301,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         THashSet<TString> NotNullColumns;
         THashSet<TString> SetNotNullInProgressColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
+        TVector<NKikimrSchemeOp::TMultiColumnStatisticsDescription> MultiColumnStatistics;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
         TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;
         std::shared_ptr<const TPartitioning> Partitioning;

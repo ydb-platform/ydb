@@ -37,6 +37,8 @@ const char* PageParam(EMonPage page)
             return "dbg";
         case EMonPage::LocalDb:
             return "localdb";
+        case EMonPage::VChunk:
+            return "vchunk";
     }
     return "overview";
 }
@@ -50,6 +52,8 @@ const char* PageTitle(EMonPage page)
             return "DBGs";
         case EMonPage::LocalDb:
             return "Local DB";
+        case EMonPage::VChunk:
+            return "VChunk";
     }
     return "";
 }
@@ -166,6 +170,7 @@ void RenderMenu(
         EMonPage::Overview,
         EMonPage::Dbg,
         EMonPage::LocalDb,
+        EMonPage::VChunk,
     };
     str << "<div style='margin:0.5em 0 1em;'>";
     for (EMonPage page: pages) {
@@ -210,6 +215,18 @@ void RenderOverview(IOutputStream& str, const TFastPathServiceInfo& info)
                     }
                     TABLED () {
                         str << info.LsnCounter;
+                    }
+                }
+                TABLER () {
+                    TABLED () {
+                        str << "Last safe barrier";
+                    }
+                    TABLED () {
+                        if (info.LastSafeBarrier != 0) {
+                            str << info.LastSafeBarrier;
+                        } else {
+                            str << "-";
+                        }
                     }
                 }
             }
@@ -501,6 +518,128 @@ void RenderLocalDb(IOutputStream& str, const TLocalDbContents& db)
     }
 }
 
+void RenderVChunk(IOutputStream& str, const TMonPageData& data)
+{
+    // Looking up a vchunk changes nothing, so this is a GET form. On submit a
+    // GET form rebuilds the query string from its fields ALONE and drops the
+    // current one - so TabletID and page (which live in the URL as
+    // ?TabletID=..&page=vchunk) must be repeated as hidden fields, otherwise
+    // the submit lands on ?vchunk=N with no tablet and no page.
+    str << "<form method='get' action='' style='margin-bottom:1em;'>"
+           "<input type='hidden' name='TabletID' value='"
+        << data.TabletInfo.TabletId
+        << "'/>"
+           "<input type='hidden' name='page' value='vchunk'/>"
+           "VChunk index: <input type='number' name='vchunk' min='0' value='";
+    if (data.SelectedVChunk) {
+        str << *data.SelectedVChunk;
+    }
+    str << "'/> <button type='submit' class='btn btn-default'>Show</button>"
+           "</form>";
+
+    if (!data.SelectedVChunk) {
+        return;
+    }
+    if (!data.VChunk) {
+        HTML (str) {
+            DIV_CLASS ("alert alert-warning") {
+                str << "VChunk #" << *data.SelectedVChunk << " not found.";
+            }
+        }
+        return;
+    }
+
+    const TVChunkSnapshot& vchunk = *data.VChunk;
+    const TVChunkConfig& config = vchunk.VChunkConfig;
+    HTML (str) {
+        TAG (TH3) {
+            str << "VChunk #" << config.GetVChunkIndex();
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLEBODY () {
+                TABLER () {
+                    TABLED () {
+                        str << "DBG";
+                    }
+                    TABLED () {
+                        str << "<a href='?TabletID=" << data.TabletInfo.TabletId
+                            << "&page=dbg&dbg=" << config.GetDBGIndex() << "'>#"
+                            << config.GetDBGIndex() << "</a>";
+                    }
+                }
+                TABLER () {
+                    TABLED () {
+                        str << "Safe barrier";
+                    }
+                    TABLED () {
+                        if (vchunk.SafeBarrier) {
+                            str << *vchunk.SafeBarrier;
+                        } else {
+                            str << "-";
+                        }
+                    }
+                }
+            }
+        }
+        TAG (TH4) {
+            str << "Host roles";
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLEHEAD () {
+                TABLER () {
+                    TABLEH () {
+                        str << "Host";
+                    }
+                    TABLEH () {
+                        str << "PBuffer role";
+                    }
+                    TABLEH () {
+                        str << "DDisk role";
+                    }
+                    TABLEH () {
+                        str << "Enabled";
+                    }
+                    TABLEH () {
+                        str << "Watermark";
+                    }
+                }
+            }
+            TABLEBODY () {
+                const auto disabled = config.GetDisabledHosts();
+                for (THostIndex host = 0; host < config.GetHostCount(); ++host)
+                {
+                    TABLER () {
+                        TABLED () {
+                            str << PrintHostIndex(host);
+                        }
+                        TABLED () {
+                            str << ToString(config.GetPBufferRole(host));
+                        }
+                        TABLED () {
+                            str << ToString(config.GetDDiskRole(host));
+                        }
+                        TABLED () {
+                            str << (disabled.Get(host) ? "no" : "yes");
+                        }
+                        TABLED () {
+                            const auto watermark = config.GetWatermark(host);
+                            if (watermark) {
+                                str << *watermark;
+                            } else {
+                                str << "-";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        str << "<details style='margin-bottom:0.5em;'>"
+               "<summary style='display:list-item; cursor:pointer;'>"
+               "Dirty map dump</summary><pre>"
+            << HtmlEscape(vchunk.DirtyMapDump) << "</pre></details>";
+    }
+}
+
 void RenderDbg(IOutputStream& str, const TMonPageData& data)
 {
     if (!data.SelectedDbg) {
@@ -553,6 +692,9 @@ TString RenderMonPage(const TMonPageData& data)
             if (data.LocalDb) {
                 RenderLocalDb(str, *data.LocalDb);
             }
+            break;
+        case EMonPage::VChunk:
+            RenderVChunk(str, data);
             break;
     }
     return str.Str();

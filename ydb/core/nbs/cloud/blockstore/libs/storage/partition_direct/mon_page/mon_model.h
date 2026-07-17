@@ -23,6 +23,7 @@ enum class EMonPage
     Overview,
     Dbg,
     LocalDb,
+    VChunk,
 };
 
 struct TTabletInfo
@@ -36,6 +37,9 @@ struct TTabletInfo
 struct TFastPathServiceInfo
 {
     ui64 LsnCounter = 0;
+    // Minimum safe barrier across all DBGs from the last finished cleanup
+    // round; 0 until the first round finishes.
+    ui64 LastSafeBarrier = 0;
     size_t TotalVChunks = 0;
     size_t DbgCount = 0;
 };
@@ -67,6 +71,13 @@ struct TDbgSnapshot
     TVector<TConnectionSnapshot> Connections;
 };
 
+struct TVChunkSnapshot
+{
+    TVChunkConfig VChunkConfig;
+    std::optional<ui64> SafeBarrier;
+    TString DirtyMapDump;
+};
+
 // Persisted tablet state (local DB). Protos are pre-dumped to text; an absent
 // value means the row was never persisted.
 struct TLocalDbContents
@@ -91,6 +102,10 @@ struct TMonPageData
     std::optional<ui32> SelectedDbg;
     // Local DB tab.
     std::optional<TLocalDbContents> LocalDb;
+    // VChunk tab: the requested index (absent => only the input form) and the
+    // snapshot (absent => no such vchunk).
+    std::optional<ui32> SelectedVChunk;
+    std::optional<TVChunkSnapshot> VChunk;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

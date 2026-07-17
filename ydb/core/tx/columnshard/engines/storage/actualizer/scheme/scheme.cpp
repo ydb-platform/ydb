@@ -90,6 +90,7 @@ void TSchemeActualizer::DoExtractTasks(
             auto info = BuildActualizationInfo(*portion);
             if (!info) {   // its possible through chains with equivalent schemas collapsed
                 portionsToRemove.emplace(portion->GetPortionId());
+                continue;
             }
             auto portionScheme = portion->GetSchema(VersionedIndex);
             TPortionEvictionFeatures features(

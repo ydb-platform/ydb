@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/scheme/scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/tiering/tiering.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
 
@@ -21,16 +22,17 @@ const TString Tier2 = NColumnShard::NTiers::TExternalStorageId("/Root/tier2").Ge
 const TDuration Tier1EvictAfter = TDuration::Hours(1);
 const TDuration Tier2EvictAfter = TDuration::Hours(2);
 
-TIndexInfo MakeTestIndexInfo(const std::shared_ptr<TSchemaObjectsCache>& cache) {
+TIndexInfo MakeTestIndexInfo(const std::shared_ptr<TSchemaObjectsCache>& cache, const ui64 version, const bool schemeNeedActualization) {
     NKikimrSchemeOp::TColumnTableSchema proto;
     *proto.MutableColumns()->Add() = NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)).CreateColumn(PkColumnId);
     proto.AddKeyColumnNames("pk");
-    proto.SetVersion(1);
+    proto.SetVersion(version);
+    proto.MutableOptions()->SetSchemeNeedActualization(schemeNeedActualization);
     proto.MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName("l-buckets");
     *proto.MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() =
         NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer();
 
-    auto result = TIndexInfo::BuildFromProto(1, proto, TTestStoragesManager::GetInstance(), cache);
+    auto result = TIndexInfo::BuildFromProto(version, proto, TTestStoragesManager::GetInstance(), cache);
     UNIT_ASSERT(result);
     return std::move(*result);
 }
@@ -59,7 +61,7 @@ public:
     TTestEnv()
         : Controller(std::make_shared<TController>())
     {
-        VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache)));
+        VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 1, false)));
         Actualizer.emplace(TestPathId, VersionedIndex, Storages);
     }
 
@@ -101,6 +103,46 @@ public:
 
     THashMap<TRWAddress, std::vector<TTaskConstructor>> ExtractTasks() {
         auto context = MakeProcessContext();
+        TInternalTasksContext internalContext;
+        Actualizer->ExtractTasks(context, TExternalTasksContext(Portions), internalContext);
+        return context.GetTasks();
+    }
+};
+
+// The scheme actualizer rewrites portions onto the latest critical schema. Its version is registered as v2, so a
+// portion written under v1 is a rewrite candidate until it resolves to v2.
+class TSchemeTestEnv {
+private:
+    const std::shared_ptr<TSchemaObjectsCache> Cache = std::make_shared<TSchemaObjectsCache>();
+    const std::shared_ptr<IStoragesManager> Storages = TTestStoragesManager::GetInstance();
+    const std::shared_ptr<NDataLocks::TManager> DataLocksManager = std::make_shared<NDataLocks::TManager>();
+    const std::shared_ptr<TController> Controller = std::make_shared<TController>();
+    TVersionedIndex VersionedIndex;
+    THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
+    std::optional<TSchemeActualizer> Actualizer;
+
+public:
+    TSchemeTestEnv() {
+        VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 1, false)));
+        VersionedIndex.AddIndex(TSnapshot(2, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 2, true)));
+        Actualizer.emplace(TestPathId, VersionedIndex);
+    }
+
+    // Queues a portion written under schema v1 for rewrite to the critical schema v2.
+    void QueuePortion() {
+        Portions.emplace(TestPortionId, NTest::MakeTestCompactedPortion(TestPathId, TestPortionId, 10, 19, 10, TSnapshot(1, 1), std::nullopt));
+        Actualizer->Refresh(TAddExternalContext(TInstant::Now(), Portions));
+    }
+
+    // Drops schema v1, so a portion written under it now resolves to v2 and no longer needs a rewrite.
+    void CollapseSchemaOntoTarget() {
+        VersionedIndex.EraseVersion(1);
+    }
+
+    THashMap<TRWAddress, std::vector<TTaskConstructor>> ExtractTasks() {
+        TSaverContext saverContext(Storages);
+        TTieringProcessContext context(
+            MemoryLimit, saverContext, DataLocksManager, VersionedIndex, NColumnShard::TEngineLogsCounters(), Controller);
         TInternalTasksContext internalContext;
         Actualizer->ExtractTasks(context, TExternalTasksContext(Portions), internalContext);
         return context.GetTasks();
@@ -161,6 +203,17 @@ Y_UNIT_TEST_SUITE(TTieringActualizerTests) {
 
         // at T the queue key (tier1) is free, so the portion reaches the task building, but its task would belong to
         // the busy tier2 address and must not be built
+        UNIT_ASSERT(env.ExtractTasks().empty());
+    }
+}
+
+Y_UNIT_TEST_SUITE(TSchemeActualizerTests) {
+    Y_UNIT_TEST(CollapsedSchemaPortionIsDropped) {
+        TSchemeTestEnv env;
+        env.QueuePortion();
+        // once v1 collapses onto v2, the queued portion already carries the target schema: it must be dropped, not
+        // turned into a task from an empty actualization info
+        env.CollapseSchemaOntoTarget();
         UNIT_ASSERT(env.ExtractTasks().empty());
     }
 }

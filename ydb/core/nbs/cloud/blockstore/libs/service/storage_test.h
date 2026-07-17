@@ -50,9 +50,10 @@ public:
         Y_UNUSED(cfg);
     }
 
-    void RequestAddHost(size_t directBlockGroupId) override
+    void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override
     {
         Y_UNUSED(directBlockGroupId);
+        Y_UNUSED(newHostIndex);
     }
 
     ui64 GenerateLsn() override

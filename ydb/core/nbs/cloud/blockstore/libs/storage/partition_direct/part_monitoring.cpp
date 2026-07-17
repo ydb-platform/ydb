@@ -184,7 +184,7 @@ void TPartitionActor::HandleHttpInfo(
                 LogTitle.GetWithTime().c_str(),
                 *selectedDbg);
 
-            FastPathService->RequestAddHost(*selectedDbg);
+            FastPathService->QueryAddHost(*selectedDbg, 0);
         }
 
         TStringBuilder reply;

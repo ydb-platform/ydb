@@ -50,6 +50,24 @@ EHostState HealthToState(EHostHealth health)
     }
 }
 
+size_t GetAliveHostCount(const TVector<THostState>& hostStates)
+{
+    // We assume that hosts that are temporarily suffering or have recently lost
+    // their connection are still alive and do not need to be replaced.
+    return CountIf(
+        hostStates,
+        [&](const THostState& hostState)
+        {
+            switch (hostState.State) {
+                case EHostState::Online:
+                case EHostState::TemporaryOffline:
+                    return true;
+                case EHostState::Offline:
+                    return false;
+            }
+        });
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -173,14 +191,12 @@ void TOracle::Think(TInstant now)
 {
     const TOracleConfig config(StorageConfig);
 
-    for (THostIndex hostIndex = 0; hostIndex < HostStates.size(); ++hostIndex) {
-        HostStates[hostIndex].PBufferUsedSize =
-            HostStateController->GetHostPBufferUsedSize(hostIndex);
-    }
-
     TVector<EHostHealth> newHostsHealths(HostsHealths);
 
     for (size_t i = 0; i < HostStatistics.size(); ++i) {
+        HostStates[i].PBufferUsedSize =
+            HostStateController->GetHostPBufferUsedSize(i);
+
         auto errorsInfo = HostStatistics[i].GetErrorsInfo(now);
 
         const bool hasSufferingSymptom =
@@ -193,7 +209,7 @@ void TOracle::Think(TInstant now)
                   config.GetMaxDurationBeforeGoingTemporaryOffline()) ||
              (errorsInfo.ConsecutiveErrorCount >=
               config.GetErrorsCountForGoingOffline()) ||
-             (HostStateController->GetHostPBufferUsedSize(i) >=
+             (HostStates[i].PBufferUsedSize >=
               config.GetErrorsTotalSizeForGoingOffline()));
         const bool hasOfflineSymptom =
             hasTemporaryOfflineSymptom &&
@@ -222,19 +238,13 @@ void TOracle::Think(TInstant now)
             }
         }
     }
-}
 
-void TOracle::OnHostAdded()
-{
-    HostStatistics.emplace_back();
-    HostStates.emplace_back();
-    HostsHealths.push_back(EHostHealth::Online);
-    HostsReconnectDelays.emplace_back(MinReconnectDelay, MaxReconnectDelay);
-}
-
-size_t TOracle::GetHostCount() const
-{
-    return HostStates.size();
+    if (GetAliveHostCount(HostStates) < DirectBlockGroupHostCount &&
+        GetHostCount() < MaxHostCount)
+    {
+        const THostIndex newHostIndex = GetHostCount();
+        HostStateController->QueryAddHost(newHostIndex);
+    }
 }
 
 void TOracle::OnRequestStarted(
@@ -427,6 +437,40 @@ TString TOracle::Dump() const
     return sb;
 }
 
+void TOracle::AddHostIfNeeded(THostIndex hostIndex)
+{
+    size_t currentHostCount = HostStatistics.size();
+    const size_t newHostCount = hostIndex + 1;
+
+    Y_ABORT_UNLESS(currentHostCount == HostStates.size());
+    Y_ABORT_UNLESS(currentHostCount == HostsHealths.size());
+    Y_ABORT_UNLESS(currentHostCount == HostsReconnectDelays.size());
+
+    while (currentHostCount < newHostCount) {
+        HostStatistics.emplace_back();
+        HostStates.emplace_back();
+        HostsHealths.push_back(EHostHealth::Online);
+        HostsReconnectDelays.emplace_back(MinReconnectDelay, MaxReconnectDelay);
+
+        currentHostCount = HostStatistics.size();
+    }
+}
+
+TVector<TOracleHostStat> TOracle::BuildHostStats(TInstant now) const
+{
+    TVector<TOracleHostStat> stats;
+    stats.reserve(HostStatistics.size());
+    for (THostIndex hostIndex = 0; hostIndex < GetHostCount(); ++hostIndex) {
+        stats.emplace_back(
+            hostIndex,
+            HostStates[hostIndex],
+            HostsHealths[hostIndex],
+            HostStatistics[hostIndex],
+            now);
+    }
+    return stats;
+}
+
 TTimePredictor& TOracle::AccessTimePredictor(EOperation operation)
 {
     return TimePredictors[static_cast<size_t>(operation)];
@@ -437,21 +481,9 @@ const TTimePredictor& TOracle::GetTimePredictor(EOperation operation) const
     return TimePredictors[static_cast<size_t>(operation)];
 }
 
-TVector<TOracleHostStat> TOracle::BuildHostStats(TInstant now) const
+size_t TOracle::GetHostCount() const
 {
-    TVector<TOracleHostStat> stats;
-    stats.reserve(HostStatistics.size());
-    for (THostIndex hostIndex = 0; hostIndex < HostStatistics.size();
-         ++hostIndex)
-    {
-        stats.emplace_back(
-            hostIndex,
-            HostStates[hostIndex],
-            HostsHealths[hostIndex],
-            HostStatistics[hostIndex],
-            now);
-    }
-    return stats;
+    return HostStatistics.size();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

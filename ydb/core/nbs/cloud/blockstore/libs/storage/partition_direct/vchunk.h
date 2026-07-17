@@ -60,7 +60,9 @@ public:
 
     void SetHostState(THostIndex hostIndex, EHostState state);
 
-    void OnHostAppended(size_t newHostCount);
+    // If the current count of hosts in the config is less than the desired
+    // host count, update the config and persist it in the tablet.
+    void UpdateHostCount(size_t newHostCount);
 
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] TExecutorPtr GetExecutor() const;

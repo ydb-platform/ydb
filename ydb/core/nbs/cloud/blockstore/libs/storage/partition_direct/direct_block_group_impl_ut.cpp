@@ -1,3 +1,6 @@
+#include "direct_block_group_impl.h"
+
+#include "base_test_fixture.h"
 #include "direct_block_group_test_fixture.h"
 #include "vchunk.h"
 
@@ -1051,22 +1054,22 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto initialReady = RunAndGetInitialReady(dbg);
         WaitReady(executor, initialReady);
 
-        auto& service = *Services.back();
-        UNIT_ASSERT_VALUES_EQUAL(0u, service.AddHostRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(0u, Service->AddHostRequests.size());
 
         RunOnExecutor(
             executor,
             [&]
             {
-                dbg->QueryAddHost();
+                dbg->QueryAddHost(10);
                 return true;
             })
             .GetValue(WaitTimeout);
 
-        UNIT_ASSERT_VALUES_EQUAL(1u, service.AddHostRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(1u, Service->AddHostRequests.size());
         UNIT_ASSERT_VALUES_EQUAL(
-            static_cast<size_t>(0),
-            service.AddHostRequests[0]);
+            0,
+            Service->AddHostRequests[0].DirectBlockGroupId);
+        UNIT_ASSERT_VALUES_EQUAL(10, Service->AddHostRequests[0].NewHostIndex);
     }
 
     // On restart a DBG comes up with the committed connection count (here N+1).
@@ -1088,7 +1091,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             MakeDDiskIds(100, grownHostCount),
             MakeDDiskIds(100 + grownHostCount, grownHostCount));
 
-        auto initialReady = RunAndGetInitialReady(dbg);
+        auto initialReady = RunAndGetInitialReady(dbg, false);
         WaitReady(executor, initialReady);
 
         // A vchunk that still only knows the pre-add host count.
@@ -1096,7 +1099,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             new ::NMonitoring::TDynamicCounters());
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
-            Services.back().get(),
+            Service.get(),
             TVChunkConfig::MakeDefault(
                 100,
                 DirectBlockGroupHostCount,
@@ -1107,16 +1110,14 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             counters);
 
         TString oracleDump;
-        TString dumpBefore;
-        TString dumpAfter;
+        TString configBefore;
         RunOnExecutor(
             executor,
             [&]
             {
                 oracleDump = dbg->GetOracle()->Dump();
-                dumpBefore = vchunk->DebugPrintDirtyMap();
+                configBefore = TBaseFixture::AccessConfig(*vchunk).DebugPrint();
                 dbg->Register(vchunk);
-                dumpAfter = vchunk->DebugPrintDirtyMap();
                 return true;
             })
             .GetValue(WaitTimeout);
@@ -1127,10 +1128,44 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 
         // The grown host slot (H5) is absent in the vchunk before registering
         // and present after - the DBG caught it up at registration.
-        UNIT_ASSERT_C(
-            dumpBefore.find("H5-") == TString::npos,
-            "unexpected H5 before register:\n" + dumpBefore);
-        UNIT_ASSERT_STRING_CONTAINS(dumpAfter, "H5-");
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[0/100] "
+            "PBuffer{Primary;Primary;Primary;HandOff;HandOff} "
+            "DDisk{Primary;Primary;Primary;None;None} "
+            "Enabled{+++++}",
+            configBefore);
+
+        // Wait for DB request completed
+        DrainExecutor(executor);
+        TString configAfter;
+        TString dirtyMapDDiskAfter;
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                configAfter = TBaseFixture::AccessConfig(*vchunk).DebugPrint();
+                dirtyMapDDiskAfter = TBaseFixture::AccessBlocksDirtyMap(*vchunk)
+                                         .DebugPrintDDiskState();
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        // VChunk config contains six enabled hosts
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[0/100] "
+            "PBuffer{Primary;Primary;Primary;HandOff;HandOff;HandOff} "
+            "DDisk{Primary;Primary;Primary;None;None;None} "
+            "Enabled{++++++}",
+            configAfter);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768,32768};"
+            "H1*{Operational,32768,32768};"
+            "H2*{Operational,32768,32768};"
+            "H3+{Disabled,0,0};"
+            "H4+{Disabled,0,0};"
+            "H5+{Disabled,0,0};",
+            dirtyMapDDiskAfter);
     }
 }
 

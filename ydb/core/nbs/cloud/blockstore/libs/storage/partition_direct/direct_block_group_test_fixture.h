@@ -29,10 +29,11 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TVector<TExecutorPtr> Executors;
 
+    std::shared_ptr<TPartitionDirectServiceMock> Service;
     // Mock services created by RunAndGetInitialReady(). Kept alive for the
     // whole test because TDirectBlockGroup::Run() stores a raw pointer to the
     // service.
-    TVector<std::shared_ptr<TPartitionDirectServiceMock>> Services;
+    TVector<IPartitionDirectServicePtr> OldServices;
 
     void SetUp(NUnitTest::TTestContext& context) override;
     void TearDown(NUnitTest::TTestContext& context) override;

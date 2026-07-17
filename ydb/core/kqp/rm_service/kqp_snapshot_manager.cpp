@@ -17,10 +17,6 @@ static IOutputStream& operator<<(IOutputStream& out, const NKikimr::NKqp::IKqpGa
 namespace NKikimr {
 namespace NKqp {
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-
 namespace {
 
 class TSnapshotManagerActor: public TActorBootstrapped<TSnapshotManagerActor> {
@@ -37,7 +33,7 @@ public:
         RequestTimeoutCookieHolder_.Reset(ISchedulerCookie::Make2Way());
         CreateLongTimer(TlsActivationContext->AsActorContext(), RequestTimeout, ev, 0, RequestTimeoutCookieHolder_.Get());
 
-        LOG_D("Start KqpSnapshotManager at " << SelfId());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"Start KqpSnapshotManager at " << SelfId());
 
         Become(&TThis::StateAwaitRequest);
     }
@@ -58,7 +54,7 @@ private:
         Orbit = std::move(ev->Get()->Orbit);
         Cookie = ev->Get()->Cookie;
 
-        LOG_D("KqpSnapshotManager: got snapshot request from " << ClientActorId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"KqpSnapshotManager: got snapshot request from " << ClientActorId);
 
         if (MvccSnapshot) {
             AFL_ENSURE(ev->Get()->Tables.empty());
@@ -120,7 +116,7 @@ private:
         if (msg->Status == Ydb::StatusIds::SUCCESS) {
             Snapshot = IKqpGateway::TKqpSnapshot(msg->Snapshot.Step, msg->Snapshot.TxId);
 
-            LOG_D("KqpSnapshotManager: snapshot: " << Snapshot << " acquired");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"KqpSnapshotManager: snapshot: " << Snapshot << " acquired");
 
             Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
                     Snapshot, std::move(ev->Get()->SnapshotHandle), NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)),
@@ -129,7 +125,7 @@ private:
             PassAway();
         } else {
             NYql::TIssues issues = msg->Issues;
-            LOG_E("KqpSnapshotManager: CreateSnapshot got unexpected status="
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"KqpSnapshotManager: CreateSnapshot got unexpected status="
                       << msg->Status << ", issues:" << issues.ToString());
             ReplyErrorAndDie(NKikimrIssues::TStatusIds::ERROR, std::move(issues));
         }
@@ -146,7 +142,7 @@ private:
         if (status == EStatus::ExecComplete && msg->Record.GetStatusCode() == NKikimrIssues::TStatusIds::SUCCESS) {
             Snapshot = IKqpGateway::TKqpSnapshot(msg->Record.GetStep(), msg->Record.GetTxId());
 
-            LOG_D("KqpSnapshotManager: snapshot " << Snapshot.Step << ":" << Snapshot.TxId << " created in cleanup state. Send discard");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"KqpSnapshotManager: snapshot " << Snapshot.Step << ":" << Snapshot.TxId << " created in cleanup state. Send discard");
 
             SendDiscard();
         }
@@ -173,7 +169,7 @@ private:
         if (status == EStatus::ExecComplete && msg->Record.GetStatusCode() == NKikimrIssues::TStatusIds::SUCCESS) {
             Snapshot = IKqpGateway::TKqpSnapshot(msg->Record.GetStep(), msg->Record.GetTxId());
 
-            LOG_D("KqpSnapshotManager: snapshot " << Snapshot.Step << ":" << Snapshot.TxId << " created");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"KqpSnapshotManager: snapshot " << Snapshot.Step << ":" << Snapshot.TxId << " created");
 
             Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
                 Snapshot, TSnapshotHandle(), NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)),
@@ -185,7 +181,7 @@ private:
             NYql::TIssues issues;
             NYql::IssuesFromMessage(msg->Record.GetIssues(), issues);
 
-            LOG_E("KqpSnapshotManager: CreateSnapshot got unexpected status " << status << ": " << issues.ToString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"KqpSnapshotManager: CreateSnapshot got unexpected status " << status << ": " << issues.ToString());
             ReplyErrorAndDie(msg->Record.GetStatusCode(), std::move(issues));
         }
     }
@@ -213,7 +209,7 @@ private:
         refreshSnapshot->SetSnapshotStep(Snapshot.Step);
         refreshSnapshot->SetSnapshotTxId(Snapshot.TxId);
 
-        LOG_D("KqpSnapshotManager: refreshing snapshot");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"KqpSnapshotManager: refreshing snapshot");
 
         Send(MakeTxProxyID(), req.Release());
         ScheduleRefresh();
@@ -228,25 +224,25 @@ private:
             NYql::TIssues issues;
             NYql::IssuesFromMessage(msg->Record.GetIssues(), issues);
 
-            LOG_E("KqpSnapshotManager: RefreshSnapshot got unexpected status=" << status
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"KqpSnapshotManager: RefreshSnapshot got unexpected status=" << status
                 << ", issues:" << issues.ToString());
             ReplyErrorAndDie(msg->Record.GetStatusCode(), std::move(issues));
         }
     }
 
     void HandleAwaitCreation(TEvKqpSnapshot::TEvDiscardSnapshot::TPtr&) {
-        LOG_D("KqpSnapshotManager: discarding snapshot in awaitCreation state; goto cleanup");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"KqpSnapshotManager: discarding snapshot in awaitCreation state; goto cleanup");
         Become(&TThis::StateCleanup);
     }
 
     void HandleRefreshing(TEvKqpSnapshot::TEvDiscardSnapshot::TPtr&) {
-        LOG_W("KqpSnapshotManager: discarding snapshot; our snapshot: " << Snapshot << " shutting down");
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"KqpSnapshotManager: discarding snapshot; our snapshot: " << Snapshot << " shutting down");
         SendDiscard();
         PassAway();
     }
 
     void Handle(TEvents::TEvPoison::TPtr&) {
-        LOG_D("KqpSnapshotManager: shutting down on timeout");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"KqpSnapshotManager: shutting down on timeout");
         ReplyErrorAndDie(NKikimrIssues::TStatusIds::TIMEOUT, {});
     }
 
@@ -271,7 +267,7 @@ private:
     }
 
     void HandleUnexpectedEvent(const TString& state, ui32 eventType) {
-        LOG_E("KqpSnapshotManager: unexpected event, state: " << state
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER,"KqpSnapshotManager: unexpected event, state: " << state
             << ", event type: " << eventType);
         ReplyErrorAndDie(NKikimrIssues::TStatusIds::INTERNAL_ERROR, {});
     }

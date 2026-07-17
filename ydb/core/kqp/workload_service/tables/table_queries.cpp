@@ -177,7 +177,7 @@ public:
         TablePathsToCheck.clear();
         for (const auto& result : results) {
             const TString& fullPath = CanonizePath(result.Path);
-            LOG_D("Describe table " << fullPath << " status " << result.Status);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() <<"Describe table " << fullPath << " status " << result.Status);
 
             std::pair<TString, TString> pathPair;
             if (TString error; !TrySplitPathByDb(fullPath, AppData()->TenantName, pathPair, error)) {
@@ -204,7 +204,7 @@ public:
                     TablesExists = false;
                     break;
                 case EStatus::Ok:
-                    LOG_D("Start cleanup for table " << fullPath);
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() <<"Start cleanup for table " << fullPath);
                     CleanupQueriesInFlight++;
                     Register(TCleanupTablesQuery::MakeRetry(SelfId(), fullPath));
                     break;
@@ -217,7 +217,7 @@ public:
         Y_ABORT_UNLESS(CleanupQueriesInFlight);
         CleanupQueriesInFlight--;
 
-        LOG_D("Cleanup finished for table " << ev->Get()->Path << ", " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() <<"Cleanup finished for table " << ev->Get()->Path << ", " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             AddError(GroupIssues(ev->Get()->Issues, TStringBuilder() << "Cleanup table " << ev->Get()->Path << " failed, " << ev->Get()->Status));
@@ -236,7 +236,7 @@ public:
 
 protected:
     void StartRequest() override {
-        LOG_D("Start check tables existence, number paths: " << TablePathsToCheck.size());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() <<"Start check tables existence, number paths: " << TablePathsToCheck.size());
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(NTableCreator::BuildSchemeCacheNavigateRequest(
             TablePathsToCheck
         ).Release()), IEventHandle::FlagTrackDelivery);
@@ -284,9 +284,9 @@ private:
         }
 
         if (Success) {
-            LOG_D("Successfully finished");
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() <<"Successfully finished");
         } else {
-            LOG_E("Failed with issues: " << Issues.ToOneLineString());
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() <<"Failed with issues: " << Issues.ToOneLineString());
         }
 
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new TEvPrivate::TEvCleanupTablesFinished(Success, TablesExists, std::move(Issues)));
@@ -809,7 +809,7 @@ public:
 
         auto& param = params.AddParam("$session_ids").BeginList();
         for (const TString& sessionId : SessionIds) {
-            LOG_T("Cleanup request with session id: " << sessionId);
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() <<"Cleanup request with session id: " << sessionId);
             param.AddListItem().Utf8(sessionId);
         }
         param.EndList().Build();

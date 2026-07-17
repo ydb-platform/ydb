@@ -26,8 +26,6 @@ constexpr size_t ISSUES_CHUNK_SOLO = SQL_TEXT_MAX_SIZE + ISSUES_CHUNK_WITH_DATA;
 constexpr size_t ISSUES_TEXT_MAX_TOTAL = 64_KB;
 static_assert(SQL_TEXT_MAX_SIZE + ISSUES_CHUNK_WITH_DATA + LOG_LINE_OVERHEAD + PART1_JSON_OVERHEAD
               <= RSYSLOG_MAX_MESSAGE_SIZE);
-#define _KQP_REQ_LOG_AT(prio, stream) \
-    LOG_LOG_S(*TlsActivationContext, (prio), NKikimrServices::KQP_REQUEST, "[REQ_JSON] " << stream)
 
 // BUILTIN_ACL_METADATA traffic dominates KQP_REQUEST volume — silence SUCCESS, keep failures.
 bool IsMetadataServiceQuery(const TKqpQueryState& state) {
@@ -208,7 +206,7 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         json.EndObject();
         json.EndObject();
 
-        _KQP_REQ_LOG_AT(prio, ss.Str());
+        LOG_LOG_S(*TlsActivationContext, (prio), NKikimrServices::KQP_REQUEST, "[REQ_JSON] " << ss.Str());
     }
 }
 

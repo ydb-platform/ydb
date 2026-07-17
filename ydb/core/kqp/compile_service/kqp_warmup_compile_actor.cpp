@@ -25,12 +25,6 @@
 
 namespace NKikimr::NKqp {
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() << stream)
-
 struct TEvPrivate {
     enum EEv {
         EvFetchCacheResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
@@ -297,7 +291,7 @@ public:
         MaxConcurrentCompilations = std::max<ui32>(1u, Config.MaxConcurrentCompilations);
         HardDeadlineTimestamp = TActivationContext::Now() + hardDeadline;
 
-        LOG_I("Warmup actor started, database: " << Database
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Warmup actor started, database: " << Database
               << ", softDeadline: " << softDeadline
               << ", hardDeadline: " << hardDeadline
               << (Config.HardDeadline < softDeadline ? " (adjusted from " + ToString(Config.HardDeadline) + ")" : "")
@@ -309,7 +303,7 @@ public:
         Schedule(hardDeadline, new TEvPrivate::TEvHardDeadline());
 
         if (Database.empty()) {
-            LOG_I("Database is empty, skipping warmup");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Database is empty, skipping warmup");
             SkipReason = "Skipped: empty database";
             ScheduleComplete();
             return;
@@ -336,7 +330,7 @@ private:
             hFunc(TEvPrivate::TEvTruncatedCountResult, HandleTruncatedCount);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
-            LOG_W("StateWaitingComplete: unexpected event " << ev->GetTypeRewrite());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"StateWaitingComplete: unexpected event " << ev->GetTypeRewrite());
             break;
         }
     }
@@ -349,7 +343,7 @@ private:
             cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadlineInTopology);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
-            LOG_W("StateWaitingTopology: unexpected event " << ev->GetTypeRewrite());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"StateWaitingTopology: unexpected event " << ev->GetTypeRewrite());
             break;
         }
     }
@@ -365,7 +359,7 @@ private:
             IgnoreFunc(TEvPrivate::TEvCheckTopology);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
-            LOG_W("StateFetching: unexpected event " << ev->GetTypeRewrite());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"StateFetching: unexpected event " << ev->GetTypeRewrite());
             break;
         }
     }
@@ -379,7 +373,7 @@ private:
             IgnoreFunc(TEvPrivate::TEvCheckTopology);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
-            LOG_W("StateCompiling: unexpected event " << ev->GetTypeRewrite());
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"StateCompiling: unexpected event " << ev->GetTypeRewrite());
             break;
         }
     }
@@ -398,7 +392,7 @@ private:
             Counters->WarmupQueriesTruncated->Set(ev->Get()->Count);
             Counters->WarmupQueriesEmptyQueryType->Set(ev->Get()->EmptyQueryTypeCount);
         }
-        LOG_I("Truncated queries in cache: " << ev->Get()->Count
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Truncated queries in cache: " << ev->Get()->Count
               << ", empty QueryType: " << ev->Get()->EmptyQueryTypeCount
               << ", success: " << ev->Get()->Success);
     }
@@ -407,7 +401,7 @@ private:
         const auto discoveredNodes = ev->Get()->DiscoveredNodesCount;
         NodeIds = ev->Get()->NodeIds;
 
-        LOG_I("Received TEvStartWarmup, discoveredNodes: " << discoveredNodes
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Received TEvStartWarmup, discoveredNodes: " << discoveredNodes
               << ", nodeIds count: " << NodeIds.size()
               << ", maxNodesToQuery: " << Config.MaxNodesToRequest
               << ", scheduling soft deadline: " << Config.SoftDeadline);
@@ -434,7 +428,7 @@ private:
         }
 
         if (peerCount == 0) {
-            LOG_I("No peers in initial kqpexch+ board sync (boardSize=" << boardNodeIds.size()
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"No peers in initial kqpexch+ board sync (boardSize=" << boardNodeIds.size()
                   << "), skipping warmup");
             Complete(true, "Skipped: no peers in initial kqpexch+ board sync");
             return;
@@ -443,7 +437,7 @@ private:
         SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
         Schedule(Config.SoftDeadline, new TEvPrivate::TEvSoftDeadline(), SoftDeadlineCookieHolder.Get());
 
-        LOG_I("Initial board sync delivered " << peerCount << " peer(s), waiting for "
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Initial board sync delivered " << peerCount << " peer(s), waiting for "
               "TEvStartWarmup from KqpProxy");
     }
 
@@ -455,7 +449,7 @@ private:
 
     void StartFetch() {
         if (NodeIds.empty()) {
-            LOG_W("StartFetch called with empty NodeIds, skipping warmup");
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"StartFetch called with empty NodeIds, skipping warmup");
             Complete(true, "Skipped: empty NodeIds");
             return;
         }
@@ -476,7 +470,7 @@ private:
             NodeIds.resize(maxNodesToQuery);
         }
 
-        LOG_I("Spawning fetch cache actor, filtering by " << NodeIds.size() << " nodes");
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Spawning fetch cache actor, filtering by " << NodeIds.size() << " nodes");
         const ui64 maxCompilationMs = Config.MaxCompilationDurationMs > 0
             ? Config.MaxCompilationDurationMs
             : Config.SoftDeadline.MilliSeconds() / 2;
@@ -491,22 +485,22 @@ private:
         if (!result->Success) {
             // DB may not be resolvable yet this early after start; retry before giving up.
             if (!SoftDeadlineReached && FetchAttempts < MaxFetchAttempts) {
-                LOG_W("Fetch failed (attempt " << FetchAttempts << "/" << MaxFetchAttempts
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Fetch failed (attempt " << FetchAttempts << "/" << MaxFetchAttempts
                       << "), retrying in " << FetchRetryDelay << ": " << result->Error);
                 Schedule(FetchRetryDelay, new TEvPrivate::TEvRetryFetch());
                 return;
             }
-            LOG_W("Fetch failed (no compile cache nodes responded), skipping warmup: " << result->Error);
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Fetch failed (no compile cache nodes responded), skipping warmup: " << result->Error);
             Complete(false, "Fetch failed: " + result->Error);
             return;
         }
 
         if (!result->Warnings.empty()) {
-            LOG_W("Fetch completed with warnings: " << result->Warnings);
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Fetch completed with warnings: " << result->Warnings);
         }
 
         QueriesToCompile = std::move(result->Queries);
-        LOG_I("Fetched " << QueriesToCompile.size() << " queries from compile cache");
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Fetched " << QueriesToCompile.size() << " queries from compile cache");
 
         if (Counters) {
             Counters->WarmupQueriesFetched->Add(QueriesToCompile.size());
@@ -542,7 +536,7 @@ private:
         if (auto it = PendingQueriesByCookie.find(cookie); it != PendingQueriesByCookie.end()) {
             auto& query = it->second;
             if (success) {
-                LOG_I("Query compiled successfully, user: " << query.UserSID
+                LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Query compiled successfully, user: " << query.UserSID
                       << ", has_metadata: " << !query.Metadata.empty()
                       << ", query: " << query.QueryText.substr(0, 200)
                       << (query.QueryText.size() > 200 ? "..." : ""));
@@ -557,7 +551,7 @@ private:
                         errorMsg += issue.message();
                     }
                 }
-                LOG_W("Query compilation failed, user: " << query.UserSID
+                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Query compilation failed, user: " << query.UserSID
                       << ", has_metadata: " << !query.Metadata.empty()
                       << ", status: " << Ydb::StatusIds::StatusCode_Name(record.GetYdbStatus())
                       << ", error: " << errorMsg
@@ -566,7 +560,7 @@ private:
             }
             PendingQueriesByCookie.erase(it);
         } else {
-            LOG_W("Received response for unknown cookie: " << cookie
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Received response for unknown cookie: " << cookie
                   << ", success: " << success);
         }
 
@@ -653,7 +647,7 @@ private:
             timeout = TDuration::MilliSeconds(100);
         }
 
-        LOG_D("Sending PREPARE request for user: " << query.UserSID
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Sending PREPARE request for user: " << query.UserSID
               << ", query length: " << query.QueryText.size()
               << ", has_metadata: " << !query.Metadata.empty()
               << ", timeout: " << timeout);
@@ -675,7 +669,7 @@ private:
         }
 
         if (PendingCompilations == 0 && QueriesToCompile.empty()) {
-            LOG_I("All compilations finished, loaded: " << EntriesLoaded
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"All compilations finished, loaded: " << EntriesLoaded
                   << ", failed: " << EntriesFailed);
             TString msg = TStringBuilder() << "Compiled " << EntriesLoaded << " queries"
                 << (SoftDeadlineReached ? " (soft deadline)" : "");
@@ -685,7 +679,7 @@ private:
 
 
     void HandleHardDeadline() {
-        LOG_W("Hard deadline reached, compiled: " << EntriesLoaded
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Hard deadline reached, compiled: " << EntriesLoaded
               << ", failed: " << EntriesFailed
               << ", pending: " << PendingCompilations);
 
@@ -699,25 +693,25 @@ private:
         SoftDeadlineReached = true;
         QueriesToCompile.clear();
 
-        LOG_I("Soft deadline reached, compiled: " << EntriesLoaded
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Soft deadline reached, compiled: " << EntriesLoaded
               << ", failed: " << EntriesFailed
               << ", pending: " << PendingCompilations);
 
         if (PendingCompilations == 0) {
             Complete(true, TStringBuilder() << "Soft deadline: compiled " << EntriesLoaded << " queries");
         } else {
-            LOG_I("Waiting for " << PendingCompilations << " in-flight compilations to finish");
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Waiting for " << PendingCompilations << " in-flight compilations to finish");
         }
     }
 
     void HandleSoftDeadlineInTopology() {
         // No peer NodeIds yet → can only read self (useless on warm restart).
-        LOG_W("Soft deadline reached while waiting for topology, skipping warmup");
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Soft deadline reached while waiting for topology, skipping warmup");
         Complete(true, "Skipped: topology not delivered before soft deadline");
     }
 
     void HandlePoison() {
-        LOG_D("Received poison, stop warmup");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Received poison, stop warmup");
         PassAway();
     }
 
@@ -727,7 +721,7 @@ private:
         }
         Completed = true;
 
-        LOG_I("Warmup " << (success ? "completed" : "finished") << ": " << message);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, LogPrefix() <<"Warmup " << (success ? "completed" : "finished") << ": " << message);
 
         for (const auto& actorId : NotifyActorIds) {
             Send(actorId, new TEvKqpWarmupComplete(success, message, EntriesLoaded, EntriesFailed));

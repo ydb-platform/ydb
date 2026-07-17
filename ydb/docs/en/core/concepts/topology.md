@@ -33,7 +33,7 @@ Fault-tolerant operation modes of distributed storage require a significant amou
 | `mirror-3-dc` *(3 nodes)*, can stand a failure of a single server, or a failure of a data center | 3 | 3 | Server | Data center | 3 | Doesn't matter |
 | `block-4-2`, can stand a failure of 2 racks | 1.5 | 8 ([10 recommended](*recommended-node-count)) | Rack | Data center | 1 | 8 |
 | `block-4-2` *(reduced)*, can stand a failure of 1 rack | 1.5 | 10 | ½ a rack | Data center | 1 | 5 |
-| `block-4-2` *(reduced)*, can stand a failure of 1 node | 1.5 | 4 | ½ a server | Data center | 1 | Doesn't matter |
+| `block-4-2` *(reduced)*, can stand a failure of 1 node | 1.5 | 4 | Server | Data center | 1 | Doesn't matter |
 | `none`, no fault tolerance | 1 | 1 | Node | Node | 1 | 1 |
 
 {% note info %}
@@ -68,7 +68,7 @@ There are 2 variants of the minimal fault-tolerant configuration of a {{ ydb-sho
 
 - The 3 nodes variant of the `mirror-3-dc` operating mode, which requires only three servers with three disks each. In this configuration, each server acts as both a fail domain and a fail realm, and the cluster can withstand the failure of only a single server. Each server must be located in an independent data center to provide reasonable fault tolerance.
 
-- The 4 nodes variant of the `block-4-2` operating mode, which requires 4 servers with 2 disks each. In this configuration, the disks of each server are divided into 2 fail domains using the [`disk_scope`](../reference/configuration/host_configs.md#disk-scope) attribute, which gives a total of 8 fail domains required for the `block-4-2` mode. Such a cluster remains operational when a single server fails.
+- The 4 nodes variant of the `block-4-2` operating mode, which requires 4 servers with 2 or more disks each. In this configuration, the disks of each server are manually divided into 2 fail domains using the [`disk_scope`](../reference/configuration/host_configs.md#disk-scope) attribute, which gives a total of 8 fail domains required for the `block-4-2` mode. Such a cluster remains operational when a single server fails.
 
 {{ ydb-short-name }} clusters configured with one of these approaches can be used for production environments if they don't require stronger fault tolerance guarantees.
 

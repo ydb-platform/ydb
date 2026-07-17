@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2.1.12)
+VERSION(2.1.13)
 
-ORIGINAL_SOURCE(https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz)
+ORIGINAL_SOURCE(https://github.com/libevent/libevent/releases/download/release-2.1.13-stable/libevent-2.1.13-stable.tar.gz)
 
 LICENSE(
     BSD-3-Clause AND
@@ -33,7 +33,6 @@ NO_RUNTIME()
 
 CFLAGS(
     -DHAVE_CONFIG_H
-    -Darc4random_buf=xxx_arc4random_buf
 )
 
 END()

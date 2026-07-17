@@ -1,4 +1,4 @@
-#include <ydb/core/tx/schemeshard/schemeshard_self_ref_map.h>
+#include <ydb/core/tx/schemeshard/schemeshard_db_ref_map.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/schemeshard/olap/store/store.h>
 

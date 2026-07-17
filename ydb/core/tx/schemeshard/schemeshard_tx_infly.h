@@ -11,7 +11,7 @@
 #include <ydb/core/tx/message_seqno.h>
 
 #include "schemeshard_identificators.h"  // for TStepId, TTxId, TShardIdx
-#include "schemeshard_path_ref.h"  // for TPathDbRef
+#include "schemeshard_path_db_ref.h"  // for TPathDbRef
 #include "schemeshard_subop_types.h"  // for ETxType
 #include "schemeshard_subop_state_types.h"  // for ETxState
 

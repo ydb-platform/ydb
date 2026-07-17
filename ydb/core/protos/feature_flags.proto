@@ -344,4 +344,5 @@ message TFeatureFlags {
     optional bool EnableColumnshardUuid = 297 [default = false];
     optional bool EnableColumnshardDyNumber = 298 [default = false];
     optional bool EnableDataShardDirectPartImport = 299 [default = false];
+    optional bool EnableIdmPermissionsManagement = 301 [default = false];
 }

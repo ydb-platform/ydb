@@ -315,9 +315,7 @@ public:
             return result;
         }
 
-        // Untracked in armed propose: TKesusInfo is non-copyable (THolder AlterConfig),
-        // so it can't be Update-snapshotted. Safe: this op rejects before mutating.
-        auto& kesus = context.SS->KesusInfos.UpdateUntracked(path.Base()->PathId);
+        auto& kesus = context.SS->KesusInfos.Update(path.Base()->PathId, context.MemChanges);
         Y_ABORT_UNLESS(kesus);
         Y_ABORT_UNLESS(path.Base()->IsCreateFinished()); // checks.NotUnderOperation checks that path not under creation
 

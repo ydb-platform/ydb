@@ -3004,6 +3004,18 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
     THolder<NKikimrFileStore::TConfig> AlterConfig;
     ui64 AlterVersion = 0;
 
+    TFileStoreInfo() = default;
+    // Deep-copies the owned AlterConfig so the info can be snapshotted for undo.
+    TFileStoreInfo(const TFileStoreInfo& other)
+        : IndexShardIdx(other.IndexShardIdx)
+        , IndexTabletId(other.IndexTabletId)
+        , Config(other.Config)
+        , Version(other.Version)
+        , AlterConfig(other.AlterConfig ? MakeHolder<NKikimrFileStore::TConfig>(*other.AlterConfig) : nullptr)
+        , AlterVersion(other.AlterVersion)
+    {}
+    TFileStoreInfo& operator=(const TFileStoreInfo&) = delete;
+
     void PrepareAlter(const NKikimrFileStore::TConfig& alterConfig) {
         Y_ENSURE(!AlterConfig);
         Y_ENSURE(!AlterVersion);
@@ -3094,6 +3106,18 @@ struct TKesusInfo : public TSimpleRefCount<TKesusInfo> {
     ui64 Version = 0;
     THolder<Ydb::Coordination::Config> AlterConfig;
     ui64 AlterVersion = 0;
+
+    TKesusInfo() = default;
+    // Deep-copies the owned AlterConfig so the info can be snapshotted for undo.
+    TKesusInfo(const TKesusInfo& other)
+        : KesusShardIdx(other.KesusShardIdx)
+        , KesusTabletId(other.KesusTabletId)
+        , Config(other.Config)
+        , Version(other.Version)
+        , AlterConfig(other.AlterConfig ? MakeHolder<Ydb::Coordination::Config>(*other.AlterConfig) : nullptr)
+        , AlterVersion(other.AlterVersion)
+    {}
+    TKesusInfo& operator=(const TKesusInfo&) = delete;
 
     void FinishAlter() {
         Y_ENSURE(AlterConfig, "No alter config at Alter completion");

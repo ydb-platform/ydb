@@ -12209,6 +12209,33 @@ Y_UNIT_TEST(ParseProtoseq) {
     UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
 }
 
+Y_UNIT_TEST(ComplexParseWithOptions) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT Protobuf::Parse(records) AS event FROM Input
+        FLATTEN LIST BY (ChunksSplitters::Protoseq(Data).SplitRecords AS records);
+
+        SELECT * FROM $input
+        WITH (
+            WATERMARK = event.ts - Interval("PT1S"),
+            WATERMARK_GRANULARITY = "PT1S",
+            WATERMARK_IDLE_TIMEOUT = "PT1M"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {
+        "WatermarkGenerator",
+        "watermarkgranularity",
+        "watermarkidletimeout",
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermarkgranularity"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermarkidletimeout"], 1);
+}
+
 Y_UNIT_TEST(ExprList) {
     auto res = SqlToYql(R"sql(
         USE plato;
@@ -13532,7 +13559,7 @@ Y_UNIT_TEST(ReadsNamedNodeExpresionSubquery) {
 
 Y_UNIT_TEST(ReadsProjectionFromSubquery) {
     NSQLTranslation::TTranslationSettings s;
-    s.LangVer = NYql::MakeLangVersion(2025, 4);
+    s.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         SELECT (SELECT a FROM plato.x) FROM (SELECT * FROM plato.y);

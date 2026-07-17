@@ -137,7 +137,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteDictJoin(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteJoinDict(node, ctx);
+        TExprBase output = DqPeepholeRewriteJoinDict(node, ctx, *GetTypes());
         DumpAppliedRule("RewriteDictJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

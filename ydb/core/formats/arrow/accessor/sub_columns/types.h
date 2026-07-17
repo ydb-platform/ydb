@@ -1,8 +1,11 @@
 #pragma once
 
+#include "value_type.h"
+
 #include <deque>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
+#include <ydb/core/formats/arrow/accessor/common/json_value_view.h>
 
 #include <library/cpp/json/writer/json_value.h>
 
@@ -10,15 +13,6 @@
 
 // Type conversions between BinaryJson, dedicated scalar types and arrow storage types.
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
-
-// Logical (as seen by external consumers) value type of data stored in a subcolumn.
-// PERSISTED: these numeric codes are written to disk as the `value_type` column of TDictStats.
-enum class EValueType : ui8 {
-    BinaryJson = 0,
-    Double = 1,
-    Bool = 2,
-    String = 3,
-};
 
 std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType valueType);
 
@@ -43,5 +37,11 @@ bool ExtractBoolScalar(const NBinaryJson::TBinaryJson& blob);
 // value (document reconstruction) or a BinaryJson blob. The array's physical arrow type must match valueType.
 NJson::TJsonValue ArrayElementToJsonValue(const arrow::Array& array, const i64 index, const EValueType valueType);
 NBinaryJson::TBinaryJson ArrayElementToBinaryJson(const arrow::Array& array, const i64 index, const EValueType valueType);
+
+// Wrap element `index` as a logical value view: a native scalar for Double/Bool/String, or a BinaryJson
+// blob for BinaryJson. The returned view aliases `array`, which must outlive it.
+TJsonValueView ArrayElementToJsonValueView(const arrow::Array& array, const i64 index, const EValueType valueType);
+
+ui32 ArrayElementSize(const arrow::Array& array, const i64 index, const EValueType valueType);
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

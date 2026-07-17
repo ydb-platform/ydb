@@ -80,7 +80,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.http_proxy_port = None
         self.kafka_api_port = None
         if configurator.kafka_proxy_enabled:
-            self.kafka_api_port = port_allocator.kafka_api_port
+            self.kafka_api_port = configurator.get_kafka_api_port(node_id)
         if not configurator.simple_config and configurator.http_proxy_enabled:
             self.http_proxy_port = port_allocator.http_proxy_port
         self.sqs_port = None

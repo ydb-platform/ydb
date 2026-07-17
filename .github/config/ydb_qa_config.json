@@ -21,6 +21,7 @@
               "pr_check_failures_by_attempt": "test_results/analytics/pr_check_failures_by_attempt",
               "binary_size": "binary_size",
               "issues": "github_data/issues",
+              "issue_open_periods": "github_data/issue_open_periods",
               "pull_requests": "github_data/pull_requests",
               "digest_queue": "test_results/analytics/digest_queue",
               "fast_unmute_active": "test_mute/fast_unmute_active",

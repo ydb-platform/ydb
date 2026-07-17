@@ -169,7 +169,7 @@ NUdf::TUnboxedValue TPgConst::ExtractConst(i32 typeMod) const {
     return AnyDatumToPod(ret, TypeDesc.PassByValue);
 }
 
-TFunctionCallInfo::TFunctionCallInfo(ui32 numArgs, const FmgrInfo* finfo)
+TFunctionCallInfo::TFunctionCallInfo(ui32 numArgs, const FmgrInfo* finfo, ui32 collationOid)
     : NumArgs(numArgs)
     , CopyFmgrInfo(*finfo)
 {
@@ -183,7 +183,7 @@ TFunctionCallInfo::TFunctionCallInfo(ui32 numArgs, const FmgrInfo* finfo)
     Zero(callInfo);
     callInfo.flinfo = &CopyFmgrInfo; // client may mutate fn_extra
     callInfo.nargs = NumArgs;
-    callInfo.fncollation = DEFAULT_COLLATION_OID;
+    callInfo.fncollation = collationOid ? collationOid : DEFAULT_COLLATION_OID;
 }
 
 FunctionCallInfoBaseData& TFunctionCallInfo::Ref() {
@@ -197,8 +197,8 @@ TFunctionCallInfo::~TFunctionCallInfo() {
     }
 }
 
-TPgResolvedCallState::TPgResolvedCallState(ui32 numArgs, const FmgrInfo* finfo)
-    : CallInfo(numArgs, finfo)
+TPgResolvedCallState::TPgResolvedCallState(ui32 numArgs, const FmgrInfo* finfo, ui32 collationOid)
+    : CallInfo(numArgs, finfo, collationOid)
     , Args(numArgs)
 {
 }
@@ -248,7 +248,7 @@ NUdf::TUnboxedValue TPgResolvedCall<UseContext>::CallFunction(TPgResolvedCallSta
 
 template <bool UseContext>
 THolder<TPgResolvedCallState> TPgResolvedCall<UseContext>::CreateState() const {
-    return MakeHolder<TPgResolvedCallState>(GetArgCount(), &FInfo);
+    return MakeHolder<TPgResolvedCallState>(GetArgCount(), &FInfo, NPg::InvalidCollationOid);
 }
 
 TPgCast::TPgCast(ui32 sourceId, ui32 targetId, bool hasTypeMod)
@@ -496,7 +496,7 @@ template class TPgResolvedCall<false>;
 TPgResolvedCallWithCastState::TPgResolvedCallWithCastState(
     const TPgResolvedCall<false>& caller,
     const TVector<TPgCast>& casters)
-    : CallState(caller.GetArgCount(), &caller.GetFInfo())
+    : CallState(caller.GetArgCount(), &caller.GetFInfo(), NPg::InvalidCollationOid)
 {
     CastStates.reserve(casters.size());
     for (const auto& caster : casters) {

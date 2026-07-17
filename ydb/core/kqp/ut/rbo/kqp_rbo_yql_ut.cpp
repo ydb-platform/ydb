@@ -1107,6 +1107,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {filter}
         );
 
+        join.Props.JoinAlgo = NKqp::EJoinAlgoType::GraceJoin;
+        join.Props.UseBlockHashJoin = false;
         const auto joinJson = join.ToJson(0);
         const auto condition = GetStringField(joinJson, "Condition");
         UNIT_ASSERT_C(condition.Contains("t1.id = t2.id"), condition);
@@ -2701,6 +2703,15 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             auto ast = *result.GetStats()->GetAst();
             const auto isCrossJoin = query.find("AnsiImplicitCrossJoin") != std::string::npos;
             UNIT_ASSERT_C(isCrossJoin || ast.find(joinAlgo) != std::string::npos, TStringBuilder() << "Wrong join algo. Expected: " << joinAlgo);
+            if (!isCrossJoin) {
+                const auto plan = TString{*result.GetStats()->GetPlan()};
+                const auto simplifiedPlan = GetSimplifiedPlan(plan);
+                const TString explainJoinAlgo = useBlockHashJoin ? "BlockHash" : "Grace";
+                const auto* joinOp = FindOperatorByStringField(simplifiedPlan, "JoinAlgo", explainJoinAlgo);
+                UNIT_ASSERT_C(joinOp, plan);
+                const TString explainJoinName = TStringBuilder() << "Join (" << explainJoinAlgo << ")";
+                UNIT_ASSERT_C(GetStringField(*joinOp, "Name").Contains(explainJoinName), plan);
+            }
 
             result =
                 session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
@@ -7797,6 +7808,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 select t1.a from `/Root/t1` as t1;
             )",
+            // Simple query with a fallback pragma
+            R"(
+                PRAGMA ydb.OptFallbackToLegacyOptimizer = 'true';
+                select t1.a from `/Root/t1` as t1;
+            )"
         };
 
         return queries;
@@ -7806,7 +7822,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         // Represents the number of successes and fails for each query with new RBO compiler pipeline.
         std::vector<std::pair<ui32, ui32>> expectedCompileCounters = {
             {0, 1},
-            {1, 0}
+            {1, 0},
+            {0, 1}
         };
 
         return expectedCompileCounters;
@@ -7814,14 +7831,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(FallbackToYqlEnabled) {
         // All queries should succeded because fallback to yql is enabled.
-        const std::vector<bool> expectedResult{true, true};
+        const std::vector<bool> expectedResult{true, true, true};
         TestFallbackToYql(/*fallbackToYqlEnabled=*/true, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
                           expectedResult);
     }
 
     Y_UNIT_TEST(FallbackToYqlDisabled) {
         // First 2 queries should fail because fallback to yql is disabled.
-        const std::vector<bool> expectedResult{false, true};
+        const std::vector<bool> expectedResult{false, true, false};
         TestFallbackToYql(/*fallbackToYqlEnabled=*/false, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
                           expectedResult);
     }
@@ -7920,7 +7937,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         return false;
     }
 
-    bool IsGraceJoinPlanNode(const NJson::TJsonValue& planNode) {
+    bool IsJoinPlanNode(const NJson::TJsonValue& planNode) {
         if (!planNode.IsMap()) {
             return false;
         }
@@ -7929,11 +7946,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
             for (const auto& opNode : operators->second.GetArraySafe()) {
                 const auto& op = opNode.GetMapSafe();
-                const auto opName = op.at("Name").GetStringSafe();
-                const bool isJoin = opName.Contains("Join");
-                const bool isGrace = opName.Contains("Grace") ||
-                    (op.contains("JoinAlgo") && op.at("JoinAlgo").GetStringSafe() == "Grace");
-                if (isJoin && isGrace) {
+                if (op.contains("JoinKind")) {
                     return true;
                 }
             }
@@ -7942,36 +7955,36 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         return false;
     }
 
-    ui32 CountGraceJoinPlanNodes(const NJson::TJsonValue& planNode) {
+    ui32 CountJoinPlanNodes(const NJson::TJsonValue& planNode) {
         if (!planNode.IsMap()) {
             return 0;
         }
 
-        ui32 count = IsGraceJoinPlanNode(planNode) ? 1 : 0;
+        ui32 count = IsJoinPlanNode(planNode) ? 1 : 0;
 
         const auto& planMap = planNode.GetMapSafe();
         if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
             for (const auto& child : plans->second.GetArraySafe()) {
-                count += CountGraceJoinPlanNodes(child);
+                count += CountJoinPlanNodes(child);
             }
         }
 
         return count;
     }
 
-    ui32 CountGraceJoinPlanNodes(const TString& plan) {
+    ui32 CountJoinPlanNodes(const TString& plan) {
         NJson::TJsonValue planRoot;
         NJson::ReadJsonTree(plan, &planRoot, true);
-        return CountGraceJoinPlanNodes(planRoot.GetMapSafe().at("SimplifiedPlan"));
+        return CountJoinPlanNodes(planRoot.GetMapSafe().at("SimplifiedPlan"));
     }
 
-    bool HasGraceJoinWithBothInputsHashShuffled(const NJson::TJsonValue& planNode) {
+    bool HasJoinWithBothInputsHashShuffled(const NJson::TJsonValue& planNode) {
         if (!planNode.IsMap()) {
             return false;
         }
 
         const auto& planMap = planNode.GetMapSafe();
-        if (IsGraceJoinPlanNode(planNode)) {
+        if (IsJoinPlanNode(planNode)) {
             if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
                 const auto& children = plans->second.GetArraySafe();
                 if (children.size() == 2 && IsHashShufflePlanNode(children[0]) && IsHashShufflePlanNode(children[1])) {
@@ -7982,7 +7995,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
             for (const auto& child : plans->second.GetArraySafe()) {
-                if (HasGraceJoinWithBothInputsHashShuffled(child)) {
+                if (HasJoinWithBothInputsHashShuffled(child)) {
                     return true;
                 }
             }
@@ -7991,10 +8004,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         return false;
     }
 
-    bool HasGraceJoinWithBothInputsHashShuffled(const TString& plan) {
+    bool HasJoinWithBothInputsHashShuffled(const TString& plan) {
         NJson::TJsonValue planRoot;
         NJson::ReadJsonTree(plan, &planRoot, true);
-        return HasGraceJoinWithBothInputsHashShuffled(planRoot.GetMapSafe().at("SimplifiedPlan"));
+        return HasJoinWithBothInputsHashShuffled(planRoot.GetMapSafe().at("SimplifiedPlan"));
     }
 
     NKikimrKqp::TKqpSetting MakeHashCompatibilityStatsSetting(const TVector<TString>& tables) {
@@ -8284,9 +8297,12 @@ PRAGMA ydb.OptimizerHints = '
         NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
         queryPlanPrinter.Print(plan);
 
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        UNIT_ASSERT_C(FindOperatorByStringField(simplifiedPlan, "JoinAlgo", "BlockHash"), plan);
+
         const auto hashShuffles = CollectHashShuffleDescriptions(plan);
 
-        UNIT_ASSERT_VALUES_EQUAL_C(CountGraceJoinPlanNodes(plan), 1u, plan);
+        UNIT_ASSERT_VALUES_EQUAL_C(CountJoinPlanNodes(plan), 1u, plan);
         UNIT_ASSERT_VALUES_EQUAL_C(hashShuffles.size(), 2u, plan);
 
         const bool hasCustomerShuffle = std::any_of(
@@ -8303,8 +8319,8 @@ PRAGMA ydb.OptimizerHints = '
             });
 
         UNIT_ASSERT_C(
-            HasGraceJoinWithBothInputsHashShuffled(plan),
-            TStringBuilder() << "Expected a GraceJoin with HashShuffle on both inputs, got: "
+            HasJoinWithBothInputsHashShuffled(plan),
+            TStringBuilder() << "Expected a join with HashShuffle on both inputs, got: "
                              << JoinSeq(", ", hashShuffles) << "\n" << plan);
         UNIT_ASSERT_C(
             hasCustomerShuffle && hasOrdersShuffle,

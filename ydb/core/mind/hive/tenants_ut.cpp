@@ -179,11 +179,11 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
                     UNIT_ASSERT_VALUES_EQUAL(tenantCounter, value);
                     return;
                 }
-                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+                Sleep(TDuration::MilliSeconds(100));
             }
         };
 
-        const auto nodeId = runtime.GetNodeId(tenants.List("/Root/db1").front());
+        const auto nodeId = runtime.GetNodeId(tenants.List("/Root/db1").back());
 
         {
             Ydb::Maintenance::CreateMaintenanceTaskRequest request;
@@ -202,6 +202,8 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
         }
 
         checkCounter(1);
+        tenants.Free("/Root/db1", 1);
+        Sleep(TDuration::MilliSeconds(100));
 
         {
             Ydb::Maintenance::DropMaintenanceTaskRequest request;
@@ -215,6 +217,7 @@ Y_UNIT_TEST_SUITE(THiveTestWithTenants) {
             Cerr << "Uncordon result: " << reply->Record.ShortDebugString() << Endl;
         }
 
+        tenants.Add("/Root/db1", 1);
         checkCounter(0);
     }
 

@@ -501,6 +501,10 @@ namespace NFlatExecutorSetup {
         // TTableDetailedMetricsSettings::EMetricsLevel value; kept as a plain
         // integer to keep this generic header free of the schemeshard proto.
         ui32 MetricsLevel = 0;
+
+        // Monitoring project id for detailed metrics, database-wide (no
+        // per-table override), learned via the subdomain subscription.
+        TString MonitoringProjectId;
     };
 
     struct ITablet : TNonCopyable {

@@ -54,6 +54,13 @@ message TSubDomainSettings {
     optional bool ExternalStatisticsAggregator = 14 [default = false];
     optional bool GraphShard = 16 [default = false];
     optional bool ExternalBackupController = 17 [default = false];
+
+    // The ID of the Monitoring project used as the `monitoring_project_id`
+    // label on detailed metrics for this database. Plain string, no
+    // validation beyond non-empty (enforced where detailed metrics are
+    // enabled, not here). Mirrors TConsumer.MonitoringProjectId
+    // (pqconfig.proto) / TLocation.MonitoringProjectId (replication.proto).
+    optional string MonitoringProjectId = 19;
 }
 
 message TProcessingParams {
@@ -152,6 +159,11 @@ message TDomainDescription {
     // (which defines it) already imports this file, and referencing it back
     // would create a proto import cycle.
     optional uint32 TablesMetricsLevel = 26;
+
+    // The ID of the Monitoring project used as the `monitoring_project_id`
+    // label on detailed metrics for this database. Rides the same publish
+    // path as TablesMetricsLevel above.
+    optional string MonitoringProjectId = 27;
 }
 
 message TSchemeQuotas {

@@ -195,6 +195,34 @@ private:
     const NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel Level;
 };
 
+class TDataShard::TTxPersistSubDomainMonitoringProjectId : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxPersistSubDomainMonitoringProjectId(TDataShard* self, const TString& monitoringProjectId)
+        : TTransactionBase(self)
+        , MonitoringProjectId(monitoringProjectId)
+    { }
+
+    TTxType GetTxType() const override { return TXTYPE_PERSIST_SUBDOMAIN_MONITORING_PROJECT_ID; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        if (Self->SubDomainMonitoringProjectId != MonitoringProjectId) {
+            Self->PersistSys(db, Schema::Sys_SubDomainMonitoringProjectId, MonitoringProjectId);
+            Self->SubDomainMonitoringProjectId = MonitoringProjectId;
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        // nothing
+    }
+
+private:
+    const TString MonitoringProjectId;
+};
+
 void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     if (SubDomainPathId && msg->PathId == *SubDomainPathId) {
@@ -213,6 +241,11 @@ void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, 
 
         if (tablesMetricsLevel != SubDomainTablesMetricsLevel) {
             Execute(new TTxPersistSubDomainTablesMetricsLevel(this, tablesMetricsLevel), ctx);
+        }
+
+        const TString& monitoringProjectId = domainDescription.GetMonitoringProjectId();
+        if (monitoringProjectId != SubDomainMonitoringProjectId) {
+            Execute(new TTxPersistSubDomainMonitoringProjectId(this, monitoringProjectId), ctx);
         }
     }
 }

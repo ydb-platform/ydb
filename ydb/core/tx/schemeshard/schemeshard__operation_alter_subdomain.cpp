@@ -308,6 +308,10 @@ public:
             alterData->ApplyAuditSettings(settings.GetAuditSettings());
         }
 
+        if (settings.HasMonitoringProjectId()) {
+            alterData->SetMonitoringProjectId(settings.GetMonitoringProjectId());
+        }
+
         NIceDb::TNiceDb db(context.GetDB());
 
         subDomain->LastTxId = OperationId.GetTxId();

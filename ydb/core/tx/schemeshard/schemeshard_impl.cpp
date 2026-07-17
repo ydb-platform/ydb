@@ -2561,6 +2561,7 @@ void TSchemeShard::PersistSubDomainAlter(NIceDb::TNiceDb& db, const TPathId& pat
         PersistSubDomainSchemeLimitsAlter(db, pathId, subDomain);
     }
     PersistSubDomainAuditSettingsAlter(db, pathId, subDomain);
+    PersistSubDomainMonitoringProjectIdAlter(db, pathId, subDomain);
     PersistSubDomainServerlessComputeResourcesModeAlter(db, pathId, subDomain);
 
     for (auto shardIdx: subDomain.GetPrivateShards()) {
@@ -2631,6 +2632,7 @@ void TSchemeShard::PersistSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId, 
     PersistSubDomainState(db, pathId, subDomain);
 
     PersistSubDomainAuditSettings(db, pathId, subDomain);
+    PersistSubDomainMonitoringProjectId(db, pathId, subDomain);
     PersistSubDomainServerlessComputeResourcesMode(db, pathId, subDomain);
 
     db.Table<Schema::SubDomainsAlterData>().Key(pathId.LocalPathId).Delete();
@@ -2758,6 +2760,20 @@ void TSchemeShard::PersistSubDomainAuditSettings(NIceDb::TNiceDb& db, const TPat
 
 void TSchemeShard::PersistSubDomainAuditSettingsAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
     PersistSubDomainAuditSettingsImpl<Schema::SubDomainsAlterData>(db, pathId, subDomain.GetAuditSettings());
+}
+
+template <class Table>
+void PersistSubDomainMonitoringProjectIdImpl(NIceDb::TNiceDb& db, const TPathId& pathId, const TString& value) {
+    using Field = typename Table::MonitoringProjectId;
+    db.Table<Table>().Key(pathId.LocalPathId).Update(NIceDb::TUpdate<Field>(value));
+}
+
+void TSchemeShard::PersistSubDomainMonitoringProjectId(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
+    PersistSubDomainMonitoringProjectIdImpl<Schema::SubDomains>(db, pathId, subDomain.GetMonitoringProjectId());
+}
+
+void TSchemeShard::PersistSubDomainMonitoringProjectIdAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
+    PersistSubDomainMonitoringProjectIdImpl<Schema::SubDomainsAlterData>(db, pathId, subDomain.GetMonitoringProjectId());
 }
 
 template <class Table>

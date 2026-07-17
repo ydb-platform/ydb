@@ -999,6 +999,10 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
 
     entry->SetTablesMetricsLevel(static_cast<ui32>(subDomainInfo->GetTablesMetricsLevel()));
 
+    if (const TString& monitoringProjectId = subDomainInfo->GetMonitoringProjectId(); !monitoringProjectId.empty()) {
+        entry->SetMonitoringProjectId(monitoringProjectId);
+    }
+
     if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
         entry->MutableAuditSettings()->CopyFrom(*auditSettings);
     }

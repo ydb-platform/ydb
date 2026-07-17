@@ -2445,6 +2445,7 @@ const NTabletFlatExecutor::NFlatExecutorSetup::TTabletTableInfo* TDataShard::Get
         ? tableLevel
         : GetSubDomainTablesMetricsLevel();
     TableInfoCache.MetricsLevel = static_cast<ui32>(effectiveLevel);
+    TableInfoCache.MonitoringProjectId = GetSubDomainMonitoringProjectId();
 
     return &TableInfoCache;
 }

@@ -2760,6 +2760,17 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TablesMetricsLevel;
     }
 
+    // The Monitoring project id used as the `monitoring_project_id` label on
+    // this database's detailed metrics. Settable via ALTER DATABASE; rides
+    // the same publish path to DataShard as TablesMetricsLevel.
+    const TString& GetMonitoringProjectId() const {
+        return MonitoringProjectId;
+    }
+
+    void SetMonitoringProjectId(const TString& monitoringProjectId) {
+        MonitoringProjectId = monitoringProjectId;
+    }
+
 private:
     bool InitiatedAsGlobal = false;
     NKikimrSubDomains::TProcessingParams ProcessingParams;
@@ -2773,6 +2784,7 @@ private:
     double SmallBlobsStorageUnits = 0;
     NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel TablesMetricsLevel =
         NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
+    TString MonitoringProjectId;
 
     TVector<TShardIdx> PrivateShards;
     TStoragePools StoragePools;

@@ -948,6 +948,10 @@ public:
             alter->ApplyAuditSettings(inputSettings.GetAuditSettings());
         }
 
+        if (inputSettings.HasMonitoringProjectId()) {
+            alter->SetMonitoringProjectId(inputSettings.GetMonitoringProjectId());
+        }
+
         if (inputSettings.HasServerlessComputeResourcesMode()) {
             alter->SetServerlessComputeResourcesMode(inputSettings.GetServerlessComputeResourcesMode());
         }

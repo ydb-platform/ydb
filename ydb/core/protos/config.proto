@@ -3105,7 +3105,7 @@ message TKafkaProxyConfig {
     optional bool EnableKafkaProxy = 1 [default = false];
 
     optional int32 ListeningPort = 2 [default = 9092];
-    optional string ListeningAddress = 20 [default = "[::]"];
+    optional string ListeningAddress = 20 [default = "::"];
 
     // You can either specify the path to the certificate, which will contain both the certificate and the private key,
     // or specify them separately in parameters Cert and Key.

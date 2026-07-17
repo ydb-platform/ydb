@@ -68,6 +68,7 @@ class YdbTpccWorkload(WorkloadBase):
 
     def __loop(self):
         cmd = ['run', '--no-tui', '--format', 'Json',
+               '--warmup', '30s',
                '--time', f'{self.duration}s',
                '--warehouses', self.warehouses]
         if self.tx_mode == 'mixed':

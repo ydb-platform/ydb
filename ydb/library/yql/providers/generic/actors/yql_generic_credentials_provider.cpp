@@ -71,10 +71,6 @@ namespace NYql::NDq {
         });
     }
 
-    void TGenericCredentialsProvider::WaitReady(TDuration timeout) const {
-        AsyncCredentialsProvider_.Wait(timeout);
-    }
-
     TGenericCredentialsProvider::TPtr
     CreateGenericCredentialsProvider(const TString& structuredTokenJSON,
                                      const IStructuredTokenCredentialsFactory::TPtr& credentialsFactory) {

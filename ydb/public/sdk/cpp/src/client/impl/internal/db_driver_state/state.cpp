@@ -67,8 +67,6 @@ void TDbDriverState::InitCredentials(
     CredentialsReady = Credentials.IgnoreResult();
 }
 
-<<<<<<< HEAD
-=======
 NThreading::TFuture<void> TDbDriverState::GetCredentialsReady() const {
     return CredentialsReady;
 }
@@ -83,24 +81,6 @@ std::shared_ptr<grpc::CallCredentials> TDbDriverState::GetCallCredentials() cons
 }
 #endif
 
-bool TDbDriverState::AreClientTlsCredentialsValid() const {
-    std::call_once(ClientTlsValidationOnceFlag_, [this]() {
-        ClientTlsValidationDetail_.clear();
-        grpc::SslCredentialsOptions sslOptions{
-            .pem_root_certs = NYdb::TStringType{SslCredentials.CaCert},
-            .pem_private_key = NYdb::TStringType{SslCredentials.PrivateKey},
-            .pem_cert_chain = NYdb::TStringType{SslCredentials.Cert}
-        };
-        ClientTlsCredentialsValid_ = NYdbGrpc::ValidateTlsCredentials(sslOptions, ClientTlsValidationDetail_);
-    });
-    return ClientTlsCredentialsValid_;
-}
-
-const std::string& TDbDriverState::GetClientTlsValidationDetail() const {
-    return ClientTlsValidationDetail_;
-}
-
->>>>>>> f7303ada674 (async provider initialisation (#46135))
 void TDbDriverState::AddCb(TCb&& cb, ENotifyType type) {
     std::lock_guard lock(NotifyCbsLock);
     NotifyCbs[static_cast<size_t>(type)].emplace_back(std::move(cb));
@@ -243,41 +223,13 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                     DiscoveryClient_),
                 deleter);
 
-            strongState->SetCredentialsProvider(
+            strongState->InitCredentials(
                 credentialsProviderFactory
-                    ? credentialsProviderFactory->CreateProvider(strongState)
-                    : CreateInsecureCredentialsProviderFactory()->CreateProvider(strongState));
+                    ? std::move(credentialsProviderFactory)
+                    : CreateInsecureCredentialsProviderFactory());
 
-<<<<<<< HEAD
             if (discoveryMode != EDiscoveryMode::Off) {
                 DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
-=======
-            try {
-                Y_ABORT_UNLESS(inserted);
-                strongState = std::shared_ptr<TDbDriverState>(
-                    new TDbDriverState(
-                        quotedDatabase,
-                        discoveryEndpoint,
-                        discoveryMode,
-                        sslCredentials,
-                        DiscoveryClient_),
-                    deleter);
-
-                strongState->InitCredentials(
-                    credentialsProviderFactory
-                        ? std::move(credentialsProviderFactory)
-                        : CreateInsecureCredentialsProviderFactory());
-
-                if (discoveryMode != EDiscoveryMode::Off) {
-                    DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
-                }
-            } catch (...) {
-                lock.lock();
-                Y_ABORT_UNLESS(weakState.expired());
-                Y_ABORT_UNLESS(States_.erase(key));
-                Notify_.notify_all();
-                throw;
->>>>>>> f7303ada674 (async provider initialisation (#46135))
             }
             Y_ABORT_UNLESS(States_.emplace(key, strongState).second);
             break;

@@ -116,8 +116,6 @@ public:
         return std::make_shared<TIAMCredentialsProvider>(Params_);
     }
 
-<<<<<<< HEAD
-=======
     NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const final {
         return CreateProviderAsync(std::weak_ptr<ICoreFacility>{});
     }
@@ -126,13 +124,6 @@ public:
         return CreateProviderInBackground(Params_, std::move(facility));
     }
 
-    std::string GetClientIdentity() const final {
-        return TStringBuilder() <<
-                "TIamCredentialsProviderFactory" << '\t' <<
-                Params_.Host << ':' << Params_.Port << '@' << Params_.RefreshPeriod;
-    }
-
->>>>>>> f7303ada674 (async provider initialisation (#46135))
 private:
     static NThreading::TFuture<TCredentialsProviderPtr> CreateProviderInBackground(
         TIamHost params,

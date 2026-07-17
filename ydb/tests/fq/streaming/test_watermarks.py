@@ -295,7 +295,7 @@ class TestWatermarksInYdb(StreamingTestBase):
             UPSERT INTO `{table_name}` (key, value) VALUES (1, "one");
             UPSERT INTO `{table_name}` (key, value) VALUES (2, "two");
             UPSERT INTO `{table_name}` (key, value) VALUES (3, "three");
-        """);
+        """)
 
         sql = f'''
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN

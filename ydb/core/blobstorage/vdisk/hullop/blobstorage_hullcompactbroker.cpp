@@ -379,14 +379,12 @@ namespace NKikimr {
 
             if (auto compactionInfo = CompactionsPerPDisk.RemoveCompactionByActorId(ev->Sender)) {
                 Mon->CompBrokerTokenReleases->Inc();
-                YDB_LOG_WARN_CTX(ctx, "Compaction token result was not delivered, releasing token",
-                    {"compaction", compactionInfo->ToString()},
-                    {"reason", ev->Get()->Reason});
+                LOG_WARN_S(ctx, NKikimrServices::BS_COMP_BROKER, "Compaction token result was not delivered, releasing token " << 
+                    "compaction# " << compactionInfo->ToString() << " reason# " << ev->Get()->Reason);
                 TryToStartNewCompactions(ctx);
             } else {
-                YDB_LOG_WARN_CTX(ctx, "Compaction token result was not delivered, active compaction not found",
-                    {"ActorId", ev->Sender},
-                    {"reason", ev->Get()->Reason});
+                LOG_WARN_S(ctx, NKikimrServices::BS_COMP_BROKER, "Compaction token result was not delivered, active compaction not found " << 
+                    "actorId# " << ev->Sender.ToString() << " reason# " << ev->Get()->Reason);
             }
         }
 

@@ -527,7 +527,7 @@ namespace NKikimr {
                 return;
             }
 
-            YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx,
+            LOG_WARN(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx,
                 "%s: compaction broker is not available, continuing without compaction tokens",
                 PDiskSignatureForHullDbKey<TKey>().ToString().data()));
 

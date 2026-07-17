@@ -571,7 +571,7 @@ namespace NTable {
                     auto finishBTree = [&](TGroupState& g) -> NPage::TBtreeIndexMeta {
                         auto meta = g.BTreeIndex.Finish(Pager);
                         if (g.BTreeIndexV1Shadow) {
-                            meta.V1Root = g.BTreeIndexV1Shadow->Finish(Pager).RootPageIdV1();
+                            meta.RootV1 = g.BTreeIndexV1Shadow->Finish(Pager).RootV1PageId();
                         }
                         return meta;
                     };
@@ -753,17 +753,17 @@ namespace NTable {
 
                 if (WriteBTreeIndex) {
                     lay->SetBTreeIndexesFormatVersion(WriteBTreeIndexV2 ? NPage::TBtreeIndexNode::FormatVersionV2
-                                                                        : NPage::TBtreeIndexNode::FormatVersion);
+                                                                        : NPage::TBtreeIndexNode::FormatVersionV1);
                     for (bool history : {false, true}) {
                         for (auto meta : history ? Current.BTreeHistoricIndexes : Current.BTreeGroupIndexes) {
                             auto m = history ? lay->AddBTreeHistoricIndexes() : lay->AddBTreeGroupIndexes();
-                            if (meta.HasV1Root()) {
-                                m->SetRootPageId(meta.RootPageIdV1());
+                            if (meta.HasRootV1()) {
+                                m->SetRootPageId(meta.RootV1PageId());
                             }
-                            if (meta.HasV2Root()) {
-                                m->SetRootOffset(meta.V2Root.Offset.AsByteOffset());
-                                m->SetRootSize(meta.V2Root.Size);
-                                m->SetRootCrc32(meta.V2Root.Crc32);
+                            if (meta.HasRootV2()) {
+                                m->SetRootOffset(meta.RootV2.Offset.AsByteOffset());
+                                m->SetRootSize(meta.RootV2.Size);
+                                m->SetRootCrc32(meta.RootV2.Crc32);
                             }
                             m->SetLevelCount(meta.LevelCount);
                             m->SetIndexSize(meta.IndexSize);

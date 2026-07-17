@@ -13,12 +13,12 @@ public:
     /// Initialise with a V2 B-tree meta (must have HasV2Root()).
     void Start(const NPage::TBtreeIndexMeta& meta)
     {
-        Y_ENSURE(meta.HasV2Root(), "TBTreePartWalker requires V2 root");
+        Y_ENSURE(meta.HasRootV2(), "TBTreePartWalker requires V2 root");
 
         LevelCount_ = meta.LevelCount;
         Levels.clear();
         Levels.resize(LevelCount_ + 1);
-        Levels[0].push_back(meta.V2Root);
+        Levels[0].push_back(meta.RootV2);
         CurrentLevel_ = 0;
         CurrentPos_ = 0;
     }
@@ -51,7 +51,7 @@ public:
                         if (!(skipDataPages && childrenAreData)) {
                             auto childType = childrenAreData ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
                             for (NPage::TRecIdx pos : xrange(node.GetChildrenCount())) {
-                                Levels[level + 1].push_back(node.GetChildLocationV2(pos, childType));
+                                Levels[level + 1].push_back(node.GetChildV2Location(pos, childType));
                             }
                         }
                     }

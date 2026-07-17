@@ -29,8 +29,8 @@ namespace NTable {
         const NPageCollection::IPageCollection* indexPages,
         const NPageCollection::IPageCollection* groupPages)
     {
-        if (meta.HasV2Root()) return meta.V2Root;
-        return (meta.LevelCount == 0 ? *groupPages : *indexPages).GetLocation(meta.RootPageIdV1());
+        if (meta.HasRootV2()) return meta.RootV2;
+        return (meta.LevelCount == 0 ? *groupPages : *indexPages).GetLocation(meta.RootV1PageId());
     }
 
     /// Universal page reference — either a V1 page ID or a V2 byte-offset location.
@@ -52,9 +52,9 @@ namespace NTable {
     inline TPageRef BuildPageRef(const NPage::TBtreeIndexNode& node, NPage::TRecIdx pos, bool isDataPage) {
         if (node.GetStoredVersion() == NPage::TBtreeIndexNode::FormatVersionV2) {
             auto type = isDataPage ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
-            return node.GetChildLocationV2(pos, type);
+            return node.GetChildV2Location(pos, type);
         }
-        return node.GetChildPageId(pos);
+        return node.GetChildV1PageId(pos);
     }
 
     /**

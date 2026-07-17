@@ -832,13 +832,13 @@ private:
     }
 
     TChildState BuildRootChildState(const TBtreeIndexMeta& meta) const {
-        if (meta.HasV2Root()) {
-            return TChildState(meta.V2Root,
+        if (meta.HasRootV2()) {
+            return TChildState(meta.RootV2,
                 0, meta.GetRowCount(),
                 0, meta.GetNonErasedRowCount(),
                 0, meta.GetDataSize());
         }
-        return TChildState(meta.RootPageIdV1(),
+        return TChildState(meta.RootV1PageId(),
             0, meta.GetRowCount(),
             0, meta.GetNonErasedRowCount(),
             0, meta.GetDataSize());
@@ -848,9 +848,9 @@ private:
     static TPageRef BuildPageRef(const TBtreeIndexNode& node, TRecIdx pos, bool isDataPage) {
         if (node.GetStoredVersion() == TBtreeIndexNode::FormatVersionV2) {
             auto type = isDataPage ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
-            return node.GetChildLocationV2(pos, type);
+            return node.GetChildV2Location(pos, type);
         }
-        return node.GetChildPageId(pos);
+        return node.GetChildV1PageId(pos);
     }
 
     // Version-aware child state builder

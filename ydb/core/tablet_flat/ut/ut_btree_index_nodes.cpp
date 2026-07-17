@@ -43,17 +43,17 @@ namespace {
 
     // Helper: assert v2 root properties on a TBtreeIndexMeta
     void AssertV2Root(const TBtreeIndexMeta& meta, const TString& msg) {
-        UNIT_ASSERT_C(meta.HasV2Root(), msg + " expected HasV2Root");
-        UNIT_ASSERT_C(!meta.HasV1Root(), msg + " expected !HasV1Root");
-        UNIT_ASSERT_C(meta.V2Root.Offset.IsByteOffset(), msg + " expected V2Root byte offset");
-        UNIT_ASSERT_VALUES_EQUAL_C(meta.RootPageIdV1(), Max<TPageId>(), msg + " expected Max RootPageIdV1");
+        UNIT_ASSERT_C(meta.HasRootV2(), msg + " expected HasV2Root");
+        UNIT_ASSERT_C(!meta.HasRootV1(), msg + " expected !HasV1Root");
+        UNIT_ASSERT_C(meta.RootV2.Offset.IsByteOffset(), msg + " expected V2Root byte offset");
+        UNIT_ASSERT_VALUES_EQUAL_C(meta.RootV1PageId(), Max<TPageId>(), msg + " expected Max RootPageIdV1");
     }
 
     // Helper: assert v1 root properties on a TBtreeIndexMeta
     void AssertV1Root(const TBtreeIndexMeta& meta, const TString& msg) {
-        UNIT_ASSERT_C(meta.HasV1Root(), msg + " expected HasV1Root");
-        UNIT_ASSERT_C(!meta.HasV2Root(), msg + " expected !HasV2Root");
-        UNIT_ASSERT_C(meta.RootPageIdV1() != Max<TPageId>(), msg + " expected valid RootPageIdV1");
+        UNIT_ASSERT_C(meta.HasRootV1(), msg + " expected HasV1Root");
+        UNIT_ASSERT_C(!meta.HasRootV2(), msg + " expected !HasV2Root");
+        UNIT_ASSERT_C(meta.RootV1PageId() != Max<TPageId>(), msg + " expected valid RootPageIdV1");
     }
 
     // Helper: count actual rows by summing (GetNextRowId() - GetRowId()) across all data pages
@@ -209,7 +209,7 @@ namespace {
     void Dump(NPage::TBtreeIndexMeta meta, const TPartScheme::TGroupInfo& groupInfo, const TStore& store,
               ui32 level = 0)
     {
-        Dump(TChild{meta.RootPageIdV1(), meta.GetRowCount(), meta.GetDataSize(), meta.GetGroupDataSize(),
+        Dump(TChild{meta.RootV1PageId(), meta.GetRowCount(), meta.GetDataSize(), meta.GetGroupDataSize(),
                     meta.GetErasedRowCount()}, groupInfo, store, level);
     }
 
@@ -638,7 +638,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
         auto expected = Meta(0, 1155, 11055, 22055, 385, 1, 683);
         UNIT_ASSERT_EQUAL_C(result, expected, "Got " + result.ToString());
 
-        CheckKeys(result.RootPageIdV1(), keys, builder.GroupInfo, pager.Back());
+        CheckKeys(result.RootV1PageId(), keys, builder.GroupInfo, pager.Back());
     }
 
     Y_UNIT_TEST(FewNodes) {
@@ -828,7 +828,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 2);
 
-        auto expected = Meta(part->IndexPages.BTreeGroups[0].RootPageIdV1(), 10, 10480, 0, 0, 1, 1131);
+        auto expected = Meta(part->IndexPages.BTreeGroups[0].RootV1PageId(), 10, 10480, 0, 0, 1, 1131);
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected, "Got " + part->IndexPages.BTreeGroups[0].ToString());
     }
 
@@ -862,7 +862,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 117);
 
-        auto expected = Meta(part->IndexPages.BTreeGroups[0].RootPageIdV1(), 700, 733140, 0, 0, 3, 87172);
+        auto expected = Meta(part->IndexPages.BTreeGroups[0].RootV1PageId(), 700, 733140, 0, 0, 3, 87172);
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected, "Got " + part->IndexPages.BTreeGroups[0].ToString());
     }
 
@@ -897,7 +897,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 31);
 
-        auto expected = Meta(part->IndexPages.BTreeGroups[0].RootPageIdV1(), 1000, 22098, 0, 143, 2, 1668);
+        auto expected = Meta(part->IndexPages.BTreeGroups[0].RootV1PageId(), 1000, 22098, 0, 143, 2, 1668);
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected, "Got " + part->IndexPages.BTreeGroups[0].ToString());
     }
 
@@ -932,10 +932,10 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         auto pages = IndexTools::CountMainPages(*part);
         UNIT_ASSERT_VALUES_EQUAL(pages, 334);
 
-        auto expected0 = Meta(part->IndexPages.BTreeGroups[0].RootPageIdV1(), 1000, 16680, 21890, 0, 3, 18430);
+        auto expected0 = Meta(part->IndexPages.BTreeGroups[0].RootV1PageId(), 1000, 16680, 21890, 0, 3, 18430);
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected0, "Got " + part->IndexPages.BTreeGroups[0].ToString());
 
-        auto expected1 = Meta(part->IndexPages.BTreeGroups[1].RootPageIdV1(), 1000, 21890, 0, 0, 3, 6497);
+        auto expected1 = Meta(part->IndexPages.BTreeGroups[1].RootV1PageId(), 1000, 21890, 0, 0, 3, 6497);
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[1], expected1, "Got " + part->IndexPages.BTreeGroups[1].ToString());
     }
 
@@ -978,16 +978,16 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         ui64 dataSizeHist0 = IndexTools::CountDataSize(*part, TGroupId{0, 1});
         ui64 dataSizeHist1 = IndexTools::CountDataSize(*part, TGroupId{1, 1});
 
-        auto expected0 = Meta(part->IndexPages.BTreeGroups[0].RootPageIdV1(), 1000, dataSize0, dataSize1+dataSizeHist0+dataSizeHist1, 0, 3, 18430);
+        auto expected0 = Meta(part->IndexPages.BTreeGroups[0].RootV1PageId(), 1000, dataSize0, dataSize1+dataSizeHist0+dataSizeHist1, 0, 3, 18430);
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected0, "Got " + part->IndexPages.BTreeGroups[0].ToString());
 
-        auto expected1 = Meta(part->IndexPages.BTreeGroups[1].RootPageIdV1(), 1000, dataSize1, 0, 0, 3, 8284);
+        auto expected1 = Meta(part->IndexPages.BTreeGroups[1].RootV1PageId(), 1000, dataSize1, 0, 0, 3, 8284);
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[1], expected1, "Got " + part->IndexPages.BTreeGroups[1].ToString());
 
-        auto expectedHist0 = Meta(part->IndexPages.BTreeHistoric[0].RootPageIdV1(), 2000, dataSizeHist0, 0, 0, 4, 34225);
+        auto expectedHist0 = Meta(part->IndexPages.BTreeHistoric[0].RootV1PageId(), 2000, dataSizeHist0, 0, 0, 4, 34225);
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[0], expectedHist0, "Got " + part->IndexPages.BTreeHistoric[0].ToString());
 
-        auto expectedHist1 = Meta(part->IndexPages.BTreeHistoric[1].RootPageIdV1(), 2000, dataSizeHist1, 0, 0, 3, 16645);
+        auto expectedHist1 = Meta(part->IndexPages.BTreeHistoric[1].RootV1PageId(), 2000, dataSizeHist1, 0, 0, 3, 16645);
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[1], expectedHist1, "Got " + part->IndexPages.BTreeHistoric[1].ToString());
     }
 
@@ -1033,16 +1033,16 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
         ui64 dataSizeHist1 = IndexTools::CountDataSize(*part, TGroupId{1, 1});
         ui64 groupDataSize = dataSize1+dataSizeHist0+dataSizeHist1 + 120463 + 7413329;
 
-        auto expected0 = Meta(part->IndexPages.BTreeGroups[0].RootPageIdV1(), 1000, dataSize0, groupDataSize, 0, 3, 18430);
+        auto expected0 = Meta(part->IndexPages.BTreeGroups[0].RootV1PageId(), 1000, dataSize0, groupDataSize, 0, 3, 18430);
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[0], expected0, "Got " + part->IndexPages.BTreeGroups[0].ToString());
 
-        auto expected1 = Meta(part->IndexPages.BTreeGroups[1].RootPageIdV1(), 1000, dataSize1, 0, 0, 3, 6497);
+        auto expected1 = Meta(part->IndexPages.BTreeGroups[1].RootV1PageId(), 1000, dataSize1, 0, 0, 3, 6497);
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeGroups[1], expected1, "Got " + part->IndexPages.BTreeGroups[1].ToString());
 
-        auto expectedHist0 = Meta(part->IndexPages.BTreeHistoric[0].RootPageIdV1(), 2000, dataSizeHist0, 0, 0, 4, 34225);
+        auto expectedHist0 = Meta(part->IndexPages.BTreeHistoric[0].RootV1PageId(), 2000, dataSizeHist0, 0, 0, 4, 34225);
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[0], expectedHist0, "Got " + part->IndexPages.BTreeHistoric[0].ToString());
 
-        auto expectedHist1 = Meta(part->IndexPages.BTreeHistoric[1].RootPageIdV1(), 2000, dataSizeHist1, 0, 0, 3, 13014);
+        auto expectedHist1 = Meta(part->IndexPages.BTreeHistoric[1].RootV1PageId(), 2000, dataSizeHist1, 0, 0, 3, 13014);
         UNIT_ASSERT_EQUAL_C(part->IndexPages.BTreeHistoric[1], expectedHist1, "Got " + part->IndexPages.BTreeHistoric[1].ToString());
     }
 }
@@ -1382,8 +1382,8 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         const auto& meta = part->IndexPages.BTreeGroups[0];
         AssertV2Root(meta, "V2 root");
         // V2Root offset must be a valid byte offset (non-zero)
-        UNIT_ASSERT_C(meta.V2Root.Offset.AsByteOffset() > 0, "V2Root byte offset must be > 0");
-        UNIT_ASSERT_C(meta.V2Root.Size > 0, "V2Root size must be > 0");
+        UNIT_ASSERT_C(meta.RootV2.Offset.AsByteOffset() > 0, "V2Root byte offset must be > 0");
+        UNIT_ASSERT_C(meta.RootV2.Size > 0, "V2Root size must be > 0");
     }
 
     Y_UNIT_TEST(V1_RootHasPageIndex) {
@@ -1583,7 +1583,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
             part->GetPageCollection(0),
             part->GetPageCollection(0));
 
-        UNIT_ASSERT_EQUAL(rootLoc, meta.V2Root);
+        UNIT_ASSERT_EQUAL(rootLoc, meta.RootV2);
         UNIT_ASSERT_C(rootLoc.Offset.IsByteOffset(), "Root location must be byte offset");
     }
 
@@ -1643,7 +1643,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         UNIT_ASSERT_C(meta.LevelCount >= 2, "Expected LevelCount >= 2, got " + ToString(meta.LevelCount));
 
         TTestEnv env;
-        auto rootPage = env.TryGetPage(part.Get(), meta.V2Root, TGroupId{});
+        auto rootPage = env.TryGetPage(part.Get(), meta.RootV2, TGroupId{});
         UNIT_ASSERT_C(rootPage, "Failed to load V2 root page");
 
         TBtreeIndexNode rootNode(*rootPage);
@@ -1651,7 +1651,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
 
         // All children in the root node must have byte-offset locations
         for (TRecIdx i : xrange(rootNode.GetChildrenCount())) {
-            auto childLoc = rootNode.GetChildLocationV2(i, EPage::BTreeIndex);
+            auto childLoc = rootNode.GetChildV2Location(i, EPage::BTreeIndex);
             UNIT_ASSERT_C(childLoc.Offset.IsByteOffset(),
                 "Child " + ToString(i) + " location must be byte offset");
             UNIT_ASSERT_C(childLoc.Size > 0,
@@ -1745,8 +1745,8 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         AssertV2Root(meta, "WriteFlag_On");
 
         // V2Root must have non-zero byte offset and size
-        UNIT_ASSERT_C(meta.V2Root.Offset.AsByteOffset() > 0, "V2Root byte offset must be > 0");
-        UNIT_ASSERT_C(meta.V2Root.Size > 0, "V2Root size must be > 0");
+        UNIT_ASSERT_C(meta.RootV2.Offset.AsByteOffset() > 0, "V2Root byte offset must be > 0");
+        UNIT_ASSERT_C(meta.RootV2.Size > 0, "V2Root size must be > 0");
     }
 
     Y_UNIT_TEST(WriteFlag_Off_V1RootInProto) {
@@ -1769,9 +1769,9 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         const auto part = eggs.Lone();
 
         const auto& meta = part->IndexPages.BTreeGroups[0];
-        UNIT_ASSERT_C(meta.HasV1Root(), "V1 part must have V1Root");
-        UNIT_ASSERT_C(!meta.HasV2Root(), "V1 part must not have V2Root");
-        UNIT_ASSERT_C(meta.RootPageIdV1() != Max<TPageId>(), "RootPageId must be valid");
+        UNIT_ASSERT_C(meta.HasRootV1(), "V1 part must have V1Root");
+        UNIT_ASSERT_C(!meta.HasRootV2(), "V1 part must not have V2Root");
+        UNIT_ASSERT_C(meta.RootV1PageId() != Max<TPageId>(), "RootPageId must be valid");
     }
 
     Y_UNIT_TEST(WriteFlag_On_V2RootInProto) {
@@ -1794,13 +1794,13 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         const auto part = eggs.Lone();
 
         const auto& meta = part->IndexPages.BTreeGroups[0];
-        UNIT_ASSERT_C(meta.HasV2Root(), "V2 part must have V2Root");
-        UNIT_ASSERT_C(!meta.HasV1Root(), "V2 part must not have V1Root");
-        UNIT_ASSERT_VALUES_EQUAL(meta.RootPageIdV1(), Max<TPageId>());
+        UNIT_ASSERT_C(meta.HasRootV2(), "V2 part must have V2Root");
+        UNIT_ASSERT_C(!meta.HasRootV1(), "V2 part must not have V1Root");
+        UNIT_ASSERT_VALUES_EQUAL(meta.RootV1PageId(), Max<TPageId>());
 
         // V2Root must be a valid byte-offset location
-        UNIT_ASSERT_C(meta.V2Root.Offset.IsByteOffset(), "V2Root must be byte offset");
-        UNIT_ASSERT_C(meta.V2Root.Size > 0, "V2Root size must be > 0");
+        UNIT_ASSERT_C(meta.RootV2.Offset.IsByteOffset(), "V2Root must be byte offset");
+        UNIT_ASSERT_C(meta.RootV2.Size > 0, "V2Root size must be > 0");
     }
 
     Y_UNIT_TEST(DualWrite_BothRootsPresent) {
@@ -1827,15 +1827,15 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
 
         const auto& meta = part->IndexPages.BTreeGroups[0];
         // Dual-root: both roots present, V2 preferred at read time
-        UNIT_ASSERT_C(meta.HasV2Root(), "dual-write part must have V2Root");
-        UNIT_ASSERT_C(meta.HasV1Root(), "dual-write part must have V1Root (revert path)");
-        UNIT_ASSERT_C(meta.V2Root.Offset.IsByteOffset(), "V2Root must be byte offset");
-        UNIT_ASSERT_C(meta.RootPageIdV1() != Max<TPageId>(), "V1Root page id must be valid");
+        UNIT_ASSERT_C(meta.HasRootV2(), "dual-write part must have V2Root");
+        UNIT_ASSERT_C(meta.HasRootV1(), "dual-write part must have V1Root (revert path)");
+        UNIT_ASSERT_C(meta.RootV2.Offset.IsByteOffset(), "V2Root must be byte offset");
+        UNIT_ASSERT_C(meta.RootV1PageId() != Max<TPageId>(), "V1Root page id must be valid");
 
         // Reader picks the V2 root when both are present
         auto rootLoc = NTable::GetBTreeRootLocation(meta,
             part->GetPageCollection(0), part->GetPageCollection(0));
-        UNIT_ASSERT_EQUAL(rootLoc, meta.V2Root);
+        UNIT_ASSERT_EQUAL(rootLoc, meta.RootV2);
 
         // Create a V2-only reference part with the same data to compare iteration
         NPage::TConf refConf = MakeV2Conf();
@@ -1891,13 +1891,13 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         auto part = eggs.Lone();
 
         // Before strip: dual-root, reader uses V2
-        UNIT_ASSERT_C(part->IndexPages.BTreeGroups[0].HasV1Root() &&
-                      part->IndexPages.BTreeGroups[0].HasV2Root(), "expected dual-root part");
+        UNIT_ASSERT_C(part->IndexPages.BTreeGroups[0].HasRootV1() &&
+                      part->IndexPages.BTreeGroups[0].HasRootV2(), "expected dual-root part");
 
         // Simulate EnableLocalDBBtreeIndexV2 off: copy the metadata, strip V2 root
         // from every dual-root entry (TTablePart::IndexPages is const, so we work on copies).
         auto strippedMeta = part->IndexPages.BTreeGroups[0];
-        strippedMeta.V2Root = NPage::TPageLocation::Max();
+        strippedMeta.RootV2 = NPage::TPageLocation::Max();
 
         // After strip: only V1 root remains, reader falls back to V1
         AssertV1Root(strippedMeta, "dual-root part after V2 strip");
@@ -2055,8 +2055,8 @@ Y_UNIT_TEST_SUITE(TBtreeIndexReadFlags) {
         // Simulate the loader stripping: v2-only entries (HasV2Root && !HasV1Root) are removed
         // In a v2-only part, this means the btree index would be completely dropped
         // A v2-only part cannot be read with v2 flag off — it falls back to flat index (which doesn't exist in v2)
-        UNIT_ASSERT_C(!meta.HasV1Root(), "V2-only part must not have V1 root");
-        UNIT_ASSERT_C(meta.HasV2Root(), "V2-only part must have V2 root");
+        UNIT_ASSERT_C(!meta.HasRootV1(), "V2-only part must not have V1 root");
+        UNIT_ASSERT_C(meta.HasRootV2(), "V2-only part must have V2 root");
     }
 
     Y_UNIT_TEST(ReadFlag_On_V1PartStillWorks) {
@@ -2161,7 +2161,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexWriteReadIndependence) {
 
         const auto& meta = part->IndexPages.BTreeGroups[0];
         // V2-only part has no v1 root
-        UNIT_ASSERT_C(!meta.HasV1Root(), "V2-only part must not have V1 root");
+        UNIT_ASSERT_C(!meta.HasRootV1(), "V2-only part must not have V1 root");
 
         // V2 part does not have flat index (v2 disables flat index writing)
         UNIT_ASSERT_C(part->IndexPages.FlatGroups.empty(),
@@ -2198,7 +2198,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexWriteReadIndependence) {
         auto rootLoc = NTable::GetBTreeRootLocation(meta,
             part->GetPageCollection(0),
             part->GetPageCollection(0));
-        UNIT_ASSERT_EQUAL(rootLoc, meta.V2Root);
+        UNIT_ASSERT_EQUAL(rootLoc, meta.RootV2);
         UNIT_ASSERT_C(rootLoc.Offset.IsByteOffset(), "V2 root must be byte offset");
     }
 }
@@ -2261,12 +2261,12 @@ Y_UNIT_TEST_SUITE(TBtreeIndexFeaturePropagation) {
 
             // Verify both roots present
             const auto& meta = part->IndexPages.BTreeGroups[0];
-            UNIT_ASSERT_C(meta.HasV1Root() && meta.HasV2Root(), "Dual-write part must have both V1 and V2 roots");
+            UNIT_ASSERT_C(meta.HasRootV1() && meta.HasRootV2(), "Dual-write part must have both V1 and V2 roots");
 
             // Verify V2 root is byte offset, V1 root is page index
-            UNIT_ASSERT_C(meta.V2Root.Offset.IsByteOffset(), "Dual-write V2 root must be byte offset");
-            UNIT_ASSERT_C(meta.HasV1Root(), "Dual-write must have V1 root");
-            UNIT_ASSERT_C(meta.RootPageIdV1() != Max<TPageId>(), "Dual-write V1 root must have valid page id");
+            UNIT_ASSERT_C(meta.RootV2.Offset.IsByteOffset(), "Dual-write V2 root must be byte offset");
+            UNIT_ASSERT_C(meta.HasRootV1(), "Dual-write must have V1 root");
+            UNIT_ASSERT_C(meta.RootV1PageId() != Max<TPageId>(), "Dual-write V1 root must have valid page id");
 
             // Verify iteration works
             UNIT_ASSERT_VALUES_EQUAL(CountAllRows(*part), 25);
@@ -2299,16 +2299,16 @@ Y_UNIT_TEST_SUITE(TBtreeIndexFeaturePropagation) {
 
         // Verify dual-root before gating
         const auto& meta = part->IndexPages.BTreeGroups[0];
-        UNIT_ASSERT_C(meta.HasV1Root() && meta.HasV2Root(), "expected dual-root part before loader gate");
+        UNIT_ASSERT_C(meta.HasRootV1() && meta.HasRootV2(), "expected dual-root part before loader gate");
 
         // Simulate loader V2-off gating: strip V2 root, keep V1
         // (mirrors flat_part_loader.cpp:122-127)
         auto strippedMeta = meta;
-        strippedMeta.V2Root = NPage::TPageLocation::Max();
+        strippedMeta.RootV2 = NPage::TPageLocation::Max();
 
         // V1 root must survive
-        UNIT_ASSERT_C(strippedMeta.HasV1Root(), "V1 root must survive V2 gating");
-        UNIT_ASSERT_C(!strippedMeta.HasV2Root(), "V2 root must be stripped");
+        UNIT_ASSERT_C(strippedMeta.HasRootV1(), "V1 root must survive V2 gating");
+        UNIT_ASSERT_C(!strippedMeta.HasRootV2(), "V2 root must be stripped");
 
         // GetBTreeRootLocation should resolve through V1 root after strip
         auto rootLoc = NTable::GetBTreeRootLocation(strippedMeta,
@@ -2317,7 +2317,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexFeaturePropagation) {
 
         // The resolved location must match the V1 root's GetLocation
         const auto* pageCollection = part->GetPageCollection(0);
-        auto v1Loc = pageCollection->GetLocation(meta.RootPageIdV1());
+        auto v1Loc = pageCollection->GetLocation(meta.RootV1PageId());
         UNIT_ASSERT_VALUES_EQUAL(rootLoc.Offset, v1Loc.Offset);
         UNIT_ASSERT_VALUES_EQUAL(rootLoc.Size, v1Loc.Size);
 
@@ -2352,7 +2352,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
         const auto part = eggs.Lone();
 
         const auto& meta = part->IndexPages.BTreeGroups[0];
-        UNIT_ASSERT(meta.HasV2Root());
+        UNIT_ASSERT(meta.HasRootV2());
         UNIT_ASSERT_C(meta.LevelCount > 0, "Expected multi-level b-tree");
 
         TBTreePartWalker walker;
@@ -2381,7 +2381,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
         const auto part = eggs.Lone();
 
         const auto& meta = part->IndexPages.BTreeGroups[0];
-        UNIT_ASSERT(meta.HasV2Root());
+        UNIT_ASSERT(meta.HasRootV2());
         UNIT_ASSERT_VALUES_EQUAL_C(meta.LevelCount, 0u,
             "Expected LevelCount == 0 for a single data page root");
 
@@ -2419,7 +2419,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
 
         UNIT_ASSERT(part->IndexPages.BTreeGroups.size() > 1);
         const auto& meta = part->IndexPages.BTreeGroups[1];
-        UNIT_ASSERT(meta.HasV2Root());
+        UNIT_ASSERT(meta.HasRootV2());
         UNIT_ASSERT_C(meta.LevelCount > 0,
             "Non-main group must have multi-level B-tree, got LevelCount="
             + ToString(meta.LevelCount));
@@ -2602,7 +2602,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
         walkers.resize(part->IndexPages.BTreeGroups.size());
         for (ui32 i = 0; i < walkers.size(); i++) {
             const auto& meta = part->IndexPages.BTreeGroups[i];
-            UNIT_ASSERT_C(meta.HasV2Root(),
+            UNIT_ASSERT_C(meta.HasRootV2(),
                 "Group " << i << " must have V2 root");
             UNIT_ASSERT_C(meta.LevelCount > 0,
                 "Group " << i << " must have multi-level B-tree");
@@ -2743,7 +2743,7 @@ Y_UNIT_TEST_SUITE(TBTreePartWalker) {
         walkers.resize(part->IndexPages.BTreeGroups.size());
         for (ui32 i = 0; i < walkers.size(); i++) {
             const auto& meta = part->IndexPages.BTreeGroups[i];
-            UNIT_ASSERT_C(meta.HasV2Root(),
+            UNIT_ASSERT_C(meta.HasRootV2(),
                 "Group " << i << " must have V2 root");
             UNIT_ASSERT_C(meta.LevelCount > 0,
                 "Group " << i << " must have multi-level B-tree");

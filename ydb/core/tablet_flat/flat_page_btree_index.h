@@ -426,7 +426,7 @@ namespace NKikimr::NTable::NPage {
 
     public:
         // Version = 0 didn't have GroupDataSize field
-        static const ui16 FormatVersion = 1;
+        static const ui16 FormatVersionV1 = 1;
         static const ui16 FormatVersionV2 = 2;
 
         TBtreeIndexNode(TSharedData raw)
@@ -437,7 +437,7 @@ namespace NKikimr::NTable::NPage {
             Y_ENSURE(data.Type == EPage::BTreeIndex || data.Type == EPage::BTreeIndexV2,
                 "Page blob has an unexpected label type");
             Y_ENSURE(data == ECodec::Plain);
-            Y_ENSURE(data.Version == FormatVersion || data.Version == FormatVersionV2,
+            Y_ENSURE(data.Version == FormatVersionV1 || data.Version == FormatVersionV2,
                 "Unexpected btree index version " << data.Version);
             StoredVersion = data.Version;
 
@@ -515,20 +515,20 @@ namespace NKikimr::NTable::NPage {
 
         const TShortChild& GetShortChild(TRecIdx pos) const noexcept
         {
-            Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersion, "GetShortChild on v2 node, use GetShortChildV2");
+            Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersionV1, "GetShortChild on v2 node, use GetShortChildV2");
             return *GetShortChildRef(pos);
         }
 
         const TChild* GetChildRef(TRecIdx pos) const
         {
             Y_DEBUG_ABORT_UNLESS(!Header->IsShortChildFormat, "GetShortChildRef should be used instead");
-            Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersion, "GetChildRef on v2 node, use GetChildV2");
+            Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersionV1, "GetChildRef on v2 node, use GetChildV2");
             return TDeref<const TChild>::At(Children, pos * ChildStructSize());
         }
 
         const TChild& GetChild(TRecIdx pos) const
         {
-            Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersion, "GetChild on v2 node, use GetChildV2");
+            Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersionV1, "GetChild on v2 node, use GetChildV2");
             return *GetChildRef(pos);
         }
 
@@ -553,7 +553,7 @@ namespace NKikimr::NTable::NPage {
         }
 
         /// For v1 nodes, the caller must resolve via Part->GetPageLocation(pageId, groupId).
-        TPageId GetChildPageId(TRecIdx pos) const noexcept
+        TPageId GetChildV1PageId(TRecIdx pos) const noexcept
         {
             if (StoredVersion == FormatVersionV2) {
                 return Max<TPageId>();
@@ -563,7 +563,7 @@ namespace NKikimr::NTable::NPage {
         }
 
         /// Returns the child's inline TPageLocation (v2 only).
-        TPageLocation GetChildLocationV2(TRecIdx pos, EPage type) const noexcept
+        TPageLocation GetChildV2Location(TRecIdx pos, EPage type) const noexcept
         {
             Y_DEBUG_ABORT_UNLESS(StoredVersion == FormatVersionV2, "GetChildLocationV2 on v1 node");
             return IsShortChildFormat() ? GetShortChildV2(pos).GetLocation(type)
@@ -785,12 +785,12 @@ namespace NKikimr::NTable::NPage {
         const void* Keys = nullptr;
         const TRecordsEntry* Offsets = nullptr;
         const void* Children = nullptr;
-        ui16 StoredVersion = FormatVersion;
+        ui16 StoredVersion = FormatVersionV1;
     };
 
     struct TBtreeIndexMeta {
-        TPageId V1Root = Max<TPageId>();
-        TPageLocation V2Root;
+        TPageId RootV1 = Max<TPageId>();
+        TPageLocation RootV2;
         TRowId RowCount_;
         ui64 DataSize_;
         ui64 GroupDataSize_;
@@ -801,26 +801,26 @@ namespace NKikimr::NTable::NPage {
         auto operator<=>(const TBtreeIndexMeta&) const = default;
 
         /// Root location for v2 format — root page carries full byte-offset location.
-        static TPageLocation RootLocationV2(ui64 offset, ui64 size, ui32 crc32, EPage type) noexcept {
+        static TPageLocation RootV2Location(ui64 offset, ui64 size, ui32 crc32, EPage type) noexcept {
             return TPageLocation::FromByteOffset(offset, size, type, crc32);
         }
 
         /// Returns true when the v1 root (page-id reference) is available.
-        bool HasV1Root() const noexcept
+        bool HasRootV1() const noexcept
         {
-            return V1Root != Max<TPageId>();
+            return RootV1 != Max<TPageId>();
         }
 
         /// Returns true when the v2 root (byte-offset location) is available.
-        bool HasV2Root() const noexcept
+        bool HasRootV2() const noexcept
         {
-            return V2Root && V2Root.Offset.IsByteOffset();
+            return RootV2 && RootV2.Offset.IsByteOffset();
         }
 
         /// Returns the root PageId for v1 format, or Max<TPageId>() when v1 root is not available.
-        TPageId RootPageIdV1() const noexcept
+        TPageId RootV1PageId() const noexcept
         {
-            return V1Root;
+            return RootV1;
         }
 
         inline TRowId GetRowCount() const noexcept { return RowCount_; }
@@ -832,13 +832,13 @@ namespace NKikimr::NTable::NPage {
 
         /// Build a TChild from the row aggregates (v1 compat).
         TBtreeIndexNode::TChild ToChild() const noexcept {
-            return {RootPageIdV1(), GetRowCount(), GetDataSize(), GetGroupDataSize(), GetErasedRowCount()};
+            return {RootV1PageId(), GetRowCount(), GetDataSize(), GetGroupDataSize(), GetErasedRowCount()};
         }
 
         TString ToString() const
         {
             TStringBuilder result;
-            result << "V1Root: " << RootPageIdV1() << " V2Root: " << V2Root
+            result << "RootV1: " << RootV1PageId() << " RootV2: " << RootV2
                 << " RowCount: " << GetRowCount() << " DataSize: " << GetDataSize();
             if (GetGroupDataSize()) {
                 result << " GroupDataSize: " << GetGroupDataSize();

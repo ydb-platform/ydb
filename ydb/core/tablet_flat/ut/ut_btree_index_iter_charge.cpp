@@ -1819,9 +1819,9 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIterationV2) {
 
         // Verify V2 root
         const auto& v2Meta = v2Part.IndexPages.BTreeGroups[0];
-        UNIT_ASSERT_C(v2Meta.HasV2Root(), "V2 root expected");
-        UNIT_ASSERT_C(!v2Meta.HasV1Root(), "V2 part must not have V1 root");
-        UNIT_ASSERT_C(v2Meta.V2Root.Offset.IsByteOffset(), "V2 root must be byte offset");
+        UNIT_ASSERT_C(v2Meta.HasRootV2(), "V2 root expected");
+        UNIT_ASSERT_C(!v2Meta.HasRootV1(), "V2 part must not have V1 root");
+        UNIT_ASSERT_C(v2Meta.RootV2.Offset.IsByteOffset(), "V2 root must be byte offset");
 
         // Iterate forward through both parts and compare row-by-row
         TTestEnv v1Env, v2Env;

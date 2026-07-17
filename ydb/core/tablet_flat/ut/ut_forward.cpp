@@ -1625,8 +1625,8 @@ static TVector<TVector<TV2PageEntry>> DiscoverV2Layout(const TPartStore& part, c
     TVector<TVector<TV2PageEntry>> layout;
     layout.resize(meta.LevelCount + 1);
 
-    // Root level [0] — use meta.V2Root.Size (logical page size from index meta)
-    auto rootLoc = meta.V2Root;
+    // Root level [0] — use meta.RootV2.Size (logical page size from index meta)
+    auto rootLoc = meta.RootV2;
     EPage rootType = meta.LevelCount > 0 ? EPage::BTreeIndex : EPage::DataPage;
     auto* rootData = part.Store->GetPage(0, rootLoc.Offset);
     UNIT_ASSERT(rootData);
@@ -1842,8 +1842,8 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
         TPartEggs eggs = cook.Finish();
 
         const auto& meta = eggs.Lone()->IndexPages.BTreeGroups[0];
-        UNIT_ASSERT_C(meta.HasV2Root(), "V2 part must have V2 root");
-        UNIT_ASSERT_C(meta.V2Root.Offset.IsByteOffset(), "V2 root must be byte offset");
+        UNIT_ASSERT_C(meta.HasRootV2(), "V2 part must have V2 root");
+        UNIT_ASSERT_C(meta.RootV2.Offset.IsByteOffset(), "V2 root must be byte offset");
 
         TTestEnv env;
         auto index = CreateIndexIter(eggs.Lone().Get(), &env, {});
@@ -1938,7 +1938,7 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCacheV2) {
     {
         const auto eggs = CookPartV2();
         const auto part = eggs.Lone();
-        UNIT_ASSERT(part->IndexPages.BTreeGroups[0].HasV2Root());
+        UNIT_ASSERT(part->IndexPages.BTreeGroups[0].HasRootV2());
 
         auto layout = DiscoverV2Layout(*part, part->IndexPages.BTreeGroups[0]);
         TCacheWrapV2 wrap(part, nullptr, 200, 350);

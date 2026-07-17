@@ -177,8 +177,8 @@ Y_UNIT_TEST_SUITE(TLegacy) {
         // sanity: the V2 part really is a V2-only b-tree (byte-offset root)
         const auto& metaV2 = eggsV2.At(0)->IndexPages.GetBTree({});
         const auto& metaV1 = eggsV1.At(0)->IndexPages.GetBTree({});
-        UNIT_ASSERT_C(metaV2.HasV2Root(), "V2 part must carry a byte-offset root");
-        UNIT_ASSERT_C(!metaV2.HasV1Root(), "V2-only part must not carry a V1 root");
+        UNIT_ASSERT_C(metaV2.HasRootV2(), "V2 part must carry a byte-offset root");
+        UNIT_ASSERT_C(!metaV2.HasRootV1(), "V2-only part must not carry a V1 root");
         // the tree must have index levels so Start() actually walks children
         UNIT_ASSERT_C(metaV1.LevelCount == metaV2.LevelCount,
             "V1/V2 level count mismatch: " << metaV1.LevelCount << " vs " << metaV2.LevelCount);

@@ -1602,7 +1602,7 @@ void TExecutor::RequestStickyPagesForPartStore(NTable::TPartView& partView, cons
             auto groupId = NTable::NPage::TGroupId(groupIndex);
             const NTable::NPage::TBtreeIndexMeta* meta =
                 partStore->IndexPages.HasBTree() ? &partStore->IndexPages.GetBTree(groupId) : nullptr;
-            if (meta && meta->HasV2Root()) {
+            if (meta && meta->HasRootV2()) {
                 v2Groups.emplace_back(groupId, meta);
             }
         }

@@ -153,7 +153,7 @@ public:
         auto& pageCollection = *PageCollections[room]->PageCollection;
         auto total = pageCollection.MetaPages();
         auto meta =  IndexPages.HasBTree() ? &IndexPages.GetBTree(NTable::NPage::TGroupId(room)) : nullptr;
-        bool skipV1 = meta && meta->HasV2Root() && meta->HasV1Root();
+        bool skipV1 = meta && meta->HasRootV2() && meta->HasRootV1();
         TVector<TPageLocation> pages(Reserve(total));
         for (ui32 i = 0; i < total; ++i) {
             if (pageCollection.Page(i).Type == ui32(EPage::Skip)

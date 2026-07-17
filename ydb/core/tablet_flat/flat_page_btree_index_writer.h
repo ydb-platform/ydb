@@ -120,7 +120,7 @@ namespace NKikimr::NTable::NPage {
             WriteUnaligned<TLabel>(
                 Advance(sizeof(TLabel)),
                 TLabel::Encode(PageType(),
-                               WriteV2 ? TBtreeIndexNode::FormatVersionV2 : TBtreeIndexNode::FormatVersion, pageSize));
+                               WriteV2 ? TBtreeIndexNode::FormatVersionV2 : TBtreeIndexNode::FormatVersionV1, pageSize));
 
             auto &header = Place<THeader>();
             header.KeysCount = Keys.size();

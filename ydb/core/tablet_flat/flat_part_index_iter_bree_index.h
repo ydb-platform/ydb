@@ -345,9 +345,9 @@ private:
     TPageLocation ChildLocation(const TBtreeIndexNode& node, TRecIdx pos, bool isLeafLevel) const {
         if (node.GetStoredVersion() == TBtreeIndexNode::FormatVersionV2) {
             auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
-            return node.GetChildLocationV2(pos, type);
+            return node.GetChildV2Location(pos, type);
         }
-        return Part->GetPageLocation(node.GetChildPageId(pos), isLeafLevel ? GroupId : TGroupId{});
+        return Part->GetPageLocation(node.GetChildV1PageId(pos), isLeafLevel ? GroupId : TGroupId{});
     }
 
     void PushNextState(TRecIdx pos) {

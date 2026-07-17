@@ -427,10 +427,10 @@ namespace {
             }
 
             for (auto &x : pages.BTreeGroups) {
-                result.insert({mainGroupId, x.RootPageIdV1()});
+                result.insert({mainGroupId, x.RootV1PageId()});
             }
             for (auto &x : pages.BTreeHistoric) {
-                result.insert({mainGroupId, x.RootPageIdV1()});
+                result.insert({mainGroupId, x.RootV1PageId()});
             }
 
             return result;

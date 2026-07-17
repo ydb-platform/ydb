@@ -31,9 +31,9 @@ NPage::TPageLocation RootLocation(const TPart* part, const TBtreeIndexMeta& meta
 NPage::TPageLocation ChildLocation(const TPart* part, const TBtreeIndexNode& node, TRecIdx pos, bool isLeafLevel, TGroupId groupId) {
     if (node.GetStoredVersion() == TBtreeIndexNode::FormatVersionV2) {
         auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
-        return node.GetChildLocationV2(pos, type);
+        return node.GetChildV2Location(pos, type);
     }
-    return part->GetPageLocation(node.GetChildPageId(pos), isLeafLevel ? groupId : TGroupId{});
+    return part->GetPageLocation(node.GetChildV1PageId(pos), isLeafLevel ? groupId : TGroupId{});
 }
 
 ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* env, bool& ready) {

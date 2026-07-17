@@ -427,11 +427,8 @@ namespace NFwd {
         }
 
         NPage::TPageLocation GetChildLocation(const NPage::TBtreeIndexNode& node, NPage::TRecIdx pos, bool isLeafLevel) const {
-            if (node.GetStoredVersion() == NPage::TBtreeIndexNode::FormatVersionV2) {
-                auto type = isLeafLevel ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2;
-                return node.GetChildLocationV2(pos, type);
-            }
-            return Part->GetPageLocation(node.GetChildPageId(pos), isLeafLevel ? GroupId : NPage::TGroupId{});
+            auto ref = BuildPageRef(node, pos, isLeafLevel);
+            return ResolvePageLocation(Part, ref, isLeafLevel ?  GroupId : TGroupId{0});
         }
 
         void DropPagesBefore(TLevel& level, TPageOffset offset)
@@ -543,7 +540,7 @@ namespace NFwd {
             auto& front = level.Queue.front();
 
             auto type = &level == &Levels.back() ? EPage::DataPage
-                : (Meta.HasV2Root() ? EPage::BTreeIndexV2 : EPage::BTreeIndex);
+                : (Meta.HasRootV2() ? EPage::BTreeIndexV2 : EPage::BTreeIndex);
             head->AddToQueue(front.Offset, type, front.PageSize, front.Crc32);
 
             Stat.Fetch += front.PageSize;

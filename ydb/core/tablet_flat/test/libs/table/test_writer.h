@@ -158,7 +158,7 @@ namespace NTest {
                     ? proto.GetRootPageId()
                     : Max<TPageId>();
                 auto v2Root = proto.HasRootOffset()
-                    ? NPage::TBtreeIndexMeta::RootLocationV2(proto.GetRootOffset(), proto.GetRootSize(), proto.GetRootCrc32(), rootType)
+                    ? NPage::TBtreeIndexMeta::RootV2Location(proto.GetRootOffset(), proto.GetRootSize(), proto.GetRootCrc32(), rootType)
                     : NPage::TPageLocation::Max();
                 return {v1Root, v2Root, proto.GetRowCount(), proto.GetDataSize(), proto.GetGroupDataSize(),
                         proto.GetErasedRowCount(),

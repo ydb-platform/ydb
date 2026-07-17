@@ -821,15 +821,7 @@ public:
         bool skipJsonErrors = false;
         bool withSharedReading = false;
 
-        if (!useSharedReading && maybeWatermark) {
-            const auto watermark = maybeWatermark.Cast();
 
-            const auto eventTimeAndDelay = SplitWatermarkExpr(ctx.GetPosition(pqReadTopic.Pos()), ctx, watermark, wrSettings);
-            if (!eventTimeAndDelay) {
-                return {};
-            }
-            std::tie(std::ignore, watermarksLateArrivalDelayUs) = *eventTimeAndDelay;
-        }
         for (const auto& setting : settings.Raw()->Children()) {
             const auto settingName = setting->Child(0)->Content();
             if ("skip.json.errors" == settingName || "sharedreadingskipjsonerrors" == settingName) {
@@ -915,19 +907,23 @@ public:
             }
         }
 
-        bool sharedReading = UseSharedReading(clusterConfiguration, withSharedReading, format);
-        if (!sharedReading && skipJsonErrors) {
+        bool useSharedReading = UseSharedReading(clusterConfiguration, pqReadTopic, withSharedReading, ctx);
+        if (!useSharedReading && skipJsonErrors) {
             ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "`SHARED_READING_SKIP_JSON_ERRORS` is supported only in shared reading mode"));
             return {};
         }
-        if (!sharedReading && maybeWatermark) {
-            watermarksLateArrivalDelayUs = ExtractWatermarkDelay(maybeWatermark.Cast());
-            if (!watermarksLateArrivalDelayUs) {
-                ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = (SystemMetadata('write_time') - Interval('PT5S'))"));
+
+        if (!useSharedReading && maybeWatermark) {
+            const auto watermark = maybeWatermark.Cast();
+
+            const auto eventTimeAndDelay = SplitWatermarkExpr(ctx.GetPosition(pqReadTopic.Pos()), ctx, watermark, wrSettings);
+            if (!eventTimeAndDelay) {
                 return {};
             }
+            std::tie(std::ignore, watermarksLateArrivalDelayUs) = *eventTimeAndDelay;
         }
-        Add(props, SharedReading, ToString(sharedReading), pos, ctx);
+        
+        Add(props, SharedReading, ToString(useSharedReading), pos, ctx);
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
         Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
@@ -1078,7 +1074,7 @@ public:
             }
             TryFromString<bool>(settingValue->Content(), withSharedReading);
         }
-        Add(innerSettings, SharedReading, ToString(UseSharedReading(clusterConfiguration, withSharedReading, pqReadTopic.Format().Ref().Content())), pos, ctx);
+        Add(innerSettings, SharedReading, ToString(UseSharedReading(clusterConfiguration, pqReadTopic, withSharedReading, ctx)), pos, ctx);
 
         if (!innerSettings.empty()) {
             settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
@@ -1102,7 +1098,7 @@ public:
         return clusterConfiguration;
     }
 
-    bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, const TPqReadTopic& pqReadTopic, TExprContext& ctx) const {
+    bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, const TPqReadTopic& pqReadTopic, bool withSharedReading, TExprContext& ctx) const {
         std::string_view format = pqReadTopic.Format().Ref().Content();
         const auto& settings = pqReadTopic.Settings();
         bool streamingTopicReadEnabled = State_->StreamingTopicsReadByDefault;
@@ -1116,7 +1112,7 @@ public:
                 streamingTopicReadEnabled = *parseResult;
             }
         }
-        bool useSharedReading = clusterConfiguration->SharedReading && (format == "json_each_row" || format == "raw");
+        bool useSharedReading = (clusterConfiguration->SharedReading || withSharedReading) && (format == "json_each_row" || format == "raw");
         if (!streamingTopicReadEnabled && useSharedReading) {
             ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Table topic reading is not supported with sharing reading mode. Reading without shared reading will be used."));
             useSharedReading = false;

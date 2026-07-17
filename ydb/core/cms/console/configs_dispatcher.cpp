@@ -450,7 +450,8 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
             &ResolvedYamlConfig,
             &ResolvedJsonConfig);
     } catch (const yexception& ex) {
-        BLOG_ERROR("Got invalid config from console error# " << ex.what());
+        // Never deliver a partially-parsed config; fail loudly instead.
+        Y_ABORT("Failed to parse resolved YAML config into proto: %s", ex.what());
     }
 
     return newYamlProtoConfig;

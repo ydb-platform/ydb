@@ -11,6 +11,7 @@
 #include <yql/essentials/types/binary_json/write.h>
 
 #include <algorithm>
+#include <limits>
 
 using NKikimr::NArrow::NAccessor::NSubColumns::NTesting::PrintBinaryJsons;
 
@@ -219,5 +220,25 @@ Y_UNIT_TEST_SUITE(SubColumnsNativeScalars) {
         UNIT_ASSERT_VALUES_EQUAL(CollectPushdown(native, "$.s"), "x;yy;<null>;z;");
         UNIT_ASSERT_VALUES_EQUAL(CollectPushdown(native, "$.n"), "1;2.5;<null>;-3;");
         UNIT_ASSERT_VALUES_EQUAL(CollectPushdown(native, "$.b"), "true;false;<null>;true;");
+    }
+
+    Y_UNIT_TEST(ReencodeNearMaxDouble) {
+        // A double near the max magnitude stores as a native Double. Re-encoding it to BinaryJson (what
+        // divergent-type compaction does) and reconstructing the document must preserve the value: WriteJson's
+        // default 10-digit rounding pushed max double past the representable range, which SerializeToBinaryJson
+        // then rejected as overflow and aborted.
+        const std::vector<std::pair<TString, double>> cases = {
+            {"1.7976931348623157e308", std::numeric_limits<double>::max()},
+            {"-1.7976931348623157e308", -std::numeric_limits<double>::max()},
+        };
+        for (const auto& [lit, expected] : cases) {
+            const TString doc = TString(TStringBuilder() << "{\"n\":" << lit << "}");
+            auto native = BuildSubColumns({doc}, NativeSettings(0));
+            UNIT_ASSERT_VALUES_EQUAL_C(CountValueType(native, EValueType::Double), 1, native->DebugJson().GetStringRobust());
+            UNIT_ASSERT(native->GetChunkedArray());   // read-back document reconstruction must not abort
+            auto it = native->GetColumnsData().BuildIterator(0);
+            auto bj = ArrayElementToBinaryJson(it.GetArray(), it.GetLocalIndex(), EValueType::Double);
+            UNIT_ASSERT_VALUES_EQUAL(ExtractDoubleScalar(bj), expected);   // re-encoded value preserved exactly
+        }
     }
 };

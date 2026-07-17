@@ -6,6 +6,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 
+#include <util/stream/str.h>
+#include <util/string/cast.h>
 #include <util/string/escape.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -18,7 +20,7 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 namespace {
 
 NBinaryJson::TBinaryJson ToBinaryJson(const NJson::TJsonValue& json) {
-    auto dumpedJson = NJson::WriteJson(&json, false);
+    const auto dumpedJson = WriteJsonRoundTripSafe(json);
     auto result = NBinaryJson::SerializeToBinaryJson(dumpedJson);
     if (std::holds_alternative<TString>(result)) {
         AFL_VERIFY(false)("error", std::get<TString>(result))("type", json.GetType())("input_dump", EscapeC(dumpedJson));
@@ -47,6 +49,14 @@ EValueType ValueTypeForItem(const NBinaryJson::TBinaryJson& blob) {
 }
 
 }   // namespace
+
+TString WriteJsonRoundTripSafe(const NJson::TJsonValue& json) {
+    NJson::TJsonWriterConfig config;
+    config.FloatToStringMode = PREC_AUTO;
+    TStringStream dumpedJson;
+    NJson::WriteJson(&dumpedJson, &json, config);
+    return dumpedJson.Str();
+}
 
 std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType valueType) {
     switch (valueType) {

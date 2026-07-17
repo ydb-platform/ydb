@@ -39,7 +39,8 @@ bool BuildLockSubOps(TOperationId opId, const TTxTransaction& tx, TOperationCont
         {"workingDir", workingDir},
         {"dstPaths", targets.DstPathsSize()},
         {"srcPaths", targets.SrcPathsSize()},
-        {"restoreOpId", targets.GetRestoreOpId()});
+        {"restoreOpId", targets.GetRestoreOpId()}
+    );
 
     // Absolute paths ("/...") are passed with workingDir="" to avoid double-joining.
     auto fanOut = [&](const ::google::protobuf::RepeatedPtrField<TString>& paths,

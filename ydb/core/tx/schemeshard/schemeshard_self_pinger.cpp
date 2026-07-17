@@ -17,7 +17,8 @@ void TSelfPinger::Handle(TEvSchemeShard::TEvMeasureSelfResponseTime::TPtr &ev, c
     if (responseTime.MilliSeconds() > 1000) {
         YDB_LOG_WARN_CTX(ctx, "Schemeshard response time is too high",
             {"tabletId", TabletId},
-            {"responseTimeMs", responseTime.MilliSeconds()});
+            {"responseTimeMs", responseTime.MilliSeconds()}
+        );
     }
     SelfPingInFlight = false;
     if (responseTime > SELF_PING_INTERVAL) {

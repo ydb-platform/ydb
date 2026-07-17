@@ -116,13 +116,15 @@ public:
             {"logPrefix", GetLogPrefix()},
             {"id", id},
             {"tabletId", tabletId},
-            {"partitionId", partitionId});
+            {"partitionId", partitionId}
+        );
 
         auto shardIdx = Self->GetShardIdx(tabletId);
         if (shardIdx == InvalidShardIdx) {
             YDB_LOG_ERROR("Shard index for not found",
                 {"logPrefix", GetLogPrefix()},
-                {"tabletId", tabletId});
+                {"tabletId", tabletId}
+            );
             return;
         }
 
@@ -133,7 +135,8 @@ public:
         if (!Self->Topics.contains(shardInfo.PathId)) {
             YDB_LOG_ERROR("Topic with not found, likely dropped concurrently, ignoring offload status",
                 {"logPrefix", GetLogPrefix()},
-                {"pathId", shardInfo.PathId});
+                {"pathId", shardInfo.PathId}
+            );
             return;
         }
         const auto& topic = Self->Topics.at(shardInfo.PathId);
@@ -142,7 +145,8 @@ public:
             YDB_LOG_ERROR("Partition with not found in topic with",
                 {"logPrefix", GetLogPrefix()},
                 {"id", partitionId},
-                {"pathId", shardInfo.PathId});
+                {"pathId", shardInfo.PathId}
+            );
             return;
         }
 
@@ -154,7 +158,8 @@ public:
         if (!Self->IncrementalBackups.contains(id)) {
             YDB_LOG_ERROR("Incremental backup with not found",
                 {"logPrefix", GetLogPrefix()},
-                {"id", id});
+                {"id", id}
+            );
             TryStartOrphanCleaner(shardInfo.PathId);
             return;
         }
@@ -163,7 +168,8 @@ public:
         if (backupInfo.IsFinished()) {
             YDB_LOG_ERROR("Incremental backup with is already finished",
                 {"logPrefix", GetLogPrefix()},
-                {"id", id});
+                {"id", id}
+            );
             return;
         }
 
@@ -173,7 +179,8 @@ public:
             YDB_LOG_ERROR("Incremental backup item with not found in backup with",
                 {"logPrefix", GetLogPrefix()},
                 {"pathId", itemPathId},
-                {"id", id});
+                {"id", id}
+            );
             return;
         }
 
@@ -199,21 +206,24 @@ public:
             {"id", id},
             {"itemPathId", itemPathId},
             {"success", success},
-            {"error", error});
+            {"error", error}
+        );
 
         Self->RunningContinuousBackupCleaners.erase(CleanerResult->Sender);
 
         if (!success) {
             YDB_LOG_ERROR("Continuous backup cleaner has",
                 {"logPrefix", GetLogPrefix()},
-                {"failed", error});
+                {"failed", error}
+            );
             return;
         }
 
         if (!Self->IncrementalBackups.contains(id)) {
             YDB_LOG_ERROR("Incremental backup with not found",
                 {"logPrefix", GetLogPrefix()},
-                {"id", id});
+                {"id", id}
+            );
             return;
         }
 
@@ -221,7 +231,8 @@ public:
         if (backupInfo.IsFinished()) {
             YDB_LOG_ERROR("Incremental backup with is already finished",
                 {"logPrefix", GetLogPrefix()},
-                {"id", id});
+                {"id", id}
+            );
             return;
         }
 
@@ -229,7 +240,8 @@ public:
             YDB_LOG_ERROR("Incremental backup item with not found in backup with",
                 {"logPrefix", GetLogPrefix()},
                 {"pathId", itemPathId},
-                {"id", id});
+                {"id", id}
+            );
             return;
         }
 
@@ -239,7 +251,8 @@ public:
                 {"logPrefix", GetLogPrefix()},
                 {"pathId", itemPathId},
                 {"id", id},
-                {"itemState", item.State});
+                {"itemState", item.State}
+            );
             return;
         }
 
@@ -249,12 +262,14 @@ public:
     void Resume(TTransactionContext& txc) {
         YDB_LOG_DEBUG("Resume",
             {"logPrefix", GetLogPrefix()},
-            {"id", Id});
+            {"id", Id}
+        );
 
         if (!Self->IncrementalBackups.contains(Id)) {
             YDB_LOG_ERROR("Incremental backup with not found",
                 {"logPrefix", GetLogPrefix()},
-                {"id", Id});
+                {"id", Id}
+            );
             return;
         }
 
@@ -262,7 +277,8 @@ public:
         if (backupInfo.IsFinished()) {
             YDB_LOG_ERROR("Incremental backup with is already finished",
                 {"logPrefix", GetLogPrefix()},
-                {"id", Id});
+                {"id", Id}
+            );
             return;
         }
 

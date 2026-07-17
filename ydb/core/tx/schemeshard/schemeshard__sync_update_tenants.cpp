@@ -24,7 +24,8 @@ struct TSchemeShard::TTxSyncTenant : public TSchemeShard::TRwTxBase {
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSyncTenant DoExecute",
             {"pathId", PathId},
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
         Y_ABORT_UNLESS(Self->IsDomainSchemeShard);
 
         SideEffects.UpdateTenants({PathId});
@@ -33,7 +34,8 @@ struct TSchemeShard::TTxSyncTenant : public TSchemeShard::TRwTxBase {
     void DoComplete(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxSyncTenant DoComplete",
             {"pathId", PathId},
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 };
@@ -75,7 +77,8 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateTenant DoExecute",
             {"msg", record.ShortDebugString()},
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
 
         Y_ABORT_UNLESS(!Self->IsDomainSchemeShard);
         Y_ABORT_UNLESS(record.GetTabletId() == Self->ParentDomainId.OwnerId);

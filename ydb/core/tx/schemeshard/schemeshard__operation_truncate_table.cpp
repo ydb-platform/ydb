@@ -36,10 +36,12 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"debugHint", DebugHint()},
-            {"tabletId", ssId});
+            {"tabletId", ssId}
+        );
         YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"debugHint", DebugHint()},
-            {"message", ev->Get()->Record.ShortDebugString()});
+            {"message", ev->Get()->Record.ShortDebugString()}
+        );
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
@@ -49,7 +51,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -57,7 +60,8 @@ public:
 
         if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
             YDB_LOG_DEBUG_CTX(context.Ctx, "UpdatePartitioningForTableModification",
-                {"debugHint", DebugHint()});
+                {"debugHint", DebugHint()}
+            );
             NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
         }
 
@@ -117,7 +121,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvSchemaChanged",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -130,7 +135,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
             {"stepId", step},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -167,7 +173,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -321,7 +328,8 @@ public:
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TTruncateTable AbortPropose",
             {"opId", OperationId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

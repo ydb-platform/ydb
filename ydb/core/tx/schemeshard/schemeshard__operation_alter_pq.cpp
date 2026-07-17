@@ -506,7 +506,8 @@ public:
             {"maxPerPQ", pqGroup->MaxPartsPerTablet},
             {"maxPartsPerTablet", pqGroup->AlterData->MaxPartsPerTablet},
             {"addingPartitions", pqGroup->AlterData->PartitionsToAdd.size()},
-            {"deletingPartitions", pqGroup->AlterData->PartitionsToDelete.size()});
+            {"deletingPartitions", pqGroup->AlterData->PartitionsToDelete.size()}
+        );
 
         // Leave pqGroup->AlterVersion unchanged. It will be updated in TxPlanStep.
         ui32 shardsNeeded = pqGroup->AlterData->ExpectedShardCount();
@@ -567,7 +568,8 @@ public:
             {"shardsCurrent", shardsCurrent},
             {"shardsNeeded", shardsNeeded},
             {"startShardIdx", startShardIdx},
-            {"hasBalancer", hasBalancer});
+            {"hasBalancer", hasBalancer}
+        );
 
         if (!pqGroup->AlterData->PartitionsToAdd.empty()) {
             ReassignIds(pqGroup);
@@ -628,7 +630,8 @@ public:
             {"name", name},
             {"pathId", pathId},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -884,12 +887,14 @@ public:
                         if (topic->Partitions.contains(*prescribedChildPartitionId)) {
                             YDB_LOG_TRACE_CTX(context.Ctx, "Skipping split partition because child partition already exists",
                                 {"splittedPartitionId", splittedPartitionId},
-                                {"childPartitionId", *prescribedChildPartitionId});
+                                {"childPartitionId", *prescribedChildPartitionId}
+                            );
                             alterData->TotalGroupCount -= 1;
                         } else {
                             YDB_LOG_TRACE_CTX(context.Ctx, "Skipping split partition and creating new partition",
                                 {"splittedPartitionId", splittedPartitionId},
-                                {"childPartitionId", *prescribedChildPartitionId});
+                                {"childPartitionId", *prescribedChildPartitionId}
+                            );
                             alterData->PartitionsToAdd.emplace_back(childPartitionId.value(), childPartitionId.value() + 1);
                         }
                     } else {
@@ -1255,7 +1260,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterPQ AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

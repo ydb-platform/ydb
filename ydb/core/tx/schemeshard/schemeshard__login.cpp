@@ -53,7 +53,8 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxLogin Execute",
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
         NIceDb::TNiceDb db(txc.DB);
         if (Self->LoginProvider.IsItTimeToRotateKeys()) {
             RotateKeys(ctx, db);
@@ -86,7 +87,8 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
         const TString& error = Result->Record.GetError();
         YDB_LOG_DEBUG_CTX(ctx, "TTxLogin Complete with",
             {"error", (error ? error : TString("no errors"))},
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
 
         Self->Send(Request->Sender, std::move(Result), 0, Request->Cookie);
     }
@@ -100,7 +102,8 @@ private:
 
     void RotateKeys(const TActorContext& ctx, NIceDb::TNiceDb& db) {
         YDB_LOG_DEBUG_CTX(ctx, "TTxLogin RotateKeys",
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
         std::vector<ui64> keysExpired;
         std::vector<ui64> keysAdded;
         Self->LoginProvider.RotateKeys(keysExpired, keysAdded);

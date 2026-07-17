@@ -57,7 +57,8 @@ public:
             {"parentPathStr", parentPathStr},
             {"name", name},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -278,7 +279,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateExtSubDomain AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

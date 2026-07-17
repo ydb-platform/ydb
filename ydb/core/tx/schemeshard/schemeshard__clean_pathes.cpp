@@ -42,7 +42,8 @@ struct TSchemeShard::TTxCleanTables : public TTransactionBase<TSchemeShard> {
             YDB_LOG_WARN_CTX(ctx, "TTxCleanTables complete: PersistRemoveTable for remaining tables",
                 {"removedCount", RemovedCount},
                 {"tablesToCleanCount", TablesToClean.size()},
-                {"schemeshard", Self->TabletID()});
+                {"schemeshard", Self->TabletID()}
+            );
         }
 
         if (TablesToClean) {
@@ -89,7 +90,8 @@ struct TSchemeShard::TTxCleanBlockStoreVolumes : public TTransactionBase<TScheme
             YDB_LOG_WARN_CTX(ctx, "TTxCleanBlockStoreVolumes complete: PersistRemoveBlockStoreVolume for remaining volumes",
                 {"removedCount", RemovedCount},
                 {"blockStoreVolumesToCleanCount", BlockStoreVolumesToClean.size()},
-                {"schemeshard", Self->TabletID()});
+                {"schemeshard", Self->TabletID()}
+            );
         }
 
         if (BlockStoreVolumesToClean) {
@@ -118,7 +120,8 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedPaths Execute paths in candidate queue",
             {"cleanDroppedPathsCandidatesCount", Self->CleanDroppedPathsCandidates.size()},
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
 
         Y_ABORT_UNLESS(Self->CleanDroppedPathsInFly);
 
@@ -139,12 +142,14 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
                 YDB_LOG_ERROR_CTX(ctx, "TTxCleanDroppedPaths: skip dropped path with children, DbRefCount is miscounted",
                     {"pathId", pathId},
                     {"allChildrenCount", path->AllChildrenCount},
-                    {"schemeshard", Self->TabletID()});
+                    {"schemeshard", Self->TabletID()}
+                );
                 ++SkippedCount;
             } else if (path->DbRefCount == 0 && path->Dropped()) {
                 YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedPaths: PersistRemovePath",
                     {"pathId", pathId},
-                    {"schemeshard", Self->TabletID()});
+                    {"schemeshard", Self->TabletID()}
+                );
                 Self->PersistRemovePath(db, path);
                 ++RemovedCount;
             } else {
@@ -166,7 +171,8 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
                 {"removedCount", RemovedCount},
                 {"skippedCount", SkippedCount},
                 {"cleanDroppedPathsCandidatesCount", Self->CleanDroppedPathsCandidates.size()},
-                {"schemeshard", Self->TabletID()});
+                {"schemeshard", Self->TabletID()}
+            );
         }
 
         if (!Self->CleanDroppedPathsCandidates.empty()) {
@@ -209,7 +215,8 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedSubDomains Execute paths in candidate queue",
             {"cleanDroppedSubDomainsCandidatesCount", Self->CleanDroppedSubDomainsCandidates.size()},
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
 
         Y_ABORT_UNLESS(Self->CleanDroppedSubDomainsInFly);
 
@@ -228,7 +235,8 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
             {
                 YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedPaths: PersistRemoveSubDomain",
                     {"pathId", pathId},
-                    {"schemeshard", Self->TabletID()});
+                    {"schemeshard", Self->TabletID()}
+                );
                 Self->PersistRemoveSubDomain(db, pathId);
                 ++RemovedCount;
 
@@ -255,7 +263,8 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
                 {"removedCount", RemovedCount},
                 {"skippedCount", SkippedCount},
                 {"cleanDroppedSubDomainsCandidatesCount", Self->CleanDroppedSubDomainsCandidates.size()},
-                {"schemeshard", Self->TabletID()});
+                {"schemeshard", Self->TabletID()}
+            );
 
         }
 

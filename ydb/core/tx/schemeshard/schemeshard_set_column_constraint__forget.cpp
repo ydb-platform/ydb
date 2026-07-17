@@ -22,7 +22,8 @@ struct TSchemeShard::TIndexBuilder::TTxForgetSetColumnConstraint: public TRwTxBa
         const auto& request = Request->Get()->Record;
         YDB_LOG_DEBUG_CTX(ctx, "][SetColumnConstraint] TIndexBuilder::TTxForgetSetColumnConstraint DoExecute",
             {"selfTabletId", Self->SelfTabletId()},
-            {"request", request.ShortDebugString()});
+            {"request", request.ShortDebugString()}
+        );
 
         auto response = MakeHolder<TEvSetColumnConstraint::TEvForgetResponse>(request.GetTxId());
         TPath database = TPath::Resolve(request.GetDatabaseName(), Self);
@@ -72,7 +73,8 @@ struct TSchemeShard::TIndexBuilder::TTxForgetSetColumnConstraint: public TRwTxBa
     void DoComplete(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "][SetColumnConstraint] TIndexBuilder::TTxForgetSetColumnConstraint DoComplete",
             {"selfTabletId", Self->SelfTabletId()},
-            {"requestRecord", Request->Get()->Record.ShortDebugString()});
+            {"requestRecord", Request->Get()->Record.ShortDebugString()}
+        );
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 

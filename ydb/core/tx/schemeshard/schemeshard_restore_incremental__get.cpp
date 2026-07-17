@@ -42,7 +42,8 @@ public:
 
         YDB_LOG_DEBUG("Reply",
             {"logPrefix", GetLogPrefix()},
-            {"responseRecord", Response->Record.ShortDebugString()});
+            {"responseRecord", Response->Record.ShortDebugString()}
+        );
 
         SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
@@ -52,7 +53,8 @@ public:
         const auto& record = Request->Get()->Record;
         YDB_LOG_DEBUG("Execute",
             {"logPrefix", GetLogPrefix()},
-            {"record", record.ShortDebugString()});
+            {"record", record.ShortDebugString()}
+        );
 
         Response = MakeHolder<TEvBackup::TEvGetBackupCollectionRestoreResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
@@ -99,7 +101,8 @@ public:
         // Don't go through Reply() — it would clobber the per-entry Status that Fill just set.
         YDB_LOG_DEBUG("Reply",
             {"logPrefix", GetLogPrefix()},
-            {"responseRecord", Response->Record.ShortDebugString()});
+            {"responseRecord", Response->Record.ShortDebugString()}
+        );
         SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
     }

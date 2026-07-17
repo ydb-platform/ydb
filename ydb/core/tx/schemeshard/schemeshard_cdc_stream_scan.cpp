@@ -152,12 +152,14 @@ private:
         const auto& streamPathId = RunCdcStreamScan->Get()->StreamPathId;
 
         YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Run",
-            {"streamPathId", streamPathId});
+            {"streamPathId", streamPathId}
+        );
 
         if (!Self->CdcStreams.contains(streamPathId)) {
             YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Cannot run doesn't exist",
                 {"streamPathId", streamPathId},
-                {"reason", "stream"});
+                {"reason", "stream"}
+            );
             return true;
         }
 
@@ -165,7 +167,8 @@ private:
         if (streamInfo->State != TCdcStreamInfo::EState::ECdcStreamStateScan) {
             YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Cannot run state",
                 {"streamPathId", streamPathId},
-                {"reason", "unexpected"});
+                {"reason", "unexpected"}
+            );
             return true;
         }
 
@@ -233,13 +236,15 @@ private:
         const auto& record = CdcStreamScanResponse->Get()->Record;
 
         YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Response",
-            {"ev", record.ShortDebugString()});
+            {"ev", record.ShortDebugString()}
+        );
 
         const auto streamPathId = TPathId::FromProto(record.GetStreamPathId());
         if (!Self->CdcStreams.contains(streamPathId)) {
             YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Cannot process response doesn't exist",
                 {"streamPathId", streamPathId},
-                {"reason", "stream"});
+                {"reason", "stream"}
+            );
             return true;
         }
 
@@ -247,7 +252,8 @@ private:
         if (streamInfo->State != TCdcStreamInfo::EState::ECdcStreamStateScan) {
             YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Cannot process response state",
                 {"streamPathId", streamPathId},
-                {"reason", "unexpected"});
+                {"reason", "unexpected"}
+            );
             return true;
         }
 
@@ -257,7 +263,8 @@ private:
             YDB_LOG_ERROR_CTX(ctx, "[CdcStreamScan] Cannot process response not found",
                 {"streamPathId", streamPathId},
                 {"tabletId", tabletId},
-                {"reason", "tablet"});
+                {"reason", "tablet"}
+            );
             return true;
         }
 
@@ -266,7 +273,8 @@ private:
             YDB_LOG_ERROR_CTX(ctx, "[CdcStreamScan] Cannot process response not found",
                 {"streamPathId", streamPathId},
                 {"shardIdx", shardIdx},
-                {"reason", "shard"});
+                {"reason", "shard"}
+            );
             return true;
         }
 
@@ -276,7 +284,8 @@ private:
                 {"streamPathId", streamPathId},
                 {"shardIdx", shardIdx},
                 {"got", record.GetStatus()},
-                {"current", status.Status});
+                {"current", status.Status}
+            );
             return true;
         }
 
@@ -309,7 +318,8 @@ private:
         default:
             YDB_LOG_ERROR_CTX(ctx, "[CdcStreamScan] Unexpected response status",
                 {"status", static_cast<int>(record.GetStatus())},
-                {"error", record.GetErrorDescription()});
+                {"error", record.GetErrorDescription()}
+            );
             return true;
         }
 
@@ -329,12 +339,14 @@ private:
 
         YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Pipe retry",
             {"streamPathId", streamPathId},
-            {"tabletId", tabletId});
+            {"tabletId", tabletId}
+        );
 
         if (!Self->CdcStreams.contains(streamPathId)) {
             YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Cannot retry doesn't exist",
                 {"streamPathId", streamPathId},
-                {"reason", "stream"});
+                {"reason", "stream"}
+            );
             return true;
         }
 
@@ -342,7 +354,8 @@ private:
         if (streamInfo->State != TCdcStreamInfo::EState::ECdcStreamStateScan) {
             YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Cannot retry state",
                 {"streamPathId", streamPathId},
-                {"reason", "unexpected"});
+                {"reason", "unexpected"}
+            );
             return true;
         }
 
@@ -351,7 +364,8 @@ private:
             YDB_LOG_ERROR_CTX(ctx, "[CdcStreamScan] Cannot retry not found",
                 {"streamPathId", streamPathId},
                 {"tabletId", tabletId},
-                {"reason", "tablet"});
+                {"reason", "tablet"}
+            );
             return true;
         }
 
@@ -360,7 +374,8 @@ private:
             YDB_LOG_ERROR_CTX(ctx, "[CdcStreamScan] Cannot retry not found",
                 {"streamPathId", streamPathId},
                 {"shardIdx", shardIdx},
-                {"reason", "shard"});
+                {"reason", "shard"}
+            );
             return true;
         }
 
@@ -381,7 +396,8 @@ private:
         if (!Self->IsServerlessDomain(domainInfo)) {
             YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Unable to make a bill is not a serverless db",
                 {"streamPathId", pathId},
-                {"reason", "domain"});
+                {"reason", "domain"}
+            );
             return;
         }
 
@@ -392,21 +408,24 @@ private:
         if (!attrs.contains("cloud_id")) {
             YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Unable to make a bill not found in user attributes",
                 {"streamPathId", pathId},
-                {"reason", "'cloud_id'"});
+                {"reason", "'cloud_id'"}
+            );
             return;
         }
 
         if (!attrs.contains("folder_id")) {
             YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Unable to make a bill not found in user attributes",
                 {"streamPathId", pathId},
-                {"reason", "'folder_id'"});
+                {"reason", "'folder_id'"}
+            );
             return;
         }
 
         if (!attrs.contains("database_id")) {
             YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Unable to make a bill not found in user attributes",
                 {"streamPathId", pathId},
-                {"reason", "'database_id'"});
+                {"reason", "'database_id'"}
+            );
             return;
         }
 
@@ -425,7 +444,8 @@ private:
 
         YDB_LOG_NOTICE_CTX(ctx, "[CdcStreamScan] Make a bill",
             {"streamPathId", pathId},
-            {"record", billRecord});
+            {"record", billRecord}
+        );
         Metering = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
     }
 };

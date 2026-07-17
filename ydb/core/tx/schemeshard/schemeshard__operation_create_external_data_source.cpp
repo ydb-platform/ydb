@@ -35,7 +35,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
-            {"step", step});
+            {"step", step}
+        );
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -64,7 +65,8 @@ public:
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"tabletId", context.SS->TabletID()},
-            {"debugHint", DebugHint()});
+            {"debugHint", DebugHint()}
+        );
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -176,7 +178,8 @@ public:
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", parentPathStr},
-            {"name", name});
+            {"name", name}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -257,14 +260,16 @@ public:
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateExternalDataSource AbortPropose",
             {"tabletId", context.SS->TabletID()},
-            {"opId", OperationId});
+            {"opId", OperationId}
+        );
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateExternalDataSource AbortUnsafe",
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
-            {"txId", forceDropTxId});
+            {"txId", forceDropTxId}
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 };
@@ -306,7 +311,8 @@ TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
         {"tabletId", context.SS->TabletID()},
         {"id", id},
         {"enableReplaceIfExists", context.SS->EnableReplaceIfExistsForExternalEntities},
-        {"transaction", tx.ShortDebugString()});
+        {"transaction", tx.ShortDebugString()}
+    );
 
     auto errorResult = [&id](NKikimrScheme::EStatus status, const TStringBuf& msg) -> TVector<ISubOperation::TPtr> {
         return {CreateReject(id, status, TStringBuilder() << "Invalid TCreateExternalDataSource request: " << msg)};

@@ -26,7 +26,8 @@ struct TSchemeShard::TTxPublishToSchemeBoard: public TSchemeShard::TRwTxBase {
 
     void DoExecute(TTransactionContext&, const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxPublishToSchemeBoard DoExecute",
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
 
         ui32 size = 0;
         while (!Paths.empty() && size++ < Self->PublishChunkSize) {
@@ -37,7 +38,8 @@ struct TSchemeShard::TTxPublishToSchemeBoard: public TSchemeShard::TRwTxBase {
             YDB_LOG_DEBUG_CTX(ctx, "TTxPublishToSchemeBoard DescribePath at path",
                 {"schemeshard", Self->TabletID()},
                 {"txId", txId},
-                {"id", paths.front()});
+                {"id", paths.front()}
+            );
 
             Descriptions[txId].emplace_back(DescribePath(Self, ctx, paths.front()));
             paths.pop_front();
@@ -50,7 +52,8 @@ struct TSchemeShard::TTxPublishToSchemeBoard: public TSchemeShard::TRwTxBase {
 
     void DoComplete(const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxPublishToSchemeBoard DoComplete",
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
 
         for (auto& kv : Descriptions) {
             const auto txId = kv.first;
@@ -61,7 +64,8 @@ struct TSchemeShard::TTxPublishToSchemeBoard: public TSchemeShard::TRwTxBase {
                     {"populator", Self->SchemeBoardPopulator},
                     {"schemeshard", Self->TabletID()},
                     {"txId", txId},
-                    {"id", desc->Record.GetPathId()});
+                    {"id", desc->Record.GetPathId()}
+                );
 
                 ctx.Send(Self->SchemeBoardPopulator, std::move(desc), 0, ui64(txId));
             }
@@ -90,7 +94,8 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
         YDB_LOG_DEBUG_CTX(ctx, "TTxAckPublishToSchemeBoard Execute",
             {"schemeshard", Self->TabletID()},
             {"msg", record.ShortDebugString()},
-            {"cookie", Ev->Cookie});
+            {"cookie", Ev->Cookie}
+        );
 
         const auto txId = TTxId(Ev->Cookie);
         const auto pathId = TPathId(record.GetPathOwnerId(), record.GetLocalPathId());
@@ -101,14 +106,16 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
         if (Self->Operations.contains(txId)) {
             YDB_LOG_INFO_CTX(ctx, "Operation in-flight",
                 {"schemeshard", Self->TabletID()},
-                {"txId", txId});
+                {"txId", txId}
+            );
 
             TOperation::TPtr operation = Self->Operations.at(txId);
             if (AckPublish(db, txId, pathId, version, operation->Publications, ctx)
                     && operation->IsReadyToNotify(ctx)) {
                 YDB_LOG_NOTICE_CTX(ctx, "TTxAckPublishToSchemeBoard operation is ready to notify",
                     {"schemeshard", Self->TabletID()},
-                    {"txId", txId});
+                    {"txId", txId}
+                );
 
                 operation->DoNotify(Self, SideEffects, ctx);
             }
@@ -119,7 +126,8 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
                     {"opId", opId},
                     {"publications", operation->CountWaitPublication(opId)},
                     {"schemeshard", Self->TabletID()},
-                    {"txId", txId});
+                    {"txId", txId}
+                );
 
                 THolder<TEvPrivate::TEvCompletePublication> msg = MakeHolder<TEvPrivate::TEvCompletePublication>(opId, pathId, version);
                 TEvPrivate::TEvCompletePublication::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCompletePublication>*) new IEventHandle(
@@ -135,14 +143,16 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
             YDB_LOG_INFO_CTX(ctx, "Publication in-flight",
                 {"count", Self->Publications.at(txId).Paths.size()},
                 {"schemeshard", Self->TabletID()},
-                {"txId", txId});
+                {"txId", txId}
+            );
 
             auto& publication = Self->Publications.at(txId);
             if (AckPublish(db, txId, pathId, version, publication.Paths, ctx)) {
                 YDB_LOG_NOTICE_CTX(ctx, "Publication complete, notify & remove",
                     {"schemeshard", Self->TabletID()},
                     {"txId", txId},
-                    {"subscribers", publication.Subscribers.size()});
+                    {"subscribers", publication.Subscribers.size()}
+                );
 
                 Notify(txId, publication.Subscribers, ctx);
                 Self->Publications.erase(txId);
@@ -150,7 +160,8 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
         } else {
             YDB_LOG_WARN_CTX(ctx, "Unknown operation & publication",
                 {"schemeshard", Self->TabletID()},
-                {"txId", txId});
+                {"txId", txId}
+            );
         }
 
         SideEffects.ApplyOnExecute(Self, txc, ctx);
@@ -160,7 +171,8 @@ struct TSchemeShard::TTxAckPublishToSchemeBoard: public TTransactionBase<TScheme
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxAckPublishToSchemeBoard Complete",
             {"schemeshard", Self->TabletID()},
-            {"cookie", Ev->Cookie});
+            {"cookie", Ev->Cookie}
+        );
 
         SideEffects.ApplyOnComplete(Self, ctx);
     }
@@ -178,7 +190,8 @@ private:
                 {"schemeshard", Self->TabletID()},
                 {"txId", txId},
                 {"pathId", pathId},
-                {"version", it->second});
+                {"version", it->second}
+            );
 
             Self->PersistRemovePublishingPath(db, txId, pathId, it->second);
 
@@ -194,7 +207,8 @@ private:
         for (const auto& subscriber : subscribers) {
             YDB_LOG_DEBUG_CTX(ctx, "TTxAckPublishToSchemeBoard Notify send TEvNotifyTxCompletionResult",
                 {"schemeshard", Self->TabletID()},
-                {"actorId", subscriber});
+                {"actorId", subscriber}
+            );
 
             SideEffects.Send(subscriber, new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId)), ui64(txId));
         }

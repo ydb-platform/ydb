@@ -222,7 +222,8 @@ void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySch
         }
 
         YDB_LOG_NOTICE("Audit log entry",
-            {"entry", entry});
+            {"entry", entry}
+        );
     }
 }
 

@@ -125,7 +125,8 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         YDB_LOG_DEBUG("TExport::TTxCreate: DoExecute");
         YDB_LOG_TRACE("Message:\n",
-            {"request", request.ShortDebugString()});
+            {"request", request.ShortDebugString()}
+        );
 
         auto response = MakeHolder<TEvExport::TEvCreateExportResponse>(request.GetTxId());
 
@@ -302,9 +303,11 @@ private:
     ) {
         YDB_LOG_DEBUG("TExport::TTxCreate: Reply",
             {"status", status},
-            {"error", errorMessage});
+            {"error", errorMessage}
+        );
         YDB_LOG_TRACE("Message:\n",
-            {"responseRecord", response->Record.ShortDebugString()});
+            {"responseRecord", response->Record.ShortDebugString()}
+        );
 
         auto& exprt = *response->Record.MutableResponse()->MutableEntry();
         exprt.SetStatus(status);
@@ -468,7 +471,8 @@ private:
     void MkDir(const TExportInfo& exportInfo, TTxId txId) {
         YDB_LOG_INFO("TExport::TTxProgress: MkDir propose",
             {"info", exportInfo},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         Y_ABORT_UNLESS(exportInfo.WaitTxId == InvalidTxId);
         Send(Self->SelfId(), MkDirPropose(Self, txId, exportInfo));
@@ -477,7 +481,8 @@ private:
     void CopyTables(const TExportInfo& exportInfo, TTxId txId) {
         YDB_LOG_INFO("TExport::TTxProgress: CopyTables propose",
             {"info", exportInfo},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         Y_ABORT_UNLESS(exportInfo.WaitTxId == InvalidTxId);
         Send(Self->SelfId(), CopyTablesPropose(Self, txId, exportInfo));
@@ -492,7 +497,8 @@ private:
         YDB_LOG_INFO("TExport::TTxProgress: Backup propose",
             {"info", exportInfo},
             {"item", item.ToString(itemIdx)},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
@@ -570,7 +576,8 @@ private:
 
         YDB_LOG_INFO("TExport::TTxProgress: UploadScheme",
             {"info", exportInfo},
-            {"item", item.ToString(itemIdx)});
+            {"item", item.ToString(itemIdx)}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
     }
@@ -694,7 +701,8 @@ private:
 
         YDB_LOG_INFO("TExport::TTxProgress: cancel backup's tx",
             {"info", exportInfo},
-            {"item", item.ToString(itemIdx)});
+            {"item", item.ToString(itemIdx)}
+        );
 
         Send(Self->SelfId(), CancelPropose(exportInfo, item.WaitTxId), 0, exportInfo.Id);
         return true;
@@ -707,7 +715,8 @@ private:
         YDB_LOG_INFO("TExport::TTxProgress: Drop propose",
             {"info", exportInfo},
             {"item", item.ToString(itemIdx)},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         Send(Self->SelfId(), DropPropose(Self, txId, exportInfo, itemIdx));
@@ -716,7 +725,8 @@ private:
     void DropDir(const TExportInfo& exportInfo, TTxId txId) {
         YDB_LOG_INFO("TExport::TTxProgress: Drop propose",
             {"info", exportInfo},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         Y_ABORT_UNLESS(exportInfo.WaitTxId == InvalidTxId);
         Send(Self->SelfId(), DropPropose(Self, txId, exportInfo));
@@ -724,7 +734,8 @@ private:
 
     void AllocateTxId(const TExportInfo& exportInfo) {
         YDB_LOG_INFO("TExport::TTxProgress: Allocate txId",
-            {"info", exportInfo});
+            {"info", exportInfo}
+        );
 
         Y_ABORT_UNLESS(exportInfo.WaitTxId == InvalidTxId);
         Send(Self->TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(), 0, exportInfo.Id);
@@ -738,7 +749,8 @@ private:
 
         YDB_LOG_INFO("TExport::TTxProgress: Allocate txId",
             {"info", exportInfo},
-            {"item", item.ToString(itemIdx)});
+            {"item", item.ToString(itemIdx)}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         Send(Self->TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(), 0, exportInfo.Id);
@@ -762,7 +774,8 @@ private:
 
     void SubscribeTx(const TExportInfo& exportInfo) {
         YDB_LOG_INFO("TExport::TTxProgress: Wait for completion",
-            {"info", exportInfo});
+            {"info", exportInfo}
+        );
 
         Y_ABORT_UNLESS(exportInfo.WaitTxId != InvalidTxId);
         SubscribeTx(exportInfo.WaitTxId);
@@ -776,7 +789,8 @@ private:
 
         YDB_LOG_INFO("TExport::TTxProgress: Wait for completion",
             {"info", exportInfo},
-            {"item", item.ToString(itemIdx)});
+            {"item", item.ToString(itemIdx)}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId != InvalidTxId);
         SubscribeTx(item.WaitTxId);
@@ -856,7 +870,8 @@ private:
         YDB_LOG_NOTICE("Cancelling",
             {"progressMarker", marker},
             {"info", exportInfo},
-            {"item", item.ToString(itemIdx)});
+            {"item", item.ToString(itemIdx)}
+        );
 
         exportInfo.State = EState::Cancelled;
 
@@ -945,7 +960,8 @@ private:
         TExportInfo::TPtr exportInfo = Self->Exports.at(Id);
 
         YDB_LOG_DEBUG("TExport::TTxProgress: Resume",
-            {"id", Id});
+            {"id", Id}
+        );
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -1067,11 +1083,13 @@ private:
 
         YDB_LOG_DEBUG("TExport::TTxProgress: OnAllocateResult",
             {"txId", txId},
-            {"id", id});
+            {"id", id}
+        );
 
         if (!Self->Exports.contains(id)) {
             YDB_LOG_ERROR("TExport::TTxProgress: OnAllocateResult received unknown id",
-                {"id", id});
+                {"id", id}
+            );
             return;
         }
 
@@ -1098,7 +1116,8 @@ private:
                 YDB_LOG_WARN("TExport::TTxProgress: OnAllocateResult allocated a needless txId for an item transferring",
                     {"id", id},
                     {"itemIdx", itemIdx},
-                    {"type", exportInfo->Items.at(itemIdx).SourcePathType});
+                    {"type", exportInfo->Items.at(itemIdx).SourcePathType}
+                );
                 return;
             }
             break;
@@ -1127,14 +1146,17 @@ private:
 
         YDB_LOG_DEBUG("TExport::TTxProgress: OnModifyResult",
             {"txId", record.GetTxId()},
-            {"status", record.GetStatus()});
+            {"status", record.GetStatus()}
+        );
         YDB_LOG_TRACE("Message:\n",
-            {"record", record.ShortDebugString()});
+            {"record", record.ShortDebugString()}
+        );
 
         auto txId = TTxId(record.GetTxId());
         if (!Self->TxIdToExport.contains(txId)) {
             YDB_LOG_ERROR("TExport::TTxProgress: OnModifyResult received unknown txId",
-                {"txId", txId});
+                {"txId", txId}
+            );
             return;
         }
 
@@ -1143,7 +1165,8 @@ private:
         std::tie(id, itemIdx) = Self->TxIdToExport.at(txId);
         if (!Self->Exports.contains(id)) {
             YDB_LOG_ERROR("TExport::TTxProgress: OnModifyResult received unknown id",
-                {"id", id});
+                {"id", id}
+            );
             return;
         }
 
@@ -1318,7 +1341,8 @@ private:
         YDB_LOG_INFO("TExport::TTxProgress: Wait for completion",
             {"info", exportInfo->ToString()},
             {"itemIdx", itemIdx},
-            {"txId", txId});
+            {"txId", txId}
+        );
         SubscribeTx(txId);
     }
 
@@ -1330,13 +1354,15 @@ private:
             {"id", result.ExportId},
             {"itemIdx", result.ItemIdx},
             {"success", result.Success},
-            {"error", result.Error});
+            {"error", result.Error}
+        );
 
         const auto exportId = result.ExportId;
         auto exportInfo = Self->Exports.Value(exportId, nullptr);
         if (!exportInfo) {
             YDB_LOG_ERROR("TExport::TTxProgress: OnSchemeUploadResult received unknown export id",
-                {"id", exportId});
+                {"id", exportId}
+            );
             return;
         }
 
@@ -1345,7 +1371,8 @@ private:
             YDB_LOG_ERROR("TExport::TTxProgress: OnSchemeUploadResult item index out of range item number of",
                 {"id", exportId},
                 {"index", itemIdx},
-                {"items", exportInfo->Items.size()});
+                {"items", exportInfo->Items.size()}
+            );
             return;
         }
 
@@ -1401,13 +1428,15 @@ private:
         YDB_LOG_DEBUG("TExport::TTxProgress: OnUploadMetadataResult",
             {"id", result.ExportId},
             {"success", result.Success},
-            {"error", result.Error});
+            {"error", result.Error}
+        );
 
         const auto exportId = result.ExportId;
         auto exportInfo = Self->Exports.Value(exportId, nullptr);
         if (!exportInfo) {
             YDB_LOG_ERROR("TExport::TTxProgress: OnUploadMetadataResult received unknown export id",
-                {"id", exportId});
+                {"id", exportId}
+            );
             return;
         }
 
@@ -1417,7 +1446,8 @@ private:
             YDB_LOG_DEBUG("TExport::TTxProgress: IsInProgress",
                 {"id", result.ExportId},
                 {"success", result.Success},
-                {"error", result.Error});
+                {"error", result.Error}
+            );
             return;
         }
 
@@ -1456,12 +1486,14 @@ private:
     void OnNotifyResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(CompletedTxId);
         YDB_LOG_DEBUG("TExport::TTxProgress: OnNotifyResult",
-            {"txId", CompletedTxId});
+            {"txId", CompletedTxId}
+        );
 
         const auto txId = CompletedTxId;
         if (!Self->TxIdToExport.contains(txId) && !Self->TxIdToDependentExport.contains(txId)) {
             YDB_LOG_ERROR("TExport::TTxProgress: OnNotifyResult received unknown txId",
-                {"txId", txId});
+                {"txId", txId}
+            );
             return;
         }
 
@@ -1487,11 +1519,13 @@ private:
         YDB_LOG_DEBUG("TExport::TTxProgress: OnNotifyResult",
             {"txId", txId},
             {"id", id},
-            {"itemIdx", itemIdx});
+            {"itemIdx", itemIdx}
+        );
 
         if (!Self->Exports.contains(id)) {
             YDB_LOG_ERROR("TExport::TTxProgress: OnNotifyResult received unknown id",
-                {"id", id});
+                {"id", id}
+            );
             return;
         }
 

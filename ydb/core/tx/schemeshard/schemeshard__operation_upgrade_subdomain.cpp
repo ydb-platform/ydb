@@ -40,7 +40,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
             {"type", TTxState::TypeName(txState->TxType)},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         bool isDone = true;
 
@@ -58,7 +59,8 @@ public:
                    << ", at schemeshard: " << ssId;
 
             YDB_LOG_ERROR_CTX(context.Ctx, "Upgrade subdomain error",
-                {"errMsg", errMsg});
+                {"errMsg", errMsg}
+            );
             Y_FAIL_S(errMsg);
 
             Y_ABORT_UNLESS(context.SS->Operations.contains(otherTxId));
@@ -108,7 +110,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvInitTenantSchemeShardResult",
             {"debugHint", DebugHint()},
             {"operationId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -130,7 +133,8 @@ public:
                 {"shard", shardIdx},
                 {"status", NKikimrScheme::EStatus_Name(status)},
                 {"opId", OperationId},
-                {"schemeshard", ssId});
+                {"schemeshard", ssId}
+            );
             return false;
         }
 
@@ -138,7 +142,8 @@ public:
             {"debugHint", DebugHint()},
             {"tablet", tabletId},
             {"shardIdx", shardIdx},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         context.OnComplete.UnbindMsgFromPipe(OperationId, TenantSchemeShardId, pathId);
         PathsInside.erase(pathId);
@@ -382,7 +387,8 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvSchemeShard::TEvMigrateSchemeShardResult",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         Y_ABORT_UNLESS(ev->Get()->GetPathId().OwnerId == context.SS->TabletID());
 
@@ -410,7 +416,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -448,7 +455,8 @@ public:
             {"debugHint", DebugHint()},
             {"toSchemeshard", TenantSchemeShardId},
             {"schemeshard", ssId},
-            {"msg", event->Record.ShortDebugString()});
+            {"msg", event->Record.ShortDebugString()}
+        );
         context.OnComplete.BindMsgToPipe(OperationId, TenantSchemeShardId, pathId, event);
 
 
@@ -480,7 +488,8 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvSchemeShard::TEvPublishTenantAsReadOnlyResult",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         Y_ABORT_UNLESS(TTabletId(ev->Get()->Record.GetTenantSchemeShard()) == TenantSchemeShardId);
 
@@ -495,7 +504,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -519,7 +529,8 @@ public:
             {"debugHint", DebugHint()},
             {"toSchemeshard", TenantSchemeShardId},
             {"schemeshard", ssId},
-            {"msg", event->Record.ShortDebugString()});
+            {"msg", event->Record.ShortDebugString()}
+        );
         context.OnComplete.BindMsgToPipe(OperationId, TenantSchemeShardId, pathId, event);
 
         return false;
@@ -555,7 +566,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvPrivate::TEvCommitTenantUpdate",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -595,7 +607,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvPrivate::TEvUndoTenantUpdate",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -660,7 +673,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr item = context.SS->PathsById.at(pathId);
@@ -724,7 +738,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -775,7 +790,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvDataShard::TEvMigrateSchemeShardResponse",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         auto dataShardId = TTabletId(record.GetTabletId());
         auto status = record.GetStatus();
@@ -802,7 +818,8 @@ public:
         YDB_LOG_DEBUG_CTX(context.Ctx, "Send next migrate schemeshard event to datashard",
             {"debugHint", DebugHint()},
             {"schemeshard", ssId},
-            {"msg", nextEvent->Record.ShortDebugString()});
+            {"msg", nextEvent->Record.ShortDebugString()}
+        );
 
         auto nextDataShardId = TTabletId(nextEvent->GetDatashardId());
         context.OnComplete.BindMsgToPipe(OperationId, nextDataShardId, TPipeMessageId(0, 0), nextEvent.Release());
@@ -835,7 +852,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TPathId targetPathId = txState->TargetPathId;
 
@@ -889,7 +907,8 @@ public:
         YDB_LOG_DEBUG_CTX(context.Ctx, "Send migrate schemeshard event to datashard",
             {"debugHint", DebugHint()},
             {"schemeshard", ssId},
-            {"msg", event->Record.ShortDebugString()});
+            {"msg", event->Record.ShortDebugString()}
+        );
 
         auto dataShardId = TTabletId(event->GetDatashardId());
         context.OnComplete.BindMsgToPipe(OperationId, dataShardId, TPipeMessageId(0, 0), event.Release());
@@ -934,7 +953,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TPathId pathId = txState->TargetPathId;
 
@@ -947,7 +967,8 @@ public:
             {"debugHint", DebugHint()},
             {"toSchemeshard", tenantSchemeShardId},
             {"schemeshard", ssId},
-            {"msg", event->Record.ShortDebugString()});
+            {"msg", event->Record.ShortDebugString()}
+        );
         context.OnComplete.BindMsgToPipe(OperationId, tenantSchemeShardId, pathId, event);
 
         return false;
@@ -1000,7 +1021,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -1129,7 +1151,8 @@ public:
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
         TString errStr;
@@ -1251,7 +1274,8 @@ public:
             YDB_LOG_NOTICE_CTX(context.Ctx, "TUpgradeSubDomain Propose, dependence has found",
                 {"dependentTransaction", OperationId.GetTxId()},
                 {"parentTransaction", otherTxId},
-                {"schemeshard", ssId});
+                {"schemeshard", ssId}
+            );
 
             Y_ABORT_UNLESS(context.SS->Operations.contains(otherTxId));
             context.OnComplete.Dependence(otherTxId, OperationId.GetTxId());
@@ -1274,7 +1298,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TUpgradeSubDomain AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         TTxState* upgradeState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(upgradeState);
@@ -1317,7 +1342,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState at schemeshard",
             {"debugHint", DebugHint()},
-            {"ssId", ssId});
+            {"ssId", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
 
@@ -1379,7 +1405,8 @@ public:
             {"path", parentPathStr},
             {"name", name},
             {"decision", NKikimrSchemeOp::TUpgradeSubDomain::EDecision_Name(decision)},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
         TString errStr;
@@ -1463,7 +1490,8 @@ public:
                << ", at schemeshard: " << ssId;
 
         YDB_LOG_ERROR_CTX(context.Ctx, "Upgrade subdomain error",
-            {"errMsg", errMsg});
+            {"errMsg", errMsg}
+        );
 
         context.OnComplete.Dependence(txId, OperationId.GetTxId());
         context.OnComplete.ActivateTx(OperationId);
@@ -1480,7 +1508,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TUpgradeSubDomainDecision AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

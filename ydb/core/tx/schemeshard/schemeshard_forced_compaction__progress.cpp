@@ -20,7 +20,8 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
         YDB_LOG_DEBUG_CTX(ctx, "][ForcedCompaction] TForcedCompaction::TTxProgress DoExecute",
             {"tabletId", Self->SelfTabletId()},
             {"forcedCompactionsDoneShardsToPersistSize", Self->ForcedCompactionsDoneShardsToPersist.size()},
-            {"cancellingForcedCompactionsSize", Self->CancellingForcedCompactions.size()});
+            {"cancellingForcedCompactionsSize", Self->CancellingForcedCompactions.size()}
+        );
         THashSet<TForcedCompactionInfo::TPtr> compactionsToPersist;
         compactionsToPersist.reserve(Self->ForcedCompactionsDoneShardsToPersist.size() + Self->CancellingForcedCompactions.size());
         NIceDb::TNiceDb db(txc.DB);
@@ -71,7 +72,8 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
         YDB_LOG_DEBUG_CTX(ctx, "][ForcedCompaction] TForcedCompaction::TTxProgress DoComplete",
             {"tabletId", Self->SelfTabletId()},
             {"forcedCompactionsDoneShardsToPersistSize", Self->ForcedCompactionsDoneShardsToPersist.size()},
-            {"cancellingForcedCompactionsSize", Self->CancellingForcedCompactions.size()});
+            {"cancellingForcedCompactionsSize", Self->CancellingForcedCompactions.size()}
+        );
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 
@@ -84,7 +86,8 @@ private:
         YDB_LOG_TRACE_CTX(ctx, "][ForcedCompaction] TForcedCompaction::TTxProgress SendNotifications: subscribers",
             {"tabletId", Self->SelfTabletId()},
             {"id", info.Id},
-            {"count", info.Subscribers.size()});
+            {"count", info.Subscribers.size()}
+        );
 
         TSet<TActorId> toAnswer;
         toAnswer.swap(info.Subscribers);

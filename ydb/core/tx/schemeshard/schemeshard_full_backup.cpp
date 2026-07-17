@@ -96,7 +96,8 @@ void TSchemeShard::ResumeFullBackups(const TVector<ui64>& ids, const TActorConte
     for (const ui64 id : ids) {
         YDB_LOG_NOTICE_CTX(ctx, "TSchemeShard::ResumeFullBackups: rehydrated full-backup",
             {"id", id},
-            {"schemeshard", TabletID()});
+            {"schemeshard", TabletID()}
+        );
         // Re-subscribe after reboot: id == control op's TxId. If the op already
         // completed before the crash, TEvNotifyTxCompletion replies immediately,
         // so a non-terminal row is always finalized on resume.

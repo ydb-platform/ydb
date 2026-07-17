@@ -42,7 +42,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvUpdateConfigResponse",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -64,7 +65,8 @@ public:
             YDB_LOG_ERROR_CTX(context.Ctx, "Reconfiguration is in progress. We'll try to finish it later. tx tablet",
                 {"debugHint", DebugHint()},
                 {"operationId", OperationId},
-                {"tabletId", tabletId});
+                {"tabletId", tabletId}
+            );
             return false;
         }
 
@@ -88,7 +90,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -153,7 +156,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
             {"step", step},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -197,7 +201,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -226,7 +231,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterFileStore AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -308,7 +314,8 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         {"name", name},
         {"pathId", pathId},
         {"opId", OperationId},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     auto result = MakeHolder<TProposeResponse>(
         NKikimrScheme::StatusAccepted,
@@ -482,7 +489,8 @@ TTxState& TAlterFileStore::PrepareChanges(
 
     YDB_LOG_DEBUG_CTX(context.Ctx, "AlterFileStore AlterVersion",
         {"txid", operationId.GetTxId()},
-        {"alterVersion", fs->AlterVersion});
+        {"alterVersion", fs->AlterVersion}
+    );
 
     context.SS->PersistAddFileStoreAlter(db, item->PathId, fs);
     context.SS->PersistTxState(db, operationId);

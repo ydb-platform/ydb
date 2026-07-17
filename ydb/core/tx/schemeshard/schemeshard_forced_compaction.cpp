@@ -114,7 +114,8 @@ bool TSchemeShard::TryFreeForcedCompactionSlot(NIceDb::TNiceDb& db, const TActor
         YDB_LOG_INFO_CTX(ctx, "[ForcedCompaction] [AutoForget] Forgetting finished to make room for a new operation, at schemeshard",
             {"compaction", id},
             {"limit", limit},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
         ForgetForcedCompaction(db, *ForcedCompactions.at(id));
     }
 
@@ -306,7 +307,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
     if (it == ShardInfos.end()) {
         YDB_LOG_WARN_CTX(ctx, "[ForcedCompaction] Failed to resolve shard info for forced compaction",
             {"shardIdx", shardIdx},
-            {"schemeshard", TabletID()});
+            {"schemeshard", TabletID()}
+        );
 
         CompleteForcedCompactionForShard(shardIdx, ctx);
         return NOperationQueue::EStartStatus::EOperationRemove;
@@ -322,7 +324,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartForcedCompaction(const TShardId
         {"rate", ForcedCompactionQueue->GetRate()},
         {"queue", ForcedCompactionQueue->Size()},
         {"running", ForcedCompactionQueue->RunningSize()},
-        {"tabletID", TabletID()});
+        {"tabletID", TabletID()}
+    );
 
     std::unique_ptr<TEvDataShard::TEvCompactTable> request(
         new TEvDataShard::TEvCompactTable(pathId.OwnerId, pathId.LocalPathId));
@@ -370,14 +373,16 @@ void TSchemeShard::HandleForcedCompactionResult(TEvDataShard::TEvCompactTableRes
         YDB_LOG_WARN_CTX(ctx, "[ForcedCompaction] Failed to resolve shard info for compaction result",
             {"pathId", pathId},
             {"datashard", tabletId},
-            {"schemeshard", TabletID()});
+            {"schemeshard", TabletID()}
+        );
     } else if (record.GetStatus() == NKikimrTxDataShard::TEvCompactTableResult::FAILED) {
         YDB_LOG_WARN_CTX(ctx, "With at schemeshard",
             {"pathId", pathId},
             {"datashard", tabletId},
             {"shardIdx", shardIdx},
             {"status", (int)record.GetStatus()},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
         // do nothing, failed shards will be retried after timeout
     } else {
         if (ForcedCompactionQueue) {
@@ -388,14 +393,16 @@ void TSchemeShard::HandleForcedCompactionResult(TEvDataShard::TEvCompactTableRes
                 {"shardIdx", shardIdx},
                 {"in", duration.MilliSeconds()},
                 {"status", (int)record.GetStatus()},
-                {"tabletID", TabletID()});
+                {"tabletID", TabletID()}
+            );
         } else {
             YDB_LOG_INFO_CTX(ctx, "With at schemeshard (no ForcedCompactionQueue)",
                 {"pathId", pathId},
                 {"datashard", tabletId},
                 {"shardIdx", shardIdx},
                 {"status", (int)record.GetStatus()},
-                {"tabletID", TabletID()});
+                {"tabletID", TabletID()}
+            );
         }
         CompleteForcedCompactionForShard(shardIdx, ctx);
     }
@@ -452,7 +459,8 @@ void TSchemeShard::ProcessForcedCompactionOnSplitMerge(
                 {"dstShardIdxsCount", dstShardIdxs.size()},
                 {"compaction", compaction->Id},
                 {"tablePathId", tablePathId},
-                {"tabletID", TabletID()});
+                {"tabletID", TabletID()}
+            );
             compaction->TotalShardCount = 0;
         }
         compaction->TotalShardCount += dstShardIdxs.size();
@@ -467,7 +475,8 @@ void TSchemeShard::ProcessForcedCompactionOnSplitMerge(
             {"compaction", compaction->Id},
             {"tablePathId", tablePathId},
             {"totalShardCount", compaction->TotalShardCount},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
 
         ScheduleForcedCompactionProgress(ctx);
     }
@@ -482,7 +491,8 @@ void TSchemeShard::EnqueueForcedCompaction(const TShardIdx& shardIdx) {
     if (ForcedCompactionQueue->Enqueue(shardIdx)) {
         YDB_LOG_TRACE_CTX(ctx, "[ForcedCompaction] [Enqueue] Enqueued at schemeshard",
             {"shard", shardIdx},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
     }
 }
 
@@ -494,7 +504,8 @@ void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
     if (it == ShardInfos.end()) {
         YDB_LOG_WARN_CTX(ctx, "[ForcedCompaction] Failed to resolve shard info for forced compaction",
             {"shardIdx", shardIdx},
-            {"schemeshard", TabletID()});
+            {"schemeshard", TabletID()}
+        );
         CompleteForcedCompactionForShard(shardIdx, ctx);
         return;
     }
@@ -508,7 +519,8 @@ void TSchemeShard::OnForcedCompactionTimeout(const TShardIdx& shardIdx) {
         {"in", ForcedCompactionQueue->GetWakeupDelta()},
         {"queue", ForcedCompactionQueue->Size()},
         {"running", ForcedCompactionQueue->RunningSize()},
-        {"tabletID", TabletID()});
+        {"tabletID", TabletID()}
+    );
 
     RetryForcedCompactionForShard(shardIdx, pathId, ctx);
 }

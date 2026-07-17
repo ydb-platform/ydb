@@ -54,7 +54,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
             {"step", step},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -89,7 +90,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -125,7 +127,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvDataShard::TEvSchemaChanged save it",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -137,7 +140,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvPrivate::TEvCompletePublication",
             {"debugHint", DebugHint()},
             {"msg", ev->Get()->ToString()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         Y_ABORT_UNLESS(ActivePathId == ev->Get()->PathId);
 
@@ -156,13 +160,15 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
             {"type", TTxState::TypeName(txState->TxType)},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
 
         if (srcPath.IsActive()) {
             YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState no renaming has been detected for this operation",
-                {"debugHint", DebugHint()});
+                {"debugHint", DebugHint()}
+            );
 
             NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
@@ -203,7 +209,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvDataShard::TEvSchemaChanged save it",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -215,7 +222,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvPrivate::TEvCompleteBarrier",
             {"debugHint", DebugHint()},
             {"msg", ev->Get()->ToString()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -241,7 +249,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
             {"type", TTxState::TypeName(txState->TxType)},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         context.OnComplete.Barrier(OperationId, "RenamePathBarrier");
 
@@ -270,7 +279,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -280,7 +290,8 @@ public:
             {"debugHint", DebugHint()},
             {"sourcePathId", txState->SourcePathId},
             {"targetPathId", txState->TargetPathId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         // clear resources on src
         NIceDb::TNiceDb db(context.GetDB());
@@ -348,7 +359,8 @@ public:
             {"from", srcPathStr},
             {"to", dstPathStr},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         THolder<TProposeResponse> result;
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
@@ -529,14 +541,16 @@ public:
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TMoveTableIndex AbortPropose",
             {"opId", OperationId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TMoveTableIndex AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

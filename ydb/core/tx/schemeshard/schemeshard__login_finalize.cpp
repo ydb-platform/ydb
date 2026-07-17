@@ -26,7 +26,8 @@ public:
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxLoginFinalize Execute",
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
 
         const auto& event = *LoginFinalizeEventPtr->Get();
         if (event.NeedUpdateCache) {
@@ -54,7 +55,8 @@ public:
     void DoComplete(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxLoginFinalize Completed with",
             {"error", (ErrMessage ? ErrMessage : TStringBuf("no errors"))},
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
     }
 
 private:

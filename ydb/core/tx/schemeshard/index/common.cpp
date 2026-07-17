@@ -27,7 +27,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     YDB_LOG_NOTICE("LockPropose",
         {"buildId", buildInfo.Id},
         {"buildState", buildInfo.State},
-        {"proposeRecord", propose->Record.ShortDebugString()});
+        {"proposeRecord", propose->Record.ShortDebugString()}
+    );
 
     return propose;
 }
@@ -65,7 +66,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
     YDB_LOG_NOTICE("UnlockPropose",
         {"buildId", buildInfo.Id},
         {"buildState", buildInfo.State},
-        {"proposeRecord", propose->Record.ShortDebugString()});
+        {"proposeRecord", propose->Record.ShortDebugString()}
+    );
 
     return propose;
 }

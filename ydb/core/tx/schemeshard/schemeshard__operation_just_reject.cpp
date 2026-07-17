@@ -45,7 +45,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TReject Propose",
             {"opId", OperationId},
             {"explain", Response->Record.GetReason()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         Response->Record.SetTxId(ui64(OperationId.GetTxId()));
         Response->Record.SetSchemeshardId(ui64(ssId));

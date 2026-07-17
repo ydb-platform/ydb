@@ -1536,7 +1536,8 @@ struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
                 Status = static_cast<NKikimrPQ::ETopicPartitionStatus>(value);
             } else {
                 YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Read unknown topic partition status value",
-                    {"value", value});
+                    {"value", value}
+                );
                 Status = NKikimrPQ::ETopicPartitionStatus::Active;
             }
         }

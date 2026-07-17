@@ -37,7 +37,8 @@ public:
             {"debugHint", DebugHint()},
             {"operationId", OperationId},
             {"schemeshard", ssId},
-            {"message", ev->Get()->Record.ShortDebugString()});
+            {"message", ev->Get()->Record.ShortDebugString()}
+        );
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -51,7 +52,8 @@ public:
         if (!idx) {
             YDB_LOG_ERROR_CTX(context.Ctx, "Tablet is not known in TxId",
                 {"tabletId", tabletId},
-                {"txId", OperationId.GetTxId()});
+                {"txId", OperationId.GetTxId()}
+            );
             return false;
         }
 
@@ -59,7 +61,8 @@ public:
             YDB_LOG_INFO_CTX(context.Ctx, "Got InitSplitMergeDestinationAck for unknown shard idx tabletId",
                 {"debugHint", DebugHint()},
                 {"idx", idx},
-                {"tabletId", tabletId});
+                {"tabletId", tabletId}
+            );
             return false;
         }
 
@@ -82,7 +85,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "TSplitMerge TConfigureDestination ProgressState",
             {"operationId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -138,7 +142,8 @@ public:
                 {"datashard", datashardId},
                 {"splitOp", OperationId},
                 {"alterVersion", alterVersion},
-                {"tablet", context.SS->TabletID()});
+                {"tablet", context.SS->TabletID()}
+            );
 
             const ui32 rangeIdx = getDstRangeIdx(datashardId);
             const auto& rangeDescr = splitDescr.GetDestinationRanges(rangeIdx);
@@ -205,7 +210,8 @@ public:
             {"debugHint", DebugHint()},
             {"schemeshard", ssId},
             {"operationCookie", ev->Get()->Record.GetOperationCookie()},
-            {"tabletId", ev->Get()->Record.GetTabletId()});
+            {"tabletId", ev->Get()->Record.GetTabletId()}
+        );
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -219,7 +225,8 @@ public:
         if (!srcShardIdx) {
             YDB_LOG_ERROR_CTX(context.Ctx, "Tablet is not known in TxId",
                 {"tabletId", tabletId},
-                {"txId", OperationId.GetTxId()});
+                {"txId", OperationId.GetTxId()}
+            );
             return false;
         }
 
@@ -227,7 +234,8 @@ public:
             YDB_LOG_INFO_CTX(context.Ctx, "Got SplitAck for unknown shard idx tabletId",
                 {"debugHint", DebugHint()},
                 {"srcShardIdx", srcShardIdx},
-                {"tabletId", tabletId});
+                {"tabletId", tabletId}
+            );
             return false;
         }
 
@@ -359,7 +367,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -379,7 +388,8 @@ public:
                 {"debugHint", DebugHint()},
                 {"datashardId", datashardId},
                 {"splitOpId", OperationId},
-                {"tabletId", context.SS->TabletID()});
+                {"tabletId", context.SS->TabletID()}
+            );
 
             auto event = MakeHolder<TEvDataShard::TEvSplit>(ui64(OperationId.GetTxId()));
 
@@ -418,7 +428,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvSplitPartitioningChangedAck",
             {"debugHint", DebugHint()},
             {"datashard", tabletId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -430,7 +441,8 @@ public:
         if (!idx) {
             YDB_LOG_ERROR_CTX(context.Ctx, "Datashard is not listed in tablet to shard map",
                 {"datashard", tabletId},
-                {"opId", OperationId});
+                {"opId", OperationId}
+            );
             return false;
         }
 
@@ -438,7 +450,8 @@ public:
             // TODO: verify that this is a repeated event from known Src shard, not a random one
             YDB_LOG_INFO_CTX(context.Ctx, "Got SplitPartitioningChangedAck from shard that is not a part ot Tx",
                 {"tabletId", tabletId},
-                {"txId", OperationId.GetTxId()});
+                {"txId", OperationId.GetTxId()}
+            );
             return false;
         }
 
@@ -463,7 +476,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -486,7 +500,8 @@ public:
                 YDB_LOG_DEBUG_CTX(context.Ctx, "Src datashard idx for is already deleted or is intended to at tablet",
                     {"shardIdx", shard.Idx},
                     {"splitOp", OperationId.GetTxId()},
-                    {"tabletId", context.SS->TabletID()});
+                    {"tabletId", context.SS->TabletID()}
+                );
                 continue;
             }
 
@@ -496,7 +511,8 @@ public:
             YDB_LOG_DEBUG_CTX(context.Ctx, "Notify src datashard on partitioning changed at tablet",
                 {"datashardId", datashardId},
                 {"splitOp", OperationId.GetTxId()},
-                {"tabletId", context.SS->TabletID()});
+                {"tabletId", context.SS->TabletID()}
+            );
 
             THolder<TEvDataShard::TEvSplitPartitioningChanged> event = MakeHolder<TEvDataShard::TEvSplitPartitioningChanged>(ui64(OperationId.GetTxId()));
 
@@ -831,7 +847,8 @@ public:
             {"tableId", pathId},
             {"opId", OperationId},
             {"schemeshard", ssId},
-            {"request", info.ShortDebugString()});
+            {"request", info.ShortDebugString()}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -844,7 +861,8 @@ public:
                 {"tableId", pathId},
                 {"opId", OperationId},
                 {"schemeshard", ssId},
-                {"request", info.ShortDebugString()});
+                {"request", info.ShortDebugString()}
+            );
         };
 
         TString errStr;
@@ -996,7 +1014,8 @@ public:
                 {"tablePath", info.GetTablePath()},
                 {"pathId", path.Base()->PathId},
                 {"tabletId", context.SS->TabletID()},
-                {"parts", totalSrcPartCount});
+                {"parts", totalSrcPartCount}
+            );
             return result;
         }
 
@@ -1117,7 +1136,8 @@ public:
             {"opId", OperationId},
             {"schemeshard", ssId},
             {"op", op.SplitDescription->ShortDebugString()},
-            {"request", info.ShortDebugString()});
+            {"request", info.ShortDebugString()}
+        );
 
         return result;
     }
@@ -1130,7 +1150,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TSplitMerge AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);

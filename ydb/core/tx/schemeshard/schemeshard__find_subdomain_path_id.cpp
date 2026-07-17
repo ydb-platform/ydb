@@ -19,7 +19,8 @@ public:
 
         const ui64 tabletId = msg->Record.GetTabletId();
         YDB_LOG_DEBUG_CTX(ctx, "FindTabletSubDomainPathId for tablet",
-            {"tabletId", tabletId});
+            {"tabletId", tabletId}
+        );
 
         auto it1 = Self->TabletIdToShardIdx.find(TTabletId(tabletId));
         if (it1 == Self->TabletIdToShardIdx.end()) {

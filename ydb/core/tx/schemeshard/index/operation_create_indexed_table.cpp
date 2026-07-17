@@ -183,7 +183,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         {"shardsToCreate", shardsToCreate},
         {"shardsPerPath", totalCounts.ShardsPerPath},
         {"getShardsInside", domainInfo->GetShardsInside()},
-        {"maxShards", domainInfo->GetSchemeLimits().MaxShards});
+        {"maxShards", domainInfo->GetSchemeLimits().MaxShards}
+    );
 
     if (indexCount > domainInfo->GetSchemeLimits().MaxTableIndices) {
         auto msg = TStringBuilder() << "indexes count has reached maximum value in the table"

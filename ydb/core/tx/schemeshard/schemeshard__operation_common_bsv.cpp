@@ -22,7 +22,8 @@ bool TConfigureParts::HandleReply(TEvBlockStore::TEvUpdateVolumeConfigResponse::
 
     YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvSetConfigResult",
         {"debugHint", DebugHint()},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -42,7 +43,8 @@ bool TConfigureParts::HandleReply(TEvBlockStore::TEvUpdateVolumeConfigResponse::
     if (status == NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS) {
         YDB_LOG_ERROR_CTX(context.Ctx, "BlockStore reconfiguration is in progress. We'll try to finish it later. Tx tablet",
             {"operationId", OperationId},
-            {"tabletId", tabletId});
+            {"tabletId", tabletId}
+        );
         return false;
     }
 
@@ -66,7 +68,8 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
 
     YDB_LOG_INFO_CTX(context.Ctx, "ProgressState at schemeshard",
         {"debugHint", DebugHint()},
-        {"ssId", ssId});
+        {"ssId", ssId}
+    );
 
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -141,7 +144,8 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
 
     YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
         {"debugHint", DebugHint()},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     TTxState* txState = context.SS->FindTx(OperationId);
     if (!txState) {
@@ -192,7 +196,8 @@ bool TPropose::ProgressState(TOperationContext& context) {
 
     YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
         {"debugHint", DebugHint()},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);

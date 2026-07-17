@@ -23,7 +23,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
-            {"step", step});
+            {"step", step}
+        );
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -46,7 +47,8 @@ public:
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"tabletId", context.SS->TabletID()},
-            {"debugHint", DebugHint()});
+            {"debugHint", DebugHint()}
+        );
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -238,7 +240,8 @@ public:
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", parentPathStr},
-            {"name", name});
+            {"name", name}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -266,14 +269,16 @@ public:
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateStreamingQuery AbortPropose",
             {"tabletId", context.SS->TabletID()},
-            {"opId", OperationId});
+            {"opId", OperationId}
+        );
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateStreamingQuery AbortUnsafe",
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
-            {"txId", forceDropTxId});
+            {"txId", forceDropTxId}
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 };
@@ -306,7 +311,8 @@ ISubOperation::TPtr CreateNewStreamingQuery(TOperationId id, const TTxTransactio
     YDB_LOG_INFO_CTX(context.Ctx, "CreateNewStreamingQuery",
         {"tabletId", context.SS->TabletID()},
         {"opId", id},
-        {"tx", tx.ShortDebugString()});
+        {"tx", tx.ShortDebugString()}
+    );
 
     const TPath parentPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     if (const auto checks = NStreamingQuery::TCreateStreamingQuery::IsParentPathValid(parentPath); !checks) {

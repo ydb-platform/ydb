@@ -17,7 +17,8 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const 
     YDB_LOG_DEBUG_CTX(context.Ctx, "CreateNewContinuousBackup",
         {"tabletId", context.SS->TabletID()},
         {"opId", opId},
-        {"tx", tx.ShortDebugString()});
+        {"tx", tx.ShortDebugString()}
+    );
 
     const auto acceptExisted = !tx.GetFailOnExist();
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);

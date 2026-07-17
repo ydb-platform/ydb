@@ -40,7 +40,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tabletId", ssId});
+            {"tabletId", ssId}
+        );
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);
 
@@ -76,7 +77,8 @@ public:
 
             YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState Propose modify scheme on shard",
                 {"debugHint", DebugHint()},
-                {"tabletId", tabletId});
+                {"tabletId", tabletId}
+            );
         }
 
         txState->UpdateShardsInProgress();
@@ -110,7 +112,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
             {"tablet", ssId},
-            {"stepId", step});
+            {"stepId", step}
+        );
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);
 
@@ -149,7 +152,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);
 
@@ -200,7 +204,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);
         txState->ClearShardsInProgress();
@@ -222,7 +227,8 @@ public:
 
             YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState wait for NotifyTxCompletionResult",
                 {"debugHint", DebugHint()},
-                {"tabletId", tabletId});
+                {"tabletId", tabletId}
+            );
         }
 
         return false;
@@ -282,7 +288,8 @@ public:
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         if (Transaction.HasAlterColumnTable() && Transaction.GetAlterColumnTable().HasAlterSchema()) {
             if (auto checkResult = CheckColumns(Transaction.GetAlterColumnTable().GetAlterSchema().GetAddColumns(), AppData()); !checkResult) {
@@ -399,7 +406,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterColumnTable AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

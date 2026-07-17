@@ -35,7 +35,8 @@ public:
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 YDB_LOG_CRIT_CTX(*TlsActivationContext, "TTabletMigrator StateWork unexpected event 0x%08x",
-                    {"eventType", ev->GetTypeRewrite()});
+                    {"eventType", ev->GetTypeRewrite()}
+                );
         }
     }
 
@@ -44,7 +45,8 @@ private:
         YDB_LOG_DEBUG("TabletMigrator - send TEvAllocateTxId working dir db",
             {"workingDir", Current.WorkingDir},
             {"name", Current.DbName},
-            {"schemeshard", SSTabletId});
+            {"schemeshard", SSTabletId}
+        );
 
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
     }
@@ -75,7 +77,8 @@ private:
         YDB_LOG_DEBUG("TabletMigrator - send TEvModifySchemeTransaction working dir db",
             {"workingDir", Current.WorkingDir},
             {"name", Current.DbName},
-            {"schemeshard", SSTabletId});
+            {"schemeshard", SSTabletId}
+        );
 
         Send(SSActorId, request.Release());
     }
@@ -86,7 +89,8 @@ private:
 
         YDB_LOG_DEBUG("TabletMigrator - send TEvNotifyTxCompletion txId",
             {"txId", txId},
-            {"schemeshard", SSTabletId});
+            {"schemeshard", SSTabletId}
+        );
 
         Send(SSActorId, request.Release());
     }
@@ -105,7 +109,8 @@ private:
     void Handle(TEvents::TEvWakeup::TPtr&) {
         YDB_LOG_DEBUG("TabletMigrator - start processing migrations queue",
             {"size", Queue.size()},
-            {"schemeshard", SSTabletId});
+            {"schemeshard", SSTabletId}
+        );
 
         StartNextMigration();
     }
@@ -115,7 +120,8 @@ private:
 
         YDB_LOG_DEBUG("TabletMigrator - handle TEvAllocateTxIdResult",
             {"txId", txId},
-            {"schemeshard", SSTabletId});
+            {"schemeshard", SSTabletId}
+        );
 
         SendModifyScheme(txId);
     }
@@ -128,7 +134,8 @@ private:
         YDB_LOG_DEBUG("TabletMigrator - handle TEvModifySchemeTransactionResult",
             {"status", status},
             {"txId", txId},
-            {"schemeshard", SSTabletId});
+            {"schemeshard", SSTabletId}
+        );
 
         switch (status) {
         case NKikimrScheme::StatusSuccess:
@@ -142,7 +149,8 @@ private:
                 {"status", status},
                 {"reason", record.GetReason()},
                 {"txId", txId},
-                {"schemeshard", SSTabletId});
+                {"schemeshard", SSTabletId}
+            );
 
             StartNextMigration();
             break;
@@ -152,7 +160,8 @@ private:
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
         YDB_LOG_DEBUG("TabletMigrator - handle TEvNotifyTxCompletionResult",
             {"txId", ev->Get()->Record.GetTxId()},
-            {"schemeshard", SSTabletId});
+            {"schemeshard", SSTabletId}
+        );
 
         StartNextMigration();
     }

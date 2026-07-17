@@ -13,7 +13,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartBorrowedCompaction(const TShard
     if (it == ShardInfos.end()) {
         YDB_LOG_WARN_CTX(ctx, "[BorrowedCompaction] Failed to resolve shard info for borrowed compaction",
             {"compaction", shardIdx},
-            {"schemeshard", TabletID()});
+            {"schemeshard", TabletID()}
+        );
 
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
@@ -28,7 +29,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartBorrowedCompaction(const TShard
         {"rate", BorrowedCompactionQueue->GetRate()},
         {"queue", BorrowedCompactionQueue->Size()},
         {"running", BorrowedCompactionQueue->RunningSize()},
-        {"tabletID", TabletID()});
+        {"tabletID", TabletID()}
+    );
 
     std::unique_ptr<TEvDataShard::TEvCompactBorrowed> request(
         new TEvDataShard::TEvCompactBorrowed(pathId.OwnerId, pathId.LocalPathId));
@@ -53,7 +55,8 @@ void TSchemeShard::OnBorrowedCompactionTimeout(const TShardIdx& shardIdx) {
     if (it == ShardInfos.end()) {
         YDB_LOG_WARN_CTX(ctx, "[BorrowedCompaction] Failed to resolve shard info for borrowed compaction",
             {"compaction", shardIdx},
-            {"schemeshard", TabletID()});
+            {"schemeshard", TabletID()}
+        );
         return;
     }
 
@@ -66,7 +69,8 @@ void TSchemeShard::OnBorrowedCompactionTimeout(const TShardIdx& shardIdx) {
         {"wakeup", BorrowedCompactionQueue->GetWakeupDelta()},
         {"queue", BorrowedCompactionQueue->Size()},
         {"running", BorrowedCompactionQueue->RunningSize()},
-        {"tabletID", TabletID()});
+        {"tabletID", TabletID()}
+    );
 
     // retry
     EnqueueBorrowedCompaction(shardIdx);
@@ -102,7 +106,8 @@ void TSchemeShard::EnqueueBorrowedCompaction(const TShardIdx& shardIdx) {
     if (BorrowedCompactionQueue->Enqueue(shardIdx)) {
         YDB_LOG_TRACE_CTX(ctx, "Borrowed compaction enqueued at schemeshard",
             {"shard", shardIdx},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
         UpdateBorrowedCompactionQueueMetrics();
     }
 }
@@ -145,7 +150,8 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, cons
             {"rate", BorrowedCompactionQueue->GetRate()},
             {"queue", BorrowedCompactionQueue->Size()},
             {"running", BorrowedCompactionQueue->RunningSize()},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
     } else {
         YDB_LOG_INFO_CTX(ctx, "Next in shards shards at schemeshard",
             {"pathId", pathId},
@@ -156,7 +162,8 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, cons
             {"rate", BorrowedCompactionQueue->GetRate()},
             {"queue", BorrowedCompactionQueue->Size()},
             {"running", BorrowedCompactionQueue->RunningSize()},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
     }
 
     RunningBorrowedCompactions.erase(shardIdx);

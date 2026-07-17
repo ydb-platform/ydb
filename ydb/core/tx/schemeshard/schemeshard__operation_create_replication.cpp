@@ -127,7 +127,8 @@ public:
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"tabletId", context.SS->TabletID()},
-            {"debugHint", DebugHint()});
+            {"debugHint", DebugHint()}
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -150,7 +151,8 @@ public:
                 YDB_LOG_DEBUG_CTX(context.Ctx, "Shard is not created yet",
                     {"tabletId", context.SS->TabletID()},
                     {"debugHint", DebugHint()},
-                    {"shardIdx", shard.Idx});
+                    {"shardIdx", shard.Idx}
+                );
                 context.OnComplete.WaitShardCreated(shard.Idx, OperationId);
             } else {
                 auto ev = MakeHolder<NReplication::TEvController::TEvCreateReplication>();
@@ -180,7 +182,8 @@ public:
                     {"tabletId", context.SS->TabletID()},
                     {"debugHint", DebugHint()},
                     {"replicationTabletId", tabletId},
-                    {"ev", ev->ToString()});
+                    {"ev", ev->ToString()}
+                );
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, pathId, ev.Release());
             }
 
@@ -194,7 +197,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply",
             {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
-            {"message", ev->Get()->ToString()});
+            {"message", ev->Get()->ToString()}
+        );
 
         const auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         const auto status = ev->Get()->Record.GetStatus();
@@ -208,7 +212,8 @@ public:
                 {"tabletId", context.SS->TabletID()},
                 {"debugHint", DebugHint()},
                 {"replicationTabletId", tabletId},
-                {"status", static_cast<int>(status)});
+                {"status", static_cast<int>(status)}
+            );
             return false;
         }
 
@@ -221,7 +226,8 @@ public:
         if (!txState->ShardsInProgress.erase(shardIdx)) {
             YDB_LOG_WARN_CTX(context.Ctx, "Ignoring duplicate TEvCreateReplicationResult",
                 {"tabletId", context.SS->TabletID()},
-                {"debugHint", DebugHint()});
+                {"debugHint", DebugHint()}
+            );
             return false;
         }
 
@@ -263,7 +269,8 @@ public:
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"tabletId", context.SS->TabletID()},
-            {"debugHint", DebugHint()});
+            {"debugHint", DebugHint()}
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -279,7 +286,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
-            {"step", step});
+            {"step", step}
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -386,7 +394,8 @@ public:
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"path", workingDir},
-            {"name", name});
+            {"name", name}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
 
@@ -565,7 +574,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateReplication AbortUnsafe",
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
-            {"txId", txId});
+            {"txId", txId}
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 

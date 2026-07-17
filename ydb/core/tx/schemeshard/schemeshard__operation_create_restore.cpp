@@ -48,7 +48,8 @@ struct TRestore {
             YDB_LOG_DEBUG_CTX(context.Ctx, "Propose restore",
                 {"shard", shardId},
                 {"opId", opId},
-                {"schemeshard", context.SS->TabletID()});
+                {"schemeshard", context.SS->TabletID()}
+            );
         
             auto fillRestoreTask = [&](auto& restore) {
                 restore.CopyFrom(restoreSettings);

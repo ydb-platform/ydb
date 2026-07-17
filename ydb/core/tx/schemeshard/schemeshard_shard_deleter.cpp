@@ -22,7 +22,8 @@ void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
     YDB_LOG_DEBUG_CTX(ctx, "SendDeleteRequests to hive",
         {"shardsToDeleteCount", shardsToDelete.size()},
         {"hiveTabletId", hiveTabletId},
-        {"myTabletID", MyTabletID});
+        {"myTabletID", MyTabletID}
+    );
 
     if (shardsToDelete.empty())
         return;
@@ -51,7 +52,8 @@ void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
         YDB_LOG_DEBUG_CTX(ctx, "Free shard at hive",
             {"shardIdx", shardIdx},
             {"hiveTabletId", hiveTabletId},
-            {"myTabletID", MyTabletID});
+            {"myTabletID", MyTabletID}
+        );
 
         NTabletPipe::SendData(ctx, info.PipeToHive, event.Release());
     }
@@ -60,12 +62,14 @@ void TShardDeleter::SendDeleteRequests(TTabletId hiveTabletId,
 void TShardDeleter::ResendDeleteRequests(TTabletId hiveTabletId, const THashMap<TShardIdx, TShardInfo>& shardsInfos, const NActors::TActorContext &ctx) {
     YDB_LOG_NOTICE_CTX(ctx, "Resending tablet deletion requests",
         {"myTabletID", MyTabletID},
-        {"hiveTabletId", hiveTabletId});
+        {"hiveTabletId", hiveTabletId}
+    );
 
     auto itPerHive = PerHiveDeletions.find(hiveTabletId);
     if (itPerHive == PerHiveDeletions.end()) {
         YDB_LOG_WARN_CTX(ctx, "Hive not found for delete requests",
-            {"hiveTabletId", hiveTabletId});
+            {"hiveTabletId", hiveTabletId}
+        );
         return;
     }
 
@@ -81,7 +85,8 @@ void TShardDeleter::ResendDeleteRequest(TTabletId hiveTabletId,
                                         const NActors::TActorContext &ctx) {
     YDB_LOG_NOTICE_CTX(ctx, "Resending tablet deletion request",
         {"myTabletID", MyTabletID},
-        {"hiveTabletId", hiveTabletId});
+        {"hiveTabletId", hiveTabletId}
+    );
 
     auto itPerHive = PerHiveDeletions.find(hiveTabletId);
     if (itPerHive == PerHiveDeletions.end())
@@ -98,7 +103,8 @@ void TShardDeleter::ResendDeleteRequest(TTabletId hiveTabletId,
     } else {
         YDB_LOG_WARN_CTX(ctx, "Shard not found for delete request for Hive",
             {"shardIdx", shardIdx},
-            {"hiveTabletId", hiveTabletId});
+            {"hiveTabletId", hiveTabletId}
+        );
     }
 }
 
@@ -109,7 +115,8 @@ void TShardDeleter::RedirectDeleteRequest(TTabletId hiveFromTabletId,
                                           const NActors::TActorContext &ctx) {
     YDB_LOG_NOTICE_CTX(ctx, "Redirecting tablet deletion requests",
         {"hiveFromTabletId", hiveFromTabletId},
-        {"hiveToTabletId", hiveToTabletId});
+        {"hiveToTabletId", hiveToTabletId}
+    );
     auto itFromHive = PerHiveDeletions.find(hiveFromTabletId);
     if (itFromHive != PerHiveDeletions.end()) {
         auto& toHive(PerHiveDeletions[hiveToTabletId]);
@@ -120,7 +127,8 @@ void TShardDeleter::RedirectDeleteRequest(TTabletId hiveFromTabletId,
         } else {
             YDB_LOG_WARN_CTX(ctx, "Shard not found for delete request for Hive",
                 {"shardIdx", shardIdx},
-                {"hiveFromTabletId", hiveFromTabletId});
+                {"hiveFromTabletId", hiveFromTabletId}
+            );
         }
         if (itFromHive->second.ShardsToDelete.empty()) {
             PerHiveDeletions.erase(itFromHive);

@@ -127,7 +127,8 @@ protected:
         YDB_LOG_DEBUG("Put file response",
             {"uploadPath", upload.Path},
             {"self", this->SelfId()},
-            {"result", result});
+            {"result", result}
+        );
 
         if (!result.IsSuccess()) {
             return RetryOrFinish(result.GetError(), upload);
@@ -228,7 +229,8 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
 
         YDB_LOG_DEBUG("HandleSchemeDescription",
             {"self", this->SelfId()},
-            {"status", describeResult.GetStatus()});
+            {"status", describeResult.GetStatus()}
+        );
 
         if (describeResult.GetStatus() != TEvSchemeShard::EStatus::StatusSuccess) {
             return Finish(false, describeResult.GetReason());
@@ -307,7 +309,8 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
         YDB_LOG_INFO("Finish",
             {"self", this->SelfId()},
             {"success", success},
-            {"error", error});
+            {"error", error}
+        );
 
         this->Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(ExportId, ItemIdx, success, error));
         this->PassAway();
@@ -481,7 +484,8 @@ private:
         YDB_LOG_INFO("Finish uploading export metadata",
             {"self", this->SelfId()},
             {"success", success},
-            {"error", error});
+            {"error", error}
+        );
 
         this->Send(SchemeShard, new TEvPrivate::TEvExportUploadMetadataResult(ExportId, success, error));
         this->PassAway();

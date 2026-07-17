@@ -35,12 +35,14 @@ public:
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] TTxProgressIncrementalRestore::Execute",
             {"operationId", OperationId},
-            {"tablet", Self->TabletID()});
+            {"tablet", Self->TabletID()}
+        );
 
         auto stateIt = Self->IncrementalRestoreStates.find(OperationId);
         if (stateIt == Self->IncrementalRestoreStates.end()) {
             YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] No incremental restore state found",
-                {"operation", OperationId});
+                {"operation", OperationId}
+            );
             return true;
         }
 
@@ -51,7 +53,8 @@ public:
             state.State == TIncrementalRestoreState::EState::Failed) {
             YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Incremental restore already in state skipping progress check",
                 {"state", static_cast<ui32>(state.State)},
-                {"operation", OperationId});
+                {"operation", OperationId}
+            );
             return true;
         }
 
@@ -73,14 +76,16 @@ public:
                                                          TOperationId{}, db);
             YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Persisted full IncrementalRestoreState dispatch view (in-memory",
                 {"completed", state.CompletedOperations.size()},
-                {"tableOps", state.TableOperations.size()});
+                {"tableOps", state.TableOperations.size()}
+            );
         }
 
         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Checking completion",
             {"inProgressOperationsCount", state.InProgressOperations.size()},
             {"completedOperationsCount", state.CompletedOperations.size()},
             {"currentIncrementalIdx", state.CurrentIncrementalIdx},
-            {"incrementalBackupsCount", state.IncrementalBackups.size()});
+            {"incrementalBackupsCount", state.IncrementalBackups.size()}
+        );
 
         if (!state.AreAllCurrentOperationsComplete()) {
             const TInstant now = ctx.Now();
@@ -99,7 +104,8 @@ public:
                     {"stageExpired", stageExpired},
                     {"overall", overall},
                     {"stage", stage},
-                    {"inProgress", state.InProgressOperations.size()});
+                    {"inProgress", state.InProgressOperations.size()}
+                );
                 TSchemeShard::PersistIncrementalRestoreTerminalState(Self, db, OperationId, state,
                     TIncrementalRestoreState::EState::Failed,
                     static_cast<ui32>(Ydb::StatusIds::TIMEOUT),
@@ -121,7 +127,8 @@ public:
                 FinalizeIncrementalRestoreOperation(txc, ctx, state);
             } else {
                 YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] No operations in progress, starting incremental backup",
-                    {"currentIncrementalIdx", state.CurrentIncrementalIdx});
+                    {"currentIncrementalIdx", state.CurrentIncrementalIdx}
+                );
                 ProcessNextIncrementalBackup(state, db, ctx);
             }
             return true;
@@ -137,7 +144,8 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] TTxProgressIncrementalRestore::Complete",
-            {"operationId", OperationId});
+            {"operationId", OperationId}
+        );
     }
 
 private:
@@ -197,7 +205,8 @@ private:
                 {"overallExpired", overallExpired},
                 {"stageExpired", stageExpired},
                 {"overall", overall},
-                {"stage", stage});
+                {"stage", stage}
+            );
             state.RetryScheduled = false;
             state.NextRetryAttemptAt = TInstant::Zero();
             const bool deadlineExpiry = (overallExpired || stageExpired);
@@ -224,7 +233,8 @@ private:
                 YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Backoff window in flight for incremental (until re-armed wakeup",
                     {"currentIncrementalIdx", state.CurrentIncrementalIdx},
                     {"nextRetryAttemptAt", state.NextRetryAttemptAt},
-                    {"remaining", remaining});
+                    {"remaining", remaining}
+                );
                 return true;
             }
 
@@ -235,7 +245,8 @@ private:
             const bool deadlinesUnlimited = (overall == -1) && (stage == -1);
             if (state.FreshBootRetryAbsorbPending && deadlinesUnlimited) {
                 YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Backoff timer fired for incremental absorbing failed sub-ops post-reboot",
-                    {"currentIncrementalIdx", state.CurrentIncrementalIdx});
+                    {"currentIncrementalIdx", state.CurrentIncrementalIdx}
+                );
                 state.FreshBootRetryAbsorbPending = false;
                 state.RetryScheduled = false;
                 state.NextRetryAttemptAt = TInstant::Zero();
@@ -267,7 +278,8 @@ private:
             }
 
             YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Backoff timer fired for incremental proceeding with retry attempt",
-                {"currentIncrementalIdx", state.CurrentIncrementalIdx});
+                {"currentIncrementalIdx", state.CurrentIncrementalIdx}
+            );
             state.RetryScheduled = false;
             state.NextRetryAttemptAt = TInstant::Zero();
             state.RetryNeeded = false;
@@ -310,7 +322,8 @@ private:
             {"currentIncrementalIdx", state.CurrentIncrementalIdx},
             {"delay", delay},
             {"overallDeadline", (overall == -1 ? TString("unlimited") : ToString(overall) + "s")},
-            {"stageDeadline", (stage == -1 ? TString("unlimited") : ToString(stage) + "s")});
+            {"stageDeadline", (stage == -1 ? TString("unlimited") : ToString(stage) + "s")}
+        );
         Self->Schedule(delay,
             new TEvPrivate::TEvProgressIncrementalRestore(OperationId));
         return true;
@@ -335,7 +348,8 @@ private:
 
         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] After MoveToNextIncremental",
             {"currentIncrementalIdx", state.CurrentIncrementalIdx},
-            {"incrementalBackupsCount", state.IncrementalBackups.size()});
+            {"incrementalBackupsCount", state.IncrementalBackups.size()}
+        );
 
         if (state.AllIncrementsProcessed()) {
             YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] All incremental backups processed, performing finalization");
@@ -387,11 +401,13 @@ private:
                         {"opId", opId},
                         {"operationId", OperationId},
                         {"failedShardsCount", tableOp.FailedShards.size()},
-                        {"expectedShardsCount", tableOp.ExpectedShards.size()});
+                        {"expectedShardsCount", tableOp.ExpectedShards.size()}
+                    );
                 } else {
                     YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Path A sub-op completed successfully for incremental restore",
                         {"opId", opId},
-                        {"operationId", OperationId});
+                        {"operationId", OperationId}
+                    );
                 }
                 state.CompletedOperations.insert(opId);
                 operationsCompleted = true;
@@ -427,7 +443,8 @@ private:
                                     {"opId", opId},
                                     {"recordedShards", recordedShards},
                                     {"expectedShardsCount", tableOp.ExpectedShards.size()},
-                                    {"incrementalRestoreId", OperationId});
+                                    {"incrementalRestoreId", OperationId}
+                                );
                                 Self->FailedIncrementalRestoreOperations.insert(opId);
                             }
                         }
@@ -437,11 +454,13 @@ private:
                         hasFailedOperations = true;
                         YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] Operation FAILED for incremental restore will retry",
                             {"opId", opId},
-                            {"operationId", OperationId});
+                            {"operationId", OperationId}
+                        );
                     } else {
                         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Operation completed successfully for incremental restore",
                             {"opId", opId},
-                            {"operationId", OperationId});
+                            {"operationId", OperationId}
+                        );
                     }
                     state.CompletedOperations.insert(opId);
                     operationsCompleted = true;
@@ -497,7 +516,8 @@ private:
         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Processing incremental backup",
             {"nextIncrementalIdx", state.CurrentIncrementalIdx + 1},
             {"path", currentIncremental->BackupPath},
-            {"timestamp", currentIncremental->Timestamp});
+            {"timestamp", currentIncremental->Timestamp}
+        );
 
         Self->EnqueueIncrementalRestoreOperations(
             state.BackupCollectionPathId,
@@ -516,7 +536,8 @@ private:
 
     void FinalizeIncrementalRestoreOperation(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx, TIncrementalRestoreState& state) {
         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Enqueuing finalization of incremental restore",
-            {"operation", OperationId});
+            {"operation", OperationId}
+        );
 
         auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
         auto& record = request->Record;
@@ -652,12 +673,14 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const 
         {"incrementalBackupCount", incrementalBackupNames.size()},
         {"backupCollectionPathId", backupCollectionPathId},
         {"operationId", operationId},
-        {"tablet", TabletID()});
+        {"tablet", TabletID()}
+    );
 
     auto itBc = BackupCollections.find(backupCollectionPathId);
     if (itBc == BackupCollections.end()) {
         YDB_LOG_ERROR_CTX(ctx, "[IncrementalRestore] Backup collection not found",
-            {"pathId", backupCollectionPathId});
+            {"pathId", backupCollectionPathId}
+        );
         return;
     }
 
@@ -673,11 +696,13 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const 
         TPathId dummyPathId;
         state.AddIncrementalBackup(dummyPathId, backupName, 0);
         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Handle(TEvRunIncrementalRestore) added incremental backup",
-            {"backupName", backupName});
+            {"backupName", backupName}
+        );
     }
 
     YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Handle(TEvRunIncrementalRestore) state now has incremental backups",
-        {"incrementalBackupsCount", state.IncrementalBackups.size()});
+        {"incrementalBackupsCount", state.IncrementalBackups.size()}
+    );
 
     IncrementalRestoreStates[ui64(operationId.GetTxId())] = std::move(state);
 
@@ -689,7 +714,8 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev, c
 
     YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Handle(TEvProgressIncrementalRestore)",
         {"operationId", operationId},
-        {"tablet", TabletID()});
+        {"tablet", TabletID()}
+    );
 
     Execute(new TTxProgressIncrementalRestore(this, operationId), ctx);
 }
@@ -703,19 +729,22 @@ void TSchemeShard::EnqueueIncrementalRestoreOperations(
     YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] EnqueueIncrementalRestoreOperations",
         {"backup", backupName},
         {"operationId", operationId},
-        {"backupCollectionPathId", backupCollectionPathId});
+        {"backupCollectionPathId", backupCollectionPathId}
+    );
 
     auto itBc = BackupCollections.find(backupCollectionPathId);
     if (itBc == BackupCollections.end()) {
         YDB_LOG_ERROR_CTX(ctx, "[IncrementalRestore] Backup collection not found",
-            {"pathId", backupCollectionPathId});
+            {"pathId", backupCollectionPathId}
+        );
         return;
     }
 
     auto stateIt = IncrementalRestoreStates.find(operationId);
     if (stateIt == IncrementalRestoreStates.end()) {
         YDB_LOG_ERROR_CTX(ctx, "[IncrementalRestore] Incremental restore state not found",
-            {"operation", operationId});
+            {"operation", operationId}
+        );
         return;
     }
 
@@ -727,7 +756,8 @@ void TSchemeShard::EnqueueIncrementalRestoreOperations(
         TString err;
         if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
             YDB_LOG_ERROR_CTX(ctx, "[IncrementalRestore] Failed to split",
-                {"path", err});
+                {"path", err}
+            );
             continue;
         }
 
@@ -737,7 +767,8 @@ void TSchemeShard::EnqueueIncrementalRestoreOperations(
 
         if (!incrBackupPath.IsResolved()) {
             YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] Incremental backup path not",
-                {"found", incrBackupPathStr});
+                {"found", incrBackupPathStr}
+            );
             continue;
         }
 
@@ -747,7 +778,8 @@ void TSchemeShard::EnqueueIncrementalRestoreOperations(
         pending.TablePath = item.GetPath();
         stateIt->second.PendingTables.push_back(std::move(pending));
         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Enqueued table sub-op",
-            {"for", item.GetPath()});
+            {"for", item.GetPath()}
+        );
     }
 
     EnqueueAndDiscoverIndexRestoreOperations(
@@ -761,7 +793,8 @@ void TSchemeShard::EnqueueIncrementalRestoreOperations(
 
     YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Enqueued sub-ops for incremental",
         {"pendingTablesCount", stateIt->second.PendingTables.size()},
-        {"backup", backupName});
+        {"backup", backupName}
+    );
 }
 
 void TSchemeShard::DispatchPendingIncrementalRestoreTables(
@@ -810,7 +843,8 @@ void TSchemeShard::DispatchPendingIncrementalRestoreTables(
         {"inFlightOperationsCount", state.InProgressOperations.size()},
         {"awaitingTxIdCount", state.PendingItems.size()},
         {"pending", state.PendingTables.size()},
-        {"cap", cap});
+        {"cap", cap}
+    );
 }
 
 void TSchemeShard::TrackIncrementalRestoreSubOpAndExpectedShards(
@@ -850,7 +884,8 @@ void TSchemeShard::DispatchIncrementalRestoreShardRequests(
     if (!srcTableInfoPtr) {
         YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] DispatchIncrementalRestoreShardRequests: src table not found",
             {"subOpId", subOpId},
-            {"srcPathId", srcPathId});
+            {"srcPathId", srcPathId}
+        );
         return;
     }
 
@@ -874,7 +909,8 @@ void TSchemeShard::DispatchIncrementalRestoreShardRequests(
         auto shardInfoIt = ShardInfos.find(shardIdx);
         if (shardInfoIt == ShardInfos.end()) {
             YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] DispatchIncrementalRestoreShardRequests: ShardInfo missing",
-                {"shardIdx", shardIdx});
+                {"shardIdx", shardIdx}
+            );
             continue;
         }
         const TTabletId tabletId = shardInfoIt->second.TabletID;
@@ -891,7 +927,8 @@ void TSchemeShard::DispatchIncrementalRestoreShardRequests(
         {"incrementalRestoreId", incrementalRestoreId},
         {"srcPathId", srcPathId},
         {"dstPathId", dstPathId},
-        {"shards", dispatch.ShardTablets.size()});
+        {"shards", dispatch.ShardTablets.size()}
+    );
 }
 
 void TSchemeShard::SendIncrementalRestoreShardRequest(
@@ -919,7 +956,8 @@ void TSchemeShard::SendIncrementalRestoreShardRequest(
         {"restoreOpId", ui64(restoreOpId)},
         {"subOpId", subOpId},
         {"shardIdx", shardIdx},
-        {"tabletId", tabletId});
+        {"tabletId", tabletId}
+    );
 }
 
 void TSchemeShard::PersistIncrementalRestoreShardDispatch(
@@ -1010,7 +1048,8 @@ void TSchemeShard::RetryIncrementalRestorePipe(
     auto stateIt = IncrementalRestoreStates.find(ui64(restoreOpId));
     if (stateIt == IncrementalRestoreStates.end()) {
         YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] RetryIncrementalRestorePipe: no state",
-            {"restoreOpId", ui64(restoreOpId)});
+            {"restoreOpId", ui64(restoreOpId)}
+        );
         return;
     }
     auto& state = stateIt->second;
@@ -1035,7 +1074,8 @@ void TSchemeShard::RetryIncrementalRestorePipe(
     YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] RetryIncrementalRestorePipe",
         {"reissued", reissued},
         {"restoreOpId", ui64(restoreOpId)},
-        {"tabletId", tabletId});
+        {"tabletId", tabletId}
+    );
 }
 
 void TSchemeShard::CreateSingleTableRestoreOperation(
@@ -1052,7 +1092,8 @@ void TSchemeShard::CreateSingleTableRestoreOperation(
     TString err;
     if (!TrySplitPathByDb(targetTablePath, bcPath.GetDomainPathString(), paths, err)) {
         YDB_LOG_ERROR_CTX(ctx, "[IncrementalRestore] Failed to split",
-            {"path", err});
+            {"path", err}
+        );
         return;
     }
     auto& relativeItemPath = paths.second;
@@ -1062,13 +1103,15 @@ void TSchemeShard::CreateSingleTableRestoreOperation(
 
     if (!incrBackupPath.IsResolved()) {
         YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] Incremental backup path not found at dispatch",
-            {"time", incrBackupPathStr});
+            {"time", incrBackupPathStr}
+        );
         return;
     }
 
     YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Enqueuing separate restore operation for ->",
         {"table", incrBackupPathStr},
-        {"targetTablePath", targetTablePath});
+        {"targetTablePath", targetTablePath}
+    );
 
     auto stateIt = IncrementalRestoreStates.find(operationId);
     if (stateIt == IncrementalRestoreStates.end()) {
@@ -1142,7 +1185,8 @@ void TSchemeShard::EnqueueIncrementalRestoreIndexesRecursive(
     if (!targetTablePath.empty()) {
         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Found table ->",
             {"mapping", accumulatedRelativePath},
-            {"targetTablePath", targetTablePath});
+            {"targetTablePath", targetTablePath}
+        );
 
         for (const auto& [indexName, indexDirPathId] : currentPath.Base()->GetChildren()) {
             auto indexPathInBackup = TPath::Init(indexDirPathId, this);
@@ -1158,7 +1202,8 @@ void TSchemeShard::EnqueueIncrementalRestoreIndexesRecursive(
                 YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Enqueued index",
                     {"subOperationName", indexName},
                     {"implName", implName},
-                    {"targetTablePath", targetTablePath});
+                    {"targetTablePath", targetTablePath}
+                );
             }
         }
     } else {
@@ -1204,12 +1249,14 @@ void TSchemeShard::EnqueueAndDiscoverIndexRestoreOperations(
     const TPath& indexMetaPath = TPath::Resolve(indexMetaBasePath, this);
     if (!indexMetaPath.IsResolved()) {
         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] No index metadata found (this is normal if no indexes were backed up)",
-            {"at", indexMetaBasePath});
+            {"at", indexMetaBasePath}
+        );
         return;
     }
 
     YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Discovering indexes for restore",
-        {"at", indexMetaBasePath});
+        {"at", indexMetaBasePath}
+    );
 
     EnqueueIncrementalRestoreIndexesRecursive(
         operationId,
@@ -1236,12 +1283,14 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
         {"table", targetTablePath},
         {"index", indexName},
         {"relativeTablePath", relativeTablePath},
-        {"specificImplTableName", specificImplTableName});
+        {"specificImplTableName", specificImplTableName}
+    );
 
     const TPath targetTablePathObj = TPath::Resolve(targetTablePath, this);
     if (!targetTablePathObj.IsResolved() || !targetTablePathObj.Base()->IsTable()) {
         YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] Target table not found or",
-            {"invalid", targetTablePath});
+            {"invalid", targetTablePath}
+        );
         return;
     }
 
@@ -1258,7 +1307,8 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
                 auto indexInfoIt = Indexes.find(indexPathId);
                 if (indexInfoIt == Indexes.end()) {
                     YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] Index info not found",
-                        {"pathId", indexPathId});
+                        {"pathId", indexPathId}
+                    );
                     return;
                 }
                 auto indexInfo = indexInfoIt->second;
@@ -1266,7 +1316,8 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
                 if (!IsSupportedIndex(indexPathId, this)) {
                     YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Skipping index with unsupported",
                         {"type", indexName},
-                        {"indexType", indexInfo->Type});
+                        {"indexType", indexInfo->Type}
+                    );
                     return;
                 }
 
@@ -1278,7 +1329,8 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
                         indexFound = true;
                         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Found index impl",
                             {"table", indexName},
-                            {"implName", implName});
+                            {"implName", implName}
+                        );
                         break;
                     }
                 }
@@ -1291,7 +1343,8 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
         YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] Index (or specific table not found on table - skipping (index may have been dropped)",
             {"indexName", indexName},
             {"specificImplTableName", specificImplTableName},
-            {"targetTablePath", targetTablePath});
+            {"targetTablePath", targetTablePath}
+        );
         return;
     }
 
@@ -1308,7 +1361,8 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
     const TPath& srcBackupPath = TPath::Resolve(srcIndexBackupPath, this);
     if (!srcBackupPath.IsResolved()) {
         YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] Index backup not found",
-            {"at", srcIndexBackupPath});
+            {"at", srcIndexBackupPath}
+        );
         return;
     }
 
@@ -1317,7 +1371,8 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
 
     YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Enqueuing index restore ->",
         {"operation", srcIndexBackupPath},
-        {"dstIndexImplPath", dstIndexImplPath});
+        {"dstIndexImplPath", dstIndexImplPath}
+    );
 
     auto stateIt = IncrementalRestoreStates.find(operationId);
     if (stateIt == IncrementalRestoreStates.end()) {
@@ -1357,7 +1412,8 @@ void TSchemeShard::NotifyIncrementalRestoreOperationCompleted(const TOperationId
 
         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] Operation completed, triggering progress check for incremental restore",
             {"operationId", operationId},
-            {"incrementalRestoreId", incrementalRestoreId});
+            {"incrementalRestoreId", incrementalRestoreId}
+        );
 
         auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(incrementalRestoreId);
         ctx.Send(ctx.SelfID, progressEvent.Release());
@@ -1396,7 +1452,8 @@ void TSchemeShard::EnqueueIncrementalRestoreItem(
         {"op", originalOpId},
         {"itemSeq", state.PendingItems.back().ItemSeq},
         {"kind", static_cast<ui32>(kind)},
-        {"tablePathId", tablePathId});
+        {"tablePathId", tablePathId}
+    );
     ctx.Send(TxAllocatorClient,
         new TEvTxAllocatorClient::TEvAllocate(),
         /*flags=*/0,
@@ -1455,19 +1512,22 @@ public:
 
         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] TTxProgressIncrementalRestoreAllocateResult",
             {"originalOpId", originalOpId},
-            {"txIdsCount", Ev->Get()->TxIds.size()});
+            {"txIdsCount", Ev->Get()->TxIds.size()}
+        );
 
         auto stateIt = Self->IncrementalRestoreStates.find(originalOpId);
         if (stateIt == Self->IncrementalRestoreStates.end()) {
             YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] TTxProgressIncrementalRestoreAllocateResult: state for not found; dropping allocator result",
-                {"originalOpId", originalOpId});
+                {"originalOpId", originalOpId}
+            );
             return true;
         }
         auto& state = stateIt->second;
 
         if (state.PendingItems.empty()) {
             YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] TTxProgressIncrementalRestoreAllocateResult: no PendingItems for op dropping allocator result",
-                {"originalOpId", originalOpId});
+                {"originalOpId", originalOpId}
+            );
             return true;
         }
         const ui32 itemSeq = state.PendingItems.front().ItemSeq;
@@ -1475,7 +1535,8 @@ public:
         if (Ev->Get()->TxIds.empty()) {
             YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] TTxProgressIncrementalRestoreAllocateResult: empty TxIds; scheduling allocator retry for op itemSeq",
                 {"originalOpId", originalOpId},
-                {"itemSeq", itemSeq});
+                {"itemSeq", itemSeq}
+            );
             ScheduleAllocatorRetry(originalOpId, itemSeq, ctx);
             return true;
         }
@@ -1521,7 +1582,8 @@ public:
                 {"itemSeq", itemSeq},
                 {"subOpId", subOpId},
                 {"srcTablePathId", srcTablePathId},
-                {"tablePathId", tablePathId});
+                {"tablePathId", tablePathId}
+            );
 
             Self->DispatchIncrementalRestoreShardRequests(
                 subOpId, srcTablePathId, tablePathId,
@@ -1533,7 +1595,8 @@ public:
         if (!baseRequest) {
             YDB_LOG_ERROR_CTX(ctx, "[IncrementalRestore] TTxProgressIncrementalRestoreAllocateResult: missing PendingRequest for op itemSeq",
                 {"originalOpId", originalOpId},
-                {"itemSeq", itemSeq});
+                {"itemSeq", itemSeq}
+            );
             return true;
         }
         auto* request = static_cast<TEvSchemeShard::TEvModifySchemeTransaction*>(baseRequest.Release());
@@ -1550,7 +1613,8 @@ public:
         YDB_LOG_INFO_CTX(ctx, "[IncrementalRestore] TTxProgressIncrementalRestoreAllocateResult: dispatching ModifyScheme for op itemSeq allocatedTxId",
             {"originalOpId", originalOpId},
             {"itemSeq", itemSeq},
-            {"allocatedTxId", allocatedTxId});
+            {"allocatedTxId", allocatedTxId}
+        );
         Self->Send(Self->SelfId(), request);
         return true;
     }
@@ -1596,7 +1660,8 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRest
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "[IncrementalRestore] Transaction is not associated with incremental restore",
-        {"txId", txId});
+        {"txId", txId}
+    );
     return nullptr;
 }
 
@@ -1607,7 +1672,8 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRest
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "[IncrementalRestore] Transaction is not associated with incremental restore",
-        {"completedTxId", completedTxId});
+        {"completedTxId", completedTxId}
+    );
     return nullptr;
 }
 
@@ -1633,7 +1699,8 @@ public:
                 {"generation", generation},
                 {"current", Self->Generation()},
                 {"subOpTxId", subOpTxId},
-                {"tabletId", tabletId});
+                {"tabletId", tabletId}
+            );
             return true;
         }
 
@@ -1642,7 +1709,8 @@ public:
         if (opStateIt == Self->IncrementalRestoreOperationToState.end()) {
             YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] [IncrementalRestore] TEvIncrementalRestoreShardProgress dropped: unknown SubOpTxId",
                 {"subOpTxId", subOpTxId},
-                {"tabletId", tabletId});
+                {"tabletId", tabletId}
+            );
             return true;
         }
         const ui64 originalOpId = opStateIt->second;
@@ -1651,7 +1719,8 @@ public:
         if (stateIt == Self->IncrementalRestoreStates.end()) {
             YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] [IncrementalRestore] TEvIncrementalRestoreShardProgress dropped: no state for op",
                 {"originalOpId", originalOpId},
-                {"subOpTxId", subOpTxId});
+                {"subOpTxId", subOpTxId}
+            );
             return true;
         }
         auto& state = stateIt->second;
@@ -1659,7 +1728,8 @@ public:
         auto opIt = state.TableOperations.find(opId);
         if (opIt == state.TableOperations.end()) {
             YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] [IncrementalRestore] TEvIncrementalRestoreShardProgress dropped: no TableOperationState",
-                {"subOpTxId", subOpTxId});
+                {"subOpTxId", subOpTxId}
+            );
             return true;
         }
         auto& tableOp = opIt->second;
@@ -1667,7 +1737,8 @@ public:
         auto* shardIdxPtr = Self->TabletIdToShardIdx.FindPtr(TTabletId(tabletId));
         if (!shardIdxPtr) {
             YDB_LOG_WARN_CTX(ctx, "[IncrementalRestore] [IncrementalRestore] TEvIncrementalRestoreShardProgress dropped: unknown TabletId",
-                {"tabletId", tabletId});
+                {"tabletId", tabletId}
+            );
             return true;
         }
         const TShardIdx shardIdx = *shardIdxPtr;
@@ -1682,7 +1753,8 @@ public:
             {"endStatus", static_cast<int>(endStatus)},
             {"success", success},
             {"retriable", retriable},
-            {"recorded", recorded});
+            {"recorded", recorded}
+        );
 
         if (!success) {
             Self->FailedIncrementalRestoreOperations.insert(opId);

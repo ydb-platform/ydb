@@ -32,7 +32,8 @@ public:
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"selfTabletId", context.SS->SelfTabletId()},
-            {"debugHint", DebugHint()});
+            {"debugHint", DebugHint()}
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -109,7 +110,8 @@ public:
             {"status", NKikimrProto::EReplyStatus_Name(record.GetStatus())},
             {"hive", record.GetOrigin()},
             {"owner", record.GetOwner()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         if (record.GetStatus() != NKikimrProto::EReplyStatus::OK && record.GetStatus() != NKikimrProto::EReplyStatus::ALREADY) {
             TStringBuilder errMsg;
@@ -118,7 +120,8 @@ public:
                    << ", at schemeshard: " << ssId << " ";
             NActors::NStructuredLog::TTextWriter().Write(errMsg, DebugHint());
             YDB_LOG_ERROR_CTX(context.Ctx, "Drop ext subdomain error",
-                {"errMsg", errMsg});
+                {"errMsg", errMsg}
+            );
             Y_VERIFY_DEBUG_S(false, errMsg);
             return false;
         }
@@ -141,7 +144,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -194,7 +198,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
             {"step", step},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropExtSubDomain);
@@ -232,7 +237,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -301,7 +307,8 @@ public:
             {"name", name},
             {"pathId", drop.GetId()},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 

@@ -44,7 +44,8 @@ public:
         YDB_LOG_DEBUG_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvProposeTransactionResult",
             {"debugHint", DebugHint()},
             {"tabletId", ssId},
-            {"message", ev->Get()->Record.ShortDebugString()});
+            {"message", ev->Get()->Record.ShortDebugString()}
+        );
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
@@ -55,7 +56,8 @@ public:
         YDB_LOG_DEBUG_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvProposeTransactionResult",
             {"debugHint", DebugHint()},
             {"tabletId", ssId},
-            {"message", ev->Get()->Record.ShortDebugString()});
+            {"message", ev->Get()->Record.ShortDebugString()}
+        );
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
@@ -66,7 +68,8 @@ public:
         YDB_LOG_DEBUG_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TConfigurePart ProgressState",
             {"kindName", TKind::Name()},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -135,7 +138,8 @@ public:
                 {"domainPathId", pathIdForDomainId},
                 {"isDomainSchemeShard", context.SS->IsDomainSchemeShard},
                 {"parentDomainId", context.SS->ParentDomainId},
-                {"resourcesDomainId", domainPath.DomainInfo()->GetResourcesDomainId()});
+                {"resourcesDomainId", domainPath.DomainInfo()->GetResourcesDomainId()}
+            );
         };
 
         if (!context.SS->IsServerlessDomain(domainPath)) {
@@ -178,7 +182,8 @@ public:
             {"opId", operationId},
             {"domain", domainPath.PathString()},
             {"domainPathId", pathIdForDomainId},
-            {"record", billRecord});
+            {"record", billRecord}
+        );
 
         context.OnComplete.Send(NMetering::MakeMeteringServiceID(),
             new NMetering::TEvMetering::TEvWriteMeteringJson(std::move(billRecord)));
@@ -284,7 +289,8 @@ public:
         YDB_LOG_INFO_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvNotifyTxCompletionResult",
             {"debugHint", DebugHint()},
             {"tablet", ssId},
-            {"message", evRecord.ShortDebugString()});
+            {"message", evRecord.ShortDebugString()}
+        );
 
         bool allnotificationsReceived = NTableState::CollectSchemaChanged(OperationId, ev, context);
         CollectStats(OperationId, ev, context);
@@ -311,7 +317,8 @@ public:
         YDB_LOG_INFO_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvSchemaChanged",
             {"debugHint", DebugHint()},
             {"tablet", ssId},
-            {"message", evRecord.ShortDebugString()});
+            {"message", evRecord.ShortDebugString()}
+        );
 
         bool allnotificationsReceived = NTableState::CollectSchemaChanged(OperationId, ev, context);
         CollectStats(OperationId, ev, context);
@@ -336,7 +343,8 @@ public:
 
         YDB_LOG_INFO_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
 
@@ -410,7 +418,8 @@ public:
 
         YDB_LOG_DEBUG_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState at tablet",
             {"debugHint", DebugHint()},
-            {"ssId", ssId});
+            {"ssId", ssId}
+        );
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -437,7 +446,8 @@ public:
                 {"kindName", TKind::Name()},
                 {"datashard", datashardId},
                 {"opId", OperationId},
-                {"schemeshard", context.SS->TabletID()});
+                {"schemeshard", context.SS->TabletID()}
+            );
 
             auto event = MakeHolder<TEvCancel>(ui64(OperationId.GetTxId()), txState->TargetPathId.LocalPathId);
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
@@ -486,7 +496,8 @@ public:
 
         YDB_LOG_INFO_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvSchemaChanged triggers early, save it",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         TProposedWaitParts<TKind>::CollectStats(OperationId, ev, context);
@@ -500,7 +511,8 @@ public:
         YDB_LOG_INFO_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
             {"stepId", step},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -525,7 +537,8 @@ public:
 
         YDB_LOG_INFO_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -721,7 +734,8 @@ public:
             {"path", parentPath},
             {"name", name},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -796,7 +810,8 @@ public:
             {"kindName", TKind::Name()},
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

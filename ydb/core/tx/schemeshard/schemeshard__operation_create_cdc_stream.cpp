@@ -33,7 +33,8 @@ public:
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"tabletId", context.SS->TabletID()},
-            {"debugHint", DebugHint()});
+            {"debugHint", DebugHint()}
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -49,7 +50,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
-            {"step", step});
+            {"step", step}
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -122,7 +124,8 @@ public:
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
             {"stream", workingDir},
-            {"streamName", streamName});
+            {"streamName", streamName}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
@@ -325,7 +328,8 @@ public:
             {"operationId", OperationId},
             {"cdcPathId", streamPath.Base()->PathId},
             {"streamName", streamPath.Base()->Name},
-            {"schemeshard", context.SS->SelfTabletId()});
+            {"schemeshard", context.SS->SelfTabletId()}
+        );
         txState.State = TTxState::Propose;
 
         streamPath.Base()->PathState = NKikimrSchemeOp::EPathStateCreate;
@@ -349,14 +353,16 @@ public:
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TNewCdcStream AbortPropose",
             {"tabletId", context.SS->TabletID()},
-            {"opId", OperationId});
+            {"opId", OperationId}
+        );
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TNewCdcStream AbortUnsafe",
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
-            {"txId", txId});
+            {"txId", txId}
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 
@@ -416,7 +422,8 @@ public:
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"tabletId", context.SS->TabletID()},
-            {"debugHint", DebugHint()});
+            {"debugHint", DebugHint()}
+        );
 
         context.OnComplete.Barrier(OperationId, "DoneBarrier");
         return false;
@@ -425,7 +432,8 @@ public:
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvCompleteBarrier",
             {"tabletId", context.SS->TabletID()},
-            {"debugHint", DebugHint()});
+            {"debugHint", DebugHint()}
+        );
 
         if (!TDone::Process(context)) {
             return false;
@@ -538,7 +546,8 @@ public:
             {"opId", OperationId},
             {"stream", workingDir},
             {"tableName", tableName},
-            {"streamName", streamName});
+            {"streamName", streamName}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
@@ -612,7 +621,8 @@ public:
                 {"operationId", OperationId},
                 {"cdcPathId", streamPath.Base()->PathId},
                 {"streamName", streamName},
-                {"schemeshard", context.SS->SelfTabletId()});
+                {"schemeshard", context.SS->SelfTabletId()}
+            );
         }
 
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
@@ -631,14 +641,16 @@ public:
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TNewCdcStreamAtTable AbortPropose",
             {"tabletId", context.SS->TabletID()},
-            {"opId", OperationId});
+            {"opId", OperationId}
+        );
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TNewCdcStreamAtTable AbortUnsafe",
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
-            {"txId", txId});
+            {"txId", txId}
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 
@@ -955,7 +967,8 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
     YDB_LOG_DEBUG_CTX(context.Ctx, "CreateNewCdcStream",
         {"tabletId", context.SS->TabletID()},
         {"opId", opId},
-        {"tx", tx.ShortDebugString()});
+        {"tx", tx.ShortDebugString()}
+    );
 
     if (!AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
         return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()

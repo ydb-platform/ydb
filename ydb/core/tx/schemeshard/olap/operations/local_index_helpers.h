@@ -31,7 +31,8 @@ inline bool ConvertOlapIndexToCreationConfig(
             if (it == columnIdToName.end()) {
                 YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: BloomFilter column ID not found in columnIdToName map for index",
                     {"colId", colId},
-                    {"indexName", indexProto.GetName()});
+                    {"indexName", indexProto.GetName()}
+                );
                 return false;
             }
             config.AddKeyColumnNames(it->second);
@@ -44,7 +45,8 @@ inline bool ConvertOlapIndexToCreationConfig(
         if (it == columnIdToName.end()) {
             YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: BloomNGrammFilter column ID not found in columnIdToName map for index",
                 {"columnId", indexProto.GetBloomNGrammFilter().GetColumnId()},
-                {"indexName", indexProto.GetName()});
+                {"indexName", indexProto.GetName()}
+            );
             return false;
         }
         config.AddKeyColumnNames(it->second);
@@ -57,7 +59,8 @@ inline bool ConvertOlapIndexToCreationConfig(
         if (it == columnIdToName.end()) {
             YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: MinMaxIndex column ID not found in columnIdToName map for index",
                 {"columnId", indexProto.GetMinMaxIndex().GetColumnId()},
-                {"indexName", indexProto.GetName()});
+                {"indexName", indexProto.GetName()}
+            );
             return false;
         }
         config.AddKeyColumnNames(it->second);
@@ -69,7 +72,8 @@ inline bool ConvertOlapIndexToCreationConfig(
             if (it == columnIdToName.end()) {
                 YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: CountMinSketch column ID not found in columnIdToName map for index",
                     {"colId", colId},
-                    {"indexName", indexProto.GetName()});
+                    {"indexName", indexProto.GetName()}
+                );
                 return false;
             }
             config.AddKeyColumnNames(it->second);
@@ -77,7 +81,8 @@ inline bool ConvertOlapIndexToCreationConfig(
         return true;
     }
     YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: Unrecognized index type for index",
-        {"indexName", indexProto.GetName()});
+        {"indexName", indexProto.GetName()}
+    );
     return false;
 }
 
@@ -102,7 +107,8 @@ inline bool ConvertOlapIndexToRequested(
                 if (it == columnIdToName.end()) {
                     YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToRequested: BloomFilter column ID not found in columnIdToName map for index",
                         {"colId", colId},
-                        {"indexName", src.GetName()});
+                        {"indexName", src.GetName()}
+                    );
                     return false;
                 }
                 bf->AddColumnNames(it->second);
@@ -122,7 +128,8 @@ inline bool ConvertOlapIndexToRequested(
                 if (it == columnIdToName.end()) {
                     YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToRequested: BloomNGrammFilter column ID not found in columnIdToName map for index",
                         {"columnId", src.GetBloomNGrammFilter().GetColumnId()},
-                        {"indexName", src.GetName()});
+                        {"indexName", src.GetName()}
+                    );
                     return false;
                 }
                 nf->SetColumnName(it->second);
@@ -157,7 +164,8 @@ inline bool ConvertOlapIndexToRequested(
                 if (it == columnIdToName.end()) {
                     YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToRequested: MinMaxIndex column ID not found in columnIdToName map for index",
                         {"columnId", src.GetMinMaxIndex().GetColumnId()},
-                        {"indexName", src.GetName()});
+                        {"indexName", src.GetName()}
+                    );
                     return false;
                 }
                 min_max->SetColumnName(it->second);
@@ -171,7 +179,8 @@ inline bool ConvertOlapIndexToRequested(
                 if (it == columnIdToName.end()) {
                     YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToRequested: CountMinSketch column ID not found in columnIdToName map for index",
                         {"colId", colId},
-                        {"indexName", src.GetName()});
+                        {"indexName", src.GetName()}
+                    );
                     return false;
                 }
                 sketch->AddColumnNames(it->second);

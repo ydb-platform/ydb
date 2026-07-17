@@ -36,7 +36,8 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         YDB_LOG_DEBUG_CTX(context.Ctx, "Execute cancel tx",
             {"operationId", OperationId},
-            {"targetOpId", TargetOperationId});
+            {"targetOpId", TargetOperationId}
+        );
 
         auto proposeResult = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
         auto result = MakeHolder<TEvSchemeShard::TEvCancelTxResult>(ui64(TargetOperationId.GetTxId()), ui64(OperationId.GetTxId()));

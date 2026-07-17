@@ -1524,7 +1524,8 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
                 {"opId", opId},
                 {"headOpId", headOpId},
                 {"headOpPath", headOpPath.PathString()},
-                {"id", headOpPath->PathId});
+                {"id", headOpPath->PathId}
+            );
 
             return headOpPath.Child(pathParts.back());
         }
@@ -1534,7 +1535,8 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
 
     YDB_LOG_DEBUG("ResolveWithInactive: NO attach to the TargetPath of head operation",
         {"path", path},
-        {"opId", opId});
+        {"opId", opId}
+    );
 
     return Resolve(nullPrefix, std::move(pathParts));
 }

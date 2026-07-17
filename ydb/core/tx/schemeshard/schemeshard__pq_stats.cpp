@@ -41,7 +41,8 @@ bool TTxStoreTopicStats::PersistSingleStats(const TPathId& pathId, const TStatsQ
         YDB_LOG_WARN_CTX(ctx, "Got wrong periodic topic stats at partition DataSize must be greater than or equal to UsedReserveSize but DataSize UsedReserveSize",
             {"pathId", pathId},
             {"dataSize", rec.GetDataSize()},
-            {"usedReserveSize", rec.GetUsedReserveSize()});
+            {"usedReserveSize", rec.GetUsedReserveSize()}
+        );
         return true;
     }
 
@@ -98,7 +99,8 @@ void TSchemeShard::Handle(TEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const T
     YDB_LOG_INFO_CTX(ctx, "Got periodic topic stats at partition DataSize UsedReserveSize",
         {"pathId", pathId},
         {"dataSize", rec.GetDataSize()},
-        {"usedReserveSize", rec.GetUsedReserveSize()});
+        {"usedReserveSize", rec.GetUsedReserveSize()}
+    );
 
     TStatsId statsId(pathId);
     switch(TopicStatsQueue.Add(statsId, ev.Release())) {
@@ -118,7 +120,8 @@ void TSchemeShard::Handle(TEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const T
 void TSchemeShard::Handle(TEvPrivate::TEvPersistTopicStats::TPtr&, const TActorContext& ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Started TEvPersistStats at tablet queue",
         {"tabletID", TabletID()},
-        {"size", TopicStatsQueue.Size()});
+        {"size", TopicStatsQueue.Size()}
+    );
 
     TopicStatsBatchScheduled = false;
     ExecuteTopicStatsBatch(ctx);
@@ -127,7 +130,8 @@ void TSchemeShard::Handle(TEvPrivate::TEvPersistTopicStats::TPtr&, const TActorC
 void TSchemeShard::ExecuteTopicStatsBatch(const TActorContext& ctx) {
     if (!TopicPersistStatsPending && !TopicStatsQueue.Empty()) {
         YDB_LOG_TRACE_CTX(ctx, "Will execute TTxStoreStats",
-            {"queue", TopicStatsQueue.Size()});
+            {"queue", TopicStatsQueue.Size()}
+        );
 
         TopicPersistStatsPending = true;
         EnqueueExecute(new TTxStoreTopicStats(this, TopicStatsQueue, TopicPersistStatsPending));
@@ -141,7 +145,8 @@ void TSchemeShard::ScheduleTopicStatsBatch(const TActorContext& ctx) {
         TDuration delay = TopicStatsQueue.Delay();
         YDB_LOG_TRACE_CTX(ctx, "Will delay TTxStoreTopicStats",
             {"on", delay},
-            {"queue", TopicStatsQueue.Size()});
+            {"queue", TopicStatsQueue.Size()}
+        );
 
         ctx.Schedule(delay, new TEvPrivate::TEvPersistTopicStats());
         TopicStatsBatchScheduled = true;

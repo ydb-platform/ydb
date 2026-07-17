@@ -48,7 +48,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "TChangePathStateOp Propose",
             {"tabletId", context.SS->TabletID()},
-            {"opId", OperationId});
+            {"opId", OperationId}
+        );
 
         const auto& changePathState = tx.GetChangePathState();
         TString pathStr = JoinPath({tx.GetWorkingDir(), changePathState.GetPath()});
@@ -92,7 +93,8 @@ public:
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TChangePathStateOp AbortPropose",
             {"tabletId", context.SS->TabletID()},
-            {"opId", OperationId});
+            {"opId", OperationId}
+        );
         // Nothing to cleanup since Propose hasn't committed anything yet
     }
 
@@ -100,7 +102,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TChangePathStateOp AbortUnsafe",
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
-            {"forceDropId", forceDropTxId});
+            {"forceDropId", forceDropTxId}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

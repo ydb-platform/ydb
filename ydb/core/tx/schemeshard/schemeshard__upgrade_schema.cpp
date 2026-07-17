@@ -37,13 +37,15 @@ struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
             if (rootRow.IsValid()) {
                 // has root row
                 YDB_LOG_NOTICE_CTX(ctx, "UpgradeInitState as Done",
-                    {"schemeshardId", Self->TabletID()});
+                    {"schemeshardId", Self->TabletID()}
+                );
                 Self->InitState = TTenantInitState::Done;
                 Self->PersistInitState(db);
             } else {
                 // no root row
                 YDB_LOG_NOTICE_CTX(ctx, "UpgradeInitState as Uninitialized",
-                    {"schemeshardId", Self->TabletID()});
+                    {"schemeshardId", Self->TabletID()}
+                );
                 Self->InitState = TTenantInitState::Uninitialized;
                 Self->PersistInitState(db);
             }
@@ -116,7 +118,8 @@ struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
     void Complete(const TActorContext &ctx) override {
         if (!IsOk) {
             YDB_LOG_CRIT_CTX(ctx, "Send TEvPoisonPill to self",
-                {"tabletId", Self->TabletID()});
+                {"tabletId", Self->TabletID()}
+            );
             ctx.Send(Self->SelfId(), new TEvents::TEvPoisonPill());
             return;
         }

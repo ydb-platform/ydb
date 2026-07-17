@@ -59,7 +59,8 @@ protected:
 
         YDB_LOG_TRACE_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "SendNotifications: subscribers",
             {"id", info->Id},
-            {"count", info->Subscribers.size()});
+            {"count", info->Subscribers.size()}
+        );
 
         TSet<TActorId> toAnswer;
         toAnswer.swap(info->Subscribers);

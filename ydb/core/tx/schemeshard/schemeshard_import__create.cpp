@@ -224,7 +224,8 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         YDB_LOG_DEBUG("TImport::TTxCreate: DoExecute");
         YDB_LOG_TRACE("Message:\n",
-            {"request", request.ShortDebugString()});
+            {"request", request.ShortDebugString()}
+        );
 
         auto response = MakeHolder<TEvImport::TEvCreateImportResponse>(request.GetTxId());
 
@@ -395,9 +396,11 @@ private:
     ) {
         YDB_LOG_DEBUG("TImport::TTxCreate: Reply",
             {"status", status},
-            {"error", errorMessage});
+            {"error", errorMessage}
+        );
         YDB_LOG_TRACE("Message:\n",
-            {"responseRecord", response->Record.ShortDebugString()});
+            {"responseRecord", response->Record.ShortDebugString()}
+        );
 
         auto& entry = *response->Record.MutableResponse()->MutableEntry();
         entry.SetStatus(status);
@@ -572,7 +575,8 @@ private:
 
         YDB_LOG_INFO("TImport::TTxProgress: Get scheme",
             {"info", importInfo->ToString()},
-            {"item", item.ToString(itemIdx)});
+            {"item", item.ToString(itemIdx)}
+        );
 
         item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV));
         Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
@@ -580,7 +584,8 @@ private:
 
     void GetSchemaMapping(TImportInfo::TPtr importInfo, const TActorContext& ctx) {
         YDB_LOG_INFO("TImport::TTxProgress: Download schema mapping",
-            {"info", importInfo->ToString()});
+            {"info", importInfo->ToString()}
+        );
 
         importInfo->SchemaMappingGetter = ctx.RegisterWithSameMailbox(CreateSchemaMappingGetter(Self->SelfId(), importInfo));
         Self->RunningImportSchemeGetters.emplace(importInfo->SchemaMappingGetter);
@@ -596,7 +601,8 @@ private:
         YDB_LOG_INFO("TImport::TTxProgress: CreateTable propose",
             {"info", importInfo},
             {"item", item.ToString(itemIdx)},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
 
@@ -616,7 +622,8 @@ private:
 
         YDB_LOG_INFO("TImport::TTxProgress: ProcessSysViewRestore",
             {"info", importInfo->ToString()},
-            {"item", item.ToString(itemIdx)});
+            {"item", item.ToString(itemIdx)}
+        );
 
         const auto ev = DescribePath(Self, ctx, item.DstPathName);
         const auto& describeResult = ev->GetRecord();
@@ -624,7 +631,8 @@ private:
 
         if (status == NKikimrScheme::StatusPathDoesNotExist) {
             YDB_LOG_INFO("TImport::TTxProgress: ProcessSysViewRestore system view does not exist",
-                {"item", item.ToString(itemIdx)});
+                {"item", item.ToString(itemIdx)}
+            );
 
             item.State = EState::Done;
             return;
@@ -636,7 +644,8 @@ private:
             const auto& pathDescription = describeResult.GetPathDescription();
             if (!FillSysViewDescription(describeSysViewResult, pathDescription, status, error)) {
                 YDB_LOG_INFO("TImport::TTxProgress: ProcessSysViewRestore path is not a system view",
-                    {"item", item.ToString(itemIdx)});
+                    {"item", item.ToString(itemIdx)}
+                );
 
                 item.State = EState::Done;
                 return;
@@ -645,7 +654,8 @@ private:
             const auto compatibilityStatus = NYdb::NDump::CheckSysViewCompatibility(*item.SysView, describeSysViewResult);
             if (!compatibilityStatus.IsSuccess()) {
                 YDB_LOG_ERROR("TImport::TTxProgress: ProcessSysViewRestore system view compatibility check failed",
-                    {"item", item.ToString(itemIdx)});
+                    {"item", item.ToString(itemIdx)}
+                );
 
                 return CancelAndPersist(db, importInfo, itemIdx, compatibilityStatus.GetIssues().ToString(),
                     "sysview compatibility check failed");
@@ -655,7 +665,8 @@ private:
                     return;
                 } else {
                     YDB_LOG_INFO("TImport::TTxProgress: ProcessSysViewRestore needs to restore ACL",
-                        {"item", item.ToString(itemIdx)});
+                        {"item", item.ToString(itemIdx)}
+                    );
 
                     AllocateTxId(*importInfo, itemIdx);
                     return;
@@ -677,7 +688,8 @@ private:
         YDB_LOG_INFO("TImport::TTxProgress: RestoreSysViewPermissions propose",
             {"info", importInfo},
             {"item", item.ToString(itemIdx)},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
 
@@ -716,7 +728,8 @@ private:
         YDB_LOG_INFO("TImport::TTxProgress: CreateTopic propose",
             {"info", importInfo},
             {"item", item.ToString(itemIdx)},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
 
@@ -738,7 +751,8 @@ private:
         YDB_LOG_INFO("TImport::TTxProgress: ExecutePreparedQuery",
             {"info", importInfo->ToString()},
             {"item", item.ToString(itemIdx)},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
 
@@ -776,7 +790,8 @@ private:
 
         YDB_LOG_DEBUG("TImport::TTxProgress: delay scheme object query execution delayed",
             {"id", importInfo->Id},
-            {"item", itemIdx});
+            {"item", itemIdx}
+        );
 
         item.State = EState::Waiting;
         Self->PersistImportItemState(db, *importInfo, itemIdx);
@@ -817,7 +832,8 @@ private:
             importInfo.WaitingSchemeObjects = std::ssize(retriedItems);
             YDB_LOG_DEBUG("TImport::TTxProgress: retry scheme object query execution retried",
                 {"id", importInfo.Id},
-                {"items", JoinSeq(", ", retriedItems)});
+                {"items", JoinSeq(", ", retriedItems)}
+            );
         }
     }
 
@@ -830,7 +846,8 @@ private:
         YDB_LOG_INFO("TImport::TTxProgress: Restore propose",
             {"info", importInfo},
             {"item", item.ToString(itemIdx)},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         Send(Self->SelfId(), RestoreTableDataPropose(Self, txId, importInfo, itemIdx));
@@ -852,7 +869,8 @@ private:
 
         YDB_LOG_INFO("TImport::TTxProgress: cancel restore's tx",
             {"info", importInfo},
-            {"item", item.ToString(itemIdx)});
+            {"item", item.ToString(itemIdx)}
+        );
 
         Send(Self->SelfId(), CancelRestoreTableDataPropose(importInfo, item.WaitTxId), 0, importInfo.Id);
         return true;
@@ -867,7 +885,8 @@ private:
         YDB_LOG_INFO("TImport::TTxProgress: build index",
             {"info", importInfo},
             {"item", item.ToString(itemIdx)},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         Send(Self->SelfId(), BuildIndexPropose(Self, txId, importInfo, itemIdx, MakeIndexBuildUid(importInfo, itemIdx)));
@@ -889,7 +908,8 @@ private:
 
         YDB_LOG_INFO("TImport::TTxProgress: cancel index building",
             {"info", importInfo},
-            {"item", item.ToString(itemIdx)});
+            {"item", item.ToString(itemIdx)}
+        );
 
         Send(Self->SelfId(), CancelIndexBuildPropose(Self, importInfo, item.WaitTxId), 0, importInfo.Id);
         return true;
@@ -903,7 +923,8 @@ private:
         YDB_LOG_INFO("TImport::TTxProgress: CreateChangefeed propose",
             {"info", importInfo},
             {"item", item.ToString(itemIdx)},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
 
@@ -924,7 +945,8 @@ private:
         YDB_LOG_INFO("TImport::TTxProgress: CreateConsumers propose",
             {"info", importInfo},
             {"item", item.ToString(itemIdx)},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
 
@@ -939,7 +961,8 @@ private:
 
         YDB_LOG_INFO("TImport::TTxProgress: Allocate txId",
             {"info", importInfo},
-            {"item", item.ToString(itemIdx)});
+            {"item", item.ToString(itemIdx)}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
         Send(Self->TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(), 0, importInfo.Id);
@@ -953,7 +976,8 @@ private:
 
         YDB_LOG_INFO("TImport::TTxProgress: Wait for completion",
             {"info", importInfo},
-            {"item", item.ToString(itemIdx)});
+            {"item", item.ToString(itemIdx)}
+        );
 
         Y_ABORT_UNLESS(item.WaitTxId != InvalidTxId);
         Send(Self->SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(ui64(item.WaitTxId)));
@@ -1057,7 +1081,8 @@ private:
         YDB_LOG_NOTICE("Cancelling",
             {"progressMarker", marker},
             {"info", importInfo},
-            {"itemLogStr", itemLogStr});
+            {"itemLogStr", itemLogStr}
+        );
 
         importInfo.State = EState::Cancelled;
 
@@ -1184,7 +1209,8 @@ private:
 
         YDB_LOG_DEBUG("TImport::TTxProgress: Resume",
             {"id", Id},
-            {"itemIdx", ItemIdx});
+            {"itemIdx", ItemIdx}
+        );
 
         switch (importInfo->State) {
             case EState::DownloadExportMetadata: {
@@ -1210,7 +1236,8 @@ private:
 
         YDB_LOG_DEBUG("TImport::TTxProgress: Resume",
             {"info", importInfo->ToString()},
-            {"item", item.ToString(itemIdx)});
+            {"item", item.ToString(itemIdx)}
+        );
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -1303,11 +1330,13 @@ private:
         YDB_LOG_DEBUG("TImport::TTxProgress: OnSchemeResult",
             {"id", msg.ImportId},
             {"itemIdx", msg.ItemIdx},
-            {"success", msg.Success});
+            {"success", msg.Success}
+        );
 
         if (!Self->Imports.contains(msg.ImportId)) {
             YDB_LOG_ERROR("TImport::TTxProgress: OnSchemeResult received unknown id",
-                {"id", msg.ImportId});
+                {"id", msg.ImportId}
+            );
             return;
         }
 
@@ -1315,7 +1344,8 @@ private:
         if (msg.ItemIdx >= importInfo->Items.size()) {
             YDB_LOG_ERROR("TImport::TTxProgress: OnSchemeResult received unknown item",
                 {"id", msg.ImportId},
-                {"item", msg.ItemIdx});
+                {"item", msg.ItemIdx}
+            );
             return;
         }
 
@@ -1412,11 +1442,13 @@ private:
 
         YDB_LOG_DEBUG("TImport::TTxProgress: OnSchemaMappingResult",
             {"id", msg.ImportId},
-            {"success", msg.Success});
+            {"success", msg.Success}
+        );
 
         if (!Self->Imports.contains(msg.ImportId)) {
             YDB_LOG_ERROR("TImport::TTxProgress: OnSchemaMappingResult received unknown id",
-                {"id", msg.ImportId});
+                {"id", msg.ImportId}
+            );
             return;
         }
 
@@ -1456,19 +1488,22 @@ private:
             {"id", message.ImportId},
             {"itemIdx", message.ItemIdx},
             {"status", message.Status},
-            {"error", error});
+            {"error", error}
+        );
 
         auto importInfo = Self->Imports.Value(message.ImportId, nullptr);
         if (!importInfo) {
             YDB_LOG_ERROR("TImport::TTxProgress: OnSchemeQueryPreparation received unknown import id",
-                {"id", message.ImportId});
+                {"id", message.ImportId}
+            );
             return;
         }
         if (message.ItemIdx >= importInfo->Items.size()) {
             YDB_LOG_ERROR("TImport::TTxProgress: OnSchemeQueryPreparation item index out of range item number of",
                 {"id", message.ImportId},
                 {"index", message.ItemIdx},
-                {"items", importInfo->Items.size()});
+                {"items", importInfo->Items.size()}
+            );
             return;
         }
 
@@ -1506,11 +1541,13 @@ private:
 
         YDB_LOG_DEBUG("TImport::TTxProgress: OnAllocateResult",
             {"txId", txId},
-            {"id", id});
+            {"id", id}
+        );
 
         if (!Self->Imports.contains(id)) {
             YDB_LOG_ERROR("TImport::TTxProgress: OnAllocateResult received unknown id",
-                {"id", id});
+                {"id", id}
+            );
             return;
         }
 
@@ -1612,14 +1649,17 @@ private:
 
         YDB_LOG_DEBUG("TImport::TTxProgress: OnModifyResult",
             {"txId", record.GetTxId()},
-            {"status", record.GetStatus()});
+            {"status", record.GetStatus()}
+        );
         YDB_LOG_TRACE("Message:\n",
-            {"record", record.ShortDebugString()});
+            {"record", record.ShortDebugString()}
+        );
 
         auto txId = TTxId(record.GetTxId());
         if (!Self->TxIdToImport.contains(txId)) {
             YDB_LOG_ERROR("TImport::TTxProgress: OnModifyResult received unknown txId",
-                {"txId", txId});
+                {"txId", txId}
+            );
             return;
         }
 
@@ -1628,7 +1668,8 @@ private:
         std::tie(id, itemIdx) = Self->TxIdToImport.at(txId);
         if (!Self->Imports.contains(id)) {
             YDB_LOG_ERROR("TImport::TTxProgress: OnModifyResult received unknown id",
-                {"id", id});
+                {"id", id}
+            );
             return;
         }
 
@@ -1745,14 +1786,17 @@ private:
 
         YDB_LOG_DEBUG("TImport::TTxProgress: OnCreateIndexResult",
             {"txId", record.GetTxId()},
-            {"status", record.GetStatus()});
+            {"status", record.GetStatus()}
+        );
         YDB_LOG_TRACE("Message:\n",
-            {"record", record.ShortDebugString()});
+            {"record", record.ShortDebugString()}
+        );
 
         auto txId = TTxId(record.GetTxId());
         if (!Self->TxIdToImport.contains(txId)) {
             YDB_LOG_ERROR("TImport::TTxProgress: OnCreateIndexResult received unknown txId",
-                {"txId", txId});
+                {"txId", txId}
+            );
             return;
         }
 
@@ -1761,7 +1805,8 @@ private:
         std::tie(id, itemIdx) = Self->TxIdToImport.at(txId);
         if (!Self->Imports.contains(id)) {
             YDB_LOG_ERROR("TImport::TTxProgress: OnCreateIndexResult received unknown id",
-                {"id", id});
+                {"id", id}
+            );
             return;
         }
 
@@ -1813,12 +1858,14 @@ private:
     void OnNotifyResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(CompletedTxId);
         YDB_LOG_DEBUG("TImport::TTxProgress: OnNotifyResult",
-            {"txId", CompletedTxId});
+            {"txId", CompletedTxId}
+        );
 
         const auto txId = CompletedTxId;
         if (!Self->TxIdToImport.contains(txId)) {
             YDB_LOG_ERROR("TImport::TTxProgress: OnNotifyResult received unknown txId",
-                {"txId", txId});
+                {"txId", txId}
+            );
             return;
         }
 
@@ -1827,7 +1874,8 @@ private:
         std::tie(id, itemIdx) = Self->TxIdToImport.at(txId);
         if (!Self->Imports.contains(id)) {
             YDB_LOG_ERROR("TImport::TTxProgress: OnNotifyResult received unknown id",
-                {"id", id});
+                {"id", id}
+            );
             return;
         }
 

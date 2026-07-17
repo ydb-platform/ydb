@@ -24,7 +24,8 @@ struct TSchemeShard::TTxListUsers : TTransactionBase<TSchemeShard> {
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxListUsers Execute",
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
 
         const auto& requestUser = Request->Get()->Record.GetUser();
         for (const auto& [_, sid] : Self->LoginProvider.Sids) {
@@ -57,7 +58,8 @@ struct TSchemeShard::TTxListUsers : TTransactionBase<TSchemeShard> {
     void Complete(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxListUsers Complete",
             {"result", Result->Record.ShortDebugString()},
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
 
         ctx.Send(Request->Sender, std::move(Result), 0, Request->Cookie);
     }

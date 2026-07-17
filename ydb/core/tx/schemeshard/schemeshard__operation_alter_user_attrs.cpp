@@ -25,7 +25,8 @@ public:
             {"path", parentPathStr},
             {"name", name},
             {"operationId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -95,7 +96,8 @@ public:
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "TAlterUserAttrs ProgressState",
             {"opId", OperationId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -111,7 +113,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "TAlterUserAttrs HandleReply TEvOperationPlan",
             {"opId", OperationId},
             {"stepId", step},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -120,7 +123,8 @@ public:
             YDB_LOG_WARN_CTX(context.Ctx, "Duplicate PlanStep at txState is",
                 {"opId", OperationId},
                 {"schemeshard", ssId},
-                {"state", TTxState::StateName(txState->State)});
+                {"state", TTxState::StateName(txState->State)}
+            );
             return true;
         }
 
@@ -150,7 +154,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterUserAttrs AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

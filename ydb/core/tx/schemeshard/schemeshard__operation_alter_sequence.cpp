@@ -41,7 +41,8 @@ public:
             {"shardId", tabletId},
             {"status", status},
             {"operationId", OperationId},
-            {"ssId", ssId});
+            {"ssId", ssId}
+        );
 
         switch (status) {
             case NKikimrTxSequenceShard::TEvUpdateSequenceResult::SUCCESS:
@@ -54,7 +55,8 @@ public:
                     {"shardId", tabletId},
                     {"status", status},
                     {"operationId", OperationId},
-                    {"ssId", ssId});
+                    {"ssId", ssId}
+                );
                 return false;
         }
 
@@ -69,7 +71,8 @@ public:
                 {"shardId", tabletId},
                 {"status", status},
                 {"operationId", OperationId},
-                {"ssId", ssId});
+                {"ssId", ssId}
+            );
             return false;
         }
 
@@ -89,7 +92,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -142,7 +146,8 @@ public:
             YDB_LOG_DEBUG_CTX(context.Ctx, "TAlterSequence TConfigureParts ProgressState sending TEvUpdateSequence to tablet at tablet",
                 {"tabletId", tabletId},
                 {"operationId", OperationId},
-                {"ssId", ssId});
+                {"ssId", ssId}
+            );
 
             context.OnComplete.BindMsgToPipe(OperationId, tabletId, txState->TargetPathId, event.Release());
 
@@ -177,7 +182,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
             {"step", step},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -221,7 +227,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -414,7 +421,8 @@ public:
             {"name", name},
             {"operationId", OperationId},
             {"transaction", Transaction.ShortDebugString()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -546,7 +554,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterSequence AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

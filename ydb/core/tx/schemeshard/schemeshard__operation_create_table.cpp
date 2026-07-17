@@ -205,10 +205,12 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"debugHint", DebugHint()},
-            {"tabletId", ssId});
+            {"tabletId", ssId}
+        );
         YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"debugHint", DebugHint()},
-            {"message", ev->Get()->Record.ShortDebugString()});
+            {"message", ev->Get()->Record.ShortDebugString()}
+        );
 
          return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
@@ -218,7 +220,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tabletId", ssId});
+            {"tabletId", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTable);
@@ -237,7 +240,8 @@ public:
             YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState Propose modify scheme on datashard",
                 {"debugHint", DebugHint()},
                 {"datashardId", datashardId},
-                {"seqNo", seqNo});
+                {"seqNo", seqNo}
+            );
 
             NKikimrTxDataShard::TFlatSchemeTransaction tx(txTemplate);
             auto tableDesc = tx.MutableCreateTable();
@@ -252,7 +256,8 @@ public:
             YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState Propose modify scheme on datashard",
                 {"debugHint", DebugHint()},
                 {"datashardId", datashardId},
-                {"message", event->Record.ShortDebugString()});
+                {"message", event->Record.ShortDebugString()}
+            );
 
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx, event.Release());
         }
@@ -285,10 +290,12 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvSchemaChanged",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
         YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply TEvSchemaChanged triggered early",
             {"debugHint", DebugHint()},
-            {"message", evRecord.ShortDebugString()});
+            {"message", evRecord.ShortDebugString()}
+        );
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -301,7 +308,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
             {"tablet", ssId},
-            {"stepId", step});
+            {"stepId", step}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTable);
@@ -359,7 +367,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -447,14 +456,16 @@ public:
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateTable Propose",
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},
             {"schema", schema.ShortDebugString()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -579,7 +590,8 @@ public:
 
         if (parentPath.Base()->IsTableIndex()) {
             YDB_LOG_DEBUG_CTX(context.Ctx, "Creating private table for table index",
-                {"opId", OperationId});
+                {"opId", OperationId}
+            );
 
             if (schema.HasTTLSettings()) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, "TTL on index table is not supported");
@@ -797,7 +809,8 @@ public:
             {"path", dstPath.PathString()},
             {"pathId", newTable->PathId},
             {"schemeshard", ssId},
-            {"tx", Transaction.DebugString()});
+            {"tx", Transaction.DebugString()}
+        );
 
         SetState(NextState());
         return result;
@@ -811,7 +824,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateTable AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

@@ -27,7 +27,8 @@ public:
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"selfTabletId", context.SS->SelfTabletId()},
-            {"debugHint", DebugHint()});
+            {"debugHint", DebugHint()}
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -43,7 +44,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"selfTabletId", context.SS->SelfTabletId()},
             {"debugHint", DebugHint()},
-            {"step", step});
+            {"step", step}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -120,7 +122,8 @@ public:
             {"selfTabletId", context.SS->SelfTabletId()},
             {"opId", OperationId},
             {"path", workingDir},
-            {"name", name});
+            {"name", name}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ssId);
 
@@ -190,14 +193,16 @@ public:
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TDropSecret AbortPropose",
             {"selfTabletId", context.SS->SelfTabletId()},
-            {"opId", OperationId});
+            {"opId", OperationId}
+        );
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TDropSecret AbortUnsafe",
             {"selfTabletId", context.SS->SelfTabletId()},
             {"opId", OperationId},
-            {"txId", forceDropTxId});
+            {"txId", forceDropTxId}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

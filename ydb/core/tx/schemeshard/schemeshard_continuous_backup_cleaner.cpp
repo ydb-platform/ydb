@@ -35,7 +35,8 @@ public:
         YDB_LOG_DEBUG("Starting continuous backup cleaner",
             {"workingDir", WorkingDir},
             {"table", TableName},
-            {"stream", StreamName});
+            {"stream", StreamName}
+        );
 
         AllocateTxId();
         Become(&TContinuousBackupCleaner::StateWork);

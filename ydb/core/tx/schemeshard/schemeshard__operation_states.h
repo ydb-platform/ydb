@@ -32,7 +32,8 @@ public:
 
         YDB_LOG_INFO_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState operation type",
             {"debugHint", DebugHint()},
-            {"txType", TTxState::TypeName(txState->TxType)});
+            {"txType", TTxState::TypeName(txState->TxType)}
+        );
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
 
@@ -76,7 +77,8 @@ public:
         YDB_LOG_INFO_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvPrivate::TEvCompleteBarrier",
             {"debugHint", DebugHint()},
             {"msg", ev->Get()->ToString()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -93,7 +95,8 @@ public:
 
         YDB_LOG_INFO_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState operation type",
             {"debugHint", DebugHint()},
-            {"txType", TTxState::TypeName(txState->TxType)});
+            {"txType", TTxState::TypeName(txState->TxType)}
+        );
 
         context.OnComplete.Barrier(OperationId, "CopyTableBarrier");
         return false;

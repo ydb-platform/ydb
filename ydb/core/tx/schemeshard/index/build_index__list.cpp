@@ -24,7 +24,8 @@ public:
         const auto& record = Request->Get()->Record;
         YDB_LOG_DEBUG("DoExecute",
             {"logPrefix", LogPrefix},
-            {"record", record.ShortDebugString()});
+            {"record", record.ShortDebugString()}
+        );
 
         Response = MakeHolder<TEvIndexBuilder::TEvListResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);

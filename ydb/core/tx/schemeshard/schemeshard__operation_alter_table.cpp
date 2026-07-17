@@ -389,7 +389,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"debugHint", DebugHint()},
             {"schemeshard", ssId},
-            {"message", ev->Get()->Record.ShortDebugString()});
+            {"message", ev->Get()->Record.ShortDebugString()}
+        );
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
@@ -399,7 +400,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -414,7 +416,8 @@ public:
             YDB_LOG_DEBUG_CTX(context.Ctx, "Propose modify scheme on datashard at schemeshard",
                 {"datashardId", datashardId},
                 {"txid", OperationId},
-                {"ssId", ssId});
+                {"ssId", ssId}
+            );
 
             const auto seqNo = context.SS->StartRound(*txState);
             const auto txBody = context.SS->FillAlterTableTxBody(txState->TargetPathId, idx, seqNo);
@@ -451,7 +454,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvSchemaChanged triggers early",
             {"debugHint", DebugHint()},
             {"schemeshard", ssId},
-            {"message", evRecord.ShortDebugString()});
+            {"message", evRecord.ShortDebugString()}
+        );
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -465,7 +469,8 @@ public:
             {"debugHint", DebugHint()},
             {"operationId", OperationId},
             {"stepId", step},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -526,7 +531,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -616,7 +622,8 @@ public:
             {"name", name},
             {"pathId", pathId},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -790,7 +797,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterTable AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

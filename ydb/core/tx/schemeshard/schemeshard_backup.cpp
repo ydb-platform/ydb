@@ -80,7 +80,8 @@ void TSchemeShard::Handle(TEvPrivate::TEvFullBackupItemDone::TPtr& ev, const TAc
         {"fullBackupId", ev->Get()->FullBackupId},
         {"dstPathId", ev->Get()->DstPathId},
         {"success", ev->Get()->Success},
-        {"tablet", TabletID()});
+        {"tablet", TabletID()}
+    );
     Execute(CreateTxFullBackupProgress(ev), ctx);
 }
 

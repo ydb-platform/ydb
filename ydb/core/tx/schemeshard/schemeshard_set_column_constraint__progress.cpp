@@ -83,7 +83,8 @@ public:
             YDB_LOG_INFO("TTxReplyAllocate operation not found",
                 {"logPrefix", LogPrefix},
                 {"cookie", AllocateResult->Cookie},
-                {"txId", txId});
+                {"txId", txId}
+            );
             return true;
         }
 
@@ -91,7 +92,8 @@ public:
         YDB_LOG_INFO("TTxReplyAllocate",
             {"logPrefix", LogPrefix},
             {"id", BuildId},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         NIceDb::TNiceDb db(txc.DB);
         switch (operationInfo.OperationState) {
@@ -152,7 +154,8 @@ public:
         YDB_LOG_ERROR("TTxReplyAllocate OnUnhandledException",
             {"logPrefix", LogPrefix},
             {"id", BuildId},
-            {"exception", exc.what()});
+            {"exception", exc.what()}
+        );
     }
 };
 
@@ -184,7 +187,8 @@ public:
             {"id", operationInfo.Id},
             {"status", Ydb::StatusIds::StatusCode_Name(status)},
             {"error", operationInfo.GetIssue()},
-            {"replyTo", operationInfo.CreateSender});
+            {"replyTo", operationInfo.CreateSender}
+        );
 
         Send(operationInfo.CreateSender, std::move(responseEv), 0, operationInfo.SenderCookie);
     }
@@ -197,7 +201,8 @@ public:
         if (!operationIdPtr) {
             YDB_LOG_INFO("TTxReplyModify: operation not found",
                 {"logPrefix", LogPrefix},
-                {"txId", txId});
+                {"txId", txId}
+            );
             return true;
         }
 
@@ -207,7 +212,8 @@ public:
             YDB_LOG_INFO("TTxReplyModify operation not found",
                 {"logPrefix", LogPrefix},
                 {"id", BuildId},
-                {"txId", txId});
+                {"txId", txId}
+            );
             return true;
         }
 
@@ -216,7 +222,8 @@ public:
             {"logPrefix", LogPrefix},
             {"id", BuildId},
             {"txId", txId},
-            {"status", NKikimrScheme::EStatus_Name(record.GetStatus())});
+            {"status", NKikimrScheme::EStatus_Name(record.GetStatus())}
+        );
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -269,7 +276,8 @@ public:
         YDB_LOG_ERROR("TTxReplyModify OnUnhandledException",
             {"logPrefix", LogPrefix},
             {"id", BuildId},
-            {"exception", exc.what()});
+            {"exception", exc.what()}
+        );
     }
 };
 
@@ -290,7 +298,8 @@ public:
         if (!operationIdPtr) {
             YDB_LOG_INFO("TTxReplyCompleted: operation not found",
                 {"logPrefix", LogPrefix},
-                {"txId", txId});
+                {"txId", txId}
+            );
             return true;
         }
 
@@ -300,7 +309,8 @@ public:
             YDB_LOG_INFO("TTxReplyCompleted operation not found",
                 {"logPrefix", LogPrefix},
                 {"id", BuildId},
-                {"txId", txId});
+                {"txId", txId}
+            );
             return true;
         }
 
@@ -308,7 +318,8 @@ public:
         YDB_LOG_INFO("TTxReplyCompleted",
             {"logPrefix", LogPrefix},
             {"id", BuildId},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         NIceDb::TNiceDb db(txc.DB);
         if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Locking) {
@@ -343,7 +354,8 @@ public:
         YDB_LOG_ERROR("TTxReplyCompleted OnUnhandledException",
             {"logPrefix", LogPrefix},
             {"id", BuildId},
-            {"exception", exc.what()});
+            {"exception", exc.what()}
+        );
     }
 };
 
@@ -369,13 +381,15 @@ public:
             {"operationId", BuildId},
             {"tabletId", tabletId},
             {"status", record.GetStatus()},
-            {"isValid", record.GetIsValid()});
+            {"isValid", record.GetIsValid()}
+        );
 
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
             YDB_LOG_WARN("TTxReplyValidateRowCondition: operation not found",
                 {"logPrefix", LogPrefix},
-                {"id", BuildId});
+                {"id", BuildId}
+            );
             return true;
         }
 
@@ -384,7 +398,8 @@ public:
         if (operationInfo.IsCancelled) {
             YDB_LOG_INFO("TTxReplyValidateRowCondition: operation is cancelled, ignoring message",
                 {"logPrefix", LogPrefix},
-                {"id", BuildId});
+                {"id", BuildId}
+            );
             return true;
         }
 
@@ -401,7 +416,8 @@ public:
         if (!found) {
             YDB_LOG_WARN("TTxReplyValidateRowCondition: shard not found",
                 {"logPrefix", LogPrefix},
-                {"tabletId", tabletId});
+                {"tabletId", tabletId}
+            );
             return true;
         }
 
@@ -414,7 +430,8 @@ public:
             YDB_LOG_NOTICE("TTxReplyValidateRowCondition: superfluous shard event",
                 {"logPrefix", LogPrefix},
                 {"id", BuildId},
-                {"shardIdx", shardIdx});
+                {"shardIdx", shardIdx}
+            );
             return true;
         }
 
@@ -439,7 +456,8 @@ public:
             if (!record.GetIsValid()) {
                 YDB_LOG_NOTICE("TTxReplyValidateRowCondition: validation failed",
                     {"logPrefix", LogPrefix},
-                    {"shard", shardIdx});
+                    {"shard", shardIdx}
+                );
                 operationInfo.ValidationFailed = true;
                 cancellationReason = "Validation failed: found NULL values in column(s) being set to NOT NULL";
             }
@@ -453,7 +471,8 @@ public:
             YDB_LOG_ERROR("TTxReplyValidateRowCondition: error",
                 {"logPrefix", LogPrefix},
                 {"shard", shardIdx},
-                {"status", record.GetStatus()});
+                {"status", record.GetStatus()}
+            );
 
             operationInfo.ValidationFailed = true;
             cancellationReason = "Validation failed: internal error";
@@ -467,7 +486,8 @@ public:
             YDB_LOG_DEBUG("TTxReplyValidateRowCondition: still in progress",
                 {"logPrefix", LogPrefix},
                 {"shard", shardIdx},
-                {"status", record.GetStatus()});
+                {"status", record.GetStatus()}
+            );
         }
 
         {
@@ -495,13 +515,15 @@ public:
         if (!operationInfo) {
             YDB_LOG_NOTICE("TTxReplyValidateRowCondition OnUnhandledException: operation not found",
                 {"logPrefix", LogPrefix},
-                {"id", BuildId});
+                {"id", BuildId}
+            );
             return;
         }
         YDB_LOG_ERROR("TTxReplyValidateRowCondition OnUnhandledException",
             {"logPrefix", LogPrefix},
             {"id", BuildId},
-            {"exception", exc.what()});
+            {"exception", exc.what()}
+        );
     }
 };
 
@@ -523,13 +545,15 @@ public:
             {"logPrefix", LogPrefix},
             {"id", BuildId},
             {"shardId", ShardId},
-            {"shardIdx", shardIdx});
+            {"shardIdx", shardIdx}
+        );
 
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
             YDB_LOG_INFO("TTxReplyRetrySetColumnConstraint: operation not found",
                 {"logPrefix", LogPrefix},
-                {"id", BuildId});
+                {"id", BuildId}
+            );
             return true;
         }
 
@@ -539,7 +563,8 @@ public:
             YDB_LOG_INFO("TTxReplyRetrySetColumnConstraint: superfluous event",
                 {"logPrefix", LogPrefix},
                 {"id", BuildId},
-                {"state", ToString(operationInfo.OperationState)});
+                {"state", ToString(operationInfo.OperationState)}
+            );
             return true;
         }
 
@@ -547,7 +572,8 @@ public:
             YDB_LOG_INFO("TTxReplyRetrySetColumnConstraint: shard not found in ValidationShards",
                 {"logPrefix", LogPrefix},
                 {"id", BuildId},
-                {"shardIdx", shardIdx});
+                {"shardIdx", shardIdx}
+            );
             return true;
         }
 
@@ -570,7 +596,8 @@ public:
         YDB_LOG_ERROR("TTxReplyRetrySetColumnConstraint OnUnhandledException",
             {"logPrefix", LogPrefix},
             {"id", BuildId},
-            {"exception", exc.what()});
+            {"exception", exc.what()}
+        );
     }
 };
 
@@ -587,7 +614,8 @@ private:
     bool InitiateValidationShards(TSetColumnConstraintOperationInfo& operationInfo) {
         YDB_LOG_DEBUG("InitiateValidationShards",
             {"logPrefix", LogPrefix},
-            {"id", BuildId});
+            {"id", BuildId}
+        );
 
         Y_ENSURE(operationInfo.ToValidateShards.empty());
         Y_ENSURE(operationInfo.InProgressValidationShards.empty());
@@ -596,7 +624,8 @@ private:
         if (!path.IsLocked()) {
             YDB_LOG_ERROR("InitiateValidationShards: table is not locked",
                 {"logPrefix", LogPrefix},
-                {"id", BuildId});
+                {"id", BuildId}
+            );
             return false;
         }
         Y_ENSURE(path.LockedBy() == operationInfo.LockTxId);
@@ -621,7 +650,8 @@ private:
             operationInfo.ToValidateShards.emplace_back(partition->ShardIdx);
             YDB_LOG_DEBUG("InitiateValidationShards: added shard",
                 {"logPrefix", LogPrefix},
-                {"shardIdx", partition->ShardIdx});
+                {"shardIdx", partition->ShardIdx}
+            );
         }
 
         return true;
@@ -649,7 +679,8 @@ private:
 
         YDB_LOG_NOTICE("TTxProgressSetColumnConstraint",
             {"logPrefix", LogPrefix},
-            {"TEvValidateRowConditionRequest", record.ShortDebugString()});
+            {"TEvValidateRowConditionRequest", record.ShortDebugString()}
+        );
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -670,7 +701,8 @@ private:
     bool DriveToSendMessageToPartOfShards(TSetColumnConstraintOperationInfo& operationInfo) {
         YDB_LOG_DEBUG("DriveToSendMessageToPartOfShards Start",
             {"logPrefix", LogPrefix},
-            {"id", BuildId});
+            {"id", BuildId}
+        );
 
         if (operationInfo.NeedToCalculateValidationShards) {
             operationInfo.NeedToCalculateValidationShards = false;
@@ -686,7 +718,8 @@ private:
         if (done) {
             YDB_LOG_DEBUG("DriveToSendMessageToPartOfShards Done",
                 {"logPrefix", LogPrefix},
-                {"id", BuildId});
+                {"id", BuildId}
+            );
         }
 
         return done;
@@ -706,7 +739,8 @@ public:
             {"logPrefix", LogPrefix},
             {"id", BuildId},
             {"operationState", ToString(operationInfo.OperationState)},
-            {"isCancelled", operationInfo.IsCancelled});
+            {"isCancelled", operationInfo.IsCancelled}
+        );
 
         switch (operationInfo.OperationState) {
             case TSetColumnConstraintOperationInfo::EOperationState::Invalid: {
@@ -732,7 +766,8 @@ public:
                 if (operationInfo.IsCancelled) {
                     YDB_LOG_INFO("TTxProgressSetColumnConstraint: operation cancelled in LockingNullWrites, jumping to Finishing",
                         {"logPrefix", LogPrefix},
-                        {"id", BuildId});
+                        {"id", BuildId}
+                    );
                     NIceDb::TNiceDb db(txc.DB);
                     ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
                     Progress(BuildId);
@@ -757,7 +792,8 @@ public:
                 if (operationInfo.IsCancelled) {
                     YDB_LOG_INFO("TTxProgressSetColumnConstraint: operation cancelled in Validating, jumping to Finishing",
                         {"logPrefix", LogPrefix},
-                        {"id", BuildId});
+                        {"id", BuildId}
+                    );
                     NIceDb::TNiceDb db(txc.DB);
                     ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
                     Progress(BuildId);
@@ -822,13 +858,15 @@ public:
         if (!operationInfo) {
             YDB_LOG_NOTICE("TTxProgressSetColumnConstraint OnUnhandledException: operation not found",
                 {"logPrefix", LogPrefix},
-                {"id", BuildId});
+                {"id", BuildId}
+            );
             return;
         }
         YDB_LOG_ERROR("TTxProgressSetColumnConstraint OnUnhandledException",
             {"logPrefix", LogPrefix},
             {"id", BuildId},
-            {"exception", exc.what()});
+            {"exception", exc.what()}
+        );
     }
 };
 

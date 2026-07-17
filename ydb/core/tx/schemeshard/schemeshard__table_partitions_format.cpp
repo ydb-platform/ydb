@@ -49,7 +49,8 @@ struct TSchemeShard::TTxTablePartitionsFormatSwitch : public TTransactionBase<TS
             {"pathId", PathId},
             {"detail", (ShardIdxFormat ? "shardidx" : "position")},
             {"status", Status},
-            {"schemeshardId", Self->TabletID()});
+            {"schemeshardId", Self->TabletID()}
+        );
 
         return true;
     }
@@ -132,7 +133,8 @@ struct TSchemeShard::TTxTablePartitionsFormatSweepStep : public TTransactionBase
             YDB_LOG_NOTICE_CTX(ctx, "TablePartitionsFormatSweep complete",
                 {"sweepDone", sweep.Done},
                 {"sweepSkipped", sweep.Skipped},
-                {"schemeshardId", Self->TabletID()});
+                {"schemeshardId", Self->TabletID()}
+            );
             return true;
         }
 
@@ -165,14 +167,16 @@ struct TSchemeShard::TTxTablePartitionsFormatSweepStep : public TTransactionBase
             {"pathId", pathId},
             {"detail", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
             {"status", status},
-            {"schemeshardId", Self->TabletID()});
+            {"schemeshardId", Self->TabletID()}
+        );
 
         if (sweep.Queue.empty()) {
             Self->ClearTablePartitionsFormatSweep(db);
             YDB_LOG_NOTICE_CTX(ctx, "TablePartitionsFormatSweep complete",
                 {"sweepDone", sweep.Done},
                 {"sweepSkipped", sweep.Skipped},
-                {"schemeshardId", Self->TabletID()});
+                {"schemeshardId", Self->TabletID()}
+            );
         }
 
         return true;
@@ -203,7 +207,8 @@ void TSchemeShard::StartTablePartitionsFormatSweep(NIceDb::TNiceDb& db, bool tar
 
     if (!AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx()) {
         YDB_LOG_ERROR("TablePartitionsFormatSweep start: cannot start as EnableTablePartitionsFormatShardIdx is disabled",
-            {"schemeshardId", TabletID()});
+            {"schemeshardId", TabletID()}
+        );
         return;
     }
 
@@ -221,7 +226,8 @@ void TSchemeShard::StartTablePartitionsFormatSweep(NIceDb::TNiceDb& db, bool tar
 
     if (sweep.Queue.empty()) {
         YDB_LOG_NOTICE("TablePartitionsFormatSweep start: no tables to process",
-            {"schemeshardId", TabletID()});
+            {"schemeshardId", TabletID()}
+        );
         sweep.Status = TTablePartitionsFormatSweepState::EStatus::Idle;
         sweep.Queue.clear();
         return;
@@ -231,7 +237,8 @@ void TSchemeShard::StartTablePartitionsFormatSweep(NIceDb::TNiceDb& db, bool tar
         {"sweepQueueSize", sweep.Queue.size()},
         {"tablesCount", Tables.size()},
         {"detail", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
-        {"schemeshardId", TabletID()});
+        {"schemeshardId", TabletID()}
+    );
 
     db.Table<Schema::SysParams>().Key(Schema::SysParam_TablePartitionsFormatSweepStatus)
         .Update(NIceDb::TUpdate<Schema::SysParams::Value>("1"))
@@ -250,7 +257,8 @@ void TSchemeShard::PauseTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
         {"sweepQueueSize", sweep.Queue.size()},
         {"tablesCount", Tables.size()},
         {"detail", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
-        {"schemeshardId", TabletID()});
+        {"schemeshardId", TabletID()}
+    );
 
     sweep.Status = TTablePartitionsFormatSweepState::EStatus::Paused;
 
@@ -266,7 +274,8 @@ void TSchemeShard::ResumeTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
         {"sweepQueueSize", sweep.Queue.size()},
         {"tablesCount", Tables.size()},
         {"detail", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
-        {"schemeshardId", TabletID()});
+        {"schemeshardId", TabletID()}
+    );
 
     sweep.Status = TTablePartitionsFormatSweepState::EStatus::Running;
 
@@ -284,7 +293,8 @@ void TSchemeShard::CancelTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
         {"sweepQueueSize", sweep.Queue.size()},
         {"tablesCount", Tables.size()},
         {"detail", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
-        {"schemeshardId", TabletID()});
+        {"schemeshardId", TabletID()}
+    );
 
     ClearTablePartitionsFormatSweep(db);
 }
@@ -342,7 +352,8 @@ void TSchemeShard::ContinueTablePartitionsFormatSweep() {
         {"sweepQueueSize", sweep.Queue.size()},
         {"tablesCount", Tables.size()},
         {"detail", (sweep.TargetIsShardIdx ? "shardidx" : "position")},
-        {"schemeshardId", TabletID()});
+        {"schemeshardId", TabletID()}
+    );
 
     Send(SelfId(), new TEvPrivate::TEvProgressTablePartitionsFormatSweep);
 }

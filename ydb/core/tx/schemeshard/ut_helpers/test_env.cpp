@@ -236,7 +236,8 @@ private:
             const auto txId = found->second;
 
             YDB_LOG_DEBUG_CTX(ctx, "Tests -- TTxNotificationSubscriber for txId disconnected from schemeshard, resend EvNotifyTxCompletion",
-                {"txId", txId});
+                {"txId", txId}
+            );
 
             // Remove entry from the tx-pipe mapping. Pipe actor has already died.
             PipeToTx.erase(pipeActor);
@@ -251,7 +252,8 @@ private:
         ui64 txId = ev->Get()->Record.GetTxId();
 
         YDB_LOG_DEBUG_CTX(ctx, "Tests -- TTxNotificationSubscriber for txId send EvNotifyTxCompletion",
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         // Add txId, add waiter, recreate pipe and send notification request
 
@@ -268,7 +270,8 @@ private:
         ui64 txId = ev->Get()->Record.GetTxId();
 
         YDB_LOG_DEBUG_CTX(ctx, "Tests -- TTxNotificationSubscriber for txId got EvNotifyTxCompletionResult",
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         if (!SchemeTxWaiters.contains(txId))
             return;
@@ -278,7 +281,8 @@ private:
         for (TActorId waiter : SchemeTxWaiters[txId]) {
             YDB_LOG_DEBUG_CTX(ctx, "Tests -- TTxNotificationSubscriber for txId satisfy waiter",
                 {"txId", txId},
-                {"waiter", waiter});
+                {"waiter", waiter}
+            );
             ctx.Send(waiter, new TEvSchemeShard::TEvNotifyTxCompletionResult(txId));
         }
         SchemeTxWaiters.erase(txId);
@@ -298,7 +302,8 @@ private:
 
     void SendToSchemeshard(ui64 txId, const TActorContext &ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Tests -- TTxNotificationSubscriber, SendToSchemeshard, txId",
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         // NOTE: the only reason why we should send every EvNotifyTxCompletion to schemeshard
         // with a separate pipe is to avoid out-of-order reception of 2 events on the schemeshard side:
@@ -387,7 +392,8 @@ private:
     {
         YDB_LOG_DEBUG("TFakeMetering: unhandled event",
             {"type", ev->GetTypeRewrite()},
-            {"event", ev->ToString()});
+            {"event", ev->ToString()}
+        );
     }
 
 private:

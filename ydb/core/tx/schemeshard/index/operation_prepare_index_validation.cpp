@@ -38,10 +38,12 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"debugHint", DebugHint()},
-            {"tabletId", ssId});
+            {"tabletId", ssId}
+        );
         YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"debugHint", DebugHint()},
-            {"message", ev->Get()->Record.ShortDebugString()});
+            {"message", ev->Get()->Record.ShortDebugString()}
+        );
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
@@ -51,7 +53,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tabletId", ssId});
+            {"tabletId", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxPrepareIndexValidation);
@@ -81,7 +84,8 @@ public:
                 {"datashard", datashardId},
                 {"operationId", OperationId},
                 {"seqNo", seqNo},
-                {"schemeshard", ssId});
+                {"schemeshard", ssId}
+            );
 
             auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, tx.SerializeAsString(), context.Ctx);
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx, event.Release());
@@ -115,10 +119,12 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvSchemaChanged",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
         YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply TEvSchemaChanged triggered early",
             {"debugHint", DebugHint()},
-            {"message", evRecord.ShortDebugString()});
+            {"message", evRecord.ShortDebugString()}
+        );
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -131,7 +137,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
             {"tablet", ssId},
-            {"stepId", step});
+            {"stepId", step}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxPrepareIndexValidation);
@@ -167,7 +174,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -211,12 +219,14 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
             {"type", TTxState::TypeName(txState->TxType)},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
             YDB_LOG_INFO_CTX(context.Ctx, "ProgressState source table partitioning changed for modification",
                 {"debugHint", DebugHint()},
-                {"type", TTxState::TypeName(txState->TxType)});
+                {"type", TTxState::TypeName(txState->TxType)}
+            );
             NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
         }
 
@@ -282,7 +292,8 @@ public:
             {"path", parentPathStr},
             {"tableName", tableName},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -392,7 +403,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TPrepareIndexValidation AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

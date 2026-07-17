@@ -26,7 +26,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         YDB_LOG_INFO("Change state",
             {"logPrefix", LogPrefix},
             {"buildState", buildInfo.State},
-            {"state", state});
+            {"state", state}
+        );
         if (state == TIndexBuildInfo::EState::Rejected ||
             state == TIndexBuildInfo::EState::Cancelled ||
             state == TIndexBuildInfo::EState::Done) {
@@ -49,7 +50,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         YDB_LOG_INFO("Change SetColumnConstraint state",
             {"logPrefix", LogPrefix},
             {"operationState", ToString(operationInfo.OperationState)},
-            {"state", ToString(state)});
+            {"state", ToString(state)}
+        );
         if (state == TSetColumnConstraintOperationInfo::EOperationState::Done) {
             operationInfo.EndTime = TAppData::TimeProvider->Now();
         }
@@ -150,7 +152,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
                 {"domain", domain.PathString()},
                 {"domainId", buildInfo.DomainPathId},
                 {"tableId", buildInfo.TablePathId},
-                {"usage", toBill});
+                {"usage", toBill}
+            );
             continue;
         }
 
@@ -163,7 +166,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
                 {"isDomainSchemeShard", Self->IsDomainSchemeShard},
                 {"parentDomainId", Self->ParentDomainId},
                 {"resourcesDomainId", domain.DomainInfo()->GetResourcesDomainId()},
-                {"usage", toBill});
+                {"usage", toBill}
+            );
             continue;
         }
 
@@ -198,7 +202,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             {"billRecord", billRecord},
             {"toBill", toBill},
             {"explain", requestUnitsExplain},
-            {"buildInfo", buildInfo});
+            {"buildInfo", buildInfo}
+        );
 
         auto request = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
         // send message at Complete stage
@@ -213,7 +218,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::Send(TActorId dst, THolder<IEventBase
 void TSchemeShard::TIndexBuilder::TTxBase::AllocateTxId(TIndexBuildId buildId) {
     YDB_LOG_DEBUG("AllocateTxId",
         {"logPrefix", LogPrefix},
-        {"buildId", buildId});
+        {"buildId", buildId}
+    );
     Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(buildId));
 }
 
@@ -391,7 +397,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::SendNotificationsIfFinished(TIndexBui
     YDB_LOG_TRACE("TIndexBuildInfo SendNotifications: subscribers",
         {"logPrefix", LogPrefix},
         {"id", indexInfo.Id},
-        {"count", indexInfo.Subscribers.size()});
+        {"count", indexInfo.Subscribers.size()}
+    );
 
     TSet<TActorId> toAnswer;
     toAnswer.swap(indexInfo.Subscribers);
@@ -554,7 +561,8 @@ bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransaction
             {"exceptionType", TypeName(originalExc)},
             {"exceptionMessage", originalExc.what()},
             {"backtrace", TBackTrace::FromCurrentException().PrintToString()},
-            {"buildInfo", buildInfoStr});
+            {"buildInfo", buildInfoStr}
+        );
 
         OnUnhandledException(txc, ctx, buildInfo, originalExc);
 
@@ -564,7 +572,8 @@ bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransaction
             {"logPrefix", LogPrefix},
             {"exceptionType", TypeName(handleExc)},
             {"exceptionMessage", handleExc.what()},
-            {"backtrace", TBackTrace::FromCurrentException().PrintToString()});
+            {"backtrace", TBackTrace::FromCurrentException().PrintToString()}
+        );
         return false;
     }
 }

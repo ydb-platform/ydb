@@ -14,7 +14,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
     if (it == ShardInfos.end()) {
         YDB_LOG_WARN_CTX(ctx, "[BackgroundCompaction] Failed to resolve shard info for background compaction",
             {"compaction", shardIdx},
-            {"schemeshard", TabletID()});
+            {"schemeshard", TabletID()}
+        );
 
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
@@ -31,7 +32,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCompaction(const TSha
         {"queue", BackgroundCompactionQueue->Size()},
         {"compaction", BackgroundCompactionQueue->WaitingSize()},
         {"running", BackgroundCompactionQueue->RunningSize()},
-        {"tabletID", TabletID()});
+        {"tabletID", TabletID()}
+    );
 
     std::unique_ptr<TEvDataShard::TEvCompactTable> request(new TEvDataShard::TEvCompactTable(pathId.OwnerId, pathId.LocalPathId));
     if (BackgroundCompactionQueue->GetReadyQueue().GetConfig().CompactSinglePartedShards) {
@@ -58,7 +60,8 @@ void TSchemeShard::OnBackgroundCompactionTimeout(const TShardCompactionInfo& inf
     if (it == ShardInfos.end()) {
         YDB_LOG_WARN_CTX(ctx, "[BackgroundCompaction] Failed to resolve shard info for background compaction",
             {"compaction", shardIdx},
-            {"schemeshard", TabletID()});
+            {"schemeshard", TabletID()}
+        );
         return;
     }
 
@@ -74,7 +77,8 @@ void TSchemeShard::OnBackgroundCompactionTimeout(const TShardCompactionInfo& inf
         {"queue", BackgroundCompactionQueue->Size()},
         {"compaction", BackgroundCompactionQueue->WaitingSize()},
         {"running", BackgroundCompactionQueue->RunningSize()},
-        {"tabletID", TabletID()});
+        {"tabletID", TabletID()}
+    );
 }
 
 void TSchemeShard::HandleBackgroundCompactionResult(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx) {
@@ -105,7 +109,8 @@ void TSchemeShard::HandleBackgroundCompactionResult(TEvDataShard::TEvCompactTabl
             {"queue", BackgroundCompactionQueue->Size()},
             {"compaction", BackgroundCompactionQueue->WaitingSize()},
             {"running", BackgroundCompactionQueue->RunningSize()},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
     } else {
         YDB_LOG_INFO_CTX(ctx, "Ms, with next in shards waiting after shards shards at schemeshard",
             {"pathId", pathId},
@@ -118,7 +123,8 @@ void TSchemeShard::HandleBackgroundCompactionResult(TEvDataShard::TEvCompactTabl
             {"queue", BackgroundCompactionQueue->Size()},
             {"compaction", BackgroundCompactionQueue->WaitingSize()},
             {"running", BackgroundCompactionQueue->RunningSize()},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
     }
 
     auto& histCounters = TabletCounters->Percentile();
@@ -158,14 +164,16 @@ void TSchemeShard::EnqueueBackgroundCompaction(
     if (stats.HasBorrowedData) {
         YDB_LOG_TRACE_CTX(ctx, "[BackgroundCompaction] [Enqueue] Skipped with borrowed parts at schemeshard",
             {"shard", shardIdx},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
         return;
     }
 
     if (stats.HasLoanedData) {
         YDB_LOG_TRACE_CTX(ctx, "[BackgroundCompaction] [Enqueue] Skipped with loaned parts at schemeshard",
             {"shard", shardIdx},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
         return;
     }
 
@@ -176,7 +184,8 @@ void TSchemeShard::EnqueueBackgroundCompaction(
             {"rowCount", stats.RowCount},
             {"searchHeight", stats.SearchHeight},
             {"lastFullCompaction", TInstant::Seconds(stats.FullCompactionTs)},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
 
         UpdateBackgroundCompactionQueueMetrics();
     } else {
@@ -186,7 +195,8 @@ void TSchemeShard::EnqueueBackgroundCompaction(
             {"rowCount", stats.RowCount},
             {"searchHeight", stats.SearchHeight},
             {"lastFullCompaction", TInstant::Seconds(stats.FullCompactionTs)},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
     }
 }
 
@@ -203,7 +213,8 @@ void TSchemeShard::UpdateBackgroundCompaction(
         if (RemoveBackgroundCompaction(shardIdx)) {
             YDB_LOG_TRACE_CTX(ctx, "[BackgroundCompaction] [Update] Removed with borrowed parts at schemeshard",
                 {"shard", shardIdx},
-                {"tabletID", TabletID()});
+                {"tabletID", TabletID()}
+            );
         }
         return;
     }
@@ -212,7 +223,8 @@ void TSchemeShard::UpdateBackgroundCompaction(
         if (RemoveBackgroundCompaction(shardIdx)) {
             YDB_LOG_TRACE_CTX(ctx, "[BackgroundCompaction] [Update] Removed with loaned parts at schemeshard",
                 {"shard", shardIdx},
-                {"tabletID", TabletID()});
+                {"tabletID", TabletID()}
+            );
         }
         return;
     }
@@ -225,7 +237,8 @@ void TSchemeShard::UpdateBackgroundCompaction(
             {"rowCount", newStats.RowCount},
             {"searchHeight", newStats.SearchHeight},
             {"lastFullCompaction", TInstant::Seconds(newStats.FullCompactionTs)},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
     } else if (BackgroundCompactionQueue->Enqueue(std::move(info))) {
         YDB_LOG_TRACE_CTX(ctx, "[BackgroundCompaction] [Update] Enqueued with at schemeshard",
             {"shard", shardIdx},
@@ -233,7 +246,8 @@ void TSchemeShard::UpdateBackgroundCompaction(
             {"rowCount", newStats.RowCount},
             {"searchHeight", newStats.SearchHeight},
             {"lastFullCompaction", TInstant::Seconds(newStats.FullCompactionTs)},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
     } else {
         YDB_LOG_TRACE_CTX(ctx, "[BackgroundCompaction] [Update] Skipped with at schemeshard",
             {"shard", shardIdx},
@@ -241,7 +255,8 @@ void TSchemeShard::UpdateBackgroundCompaction(
             {"rowCount", newStats.RowCount},
             {"searchHeight", newStats.SearchHeight},
             {"lastFullCompaction", TInstant::Seconds(newStats.FullCompactionTs)},
-            {"tabletID", TabletID()});
+            {"tabletID", TabletID()}
+        );
     }
 
     UpdateBackgroundCompactionQueueMetrics();

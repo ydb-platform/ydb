@@ -59,7 +59,8 @@ public:
         YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply TEvProposeTransactionResult",
             {"debugHint", DebugHint()},
             {"tablet", ssId},
-            {"message", ev->Get()->Record.ShortDebugString()});
+            {"message", ev->Get()->Record.ShortDebugString()}
+        );
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
@@ -69,7 +70,8 @@ public:
 
         YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -102,7 +104,8 @@ public:
                 {"srcShardIdx", srcShardIdx},
                 {"operationId", OperationId},
                 {"seqNo", seqNo},
-                {"tablet", ssId});
+                {"tablet", ssId}
+            );
 
             // Send "CreateTable + ReceiveParts" transaction to destination datashard
             NKikimrTxDataShard::TFlatSchemeTransaction newShardTx;
@@ -205,7 +208,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvDataShard::TEvSchemaChanged triggers early, save it",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -218,7 +222,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan at schemeshard",
             {"debugHint", DebugHint()},
             {"stepId", step},
-            {"ssId", ssId});
+            {"ssId", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
 
@@ -425,7 +430,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -522,7 +528,8 @@ public:
             {"path", parentPath},
             {"name", name},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -713,7 +720,8 @@ public:
                     YDB_LOG_NOTICE_CTX(context.Ctx, "TCopyTable Propose: Stream was busy by txId overriding with current opId because CopyTable owns the parent table",
                         {"streamName", streamName},
                         {"lastTxId", oldStreamPath.Base()->LastTxId},
-                        {"txId", OperationId.GetTxId()});
+                        {"txId", OperationId.GetTxId()}
+                    );
                 }
 
                 context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);
@@ -885,7 +893,8 @@ public:
         for (auto splitTx: context.SS->Tables.at(srcPath.Base()->PathId)->GetSplitOpsInFlight()) {
             YDB_LOG_DEBUG_CTX(context.Ctx, "TCopyTable Propose wait split ops in flight on src table",
                 {"opId", OperationId},
-                {"splitTx", splitTx});
+                {"splitTx", splitTx}
+            );
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
         }
 
@@ -914,7 +923,8 @@ public:
             {"pathId", newTable->PathId},
             {"withNewCdc", (Transaction.HasCreateCdcStream() ? "true" : "false")},
             {"schemeshard", ssId},
-            {"tx", Transaction.DebugString()});
+            {"tx", Transaction.DebugString()}
+        );
 
         SetState(NextState());
         return result;
@@ -923,14 +933,16 @@ public:
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCopyTable AbortPropose",
             {"opId", OperationId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCopyTable AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);

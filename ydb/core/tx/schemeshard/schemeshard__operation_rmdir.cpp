@@ -27,7 +27,8 @@ public:
             {"name", name},
             {"pathId", drop.GetId()},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -75,7 +76,8 @@ public:
             YDB_LOG_DEBUG_CTX(context.Ctx, "Processing remove temp directory with",
                 {"name", name},
                 {"workingDir", parentPathStr},
-                {"tempDirOwnerActorId", pathElement->TempDirOwnerActorId});
+                {"tempDirOwnerActorId", pathElement->TempDirOwnerActorId}
+            );
             context.OnComplete.UpdateTempDirsToRemoveState(pathElement->TempDirOwnerActorId, path.Base()->PathId);
         }
 
@@ -110,7 +112,8 @@ public:
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "TRmDir ProgressState",
             {"opId", OperationId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
 
@@ -125,7 +128,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "TRmDir HandleReply TEvOperationPlan",
             {"opId", OperationId},
             {"step", step},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
 
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -133,7 +137,8 @@ public:
         if (!txState) {
             YDB_LOG_WARN_CTX(context.Ctx, "TxState is nullptr, considered as duplicate PlanStep",
                 {"opId", OperationId},
-                {"schemeshard", ssId});
+                {"schemeshard", ssId}
+            );
             return true;
         }
 
@@ -141,7 +146,8 @@ public:
             YDB_LOG_WARN_CTX(context.Ctx, "Duplicate PlanStep",
                 {"opId", OperationId},
                 {"state", TTxState::StateName(txState->State)},
-                {"schemeshard", ssId});
+                {"schemeshard", ssId}
+            );
             return true;
         }
 
@@ -175,7 +181,8 @@ public:
 
         YDB_LOG_DEBUG_CTX(context.Ctx, "RmDir is done",
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
         return true;
@@ -185,7 +192,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "RmDir AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

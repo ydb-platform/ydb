@@ -73,7 +73,8 @@ TConfigurePartsAtTable::TConfigurePartsAtTable(TOperationId id)
 bool TConfigurePartsAtTable::ProgressState(TOperationContext& context) {
     YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
         {"debugHint", DebugHint()},
-        {"schemeshard", context.SS->SelfTabletId()});
+        {"schemeshard", context.SS->SelfTabletId()}
+    );
 
     auto* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -106,7 +107,8 @@ bool TConfigurePartsAtTable::HandleReply(TEvDataShard::TEvProposeTransactionResu
     YDB_LOG_INFO_CTX(context.Ctx, "HandleReply",
         {"debugHint", DebugHint()},
         {"message", ev->Get()->ToString()},
-        {"schemeshard", context.SS->SelfTabletId()});
+        {"schemeshard", context.SS->SelfTabletId()}
+    );
 
     if (!NTableState::CollectProposeTransactionResults(OperationId, ev, context)) {
         return false;
@@ -125,7 +127,8 @@ TProposeAtTable::TProposeAtTable(TOperationId id)
 bool TProposeAtTable::ProgressState(TOperationContext& context) {
     YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
         {"debugHint", DebugHint()},
-        {"schemeshard", context.SS->SelfTabletId()});
+        {"schemeshard", context.SS->SelfTabletId()}
+    );
 
     const auto* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -145,7 +148,8 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
     YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
         {"debugHint", DebugHint()},
         {"step", ev->Get()->StepId},
-        {"schemeshard", context.SS->SelfTabletId()});
+        {"schemeshard", context.SS->SelfTabletId()}
+    );
 
     const auto* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -266,7 +270,8 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
 bool TProposeAtTable::HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) {
     YDB_LOG_INFO_CTX(context.Ctx, "TEvDataShard::TEvSchemaChanged triggers early, save it",
         {"debugHint", DebugHint()},
-        {"schemeshard", context.SS->SelfTabletId()});
+        {"schemeshard", context.SS->SelfTabletId()}
+    );
 
     NTableState::CollectSchemaChanged(OperationId, ev, context);
     return false;

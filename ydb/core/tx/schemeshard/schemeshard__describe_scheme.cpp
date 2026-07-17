@@ -29,7 +29,8 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
     void DoExecute(TTransactionContext& /*txc*/, const TActorContext& ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxDescribeScheme DoExecute",
             {"record", PathDescriber.GetParams().ShortDebugString()},
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
 
         Result = PathDescriber.Describe(ctx);
     }
@@ -42,18 +43,21 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
                 {"tabletId", Self->TabletID()},
                 {"pathId", params.GetPathId()},
                 {"executeDuration", HumanReadable(ExecuteDuration)},
-                {"status", NKikimrScheme::EStatus_Name(Result->Record.GetStatus())});
+                {"status", NKikimrScheme::EStatus_Name(Result->Record.GetStatus())}
+            );
         } else {
             YDB_LOG_INFO_CTX(ctx, "Tablet describe path took result status",
                 {"tabletId", Self->TabletID()},
                 {"path", params.GetPath()},
                 {"executeDuration", HumanReadable(ExecuteDuration)},
-                {"status", NKikimrScheme::EStatus_Name(Result->Record.GetStatus())});
+                {"status", NKikimrScheme::EStatus_Name(Result->Record.GetStatus())}
+            );
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxDescribeScheme DoComplete",
             {"result", Result->GetRecord().ShortDebugString()},
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
 
         ctx.Send(Sender, std::move(Result), 0, Cookie);
     }

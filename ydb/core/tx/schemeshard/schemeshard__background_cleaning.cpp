@@ -85,7 +85,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
         {"rate", BackgroundCleaningQueue->GetRate()},
         {"queue", BackgroundCleaningQueue->Size()},
         {"running", BackgroundCleaningQueue->RunningSize()},
-        {"tabletID", TabletID()});
+        {"tabletID", TabletID()}
+    );
 
     auto traverseResult = Traverse(info->WorkingDir, info->Name, this);
 
@@ -105,7 +106,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
         if (txId == InvalidTxId) {
             YDB_LOG_WARN_CTX(ctx, "Only objects will be removed during current iteration. Background cleaning will be finished later",
                 {"dir", JoinPath({info->WorkingDir, info->Name})},
-                {"objectsToDrop", state.ObjectsToDrop});
+                {"objectsToDrop", state.ObjectsToDrop}
+            );
             state.NeedToRetryLater = true;
             break;
         }
@@ -152,7 +154,8 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
                 YDB_LOG_ERROR_CTX(ctx, "Is not expected here ` `",
                     {"dir", JoinPath({info->WorkingDir, info->Name})},
                     {"pathType", ToString(objectPath.Base()->PathType)},
-                    {"objectPath", objectPath.PathString()});
+                    {"objectPath", objectPath.PathString()}
+                );
                 break;
         }
         if (!modifyScheme.HasOperationType()) {
@@ -191,7 +194,8 @@ bool TSchemeShard::ContinueBackgroundCleaning(const TPathId& pathId) {
         if (txId == InvalidTxId) {
             auto info = ResolveTempDirInfo(pathId);
             YDB_LOG_WARN_CTX(ctx, "Background cleaning will be finished later",
-                {"dir", (info                         ? JoinPath({info->WorkingDir, info->Name})                         : TString("not found"))});
+                {"dir", (info                         ? JoinPath({info->WorkingDir, info->Name})                         : TString("not found"))}
+            );
             return false;
         }
 
@@ -256,7 +260,8 @@ void TSchemeShard::HandleBackgroundCleaningCompletionResult(const TTxId& txId) {
         {"wakeup", BackgroundCleaningQueue->GetWakeupDelta()},
         {"queue", BackgroundCleaningQueue->GetRate()},
         {"running", BackgroundCleaningQueue->RunningSize()},
-        {"tabletID", TabletID()});
+        {"tabletID", TabletID()}
+    );
 
     ContinueBackgroundCleaning(pathId);
 }
@@ -271,7 +276,8 @@ void TSchemeShard::OnBackgroundCleaningTimeout(const TPathId& pathId) {
         {"wakeup", BackgroundCleaningQueue->GetWakeupDelta()},
         {"queue", BackgroundCleaningQueue->GetRate()},
         {"running", BackgroundCleaningQueue->RunningSize()},
-        {"tabletID", TabletID()});
+        {"tabletID", TabletID()}
+    );
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvRetryNodeSubscribe::TPtr& ev, const TActorContext&) {
@@ -314,7 +320,8 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
         {"retries", retryState.RetryNumber},
         {"limit", BackgroundCleaningRetrySettings.GetMaxRetryNumber()},
         {"at", retryState.LastRetryAt},
-        {"tabletID", TabletID()});
+        {"tabletID", TabletID()}
+    );
 
     if (retryState.RetryNumber > BackgroundCleaningRetrySettings.GetMaxRetryNumber()) {
         for (const auto& ownerActorId : nodeState.Owners) {
@@ -368,7 +375,8 @@ bool TSchemeShard::CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
     YDB_LOG_INFO_CTX(ctx, "Undelivered at schemeshard",
         {"ownerActorId", ownerActorId},
         {"reason", ev->Get()->Reason},
-        {"tabletID", TabletID()});
+        {"tabletID", TabletID()}
+    );
 
     if (ev->Get()->Reason != TEvents::TEvUndelivered::EReason::ReasonActorUnknown) {
         RetryNodeSubscribe(ownerActorId.NodeId());
@@ -425,7 +433,8 @@ void TSchemeShard::HandleBackgroundCleaningTransactionResult(
         {"wakeup", BackgroundCleaningQueue->GetWakeupDelta()},
         {"queue", BackgroundCleaningQueue->GetRate()},
         {"running", BackgroundCleaningQueue->RunningSize()},
-        {"tabletID", TabletID()});
+        {"tabletID", TabletID()}
+    );
 
     const NKikimrScheme::TEvModifySchemeTransactionResult &record = result->Get()->Record;
 
@@ -458,7 +467,8 @@ void TSchemeShard::CleanBackgroundCleaningState(const TPathId& pathId) {
 void TSchemeShard::ClearTempDirsState() {
     auto ctx = ActorContext();
     YDB_LOG_INFO_CTX(ctx, "Clear TempDirsState with owners",
-        {"number", TempDirsState.TempDirsByOwner.size()});
+        {"number", TempDirsState.TempDirsByOwner.size()}
+    );
 
     if (BackgroundCleaningQueue) {
         auto& nodeStates = TempDirsState.NodeStates;

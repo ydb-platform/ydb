@@ -28,13 +28,15 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
             auto txId = TTxId(rawTxId);
             YDB_LOG_DEBUG_CTX(ctx, "NotifyTxCompletion operation in-flight",
                 {"txId", txId},
-                {"schemeshard", Self->TabletID()});
+                {"schemeshard", Self->TabletID()}
+            );
 
             TOperation::TPtr operation = Self->Operations.at(txId);
             if (operation->IsReadyToNotify(ctx)) {
                 YDB_LOG_INFO_CTX(ctx, "NotifyTxCompletion operation is ready to notify",
                     {"txId", txId},
-                    {"schemeshard", Self->TabletID()});
+                    {"schemeshard", Self->TabletID()}
+                );
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId));
                 return;
             }
@@ -46,7 +48,8 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
             YDB_LOG_DEBUG_CTX(ctx, "NotifyTxCompletion publication in-flight",
                 {"count", Self->Publications.at(txId).Paths.size()},
                 {"txId", txId},
-                {"schemeshard", Self->TabletID()});
+                {"schemeshard", Self->TabletID()}
+            );
 
             Self->Publications.at(txId).Subscribers.insert(Ev->Sender);
             Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
@@ -54,13 +57,15 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
             auto txId = rawTxId;
             YDB_LOG_DEBUG_CTX(ctx, "NotifyTxCompletion export in-flight",
                 {"txId", txId},
-                {"schemeshard", Self->TabletID()});
+                {"schemeshard", Self->TabletID()}
+            );
 
             TExportInfo::TPtr exportInfo = Self->Exports.at(txId);
             if (exportInfo->IsFinished()) {
                 YDB_LOG_INFO_CTX(ctx, "NotifyTxCompletion export is ready to notify",
                     {"txId", txId},
-                    {"schemeshard", Self->TabletID()});
+                    {"schemeshard", Self->TabletID()}
+                );
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(txId);
                 return;
             }
@@ -71,13 +76,15 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
             auto txId = rawTxId;
             YDB_LOG_DEBUG_CTX(ctx, "NotifyTxCompletion import in-flight",
                 {"txId", txId},
-                {"schemeshard", Self->TabletID()});
+                {"schemeshard", Self->TabletID()}
+            );
 
             TImportInfo::TPtr importInfo = Self->Imports.at(txId);
             if (importInfo->IsFinished()) {
                 YDB_LOG_INFO_CTX(ctx, "NotifyTxCompletion import is ready to notify",
                     {"txId", txId},
-                    {"schemeshard", Self->TabletID()});
+                    {"schemeshard", Self->TabletID()}
+                );
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(txId);
                 return;
             }
@@ -87,12 +94,14 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
         } else if (const auto txId = TIndexBuildId(rawTxId); const auto* indexInfoPtr = Self->IndexBuilds.FindPtr(txId)) {
             YDB_LOG_DEBUG_CTX(ctx, "NotifyTxCompletion index build in-flight",
                 {"txId", txId},
-                {"schemeshard", Self->TabletID()});
+                {"schemeshard", Self->TabletID()}
+            );
             auto& indexInfo = *indexInfoPtr->get();
             if (indexInfo.IsFinished()) {
                 YDB_LOG_INFO_CTX(ctx, "NotifyTxCompletion index build is ready to notify",
                     {"txId", txId},
-                    {"schemeshard", Self->TabletID()});
+                    {"schemeshard", Self->TabletID()}
+                );
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId));
                 return;
             }
@@ -104,11 +113,13 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
             auto txId = rawTxId;
             YDB_LOG_DEBUG_CTX(ctx, "NotifyTxCompletion forced compaction in-flight",
                 {"txId", txId},
-                {"schemeshard", Self->TabletID()});
+                {"schemeshard", Self->TabletID()}
+            );
             if (compactionInfo.IsFinished()) {
                 YDB_LOG_INFO_CTX(ctx, "NotifyTxCompletion forced compaction is ready to notify",
                     {"txId", txId},
-                    {"schemeshard", Self->TabletID()});
+                    {"schemeshard", Self->TabletID()}
+                );
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(txId);
                 return;
             }
@@ -118,12 +129,14 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
         } else if (const auto txId = TIndexBuildId(rawTxId); const auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(txId)) {
             YDB_LOG_DEBUG_CTX(ctx, "NotifyTxCompletion set column constraint in-flight",
                 {"txId", txId},
-                {"schemeshard", Self->TabletID()});
+                {"schemeshard", Self->TabletID()}
+            );
             auto& operationInfo = *operationInfoPtr->get();
             if (operationInfo.IsFinished()) {
                 YDB_LOG_INFO_CTX(ctx, "NotifyTxCompletion set column constraint is ready to notify",
                     {"txId", txId},
-                    {"schemeshard", Self->TabletID()});
+                    {"schemeshard", Self->TabletID()}
+                );
                 Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId));
                 return;
             }
@@ -133,14 +146,16 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
         } else {
             YDB_LOG_WARN_CTX(ctx, "NotifyTxCompletion unknown transaction",
                 {"txId", rawTxId},
-                {"schemeshard", Self->TabletID()});
+                {"schemeshard", Self->TabletID()}
+            );
             Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(rawTxId);
             return;
         }
 
         YDB_LOG_INFO_CTX(ctx, "NotifyTxCompletion transaction is registered",
             {"txId", rawTxId},
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
     }
 
     void DoComplete(const TActorContext &ctx) override {

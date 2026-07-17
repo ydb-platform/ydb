@@ -81,7 +81,8 @@ private:
             AppData(ctx)->UserPoolId);
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, ServiceId, "Operation queue set wakeup after seconds",
-            {"delta", delta.Seconds()});
+            {"delta", delta.Seconds()}
+        );
     }
 
     TMonotonic Now() override {

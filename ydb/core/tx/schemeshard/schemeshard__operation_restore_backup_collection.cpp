@@ -51,7 +51,8 @@ public:
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"tabletId", context.SS->TabletID()},
-            {"debugHint", DebugHint()});
+            {"debugHint", DebugHint()}
+        );
 
         context.OnComplete.Barrier(OperationId, "DoneBarrier");
         return false;
@@ -60,7 +61,8 @@ public:
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr&, TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvCompleteBarrier",
             {"tabletId", context.SS->TabletID()},
-            {"debugHint", DebugHint()});
+            {"debugHint", DebugHint()}
+        );
 
         if (!TDone::Process(context)) {
             return false;
@@ -79,7 +81,8 @@ public:
         if (itOp == context.SS->LongIncrementalRestoreOps.end()) {
             YDB_LOG_ERROR_CTX(context.Ctx, "Failed to find long incremental restore operation",
                 {"tabletId", context.SS->TabletID()},
-                {"debugHint", DebugHint()});
+                {"debugHint", DebugHint()}
+            );
             return false;
         }
 
@@ -101,7 +104,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "Found incremental backups to restore",
             {"tabletId", context.SS->TabletID()},
             {"debugHint", DebugHint()},
-            {"incrementalBackupCount", incrementalBackupNames.size()});
+            {"incrementalBackupCount", incrementalBackupNames.size()}
+        );
 
         context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId, OperationId, incrementalBackupNames));
 
@@ -144,7 +148,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
             {"step", step},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -166,7 +171,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -225,7 +231,8 @@ public:
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         YDB_LOG_INFO_CTX(context.Ctx, "TCreateRestoreOpControlPlane Propose",
             {"tabletId", context.SS->TabletID()},
-            {"opId", OperationId});
+            {"opId", OperationId}
+        );
 
         TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()});
 
@@ -315,14 +322,16 @@ public:
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateRestoreOpControlPlane AbortPropose",
             {"tabletId", context.SS->TabletID()},
-            {"opId", OperationId});
+            {"opId", OperationId}
+        );
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateRestoreOpControlPlane AbortUnsafe",
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
-            {"forceDropId", forceDropTxId});
+            {"forceDropId", forceDropTxId}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

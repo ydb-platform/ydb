@@ -36,7 +36,8 @@ auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TT
 {
     YDB_LOG_TRACE_CTX(ctx, "BuildStatsForCollector: datashardId followerId",
         {"datashardId", datashardId},
-        {"followerId", followerId});
+        {"followerId", followerId}
+    );
 
     auto ev = MakeHolder<NSysView::TEvSysView::TEvSendPartitionStats>(
         GetDomainKey(pathId), pathId, std::make_pair(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId())));
@@ -279,7 +280,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         YDB_LOG_DEBUG_CTX(ctx, "PersistSingleStats for unknown pathId",
             {"pathId", pathId},
             {"datashardId", datashardId},
-            {"followerId", followerId});
+            {"followerId", followerId}
+        );
         return true;
     }
     const auto& pathElement = pathElementIt->second;
@@ -287,7 +289,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         YDB_LOG_DEBUG_CTX(ctx, "PersistSingleStats for dropped pathId",
             {"pathId", pathId},
             {"datashardId", datashardId},
-            {"followerId", followerId});
+            {"followerId", followerId}
+        );
         return true;
     }
 
@@ -297,7 +300,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     if (!isDataShard && !isOlapStore && !isColumnTable) {
         YDB_LOG_DEBUG_CTX(ctx, "Unexpected stats from shard",
-            {"datashardId", datashardId});
+            {"datashardId", datashardId}
+        );
         return true;
     }
 
@@ -307,7 +311,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }();
     if (!shardIdx) {
         YDB_LOG_ERROR_CTX(ctx, "No shardIdx for shard",
-            {"datashardId", datashardId});
+            {"datashardId", datashardId}
+        );
         return true;
     }
 
@@ -315,12 +320,14 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         {"pathId", pathId.LocalPathId},
         {"shardIdx", shardIdx},
         {"dataSize", dataSize},
-        {"rowCount", rowCount});
+        {"rowCount", rowCount}
+    );
     const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx);
     if (!shardInfo) {
         YDB_LOG_DEBUG_CTX(ctx, "No ShardInfo by shardIdx of shard",
             {"shardIdx", shardIdx},
-            {"datashardId", datashardId});
+            {"datashardId", datashardId}
+        );
         return true;
     }
 
@@ -338,7 +345,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         {"olap", isOlapStore},
         {"rowCount", newStats.RowCount},
         {"dataSize", newStats.DataSize},
-        {"detail", (newStats.HasBorrowedData ? ", with borrowed parts" : "")});
+        {"detail", (newStats.HasBorrowedData ? ", with borrowed parts" : "")}
+    );
 
     NIceDb::TNiceDb db(txc.DB);
 
@@ -366,7 +374,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
         if (!Self->Tables.contains(pathId)) {
             YDB_LOG_WARN_CTX(ctx, "Row table not found",
-                {"pathId", pathId});
+                {"pathId", pathId}
+            );
             return true;
         }
 
@@ -401,7 +410,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             YDB_LOG_DEBUG_CTX(ctx, "Do not want to split tablet by the CPU load from the follower ID",
                 {"datashardId", datashardId},
                 {"followerId", followerId},
-                {"reason", splitReason});
+                {"reason", splitReason}
+            );
 
             return true;
         }
@@ -409,7 +419,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         YDB_LOG_NOTICE_CTX(ctx, "Want to split tablet by the CPU load from the follower ID",
             {"datashardId", datashardId},
             {"followerId", followerId},
-            {"reason", splitReason});
+            {"reason", splitReason}
+        );
 
         VerifySplitAndRequestStats(
             ctx,
@@ -433,7 +444,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     if (isDataShard) {
         if (!Self->Tables.contains(pathId)) {
             YDB_LOG_WARN_CTX(ctx, "Row table not found",
-                {"pathId", pathId});
+                {"pathId", pathId}
+            );
             return true;
         }
 
@@ -461,7 +473,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     } else if (isOlapStore) {
         if (!Self->OlapStores.contains(pathId)) {
             YDB_LOG_WARN_CTX(ctx, "Olap store not found",
-                {"pathId", pathId});
+                {"pathId", pathId}
+            );
             return true;
         }
 
@@ -475,7 +488,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
         const auto tables = rec.GetTables();
         YDB_LOG_DEBUG_CTX(ctx, "OLAP store contains tables",
-            {"tablesCount", tables.size()});
+            {"tablesCount", tables.size()}
+        );
 
         for (const auto& table : tables) {
             const TPartitionStats newTableStats = PrepareStats(table, now, {}, {});
@@ -484,29 +498,34 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
             if (Self->ColumnTables.contains(tablePathId)) {
                 YDB_LOG_TRACE_CTX(ctx, "Add stats for existing table",
-                    {"pathId", tablePathId});
+                    {"pathId", tablePathId}
+                );
 
                 Self->ColumnTables.GetVerifiedPtr(tablePathId)->UpdateTableStats(shardIdx, tablePathId, newTableStats, now);
             } else {
                 YDB_LOG_WARN_CTX(ctx, "Failed to add stats for table",
-                    {"pathId", tablePathId});
+                    {"pathId", tablePathId}
+                );
             }
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "Aggregated stats for pathId RowCount DataSize",
             {"pathId", pathId.LocalPathId},
             {"rowCount", olapStore->Stats.Aggregated.RowCount},
-            {"dataSize", olapStore->Stats.Aggregated.DataSize});
+            {"dataSize", olapStore->Stats.Aggregated.DataSize}
+        );
 
     } else if (isColumnTable) {
         if (!Self->ColumnTables.contains(pathId)) {
             YDB_LOG_WARN_CTX(ctx, "Column table not found",
-                {"pathId", pathId});
+                {"pathId", pathId}
+            );
             return true;
         }
 
         YDB_LOG_INFO_CTX(ctx, "PersistSingleStats: ColumnTable tables count",
-            {"size", rec.GetTables().size()});
+            {"size", rec.GetTables().size()}
+        );
 
         auto columnTable = Self->ColumnTables.GetVerifiedPtr(pathId);
         const ui64 prevSmallBlobsBytes = columnTable->Stats.Aggregated.SmallBlobsVolumeBytes;
@@ -519,7 +538,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         YDB_LOG_DEBUG_CTX(ctx, "Aggregated stats for pathId RowCount DataSize",
             {"pathId", pathId.LocalPathId},
             {"rowCount", columnTable->Stats.Aggregated.RowCount},
-            {"dataSize", columnTable->Stats.Aggregated.DataSize});
+            {"dataSize", columnTable->Stats.Aggregated.DataSize}
+        );
     }
 
     if (updateSubdomainInfo) {
@@ -565,7 +585,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     TString inflightLimitErrStr;
     if (!Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, inflightLimitErrStr)) {
         YDB_LOG_DEBUG_CTX(ctx, "Do not consider split-merge",
-            {"error", inflightLimitErrStr});
+            {"error", inflightLimitErrStr}
+        );
         return true;
     }
 
@@ -580,7 +601,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         if (!txId) {
             YDB_LOG_WARN_CTX(ctx, "Do not request merge op: no cached tx ids for internal operation",
                 {"shardIdx", shardIdx},
-                {"merge", shardsToMerge.size()});
+                {"merge", shardsToMerge.size()}
+            );
             return true;
         }
 
@@ -588,7 +610,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
         YDB_LOG_INFO_CTX(ctx, "Propose merge",
             {"request", request->Record.ShortDebugString()},
-            {"reason", mergeReason});
+            {"reason", mergeReason}
+        );
 
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
@@ -611,23 +634,27 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         // We would like to split by size and do this no matter how many partitions there are
         YDB_LOG_NOTICE_CTX(ctx, "Want to split tablet",
             {"datashardId", datashardId},
-            {"size", reason});
+            {"size", reason}
+        );
     } else if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
         // We cannot split as there are max partitions already
         YDB_LOG_DEBUG_CTX(ctx, "Do not want to split tablet by load: table already has max partitions",
             {"datashardId", datashardId},
             {"partitionsCount", table->GetPartitions().size()},
-            {"maxPartitionsCount", table->GetMaxPartitionsCount()});
+            {"maxPartitionsCount", table->GetMaxPartitionsCount()}
+        );
         return true;
     } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, reason)) {
         YDB_LOG_NOTICE_CTX(ctx, "Want to split tablet",
             {"datashardId", datashardId},
-            {"load", reason});
+            {"load", reason}
+        );
         collectKeySample = true;
     } else {
         YDB_LOG_DEBUG_CTX(ctx, "Do not want to split tablet",
             {"datashardId", datashardId},
-            {"reason", reason});
+            {"reason", reason}
+        );
         return true;
     }
 
@@ -669,7 +696,8 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
                 {"datashardId", datashardId},
                 {"limit", subDomainInfo->GetSchemeLimits().MaxShardsInPath},
                 {"current", pathElement->GetShardsInside()},
-                {"delta", deltaShards});
+                {"delta", deltaShards}
+            );
 
             return false;
         }
@@ -681,7 +709,8 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
                 {"datashard", datashardId},
                 {"limit", subDomainInfo->GetSchemeLimits().MaxShards},
                 {"current", currentShards},
-                {"delta", deltaShards});
+                {"delta", deltaShards}
+            );
 
             return false;
         }
@@ -689,7 +718,8 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
 
     if (newPartitionStats.HasBorrowedData) {
         YDB_LOG_NOTICE_CTX(ctx, "Postpone split tablet because it has borrow parts, enqueue compact them first",
-            {"datashardId", datashardId});
+            {"datashardId", datashardId}
+        );
 
         Self->EnqueueBorrowedCompaction(shardIdx);
         return false;
@@ -700,14 +730,16 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
         const auto txId = found->second;
         YDB_LOG_NOTICE_CTX(ctx, "Postpone split tablet because it is locked by",
             {"datashardId", datashardId},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
         return false;
     }
 
     // Request histograms from the datashard
     YDB_LOG_NOTICE_CTX(ctx, "Requesting full tablet stats to split it",
-        {"datashardId", datashardId});
+        {"datashardId", datashardId}
+    );
 
     auto request = new TEvDataShard::TEvGetTableStats(pathId.LocalPathId);
     request->Record.SetCollectKeySample(collectKeySample);
@@ -753,14 +785,16 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
         {"shardState", DatashardStateName(rec.GetShardState())},
         {"dataSize", dataSize},
         {"rowCount", rowCount},
-        {"cpuUsage", tabletMetrics.GetCPU()/10000.0});
+        {"cpuUsage", tabletMetrics.GetCPU()/10000.0}
+    );
 
     YDB_LOG_TRACE_CTX(ctx, "Got periodic table stats raw",
         {"tabletID", TabletID()},
         {"datashardId", datashardId},
         {"followerId", followerId},
         {"pathId", pathId},
-        {"tableStats", tableStats.ShortDebugString()});
+        {"tableStats", tableStats.ShortDebugString()}
+    );
 
     TStatsId statsId(pathId, datashardId, followerId);
 
@@ -781,7 +815,8 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
 void TSchemeShard::Handle(TEvPrivate::TEvPersistTableStats::TPtr&, const TActorContext& ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Started TEvPersistStats at tablet queue",
         {"tabletID", TabletID()},
-        {"size", TableStatsQueue.Size()});
+        {"size", TableStatsQueue.Size()}
+    );
 
     TableStatsBatchScheduled = false;
     ExecuteTableStatsBatch(ctx);
@@ -792,7 +827,8 @@ void TSchemeShard::ExecuteTableStatsBatch(const TActorContext& ctx) {
         TablePersistStatsPending = true;
         EnqueueExecute(new TTxStoreTableStats(this, TableStatsQueue, TablePersistStatsPending));
         YDB_LOG_TRACE_CTX(ctx, "Will execute TTxStoreStats",
-            {"queue", TableStatsQueue.Size()});
+            {"queue", TableStatsQueue.Size()}
+        );
         ScheduleTableStatsBatch(ctx);
     }
 }
@@ -802,7 +838,8 @@ void TSchemeShard::ScheduleTableStatsBatch(const TActorContext& ctx) {
         TDuration delay = TableStatsQueue.Delay();
         YDB_LOG_TRACE_CTX(ctx, "Will delay TTxStoreTableStats",
             {"on", delay},
-            {"queue", TableStatsQueue.Size()});
+            {"queue", TableStatsQueue.Size()}
+        );
 
         ctx.Schedule(delay, new TEvPrivate::TEvPersistTableStats());
         TableStatsBatchScheduled = true;

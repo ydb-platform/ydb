@@ -42,7 +42,8 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
                 YDB_LOG_WARN_CTX(ctx, "Got DeleteTabletReply with Forward response from Hive to Hive shardIdx",
                     {"hiveId", HiveId},
                     {"forwardToHiveId", ForwardToHiveId},
-                    {"shardIdx", ShardIdx});
+                    {"shardIdx", ShardIdx}
+                );
                 Y_ABORT_UNLESS(ForwardToHiveId);
                 Self->ShardDeleter.RedirectDeleteRequest(HiveId, ForwardToHiveId, ShardIdx, Self->ShardInfos, ctx);
                 return;
@@ -51,7 +52,8 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             YDB_LOG_ALERT_CTX(ctx, "Got DeleteTabletReply from Hive shardIdx status",
                 {"hiveId", HiveId},
                 {"shardIdx", ShardIdx},
-                {"status", Status});
+                {"status", Status}
+            );
             return;
         }
 
@@ -188,14 +190,16 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
     void DoComplete(const TActorContext &ctx) override {
         if (Status == NKikimrProto::OK) {
             YDB_LOG_DEBUG_CTX(ctx, "Deleted shardIdx",
-                {"shardIdx", ShardIdx});
+                {"shardIdx", ShardIdx}
+            );
 
             Self->ShardDeleter.ShardDeleted(ShardIdx, ctx);
 
             if (TabletId != InvalidTabletId) {
                 YDB_LOG_DEBUG_CTX(ctx, "Close pipe to deleted shardIdx tabletId",
                     {"shardIdx", ShardIdx},
-                    {"tabletId", TabletId});
+                    {"tabletId", TabletId}
+                );
                 Self->PipeClientCache->ForceClose(ctx, ui64(TabletId));
             }
             if (Self->EnableShred && Self->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {

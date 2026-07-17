@@ -35,7 +35,8 @@ public:
         const auto& settings = request.GetSettings();
         YDB_LOG_NOTICE("DoExecute",
             {"logPrefix", LogPrefix},
-            {"request", request.ShortDebugString()});
+            {"request", request.ShortDebugString()}
+        );
 
         if (Self->SetColumnConstraintOperations.contains(BuildId)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()

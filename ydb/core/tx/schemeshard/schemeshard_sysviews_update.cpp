@@ -126,7 +126,8 @@ public:
             YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Send",
                 {"sysViewsRosterUpdate", ctx.SelfID},
                 {"schemeshard", SelfTabletId},
-                {"TEvModifySchemeTransaction", request->Record.ShortDebugString()});
+                {"TEvModifySchemeTransaction", request->Record.ShortDebugString()}
+            );
 
             AwaitingModifySchemeRequests.emplace(txId, std::move(requestInfo));
             Send(SelfActorId, request.Release());
@@ -145,7 +146,8 @@ public:
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 YDB_LOG_CRIT_CTX(*TlsActivationContext, "TSysViewsRosterUpdate StateUpdateSysViewFolder unexpected event 0x%08x",
-                    {"eventType", ev->GetTypeRewrite()});
+                    {"eventType", ev->GetTypeRewrite()}
+                );
         }
     }
 
@@ -156,7 +158,8 @@ private:
         YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Send TEvNotifyTxCompletion",
             {"sysViewsRosterUpdate", ctx.SelfID},
             {"schemeshard", SelfTabletId},
-            {"txId", txId});
+            {"txId", txId}
+        );
 
 
         Send(SelfActorId, new TEvSchemeShard::TEvNotifyTxCompletion(static_cast<ui64>(txId)));
@@ -172,7 +175,8 @@ private:
             {"sysViewsRosterUpdate", ctx.SelfID},
             {"schemeshard", SelfTabletId},
             {"modifyInfo", modifyInfo.DebugString()},
-            {"status", status});
+            {"status", status}
+        );
 
         switch (status) {
         case NKikimrScheme::StatusSuccess:
@@ -186,7 +190,8 @@ private:
                 {"sysViewsRosterUpdate", ctx.SelfID},
                 {"schemeshard", SelfTabletId},
                 {"modifyInfo", modifyInfo.DebugString()},
-                {"reason", record.GetReason()});
+                {"reason", record.GetReason()}
+            );
 
             AwaitingModifySchemeRequests.erase(txId);
             break;
@@ -195,7 +200,8 @@ private:
         if (AwaitingModifySchemeRequests.empty()) {
             YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Send TEvRosterUpdateFinished",
                 {"sysViewsRosterUpdate", ctx.SelfID},
-                {"schemeshard", SelfTabletId});
+                {"schemeshard", SelfTabletId}
+            );
             Send(ctx.SelfID, new NSysView::TEvSysView::TEvRosterUpdateFinished());
         }
     }
@@ -208,14 +214,16 @@ private:
         YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Handle TEvNotifyTxCompletionResult",
             {"sysViewsRosterUpdate", ctx.SelfID},
             {"schemeshard", SelfTabletId},
-            {"modifyInfo", modifyInfo.DebugString()});
+            {"modifyInfo", modifyInfo.DebugString()}
+        );
 
         AwaitingModifySchemeRequests.erase(txId);
 
         if (AwaitingModifySchemeRequests.empty()) {
             YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Send TEvRosterUpdateFinished",
                 {"sysViewsRosterUpdate", ctx.SelfID},
-                {"schemeshard", SelfTabletId});
+                {"schemeshard", SelfTabletId}
+            );
             Send(ctx.SelfID, new NSysView::TEvSysView::TEvRosterUpdateFinished());
         }
     }

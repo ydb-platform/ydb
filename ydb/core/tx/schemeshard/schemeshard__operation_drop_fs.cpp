@@ -42,7 +42,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
             {"step", step},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -103,7 +104,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -179,7 +181,8 @@ THolder<TProposeResponse> TDropFileStore::Propose(
         {"name", name},
         {"pathId", operation.GetId()},
         {"opId", OperationId},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     auto result = MakeHolder<TProposeResponse>(
         NKikimrScheme::StatusAccepted,

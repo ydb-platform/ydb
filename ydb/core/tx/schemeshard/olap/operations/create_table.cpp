@@ -240,7 +240,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tabletId", ssId});
+            {"tabletId", ssId}
+        );
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateColumnTable);
 
@@ -321,12 +322,14 @@ public:
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             } else {
                 YDB_LOG_ERROR_CTX(context.Ctx, "Unexpected tablet type",
-                    {"debugHint", DebugHint()});
+                    {"debugHint", DebugHint()}
+                );
             }
 
             YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState Propose modify scheme on shard",
                 {"debugHint", DebugHint()},
-                {"tabletId", tabletId});
+                {"tabletId", tabletId}
+            );
         }
 
         txState->UpdateShardsInProgress();
@@ -361,7 +364,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
             {"tablet", ssId},
-            {"stepId", step});
+            {"stepId", step}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateColumnTable);
@@ -404,7 +408,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -464,7 +469,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -484,13 +490,15 @@ public:
                 }
                 default: {
                     YDB_LOG_DEBUG_CTX(context.Ctx, "Unexpected tablet type",
-                        {"debugHint", DebugHint()});
+                        {"debugHint", DebugHint()}
+                    );
                 }
             }
 
             YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState wait for NotifyTxCompletionResult",
                 {"debugHint", DebugHint()},
-                {"tabletId", tabletId});
+                {"tabletId", tabletId}
+            );
         }
 
         if (txState->NeedUpdateObject) {
@@ -577,7 +585,8 @@ public:
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(opTxId), ui64(ssId));
@@ -863,7 +872,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateColumnTable AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

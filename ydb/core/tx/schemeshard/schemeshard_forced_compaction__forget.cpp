@@ -20,7 +20,8 @@ struct TSchemeShard::TForcedCompaction::TTxForget: public TRwTxBase {
         const auto& request = Request->Get()->Record;
         YDB_LOG_DEBUG_CTX(ctx, "][ForcedCompaction] TForcedCompaction::TTxForget DoExecute",
             {"tabletId", Self->SelfTabletId()},
-            {"request", request.ShortDebugString()});
+            {"request", request.ShortDebugString()}
+        );
 
         auto response = MakeHolder<TEvForcedCompaction::TEvForgetResponse>(request.GetTxId());
         TPath database = TPath::Resolve(request.GetDatabaseName(), Self);
@@ -70,7 +71,8 @@ struct TSchemeShard::TForcedCompaction::TTxForget: public TRwTxBase {
     void DoComplete(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "][ForcedCompaction] TForcedCompaction::TTxForget DoComplete",
             {"tabletId", Self->SelfTabletId()},
-            {"requestRecord", Request->Get()->Record.ShortDebugString()});
+            {"requestRecord", Request->Get()->Record.ShortDebugString()}
+        );
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 

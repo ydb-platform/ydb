@@ -36,7 +36,8 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         if (!Self->IsServerlessDomain(TPath::Init(Self->RootPathId(), Self))) {
             YDB_LOG_INFO_CTX(ctx, "TTxServerlessStorageBilling: unable to make a bill, domain is not a serverless db",
                 {"schemeshardId", Self->SelfTabletId()},
-                {"domainId", Self->ParentDomainId});
+                {"domainId", Self->ParentDomainId}
+            );
             return true;
         }
 
@@ -50,7 +51,8 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
             YDB_LOG_INFO_CTX(ctx, "TTxServerlessStorageBilling: unable to make a bill, AllowServerlessStorageBilling is false next retry",
                 {"schemeshardId", Self->SelfTabletId()},
                 {"domainId", Self->ParentDomainId},
-                {"at", TimeToNextBill});
+                {"at", TimeToNextBill}
+            );
             return true;
         }
 
@@ -71,7 +73,8 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
             YDB_LOG_INFO_CTX(ctx, "TTxServerlessStorageBilling: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain next retry",
                 {"schemeshardId", Self->SelfTabletId()},
                 {"domainId", Self->ParentDomainId},
-                {"at", TimeToNextBill});
+                {"at", TimeToNextBill}
+            );
             return true;
         }
 
@@ -79,7 +82,8 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
             YDB_LOG_INFO_CTX(ctx, "TTxServerlessStorageBilling: nothing to bill next retry",
                 {"schemeshardId", Self->SelfTabletId()},
                 {"domainId", Self->ParentDomainId},
-                {"at", TimeToNextBill});
+                {"at", TimeToNextBill}
+            );
             return true;
         }
 
@@ -94,7 +98,8 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
                 {"domainId", Self->ParentDomainId},
                 {"now", now},
                 {"lastBillTime", cur.Start},
-                {"at", TimeToNextBill});
+                {"at", TimeToNextBill}
+            );
 
             Self->ServerlessStorageLastBillTime = cur.Start;
             Self->PersistStorageBillingTime(db);
@@ -110,7 +115,8 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
                 {"domainId", Self->ParentDomainId},
                 {"now", now},
                 {"lastBillTime", last},
-                {"at", TimeToNextBill});
+                {"at", TimeToNextBill}
+            );
             return true;
         }
 
@@ -127,7 +133,8 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
                 {"lastBilledEnd", lastBilled.End},
                 {"toBill", toBill.Start},
                 {"toBillEnd", toBill.End},
-                {"at", TimeToNextBill});
+                {"at", TimeToNextBill}
+            );
             return true;
         }
 
@@ -144,7 +151,8 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
                 {"lastBilledEnd", lastBilled.End},
                 {"toBill", toBill.Start},
                 {"toBillEnd", toBill.End},
-                {"at", TimeToNextBill});
+                {"at", TimeToNextBill}
+            );
         }
 
         Self->ServerlessStorageLastBillTime = toBill.Start;
@@ -204,7 +212,8 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
             {"lastBilledEnd", lastBilled.End},
             {"toBill", toBill.Start},
             {"toBillEnd", toBill.End},
-            {"at", TimeToNextBill});
+            {"at", TimeToNextBill}
+        );
 
         auto request = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(billRecord);
         // send message at Complete stage

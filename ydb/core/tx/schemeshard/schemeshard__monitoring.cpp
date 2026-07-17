@@ -214,7 +214,8 @@ bool IsSchemeShardDevUiAdminRequest(const TCgiParameters& cgi, const TActorConte
 
     YDB_LOG_WARN_CTX(ctx, "SchemeShard DevUI request to unknown",
         {"page", page},
-        {"cgi", cgi.Print()});
+        {"cgi", cgi.Print()}
+    );
     return true;
 }
 
@@ -758,7 +759,8 @@ private:
                   << " to " << valueStr;
 
             YDB_LOG_EMERG_CTX(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
-                {"debug", debug});
+                {"debug", debug}
+            );
             str << debug;
 
             db.Table<Schema::SysParams>().Key(Schema::SysParam_IsReadOnlyMode).Update(
@@ -778,7 +780,8 @@ private:
             debug << "Triggered UpdateAccessDatabaseRights with DryRunVal: " << valueDryRunStr;
 
             YDB_LOG_EMERG_CTX(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
-                {"debug", debug});
+                {"debug", debug}
+            );
             str << debug;
 
             TStringStream templateAnswer = str;
@@ -830,7 +833,8 @@ private:
             debug << "Triggered FixAccessDatabaseInheritance with DryRunVal: " << valueDryRunStr;
 
             YDB_LOG_EMERG_CTX(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
-                {"debug", debug});
+                {"debug", debug}
+            );
             str << debug;
 
             TStringStream templateAnswer = str;
@@ -882,7 +886,8 @@ private:
             debug << "Triggered UpdateCoordinatorsConfig, dryRun = " << valueDryRun;
 
             YDB_LOG_EMERG_CTX(ctx, "TSchemeShard::TTxMonitoring AdminRequest",
-                {"debug", debug});
+                {"debug", debug}
+            );
             str << "<pre>";
             str << debug << Endl;
 
@@ -2466,7 +2471,8 @@ private:
                 location << "&" << TCgi::SweepAlert.AsCgiParam(ToString(ui8(sweepAlert)));
             }
             YDB_LOG_DEBUG_CTX(ctx, "TTxMonitoring.Execute: redirect",
-                {"location", location});
+                {"location", location}
+            );
             SendRedirect(location, ctx);
 
         } else {
@@ -2494,7 +2500,8 @@ struct TSchemeShard::TTxMoveShardToStoragePool : public NTabletFlatExecutor::TTr
         if (!info) {
             // Shard deleted between Hive ack and persist; nothing to record.
             YDB_LOG_WARN_CTX(ctx, "TTxMoveShardToStoragePool: shard no longer exists, skipping persist",
-                {"shardIdx", shardIdx});
+                {"shardIdx", shardIdx}
+            );
             return true;
         }
 
@@ -2504,7 +2511,8 @@ struct TSchemeShard::TTxMoveShardToStoragePool : public NTabletFlatExecutor::TTr
         Persisted = true;
 
         YDB_LOG_DEBUG_CTX(ctx, "TTxMoveShardToStoragePool: persisted new channel bindings for shard",
-            {"shardIdx", shardIdx});
+            {"shardIdx", shardIdx}
+        );
         return true;
     }
 
@@ -2550,7 +2558,8 @@ bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Handle",
-        {"TEvRemoteHttpInfo", ev->Get()->Cgi().Print()});
+        {"TEvRemoteHttpInfo", ev->Get()->Cgi().Print()}
+    );
     Execute(new TTxMonitoring(this, ev), ctx);
 
     return true;

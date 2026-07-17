@@ -41,7 +41,8 @@ void PrepareChanges(TOperationId operationId,
 
     YDB_LOG_DEBUG_CTX(context.Ctx, "AlterKesus AlterVersion",
         {"txid", operationId.GetTxId()},
-        {"alterVersion", kesus->AlterVersion});
+        {"alterVersion", kesus->AlterVersion}
+    );
 
     context.SS->PersistAddKesusAlter(db, item->PathId, kesus);
 
@@ -71,7 +72,8 @@ public:
 
         YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateKesus TConfigureParts HandleReply TEvSetConfigResult",
             {"operationId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTabletId tabletId =TTabletId(ev->Get()->Record.GetTabletId());
         auto status = ev->Get()->Record.GetError().GetStatus();
@@ -109,7 +111,8 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
         YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateKesus TConfigureParts ProgressState",
             {"operationId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -166,7 +169,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "TAlterKesus TPropose HandleReply TEvOperationPlan",
             {"operationId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -198,7 +202,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "TAlterKesus TPropose ProgressState",
             {"operationId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -274,7 +279,8 @@ public:
             {"name", name},
             {"pathId", pathId},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -350,7 +356,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterKesus AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

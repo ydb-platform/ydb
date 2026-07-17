@@ -43,7 +43,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvUpdateConfigResponse",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -65,7 +66,8 @@ public:
             YDB_LOG_ERROR_CTX(context.Ctx, "Reconfiguration is in progress. We'll try to finish it later",
                 {"debugHint", DebugHint()},
                 {"tx", OperationId},
-                {"tablet", tabletId});
+                {"tablet", tabletId}
+            );
             return false;
         }
 
@@ -89,7 +91,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -154,7 +157,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
             {"step", step},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -188,7 +192,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -217,7 +222,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateFileStore AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -290,7 +296,8 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
         {"path", parentPathStr},
         {"name", name},
         {"opId", OperationId},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     auto status = NKikimrScheme::StatusAccepted;
     auto result = MakeHolder<TProposeResponse>(

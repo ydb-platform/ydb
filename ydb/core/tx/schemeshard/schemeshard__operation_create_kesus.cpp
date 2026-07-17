@@ -96,7 +96,8 @@ public:
 
         YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateKesus TConfigureParts HandleReply TEvSetConfigResult at tablet",
             {"operationId", OperationId},
-            {"ssId", ssId});
+            {"ssId", ssId}
+        );
 
         auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
         auto status = ev->Get()->Record.GetError().GetStatus();
@@ -131,7 +132,8 @@ public:
         auto ssId = context.SS->SelfTabletId();
         YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateKesus TConfigureParts ProgressState at tablet",
             {"operationId", OperationId},
-            {"ssId", ssId});
+            {"ssId", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -194,7 +196,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -239,7 +242,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -302,7 +306,8 @@ public:
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -420,7 +425,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateKesus AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

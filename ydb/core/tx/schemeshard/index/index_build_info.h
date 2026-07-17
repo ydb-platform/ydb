@@ -733,7 +733,8 @@ public:
 
         YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Restored index build",
             {"id", indexInfo->Id},
-            {"indexInfo", *indexInfo});
+            {"indexInfo", *indexInfo}
+        );
     }
 
     template<class TRow>
@@ -752,7 +753,8 @@ public:
         TSerializedTableRange bound{range};
         YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "AddShardStatus shard",
             {"id", Id},
-            {"shardIdx", shardIdx});
+            {"shardIdx", shardIdx}
+        );
         if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
             KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
             KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders)

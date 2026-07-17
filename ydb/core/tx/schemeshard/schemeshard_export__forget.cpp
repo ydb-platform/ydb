@@ -72,7 +72,8 @@ struct TSchemeShard::TExport::TTxForget: public TSchemeShard::TXxport::TTxBase {
             Self->PersistRemoveExport(db, *exportInfo);
         } else {
             YDB_LOG_DEBUG("TExport::TTxForget, dropping export tables",
-                {"info", exportInfo->ToString()});
+                {"info", exportInfo->ToString()}
+            );
 
             PrepareDropping(Self, *exportInfo, db);
 

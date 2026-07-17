@@ -122,7 +122,8 @@ public:
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateFullBackupOp AbortPropose",
             {"tabletId", context.SS->TabletID()},
-            {"opId", OperationId});
+            {"opId", OperationId}
+        );
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -130,7 +131,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateFullBackupOp AbortUnsafe",
             {"tabletId", context.SS->TabletID()},
             {"opId", OperationId},
-            {"forceDropTxId", forceDropTxId});
+            {"forceDropTxId", forceDropTxId}
+        );
 
         auto* infoPtr = context.SS->FullBackups.FindPtr(ui64(OperationId.GetTxId()));
         if (infoPtr && (*infoPtr)->State == TFullBackupInfo::EState::Transferring) {

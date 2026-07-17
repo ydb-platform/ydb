@@ -27,7 +27,8 @@ public:
         const auto& request = Request->Get()->Record;
         YDB_LOG_DEBUG_CTX(ctx, "][ForcedCompaction] TForcedCompaction::TTxList DoExecute",
             {"tabletId", Self->SelfTabletId()},
-            {"request", request.ShortDebugString()});
+            {"request", request.ShortDebugString()}
+        );
 
         auto response = MakeHolder<TEvForcedCompaction::TEvListResponse>();
         TPath database = TPath::Resolve(request.GetDatabaseName(), Self);
@@ -85,7 +86,8 @@ public:
     void DoComplete(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "][ForcedCompaction] TForcedCompaction::TTxList DoComplete",
             {"tabletId", Self->SelfTabletId()},
-            {"requestRecord", Request->Get()->Record.ShortDebugString()});
+            {"requestRecord", Request->Get()->Record.ShortDebugString()}
+        );
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 

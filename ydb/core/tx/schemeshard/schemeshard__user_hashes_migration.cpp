@@ -85,7 +85,8 @@ struct TSchemeShard::TTxUserHashesMigration : public TTransactionBase<TSchemeSha
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "TTxUserHashesMigration Execute",
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
 
         NIceDb::TNiceDb db(txc.DB);
         for (const auto& [sidName, sid] : Self->LoginProvider.Sids) {
@@ -99,7 +100,8 @@ struct TSchemeShard::TTxUserHashesMigration : public TTransactionBase<TSchemeSha
                     if (response.Error) {
                         YDB_LOG_ERROR_CTX(ctx, "TTxUserHashesMigration Execute can't set generated password in place unacceptable argon",
                             {"hash", response.Error},
-                            {"schemeshard", Self->TabletID()});
+                            {"schemeshard", Self->TabletID()}
+                        );
                         continue;
                     }
 
@@ -127,7 +129,8 @@ struct TSchemeShard::TTxUserHashesMigration : public TTransactionBase<TSchemeSha
 
     void Complete(const TActorContext &ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxUserHashesMigration Complete",
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
 
         if (IsLoginProviderModified) {
             Self->PublishToSchemeBoard(TTxId(), {Self->GetCurrentSubDomainPathId()}, ctx);

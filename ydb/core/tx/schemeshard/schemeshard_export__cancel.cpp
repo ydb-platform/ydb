@@ -62,7 +62,8 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         }
 
         YDB_LOG_DEBUG("TExport::TTxCancel, cancelling manually",
-            {"info", exportInfo->ToString()});
+            {"info", exportInfo->ToString()}
+        );
 
         exportInfo->Issue = "Cancelled manually";
 

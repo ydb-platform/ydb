@@ -54,7 +54,8 @@ class TDropTestShardSet : public TSubOperation {
             YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
                 {"debugHint", DebugHint()},
                 {"step", step},
-                {"schemeshard", ssId});
+                {"schemeshard", ssId}
+            );
 
             TTxState* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);
@@ -105,7 +106,8 @@ class TDropTestShardSet : public TSubOperation {
 
             YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
                 {"debugHint", DebugHint()},
-                {"schemeshard", ssId});
+                {"schemeshard", ssId}
+            );
 
             TTxState* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);
@@ -150,7 +152,8 @@ public:
             {"name", name},
             {"opId", OperationId},
             {"schemeshard", ssId},
-            {"drop", drop.ShortDebugString()});
+            {"drop", drop.ShortDebugString()}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -230,7 +233,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TDropTestShardSet AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->SelfTabletId()});
+            {"schemeshard", context.SS->SelfTabletId()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

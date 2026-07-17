@@ -93,7 +93,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tabletId", ssId});
+            {"tabletId", ssId}
+        );
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterOlapStore);
         TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores[txState->TargetPathId];
@@ -164,7 +165,8 @@ public:
 
             YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState Propose modify scheme on shard",
                 {"debugHint", DebugHint()},
-                {"tabletId", tabletId});
+                {"tabletId", tabletId}
+            );
         }
 
         txState->UpdateShardsInProgress();
@@ -197,7 +199,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"debugHint", DebugHint()},
             {"tablet", ssId},
-            {"stepId", step});
+            {"stepId", step}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterOlapStore);
@@ -243,7 +246,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -303,7 +307,8 @@ public:
 
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"debugHint", DebugHint()},
-            {"tablet", ssId});
+            {"tablet", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -329,7 +334,8 @@ public:
 
                 YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState wait for NotifyTxCompletionResult",
                     {"debugHint", DebugHint()},
-                    {"tabletId", tabletId});
+                    {"tabletId", tabletId}
+                );
             }
 
             MessagesSent = true;
@@ -462,7 +468,8 @@ public:
             {"path", parentPathStr},
             {"name", name},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -609,7 +616,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterOlapStore AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

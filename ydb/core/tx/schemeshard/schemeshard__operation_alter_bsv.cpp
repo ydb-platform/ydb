@@ -74,7 +74,8 @@ public:
             {"defaultPartitions", volume->DefaultPartitionCount},
             {"defaultPartitionCount", volume->AlterData->DefaultPartitionCount},
             {"explicitChannelProfiles", volume->ExplicitChannelProfileCount},
-            {"explicitChannelProfileCount", volume->AlterData->ExplicitChannelProfileCount});
+            {"explicitChannelProfileCount", volume->AlterData->ExplicitChannelProfileCount}
+        );
 
         bool needMoreShards = ApplySharding(
             operationId.GetTxId(),
@@ -403,7 +404,8 @@ public:
             {"name", name},
             {"pathId", pathId},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto result = MakeHolder<TProposeResponse>(
             NKikimrScheme::StatusAccepted,
@@ -645,7 +647,8 @@ public:
         YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterBlockStoreVolume AbortUnsafe",
             {"opId", OperationId},
             {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()});
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

@@ -34,7 +34,8 @@ struct TSchemeShard::TTxFixBadPaths : public TTransactionBase<TSchemeShard> {
 
                 YDB_LOG_WARN_CTX(ctx, "Fix CreateTxId",
                     {"self", Self->TabletID()},
-                    {"pathId", pathId});
+                    {"pathId", pathId}
+                );
             }
             if (pathId != Self->RootPathId() && pathEl->StepCreated == InvalidStepId) {
                 pathEl->StepCreated = TStepId(1);
@@ -42,7 +43,8 @@ struct TSchemeShard::TTxFixBadPaths : public TTransactionBase<TSchemeShard> {
 
                 YDB_LOG_WARN_CTX(ctx, "Fix StepCreated",
                     {"self", Self->TabletID()},
-                    {"pathId", pathId});
+                    {"pathId", pathId}
+                );
             }
         }
 

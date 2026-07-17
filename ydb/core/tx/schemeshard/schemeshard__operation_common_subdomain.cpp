@@ -24,7 +24,8 @@ bool TConfigureParts::HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult
     YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvInitTenantSchemeShardResult",
         {"debugHint", DebugHint()},
         {"operationId", OperationId},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -51,7 +52,8 @@ bool TConfigureParts::HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult
             {"shard", shardIdx},
             {"status", NKikimrScheme::EStatus_Name(status)},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
         return false;
     }
 
@@ -59,7 +61,8 @@ bool TConfigureParts::HandleReply(TEvSchemeShard::TEvInitTenantSchemeShardResult
         {"debugHint", DebugHint()},
         {"tablet", tabletId},
         {"shardIdx", shardIdx},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     txState->ShardsInProgress.erase(shardIdx);
     context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, shardIdx);
@@ -79,7 +82,8 @@ bool TConfigureParts::HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TO
     YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvConfigureStatus",
         {"debugHint", DebugHint()},
         {"operationId", OperationId},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -105,7 +109,8 @@ bool TConfigureParts::HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TO
             {"tablet", tabletId},
             {"shard", shardIdx},
             {"opId", OperationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
         return false;
     }
 
@@ -113,7 +118,8 @@ bool TConfigureParts::HandleReply(TEvSubDomain::TEvConfigureStatus::TPtr& ev, TO
         {"debugHint", DebugHint()},
         {"tablet", tabletId},
         {"shardIdx", shardIdx},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     txState->ShardsInProgress.erase(shardIdx);
     context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, shardIdx);
@@ -133,7 +139,8 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
     TTabletId ssId = context.SS->SelfTabletId();
     YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
         {"debugHint", DebugHint()},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -180,7 +187,8 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             YDB_LOG_DEBUG_CTX(context.Ctx, "Send configure request",
                 {"coordinatorTabletId", tabletID},
                 {"opId", OperationId},
-                {"schemeshard", ssId});
+                {"schemeshard", ssId}
+            );
             shard.Operation = TTxState::ConfigureParts;
             auto event = new TEvSubDomain::TEvConfigure(processing);
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
@@ -190,7 +198,8 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             YDB_LOG_DEBUG_CTX(context.Ctx, "Send configure request",
                 {"hive", tabletID},
                 {"opId", OperationId},
-                {"schemeshard", ssId});
+                {"schemeshard", ssId}
+            );
             shard.Operation = TTxState::ConfigureParts;
             auto event = new TEvHive::TEvConfigureHive(TSubDomainKey(pathId.OwnerId, pathId.LocalPathId));
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
@@ -200,7 +209,8 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             YDB_LOG_DEBUG_CTX(context.Ctx, "Send configure request to sys view",
                 {"processor", tabletID},
                 {"opId", OperationId},
-                {"schemeshard", ssId});
+                {"schemeshard", ssId}
+            );
             auto event = new NSysView::TEvSysView::TEvConfigureProcessor(path.PathString());
             shard.Operation = TTxState::ConfigureParts;
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
@@ -210,7 +220,8 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             YDB_LOG_DEBUG_CTX(context.Ctx, "Send configure request to statistics",
                 {"aggregator", tabletID},
                 {"opId", OperationId},
-                {"schemeshard", ssId});
+                {"schemeshard", ssId}
+            );
             auto event = new NStat::TEvStatistics::TEvConfigureAggregator(path.PathString());
             shard.Operation = TTxState::ConfigureParts;
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
@@ -240,7 +251,8 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 {"toSchemeshard", tabletID},
                 {"opId", OperationId},
                 {"schemeshard", ssId},
-                {"msg", event->Record.ShortDebugString()});
+                {"msg", event->Record.ShortDebugString()}
+            );
 
             shard.Operation = TTxState::ConfigureParts;
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
@@ -250,7 +262,8 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             YDB_LOG_DEBUG_CTX(context.Ctx, "Send configure request to graph",
                 {"shard", tabletID},
                 {"opId", OperationId},
-                {"schemeshard", ssId});
+                {"schemeshard", ssId}
+            );
             shard.Operation = TTxState::ConfigureParts;
             auto event = new TEvSubDomain::TEvConfigure(processing);
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
@@ -260,7 +273,8 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             YDB_LOG_DEBUG_CTX(context.Ctx, "Send configure request to backup controller",
                 {"tablet", tabletID},
                 {"opId", OperationId},
-                {"schemeshard", ssId});
+                {"schemeshard", ssId}
+            );
             shard.Operation = TTxState::ConfigureParts;
             auto event = new TEvSubDomain::TEvConfigure(processing);
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);
@@ -294,7 +308,8 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
 
     YDB_LOG_INFO_CTX(context.Ctx, "NSubDomainState::TPropose HandleReply TEvOperationPlan operationId",
         {"operationId", OperationId},
-        {"tablet", ssId});
+        {"tablet", ssId}
+    );
 
     TTxState* txState = context.SS->FindTx(OperationId);
     if (!txState) {
@@ -352,7 +367,8 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
 
     YDB_LOG_DEBUG_CTX(context.Ctx, "NSubDomainState::TPropose HandleReply TEvOperationPlan operationId",
         {"operationId", OperationId},
-        {"tablet", ssId});
+        {"tablet", ssId}
+    );
 
     return true;
 }
@@ -362,7 +378,8 @@ bool TPropose::ProgressState(TOperationContext& context) {
 
     YDB_LOG_INFO_CTX(context.Ctx, "NSubDomainState::TPropose ProgressState",
         {"operationId", OperationId},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     TTxState* txState = context.SS->FindTx(OperationId);
     Y_ABORT_UNLESS(txState);
@@ -377,7 +394,8 @@ bool TPropose::ProgressState(TOperationContext& context) {
 
     YDB_LOG_DEBUG_CTX(context.Ctx, "NSubDomainState::TPropose ProgressState leave operationId",
         {"operationId", OperationId},
-        {"tablet", ssId});
+        {"tablet", ssId}
+    );
 
     return false;
 }

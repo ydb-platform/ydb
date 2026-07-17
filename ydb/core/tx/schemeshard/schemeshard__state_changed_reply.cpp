@@ -27,7 +27,8 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
         if (shardIdx == InvalidShardIdx) {
             YDB_LOG_WARN_CTX(ctx, "TTxShardStateChanged DoExecute Unknown shardIdx for tabletId",
                 {"tabletId", tabletId},
-                {"state", DatashardStateName(NDataShard::TShardState::Offline)});
+                {"state", DatashardStateName(NDataShard::TShardState::Offline)}
+            );
             return;
         }
 
@@ -39,7 +40,8 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
             auto txId = TTxId(txIdNum);
             YDB_LOG_DEBUG_CTX(ctx, "TTxShardStateChanged DoExecute Operation should be restarted in case missing one of shard",
                 {"txId", txId},
-                {"tabletId", tabletId});
+                {"tabletId", tabletId}
+            );
 
             if (!Self->Operations.contains(txId)) {
                 continue;
@@ -71,7 +73,8 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
         YDB_LOG_INFO_CTX(ctx, "TTxShardStateChanged DoExecute datashard informs about state changing",
             {"datashardId", tabletId},
             {"state", DatashardStateName(state)},
-            {"schemeshard", Self->TabletID()});
+            {"schemeshard", Self->TabletID()}
+        );
 
         // Ack state change notification
         auto event = MakeHolder<TEvDataShard::TEvStateChangedResult>(Self->TabletID(), state);

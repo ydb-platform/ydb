@@ -49,7 +49,8 @@ public:
     bool ProgressState(TOperationContext& context) override {
         YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
             {"selfTabletId", context.SS->SelfTabletId()},
-            {"debugHint", DebugHint()});
+            {"debugHint", DebugHint()}
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -65,7 +66,8 @@ public:
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
             {"selfTabletId", context.SS->SelfTabletId()},
             {"debugHint", DebugHint()},
-            {"step", step});
+            {"step", step}
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -152,7 +154,8 @@ public:
             {"selfTabletId", context.SS->SelfTabletId()},
             {"path", parentPathStr},
             {"secretName", secretName},
-            {"opId", OperationId});
+            {"opId", OperationId}
+        );
 
         auto secretDescrWithoutSecretParts = createSecretProto;
         secretDescrWithoutSecretParts.ClearValue();
@@ -161,7 +164,8 @@ public:
             {"path", parentPathStr},
             {"secretName", secretName},
             {"opId", OperationId},
-            {"secretDescription", secretDescrWithoutSecretParts.ShortDebugString()});
+            {"secretDescription", secretDescrWithoutSecretParts.ShortDebugString()}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -303,14 +307,16 @@ public:
     void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSecret AbortPropose",
             {"selfTabletId", context.SS->SelfTabletId()},
-            {"opId", OperationId});
+            {"opId", OperationId}
+        );
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSecret AbortUnsafe",
             {"selfTabletId", context.SS->SelfTabletId()},
             {"opId", OperationId},
-            {"forceDropId", forceDropTxId});
+            {"forceDropId", forceDropTxId}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

@@ -22,7 +22,8 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         const auto& settings = request.GetSettings();
         YDB_LOG_DEBUG_CTX(ctx, "][ForcedCompaction] TForcedCompaction::TTxCreate DoExecute",
             {"tabletId", Self->SelfTabletId()},
-            {"request", request.ShortDebugString()});
+            {"request", request.ShortDebugString()}
+        );
 
         auto response = MakeHolder<TEvForcedCompaction::TEvCreateResponse>(Request->Get()->Record.GetTxId());
 
@@ -204,7 +205,8 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
     void DoComplete(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "][ForcedCompaction] TForcedCompaction::TTxCreate DoComplete",
             {"tabletId", Self->SelfTabletId()},
-            {"requestRecord", Request->Get()->Record.ShortDebugString()});
+            {"requestRecord", Request->Get()->Record.ShortDebugString()}
+        );
         Self->ScheduleForcedCompactionProgress(ctx);
         SideEffects.ApplyOnComplete(Self, ctx);
     }

@@ -46,7 +46,8 @@ void TParentDomainLink::SendSync(const TActorContext &ctx) {
 
     YDB_LOG_DEBUG_CTX(ctx, "Send TEvSyncTenantSchemeShard",
         {"parent", Self->ParentDomainId},
-        {"from", Self->TabletID()});
+        {"from", Self->TabletID()}
+    );
 
     if (!Pipe) {
         Pipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, Self->ParentDomainId.OwnerId, PipeClientConfig));
@@ -94,7 +95,8 @@ bool TSubDomainsLinks::Sync(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr &ev, 
         if (link.Generation > generation) {
             YDB_LOG_INFO_CTX(ctx, "Ignore TEvSyncTenantSchemeShard with obsolete generation",
                 {"msg", record.ShortDebugString()},
-                {"schemeshard", Self->TabletID()});
+                {"schemeshard", Self->TabletID()}
+            );
             return false;
         }
     }

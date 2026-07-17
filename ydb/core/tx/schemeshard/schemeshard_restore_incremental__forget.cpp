@@ -36,7 +36,8 @@ public:
 
         YDB_LOG_DEBUG("Reply",
             {"logPrefix", GetLogPrefix()},
-            {"responseRecord", Response->Record.ShortDebugString()});
+            {"responseRecord", Response->Record.ShortDebugString()}
+        );
 
         SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
@@ -46,7 +47,8 @@ public:
         const auto& record = Request->Get()->Record;
         YDB_LOG_DEBUG("Execute",
             {"logPrefix", GetLogPrefix()},
-            {"record", record.ShortDebugString()});
+            {"record", record.ShortDebugString()}
+        );
 
         Response = MakeHolder<TEvBackup::TEvForgetBackupCollectionRestoreResponse>();
         Response->Record.SetTxId(record.GetTxId());
@@ -55,7 +57,8 @@ public:
         if (!database.IsResolved()) {
             YDB_LOG_INFO("FORGET DEBUG: Database not",
                 {"logPrefix", GetLogPrefix()},
-                {"resolved", record.GetDatabaseName()});
+                {"resolved", record.GetDatabaseName()}
+            );
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
                 TStringBuilder() << "Database " << record.GetDatabaseName() << " is not found"
@@ -128,13 +131,15 @@ public:
         db.Table<Schema::IncrementalRestoreState>().Key(restoreId).Delete();
         YDB_LOG_INFO("Cleaned up IncrementalRestoreState",
             {"logPrefix", GetLogPrefix()},
-            {"operation", restoreId});
+            {"operation", restoreId}
+        );
 
         // Clean up IncrementalRestoreOperations table
         db.Table<Schema::IncrementalRestoreOperations>().Key(restoreId).Delete();
         YDB_LOG_INFO("Cleaned up IncrementalRestoreOperations",
             {"logPrefix", GetLogPrefix()},
-            {"operation", restoreId});
+            {"operation", restoreId}
+        );
 
         auto opIt = Self->IncrementalRestoreOperationToState.begin();
         while (opIt != Self->IncrementalRestoreOperationToState.end()) {
@@ -147,7 +152,8 @@ public:
         }
         YDB_LOG_INFO("Cleaned up remaining mappings",
             {"logPrefix", GetLogPrefix()},
-            {"operation", restoreId});
+            {"operation", restoreId}
+        );
 
         Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
 

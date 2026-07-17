@@ -23,7 +23,8 @@ public:
         const auto& record = Request->Get()->Record;
         YDB_LOG_DEBUG("TTxGetSetColumnConstraint::DoExecute",
             {"logPrefix", LogPrefix},
-            {"record", record.ShortDebugString()});
+            {"record", record.ShortDebugString()}
+        );
 
         Response = MakeHolder<TEvSetColumnConstraint::TEvGetResponse>();
 

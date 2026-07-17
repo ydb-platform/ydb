@@ -111,10 +111,12 @@ TCreateParts::TCreateParts(const TOperationId& id)
 bool TCreateParts::HandleReply(TEvHive::TEvAdoptTabletReply::TPtr& ev, TOperationContext& context) {
     YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvAdoptTablet",
         {"debugHint", DebugHint()},
-        {"tabletId", context.SS->SelfTabletId()});
+        {"tabletId", context.SS->SelfTabletId()}
+    );
     YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply TEvAdoptTablet message%",
         {"debugHint", DebugHint()},
-        {"reply", DebugReply(ev)});
+        {"reply", DebugReply(ev)}
+    );
 
     NIceDb::TNiceDb db(context.GetDB());
 
@@ -141,7 +143,8 @@ bool TCreateParts::HandleReply(TEvHive::TEvAdoptTabletReply::TPtr& ev, TOperatio
         YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvAdoptTablet Got TTxAdoptTabletReply for shard but it is not present in AdoptedShards",
             {"debugHint", DebugHint()},
             {"shardIdx", shardIdx},
-            {"tabletId", tabletId});
+            {"tabletId", tabletId}
+        );
         return false;
     }
 
@@ -177,10 +180,12 @@ bool TCreateParts::HandleReply(TEvHive::TEvAdoptTabletReply::TPtr& ev, TOperatio
 bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperationContext& context) {
     YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvCreateTabletReply",
         {"debugHint", DebugHint()},
-        {"tabletId", context.SS->SelfTabletId()});
+        {"tabletId", context.SS->SelfTabletId()}
+    );
     YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply TEvCreateTabletReply",
         {"debugHint", DebugHint()},
-        {"message", DebugReply(ev)});
+        {"message", DebugReply(ev)}
+    );
 
     NIceDb::TNiceDb db(context.GetDB());
 
@@ -205,7 +210,8 @@ bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperati
         YDB_LOG_NOTICE_CTX(context.Ctx, "CreateRequest BLOCKED",
             {"debugHint", DebugHint()},
             {"hive", hive},
-            {"msg", DebugReply(ev)});
+            {"msg", DebugReply(ev)}
+        );
 
         // do not unsubscribe message
         // context.OnComplete.UnbindMsgFromPipe(OperationId, hive, shardIdx);
@@ -233,7 +239,8 @@ bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperati
             {"debugHint", DebugHint()},
             {"fromHive", hive},
             {"toHive", redirectTo},
-            {"msg", request->Record.DebugString()});
+            {"msg", request->Record.DebugString()}
+        );
 
         context.OnComplete.BindMsgToPipe(OperationId, redirectTo, shardIdx, request.Release());
         return false;
@@ -304,7 +311,8 @@ THolder<TEvHive::TEvAdoptTablet> TCreateParts::AdoptRequest(TShardIdx shardIdx, 
 
     YDB_LOG_DEBUG_CTX(context.Ctx, "AdoptRequest Event",
         {"debugHint", DebugHint()},
-        {"hive", ev->Record.DebugString()});
+        {"hive", ev->Record.DebugString()}
+    );
 
     return ev;
 }
@@ -318,7 +326,8 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
     YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
         {"debugHint", DebugHint()},
         {"type", TTxState::TypeName(txState->TxType)},
-        {"tablet", ssId});
+        {"tablet", ssId}
+    );
 
     if (txState->TxType == TTxState::TxDropTable
         || txState->TxType == TTxState::TxAlterTable
@@ -327,14 +336,16 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
         if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
             YDB_LOG_INFO_CTX(context.Ctx, "ProgressState source table partitioning changed for modification",
                 {"debugHint", DebugHint()},
-                {"type", TTxState::TypeName(txState->TxType)});
+                {"type", TTxState::TypeName(txState->TxType)}
+            );
             NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
         }
     } else if (txState->TxType == TTxState::TxCopyTable) {
         if (NTableState::SourceTablePartitioningChangedForCopyTable(*txState, context)) {
             YDB_LOG_INFO_CTX(context.Ctx, "ProgressState SourceTablePartitioningChangedForCopyTable tx",
                 {"debugHint", DebugHint()},
-                {"type", TTxState::TypeName(txState->TxType)});
+                {"type", TTxState::TypeName(txState->TxType)}
+            );
             NTableState::UpdatePartitioningForCopyTable(OperationId, *txState, context);
         }
     }
@@ -360,7 +371,8 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
             YDB_LOG_DEBUG_CTX(context.Ctx, "CreateRequest Event",
                 {"debugHint", DebugHint()},
                 {"hive", hiveToRequest},
-                {"msg", ev->Record.DebugString()});
+                {"msg", ev->Record.DebugString()}
+            );
 
             context.OnComplete.BindMsgToPipe(OperationId, hiveToRequest, shard.Idx, ev.Release());
         }
@@ -369,7 +381,8 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
 
     if (nothingToDo) {
         YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState no shards to create, do next state",
-            {"debugHint", DebugHint()});
+            {"debugHint", DebugHint()}
+        );
 
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::ConfigureParts);
@@ -401,7 +414,8 @@ void TDeleteParts::DeleteShards(TOperationContext& context) {
 bool TDeleteParts::ProgressState(TOperationContext& context) {
     YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
         {"selfTabletId", context.SS->SelfTabletId()},
-        {"debugHint", DebugHint()});
+        {"debugHint", DebugHint()}
+    );
     DeleteShards(context);
 
     NIceDb::TNiceDb db(context.GetDB());
@@ -420,7 +434,8 @@ TDeletePartsAndDone::TDeletePartsAndDone(const TOperationId& id)
 bool TDeletePartsAndDone::ProgressState(TOperationContext& context) {
     YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
         {"selfTabletId", context.SS->SelfTabletId()},
-        {"debugHint", DebugHint()});
+        {"debugHint", DebugHint()}
+    );
     DeleteShards(context);
 
     context.OnComplete.DoneOperation(OperationId);
@@ -500,7 +515,8 @@ bool TDone::Process(TOperationContext& context) {
 bool TDone::ProgressState(TOperationContext& context) {
     YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
         {"selfTabletId", context.SS->SelfTabletId()},
-        {"debugHint", DebugHint()});
+        {"debugHint", DebugHint()}
+    );
 
     return Process(context);
 }
@@ -518,7 +534,8 @@ bool CollectProposeTxResults(
     auto ssId = context.SS->SelfTabletId();
 
     YDB_LOG_INFO_CTX(context.Ctx, "TEvProposeTransactionResult",
-        {"tablet", ssId});
+        {"tablet", ssId}
+    );
 
     auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
     auto shardMinStep = TStepId(ev->Get()->Record.GetMinStep());
@@ -530,7 +547,8 @@ bool CollectProposeTxResults(
             {"shard", tabletId},
             {"operationId", operationId},
             {"status", toString(status)},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
         return false;
     }
 
@@ -551,7 +569,8 @@ bool CollectProposeTxResults(
             {"shard", tabletId},
             {"shardIdx", shardIdx},
             {"operationId", operationId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
         return false;
     }
 
@@ -563,7 +582,8 @@ bool CollectProposeTxResults(
         {"shardIdx", shardIdx},
         {"operationId", operationId},
         {"await", txState.ShardsInProgress.size()},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     if (txState.ShardsInProgress.empty()) {
         // All datashards have replied so we can proceed with this transaction
@@ -642,7 +662,8 @@ bool CollectSchemaChangedImpl(
             {"shardId", shardId},
             {"eventGeneration", generation},
             {"knownGeneration", pTablet->second},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
         return false;
     }
 
@@ -676,7 +697,8 @@ bool CollectSchemaChangedImpl(
         {"await", txState.ShardsInProgress.size()},
         {"state", TTxState::StateName(txState.State)},
         {"readyForNotifications", txState.ReadyForNotifications},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     if (txState.ShardsInProgress.empty()) {
         AckAllSchemaChanges(operationId, txState, context);
@@ -712,7 +734,8 @@ void AckAllSchemaChanges(const TOperationId &operationId, TTxState &txState, TOp
 
     YDB_LOG_INFO_CTX(context.Ctx, "All shard schema changes has been received",
         {"operationId", operationId},
-        {"schemeshard", ssId});
+        {"schemeshard", ssId}
+    );
 
     // Ack to all participating datashards
     for (const auto& items : txState.SchemeChangeNotificationReceived) {
@@ -723,7 +746,8 @@ void AckAllSchemaChanges(const TOperationId &operationId, TTxState &txState, TOp
         YDB_LOG_DEBUG_CTX(context.Ctx, "Send schema changes ack message",
             {"operation", operationId},
             {"datashard", tabletId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         auto event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>();
         event->Record.SetTxId(ui64(operationId.GetTxId()));
@@ -1078,7 +1102,8 @@ TProposedWaitParts::TProposedWaitParts(TOperationId id, TTxState::ETxState nextS
     , NextState(nextState)
 {
     YDB_LOG_TRACE("Constructed",
-        {"debugHint", DebugHint()});
+        {"debugHint", DebugHint()}
+    );
     IgnoreMessages(DebugHint(),
         { TEvHive::TEvCreateTabletReply::EventType
         , TEvDataShard::TEvProposeTransactionResult::EventType
@@ -1095,17 +1120,20 @@ bool TProposedWaitParts::HandleReplyImpl(const TEvent& ev, TOperationContext& co
     YDB_LOG_INFO_CTX(context.Ctx, "HandleReply",
         {"debugHint", DebugHint()},
         {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
-        {"tablet", ssId});
+        {"tablet", ssId}
+    );
     YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply",
         {"debugHint", DebugHint()},
         {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()},
         {"tablet", ssId},
-        {"message", evRecord.ShortDebugString()});
+        {"message", evRecord.ShortDebugString()}
+    );
 
     if (!CollectSchemaChanged(OperationId, ev, context)) {
         YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply CollectSchemaChanged: false",
             {"debugHint", DebugHint()},
-            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()});
+            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()}
+        );
         return false;
     }
 
@@ -1115,7 +1143,8 @@ bool TProposedWaitParts::HandleReplyImpl(const TEvent& ev, TOperationContext& co
     if (!txState.ReadyForNotifications) {
         YDB_LOG_DEBUG_CTX(context.Ctx, "HandleReply ReadyForNotifications: false",
             {"debugHint", DebugHint()},
-            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()});
+            {"eventName", TEvSchemaChangedTraits<TEvent>::GetName()}
+        );
         return false;
     }
 
@@ -1135,7 +1164,8 @@ bool TProposedWaitParts::ProgressState(TOperationContext& context) {
 
     YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
         {"debugHint", DebugHint()},
-        {"tablet", ssId});
+        {"tablet", ssId}
+    );
 
     TTxState* txState = context.SS->FindTx(OperationId);
 
@@ -1213,7 +1243,8 @@ void CollectShards(const THashSet<TPathId>& paths, TOperationId operationId, TTx
         YDB_LOG_DEBUG_CTX(context.Ctx, "Collect shard shard path",
             {"idx", shardIdx},
             {"tabletID", shardInfo.TabletID},
-            {"id", shardInfo.PathId});
+            {"id", shardInfo.PathId}
+        );
 
         txState->Shards.emplace_back(shardIdx, shardInfo.TabletType, txState->State);
 
@@ -1254,7 +1285,8 @@ void AbortRelatedOperations(TOperationId operationId, const THashSet<TTxId>& rel
             {"logPrefix", logPrefix},
             {"dependentTransaction", operationId.GetTxId()},
             {"parentTransaction", otherTxId},
-            {"schemeshard", ssId});
+            {"schemeshard", ssId}
+        );
 
         context.OnComplete.Dependence(otherTxId, operationId.GetTxId());
 
@@ -1404,7 +1436,8 @@ void AbortUnsafeDropOperation(const TOperationId& opId, const TTxId& txId, TOper
         {"txType", TTxState::TypeName(txState->TxType)},
         {"opId", opId},
         {"txId", txId},
-        {"ssId", context.SS->TabletID()});
+        {"ssId", context.SS->TabletID()}
+    );
 
     const auto& pathId = txState->TargetPathId;
     Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));

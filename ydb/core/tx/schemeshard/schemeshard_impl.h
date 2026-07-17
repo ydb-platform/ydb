@@ -235,6 +235,8 @@ public:
     TControlWrapper AllowServerlessStorageBilling;
     TControlWrapper DisablePublicationsOfDropping;
     TControlWrapper FillAllocatePQ;
+    TControlWrapper TolerateOrphanedPaths;
+    bool HasOrphanPlaceholders = false; // in-memory, set by TTxInit
 
     // Shared with NTabletFlatExecutor::TExecutor
     TControlWrapper MaxCommitRedoMB;

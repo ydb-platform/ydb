@@ -389,7 +389,7 @@ bool TScheduler::SubmitTask(const TEvResourceBroker::TTask &task,
     auto &config = TaskConfig(task.Type);
     TTaskPtr newTask = new TTask(task, client, Now, config.Counters);
 
-    YDB_LOG_DEBUG_CTX(as, "TScheduler::SubmitTask: submitted new task",
+    YDB_LOG_DEBUG_CTX(as, "Submitted new task",
         {"configName", config.Name.data()},
         {"taskId", newTask->GetIdString().data()},
         {"priority", task.Priority},
@@ -402,10 +402,10 @@ bool TScheduler::SubmitTask(const TEvResourceBroker::TTask &task,
         } while (Tasks.contains(id));
         newTask->TaskId = id.second;
 
-        YDB_LOG_DEBUG_CTX(as, "TScheduler::SubmitTask: assigned generated task id",
+        YDB_LOG_DEBUG_CTX(as, "Assigned generated task id",
             {"generatedTaskId", id.second});
     } else if (Tasks.contains(id)) {
-        YDB_LOG_DEBUG_CTX(as, "TScheduler::SubmitTask: task with the same id was already submitted",
+        YDB_LOG_DEBUG_CTX(as, "Task with the same id was already submitted",
             {"submittedTaskId", task.TaskId},
             {"client", ToString(client)});
         return false;
@@ -430,14 +430,14 @@ bool TScheduler::UpdateTask(ui64 taskId,
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        YDB_LOG_DEBUG_CTX(as, "TScheduler::UpdateTask: cannot update unknown task",
+        YDB_LOG_DEBUG_CTX(as, "Cannot update unknown task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return false;
     }
 
     auto task = it->second;
-    YDB_LOG_DEBUG_CTX(as, "TScheduler::UpdateTask: updated task resources",
+    YDB_LOG_DEBUG_CTX(as, "Updated task resources",
         {"taskId", task->GetIdString().data()},
         {"priority", priority},
         {"type", type.data()},
@@ -465,14 +465,14 @@ bool TScheduler::UpdateTaskCookie(ui64 taskId,
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        YDB_LOG_DEBUG_CTX(as, "TScheduler::UpdateTaskCookie: cannot update unknown task",
+        YDB_LOG_DEBUG_CTX(as, "Cannot update unknown task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return false;
     }
 
     auto task = it->second;
-    YDB_LOG_DEBUG_CTX(as, "TScheduler::UpdateTaskCookie: updated task cookie",
+    YDB_LOG_DEBUG_CTX(as, "Updated task cookie",
         {"taskId", task->GetIdString().data()});
 
     task->Cookie = cookie;
@@ -485,7 +485,7 @@ TScheduler::TTerminateTaskResult TScheduler::RemoveQueuedTask(ui64 taskId,
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        YDB_LOG_DEBUG_CTX(as, "TScheduler::RemoveQueuedTask: cannot remove unknown task",
+        YDB_LOG_DEBUG_CTX(as, "Cannot remove unknown task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return TTerminateTaskResult(false, nullptr);
@@ -493,13 +493,13 @@ TScheduler::TTerminateTaskResult TScheduler::RemoveQueuedTask(ui64 taskId,
 
     auto task = it->second;
     if (task->InFly) {
-        YDB_LOG_DEBUG_CTX(as, "TScheduler::RemoveQueuedTask: cannot remove in-flight task",
+        YDB_LOG_DEBUG_CTX(as, "Cannot remove in-flight task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return TTerminateTaskResult(false, task);
     }
 
-    YDB_LOG_DEBUG_CTX(as, "TScheduler::RemoveQueuedTask: removing queued task",
+    YDB_LOG_DEBUG_CTX(as, "Removing queued task",
         {"taskId", task->GetIdString().data()});
 
     EraseTask(task, false, as);
@@ -514,7 +514,7 @@ TScheduler::TTerminateTaskResult TScheduler::FinishTask(ui64 taskId,
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        YDB_LOG_DEBUG_CTX(as, "TScheduler::FinishTask: cannot finish unknown task",
+        YDB_LOG_DEBUG_CTX(as, "Cannot finish unknown task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return TTerminateTaskResult(false, nullptr);
@@ -522,13 +522,13 @@ TScheduler::TTerminateTaskResult TScheduler::FinishTask(ui64 taskId,
 
     auto task = it->second;
     if (!task->InFly) {
-        YDB_LOG_DEBUG_CTX(as, "TScheduler::FinishTask: cannot finish queued task",
+        YDB_LOG_DEBUG_CTX(as, "Cannot finish queued task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return TTerminateTaskResult(false, task);
     }
 
-    YDB_LOG_DEBUG_CTX(as, "TScheduler::FinishTask: finished task and released resources",
+    YDB_LOG_DEBUG_CTX(as, "Finished task and released resources",
         {"taskId", task->GetIdString().data()},
         {"requiredResources", JoinSeq(", ", task->RequiredResources).data()});
 
@@ -577,14 +577,14 @@ void TScheduler::EraseTask(TTaskPtr task, bool finished, const TActorSystem &as)
     queue->EraseTask(task, finished, Now);
 
     if (oldp != queue->PlannedResourceUsage)
-        YDB_LOG_DEBUG_CTX(as, "TScheduler::EraseTask: updated planned resource usage after removing task",
+        YDB_LOG_DEBUG_CTX(as, "Updated planned resource usage after removing task",
             {"queueName", queue->Name.data()},
             {"previousPlannedResourceUsage", oldp},
             {"plannedResourceUsage", queue->PlannedResourceUsage},
             {"taskId", task->GetIdString().data()});
 
     if (oldr != queue->RealResourceUsage)
-        YDB_LOG_DEBUG_CTX(as, "TScheduler::EraseTask: updated real resource usage after removing task",
+        YDB_LOG_DEBUG_CTX(as, "Updated real resource usage after removing task",
             {"queueName", queue->Name.data()},
             {"previousRealResourceUsage", oldr},
             {"realResourceUsage", queue->RealResourceUsage});
@@ -611,7 +611,7 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
 
         auto task = queue->FrontTask();
         if (task->GetRequiredResourcesMask() & blockedResources) {
-            YDB_LOG_DEBUG_CTX(as, "TScheduler::ScheduleTasks: skipping queue blocked by an earlier queue",
+            YDB_LOG_DEBUG_CTX(as, "Skipping queue blocked by an earlier queue",
                 {"queueName", queue->Name});
             continue;
         }
@@ -621,7 +621,7 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
         // Allow resource over-usage if no tasks are running.
         if (!ResourceLimit->HasResources(task->RequiredResources)
             && *TotalCounters->InFlyTasks) {
-            YDB_LOG_DEBUG_CTX(as, "TScheduler::ScheduleTasks: not enough resources to start task",
+            YDB_LOG_DEBUG_CTX(as, "Not enough resources to start task",
                 {"taskId", task->GetIdString().data()});
             blockedResources |= task->GetRequiredResourcesMask();
             continue;
@@ -631,12 +631,12 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
         // Allow resource over-usage if no tasks are running in this queue.
         if (!queue->QueueLimit.HasResources(task->RequiredResources)
             && *queue->QueueCounters.InFlyTasks) {
-            YDB_LOG_DEBUG_CTX(as, "TScheduler::ScheduleTasks: skipping queue due to exceeded limits",
+            YDB_LOG_DEBUG_CTX(as, "Skipping queue due to exceeded limits",
                 {"queueName", queue->Name.data()});
             continue;
         }
 
-        YDB_LOG_DEBUG_CTX(as, "TScheduler::ScheduleTasks: allocated resources for task",
+        YDB_LOG_DEBUG_CTX(as, "Allocated resources for task",
             {"requiredResources", JoinSeq(", ", task->RequiredResources).data()},
             {"taskId", task->GetIdString().data()},
             {"queueName", queue->Name.data()});
@@ -662,7 +662,7 @@ void TScheduler::UpdateResourceUsage(const TActorSystem &as)
         queue->UpdateRealResourceUsage(Now);
 
         if (old != queue->RealResourceUsage)
-            YDB_LOG_DEBUG_CTX(as, "TScheduler::UpdateResourceUsage: updated real resource usage for in-flight consumption",
+            YDB_LOG_DEBUG_CTX(as, "Updated real resource usage for in-flight consumption",
                 {"queueName", queue->Name.data()},
                 {"previousRealResourceUsage", old},
                 {"realResourceUsage", queue->RealResourceUsage},
@@ -676,12 +676,12 @@ void TScheduler::AssignTask(TTaskPtr &task, const TActorSystem &as)
     TTaskQueuePtr queue = TaskConfig(task->Type).Queue;
 
     if (!TaskConfigs.contains(task->Type)) {
-        YDB_LOG_ERROR_CTX(as, "TScheduler::AssignTask: assigning task of unknown type to default queue",
+        YDB_LOG_ERROR_CTX(as, "Assigning task of unknown type to default queue",
             {"state", state.data()},
             {"taskId", task->GetIdString().data()},
             {"taskType", task->Type.data()});
     } else {
-        YDB_LOG_DEBUG_CTX(as, "TScheduler::AssignTask: assigning task to queue",
+        YDB_LOG_DEBUG_CTX(as, "Assigning task to queue",
             {"state", state.data()},
             {"taskId", task->GetIdString().data()},
             {"queueName", queue->Name.data()});
@@ -709,13 +709,13 @@ void TScheduler::AssignTask(TTaskPtr &task, const TActorSystem &as)
     queue->InsertTask(task, Now);
 
     if (oldr != queue->RealResourceUsage)
-        YDB_LOG_DEBUG_CTX(as, "TScheduler::AssignTask: updated real resource usage after inserting task",
+        YDB_LOG_DEBUG_CTX(as, "Updated real resource usage after inserting task",
             {"queueName", queue->Name.data()},
             {"previousRealResourceUsage", oldr},
             {"realResourceUsage", queue->RealResourceUsage});
 
     if (oldp != queue->PlannedResourceUsage)
-        YDB_LOG_DEBUG_CTX(as, "TScheduler::AssignTask: updated planned resource usage after inserting task",
+        YDB_LOG_DEBUG_CTX(as, "Updated planned resource usage after inserting task",
             {"queueName", queue->Name.data()},
             {"previousPlannedResourceUsage", oldp},
             {"plannedResourceUsage", queue->PlannedResourceUsage},
@@ -975,7 +975,7 @@ bool TResourceBroker::ReduceTaskResourcesInstant(ui64 taskId, const TResourceVal
             return true;
         }
 
-        YDB_LOG_ERROR_CTX(*ActorSystem, "TResourceBroker::ReduceTaskResourcesInstant: failed to update task",
+        YDB_LOG_ERROR_CTX(*ActorSystem, "Failed to update task",
             {"taskId", taskId});
         return false;
     }
@@ -1086,7 +1086,7 @@ bool TResourceBroker::FinishTaskInstant(const TEvResourceBroker::TEvFinishTask &
                 ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
             });
         } else {
-            YDB_LOG_ERROR_CTX(*ActorSystem, "TResourceBroker::FinishTaskInstant: failed to finish task",
+            YDB_LOG_ERROR_CTX(*ActorSystem, "Failed to finish task",
                 {"taskId", ev.TaskId},
                 {"errorReason", (result.Task ? "cannot finish queued task" : "cannot finish unknown task")});
         }
@@ -1123,7 +1123,7 @@ TResourceBrokerActor::TResourceBrokerActor(const TResourceBrokerConfig &config,
 
 void TResourceBrokerActor::Bootstrap(const TActorContext &ctx)
 {
-    YDB_LOG_DEBUG_CTX(ctx, "TResourceBrokerActor::Bootstrap: actor bootstrap");
+    YDB_LOG_DEBUG_CTX(ctx, "Actor bootstrap");
 
     NActors::TMon* mon = AppData(ctx)->Mon;
     if (mon) {
@@ -1197,14 +1197,14 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
 {
     auto &config = ev->Get()->Record;
     if (ev->Get()->Merge) {
-        YDB_LOG_INFO_CTX(ctx, "TResourceBrokerActor::Handle TEvConfigure: applying config merge",
+        YDB_LOG_INFO_CTX(ctx, "TEvConfigure: applying config merge",
             {"configDiff", config.ShortDebugString()});
         auto current = ResourceBroker->GetConfig();
         MergeConfigUpdates(current, config);
         config.Swap(&current);
     }
 
-    YDB_LOG_INFO_CTX(ctx, "TResourceBrokerActor::Handle TEvConfigure: applying new config",
+    YDB_LOG_INFO_CTX(ctx, "TEvConfigure: applying new config",
         {"config", config.ShortDebugString()});
 
     TSet<TString> queues;

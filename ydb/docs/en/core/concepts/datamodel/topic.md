@@ -74,7 +74,7 @@ The following limitations apply when using autopartitioning:
 
 1. If autopartitioning is enabled on a topic, it cannot be disabled, only paused.
 2. If autopartitioning is enabled on a topic, writing to or reading from such a topic via the [Kafka API protocol](../../reference/kafka-api/index.md) is not possible.
-3. Autopartitioning cannot be enabled on a topic with the storage mode by location.
+3. Autopartitioning cannot be enabled on a topic with local storage mode.
 
 ## Sources {#producer-id}
 
@@ -195,7 +195,7 @@ When placing a message in the queue, you can specify a delay before the message 
 
 See also [{#T}](../../dev/shared-consumer-internals.md).
 
-### Per-partition read limit {#consumer-offset}
+### Reading position {#consumer-offset}
 
 The reading position is the saved [offset](#offset) of the reader for each partition of the topic. The reading position is saved by the reader after sending an acknowledgment of the read data. When establishing a new reading session, messages are delivered to the reader starting from the saved reading position. This allows users not to store the reading position on their side.
 

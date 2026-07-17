@@ -1099,6 +1099,7 @@ ydb/tests/stress/ctas/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kv_volume_tool/tests py3test.sole chunk
+ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[128MB]
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[1GB]
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
 ydb/tests/stress/min_max_workload/tests test_workload.py.TestMinMaxWorkload.test

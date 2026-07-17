@@ -9,10 +9,12 @@ SPLIT_FACTOR(10)
 TEST_SRCS(
     test_scalar_topic_write.py
     test_streaming.py
+    test_watermarks.py
 )
 
 SIZE(LARGE)
 REQUIREMENTS(cpu:4)
+REQUIREMENTS(ram:16)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(
@@ -22,6 +24,7 @@ DEPENDS(
 
 PEERDIR(
     contrib/python/boto3
+    ydb/tests/fq/streaming_common
     ydb/tests/library
     ydb/tests/library/compatibility
     ydb/tests/library/test_meta

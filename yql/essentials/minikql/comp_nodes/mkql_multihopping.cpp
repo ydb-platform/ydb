@@ -199,6 +199,7 @@ public:
 
             const auto statesMapSize = in.Read<ui32>();
             ClearState();
+            LastWatermark = Nothing();
             StatesMap.reserve(statesMapSize);
             for (auto i = 0U; i < statesMapSize; ++i) {
                 auto key = in.ReadUnboxedValue(Self->KeyPacker.RefMutableObject(Ctx, false, Self->KeyType), Ctx);
@@ -254,8 +255,14 @@ public:
             return false;
         }
 
-        TMaybe<TInstant> GetWatermark() {
+        TMaybe<TInstant> GetWatermark() const {
             return Watermark.WatermarkIn;
+        }
+
+        void UpdateLastWatermark(const TInstant& watermark) {
+            if (!LastWatermark || watermark > *LastWatermark) {
+                LastWatermark = watermark;
+            }
         }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
@@ -305,7 +312,8 @@ public:
                     } else if (status == NUdf::EFetchStatus::Yield) {
                         if (WatermarkMode) {
                             if (auto watermark = GetWatermark()) {
-                                CloseOldBuckets(watermark->MicroSeconds(), newHopsStat, farFutureStateSizeChange);
+                                UpdateLastWatermark(*watermark);
+                                CloseOldBuckets(LastWatermark->MicroSeconds(), newHopsStat, farFutureStateSizeChange);
                                 PendingYield = true;
                                 continue;
                             }
@@ -326,7 +334,7 @@ public:
                 const auto ts = time.Get<ui64>();
                 auto hopIndex = ts / HopTime;
 
-                const auto initialBufferPosition = WatermarkMode ? GetWatermark().GetOrElse(TInstant::Zero()).MicroSeconds() / HopTime : hopIndex;
+                const auto initialBufferPosition = WatermarkMode ? LastWatermark.GetOrElse(TInstant::Zero()).MicroSeconds() / HopTime : hopIndex;
                 auto& keyState = GetOrCreateKeyState(key, initialBufferPosition);
                 if (hopIndex < keyState.HopIndex) {
                     ++lateEventsThrown;
@@ -616,7 +624,8 @@ public:
         const ui64 HopTime;
         const ui64 IntervalHopCount;
         const ui64 DelayHopCount;
-        TWatermark& Watermark;
+        TWatermark& Watermark;          // One-shot watermark signal owned by the task runner.
+        TMaybe<TInstant> LastWatermark; // Last processed watermark for initializing newly seen keys.
         bool WatermarkMode;
         ui64 FarFutureSizeLimit;
         ui64 FarFutureTimeLimit;

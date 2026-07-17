@@ -224,7 +224,7 @@ class MixedClusterFixture:
             for item in tpl
         )
         self.config = KikimrConfigGenerator(
-            erasure=Erasure.MIRROR_3_DC,
+            erasure=kwargs.pop("erasure", Erasure.MIRROR_3_DC),
             binary_paths=self.all_binary_paths,
             suppress_version_check=not all_versions_numbered,
             extra_feature_flags=extra_feature_flags,
@@ -262,7 +262,7 @@ all_binary_combinations_ids_rolling = [
 
 
 class RollingUpgradeAndDowngradeFixture:
-    recreate_driver = True  # TODO: temporary workaround. We don't want to recreate driver, but not working now
+    recreate_driver = False
 
     @pytest.fixture(autouse=True, params=all_binary_combinations_rolling, ids=all_binary_combinations_ids_rolling)
     def base_setup(self, request):

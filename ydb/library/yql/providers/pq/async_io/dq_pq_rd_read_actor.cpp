@@ -700,14 +700,6 @@ void TDqPqRdReadActor::ProcessGlobalState() {
             return;
         }
         auto partitionToRead = GetPartitionsToRead();
-        if (WatermarkTracker) {
-            auto now = TInstant::Now();
-            TPartitionKey partitionKey { .Cluster = Cluster };
-            for (auto partitionId: partitionToRead) {
-                partitionKey.PartitionId = partitionId;
-                WatermarkTracker->RegisterPartition(partitionKey, now);
-            }
-        }
         auto cookie = ++CoordinatorRequestCookie;
         SRC_LOG_I("Send TEvCoordinatorRequest to coordinator " << CoordinatorActorId->ToString() << ", partIds: "
             << JoinSeq(", ", partitionToRead) << " cookie " << cookie);
@@ -1206,6 +1198,17 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     }
 
     TPartitionKey partitionKey { Cluster, partitionId };
+
+    // A partition that has not produced any data has no event-time progress
+    // and must not be declared idle.  In particular, the time spent creating
+    // a query, assigning a partition, and starting a Row Dispatcher session
+    // must not consume WATERMARK_IDLE_TIMEOUT.
+    if (Parent->WatermarkTracker) {
+        const auto now = TInstant::Now();
+        if (Parent->WatermarkTracker->RegisterPartition(partitionKey, now)) {
+            Parent->MaybeSchedulePartitionIdlenessCheck(now);
+        }
+    }
 
     if (Parent->ReadyBuffer.empty() || Parent->ReadyBuffer.back().PartitionKey != partitionKey) {
         Parent->ReadyBuffer.emplace(partitionKey, Nothing(), messages.size());

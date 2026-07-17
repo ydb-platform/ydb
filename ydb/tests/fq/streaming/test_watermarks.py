@@ -1,125 +1,381 @@
 import datetime
+import json
 import logging
 import pytest
 import time
-from typing import Callable
+from typing import Callable, Self
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient
+from ydb.tests.library.test_meta import link_test_case
 
 logger = logging.getLogger(__name__)
+DEFAULT_INITIAL_TS = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
 
 
 class TestWatermarksInYdb(StreamingTestBase):
-    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
-    @pytest.mark.parametrize("tasks", [1, 2])
-    @pytest.mark.parametrize("local_topics", [True, False])
-    def test_watermarks(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, local_topics: bool) -> None:
-        if local_topics and shared_reading:
-            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
+    idle_timeout_seconds = 5
 
-        endpoint = self.get_endpoint(kikimr, local_topics)
-        query_name = f"test_watermarks_{shared_reading}{tasks}{local_topics}"
-        source_name = entity_name(query_name)
-        self.init_topics(source_name, partitions_count=tasks, endpoint=endpoint)
-        self.create_source(kikimr, source_name, shared_reading)
+    @staticmethod
+    def _event(
+        seconds: int,
+        event_id: str,
+        filter: bool = False,
+        initial_ts: datetime.datetime = DEFAULT_INITIAL_TS,
+    ) -> str:
+        event_time = initial_ts + datetime.timedelta(seconds=seconds)
+        return json.dumps({
+            "ts": event_time.isoformat().replace("+00:00", "Z"),
+            "pass": 0 if filter else 1,
+            "id": event_id,
+        })
 
-        cluster = f"{source_name}." if not local_topics else ""
-        idleness_clause = ', WATERMARK_IDLE_TIMEOUT = "PT5S"' if tasks > 1 else ''
+    def _create_query(
+        self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        scenario: str,
+        local_topics: bool,
+        shared_reading: bool,
+        tasks: int = 2,
+        settings: dict[str, str] = {},
+        cascade_hopping: bool = False,
+    ) -> str:
+        query_name = entity_name(scenario)
+        input_name, output_name, _ = self.get_io_names(
+            kikimr, query_name, local_topics, entity_name, partitions_count=tasks, shared=shared_reading
+        )
 
-        sql = f'''
-            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
-            PRAGMA ydb.MaxTasksPerStage = '{tasks}';
-
-            $input = (
+        settings_str = f"WITH ({', '.join(f'{k} = {v}' for k, v in settings.items())})" if settings else ""
+        idleness_clause = f', WATERMARK_IDLE_TIMEOUT = "PT{self.idle_timeout_seconds}S"' if tasks > 1 else ''
+        process = '''
+            $process = (
                 SELECT
-                    input.*,
-                    CAST(ts AS Timestamp) AS event_time,
-                FROM
-                    {cluster}{self.input_topic} WITH (
-                        FORMAT = json_each_row,
-                        SCHEMA (ts String, pass Uint64),
-                        WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S')
-                        {idleness_clause}
-                    ) AS input
-            );
-
-            $hop = (
-                SELECT
-                    CAST(HOP_END() AS String) AS event_time,
-                    AGGREGATE_LIST(ts) AS ts
+                    HOP_END() AS event_time,
+                    AGGREGATE_LIST(id) AS id
                 FROM
                     $input
                 WHERE
                     pass > 0
                 GROUP BY
-                    HoppingWindow(CAST(event_time AS Timestamp), 'PT1S', 'PT1S')
+                    HoppingWindow(event_time, 'PT1S', 'PT1S')
             );
+        ''' if cascade_hopping else '''
+            $process = (
+                SELECT
+                    event_time,
+                    id
+                FROM
+                    $input
+                WHERE
+                    pass > 0
+            );
+        '''
+        kikimr.ydb_client.query(f'''
+            CREATE STREAMING QUERY `{query_name}` {settings_str} AS DO BEGIN
+            PRAGMA ydb.MaxTasksPerStage = '{tasks}';
+
+            $input = (
+                SELECT
+                    CAST(ts AS Timestamp) AS event_time,
+                    pass,
+                    id
+                FROM
+                    {input_name} WITH (
+                        FORMAT = json_each_row,
+                        SCHEMA (ts String, pass Uint64, id String),
+                        WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S')
+                        {idleness_clause}
+                    )
+            );
+
+            {process}
 
             $output = (
                 SELECT
-                    CAST(HOP_END() AS String) AS event_time,
-                    AGGREGATE_LIST(ts) AS ts
+                    HOP_END() AS event_time,
+                    AGGREGATE_LIST(id) AS id
                 FROM
-                    $hop
+                    $process
                 GROUP BY
-                    HoppingWindow(CAST(event_time AS Timestamp), 'PT1S', 'PT1S')
+                    HoppingWindow(event_time, 'PT1S', 'PT1S')
             );
 
-            INSERT INTO {cluster}{self.output_topic}
-            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(ts))))
+            INSERT INTO {output_name}
+            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(id))))
             FROM $output;
             END DO;
-        '''
-        kikimr.ydb_client.query(sql)
+        ''')
         self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+        return query_name
 
-        self.write_stream(
-            data=[
-                '{"ts": "1970-01-01T00:00:40Z", "pass": 1}',
-                '{"ts": "1970-01-01T00:00:50Z", "pass": 1}',
-                '{"ts": "1970-01-01T00:01:00Z", "pass": 0}',
-            ],
-            endpoint=endpoint,
-            partition_key=b'1',
-        )
+    def _write_topic(
+        self,
+        ydb_client: YdbClient,
+        messages: list[str],
+        partition_id: int = 0,
+    ) -> None:
+        ydb_client.topic_write(self.input_topic, messages, partition_id=partition_id)
+
+    def _wait_for_idle(self, shared_reading: bool, tasks: int) -> None:
         if shared_reading and tasks > 1:
-            time.sleep(10)  # leave a bit more time to fire up idle timeout
+            time.sleep(2 * self.idle_timeout_seconds)  # leave a bit more time to fire up idle timeout
 
-        expected = [
-            '[["1970-01-01T00:00:40Z"]]',
-            '[["1970-01-01T00:00:50Z"]]',
-        ]
-        actual = self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint)
-        assert sorted(actual) == expected
+    def _read_topic(self, ydb_client: YdbClient, messages_count: int) -> list[str]:
+        return ydb_client.topic_read(self.output_topic, self.consumer_name, messages_count)
 
-        sql = f'''DROP STREAMING QUERY `{query_name}`;'''
-        kikimr.ydb_client.query(sql)
+    def _read_topic_check_row(self, ydb_client: YdbClient, expected: list[str]) -> None:
+        actual = self._read_topic(ydb_client, 1)
+        assert sorted(json.loads(actual[0])) == sorted(expected)
+
+    def _read_topic_check(self, ydb_client: YdbClient, expected: list[str]) -> None:
+        actual = self._read_topic(ydb_client, len(expected))
+        assert actual == expected
+
+    def _drop_query(self, kikimr: Kikimr, query_name: str) -> None:
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    @link_test_case("#28595")
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
+    @pytest.mark.parametrize("tasks", [1, 2])
+    def test_watermarks(
+        self: Self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+        shared_reading: bool,
+        tasks: int,
+    ) -> None:
+        ydb_client = self.get_ydb_client(kikimr, local_topics)
+        query_name = f"test_hopping_window_{shared_reading}{tasks}{local_topics}"
+        query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading, tasks)
+        try:
+            self._write_topic(
+                ydb_client,
+                [
+                    self._event(40, "40"),
+                    self._event(50, "50"),
+                    self._event(60, "60", filter=True),
+                ],
+            )
+            self._wait_for_idle(shared_reading, tasks)
+
+            expected = ['["40"]', '["50"]']
+            self._read_topic_check(ydb_client, expected)
+        finally:
+            self._drop_query(kikimr, query_name)
+
+    @link_test_case("#28599")
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
+    @pytest.mark.parametrize("tasks", [1, 2])
+    def test_cascade_hopping_window(
+        self: Self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+        shared_reading: bool,
+        tasks: int,
+    ) -> None:
+        ydb_client = self.get_ydb_client(kikimr, local_topics)
+        query_name = f"test_cascade_hopping_window_{shared_reading}{tasks}{local_topics}"
+        query_name = self._create_query(
+            kikimr, entity_name, query_name, local_topics, shared_reading, tasks, cascade_hopping=True
+        )
+
+        try:
+            self._write_topic(
+                ydb_client,
+                [
+                    self._event(40, "40"),
+                    self._event(50, "50"),
+                    self._event(60, "60", filter=True),
+                ],
+            )
+            self._wait_for_idle(shared_reading, tasks)
+
+            expected = ['[["40"]]', '[["50"]]']
+            self._read_topic_check(ydb_client, expected)
+        finally:
+            self._drop_query(kikimr, query_name)
+
+    @link_test_case("#28600")
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
+    def test_idle_partition_more_than_timeout(
+        self: Self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+        shared_reading: bool,
+    ) -> None:
+        ydb_client = self.get_ydb_client(kikimr, local_topics)
+        query_name = "slow_partition"
+        query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+        try:
+            self._write_topic(ydb_client, [self._event(0, "fast-0")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(0, "slow-0")], partition_id=1)
+            self._write_topic(ydb_client, [self._event(10, "fast-10")], partition_id=0)
+
+            time.sleep(self.idle_timeout_seconds + 1)
+
+            expected = ["fast-0", "slow-0"]
+            self._read_topic_check_row(ydb_client, expected)
+
+            self._write_topic(ydb_client, [self._event(10, "slow-10")], partition_id=1)
+            self._write_topic(ydb_client, [self._event(20, "fast-20")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(20, "slow-20")], partition_id=1)
+
+            expected = ["fast-10", "slow-10"]
+            self._read_topic_check_row(ydb_client, expected)
+        finally:
+            self._drop_query(kikimr, query_name)
+
+    @link_test_case("#28601")
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
+    def test_idle_partition_less_than_timeout(
+        self: Self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+        shared_reading: bool,
+    ) -> None:
+        ydb_client = self.get_ydb_client(kikimr, local_topics)
+        query_name = "slow_partition_within_timeout"
+        query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+        try:
+            self._write_topic(ydb_client, [self._event(0, "fast-0")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(0, "slow-0")], partition_id=1)
+            self._write_topic(ydb_client, [self._event(10, "fast-10")], partition_id=0)
+
+            time.sleep(self.idle_timeout_seconds - 1)
+            self._write_topic(ydb_client, [self._event(10, "slow-10")], partition_id=1)
+            self._write_topic(ydb_client, [self._event(20, "fast-20")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(20, "slow-20")], partition_id=1)
+
+            expected = ["fast-0", "slow-0"]
+            self._read_topic_check_row(ydb_client, expected)
+            expected = ["fast-10", "slow-10"]
+            self._read_topic_check_row(ydb_client, expected)
+        finally:
+            self._drop_query(kikimr, query_name)
+
+    @link_test_case("#28602")
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
+    def test_idle_topic(
+        self: Self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+        shared_reading: bool,
+    ) -> None:
+        ydb_client = self.get_ydb_client(kikimr, local_topics)
+        query_name = "topic"
+        query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+        try:
+            self._write_topic(ydb_client, [self._event(0, "first-0")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(0, "second-0")], partition_id=1)
+
+            time.sleep(self.idle_timeout_seconds + 1)
+            self._write_topic(ydb_client, [self._event(10, "first-10")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(10, "second-10")], partition_id=1)
+            self._write_topic(ydb_client, [self._event(20, "first-20")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(20, "second-20")], partition_id=1)
+
+            expected = ["first-0", "second-0"]
+            self._read_topic_check_row(ydb_client, expected)
+            expected = ["first-10", "second-10"]
+            self._read_topic_check_row(ydb_client, expected)
+        finally:
+            self._drop_query(kikimr, query_name)
+
+    @link_test_case("#28603")
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
+    def test_idle_partition_resume(
+        self: Self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+        shared_reading: bool,
+    ) -> None:
+        ydb_client = self.get_ydb_client(kikimr, local_topics)
+        query_name = "partition_resume"
+        query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+        try:
+            self._write_topic(ydb_client, [self._event(0, "active-0")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(0, "paused-0")], partition_id=1)
+            self._write_topic(ydb_client, [self._event(10, "active-10")], partition_id=0)
+
+            time.sleep(self.idle_timeout_seconds + 1)
+            expected = ["active-0", "paused-0"]
+            self._read_topic_check_row(ydb_client, expected)
+
+            self._write_topic(ydb_client, [self._event(10, "paused-10")], partition_id=1)
+            self._write_topic(ydb_client, [self._event(20, "active-20")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(20, "paused-20")], partition_id=1)
+
+            expected = ["active-10", "paused-10"]
+            self._read_topic_check_row(ydb_client, expected)
+        finally:
+            self._drop_query(kikimr, query_name)
+
+    @link_test_case("#28604")
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
+    def test_empty_partition(
+        self: Self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+        shared_reading: bool,
+    ) -> None:
+        ydb_client = self.get_ydb_client(kikimr, local_topics)
+        query_name = "empty_partition"
+        query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
+        try:
+            self._write_topic(ydb_client, [self._event(0, "active-0")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(10, "active-10")], partition_id=0)
+
+            time.sleep(self.idle_timeout_seconds + 1)
+
+            expected = ["active-0"]
+            self._read_topic_check_row(ydb_client, expected)
+
+            self._write_topic(ydb_client, [self._event(10, "new-10")], partition_id=1)
+            self._write_topic(ydb_client, [self._event(20, "active-20")], partition_id=0)
+            self._write_topic(ydb_client, [self._event(20, "new-20")], partition_id=1)
+
+            expected = ["active-10", "new-10"]
+            self._read_topic_check_row(ydb_client, expected)
+        finally:
+            self._drop_query(kikimr, query_name)
 
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     @pytest.mark.parametrize("tasks", [1, 2])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_wm_after_parsing(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, local_topics: bool) -> None:
+    def test_wm_after_parsing(self: Self, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, local_topics: bool) -> None:
         if shared_reading:
             pytest.skip("Shared reading is not supported for watermarks after parsing yet")
 
-        endpoint = self.get_endpoint(kikimr, local_topics)
+        ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"test_wm_after_parsing_{shared_reading}{tasks}{local_topics}"
-        source_name = entity_name(query_name)
-        self.init_topics(source_name, partitions_count=tasks, endpoint=endpoint)
-        self.create_source(kikimr, source_name, shared_reading)
+        input_name, output_name, _ = self.get_io_names(
+            kikimr, query_name, local_topics, entity_name, partitions_count=tasks, shared=shared_reading
+        )
 
-        cluster = f"{source_name}." if not local_topics else ""
-        idleness_clause = ', WATERMARK_IDLE_TIMEOUT = "PT5S"' if tasks > 1 else ''
-
-        sql = f'''
+        idleness_clause = f', WATERMARK_IDLE_TIMEOUT = "PT{self.idle_timeout_seconds}S"' if tasks > 1 else ''
+        kikimr.ydb_client.query(f'''
             CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
             PRAGMA ydb.MaxTasksPerStage = '{tasks}';
 
             $input = (
                 SELECT
-                    Yson::ConvertTo(Yson::ParseJson(line), Struct<ts: String, pass: Uint64>) AS row
+                    Yson::ConvertTo(Yson::ParseJson(line), Struct<ts: String, pass: Uint64, id: String>) AS row
                 FROM
-                    {cluster}{self.input_topic}
+                    {input_name}
                     FLATTEN LIST BY (
                         String::SplitToList(Data, '.') AS line
                     )
@@ -130,7 +386,8 @@ class TestWatermarksInYdb(StreamingTestBase):
             $input = (
                 SELECT
                     ts,
-                    pass
+                    pass,
+                    id
                 FROM
                     $input
                     FLATTEN COLUMNS
@@ -138,9 +395,9 @@ class TestWatermarksInYdb(StreamingTestBase):
 
             $input = (
                 SELECT
-                    ts,
-                    pass,
                     CAST(ts AS Timestamp) AS event_time,
+                    pass,
+                    id
                 FROM
                     $input WITH (
                         WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S')
@@ -150,210 +407,116 @@ class TestWatermarksInYdb(StreamingTestBase):
 
             $output = (
                 SELECT
-                    AGGREGATE_LIST(ts) AS ts
+                    HOP_END() AS event_time,
+                    AGGREGATE_LIST(id) AS id
                 FROM
                     $input
                 WHERE
                     pass > 0
                 GROUP BY
-                    HoppingWindow(CAST(event_time AS Timestamp), 'PT1S', 'PT1S')
+                    HoppingWindow(event_time, 'PT1S', 'PT1S')
             );
 
-            INSERT INTO {cluster}{self.output_topic}
-            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(ts))))
+            INSERT INTO {output_name}
+            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(id))))
             FROM $output;
             END DO;
-        '''
-        kikimr.ydb_client.query(sql)
+        ''')
         self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
 
-        self.write_stream(
-            data=[
-                '{"ts": "1970-01-01T00:00:40Z", "pass": 1}..{"ts": "1970-01-01T00:00:50Z", "pass": 1}..{"ts": "1970-01-01T00:01:00Z", "pass": 0}',
-            ],
-            endpoint=endpoint,
-            partition_key=b'1',
-        )
-        if shared_reading and tasks > 1:
-            time.sleep(10)  # leave a bit more time to fire up idle timeout
+        try:
+            self._write_topic(
+                ydb_client,
+                [
+                    f'{self._event(40, "40")}..{self._event(50, "50")}.{self._event(60, "60", filter=True)}',
+                ],
+            )
+            self._wait_for_idle(shared_reading, tasks)
 
-        expected = [
-            '["1970-01-01T00:00:40Z"]',
-            '["1970-01-01T00:00:50Z"]',
-        ]
-        actual = self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint)
-        assert sorted(actual) == expected
+            expected = ['["40"]', '["50"]']
+            self._read_topic_check(ydb_client, expected)
+        finally:
+            self._drop_query(kikimr, query_name)
 
-        sql = f'''DROP STREAMING QUERY `{query_name}`;'''
-        kikimr.ydb_client.query(sql)
-
+    @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     @pytest.mark.parametrize("tasks", [1, 2])
-    @pytest.mark.parametrize("local_topics", [True, False])
-    def test_early_events_are_dropped(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, local_topics: bool) -> None:
-        if local_topics and shared_reading:
-            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
-
-        endpoint = self.get_endpoint(kikimr, local_topics)
+    def test_early_events_are_dropped(
+        self: Self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+        shared_reading: bool,
+        tasks: int,
+    ) -> None:
+        ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"wm_early_{shared_reading}{tasks}{local_topics}"
-        source_name = entity_name(query_name)
-        self.init_topics(source_name, partitions_count=tasks, endpoint=endpoint)
-        self.create_source(kikimr, source_name, shared_reading)
+        query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading, tasks)
 
-        cluster = f"{source_name}." if not local_topics else ""
-        idleness_clause = ', WATERMARK_IDLE_TIMEOUT = "PT5S"' if tasks > 1 else ''
+        try:
+            now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
 
-        sql = f'''
-            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
-            PRAGMA ydb.MaxTasksPerStage = '{tasks}';
+            self._write_topic(
+                ydb_client,
+                [
+                    self._event(0 * 60, "0", initial_ts=now),
+                    self._event(10 * 60, "600", initial_ts=now),
+                    self._event(4 * 60, "240", initial_ts=now, filter=True),
+                ],
+            )
+            self._wait_for_idle(shared_reading, tasks)
 
-            $input = (
-                SELECT
-                    input.*,
-                    CAST(ts AS Timestamp) AS event_time,
-                FROM
-                    {cluster}{self.input_topic} WITH (
-                        FORMAT = json_each_row,
-                        SCHEMA (ts String, pass Uint64),
-                        WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S')
-                        {idleness_clause}
-                    ) AS input
-            );
-
-            $output = (
-                SELECT
-                    CAST(HOP_END() AS String) AS event_time,
-                    AGGREGATE_LIST(ts) AS ts
-                FROM $input
-                WHERE
-                    pass > 0
-                GROUP BY
-                    HoppingWindow(CAST(event_time AS Timestamp), 'PT1S', 'PT1S')
-            );
-
-            INSERT INTO {cluster}{self.output_topic}
-            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(ts))))
-            FROM $output;
-            END DO;
-        '''
-        kikimr.ydb_client.query(sql)
-        self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
-
-        now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
-
-        def time_format(time: datetime.datetime, delta: int) -> str:
-            return (time + datetime.timedelta(minutes=delta)).isoformat().replace("+00:00", "Z")
-
-        self.write_stream(
-            data=[
-                f'{{"ts": "{time_format(now,  0)}", "pass": 1}}',
-                f'{{"ts": "{time_format(now, 10)}", "pass": 1}}',
-                f'{{"ts": "{time_format(now,  4)}", "pass": 0}}',
-            ],
-            endpoint=endpoint,
-            partition_key=b'1',
-        )
-        if shared_reading and tasks > 1:
-            time.sleep(10)  # leave a bit more time to fire up idle timeout
-
-        actual = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)
-        assert actual == [f'["{time_format(now, 0)}"]']
-
-        kikimr.ydb_client.query(f'''DROP STREAMING QUERY `{query_name}`;''')
+            expected = ['["0"]']
+            self._read_topic_check(ydb_client, expected)
+        finally:
+            self._drop_query(kikimr, query_name)
 
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     @pytest.mark.parametrize("tasks", [1, 2])
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("policy,expected", [
-        ("DROP", ['["1970-01-01T00:00:50Z"]']),
-        ("ADJUST", ['["1970-01-01T00:00:50Z"]', '["1970-01-01T00:00:40Z"]']),
+        ("DROP", ['["60"]']),
+        ("ADJUST", ['["40"]', '["60"]']),
     ])
     def test_late_events_policy(
-        self: StreamingTestBase,
+        self: Self,
         kikimr: Kikimr,
         entity_name: Callable[[str], str],
+        local_topics: bool,
         shared_reading: bool,
         tasks: int,
-        local_topics: bool,
         policy: str,
         expected: list[str],
     ) -> None:
-        if local_topics and shared_reading:
-            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
-
-        endpoint = self.get_endpoint(kikimr, local_topics)
+        ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"wm_late_{policy.lower()}_{shared_reading}{tasks}{local_topics}"
-        source_name = entity_name(query_name)
-        self.init_topics(source_name, partitions_count=tasks, endpoint=endpoint)
-        self.create_source(kikimr, source_name, shared_reading)
-
-        cluster = f"{source_name}." if not local_topics else ""
-        idleness_clause = ', WATERMARK_IDLE_TIMEOUT = "PT5S"' if tasks > 1 else ''
-        sql = f'''
-            CREATE STREAMING QUERY `{query_name}` WITH (
-                WATERMARK_LATE_EVENTS_POLICY = {policy}
-            ) AS DO BEGIN
-            PRAGMA ydb.MaxTasksPerStage = '{tasks}';
-
-            $input = (
-                SELECT
-                    input.*,
-                    CAST(ts AS Timestamp) AS event_time,
-                FROM
-                    {cluster}{self.input_topic} WITH (
-                        FORMAT = json_each_row,
-                        SCHEMA (ts String, pass Uint64),
-                        WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S')
-                        {idleness_clause}
-                    ) AS input
-            );
-
-            $output = (
-                SELECT
-                    CAST(HOP_END() AS String) AS event_time,
-                    AGGREGATE_LIST(ts) AS ts
-                FROM $input
-                WHERE
-                    pass > 0
-                GROUP BY
-                    HoppingWindow(CAST(event_time AS Timestamp), 'PT1S', 'PT1S')
-            );
-
-            INSERT INTO {cluster}{self.output_topic}
-            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(ts))))
-            FROM $output;
-            END DO;
-        '''
-        kikimr.ydb_client.query(sql)
-        self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
-
-        self.write_stream(
-            data=[
-                '{"ts": "1970-01-01T00:00:50Z", "pass": 1}',
-                '{"ts": "1970-01-01T00:01:00Z", "pass": 0}',
-            ],
-            endpoint=endpoint,
-            partition_key=b'1',
+        query_name = self._create_query(
+            kikimr, entity_name, query_name, local_topics, shared_reading, tasks, settings={"WATERMARK_LATE_EVENTS_POLICY": policy},
         )
-        if shared_reading and tasks > 1:
-            time.sleep(10)  # leave a bit more time to fire up idle timeout
 
-        actual = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)
+        try:
+            self._write_topic(
+                ydb_client,
+                [
+                    self._event(50, "50"),
+                    self._event(60, "60", filter=True),
+                ],
+            )
+            self._wait_for_idle(shared_reading, tasks)
 
-        self.write_stream(
-            data=[
-                '{"ts": "1970-01-01T00:00:40Z", "pass": 1}',
-                '{"ts": "1970-01-01T00:01:10Z", "pass": 0}',
-            ],
-            endpoint=endpoint,
-            partition_key=b'1',
-        )
-        if shared_reading and tasks > 1:
-            time.sleep(10)  # leave a bit more time to fire up idle timeout
+            expected1 = ['["50"]']
+            self._read_topic_check(ydb_client, expected1)
 
-        if len(expected) > len(actual):
-            actual += self.read_stream(len(expected) - len(actual), topic_path=self.output_topic, endpoint=endpoint)
+            self._write_topic(
+                ydb_client,
+                [
+                    self._event(60, "60"),
+                    self._event(40, "40"),
+                    self._event(70, "70", filter=True),
+                ],
+            )
+            self._wait_for_idle(shared_reading, tasks)
 
-        assert sorted(actual) == sorted(expected)
-
-        kikimr.ydb_client.query(f'''DROP STREAMING QUERY `{query_name}`;''')
+            self._read_topic_check(ydb_client, expected)
+        finally:
+            self._drop_query(kikimr, query_name)

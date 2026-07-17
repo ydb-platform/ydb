@@ -78,6 +78,29 @@ TString GetDatabase(NHttp::THttpIncomingRequest* request) {
     return {};
 }
 
+void LogAuthorizedHttpRequest(
+    const TAppData* appData,
+    const NGRpcService::TEvRequestAuthAndCheckResult* result,
+    const NHttp::THttpIncomingRequest& request)
+{
+    const TString address = request.Address ? request.Address->ToString() : "";
+    const TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
+    const NACLib::TUserToken* userToken = (result && result->UserToken) ? result->UserToken.Get() : nullptr;
+    const TString accessLevel = AccessLevelToString(GetHighestAccessLevel(appData, userToken));
+    YDB_LOG_NOTICE(
+        "Send request"
+            << " [" << address << "]"
+            << " " << user
+            << " " << request.Method
+            << " " << request.URL
+            << " highest_access_level=" << accessLevel,
+        {"address", address},
+        {"user", user},
+        {"method", request.Method},
+        {"url", request.URL},
+        {"highest_access_level", accessLevel});
+}
+
 const Ydb::Issue::IssueMessage* FindDeepestIssue(const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues) {
     std::queue<TIssueInfo> issuesQueue;
     ui32 minimalSeverity = std::numeric_limits<ui32>::max();
@@ -594,12 +617,7 @@ public:
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (ActorMonPage->Authorizer) {
-            TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
-            YDB_LOG_NOTICE("Send request",
-                {"address", (request->Address ? request->Address->ToString() : "")},
-                {"user", user},
-                {"method", request->Method},
-                {"url", request->URL});
+            LogAuthorizedHttpRequest(AppData(), result, *request);
         }
         TString serializedToken = result && result->UserToken ? result->UserToken->GetSerializedToken() : TString();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
@@ -1248,12 +1266,7 @@ public:
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         if (Authorizer) {
-            TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
-            YDB_LOG_NOTICE("",
-                {"address", (Request->Address ? Request->Address->ToString() : "")},
-                {"user", user},
-                {"method", Request->Method},
-                {"url", Request->URL});
+            LogAuthorizedHttpRequest(AppData(), result, *Request);
         }
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }

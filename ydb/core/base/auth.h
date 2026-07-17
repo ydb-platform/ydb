@@ -9,6 +9,14 @@ namespace NKikimrScheme {
 
 namespace NKikimr {
 
+enum class EAccessLevel {
+    None,
+    Database,
+    Viewer,
+    Monitoring,
+    Administration,
+};
+
 // Check token against given list of allowed sids
 bool IsTokenAllowed(const NACLib::TUserToken* userToken, const TVector<TString>& allowedSIDs);
 bool IsTokenAllowed(const NACLib::TUserToken* userToken, const NProtoBuf::RepeatedPtrField<TString>& allowedSIDs);
@@ -19,6 +27,12 @@ bool IsTokenAllowed(const TString& userTokenSerialized, const NProtoBuf::Repeate
 bool IsAdministrator(const TAppData* appData, const TString& userTokenSerialized);
 bool IsAdministrator(const TAppData* appData, const NACLib::TUserToken* userToken);
 
+// EAccessLevel::None means that no access level was matched for the given token and security config.
+// It is not the same as an anonymous request: a missing token may still resolve to any level
+// when the corresponding allowed_sids list is empty.
+EAccessLevel GetHighestAccessLevel(const TAppData* appData, const NACLib::TUserToken* userToken);
+EAccessLevel GetHighestAccessLevel(const TAppData* appData, const TString& userTokenSerialized);
+
 bool IsStrictDatabaseOnlyToken(const TAppData* appData, const TString& userTokenSerialized);
 
 // Check token against database owner
@@ -28,5 +42,7 @@ bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::
 // modification record to the system basic owner, unless the record is already owned
 // by the system metadata user (objects created by the system itself keep their owner).
 void SetSystemOwnerIfNeeded(NKikimrScheme::TEvModifySchemeTransaction& record, const TAppData* appData);
+
+TString AccessLevelToString(EAccessLevel level);
 
 } // namespace NKikimr

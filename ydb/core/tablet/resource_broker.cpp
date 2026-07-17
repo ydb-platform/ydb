@@ -405,7 +405,7 @@ bool TScheduler::SubmitTask(const TEvResourceBroker::TTask &task,
         YDB_LOG_DEBUG_CTX(as, "Assigned generated task id",
             {"generatedTaskId", id.second});
     } else if (Tasks.contains(id)) {
-        YDB_LOG_DEBUG_CTX(as, "Task with the same id was already submitted",
+        YDB_LOG_DEBUG_CTX(as, "SubmitTask failed: task with the same id was already submitted",
             {"submittedTaskId", task.TaskId},
             {"client", ToString(client)});
         return false;
@@ -430,7 +430,7 @@ bool TScheduler::UpdateTask(ui64 taskId,
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        YDB_LOG_DEBUG_CTX(as, "Cannot update unknown task",
+        YDB_LOG_DEBUG_CTX(as, "UpdateTask failed: cannot update unknown task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return false;
@@ -465,7 +465,7 @@ bool TScheduler::UpdateTaskCookie(ui64 taskId,
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        YDB_LOG_DEBUG_CTX(as, "Cannot update unknown task",
+        YDB_LOG_DEBUG_CTX(as, "UpdateTaskCookie failed: cannot update unknown task's cookie",
             {"taskId", taskId},
             {"client", ToString(client)});
         return false;
@@ -485,7 +485,7 @@ TScheduler::TTerminateTaskResult TScheduler::RemoveQueuedTask(ui64 taskId,
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        YDB_LOG_DEBUG_CTX(as, "Cannot remove unknown task",
+        YDB_LOG_DEBUG_CTX(as, "RemoveQueuedTask failed: cannot remove unknown task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return TTerminateTaskResult(false, nullptr);
@@ -493,7 +493,7 @@ TScheduler::TTerminateTaskResult TScheduler::RemoveQueuedTask(ui64 taskId,
 
     auto task = it->second;
     if (task->InFly) {
-        YDB_LOG_DEBUG_CTX(as, "Cannot remove in-flight task",
+        YDB_LOG_DEBUG_CTX(as, "RemoveQueuedTask failed: cannot remove in-flight task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return TTerminateTaskResult(false, task);
@@ -514,7 +514,7 @@ TScheduler::TTerminateTaskResult TScheduler::FinishTask(ui64 taskId,
 {
     auto it = Tasks.find(std::make_pair(client, taskId));
     if (it == Tasks.end()) {
-        YDB_LOG_DEBUG_CTX(as, "Cannot finish unknown task",
+        YDB_LOG_DEBUG_CTX(as, "FinishTask failed: cannot finish unknown task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return TTerminateTaskResult(false, nullptr);
@@ -522,7 +522,7 @@ TScheduler::TTerminateTaskResult TScheduler::FinishTask(ui64 taskId,
 
     auto task = it->second;
     if (!task->InFly) {
-        YDB_LOG_DEBUG_CTX(as, "Cannot finish queued task",
+        YDB_LOG_DEBUG_CTX(as, "FinishTask failed for task: cannot finish queued task",
             {"taskId", taskId},
             {"client", ToString(client)});
         return TTerminateTaskResult(false, task);
@@ -975,7 +975,7 @@ bool TResourceBroker::ReduceTaskResourcesInstant(ui64 taskId, const TResourceVal
             return true;
         }
 
-        YDB_LOG_ERROR_CTX(*ActorSystem, "Failed to update task",
+        YDB_LOG_ERROR_CTX(*ActorSystem, "ReduceTaskResourcesInstant failed for task",
             {"taskId", taskId});
         return false;
     }
@@ -1086,9 +1086,9 @@ bool TResourceBroker::FinishTaskInstant(const TEvResourceBroker::TEvFinishTask &
                 ActorSystem->Send(task.Client, new TEvResourceBroker::TEvResourceAllocated(task.TaskId, task.Cookie));
             });
         } else {
-            YDB_LOG_ERROR_CTX(*ActorSystem, "Failed to finish task",
-                {"taskId", ev.TaskId},
-                {"errorReason", (result.Task ? "cannot finish queued task" : "cannot finish unknown task")});
+            TString error = result.Task ? "cannot finish queued task" : "cannot finish unknown task";
+            YDB_LOG_ERROR_CTX(*ActorSystem, "FinishTaskInstant failed for task: " + error,
+                {"taskId", ev.TaskId});
         }
 
         return result.Success;
@@ -1123,7 +1123,7 @@ TResourceBrokerActor::TResourceBrokerActor(const TResourceBrokerConfig &config,
 
 void TResourceBrokerActor::Bootstrap(const TActorContext &ctx)
 {
-    YDB_LOG_DEBUG_CTX(ctx, "Actor bootstrap");
+    YDB_LOG_DEBUG_CTX(ctx, "TResourceBrokerActor bootstrap");
 
     NActors::TMon* mon = AppData(ctx)->Mon;
     if (mon) {

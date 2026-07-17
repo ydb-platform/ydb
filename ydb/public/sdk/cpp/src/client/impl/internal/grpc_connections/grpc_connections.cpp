@@ -6,6 +6,273 @@
 
 namespace NYdb::inline Dev {
 
+<<<<<<< HEAD
+=======
+namespace {
+    thread_local ui32 SdkResponseCallbackDepth = 0;
+
+    template<class TCallback>
+    void RunAfterCurrentSdkCallback(std::shared_ptr<TDriverStopState> stopState, TCallback&& callback) {
+        // A fresh detached thread that runs to completion and exits: deferring onto a single
+        // long-lived worker instead was tried and regressed (a permanently-blocked worker
+        // faults at process teardown). Teardown-from-callback is rare, so on-demand is fine.
+        try {
+            std::thread([stopState = std::move(stopState), callback = std::forward<TCallback>(callback)]() mutable {
+                // Wait until every in-flight SDK callback (including the one that scheduled
+                // us) has returned before touching the driver, so we never free it or join
+                // its threads from under a live callback frame.
+                if (stopState) {
+                    stopState->WaitCallbacksDrained();
+                }
+                callback();
+            }).detach();
+        } catch (...) {
+            Y_ABORT("Failed to defer YDB driver action from SDK callback thread");
+        }
+    }
+
+    TQueueClientCallbackGuardFactory MakeSdkCallbackGuardFactory(std::shared_ptr<TDriverStopState> stopState) {
+        return [stopState = std::move(stopState)] {
+            return std::make_unique<TSdkCallbackGuard>(stopState);
+        };
+    }
+
+    class TSdkQueueClientContext final : public NYdbGrpc::IQueueClientContext {
+    public:
+        TSdkQueueClientContext(IQueueClientContextPtr underlying, std::shared_ptr<TDriverStopState> stopState)
+            : Underlying_(std::move(underlying))
+            , StopState_(std::move(stopState))
+        {
+            Y_ABORT_UNLESS(Underlying_);
+            Y_ABORT_UNLESS(StopState_);
+        }
+
+        IQueueClientContextPtr CreateContext() override {
+            auto child = Underlying_->CreateContext();
+            if (!child) {
+                return nullptr;
+            }
+            return std::make_shared<TSdkQueueClientContext>(std::move(child), StopState_);
+        }
+
+        TQueueClientCallbackGuardFactory GetCallbackGuardFactory() override {
+            return MakeSdkCallbackGuardFactory(StopState_);
+        }
+
+        grpc::CompletionQueue* CompletionQueue() override {
+            return Underlying_->CompletionQueue();
+        }
+
+        bool IsCancelled() const override {
+            return Underlying_->IsCancelled();
+        }
+
+        bool Cancel() override {
+            return Underlying_->Cancel();
+        }
+
+        void SubscribeCancel(std::function<void()> callback) override {
+            Underlying_->SubscribeCancel(std::move(callback));
+        }
+
+    private:
+        IQueueClientContextPtr Underlying_;
+        std::shared_ptr<TDriverStopState> StopState_;
+    };
+}
+
+namespace {
+
+using TCredentialsWaitResult = TGRpcConnectionsImpl::TCredentialsWaitResult;
+
+TPlainStatus InitFailedStatus(const std::exception* e = nullptr) {
+    TStringBuilder message;
+    message << "Credentials provider initialization failed";
+    if (e) {
+        message << ". " << e->what();
+    }
+    return TPlainStatus(EStatus::CLIENT_UNAUTHENTICATED, message);
+}
+
+TPlainStatus InitCancelledStatus() {
+    return TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped");
+}
+
+TCredentialsWaitResult ReadyResult(const NThreading::TFuture<void>& future) {
+    try {
+        future.GetValue();
+        return {};
+    } catch (const std::exception& e) {
+        return InitFailedStatus(&e);
+    } catch (...) {
+        return InitFailedStatus();
+    }
+}
+
+bool ScheduledSuccessfully(const NThreading::TFuture<bool>& future) {
+    try {
+        return future.GetValue();
+    } catch (...) {
+        return false;
+    }
+}
+
+} // anonymous namespace
+
+bool TDriverStopState::TryEnterCallback() noexcept {
+    std::unique_lock lock(Mutex_);
+    if (Stopped_) {
+        return false;
+    }
+    ++InFlightCallbacks_;
+    return true;
+}
+
+void TDriverStopState::LeaveCallback() noexcept {
+    std::unique_lock lock(Mutex_);
+    Y_ABORT_UNLESS(InFlightCallbacks_ > 0);
+    if (--InFlightCallbacks_ == 0) {
+        Drained_.notify_all();
+    }
+}
+
+void TDriverStopState::WaitCallbacksDrained() {
+    std::unique_lock lock(Mutex_);
+    Drained_.wait(lock, [this] {
+        return InFlightCallbacks_ == 0;
+    });
+}
+
+void TDriverStopState::MarkStopped() noexcept {
+    std::unique_lock lock(Mutex_);
+    Stopped_ = true;
+    if (InFlightCallbacks_ == 0) {
+        Drained_.notify_all();
+    }
+}
+
+TSdkCallbackGuard::TSdkCallbackGuard(std::shared_ptr<TDriverStopState> stopState)
+    : StopState_(std::move(stopState))
+{
+    Entered_ = !StopState_ || StopState_->TryEnterCallback();
+    if (Entered_) {
+        ++SdkResponseCallbackDepth;
+    }
+}
+
+TSdkCallbackGuard::~TSdkCallbackGuard() {
+    if (!Entered_) {
+        return;
+    }
+
+    --SdkResponseCallbackDepth;
+
+    if (StopState_) {
+        StopState_->LeaveCallback();
+    }
+}
+
+bool TSdkCallbackGuard::IsEntered() const noexcept {
+    return Entered_;
+}
+
+NThreading::TFuture<void> TGRpcConnectionsImpl::CredentialsReadyToWaitFor(
+    const TDbDriverStatePtr& dbState,
+    const TRpcRequestSettings& requestSettings,
+    const IQueueClientContextPtr& context) const
+{
+    if (!requestSettings.UseAuth) {
+        return {};
+    }
+    auto ready = dbState->GetCredentialsReady();
+    return ready.HasValue() && !(context && context->IsCancelled())
+        ? NThreading::TFuture<void>{}
+        : ready;
+}
+
+void TGRpcConnectionsImpl::DeferUntilCredentialsReady(
+    const TRpcRequestSettings& requestSettings,
+    IQueueClientContextPtr& context,
+    NThreading::TFuture<void> credentialsReady,
+    TCredentialsCallback callback)
+{
+    auto cancelled = NThreading::NewPromise<void>();
+    if (!credentialsReady.IsReady()) {
+        TryCreateContext(context);
+        if (context) {
+            context->SubscribeCancel([cancelled]() mutable {
+                cancelled.TrySetValue();
+            });
+        } else {
+            cancelled.SetValue();
+        }
+    } else if (context && context->IsCancelled()) {
+        cancelled.SetValue();
+    }
+
+    auto scheduleContext = context;
+    auto schedule = [this, scheduleContext, stopState = StopState_](TDeadline deadline) {
+        TSdkCallbackGuard guard(stopState);
+        if (!guard.IsEntered()) {
+            return NThreading::MakeFuture(false);
+        }
+        const auto now = TDeadline::Clock::now();
+        const auto timeout = deadline.GetTimePoint() <= now
+            ? TDuration::Zero()
+            : TDuration::MicroSeconds(std::chrono::duration_cast<std::chrono::microseconds>(
+                deadline.GetTimePoint() - now).count());
+        return ScheduleFuture(timeout, scheduleContext);
+    };
+
+    NThreading::TFuture<TCredentialsWaitResult> wait;
+    if (credentialsReady.IsReady()) {
+        auto status = ReadyResult(credentialsReady);
+        wait = NThreading::MakeFuture(status || !cancelled.HasValue()
+            ? std::move(status)
+            : TCredentialsWaitResult(InitCancelledStatus()));
+    } else {
+        auto result = NThreading::NewPromise<TCredentialsWaitResult>();
+        wait = result.GetFuture();
+        credentialsReady.Subscribe([result](const NThreading::TFuture<void>& future) mutable {
+            result.TrySetValue(ReadyResult(future));
+        });
+        cancelled.GetFuture().Subscribe([result](const NThreading::TFuture<void>&) mutable {
+            result.TrySetValue(InitCancelledStatus());
+        });
+        if (requestSettings.Deadline != TDeadline::Max()) {
+            try {
+                schedule(requestSettings.Deadline).Subscribe(
+                    [result](const NThreading::TFuture<bool>& future) mutable {
+                        result.TrySetValue(ScheduledSuccessfully(future)
+                            ? TPlainStatus(EStatus::CLIENT_DEADLINE_EXCEEDED,
+                                "Request deadline exceeded while waiting for credentials")
+                            : InitCancelledStatus());
+                    });
+            } catch (...) {
+                result.TrySetValue(InitCancelledStatus());
+            }
+        }
+    }
+
+    wait.Subscribe([callback = std::move(callback), schedule = std::move(schedule)]
+        (const NThreading::TFuture<TCredentialsWaitResult>& future) mutable {
+        NThreading::TFuture<bool> scheduled;
+        try {
+            scheduled = schedule(TDeadline::Now());
+        } catch (...) {
+            callback(InitCancelledStatus());
+            return;
+        }
+        scheduled.Subscribe([callback = std::move(callback), status = future.GetValue()]
+            (const NThreading::TFuture<bool>& future) mutable {
+            callback(ScheduledSuccessfully(future)
+                ? std::move(status)
+                : TCredentialsWaitResult(InitCancelledStatus()));
+        });
+    });
+}
+
+>>>>>>> f7303ada674 (async provider initialisation (#46135))
 bool IsTokenCorrect(const std::string& in) {
     for (char c : in) {
         if (!(IsAsciiAlnum(c) || IsAsciiPunct(c) || c == ' ')) {
@@ -17,7 +284,11 @@ bool IsTokenCorrect(const std::string& in) {
 
 std::string GetAuthInfo(TDbDriverStatePtr p) {
     try {
-        auto token = p->CredentialsProvider->GetAuthInfo();
+        auto credentialsProvider = p->GetCredentialsProvider();
+        if (!credentialsProvider) {
+            throw TAuthenticationError("Credentials provider is not initialized");
+        }
+        auto token = credentialsProvider->GetAuthInfo();
         if (!IsTokenCorrect(token)) {
             throw TAuthenticationError("token is incorrect, illegal characters found");
         }
@@ -208,8 +479,37 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
 }
 
 TGRpcConnectionsImpl::~TGRpcConnectionsImpl() {
+<<<<<<< HEAD
     GRpcClientLow_.Stop(true);
     ResponseQueue_->Stop();
+=======
+    Stop(true);
+    StopState_->MarkStopped();
+    StopState_->WaitCallbacksDrained();
+}
+
+bool TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback() noexcept {
+    return SdkResponseCallbackDepth != 0;
+}
+
+void TGRpcConnectionsImpl::DeferOrRunNow(std::shared_ptr<TDriverStopState> stopState, std::function<void()> action) {
+    if (!IsCurrentThreadInSdkCallback() && !NYdbGrpc::IsGRpcCompletionThread()) {
+        action();
+        return;
+    }
+
+    RunAfterCurrentSdkCallback(std::move(stopState), std::move(action));
+}
+
+void TGRpcConnectionsDeleter::operator()(TGRpcConnectionsImpl* connections) const noexcept {
+    if (!connections) {
+        return;
+    }
+
+    TGRpcConnectionsImpl::DeferOrRunNow(connections->StopState_, [connections] {
+        delete connections;
+    });
+>>>>>>> f7303ada674 (async provider initialisation (#46135))
 }
 
 void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) {
@@ -459,9 +759,12 @@ TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestS
     TCallMeta meta;
     meta.Timeout = requestSettings.Deadline;
 #ifndef YDB_GRPC_UNSECURE_AUTH
-    meta.CallCredentials = dbState->CallCredentials;
+    if (requestSettings.UseAuth) {
+        meta.CallCredentials = dbState->GetCallCredentials();
+    }
 #else
-    if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) {
+    auto credentialsProvider = dbState->GetCredentialsProvider();
+    if (requestSettings.UseAuth && credentialsProvider && credentialsProvider->IsValid()) {
         meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, GetAuthInfo(dbState)});
     }
 #endif

@@ -8,6 +8,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/http/simple/http_client.h>
 
+#include <exception>
 #include <mutex>
 
 using namespace yandex::cloud::iam::v1;
@@ -115,7 +116,48 @@ public:
         return std::make_shared<TIAMCredentialsProvider>(Params_);
     }
 
+<<<<<<< HEAD
+=======
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const final {
+        return CreateProviderAsync(std::weak_ptr<ICoreFacility>{});
+    }
+
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const final {
+        return CreateProviderInBackground(Params_, std::move(facility));
+    }
+
+    std::string GetClientIdentity() const final {
+        return TStringBuilder() <<
+                "TIamCredentialsProviderFactory" << '\t' <<
+                Params_.Host << ':' << Params_.Port << '@' << Params_.RefreshPeriod;
+    }
+
+>>>>>>> f7303ada674 (async provider initialisation (#46135))
 private:
+    static NThreading::TFuture<TCredentialsProviderPtr> CreateProviderInBackground(
+        TIamHost params,
+        std::weak_ptr<ICoreFacility> facility)
+    {
+        auto promise = NThreading::NewPromise<TCredentialsProviderPtr>();
+        auto createProvider = [params = std::move(params), promise]() mutable {
+            try {
+                promise.TrySetValue(std::make_shared<TIAMCredentialsProvider>(params));
+            } catch (...) {
+                promise.TrySetException(std::current_exception());
+            }
+        };
+        try {
+            if (auto core = facility.lock()) {
+                core->PostToResponseQueue(std::move(createProvider));
+            } else {
+                createProvider();
+            }
+        } catch (...) {
+            promise.TrySetException(std::current_exception());
+        }
+        return promise.GetFuture();
+    }
+
     TIamHost Params_;
 };
 

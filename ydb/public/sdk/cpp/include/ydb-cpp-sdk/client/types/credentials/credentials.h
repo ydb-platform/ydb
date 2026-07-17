@@ -2,8 +2,15 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fwd.h>
 
+<<<<<<< HEAD
+=======
+#include <functional>
+#include <library/cpp/threading/future/future.h>
+
+>>>>>>> f7303ada674 (async provider initialisation (#46135))
 #include <memory>
 #include <string>
+#include <utility>
 
 namespace NYdb::inline Dev {
 
@@ -22,8 +29,14 @@ public:
     virtual ~ICredentialsProviderFactory() = default;
     // deprecated, use CreateProvider(std::weak_ptr<ICoreFacility> facility) instead
     virtual TCredentialsProviderPtr CreateProvider() const = 0;
+    virtual NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const {
+        return NThreading::MakeFuture(CreateProvider());
+    }
     virtual TCredentialsProviderPtr CreateProvider([[maybe_unused]] std::weak_ptr<ICoreFacility> facility) const {
         return CreateProvider();
+    }
+    virtual NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const {
+        return NThreading::MakeFuture(CreateProvider(std::move(facility)));
     }
     virtual std::string GetClientIdentity() const;
 };

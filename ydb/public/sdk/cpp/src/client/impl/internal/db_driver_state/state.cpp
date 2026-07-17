@@ -52,14 +52,55 @@ TDbDriverState::TDbDriverState(
     Log.SetFormatter(GetPrefixLogFormatter(GetDatabaseLogPrefix(Database)));
 }
 
-void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider) {
-    CredentialsProvider = std::move(credentialsProvider);
+void TDbDriverState::InitCredentials(
+    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
+) {
+    Credentials = credentialsProviderFactory->CreateProviderAsync(weak_from_this()).Apply(
+        [](const NThreading::TFuture<TCredentialsProviderPtr>& future) {
+            TCredentials result{future.GetValue()};
 #ifndef YDB_GRPC_UNSECURE_AUTH
-    CallCredentials = grpc::MetadataCredentialsFromPlugin(
-        std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(CredentialsProvider)));
+            result.CallCredentials = grpc::MetadataCredentialsFromPlugin(
+                std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(result.Provider)));
 #endif
+            return result;
+        });
+    CredentialsReady = Credentials.IgnoreResult();
 }
 
+<<<<<<< HEAD
+=======
+NThreading::TFuture<void> TDbDriverState::GetCredentialsReady() const {
+    return CredentialsReady;
+}
+
+std::shared_ptr<ICredentialsProvider> TDbDriverState::GetCredentialsProvider() const {
+    return Credentials.HasValue() ? Credentials.GetValue().Provider : nullptr;
+}
+
+#ifndef YDB_GRPC_UNSECURE_AUTH
+std::shared_ptr<grpc::CallCredentials> TDbDriverState::GetCallCredentials() const {
+    return Credentials.HasValue() ? Credentials.GetValue().CallCredentials : nullptr;
+}
+#endif
+
+bool TDbDriverState::AreClientTlsCredentialsValid() const {
+    std::call_once(ClientTlsValidationOnceFlag_, [this]() {
+        ClientTlsValidationDetail_.clear();
+        grpc::SslCredentialsOptions sslOptions{
+            .pem_root_certs = NYdb::TStringType{SslCredentials.CaCert},
+            .pem_private_key = NYdb::TStringType{SslCredentials.PrivateKey},
+            .pem_cert_chain = NYdb::TStringType{SslCredentials.Cert}
+        };
+        ClientTlsCredentialsValid_ = NYdbGrpc::ValidateTlsCredentials(sslOptions, ClientTlsValidationDetail_);
+    });
+    return ClientTlsCredentialsValid_;
+}
+
+const std::string& TDbDriverState::GetClientTlsValidationDetail() const {
+    return ClientTlsValidationDetail_;
+}
+
+>>>>>>> f7303ada674 (async provider initialisation (#46135))
 void TDbDriverState::AddCb(TCb&& cb, ENotifyType type) {
     std::lock_guard lock(NotifyCbsLock);
     NotifyCbs[static_cast<size_t>(type)].emplace_back(std::move(cb));
@@ -207,8 +248,36 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                     ? credentialsProviderFactory->CreateProvider(strongState)
                     : CreateInsecureCredentialsProviderFactory()->CreateProvider(strongState));
 
+<<<<<<< HEAD
             if (discoveryMode != EDiscoveryMode::Off) {
                 DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
+=======
+            try {
+                Y_ABORT_UNLESS(inserted);
+                strongState = std::shared_ptr<TDbDriverState>(
+                    new TDbDriverState(
+                        quotedDatabase,
+                        discoveryEndpoint,
+                        discoveryMode,
+                        sslCredentials,
+                        DiscoveryClient_),
+                    deleter);
+
+                strongState->InitCredentials(
+                    credentialsProviderFactory
+                        ? std::move(credentialsProviderFactory)
+                        : CreateInsecureCredentialsProviderFactory());
+
+                if (discoveryMode != EDiscoveryMode::Off) {
+                    DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
+                }
+            } catch (...) {
+                lock.lock();
+                Y_ABORT_UNLESS(weakState.expired());
+                Y_ABORT_UNLESS(States_.erase(key));
+                Notify_.notify_all();
+                throw;
+>>>>>>> f7303ada674 (async provider initialisation (#46135))
             }
             Y_ABORT_UNLESS(States_.emplace(key, strongState).second);
             break;

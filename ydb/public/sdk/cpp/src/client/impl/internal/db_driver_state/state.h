@@ -8,6 +8,12 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
+<<<<<<< HEAD
+=======
+#include <memory>
+#include <mutex>
+
+>>>>>>> f7303ada674 (async provider initialisation (#46135))
 namespace NYdb::inline Dev {
 
 class ICredentialsProvider;
@@ -38,6 +44,12 @@ public:
     NThreading::TFuture<void> DiscoveryCompleted() const;
 
     void SignalDiscoveryCompleted();
+    void InitCredentials(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
+    NThreading::TFuture<void> GetCredentialsReady() const;
+    std::shared_ptr<ICredentialsProvider> GetCredentialsProvider() const;
+#ifndef YDB_GRPC_UNSECURE_AUTH
+    std::shared_ptr<grpc::CallCredentials> GetCallCredentials() const;
+#endif
 
     void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
     void PostToResponseQueue(TPostTaskCb&& f) override;
@@ -48,27 +60,45 @@ public:
     void ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     TBalancingPolicy::TImpl::EPolicyType GetBalancingPolicyType() const;
     std::string GetEndpoint() const;
+<<<<<<< HEAD
     void SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider);
+=======
+    bool AreClientTlsCredentialsValid() const;
+    const std::string& GetClientTlsValidationDetail() const;
+>>>>>>> f7303ada674 (async provider initialisation (#46135))
 
     const std::string Database;
     const std::string DiscoveryEndpoint;
     const EDiscoveryMode DiscoveryMode;
     const TSslCredentials SslCredentials;
-    std::shared_ptr<ICredentialsProvider> CredentialsProvider;
     IInternalClient* Client;
     TEndpointPool EndpointPool;
     // StopCb allow client to subscribe for notifications from lower layer
     std::mutex NotifyCbsLock;
     std::array<std::vector<TCb>, static_cast<size_t>(ENotifyType::COUNT)> NotifyCbs;
-#ifndef YDB_GRPC_UNSECURE_AUTH
-    std::shared_ptr<grpc::CallCredentials> CallCredentials;
-#endif
     // Status of last discovery call, used in sync mode, coresponding mutex
     std::shared_mutex LastDiscoveryStatusRWLock;
     TPlainStatus LastDiscoveryStatus;
     NSdkStats::TStatCollector StatCollector;
     TLog Log;
     NThreading::TPromise<void> DiscoveryCompletedPromise;
+<<<<<<< HEAD
+=======
+
+private:
+    struct TCredentials {
+        std::shared_ptr<ICredentialsProvider> Provider;
+#ifndef YDB_GRPC_UNSECURE_AUTH
+        std::shared_ptr<grpc::CallCredentials> CallCredentials;
+#endif
+    };
+
+    NThreading::TFuture<void> CredentialsReady;
+    NThreading::TFuture<TCredentials> Credentials;
+    mutable std::once_flag ClientTlsValidationOnceFlag_;
+    mutable bool ClientTlsCredentialsValid_ = true;
+    mutable std::string ClientTlsValidationDetail_;
+>>>>>>> f7303ada674 (async provider initialisation (#46135))
 };
 
 // Tracker allows to get driver state by database and credentials

@@ -16,6 +16,12 @@
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
 
+#if defined(_asan_enabled_)
+#define YDB_ASAN_SIZE_ATTRIBUTES __attribute__((nodebug))
+#else
+#define YDB_ASAN_SIZE_ATTRIBUTES
+#endif
+
 namespace NYdb::inline Dev {
 
 constexpr TDeadline::Duration GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY = std::chrono::seconds(10);
@@ -79,6 +85,25 @@ public:
 
     static void SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDeadline::Duration& timeout, bool permitWithoutCalls);
 
+<<<<<<< HEAD
+=======
+    static void SetGrpcCompressionAlgorithm(NYdbGrpc::TGRpcClientConfig& config, EGrpcCompressionAlgorithm algorithm);
+
+    using TCredentialsWaitResult = std::optional<TPlainStatus>;
+    using TCredentialsCallback = std::function<void(TCredentialsWaitResult)>;
+
+    NThreading::TFuture<void> CredentialsReadyToWaitFor(
+        const TDbDriverStatePtr& dbState,
+        const TRpcRequestSettings& requestSettings,
+        const IQueueClientContextPtr& context) const;
+
+    void DeferUntilCredentialsReady(
+        const TRpcRequestSettings& requestSettings,
+        IQueueClientContextPtr& context,
+        NThreading::TFuture<void> credentialsReady,
+        TCredentialsCallback callback);
+
+>>>>>>> f7303ada674 (async provider initialisation (#46135))
     template<typename TService>
     std::pair<std::unique_ptr<TServiceConnection<TService>>, TEndpointKey> GetServiceConnection(
         TDbDriverStatePtr dbState, const TEndpointKey& preferredEndpoint,
@@ -171,6 +196,7 @@ public:
         TRequestWrapper& operator=(TRequestWrapper&& other) = default;
 
         template<typename TService, typename TResponse>
+        YDB_ASAN_SIZE_ATTRIBUTES
         void DoRequest(
             std::unique_ptr<TServiceConnection<TService>>& serviceConnection,
             NYdbGrpc::TAdvancedResponseCallback<TResponse>&& responseCbLow,
@@ -192,6 +218,7 @@ public:
     };
 
     template<typename TService, typename TRequest, typename TResponse>
+    YDB_ASAN_SIZE_ATTRIBUTES
     void Run(
         TRequestWrapper<TRequest>&& requestWrapper,
         TResponseCb<TResponse>&& userResponseCb,
@@ -204,6 +231,34 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         Y_ABORT_UNLESS(dbState);
 
+<<<<<<< HEAD
+=======
+        if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
+            DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
+                [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb),
+                 rpc, dbState, requestSettings, context = std::move(context)]
+                (std::optional<TPlainStatus> status) YDB_ASAN_SIZE_ATTRIBUTES mutable {
+                    if (status) {
+                        userResponseCb(nullptr, std::move(*status));
+                        return;
+                    }
+                    Run<TService, TRequest, TResponse>(
+                        std::move(requestWrapper),
+                        std::move(userResponseCb),
+                        rpc,
+                        std::move(dbState),
+                        requestSettings,
+                        std::move(context));
+                });
+            return;
+        }
+
+        if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
+            RunResponseCallback<TResponse>(userResponseCb, nullptr, std::move(*tlsValidationStatus), StopState_);
+            return;
+        }
+
+>>>>>>> f7303ada674 (async provider initialisation (#46135))
         if (!TryCreateContext(context)) {
             TPlainStatus status(EStatus::CLIENT_CANCELLED, "Client is stopped");
             userResponseCb(nullptr, TPlainStatus{status.Status, std::move(status.Issues)});
@@ -419,6 +474,7 @@ public:
             TResponse>::TAsyncRequest;
 
     template<class TService, class TRequest, class TResponse, class TCallback>
+    YDB_ASAN_SIZE_ATTRIBUTES
     void StartReadStream(
         const TRequest& request,
         TCallback responseCb,
@@ -431,6 +487,33 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
 
+<<<<<<< HEAD
+=======
+        if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
+            DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
+                [this, request, responseCb = std::move(responseCb), rpc, dbState, requestSettings, context = std::move(context)]
+                (std::optional<TPlainStatus> status) YDB_ASAN_SIZE_ATTRIBUTES mutable {
+                    if (status) {
+                        responseCb(std::move(*status), nullptr);
+                        return;
+                    }
+                    StartReadStream<TService, TRequest, TResponse>(
+                        request,
+                        std::move(responseCb),
+                        rpc,
+                        std::move(dbState),
+                        requestSettings,
+                        std::move(context));
+                });
+            return;
+        }
+
+        if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
+            RunStreamCallback(responseCb, std::move(*tlsValidationStatus), nullptr, StopState_);
+            return;
+        }
+
+>>>>>>> f7303ada674 (async provider initialisation (#46135))
         if (!TryCreateContext(context)) {
             responseCb(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
             return;
@@ -493,6 +576,7 @@ public:
     }
 
     template<class TService, class TRequest, class TResponse, class TCallback>
+    YDB_ASAN_SIZE_ATTRIBUTES
     void StartBidirectionalStream(
         TCallback connectedCallback,
         TStreamRpc<TService, TRequest, TResponse, NYdbGrpc::TStreamRequestReadWriteProcessor> rpc,
@@ -504,6 +588,32 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
 
+<<<<<<< HEAD
+=======
+        if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
+            DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
+                [this, connectedCallback = std::move(connectedCallback), rpc, dbState, requestSettings, context = std::move(context)]
+                (std::optional<TPlainStatus> status) YDB_ASAN_SIZE_ATTRIBUTES mutable {
+                    if (status) {
+                        connectedCallback(std::move(*status), nullptr);
+                        return;
+                    }
+                    StartBidirectionalStream<TService, TRequest, TResponse>(
+                        std::move(connectedCallback),
+                        rpc,
+                        std::move(dbState),
+                        requestSettings,
+                        std::move(context));
+                });
+            return;
+        }
+
+        if (auto tlsValidationStatus = ValidateClientTlsCredentials(dbState)) {
+            RunStreamCallback(connectedCallback, std::move(*tlsValidationStatus), nullptr, StopState_);
+            return;
+        }
+
+>>>>>>> f7303ada674 (async provider initialisation (#46135))
         if (!TryCreateContext(context)) {
             connectedCallback(TPlainStatus(EStatus::CLIENT_CANCELLED, "Client is stopped"), nullptr);
             return;
@@ -587,6 +697,7 @@ public:
 
 private:
     template <typename TService, typename TCallback>
+    YDB_ASAN_SIZE_ATTRIBUTES
     void WithServiceConnection(TCallback callback, TDbDriverStatePtr dbState,
         const TEndpointKey& preferredEndpoint, TRpcRequestSettings::TEndpointPolicy endpointPolicy)
     {
@@ -727,3 +838,5 @@ private:
 };
 
 } // namespace NYdb
+
+#undef YDB_ASAN_SIZE_ATTRIBUTES

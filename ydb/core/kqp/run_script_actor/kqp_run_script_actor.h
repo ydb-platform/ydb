@@ -33,6 +33,7 @@ struct TKqpRunScriptActorSettings {
     TString CheckpointId;
     TString StreamingQueryPath;
     TString CustomerSuppliedId;
+    TString WatermarkLateEventsPolicy;
     std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
 };
 

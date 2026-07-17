@@ -423,6 +423,12 @@ private:
             if (colInfo.IsDefaultFromLiteral()) {
                 defaultColumnsLeft.insert(name);
             }
+
+            if (colInfo.IsDefaultFromGenerated() && colInfo.Generated->Stored) {
+                return TConclusionStatus::Fail(TStringBuilder()
+                    << "Bulk upsert is not supported for tables with STORED generated columns: column "
+                    << name);
+            }
         }
 
         if (entry.ColumnTableInfo) {

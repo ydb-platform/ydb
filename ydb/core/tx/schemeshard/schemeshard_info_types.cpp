@@ -557,6 +557,40 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 }
             }
 
+            if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromGenerated && columnFamily && columnFamily->GetId() != 0) {
+                NKikimrSchemeOp::TGeneratedColumnDescription generatedDesc;
+                if (generatedDesc.ParseFromString(sourceColumn.DefaultValue) && !generatedDesc.GetStored()) {
+                    errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
+                    return nullptr;
+                }
+            }
+
+            if (isChangeNotNullConstraint || isChangeSetNotNullInProgress) {
+                if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromGenerated) {
+                    errStr = Sprintf("Can't change nullability of generated column '%s'", colName.c_str());
+                    return nullptr;
+                }
+
+                for (const auto& [_, srcCol] : source->Columns) {
+                    if (srcCol.DefaultKind != ETableColumnDefaultKind::FromGenerated || srcCol.IsDropped()) {
+                        continue;
+                    }
+
+                    NKikimrSchemeOp::TGeneratedColumnDescription generatedDesc;
+                    if (!generatedDesc.ParseFromString(srcCol.DefaultValue)) {
+                        continue;
+                    }
+
+                    for (const auto& dependency : generatedDesc.GetDependencyColumnNames()) {
+                        if (dependency == colName) {
+                            errStr = Sprintf("Can't change nullability of column '%s': it is used by generated column '%s'", colName.c_str(),
+                                srcCol.Name.data());
+                            return nullptr;
+                        }
+                    }
+                }
+            }
+
             if (col.HasDefaultFromSequence()) {
                 switch (sourceColumn.PType.GetTypeId()) {
                     case NScheme::NTypeIds::Int8:
@@ -689,6 +723,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
+            if (col.HasDefaultFromGenerated() && !col.GetDefaultFromGenerated().GetStored() && columnFamily && columnFamily->GetId() != 0) {
+                errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
+                return nullptr;
+            }
+
             alterData->NextColumnId = Max(colId + 1, alterData->NextColumnId);
 
             colName2Id[colName] = colId;
@@ -705,6 +744,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             } else if (col.HasDefaultFromLiteral()) {
                 column.DefaultKind = ETableColumnDefaultKind::FromLiteral;
                 column.DefaultValue = col.GetDefaultFromLiteral().SerializeAsString();
+            } else if (col.HasDefaultFromGenerated()) {
+                column.DefaultKind = ETableColumnDefaultKind::FromGenerated;
+                column.DefaultValue = col.GetDefaultFromGenerated().SerializeAsString();
             }
         }
     }
@@ -743,6 +785,27 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             if (source->TTLSettings().HasEnabled() && source->TTLSettings().GetEnabled().GetColumnName() == colName) {
                 errStr = Sprintf("Can't drop TTL column: '%s', disable TTL first ", colName.data());
                 return nullptr;
+            }
+            for (const auto& [srcColId, srcCol] : source->Columns) {
+                if (srcCol.DefaultKind != ETableColumnDefaultKind::FromGenerated || srcCol.IsDropped()) {
+                    continue;
+                }
+
+                if (auto it = alterData->Columns.find(srcColId);
+                    it != alterData->Columns.end() && it->second.DeleteVersion == alterData->AlterVersion)
+                {
+                    continue;
+                }
+
+                NKikimrSchemeOp::TGeneratedColumnDescription generatedDesc;
+                if (generatedDesc.ParseFromString(srcCol.DefaultValue)) {
+                    for (const auto& dependency : generatedDesc.GetDependencyColumnNames()) {
+                        if (dependency == colName) {
+                            errStr = Sprintf("Can't drop column '%s': it is used by generated column '%s'", colName.data(), srcCol.Name.data());
+                            return nullptr;
+                        }
+                    }
+                }
             }
 
             alterData->Columns[colId] = colIt->second;

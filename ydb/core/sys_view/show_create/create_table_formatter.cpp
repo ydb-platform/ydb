@@ -499,6 +499,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
 
     auto type = columnDesc.GetType();
     std::optional<Ydb::TypedValue> defaultFromLiteral;
+    const NKikimrSchemeOp::TGeneratedColumnDescription* generated = nullptr;
     switch (columnDesc.GetDefaultValueCase()) {
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
             defaultFromLiteral = columnDesc.GetDefaultFromLiteral();
@@ -513,6 +514,10 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
             } else if (lowerType == "int16") {
                 type = "Serial2";
             }
+            break;
+        }
+        case NKikimrSchemeOp::TColumnDescription::kDefaultFromGenerated: {
+            generated = &columnDesc.GetDefaultFromGenerated();
             break;
         }
         default: break;
@@ -530,6 +535,10 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
     if (defaultFromLiteral) {
         Stream << " DEFAULT ";
         Format(defaultFromLiteral.value());
+    }
+    if (generated) {
+        Stream << " GENERATED ALWAYS AS (" << generated->GetExprText() << ")";
+        Stream << (generated->GetStored() ? " STORED" : " VIRTUAL");
     }
 }
 

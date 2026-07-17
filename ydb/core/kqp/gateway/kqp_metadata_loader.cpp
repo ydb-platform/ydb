@@ -315,9 +315,11 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
             defaultFromSequencePathId = sequenceIt->second;
         } else if (columnDesc.IsDefaultFromLiteral()) {
             defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+        } else if (columnDesc.IsDefaultFromGenerated()) {
+            defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_GENERATED;
         }
 
-        tableMeta->Columns.emplace(
+        auto emplaceResult = tableMeta->Columns.emplace(
             columnDesc.Name,
             NYql::TKikimrColumnMetadata(
                 columnDesc.Name,
@@ -334,6 +336,15 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
                 columnDesc.SetNotNullInProgress
             )
         );
+        if (columnDesc.IsDefaultFromGenerated()) {
+            auto& columnMeta = emplaceResult.first->second;
+            columnMeta.Generated.ConstructInPlace();
+            columnMeta.Generated->Context = columnDesc.Generated->Context;
+            columnMeta.Generated->ExprText = columnDesc.Generated->ExprText;
+            columnMeta.Generated->Stored = columnDesc.Generated->Stored;
+            columnMeta.Generated->Dependencies.assign(
+                columnDesc.Generated->Dependencies.begin(), columnDesc.Generated->Dependencies.end());
+        }
         if (columnDesc.KeyOrder >= 0) {
             keyColumns[columnDesc.KeyOrder] = columnDesc.Name;
         }

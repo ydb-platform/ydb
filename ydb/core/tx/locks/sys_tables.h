@@ -5,6 +5,7 @@
 
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
+#include <util/generic/maybe.h>
 #include <util/system/unaligned_mem.h>
 
 namespace NKikimrMiniKQL {
@@ -19,7 +20,15 @@ struct TSysTables {
         enum EDefaultKind {
             DEFAULT_UNDEFINED = 0,
             DEFAULT_SEQUENCE = 1,
-            DEFAULT_LITERAL = 2
+            DEFAULT_LITERAL = 2,
+            DEFAULT_GENERATED = 3
+        };
+
+        struct TGeneratedColumnInfo {
+            TString ExprText;
+            TString Context;
+            TVector<TString> Dependencies;
+            bool Stored = false;
         };
 
         TString Name;
@@ -33,6 +42,7 @@ struct TSysTables {
         bool IsBuildInProgress = false;
         bool IsNotNullColumn = false; //maybe move into TTypeInfo?
         bool SetNotNullInProgress = false;
+        TMaybe<TGeneratedColumnInfo> Generated;
 
         TTableColumnInfo() = default;
 
@@ -44,12 +54,20 @@ struct TSysTables {
             DefaultKind = DEFAULT_LITERAL;
         }
 
+        void SetDefaultFromGenerated() {
+            DefaultKind = DEFAULT_GENERATED;
+        }
+
         bool IsDefaultFromSequence() const {
             return DefaultKind == DEFAULT_SEQUENCE;
         }
 
         bool IsDefaultFromLiteral() const {
             return DefaultKind == DEFAULT_LITERAL;
+        }
+
+        bool IsDefaultFromGenerated() const {
+            return DefaultKind == DEFAULT_GENERATED;
         }
 
         TTableColumnInfo(TString name, ui32 colId, NScheme::TTypeInfo type,

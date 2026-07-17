@@ -363,6 +363,16 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
                 cMeta.DefaultFromLiteral);
         }
 
+        if (cMeta.IsDefaultFromGenerated()) {
+            auto& generated = *columnDesc.MutableDefaultFromGenerated();
+            generated.SetContext(cMeta.Generated->Context);
+            generated.SetExprText(cMeta.Generated->ExprText);
+            generated.SetStored(cMeta.Generated->Stored);
+            for (const auto& dependency : cMeta.Generated->Dependencies) {
+                generated.AddDependencyColumnNames(dependency);
+            }
+        }
+
         if (NScheme::NTypeIds::IsParametrizedType(columnIt->second.TypeInfo.GetTypeId())) {
             ProtoFromTypeInfo(columnIt->second.TypeInfo, columnIt->second.TypeMod, *columnDesc.MutableTypeInfo());
         }
@@ -555,6 +565,12 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         if (columnIt->second.IsDefaultFromSequence()) {
             code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Default sequences are not supported in column tables";
+            return false;
+        }
+
+        if (columnIt->second.IsDefaultFromGenerated()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Generated columns are not supported in column tables";
             return false;
         }
 

@@ -1274,7 +1274,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     } else {
         pushRes = EventsQueue->PushEvent(
             partitionStream,
-            NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent(std::move(partitionStream), msg.commit_offset()),
+            NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent(partitionStream, msg.commit_offset()),
             deferred);
     }
 
@@ -1477,7 +1477,7 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
         pushRes = EventsQueue->PushEvent(
             partitionStream,
             // TODO(qyryq) Is it safe to use GetMaxCommittedOffset here instead of StopPartitionSessionRequest.commmitted_offset?
-            TReadSessionEvent::TStopPartitionSessionEvent(std::move(partitionStream), committedOffset),
+            TReadSessionEvent::TStopPartitionSessionEvent(partitionStream, committedOffset),
             deferred);
     } else {
         // partitionStream->ConfirmDestroy();
@@ -1765,7 +1765,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 
     bool pushRes = EventsQueue->PushEvent(
             partitionStream,
-            TReadSessionEvent::TEndPartitionSessionEvent(std::move(partitionStream), std::move(adjacentPartitionIds), std::move(childPartitionIds)),
+            TReadSessionEvent::TEndPartitionSessionEvent(partitionStream, std::move(adjacentPartitionIds), std::move(childPartitionIds)),
             deferred);
     if (!pushRes) {
         AbortImpl(&deferred);
@@ -1880,7 +1880,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::DestroyAllPartitionStr
 
     for (auto&& [key, partitionStream] : PartitionStreams) {
         bool pushRes = EventsQueue->PushEvent(partitionStream,
-                                TClosedEvent(std::move(partitionStream), TClosedEvent::EReason::ConnectionLost),
+                                TClosedEvent(partitionStream, TClosedEvent::EReason::ConnectionLost),
                                deferred);
         if (!pushRes) {
             AbortImpl(&deferred);

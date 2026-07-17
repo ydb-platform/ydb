@@ -38,7 +38,7 @@ class KillNodeNemesis(MonitoredAgentActor):
             "xargs -r sudo kill -%d" % (ic_port, int(sig))
         )
         self._logger.info("Executing: %s", cmd)
-        subprocess.check_call(cmd, shell=True)
+        subprocess.run(cmd, shell=True, check=False)
         self.on_success_inject_fault()
         self._logger.info("=== INJECT_FAULT SUCCESS: KillNodeNemesis ===")
 

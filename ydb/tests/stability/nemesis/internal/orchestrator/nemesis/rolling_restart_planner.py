@@ -48,6 +48,11 @@ class RollingRestartNemesisPlanner(NemesisPlannerBase):
 
     def scheduled_tick(self, candidates: list[ChaosTarget]) -> list[DispatchCommand]:
         safe = normalize_candidates(candidates)
+        # Empty candidates means the failure guard (or inventory) admitted nothing.
+        # Do not treat empty safe_hosts as "no filter" — that would bypass the guard.
+        if not safe:
+            logger.info("rolling restart tick: no safe candidates from guard/inventory")
+            return []
         safe_hosts = {t.host for t in safe}
         safe_ic_ports = {t.ic_port for t in safe if t.ic_port is not None}
 
@@ -71,8 +76,7 @@ class RollingRestartNemesisPlanner(NemesisPlannerBase):
                     n for n in self._target_nodes
                     if n not in self._affected_nodes
                     and (
-                        not safe_hosts
-                        or n.host in safe_hosts
+                        n.host in safe_hosts
                         or (getattr(n, "ic_port", None) in safe_ic_ports)
                     )
                 ]

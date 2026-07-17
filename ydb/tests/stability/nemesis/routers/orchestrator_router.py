@@ -168,6 +168,9 @@ def create_host_process():
         return jsonify({"status": "error", "message": "Invalid host"}), 400
     host = chaos_target.host
 
+    if nemesis_schedule is None:
+        return jsonify({"status": "error", "message": "Schedule not initialized"}), 500
+
     if nemesis_schedule.is_schedule_enabled(process_type):
         return jsonify(
             {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -24,7 +25,8 @@ def _write_topology_yaml(hosts: list[dict], erasure: str = "block-4-2") -> str:
         "static_erasure": erasure,
         "hosts": hosts,
     }
-    _fd, path = tempfile.mkstemp(suffix=".yaml")
+    fd, path = tempfile.mkstemp(suffix=".yaml")
+    os.close(fd)
     Path(path).write_text(yaml.safe_dump(doc), encoding="utf-8")
     return path
 
@@ -79,10 +81,19 @@ class TestFailureModelGuard:
         c2 = ChaosTarget.for_node("h2", node_id=2)
         c3 = ChaosTarget.for_node("h3", node_id=3)
 
+        # Joint filter accumulates admitted racks: block-4-2 budget is 2, so only first two.
         safe = guard.filter_safe([c1, c2, c3], ImpactScope.NODE)
-        assert {t.host for t in safe} == {"h1", "h2", "h3"}, (
-            f"with empty impairments, block-4-2 must allow all candidates; got {[t.host for t in safe]}"
+        assert {t.host for t in safe} == {"h1", "h2"}, (
+            "with empty impairments, block-4-2 joint filter must admit at most 2 domains; "
+            f"got {[t.host for t in safe]}"
         )
+
+        # Individually, each candidate is still tolerable against empty active set.
+        for cand in (c1, c2, c3):
+            alone = guard.filter_safe([cand], ImpactScope.NODE)
+            assert alone == [cand], (
+                f"single candidate {cand.host} must be safe alone; got {[t.host for t in alone]}"
+            )
 
         guard.record_inject("e1", c1, ImpactScope.NODE, recovery_sec=None)
         guard.record_inject("e2", c2, ImpactScope.NODE, recovery_sec=None)
@@ -115,13 +126,19 @@ class TestFailureModelGuard:
         extra_ok = ChaosTarget.for_node("h3", node_id=3)  # dc2 / r3 — one extra domain
         extra_other = ChaosTarget.for_node("h5", node_id=5)  # dc3 / r5
 
-        # filter_safe checks each candidate independently against current impairments.
+        # Individually, either remaining realm's domain is still tolerable.
+        for cand in (extra_ok, extra_other):
+            alone = guard.filter_safe([cand], ImpactScope.NODE)
+            assert alone == [cand], (
+                f"with only dc1 lost, {cand.host} must be safe alone; "
+                f"snapshot={guard.snapshot()}, alone={[t.host for t in alone]}"
+            )
+
+        # Jointly, accumulate admits only the first extra domain.
         safe = guard.filter_safe([extra_ok, extra_other], ImpactScope.NODE)
-        safe_hosts = {t.host for t in safe}
-        assert safe_hosts == {"h3", "h5"}, (
-            "with only dc1 lost, mirror-3-dc must still allow one extra domain in *either* "
-            f"remaining realm (h3 or h5) individually; snapshot={guard.snapshot()}, "
-            f"safe={sorted(safe_hosts)}"
+        assert [t.host for t in safe] == ["h3"], (
+            "joint filter must not admit two extra domains after sacrificial realm; "
+            f"snapshot={guard.snapshot()}, safe={[t.host for t in safe]}"
         )
 
         guard.record_inject("e-extra", extra_ok, ImpactScope.NODE, recovery_sec=None)
@@ -129,6 +146,25 @@ class TestFailureModelGuard:
         assert safe_after == [], (
             "after dc1 + one domain in dc2, mirror-3-dc must reject a domain in a third realm "
             f"(h5/dc3); snapshot={guard.snapshot()}, safe_after={[t.host for t in safe_after]}"
+        )
+
+    def test_record_extract_fallback_matches_identity_not_rack(self, block42_topology):
+        """Untracked extract must not drop unrelated impairments that share a rack."""
+        guard = FailureModelGuard(block42_topology)
+        # Two different node identities on the same host/rack.
+        n1 = ChaosTarget.for_node("h1", node_id=1, ic_port=19001)
+        n2 = ChaosTarget.for_node("h1", node_id=2, ic_port=19002)
+        guard.record_inject("tracked", n1, ImpactScope.NODE, recovery_sec=None)
+        # Simulate extract for an untracked execution of n2 (e.g. after restart).
+        guard.record_extract("untracked-other", n2, ImpactScope.NODE)
+        snap = guard.snapshot()
+        assert "r1" in snap["impaired_racks"], (
+            "extract fallback by identity must leave n1 impairment intact; "
+            f"snapshot={snap}"
+        )
+        guard.record_extract("tracked", n1, ImpactScope.NODE)
+        assert guard.snapshot()["impaired_racks"] == [], (
+            f"tracked extract must release n1; snapshot={guard.snapshot()}"
         )
 
     def test_tablet_targets_do_not_consume_budget(self, block42_topology):

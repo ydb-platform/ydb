@@ -50,8 +50,8 @@ class ImpactScope(enum.Enum):
 class GuardMode(enum.Enum):
     """How the failure-model guard treats a nemesis type.
 
-    FULL           : pre-filter host list (B) AND post-veto + record impact (A).
-    PREFILTER_ONLY : pre-filter host list only; never vetoed / recorded at dispatch.
+    FULL           : pre-filter candidates AND record inject/extract impact after dispatch.
+    PREFILTER_ONLY : pre-filter candidates only; impact is not recorded at dispatch.
     BYPASS         : guard does not touch this type at all.
     """
 
@@ -294,9 +294,11 @@ class FailureModelGuard:
         candidates: Iterable[ChaosTarget],
         scope: ImpactScope,
     ) -> list[ChaosTarget]:
-        """Return candidates that would not exceed the failure budget given current impairments.
+        """Return a jointly safe subset of ``candidates`` under the failure budget.
 
-        Also drops already-touched identities (same ChaosTarget.identity_key).
+        Candidates are checked in order. Each admitted target's fail domains are added to
+        the running ``active`` set, so later candidates see earlier admissions (order-dependent).
+        Already-touched identities (``ChaosTarget.identity_key``) are skipped.
         When the guard is disabled, returns all candidates unchanged.
         """
         candidates = list(candidates)
@@ -315,8 +317,10 @@ class FailureModelGuard:
                     # e.g. TABLET — always safe for erasure budget
                     safe.append(target)
                     continue
-                if self._is_tolerable(active | racks):
+                hypothetical = active | racks
+                if self._is_tolerable(hypothetical):
                     safe.append(target)
+                    active = hypothetical
         return safe
 
     def filter_safe_hosts(self, hosts: Iterable[str], scope: ImpactScope) -> list[str]:
@@ -379,11 +383,12 @@ class FailureModelGuard:
                 imp for imp in self._impairments if imp.execution_id != execution_id
             ]
             if len(self._impairments) == before:
-                racks = self._racks_for_target(chaos_target, scope)
-                if racks:
-                    self._impairments = [
-                        imp for imp in self._impairments if not (imp.racks <= racks)
-                    ]
+                # Untracked execution (e.g. after restart): drop by identity, not by rack subset
+                # (same rack can hold unrelated impairments).
+                key = chaos_target.identity_key()
+                self._impairments = [
+                    imp for imp in self._impairments if imp.identity_key != key
+                ]
 
     def snapshot(self) -> dict:
         now = time.monotonic()

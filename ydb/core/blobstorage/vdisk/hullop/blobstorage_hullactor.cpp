@@ -434,7 +434,7 @@ namespace NKikimr {
 
                             Y_VERIFY_S(wId, HullDs->HullCtx->VCtx->VDiskLogPrefix);
                             YDB_LOG_DEBUG_CTX(ctx, "Got PreCompactResult for ActDeleteSsts,",
-                                {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                                {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
                                 {"wId", wId});
                             AccountSelectedStrategy();
                             ApplyCompactionResult(ctx, {}, {}, wId);

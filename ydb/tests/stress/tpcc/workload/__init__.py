@@ -12,12 +12,13 @@ logger = logging.getLogger("YdbTpccWorkload")
 
 
 class YdbTpccWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, warehouses, tables_prefix):
+    def __init__(self, endpoint, database, duration, warehouses, tables_prefix, tx_mode=None):
         super().__init__(None, tables_prefix, 'tpcc', None)
         self.endpoint = endpoint
         self.database = database
         self.duration = str(duration)
         self.warehouses = str(warehouses)
+        self.tx_mode = tx_mode
         self.tempdir = None
         self._unpack_resource('ydb_cli')
 
@@ -66,14 +67,16 @@ class YdbTpccWorkload(WorkloadBase):
         )
 
     def __loop(self):
-        self.cmd_run(
-            self.get_command_prefix(['run', '--no-tui', '--format', 'Json',
-                                     '--time', f'{self.duration}s',
-                                     '--warehouses', self.warehouses,
-                                     '--tx-mode', 'mixed',
-                                     '--tx-mode-weight-serializable', '30',
-                                     '--tx-mode-weight-snapshot', '70'])
-        )
+        cmd = ['run', '--no-tui', '--format', 'Json',
+               '--time', f'{self.duration}s',
+               '--warehouses', self.warehouses]
+        if self.tx_mode == 'mixed':
+            cmd += ['--tx-mode', 'mixed',
+                    '--tx-mode-weight-serializable', '30',
+                    '--tx-mode-weight-snapshot', '70']
+        elif self.tx_mode is not None:
+            cmd += ['--tx-mode', self.tx_mode]
+        self.cmd_run(self.get_command_prefix(cmd))
 
     def get_workload_thread_funcs(self):
         return [self.__loop]

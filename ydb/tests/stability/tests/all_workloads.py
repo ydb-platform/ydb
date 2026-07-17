@@ -147,17 +147,18 @@ def _init_stress_utils():
             'local_path': 'ydb/tests/stress/system_tablet_backup/system_tablet_backup'
         },
         'Tpcc': {
-            'args': [
-                "--endpoint", "grpc://{node_host}:2135",
-                "--path", "workload_tpcc_{node_host}_{test_run_uuid}",
-                "--warehouses", "1000",
-                "--phase", "run",
-            ],
             'pre_nemesis_args': [
                 "--endpoint", "grpc://{node_host}:2135",
                 "--path", "workload_tpcc_{node_host}_{test_run_uuid}",
                 "--warehouses", "1000",
                 "--phase", "prepare",
+            ],
+            'args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--path", "workload_tpcc_{node_host}_{test_run_uuid}",
+                "--warehouses", "1000",
+                "--phase", "run",
+                "--tx-mode", "mixed",
             ],
             'post_nemesis_args': [
                 "--endpoint", "grpc://{node_host}:2135",

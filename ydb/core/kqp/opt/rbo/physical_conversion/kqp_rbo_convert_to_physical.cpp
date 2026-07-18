@@ -120,6 +120,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             }
 
             auto limit = CastOperator<TOpLimit>(op);
+
             if (limit->HasOffset()) {
                 // clang-format off
                 currentStageBody = Build<TCoSkip>(ctx, op->Pos)
@@ -136,9 +137,10 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             .Done().Ptr();
             // clang-format on
 
-            if (limit->GetOutputIUs() != limit->GetInput()->GetOutputIUs()) {
-                currentStageBody = NPhysicalConvertionUtils::ExtractMembers(currentStageBody, ctx, limit->GetOutputIUs());
-            }
+            currentStageBody = NPhysicalConvertionUtils::ExtractMembers(
+                currentStageBody,
+                ctx,
+                NPhysicalConvertionUtils::GetLiveOutputIUs(*limit));
 
             if (!limit->IsSingleConsumer()) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, limit->GetNumOfConsumers(), ctx, op->Pos);

@@ -4,20 +4,25 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-TExprNode::TPtr TPhysicalUnionAllBuilder::ProjectInput(TExprNode::TPtr input, const TIntrusivePtr<IOperator>& inputOp) const {
-    const auto inputOutput = inputOp->GetOutputIUs();
-    const auto unionOutput = UnionAll->GetOutputIUs();
-    THashSet<TInfoUnit, TInfoUnit::THashFunction> inputOutputSet;
-    inputOutputSet.insert(inputOutput.begin(), inputOutput.end());
+TExprNode::TPtr TPhysicalUnionAllBuilder::ProjectInput(TExprNode::TPtr input, ui32 childIndex) const {
+    const auto inputOutput = UnionAll->Children[childIndex]->GetOutputIUs();
+    const auto inputLiveOutput = NPhysicalConvertionUtils::GetLiveOutputIUs(*UnionAll->Children[childIndex]);
+    const auto inputLiveIn = NPhysicalConvertionUtils::GetLiveInputIUs(*UnionAll, childIndex);
+    const auto unionOutput = NPhysicalConvertionUtils::GetLiveOutputIUs(*UnionAll);
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> inputLiveInSet;
+    inputLiveInSet.insert(inputLiveIn.begin(), inputLiveIn.end());
 
     TVector<std::pair<TString, TString>> renames;
-    renames.reserve(UnionAll->Columns.size());
-    bool identity = inputOutput.size() == unionOutput.size();
-    for (size_t i = 0; i < UnionAll->Columns.size(); ++i) {
-        const auto& column = UnionAll->Columns[i];
-        Y_ENSURE(inputOutputSet.contains(column), "UnionAll column " << column.GetFullName() << " is not visible");
+    renames.reserve(unionOutput.size());
+    // Extend inputs must have identical schemas.
+    bool identity = inputOutput.size() == unionOutput.size()
+        && inputLiveOutput.size() == unionOutput.size()
+        && inputLiveIn.size() == unionOutput.size();
+    for (size_t i = 0; i < unionOutput.size(); ++i) {
+        const auto& column = unionOutput[i];
+        Y_ENSURE(inputLiveInSet.contains(column), "UnionAll column " << column.GetFullName() << " is not visible");
         renames.emplace_back(column.GetFullName(), column.GetFullName());
-        identity = identity && inputOutput[i] == column;
+        identity = identity && inputOutput[i] == column && inputLiveOutput[i] == column && inputLiveIn[i] == column;
     }
 
     if (identity) {
@@ -28,8 +33,8 @@ TExprNode::TPtr TPhysicalUnionAllBuilder::ProjectInput(TExprNode::TPtr input, co
 
 TExprNode::TPtr TPhysicalUnionAllBuilder::BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) {
     TVector<TExprNode::TPtr> extendArgs{
-        ProjectInput(leftInput, UnionAll->GetLeftInput()),
-        ProjectInput(rightInput, UnionAll->GetRightInput())
+        ProjectInput(leftInput, 0),
+        ProjectInput(rightInput, 1)
     };
 
     if (UnionAll->Ordered) {

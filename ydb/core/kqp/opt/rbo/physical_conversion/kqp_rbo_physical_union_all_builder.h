@@ -16,7 +16,7 @@ public:
     TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) override;
 
 private:
-    TExprNode::TPtr ProjectInput(TExprNode::TPtr input, const TIntrusivePtr<IOperator>& inputOp) const;
+    TExprNode::TPtr ProjectInput(TExprNode::TPtr input, ui32 childIndex) const;
 
     TIntrusivePtr<TOpUnionAll> UnionAll;
 };

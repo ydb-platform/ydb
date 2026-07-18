@@ -75,6 +75,14 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.grpc_port = port_allocator.grpc_port
         self.mon_port = port_allocator.mon_port
         self.mon_uses_https = self.__configurator.monitoring_tls_cert_path is not None
+        if self.__configurator.monitoring_tls_client_certificate_required:
+            self._monitor_client_cert_file = self.__configurator.monitoring_tls_admin_client_cert_path
+            self._monitor_client_key_file = self.__configurator.monitoring_tls_admin_client_key_path
+            self._monitor_ca_file = self.__configurator.monitoring_tls_ca_path
+        else:
+            self._monitor_client_cert_file = None
+            self._monitor_client_key_file = None
+            self._monitor_ca_file = None
         self.ic_port = port_allocator.ic_port
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.http_proxy_port = None
@@ -1009,7 +1017,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 node.host,
                 node.mon_port,
                 use_https=getattr(node, 'mon_uses_https', False),
-                token=token
+                token=token,
+                client_cert_file=getattr(node, '_monitor_client_cert_file', None),
+                client_key_file=getattr(node, '_monitor_client_key_file', None),
+                ca_file=getattr(node, '_monitor_ca_file', None),
             )
             for node in self.nodes.values()
         ]

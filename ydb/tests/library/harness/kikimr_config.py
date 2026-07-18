@@ -256,6 +256,9 @@ class KikimrConfigGenerator(object):
         self.monitoring_tls_cert_path = None
         self.monitoring_tls_key_path = None
         self.monitoring_tls_ca_path = None
+        self.monitoring_tls_admin_client_cert_path = None
+        self.monitoring_tls_admin_client_key_path = None
+        self._monitoring_tls_client_certificate_required = False
         self.enable_topic_cloud_events = enable_topic_cloud_events
 
         self.__binary_paths = binary_paths
@@ -855,6 +858,16 @@ class KikimrConfigGenerator(object):
 
     def set_binary_paths(self, binary_paths):
         self.__binary_paths = binary_paths
+
+    @property
+    def monitoring_tls_client_certificate_required(self):
+        return self._monitoring_tls_client_certificate_required
+
+    @monitoring_tls_client_certificate_required.setter
+    def monitoring_tls_client_certificate_required(self, value):
+        self._monitoring_tls_client_certificate_required = value
+        if value:
+            self.yaml_config.setdefault('monitoring_config', {})['client_certificate_required'] = True
 
     def write_tls_data(self):
         if self.__grpc_ssl_enable:

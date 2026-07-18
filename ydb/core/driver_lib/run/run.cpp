@@ -678,6 +678,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.CertificateFile = appConfig.GetMonitoringConfig().GetMonitoringCertificateFile();
         monConfig.PrivateKeyFile = appConfig.GetMonitoringConfig().GetMonitoringPrivateKeyFile();
         monConfig.CaFile = appConfig.GetMonitoringConfig().GetMonitoringCaFile();
+        monConfig.ClientCertificateRequired = appConfig.GetMonitoringConfig().GetClientCertificateRequired();
         monConfig.RedirectMainPageTo = appConfig.GetMonitoringConfig().GetRedirectMainPageTo();
         monConfig.RequireCountersAuthentication = appConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
         if (appConfig.GetMonitoringConfig().CompressContentTypesSize() > 0) {

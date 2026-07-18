@@ -865,9 +865,12 @@ class KikimrConfigGenerator(object):
 
     @monitoring_tls_client_certificate_required.setter
     def monitoring_tls_client_certificate_required(self, value):
-        self._monitoring_tls_client_certificate_required = value
-        if value:
-            self.yaml_config.setdefault('monitoring_config', {})['client_certificate_required'] = True
+        self._monitoring_tls_client_certificate_required = bool(value)
+        monitoring_config = self.yaml_config.setdefault('monitoring_config', {})
+        if self._monitoring_tls_client_certificate_required:
+            monitoring_config['client_certificate_required'] = True
+        else:
+            monitoring_config.pop('client_certificate_required', None)
 
     def write_tls_data(self):
         if self.__grpc_ssl_enable:

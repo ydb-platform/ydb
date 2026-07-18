@@ -703,6 +703,7 @@ Y_UNIT_TEST_SUITE(MonitoringConfigValidation) {
             NKikimrConfig::TAppConfig config;
             auto* monitoringConfig = config.MutableMonitoringConfig();
             monitoringConfig->SetMonitoringCertificateFile("/path/to/cert.pem");
+            monitoringConfig->SetMonitoringPrivateKeyFile("/path/to/key.pem");
             monitoringConfig->SetClientCertificateRequired(true);
             std::vector<TString> msg;
             auto res = ValidateMonitoringConfig(config, msg);
@@ -714,6 +715,7 @@ Y_UNIT_TEST_SUITE(MonitoringConfigValidation) {
             NKikimrConfig::TAppConfig config;
             auto* monitoringConfig = config.MutableMonitoringConfig();
             monitoringConfig->SetMonitoringCertificateFile("/path/to/cert.pem");
+            monitoringConfig->SetMonitoringPrivateKeyFile("/path/to/key.pem");
             monitoringConfig->SetMonitoringCaFile("/path/to/ca.pem");
             monitoringConfig->SetClientCertificateRequired(true);
             std::vector<TString> msg;
@@ -735,15 +737,27 @@ Y_UNIT_TEST_SUITE(ClientCertificateAuthorizationValidation) {
             UNIT_ASSERT_EQUAL(msg[0], "RequestClientCertificate is disabled, but ClientCertificateRequired is enabled");
             UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
         }
-        { // With RequestClientCertificate
+        { // With RequestClientCertificate, with CA file
+            NKikimrConfig::TAppConfig config;
+            auto* clientCertificateAuthorization = config.MutableClientCertificateAuthorization();
+            clientCertificateAuthorization->SetRequestClientCertificate(true);
+            clientCertificateAuthorization->SetClientCertificateRequired(true);
+            config.MutableGRpcConfig()->SetPathToCaFile("/path/to/ca.pem");
+            std::vector<TString> msg;
+            auto res = ValidateClientCertificateAuthorization(config, msg);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 0);
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+        }
+        { // With RequestClientCertificate, but without CA file
             NKikimrConfig::TAppConfig config;
             auto* clientCertificateAuthorization = config.MutableClientCertificateAuthorization();
             clientCertificateAuthorization->SetRequestClientCertificate(true);
             clientCertificateAuthorization->SetClientCertificateRequired(true);
             std::vector<TString> msg;
             auto res = ValidateClientCertificateAuthorization(config, msg);
-            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 0);
-            UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+            UNIT_ASSERT_VALUES_EQUAL(msg.size(), 1);
+            UNIT_ASSERT_EQUAL(msg[0], "gRPC CA is not set, but ClientCertificateRequired is enabled");
+            UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
         }
     }
 }

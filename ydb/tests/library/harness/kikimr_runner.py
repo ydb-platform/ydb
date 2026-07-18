@@ -75,14 +75,27 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.grpc_port = port_allocator.grpc_port
         self.mon_port = port_allocator.mon_port
         self.mon_uses_https = self.__configurator.monitoring_tls_cert_path is not None
+        self._monitor_ca_file = self.__configurator.monitoring_tls_ca_path
         if self.__configurator.monitoring_tls_client_certificate_required:
+            # Without proper client cert the cluster setup cannot be checked via monitoring:
+            # __wait_for_bs_controller_to_start polls /counters/json and hangs.
+            missing = []
+            if not self.__configurator.monitoring_tls_admin_client_cert_path:
+                missing.append('monitoring_tls_admin_client_cert_path')
+            if not self.__configurator.monitoring_tls_admin_client_key_path:
+                missing.append('monitoring_tls_admin_client_key_path')
+            if not self.__configurator.monitoring_tls_ca_path:
+                missing.append('monitoring_tls_ca_path')
+            if missing:
+                raise ValueError(
+                    'monitoring TLS client certificate is required, but the following configurator '
+                    'fields are not set: %s' % ', '.join(missing)
+                )
             self._monitor_client_cert_file = self.__configurator.monitoring_tls_admin_client_cert_path
             self._monitor_client_key_file = self.__configurator.monitoring_tls_admin_client_key_path
-            self._monitor_ca_file = self.__configurator.monitoring_tls_ca_path
         else:
             self._monitor_client_cert_file = None
             self._monitor_client_key_file = None
-            self._monitor_ca_file = None
         self.ic_port = port_allocator.ic_port
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.http_proxy_port = None

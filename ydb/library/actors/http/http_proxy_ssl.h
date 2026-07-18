@@ -52,16 +52,16 @@ struct TSslHelpers {
         return CreateSslCtx(SSLv23_client_method());
     }
 
-    static void ConfigureClientCertificateVerification(
+    static bool ConfigureClientCertificateVerification(
         SSL_CTX* ctx,
         const TString& caFile,
         bool clientCertificateRequired)
     {
         if (caFile.empty()) {
-            return;
+            return true;
         }
         if (SSL_CTX_load_verify_locations(ctx, caFile.c_str(), nullptr) != 1) {
-            return;
+            return false;
         }
         int mode = SSL_VERIFY_PEER;
         if (clientCertificateRequired) {
@@ -70,6 +70,7 @@ struct TSslHelpers {
         // SSL_VERIFY_PEER option requests the client certificate during TLS handshake (mTLS),
         // but doesn't fail if not provided
         SSL_CTX_set_verify(ctx, mode, nullptr);
+        return true;
     }
 
     static TSslHolder<SSL_CTX> CreateServerContext(
@@ -92,8 +93,7 @@ struct TSslHelpers {
             // TODO(xenoxeno): more diagnostics?
             return nullptr;
         }
-        ConfigureClientCertificateVerification(ctx.Get(), caFile, clientCertificateRequired);
-        if (!caFile.empty() && SSL_CTX_get_verify_mode(ctx.Get()) == SSL_VERIFY_NONE) {
+        if (!ConfigureClientCertificateVerification(ctx.Get(), caFile, clientCertificateRequired)) {
             return nullptr;
         }
 
@@ -150,8 +150,7 @@ struct TSslHelpers {
         if (!LoadPrivateKey(ctx, pem)) {
             return nullptr;
         }
-        ConfigureClientCertificateVerification(ctx.Get(), caFile, clientCertificateRequired);
-        if (!caFile.empty() && SSL_CTX_get_verify_mode(ctx.Get()) == SSL_VERIFY_NONE) {
+        if (!ConfigureClientCertificateVerification(ctx.Get(), caFile, clientCertificateRequired)) {
             return nullptr;
         }
 

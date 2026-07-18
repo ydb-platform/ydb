@@ -79,7 +79,9 @@ private:
             // config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
         }
         if (serverInitialization.EnableClientCertificateRequired) {
-            config.MutableClientCertificateAuthorization()->SetClientCertificateRequired(true);
+            auto* clientCertificateAuthorization = config.MutableClientCertificateAuthorization();
+            clientCertificateAuthorization->SetRequestClientCertificate(true);
+            clientCertificateAuthorization->SetClientCertificateRequired(true);
         }
 
         std::vector<TString> tmpRegisterNodeAllowedSids(serverInitialization.RegisterNodeAllowedSids);

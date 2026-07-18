@@ -2426,6 +2426,29 @@ ui64 TDataShard::GetMemoryUsage() const {
     return res;
 }
 
+const NTabletFlatExecutor::NFlatExecutorSetup::TTabletTableInfo* TDataShard::GetTableInfo() const {
+    if (TableInfos.empty()) {
+        return nullptr;
+    }
+
+    // Expected that it's almost always one table here, hence only TableInfos.begin()
+    // IsBackup can be filtered out though
+    const auto& table = *TableInfos.begin()->second;
+    TableInfoCache.TableId = TPathId(GetPathOwnerId(), TableInfos.begin()->first);
+    TableInfoCache.TablePath = table.Path;
+    TableInfoCache.SchemaVersion = table.GetTableSchemaVersion();
+
+    // Effective level: the table's own override wins; otherwise fall back to
+    // the database-wide default learned via the subdomain subscription.
+    const auto tableLevel = table.GetDetailedMetricsLevel();
+    const auto effectiveLevel = tableLevel != NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified
+        ? tableLevel
+        : GetSubDomainTablesMetricsLevel();
+    TableInfoCache.MetricsLevel = static_cast<ui32>(effectiveLevel);
+
+    return &TableInfoCache;
+}
+
 bool TDataShard::ByKeyFilterDisabled() const {
     return DisableByKeyFilter;
 }

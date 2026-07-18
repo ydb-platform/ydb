@@ -326,6 +326,7 @@ class TDataShard
 
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
+    class TTxPersistSubDomainTablesMetricsLevel;
 
     class TTxRequestChangeRecords;
     class TTxRemoveChangeRecords;
@@ -1227,6 +1228,11 @@ class TDataShard
 
             Sys_VacuumCompletedGeneration = 47,
 
+            // Database-wide default detailed metrics level (TABLES_METRICS_LEVEL),
+            // learned from the subdomain description publish. Values match
+            // NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel.
+            Sys_SubDomainTablesMetricsLevel = 48,
+
             // reserved
             SysPipeline_Flags = 1000,
             SysPipeline_LimitActiveTx,
@@ -1239,6 +1245,7 @@ class TDataShard
         static_assert(ESysTableKeys::SysMvcc_UnprotectedReads == 38, "SysMvcc_UnprotectedReads changed its value");
         static_assert(ESysTableKeys::SysMvcc_ImmediateWriteEdgeStep == 39, "SysMvcc_ImmediateWriteEdgeStep changed its value");
         static_assert(ESysTableKeys::SysMvcc_ImmediateWriteEdgeTxId == 40, "SysMvcc_ImmediateWriteEdgeTxId changed its value");
+        static_assert(ESysTableKeys::Sys_SubDomainTablesMetricsLevel == 48, "Sys_SubDomainTablesMetricsLevel changed its value");
         static_assert(ESysTableKeys::Sys_LastLoanTableTid == 41, "Sys_LastLoanTableTid changed its value");
 
         static constexpr ui64 MinLocalTid = TSysTables::SysTableMAX + 1; // 1000
@@ -1921,6 +1928,7 @@ public:
     void OnRejectProbabilityRelaxed() override;
     void OnFollowersCountChanged() override;
     ui64 GetMemoryUsage() const override;
+    const NTabletFlatExecutor::NFlatExecutorSetup::TTabletTableInfo* GetTableInfo() const override;
 
     bool HasPipeServer(const TActorId& pipeServerId);
     bool AddOverloadSubscriber(const TActorId& pipeServerId, const TActorId& actorId, ui64 seqNo, ERejectReasons reasons);
@@ -2004,6 +2012,11 @@ public:
     bool IsSubDomainOutOfSpace() const
     {
         return SubDomainOutOfSpace;
+    }
+
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetSubDomainTablesMetricsLevel() const
+    {
+        return SubDomainTablesMetricsLevel;
     }
 
     ui64 GetExecutorStep() const
@@ -2836,6 +2849,8 @@ private:
     std::optional<TPathId> SubDomainPathId;
     std::optional<TPathId> WatchingSubDomainPathId;
     bool SubDomainOutOfSpace = false;
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel SubDomainTablesMetricsLevel =
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
 
     THashSet<TActorId> Actors;
     TLoanReturnTracker LoanReturnTracker;
@@ -2882,6 +2897,7 @@ private:
     TInstant StopKeyAccessSamplingAt;
 
     TUserTable::TTableInfos TableInfos;  // tableId -> local table info
+    mutable NTabletFlatExecutor::NFlatExecutorSetup::TTabletTableInfo TableInfoCache;
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;

@@ -3,6 +3,7 @@
 #include "util_fmt_abort.h"
 #include "shared_cache_counters.h"
 #include <ydb/core/base/counters.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/actors/wait_events.h>
 
@@ -440,6 +441,11 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
     ui64 ScanCookie;
     ui64 SnapshotId;
     TActorId Sender;
+    std::optional<NFlatExecutorSetup::TTabletTableInfo> TableInfoOverride;
+
+    const NFlatExecutorSetup::TTabletTableInfo* GetTableInfo() const override {
+        return TableInfoOverride ? &*TableInfoOverride : nullptr;
+    }
 
     void SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext&) override {
         Send(Sender, new TEvTestFlatTablet::TEvSnapshotComplete(std::move(snapContext)));
@@ -549,7 +555,8 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
     }
 
 public:
-    TTestFlatTablet(const TActorId &sender, const TActorId &tablet, TTabletStorageInfo *info)
+    TTestFlatTablet(const TActorId &sender, const TActorId &tablet, TTabletStorageInfo *info,
+            std::optional<NFlatExecutorSetup::TTabletTableInfo> tableInfoOverride = std::nullopt)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, nullptr)
         , Scan(nullptr)
@@ -557,6 +564,7 @@ public:
         , ScanCookie(123)
         , SnapshotId(0)
         , Sender(sender)
+        , TableInfoOverride(std::move(tableInfoOverride))
     {}
 
     STFUNC(StateInit) {
@@ -672,6 +680,80 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CompactionScan) {
     }
 }
 
+// MakeTabletCountersAggregatorID(...) is a named-service ActorId: sends to it go through the real
+// ActorSystem, bypassing TTestActorRuntime's mailbox-dispatch loop (so AddObserver never sees them).
+// Register a catcher in its place that forwards the raw message to an edge actor instead.
+class TCountersCatcher : public TActor<TCountersCatcher> {
+public:
+    explicit TCountersCatcher(TActorId forwardTo)
+        : TActor(&TThis::StateWork)
+        , ForwardTo(forwardTo)
+    {}
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTabletCounters::TEvTabletAddCounters, Handle);
+            hFunc(TEvents::TEvPoison, HandlePoison);
+        default:
+            break;
+        }
+    }
+
+    void Handle(TEvTabletCounters::TEvTabletAddCounters::TPtr &ev) {
+        Send(ForwardTo, ev->Release().Release());
+    }
+
+    // The model's TLeader shuts children down by poisoning them and waits for a
+    // TEvGone reply before advancing the run level; reply and die so it doesn't stall.
+    void HandlePoison(TEvents::TEvPoison::TPtr &ev) {
+        Send(ev->Sender, new TEvents::TEvGone);
+        PassAway();
+    }
+
+private:
+    TActorId ForwardTo;
+};
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_DetailedMetricsCounters) {
+    Y_UNIT_TEST(TestAddCountersStampsFollowerIdAndTableInfo) {
+        TMyEnvBase env;
+        env.RunOn(2, MakeTabletCountersAggregatorID(env.NodeId, false), new TCountersCatcher(env.Edge), NFake::EMail::Simple);
+
+        NFlatExecutorSetup::TTabletTableInfo tableInfo{TPathId(1113, 42), "/Root/table", 3};
+
+        env.FireTablet(env.Edge, env.Tablet, [&](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info, tableInfo);
+        });
+        env.WaitForWakeUp();
+
+        // DetachTablet() (reached via TEvPoison) unconditionally calls ForceSendCounters().
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        auto ev = env.GrabEdgeEvent<TEvTabletCounters::TEvTabletAddCounters>();
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->FollowerId, 0u);
+
+        UNIT_ASSERT(ev->Get()->TableInfo.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->TableInfo->TableId, tableInfo.TableId);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->TableInfo->TablePath, tableInfo.TablePath);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->TableInfo->SchemaVersion, tableInfo.SchemaVersion);
+    }
+
+    Y_UNIT_TEST(TestAddCountersDefaultsToNoTableInfo) {
+        TMyEnvBase env;
+        env.RunOn(2, MakeTabletCountersAggregatorID(env.NodeId, false), new TCountersCatcher(env.Edge), NFake::EMail::Simple);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        auto ev = env.GrabEdgeEvent<TEvTabletCounters::TEvTabletAddCounters>();
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->FollowerId, 0u);
+        UNIT_ASSERT(!ev->Get()->TableInfo.has_value());
+    }
+}
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_ExecutorTxLimit) {
 

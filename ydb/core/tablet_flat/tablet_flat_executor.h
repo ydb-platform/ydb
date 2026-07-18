@@ -6,6 +6,7 @@
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/lwtrace/shuttle.h>
@@ -490,6 +491,18 @@ struct TScanOptions {
 };
 
 namespace NFlatExecutorSetup {
+    struct TTabletTableInfo {
+        TPathId TableId;
+        TString TablePath;
+        ui64 SchemaVersion = 0;
+
+        // Effective detailed METRICS_LEVEL for this table (per-table override,
+        // falling back to the database-wide default). Raw NKikimrSchemeOp::
+        // TTableDetailedMetricsSettings::EMetricsLevel value; kept as a plain
+        // integer to keep this generic header free of the schemeshard proto.
+        ui32 MetricsLevel = 0;
+    };
+
     struct ITablet : TNonCopyable {
         virtual ~ITablet() {}
 
@@ -519,6 +532,8 @@ namespace NFlatExecutorSetup {
         virtual ui64 GetMemoryUsage() const { return 50 << 10; }
 
         virtual void OnLeaderUserAuxUpdate(TString) { /* default */ }
+
+        virtual const TTabletTableInfo* GetTableInfo() const { return nullptr; }
 
         virtual bool ReadOnlyLeaseEnabled();
         virtual TDuration ReadOnlyLeaseDuration();

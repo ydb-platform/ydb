@@ -2752,6 +2752,14 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         ServerlessComputeResourcesMode = serverlessComputeResourcesMode;
     }
 
+    // Database-wide default detailed metrics level for row/column tables
+    // (TABLES_METRICS_LEVEL). No setter yet: storage + ALTER DATABASE wiring
+    // lands with the monitoring_project_id step; this only rides the publish
+    // path to DataShard with its Unspecified default.
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetTablesMetricsLevel() const {
+        return TablesMetricsLevel;
+    }
+
 private:
     bool InitiatedAsGlobal = false;
     NKikimrSubDomains::TProcessingParams ProcessingParams;
@@ -2763,6 +2771,8 @@ private:
     bool SmallBlobsQuotaExceeded = false;
     // Cached (data_size_hard_quota / 10 TiB) factor used to derive the small-blobs quotas
     double SmallBlobsStorageUnits = 0;
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel TablesMetricsLevel =
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
 
     TVector<TShardIdx> PrivateShards;
     TStoragePools StoragePools;

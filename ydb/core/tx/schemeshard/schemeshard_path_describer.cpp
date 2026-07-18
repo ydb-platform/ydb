@@ -996,6 +996,9 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
         entry->MutableDomainState()->SetSmallBlobsQuotaExceeded(true);
     }
 
+
+    entry->SetTablesMetricsLevel(static_cast<ui32>(subDomainInfo->GetTablesMetricsLevel()));
+
     if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
         entry->MutableAuditSettings()->CopyFrom(*auditSettings);
     }

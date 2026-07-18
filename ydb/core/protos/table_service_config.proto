@@ -560,9 +560,10 @@ message TTableServiceConfig {
     // Defer join-filter inlining until after cost-based optimization.
     optional bool EnableInlineJoinFiltersAfterCBO = 140 [default = true, (InvalidateCompileCache) = true];
 
-    // Opt-in switch for the specialized vector search actor (TKqpPhyCnVectorSearch). Off by
-    // default: vector ORDER BY ... LIMIT over a kmeans-tree index keeps using the legacy StreamLookup
-    // chain. When enabled, DoRewriteTopSortOverKMeansTree lowers it into the new read actor instead,
-    // so it changes the compiled plan shape and must invalidate the compile cache when toggled.
-    optional bool EnableVectorSearchActor = 141 [default = false, (InvalidateCompileCache) = true];
+    // Opt-out switch for the specialized vector search actor (TKqpPhyCnVectorSearch). On by
+    // default: vector ORDER BY ... LIMIT over a kmeans-tree index is lowered by
+    // DoRewriteTopSortOverKMeansTree into the new read actor (TKqpVectorSearchActor). When disabled,
+    // it falls back to the legacy StreamLookup chain. Toggling changes the compiled plan shape, so it
+    // must invalidate the compile cache.
+    optional bool EnableVectorSearchActor = 141 [default = true, (InvalidateCompileCache) = true];
 };

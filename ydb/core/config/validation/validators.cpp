@@ -268,6 +268,12 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
             return EValidationResult::Error;
         }
     }
+    {
+        NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateClientCertificateAuthorization(config, msg);
+        if (result == NKikimr::NConfig::EValidationResult::Error) {
+            return EValidationResult::Error;
+        }
+    }
     NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateStateStorageConfig(config, msg);
     if (result == NKikimr::NConfig::EValidationResult::Error) {
         return EValidationResult::Error;

@@ -63,6 +63,10 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
         ColumnFamilyName = columnSchema.GetColumnFamilyName();
     }
 
+    if (columnSchema.HasNotNull()) {
+        NotNull = columnSchema.GetNotNull();
+    }
+
     if (columnSchema.HasSerializer()) {
         Serializer = NArrow::NSerialization::TSerializerContainer();
         if (columnSchema.GetSerializer().HasClassName()) {
@@ -268,6 +272,14 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
             << "Column FAMILY is not supported for column tables");
         return false;
+    }
+    if (diffColumn.GetNotNull().has_value()) {
+        if (IsKeyColumn() && !*diffColumn.GetNotNull()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "Cannot drop NOT NULL from primary key column '" << Name << "'");
+            return false;
+        }
+        NotNullFlag = *diffColumn.GetNotNull();
     }
     if (diffColumn.GetSerializer()) {
         if (*diffColumn.GetSerializer()) {

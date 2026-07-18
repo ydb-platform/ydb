@@ -735,11 +735,11 @@ private:
         i64 dataLimit = static_cast<i64>(State->Settings->_MaxAttachmentsSize.Get().GetOrElse(TDqSettings::TDefault::MaxAttachmentsSize));
         if (sizeSum > dataLimit) {
             const auto filesCount = uploadList->size();
-            YQL_CLOG(WARN, ProviderDq) << "Too much data: " << filesCount << " files, " << sizeSum << " > " << dataLimit;
+            YQL_CLOG(WARN, ProviderDq) << "Too much data: " << filesCount << " file(s), " << sizeSum << " > " << dataLimit;
             // Keep the "Too big attachment" prefix — analytics tools parse it.
             return TStringBuilder()
                 << "Too big attachment: " << filesCount
-                << (filesCount == 1 ? " file attached with a total size of " : " files attached with a total size of ")
+                << " file(s) attached with a total size of "
                 << sizeSum << " bytes, which exceeds the limit of "
                 << dataLimit << " bytes";
         }

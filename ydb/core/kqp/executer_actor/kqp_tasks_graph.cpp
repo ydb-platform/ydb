@@ -1200,6 +1200,17 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
         for (const auto& column : vectorSearch.GetColumns()) {
             settings->AddPostingOutputColumnIds(postingTableInfo->Columns.at(column).Id);
         }
+    } else {
+        // Partially-covered index: the output is not fully in the posting table
+        // (e.g. a prefixed index whose posting table lacks the prefix key column),
+        // but the posting table still holds the embedding column. Pass its posting
+        // column id so the actor can push the final top-K down into the posting
+        // scan (rank on the posting embedding) and then main-read only the
+        // surviving PKs -- instead of streaming every candidate to the main read.
+        const auto& embeddingColumn = vectorSearch.GetColumns(vectorSearch.GetVectorColumnIndex());
+        if (auto it = postingTableInfo->Columns.find(embeddingColumn); it != postingTableInfo->Columns.end()) {
+            settings->SetPostingEmbeddingColumnId(it->second.Id);
+        }
     }
 
     TTransform vectorSearchTransform;

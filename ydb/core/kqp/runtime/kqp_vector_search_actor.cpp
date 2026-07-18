@@ -683,10 +683,45 @@ private:
                 topK->AddDistinctColumns(pos);
             }
         } else {
-            // Read just the PK columns (using posting table column ids) to feed
-            // the main table read.
+            // Read the PK columns (using posting table column ids) to feed the
+            // main table read.
             for (size_t i = 0; i < Settings.MainTableKeyColumnsSize(); ++i) {
                 AddColumnMeta(src, Settings.GetPostingTableKeyColumnIds(i + 1), Settings.GetMainTableKeyColumns(i));
+            }
+            // Partially-covered index: the posting table stores the embedding but
+            // not every output column (e.g. a prefixed index missing the prefix
+            // key column), so the actor cannot build results straight from the
+            // posting scan. It can still push the top-K down: rank on the posting
+            // embedding column so the datashard returns only this read's TopK
+            // nearest PKs instead of every candidate. Those PKs are point-read
+            // from the main table for the full output row (the main read keeps
+            // its own top-K); the global K nearest are necessarily among the
+            // per-read TopKs. The embedding is appended right after the PK
+            // columns -- unless it is itself a main PK column (vector indexes may
+            // index table key columns): a read must not request the same column
+            // id twice, so then the ranking uses its existing PK position.
+            // MakePostingPk still reads the PK at positions 0..N-1 either way.
+            if (Settings.HasPostingEmbeddingColumnId()) {
+                const ui32 embeddingId = Settings.GetPostingEmbeddingColumnId();
+                ui32 embeddingPos = Settings.MainTableKeyColumnsSize();
+                for (ui32 i = 0; i < Settings.MainTableKeyColumnsSize(); ++i) {
+                    if (Settings.GetPostingTableKeyColumnIds(i + 1) == embeddingId) {
+                        embeddingPos = i;
+                        break;
+                    }
+                }
+                if (embeddingPos == Settings.MainTableKeyColumnsSize()) {
+                    AddColumnMeta(src, embeddingId, Settings.GetOutputColumns(Settings.GetVectorColumnIndex()));
+                }
+                auto* topK = SetVectorTopK(src, embeddingPos, TopK);
+                // With overlap the same row appears under several clusters; dedup
+                // by PK inside the pushed-down top-K so duplicates don't crowd out
+                // distinct nearest rows (the actor still dedups across shards).
+                if (OverlapClusters > 1) {
+                    for (ui32 pos = 0; pos < Settings.MainTableKeyColumnsSize(); ++pos) {
+                        topK->AddDistinctColumns(pos);
+                    }
+                }
             }
         }
 

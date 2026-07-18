@@ -427,10 +427,18 @@ message TKqpVectorSearchSettings {
     optional bool PostingCovers = 37;
     repeated uint32 PostingOutputColumnIds = 38;
 
+    // Partially-covered index: the posting table stores the embedding column but
+    // not every output column (e.g. a prefixed index whose posting table lacks
+    // the prefix key column). PostingCovers is then false, but the posting scan
+    // can still rank on its embedding and push the top-K down (returning only the
+    // TopK nearest PKs per shard) before the main-table point reads. Set to the
+    // embedding column's id in the posting table in that case; unset otherwise.
+    optional uint32 PostingEmbeddingColumnId = 39;
+
     // Prefixed index: the transform input rows carry the root cluster id in the
     // __ydb_parent member (input struct element 1; the target vector is element 0).
     // The actor uses these as the level-traversal roots instead of cluster 0.
-    optional bool HasPrefix = 39;
+    optional bool HasPrefix = 40;
 }
 
 message TKqpTaskInfo {

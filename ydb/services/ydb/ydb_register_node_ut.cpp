@@ -53,6 +53,7 @@ struct TKikimrServerForTestNodeRegistration : TBasicKikimrWithGrpcAndRootSchema<
         bool EnforceUserToken = false;
         bool EnforceCheckUserToken = false; // Takes effect when EnforceUserToken = false
         bool EnableDynamicNodeAuth = false;
+        bool EnableClientCertificateRequired = false;
         bool EnableWrongIdentity = false;
         bool SetNodeAuthValues = false;
         std::vector<TString> RegisterNodeAllowedSids = {"DefaultClientAuth@cert", BUILTIN_ACL_ROOT};
@@ -76,6 +77,9 @@ private:
         if (serverInitialization.EnableDynamicNodeAuth) {
             config.MutableClientCertificateAuthorization()->SetRequestClientCertificate(true);
             // config.MutableFeatureFlags()->SetEnableDynamicNodeAuthorization(true);
+        }
+        if (serverInitialization.EnableClientCertificateRequired) {
+            config.MutableClientCertificateAuthorization()->SetClientCertificateRequired(true);
         }
 
         std::vector<TString> tmpRegisterNodeAllowedSids(serverInitialization.RegisterNodeAllowedSids);
@@ -897,6 +901,73 @@ Y_UNIT_TEST(ServerWithoutCertVerification_ClientDoesNotProvideClientCerts) {
         CheckAccessDeniedRegisterNode(RegisterNode(config.SetAuthToken("wrong_token")), "Cannot authorize node. Access denied");
 
     }
+}
+
+Y_UNIT_TEST(ServerWithClientCertificateRequired_ClientDoesNotProvideClientCerts) {
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
+    const TString expectedTransportError = "connections to all backends failing";
+    {
+        TKikimrServerForTestNodeRegistration server({
+            .EnforceUserToken = true,
+            .EnableClientCertificateRequired = true,
+        });
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + server.ServerSettings->DomainName;
+
+        SetLogPriority(server);
+
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .SetDatabase(database)
+            .SetEndpoint(location);
+
+        CheckAccessDenied(RegisterNode(config), expectedTransportError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedTransportError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedTransportError);
+    }
+    {
+        TKikimrServerForTestNodeRegistration serverDoesNotRequireToken({
+            .EnforceUserToken = false,
+            .EnableClientCertificateRequired = true,
+        });
+        ui16 grpc = serverDoesNotRequireToken.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        const TString database = "/" + serverDoesNotRequireToken.ServerSettings->DomainName;
+
+        SetLogPriority(serverDoesNotRequireToken);
+
+        TDriverConfig config;
+        config.UseSecureConnection(caCert.Certificate.c_str())
+            .SetDatabase(database)
+            .SetEndpoint(location);
+
+        CheckAccessDenied(RegisterNode(config), expectedTransportError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)), expectedTransportError);
+        CheckAccessDenied(RegisterNode(config.SetAuthToken("wrong_token")), expectedTransportError);
+    }
+}
+
+Y_UNIT_TEST(ServerWithClientCertificateRequired_ClientProvidesClientCerts) {
+    const TCertAndKey& caCert = TKikimrTestWithAuthAndSsl::GetCACertAndKey();
+    const TCertAndKey clientServerCert = GenerateSignedCert(caCert, TProps::AsClientServer());
+    TKikimrServerForTestNodeRegistration server({
+        .EnableClientCertificateRequired = true,
+    });
+    ui16 grpc = server.GetPort();
+    TString location = TStringBuilder() << "localhost:" << grpc;
+    const TString database = "/" + server.ServerSettings->DomainName;
+
+    SetLogPriority(server);
+
+    TDriverConfig config;
+    config.UseSecureConnection(caCert.Certificate.c_str())
+        .UseClientCertificate(clientServerCert.Certificate.c_str(), clientServerCert.PrivateKey.c_str())
+        .SetDatabase(database)
+        .SetEndpoint(location);
+
+    CheckGood(RegisterNode(config));
+    CheckGood(RegisterNode(config.SetAuthToken(BUILTIN_ACL_ROOT)));
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_AuthNotRequired) {

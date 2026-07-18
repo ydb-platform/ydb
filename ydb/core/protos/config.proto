@@ -3099,6 +3099,7 @@ message TClientCertificateAuthorization {
     repeated TClientCertificateDefinition ClientCertificateDefinitions = 1;
     optional bool RequestClientCertificate = 2 [default = false];
     optional string DefaultGroup = 3 [default = "DefaultClientAuth@cert"];
+    optional bool ClientCertificateRequired = 4 [default = false];
 }
 
 message TKafkaProxyConfig {

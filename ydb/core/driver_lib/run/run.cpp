@@ -202,6 +202,15 @@ namespace NKikimr {
 
 namespace {
 
+void FillGrpcSslDataFromClientCertificateAuthorization(
+        NYdbGrpc::TSslData& sslData,
+        const NKikimrConfig::TAppConfig& appConfig)
+{
+    const auto& clientCertificateAuthorization = appConfig.GetClientCertificateAuthorization();
+    sslData.DoRequestClientCertificate = clientCertificateAuthorization.GetRequestClientCertificate();
+    sslData.ClientCertificateRequired = clientCertificateAuthorization.GetClientCertificateRequired();
+}
+
 void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
     auto wrapper = grpcServersWrapper.lock();
     if (!wrapper) {
@@ -1295,7 +1304,7 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
             sslData.Root = ReadFile(pathToCaFile);
             sslData.Cert = ReadFile(pathToCertificateFile);
             sslData.Key = ReadFile(pathToPrivateKeyFile);
-            sslData.DoRequestClientCertificate = appConfig.GetClientCertificateAuthorization().GetRequestClientCertificate();
+            FillGrpcSslDataFromClientCertificateAuthorization(sslData, appConfig);
             sslOpts.SetSslData(sslData);
 
             grpcServers.push_back({ "grpcs", new NYdbGrpc::TGRpcServer(sslOpts, Counters) });
@@ -1352,6 +1361,7 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
                     pathToPrivateKeyFile = GET_PATH_TO_FILE(grpcConfig, PathToPrivateKeyFile, Key);
                 }
                 sslData.Key = ReadFile(pathToPrivateKeyFile);
+                FillGrpcSslDataFromClientCertificateAuthorization(sslData, appConfig);
 #undef GET_PATH_TO_FILE
 
                 xopts.SetSslData(sslData);

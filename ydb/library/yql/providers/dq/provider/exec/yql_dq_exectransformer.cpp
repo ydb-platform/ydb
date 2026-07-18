@@ -522,9 +522,9 @@ private:
             pathWithMd5.Md5);
     }
 
-    // Returns formatted error message if attachments exceed the limit; Nothing() otherwise.
+    // Returns formatted error message if attachments exceed the limit; empty string otherwise.
     // Message always starts with "Too big attachment" — do not change the prefix (analytics parsers).
-    TMaybe<TString> BuildUploadList(
+    TString BuildUploadList(
         TUploadList* uploadList,
         bool localRun,
         TString* lambda,
@@ -539,7 +539,7 @@ private:
         return ret;
     }
 
-    TMaybe<TString> BuildUploadList(
+    TString BuildUploadList(
         TUploadList* uploadList,
         bool localRun,
         TExploringNodeVisitor& explorer,
@@ -734,8 +734,8 @@ private:
 
         i64 dataLimit = static_cast<i64>(State->Settings->_MaxAttachmentsSize.Get().GetOrElse(TDqSettings::TDefault::MaxAttachmentsSize));
         if (sizeSum > dataLimit) {
-            YQL_CLOG(WARN, ProviderDq) << "Too much data: " << sizeSum << " > " << dataLimit;
             const auto filesCount = uploadList->size();
+            YQL_CLOG(WARN, ProviderDq) << "Too much data: " << filesCount << " files, " << sizeSum << " > " << dataLimit;
             // Keep the "Too big attachment" prefix — analytics tools parse it.
             return TStringBuilder()
                 << "Too big attachment: " << filesCount
@@ -744,7 +744,7 @@ private:
                 << dataLimit << " bytes";
         }
 
-        return Nothing();
+        return {};
     }
 
     TStatusCallbackPair GetLambda(
@@ -829,8 +829,8 @@ private:
         }
 
         const bool localRun = enableLocalRun && (!State->DqGateway || (!*untrustedUdfFlag && !State->TypeCtx->ForceDq && !hasGraphParams));
-        if (BuildUploadList(uploadList, localRun, explorer, typeEnv, files)) {
-            YQL_CLOG(TRACE, ProviderDq) << "Fallback: " << NCommon::ExprToPrettyString(ctx, *input);
+        if (auto error = BuildUploadList(uploadList, localRun, explorer, typeEnv, files)) {
+            YQL_CLOG(TRACE, ProviderDq) << "Fallback: " << error << ": " << NCommon::ExprToPrettyString(ctx, *input);
             return Fallback();
         } else {
             *lambda = SerializeRuntimeNode(root, typeEnv);
@@ -1463,7 +1463,8 @@ private:
                 TUploadList uploadList;
                 TString lambda = t.GetProgram().GetRaw();
                 if (auto error = BuildUploadList(&uploadList, localRun, &lambda, typeEnv, files)) {
-                    tooBigAttachmentError = *error;
+                    tooBigAttachmentError = error;
+                    break;
                 }
                 t.MutableProgram()->SetRaw(lambda);
                 t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
@@ -2020,7 +2021,8 @@ private:
                     TUploadList uploadList;
                     TString lambda = t.GetProgram().GetRaw();
                     if (auto error = BuildUploadList(&uploadList, false, &lambda, typeEnv, files)) {
-                        tooBigAttachmentError = *error;
+                        tooBigAttachmentError = error;
+                        break;
                     }
                     t.MutableProgram()->SetRaw(lambda);
                     t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);

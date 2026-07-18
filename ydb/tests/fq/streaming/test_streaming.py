@@ -408,19 +408,21 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_limit(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
-        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_shared_reading_limit", local_topics, entity_name, partitions_count=10, shared=True)
+        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_shared_reading_limit", local_topics, entity_name, partitions_count=10)
 
         sql = f"""SELECT time FROM {input_name}
             WITH (
                 STREAMING = "TRUE",
                 FORMAT = "json_each_row",
-                SCHEMA = (time String NOT NULL)
+                SCHEMA = (time String NOT NULL),
+                SHARED_READING="TRUE"
             )
             WHERE time like "%lunch%"
             LIMIT 1"""
 
         future1 = kikimr.ydb_client.query_async(sql)
         future2 = kikimr.ydb_client.query_async(sql)
+        self.wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 10)
         time.sleep(3)
         data = ['{"time": "lunch time"}']
         self.write_stream(data, endpoint=endpoint)
@@ -1040,8 +1042,7 @@ FROM `{table_name}`"""
             f"shared_reading_insert_to_topic{local_topics!s:.1}",
             local_topics,
             entity_name,
-            partitions_count=10,
-            shared=True,
+            partitions_count=10
         )
 
         sql = R'''
@@ -1050,7 +1051,8 @@ FROM `{table_name}`"""
                 $in = SELECT time FROM {inp}
                 WITH (
                     FORMAT="json_each_row",
-                    SCHEMA=(time String NOT NULL))
+                    SCHEMA=(time String NOT NULL),
+                    SHARED_READING="TRUE")
                 WHERE time like "%lunch%";
                 INSERT INTO {out} SELECT time FROM $in;
             END DO;'''
@@ -1062,6 +1064,7 @@ FROM `{table_name}`"""
         path1 = f"/Root/{query_name1}"
         path2 = f"/Root/{query_name2}"
         self.wait_completed_checkpoints(kikimr, path1)
+        self.wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 10)
 
         # Check that streaming.query.tasks.count metric exists for both queries
         self.wait_streaming_query_metric(kikimr, path1, "streaming.query.tasks.count", expected_value=1)
@@ -1111,6 +1114,7 @@ FROM `{table_name}`"""
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
+        self.wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 
         self.write_stream(['{"value": "value1"}'], endpoint=endpoint)
         expected_data = ['value1']
@@ -1224,7 +1228,8 @@ FROM `{table_name}`"""
                 $in = SELECT data FROM {inp}
                 WITH (
                     FORMAT="json_each_row",
-                    `skip.json.errors` = "true",
+                    SHARED_READING="TRUE",
+                    SHARED_READING_SKIP_JSON_ERRORS = "TRUE",
                     SCHEMA=(time UINT32 NOT NULL, data String NOT NULL));
                 INSERT INTO {out} SELECT data FROM $in;
             END DO;'''
@@ -1232,6 +1237,7 @@ FROM `{table_name}`"""
         path = f"/Root/{name}"
         kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, path)
+        self.wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 10)
 
         data = [
             '{"time": 101, "data": "hello1"}',

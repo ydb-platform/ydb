@@ -86,7 +86,7 @@ bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings,
                 Watermark = readSettings->Child(i)->ChildPtr(1);
                 continue;
             }
-            if (readSettings->Child(i)->Head().IsAtom("skip.json.errors")) {
+            if (readSettings->Child(i)->Head().IsAtom("skip.json.errors") || readSettings->Child(i)->Head().IsAtom("sharedreadingskipjsonerrors")) {
                 SkipJsonErrors = readSettings->Child(i);
                 continue;
             }
@@ -96,6 +96,10 @@ bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings,
             }
             if (readSettings->Child(i)->Head().IsAtom("streaming")) {
                 StreamingTopicRead = readSettings->Child(i);
+                continue;
+            }
+            if (readSettings->Child(i)->Head().IsAtom("sharedreading")) {
+                SharedReading = readSettings->Child(i);
                 continue;
             }
         }

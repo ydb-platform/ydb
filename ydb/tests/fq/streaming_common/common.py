@@ -251,9 +251,6 @@ class StreamingTestBase(TestYdsBase):
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
     def get_input_name(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False):
-        if local_topics and shared:
-            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
-
         endpoint = self.get_endpoint(kikimr, local_topics)
         source_name = entity_name(name)
         self.init_topics(source_name, create_output=False, partitions_count=partitions_count, endpoint=endpoint)
@@ -265,9 +262,6 @@ class StreamingTestBase(TestYdsBase):
             return f"`{source_name}`.`{self.input_topic}`", endpoint
 
     def get_io_names(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False, endpoint=None):
-        if local_topics and shared:
-            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
-
         if endpoint is None:
             endpoint = self.get_endpoint(kikimr, local_topics)
         source_name = entity_name(name)
@@ -320,3 +314,14 @@ class StreamingTestBase(TestYdsBase):
             node.stop()
             node.start()
             yield
+
+    def wait_actor_count(self, kikimr: Kikimr, activity: str, expected_count: int):
+        deadline = time.time() + 60
+        while True:
+            count = 0
+            for node_id in kikimr.cluster.nodes:
+                count = count + self.get_actor_count(kikimr, node_id, activity)
+                if count >= expected_count:
+                    return node_id  # return any node
+            assert time.time() < deadline, f"Waiting actor {activity} count failed, current count {count}"
+            time.sleep(1)

@@ -243,6 +243,10 @@ public:
             settings.Add(std::move(streamingTopicRead));
         }
 
+        if (auto sharedReading = topicKeyParser.GetSharedReading()) {
+            settings.Add(std::move(sharedReading));
+        }
+
         TExprNode::TPtr userSchemaColumnsList;
         if (format == "csv"sv) {
             YQL_ENSURE(columns && columns->IsList());

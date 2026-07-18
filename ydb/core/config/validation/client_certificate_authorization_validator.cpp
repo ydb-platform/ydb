@@ -1,6 +1,9 @@
 #include "validators.h"
+
 #include <ydb/core/protos/config.pb.h>
+
 #include <util/generic/string.h>
+
 #include <vector>
 
 namespace NKikimr::NConfig {
@@ -27,8 +30,9 @@ EValidationResult ValidateClientCertificateAuthorization(
     }
 
     const auto& clientCertificateAuthorization = config.GetClientCertificateAuthorization();
-    if (clientCertificateAuthorization.GetClientCertificateRequired()
-            && !clientCertificateAuthorization.GetRequestClientCertificate()) {
+    if (clientCertificateAuthorization.GetClientCertificateRequired() &&
+        !clientCertificateAuthorization.GetRequestClientCertificate()
+    ) {
         msg.push_back("RequestClientCertificate is disabled, but ClientCertificateRequired is enabled");
         return EValidationResult::Error;
     }

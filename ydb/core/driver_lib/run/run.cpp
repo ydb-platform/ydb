@@ -204,8 +204,8 @@ namespace {
 
 void FillGrpcSslDataFromClientCertificateAuthorization(
     NYdbGrpc::TSslData& sslData,
-    const NKikimrConfig::TAppConfig& appConfig)
-{
+    const NKikimrConfig::TAppConfig& appConfig
+) {
     const auto& clientCertificateAuthorization = appConfig.GetClientCertificateAuthorization();
     sslData.DoRequestClientCertificate = clientCertificateAuthorization.GetRequestClientCertificate();
     sslData.ClientCertificateRequired = clientCertificateAuthorization.GetClientCertificateRequired();

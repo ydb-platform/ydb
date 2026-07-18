@@ -22,8 +22,8 @@ bool GetEnforceUserToken(const NKikimrConfig::TAppConfig& config) {
 }
 
 bool HasMonitoringTlsCertificate(const NKikimrConfig::TMonitoringConfig& monitoringConfig) {
-    return !monitoringConfig.GetMonitoringCertificateFile().empty()
-        || !monitoringConfig.GetMonitoringCertificate().empty();
+    return !monitoringConfig.GetMonitoringCertificateFile().empty() ||
+        !monitoringConfig.GetMonitoringCertificate().empty();
 }
 
 } // namespace

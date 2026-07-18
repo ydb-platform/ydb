@@ -41,10 +41,11 @@ class KikimrMonitor(object):
         if self.__token:
             req.add_header('Authorization', self.__token)
         if self.__use_https:
-            ctx = ssl.create_default_context()
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             ctx.check_hostname = False
             if self.__ca_file:
-                ctx.load_verify_locations(self.__ca_file)
+                ctx.verify_mode = ssl.CERT_REQUIRED
+                ctx.load_verify_locations(cafile=self.__ca_file)
             else:
                 ctx.verify_mode = ssl.CERT_NONE
             if self.__client_cert_file and self.__client_key_file:

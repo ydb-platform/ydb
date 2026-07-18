@@ -202,6 +202,7 @@ namespace NKikimr {
 
 namespace {
 
+// client_certificate_authorization (request/required) applies to grpc_config.ssl_port only.
 void FillGrpcSslDataFromClientCertificateAuthorization(
     NYdbGrpc::TSslData& sslData,
     const NKikimrConfig::TAppConfig& appConfig
@@ -1362,7 +1363,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
                     pathToPrivateKeyFile = GET_PATH_TO_FILE(grpcConfig, PathToPrivateKeyFile, Key);
                 }
                 sslData.Key = ReadFile(pathToPrivateKeyFile);
-                FillGrpcSslDataFromClientCertificateAuthorization(sslData, appConfig);
+                // client_certificate_authorization applies to the main grpcs port only.
+                // ext_endpoints need their own mTLS settings (not implemented yet).
 #undef GET_PATH_TO_FILE
 
                 xopts.SetSslData(sslData);

@@ -523,7 +523,6 @@ private:
     }
 
     // Returns formatted error message if attachments exceed the limit; empty string otherwise.
-    // Message always starts with "Too big attachment" — do not change the prefix (analytics parsers).
     TString BuildUploadList(
         TUploadList* uploadList,
         bool localRun,

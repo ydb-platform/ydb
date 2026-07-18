@@ -18,7 +18,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTableWithLocalBloomIndexes
-ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHiddenCopy
 ydb/public/sdk/cpp/tests/integration/topic gtest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk

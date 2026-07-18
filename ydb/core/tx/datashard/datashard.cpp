@@ -2426,6 +2426,20 @@ ui64 TDataShard::GetMemoryUsage() const {
     return res;
 }
 
+const NTabletFlatExecutor::NFlatExecutorSetup::TTabletTableInfo* TDataShard::GetTableInfo() const {
+    if (TableInfos.empty()) {
+        return nullptr;
+    }
+
+    // Expected that it's almost always one table here, hence only TableInfos.begin()
+    // IsBackup can be filtered out though
+    const auto& table = *TableInfos.begin()->second;
+    TableInfoCache.TableId = TPathId(GetPathOwnerId(), TableInfos.begin()->first);
+    TableInfoCache.TablePath = table.Path;
+    TableInfoCache.SchemaVersion = table.GetTableSchemaVersion();
+    return &TableInfoCache;
+}
+
 bool TDataShard::ByKeyFilterDisabled() const {
     return DisableByKeyFilter;
 }

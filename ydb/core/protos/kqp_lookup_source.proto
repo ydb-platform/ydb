@@ -6,4 +6,5 @@ option java_package = "ru.yandex.kikimr.proto";
 
 message TKikimrLookupSource {
     string Path = 1;
+    string Token = 2;
 }

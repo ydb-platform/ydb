@@ -544,6 +544,14 @@ private:
 };
 
 class TKikimrDqIntegration : public NYql::TDqIntegrationBase {
+public:
+    explicit TKikimrDqIntegration(const TString& token)
+    : Token(token)
+    {
+    }
+
+private:
+
     void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override {
         const TDqLookupSourceWrap wrap(&node);
         const auto settings = wrap.Settings().Cast<TCoAtomList>();
@@ -551,11 +559,14 @@ class TKikimrDqIntegration : public NYql::TDqIntegrationBase {
 
         NKqpProto::TKikimrLookupSource source;
         source.SetPath(path);
+        source.SetToken(Token);
 
         // preserve source description for read actor
         protoSettings.PackFrom(source);
         sourceType = KikimrProviderName;
     }
+
+    const TString Token;
 };
 
 class TKikimrDataSource : public TDataProviderBase {
@@ -595,6 +606,8 @@ public:
     }
 
     bool Initialize(TExprContext& ctx) override {
+        KikimrDqIntegration = MakeHolder<TKikimrDqIntegration>(SessionCtx->GetUserToken() ? SessionCtx->GetUserToken()->SerializeAsString() : "");
+
         TString defaultToken;
         if (auto credential = Types.Credentials->FindCredential(TString("default_") + KikimrProviderName)) {
             if (credential->Category != KikimrProviderName) {
@@ -1005,7 +1018,7 @@ private:
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
     const TAutoPtr<IGraphTransformer> ConstraintsTransformer;
-    THolder<IDqIntegration> KikimrDqIntegration = MakeHolder<TKikimrDqIntegration>();
+    THolder<IDqIntegration> KikimrDqIntegration;
 };
 
 } // anonymous namespace

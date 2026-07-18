@@ -191,6 +191,9 @@ namespace NYql::NDq {
             , MaxKeysInRequest(std::min(maxKeysInRequest, size_t{100}))
             , IsMultiMatches(isMultiMatches)
         {
+            if (auto token = LookupSource.GetToken(); !token.empty()) {
+                Token.emplace(token);
+            }
             InitMonCounters(taskCounters);
             {
                 TStringBuilder out;
@@ -397,7 +400,7 @@ namespace NYql::NDq {
             using TRpcRequest = NGRpcService::TGrpcRequestOperationCall<TRequest, TResponse>;
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
-            auto result = NRpcService::DoLocalRpc<TRpcRequest>(FillSelect(state), AppData()->TenantName, /*token=*/Nothing(), actorSystem);
+            auto result = NRpcService::DoLocalRpc<TRpcRequest>(FillSelect(state), AppData()->TenantName, Token, actorSystem);
             result.Subscribe([actorSystem, selfId, state = std::move(state)](const NThreading::TFuture<TResponse>& future) mutable {
                 actorSystem->Send(selfId, new TEvYdbExecuteDataQueryResponse(future, std::move(state)));
             });
@@ -437,7 +440,7 @@ namespace NYql::NDq {
             TRequest request;
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
-            auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), /*database=*/AppData()->TenantName, /*token=*/Nothing(), actorSystem);
+            auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), /*database=*/AppData()->TenantName, Token, actorSystem);
             result.Subscribe([actorSystem, selfId, state] (const NThreading::TFuture<TResponse>& future) mutable {
                 actorSystem->Send(selfId, new TEvYdbCreateSessionResponse(future, std::move(state)));
             });
@@ -472,7 +475,7 @@ namespace NYql::NDq {
             [[maybe_unused]]
             auto selfId = SelfId();
             [[maybe_unused]]
-            auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), /*database=*/AppData()->TenantName, /*token=*/Nothing(), actorSystem);
+            auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), /*database=*/AppData()->TenantName, Token, actorSystem);
             // don't wait for results
         }
 
@@ -773,6 +776,7 @@ namespace NYql::NDq {
         const std::vector<std::pair<EColumnDestination, size_t>> ColumnDestinations;
         const size_t MaxKeysInRequest;
         const bool IsMultiMatches;
+        TMaybe<TString> Token;
         ui32 LocalInFlight = 0;
         static inline constexpr std::string_view KeyTupleListName = "$keyTupleList"sv;
         NYql::NUdf::ITypeInfoHelper::TPtr TypeInfoHelper = new NKikimr::NMiniKQL::TTypeInfoHelper();

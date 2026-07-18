@@ -203,8 +203,8 @@ namespace NKikimr {
 namespace {
 
 void FillGrpcSslDataFromClientCertificateAuthorization(
-        NYdbGrpc::TSslData& sslData,
-        const NKikimrConfig::TAppConfig& appConfig)
+    NYdbGrpc::TSslData& sslData,
+    const NKikimrConfig::TAppConfig& appConfig)
 {
     const auto& clientCertificateAuthorization = appConfig.GetClientCertificateAuthorization();
     sslData.DoRequestClientCertificate = clientCertificateAuthorization.GetRequestClientCertificate();

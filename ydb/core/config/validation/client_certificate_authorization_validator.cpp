@@ -3,10 +3,12 @@
 #include <util/generic/string.h>
 #include <vector>
 
-
 namespace NKikimr::NConfig {
 
-EValidationResult ValidateClientCertificateAuthorization(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
+EValidationResult ValidateClientCertificateAuthorization(
+    const NKikimrConfig::TAppConfig& config,
+    std::vector<TString>& msg
+) {
     if (!config.HasClientCertificateAuthorization()) {
         return EValidationResult::Ok;
     }

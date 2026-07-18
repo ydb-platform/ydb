@@ -37,5 +37,5 @@ ALTER TABLE table_name ALTER COLUMN column_name DROP NOT NULL;
 
 ## См. также
 
-* [Описание всех опций колонки](columns.md)
+* [ALTER COLUMN](columns.md)
 

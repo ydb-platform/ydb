@@ -219,7 +219,7 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    if (topMap->MapElements.empty()) {
+    if (topMap->GetMapElements().empty()) {
         return input;
     }
 
@@ -238,7 +238,7 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
     // A column-access append whose source is dead above the map is a semantic
     // rename in disguise: hiding the source changes nothing for consumers.
     // Normalize such appends to renames so one push covers both spellings.
-    auto mapElements = topMap->MapElements;
+    auto mapElements = topMap->GetMapElements();
     for (auto& mapElement : mapElements) {
         if (!mapElement.IsRename() &&
             mapElement.IsColumnAccess() &&
@@ -305,18 +305,18 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
         return input;
     }
 
-    unionAll->Children[0] = MakeIntrusive<TOpMap>(unionAll->Children[0], topMap->Pos, pushedElements, topMap->Ordered);
-    unionAll->Children[1] = MakeIntrusive<TOpMap>(unionAll->Children[1], topMap->Pos, pushedElements, topMap->Ordered);
+    unionAll->Children[0] = MakeIntrusive<TOpMap>(unionAll->Children[0], topMap->Pos, pushedElements);
+    unionAll->Children[1] = MakeIntrusive<TOpMap>(unionAll->Children[1], topMap->Pos, pushedElements);
     unionAll->Columns = std::move(newColumns);
     if (!renameMap.empty()) {
-        props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
+        props.Subplans.RenameExternalReferences(renameMap, ctx.ExprCtx);
     }
 
     if (residualElements.empty()) {
         return unionAll;
     }
 
-    return MakeIntrusive<TOpMap>(unionAll, topMap->Pos, residualElements, topMap->Ordered);
+    return MakeIntrusive<TOpMap>(unionAll, topMap->Pos, residualElements);
 }
 
 } // namespace NKqp

@@ -145,7 +145,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                         }
                         // Finally, it's a subplan, so update the subplan
                         else {
-                            root.PlanProps.Subplans.Replace(*iter.SubplanIU, op);
+                            root.PlanProps.Subplans.ReplacePlan(*iter.SubplanIU, op);
                         }
                     }
 

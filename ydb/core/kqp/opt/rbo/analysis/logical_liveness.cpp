@@ -77,12 +77,12 @@ public:
                 continue;
             }
 
-            const auto it = Props.Subplans.PlanMap.find(iu);
-            if (it == Props.Subplans.PlanMap.end()) {
+            const auto* subplanEntry = Props.Subplans.Find(iu);
+            if (!subplanEntry) {
                 continue;
             }
 
-            auto subplan = CastOperator<IOperator>(it->second.Plan);
+            auto subplan = CastOperator<IOperator>(subplanEntry->Plan);
             AddLiveColumns(subplan, subplan->GetOutputIUs());
         }
     }

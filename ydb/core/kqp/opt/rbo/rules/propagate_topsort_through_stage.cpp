@@ -206,7 +206,7 @@ TIntrusivePtr<IOperator> TPropagateTopSortThroughStageRule::SimpleMatchAndApply(
         // If map renames a sort element, update it.
         MaybeUpdateSortElements(sortElements, mapElements);
         const auto propagatedSort = MakeIntrusive<TOpSort>(map->GetInput(), sort->Pos, sort->Props, sortElements, sort->LimitCond, EOpPhase::Intermediate);
-        return MakeIntrusive<TOpMap>(propagatedSort, map->Pos, map->Props, mapElements, map->Ordered);
+        return MakeIntrusive<TOpMap>(propagatedSort, map->Pos, map->Props, mapElements);
     } else if (CanPushSortToOlapRead(sort, sortInput, ctx, sortDirecion)) {
         const auto read = CastOperator<TOpRead>(sortInput);
         const auto limitCond = sort->LimitCond->Node->ChildPtr(1);

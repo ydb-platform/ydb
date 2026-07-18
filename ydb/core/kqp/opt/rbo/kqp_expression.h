@@ -66,8 +66,17 @@ class TExpression {
     // Return all column references used in this expression
     // Optionally include columns that bind to subplan results and external columns inside correlated subqueries
     // If the result list of column references is not empty and plan properties are not set in the expression,
-    // an exception will be thrown
+    // an exception will be thrown. The returned buffer is refreshed by the next
+    // call with the same flags; do not retain its elements or iterators across calls.
     const TVector<TInfoUnit>& GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
+
+    // Return Member names without classifying them against the current subplan registry.
+    // The result depends only on Node and is cached after the first AST traversal.
+    const TVector<TInfoUnit>& GetRawInputIUs() const;
+
+    void BindPlanProps(TPlanProps* props) const {
+        PlanProps = props;
+    }
 
     // Rename column references in the expression
     TExpression ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const;
@@ -88,13 +97,17 @@ class TExpression {
     TString ToExplainString() const;
 
     TExprNode::TPtr Node;
-    TExprContext* Ctx;
-    TPlanProps* PlanProps;
+    TExprContext* Ctx = nullptr;
+    mutable TPlanProps* PlanProps = nullptr;
 
   private:
     bool MaybeEquiJoinConditionInternal(bool includeExpressions) const;
 
-    mutable std::optional<TVector<TInfoUnit>> InputIUs[4] = {std::nullopt, std::nullopt, std::nullopt, std::nullopt};
+    mutable TExprNode::TPtr RawInputIUsCacheKey;
+    mutable std::optional<TVector<TInfoUnit>> RawInputIUs;
+    // Reusable buffers. Each call refreshes the selected buffer against the
+    // current subplan registry, so registry mutations cannot stale the result.
+    mutable std::optional<TVector<TInfoUnit>> ResolvedInputIUs[4] = {std::nullopt, std::nullopt, std::nullopt, std::nullopt};
 
 };
 

@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 
+#include <algorithm>
 #include <optional>
 #include <utility>
 
@@ -22,44 +23,78 @@ enum ESubplanType : ui32 { EXPR, IN_SUBPLAN, EXISTS };
 struct TPlanProps;
 
 struct TSubplanEntry {
+    TSubplanEntry(TIntrusivePtr<ISimpleOperator> plan, ESubplanType type, TVector<TInfoUnit> tuple)
+        : Plan(std::move(plan))
+        , Tuple(std::move(tuple))
+        , Type(type) {
+    }
+
     TIntrusivePtr<ISimpleOperator> Plan;
     TVector<TInfoUnit> Tuple;
     ESubplanType Type;
-    TInfoUnit IU;
     TVector<TInfoUnit> DependentIUs;
 };
 
-struct TSubplans {
+class TSubplans {
+public:
+    using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
 
-    void Add(const TInfoUnit& iu, const TSubplanEntry& entry) {
-        OrderedList.push_back(iu);
-        PlanMap.insert({iu, entry});
+    // A binding is the stable identity of a registry entry. Replacing the
+    // referenced plan preserves that identity; changing it requires rewriting
+    // every expression that names it and is intentionally unsupported here.
+    void Add(const TInfoUnit& binding, TIntrusivePtr<ISimpleOperator> plan, ESubplanType type, TVector<TInfoUnit> tuple = {}) {
+        Y_ENSURE(plan, "Cannot register a null subplan for " << binding.GetFullName());
+        const bool inserted = Entries.emplace(binding, TSubplanEntry(std::move(plan), type, std::move(tuple))).second;
+        Y_ENSURE(inserted, "Duplicate subplan binding " << binding.GetFullName());
     }
 
-    void Replace(const TInfoUnit& iu, TIntrusivePtr<ISimpleOperator> op) {
-        auto entry = PlanMap.at(iu);
-        entry.Plan = op;
-        PlanMap.erase(iu);
-        PlanMap.insert({iu, entry});
+    void ReplacePlan(const TInfoUnit& binding, TIntrusivePtr<ISimpleOperator> plan) {
+        Y_ENSURE(plan, "Cannot replace " << binding.GetFullName() << " with a null subplan");
+        Entries.at(binding).Plan = std::move(plan);
     }
 
-    TVector<TSubplanEntry> Get() {
-        TVector<TSubplanEntry> result;
-        for (const auto& iu : OrderedList) {
-            result.push_back(PlanMap.at(iu));
+    void AddDependentIU(const TInfoUnit& binding, const TInfoUnit& iu) {
+        auto& dependentIUs = Entries.at(binding).DependentIUs;
+        if (std::find(dependentIUs.begin(), dependentIUs.end(), iu) == dependentIUs.end()) {
+            dependentIUs.push_back(iu);
         }
-        return result;
     }
 
-    void Remove(const TInfoUnit& iu) {
-        std::erase(OrderedList, iu);
-        PlanMap.erase(iu);
+    void Remove(const TInfoUnit& binding) {
+        const auto entryIt = Entries.find(binding);
+        Y_ENSURE(entryIt != Entries.end(), "Unknown subplan binding " << binding.GetFullName());
+        Entries.erase(entryIt);
     }
 
-    bool RenameReferences(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx);
+    const TSubplanEntry* Find(const TInfoUnit& binding) const {
+        const auto it = Entries.find(binding);
+        return it == Entries.end() ? nullptr : &it->second;
+    }
 
-    THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> PlanMap;
-    TVector<TInfoUnit> OrderedList;
+    const TSubplanEntry& At(const TInfoUnit& binding) const {
+        return Entries.at(binding);
+    }
+
+    bool Contains(const TInfoUnit& binding) const {
+        return Entries.contains(binding);
+    }
+
+    bool Empty() const {
+        return Entries.empty();
+    }
+
+    auto begin() const {
+        return Entries.begin();
+    }
+
+    auto end() const {
+        return Entries.end();
+    }
+
+    bool RenameExternalReferences(const TRenameMap& renameMap, TExprContext& ctx);
+
+private:
+    THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> Entries;
 };
 
 class TInfoUnitConstraintSet {

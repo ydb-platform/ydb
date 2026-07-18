@@ -34,13 +34,11 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
 
     // Check that the filter lambda contains at least one in/exists subplan
     auto filter = CastOperator<TOpFilter>(input);
-    auto subplanIUs = filter->FilterExpr.GetInputIUs(true, false);
     TVector<TInfoUnit> inOrExistsSubplans;
 
-    for (auto subplanIU : subplanIUs) {
-        if(props.Subplans.PlanMap.contains(subplanIU)) {
-            auto subplanEntry = props.Subplans.PlanMap.at(subplanIU);
-            if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || subplanEntry.Type == ESubplanType::EXISTS) {
+    for (const auto& subplanIU : filter->GetSubplanCandidates()) {
+        if (const auto* subplanEntry = props.Subplans.Find(subplanIU)) {
+            if (subplanEntry->Type == ESubplanType::IN_SUBPLAN || subplanEntry->Type == ESubplanType::EXISTS) {
                 inOrExistsSubplans.push_back(subplanIU);
             }
         } 
@@ -55,7 +53,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
     // so the current iu is no longer marked as SubplanIU
 
     auto subplanIU = inOrExistsSubplans[0];
-    auto subplanEntry = props.Subplans.PlanMap.at(subplanIU);
+    const auto& subplanEntry = props.Subplans.At(subplanIU);
     TIntrusivePtr<IOperator> join;
     TVector<std::pair<TInfoUnit, TInfoUnit>> extraJoinKeys;
     auto uncorrSubplan = CastOperator<IOperator>(subplanEntry.Plan);
@@ -68,7 +66,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
         auto subplanFilter = CastOperator<TOpFilter>(subplanEntry.Plan);
         auto addDeps = CastOperator<TOpAddDependencies>(subplanFilter->GetInput());
         uncorrSubplan = addDeps->GetInput();
-        auto subplanConjuncts = subplanFilter->FilterExpr.SplitConjunct();
+        auto subplanConjuncts = subplanFilter->GetFilterExpression().SplitConjunct();
 
         for (const auto& conj : subplanConjuncts) {
             if (conj.MaybeEquiJoinCondition()) {
@@ -89,7 +87,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
     }
 
     // If we have a correlated subplan where pull up didn't succeed, throw an exception
-    else if (subPlanKind == EOperator::Filter && subplanEntry.DependentIUs.size()) {
+    else if (subPlanKind == EOperator::Filter && !subplanEntry.DependentIUs.empty()) {
         Y_ENSURE(false, "Decorrelation via filter pull up didn't succeed");
     }
 
@@ -139,7 +137,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
         auto comparePredicate = MakeBinaryPredicate(">", MakeColumnAccess(countResult, filter->Pos, &ctx.ExprCtx, &props), zero);
         TVector<TMapElement> mapElements;
         mapElements.emplace_back(subplanIU, comparePredicate);
-        auto compareResMap = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements, false);
+        auto compareResMap = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements);
 
         // make a left join with the main plan on the keys of the plan
         // fail if the keys don't exist or some are nullable
@@ -163,7 +161,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
         auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
         TVector<TMapElement> countMapElements;
         countMapElements.emplace_back(countResult, zero);
-        auto countMap = MakeIntrusive<TOpMap>(limit, filter->Pos, countMapElements, true);
+        auto countMap = MakeIntrusive<TOpMap>(limit, filter->Pos, countMapElements);
 
         TOpAggregationTraits aggFunction(countResult, "count", countResult);
         TVector<TOpAggregationTraits> aggs = {aggFunction};
@@ -175,7 +173,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
         TVector<TMapElement> mapElements;
         mapElements.emplace_back(subplanIU, comparePredicate);
 
-        auto map = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements, true);
+        auto map = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements);
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         join = MakeIntrusive<TOpJoin>(filter->GetInput(), map, filter->Pos, "Cross", joinKeys, joinFilters);
@@ -184,7 +182,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
     props.Subplans.Remove(subplanIU);
 
     // Otherwise, we need to pack the remaining conjuncts back into the filter
-    return MakeIntrusive<TOpFilter>(join, filter->Pos, TExpression(filter->FilterExpr.GetLambda(), &ctx.ExprCtx, &props));
+    return MakeIntrusive<TOpFilter>(join, filter->Pos, TExpression(filter->GetFilterExpression().GetLambda(), &ctx.ExprCtx, &props));
 }
 }
 }

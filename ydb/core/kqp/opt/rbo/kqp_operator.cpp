@@ -30,6 +30,14 @@ TString FormatSortElements(const TVector<TSortElement>& sortElements) {
     return result;
 }
 
+void AddExpressionMembers(const TExpression& expression, TVector<TInfoUnit>& members) {
+    for (const auto& iu : expression.GetRawInputIUs()) {
+        if (std::find(members.begin(), members.end(), iu) == members.end()) {
+            members.push_back(iu);
+        }
+    }
+}
+
 } // namespace
 
 /**
@@ -67,6 +75,12 @@ const TVector<TInfoUnit>& IOperator::GetOutputIUs() {
         Y_ENSURE(Props.OutputIUs.has_value(), "Computation of output IUs failed for " << GetExplainName());
     }
     return Props.OutputIUs.value();
+}
+
+void IOperator::BindExpressionPlanProps(TPlanProps* props) {
+    for (const auto& expression : GetExpressions()) {
+        expression.get().BindPlanProps(props);
+    }
 }
 
 void IOperator::ComputeOutputIUsSubtree() {
@@ -297,10 +311,6 @@ const TExpression& TMapElement::GetExpression() const {
     return Expr;
 }
 
-TExpression& TMapElement::GetExpressionRef() {
-    return Expr;
-}
-
 bool TMapElement::DependsOnlyOn(const TVector<TInfoUnit>& availableIUs) const {
     const auto usedIUs = Expr.GetInputIUs(false, true);
     return IUSetDiff(usedIUs, availableIUs).empty();
@@ -318,32 +328,21 @@ TInfoUnit TMapElement::GetColumnAccess() const {
 }
 
 void TMapElement::SetExpression(TExpression expr) {
-    Expr = expr;
+    Y_ENSURE(!Rename || expr.IsColumnAccess(), "Rename map element must be a plain column access");
+    Expr = std::move(expr);
 }
 
 /**
  * OpMap operator methods
  */
-TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool ordered)
+TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements)
     : IUnaryOperator(EOperator::Map, pos, input)
-    , MapElements(mapElements)
-    , Ordered(ordered) {
+    , MapElements(mapElements) {
 }
 
-TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements,
-               bool ordered)
+TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements)
     : IUnaryOperator(EOperator::Map, pos, props, input)
-    , MapElements(mapElements)
-    , Ordered(ordered) {
-}
-
-TMapElement* TOpMap::FindOutputElement(const TInfoUnit& output) {
-    for (auto& mapElement : MapElements) {
-        if (mapElement.GetElementName() == output) {
-            return &mapElement;
-        }
-    }
-    return nullptr;
+    , MapElements(mapElements) {
 }
 
 const TMapElement* TOpMap::FindOutputElement(const TInfoUnit& output) const {
@@ -353,6 +352,31 @@ const TMapElement* TOpMap::FindOutputElement(const TInfoUnit& output) const {
         }
     }
     return nullptr;
+}
+
+void TOpMap::SetMapElements(TVector<TMapElement> mapElements) {
+    MapElements = std::move(mapElements);
+    MarkSubplanCandidatesDirty();
+}
+
+void TOpMap::AddMapElement(TMapElement mapElement) {
+    MapElements.push_back(std::move(mapElement));
+    MarkSubplanCandidatesDirty();
+}
+
+void TOpMap::RemoveMapElement(size_t index) {
+    Y_ENSURE(index < MapElements.size(), "Map element index is out of range: " << index);
+    MapElements.erase(MapElements.begin() + index);
+    MarkSubplanCandidatesDirty();
+}
+
+void TOpMap::SetMapElementExpression(size_t index, TExpression expression) {
+    MapElements.at(index).SetExpression(std::move(expression));
+    MarkSubplanCandidatesDirty();
+}
+
+void TOpMap::MarkSubplanCandidatesDirty() {
+    SubplanCandidatesDirty = true;
 }
 
 bool TOpMap::HasOutputElement(const TInfoUnit& output) const {
@@ -408,30 +432,23 @@ TVector<TInfoUnit> TOpMap::GetUsedIUs(TPlanProps& props) {
     return result;
 }
 
-TVector<std::reference_wrapper<TExpression>> TOpMap::GetExpressions() {
-    TVector<std::reference_wrapper<TExpression>> result;
-    for (auto& mapElement : MapElements) {
-        result.push_back(mapElement.GetExpressionRef());
+TVector<std::reference_wrapper<const TExpression>> TOpMap::GetExpressions() const {
+    TVector<std::reference_wrapper<const TExpression>> result;
+    for (const auto& mapElement : MapElements) {
+        result.push_back(std::cref(mapElement.GetExpression()));
     }
     return result;
 }
 
-TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
-    TVector<TInfoUnit> subplanIUs;
-    TVector<TInfoUnit> res;
-
-    for (const auto& mapElement : MapElements) {
-        auto expression = mapElement.GetExpression();
-        auto vars = TExpression(expression.Node, expression.Ctx, &props).GetInputIUs(true, false);
-        for (const auto& iu : vars) {
-            if (iu.IsSubplanContext()) {
-                subplanIUs.push_back(iu);
-            }
+const TVector<TInfoUnit>& TOpMap::GetSubplanCandidates() const {
+    if (SubplanCandidatesDirty) {
+        SubplanCandidates.clear();
+        for (const auto& mapElement : MapElements) {
+            AddExpressionMembers(mapElement.GetExpression(), SubplanCandidates);
         }
+        SubplanCandidatesDirty = false;
     }
-
-    AddUnique<TInfoUnit>(res, subplanIUs);
-    return res;
+    return SubplanCandidates;
 }
 
 // Returns explicit renames as pairs of <to, from>
@@ -470,11 +487,10 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetPropertyPreservingMappings(T
 }
 
 void TOpMap::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) {
-    TOptimizeExprSettings settings(&ctx.TypeCtx);
     for (size_t i = 0; i < MapElements.size(); i++) {
         if (!MapElements[i].IsRename()) {
             auto expr = MapElements[i].GetExpression();
-            MapElements[i].SetExpression(expr.ApplyReplaceMap(map, ctx));
+            SetMapElementExpression(i, expr.ApplyReplaceMap(map, ctx));
         }
     }
 }
@@ -610,12 +626,17 @@ void TOpFilter::ComputeOutputIUs() {
     Props.OutputIUs = GetInput()->GetOutputIUs();
 }
 
-TVector<std::reference_wrapper<TExpression>> TOpFilter::GetExpressions() {
-    return {FilterExpr};
+TVector<std::reference_wrapper<const TExpression>> TOpFilter::GetExpressions() const {
+    return {std::cref(FilterExpr)};
+}
+
+void TOpFilter::SetFilterExpression(TExpression filterExpr) {
+    FilterExpr = std::move(filterExpr);
+    SubplanCandidatesDirty = true;
 }
 
 void TOpFilter::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext & ctx) {
-    FilterExpr = FilterExpr.ApplyReplaceMap(map, ctx);
+    SetFilterExpression(FilterExpr.ApplyReplaceMap(map, ctx));
 }
 
 TVector<TInfoUnit> TOpFilter::GetFilterIUs(TPlanProps& props) const {
@@ -627,14 +648,13 @@ TVector<TInfoUnit> TOpFilter::GetUsedIUs(TPlanProps& props) {
     return FilterExpr.GetInputIUs(false, true);
 }
 
-TVector<TInfoUnit> TOpFilter::GetSubplanIUs(TPlanProps& props) {
-    TVector<TInfoUnit> res;
-    for (const auto& iu : GetFilterIUs(props)) {
-        if (iu.IsSubplanContext()) {
-            res.push_back(iu);
-        }
+const TVector<TInfoUnit>& TOpFilter::GetSubplanCandidates() const {
+    if (SubplanCandidatesDirty) {
+        SubplanCandidates.clear();
+        AddExpressionMembers(FilterExpr, SubplanCandidates);
+        SubplanCandidatesDirty = false;
     }
-    return res;
+    return SubplanCandidates;
 }
 
 TString TOpFilter::ToString(TExprContext& ctx) {
@@ -719,10 +739,10 @@ TVector<TInfoUnit> TOpJoin::GetUsedIUs(TPlanProps& props) {
     return result;
 }
 
-TVector<std::reference_wrapper<TExpression>> TOpJoin::GetExpressions() {
-    TVector<std::reference_wrapper<TExpression>> result;
-    for (auto & expr : JoinFilters) {
-        result.push_back(expr);
+TVector<std::reference_wrapper<const TExpression>> TOpJoin::GetExpressions() const {
+    TVector<std::reference_wrapper<const TExpression>> result;
+    for (const auto& expr : JoinFilters) {
+        result.push_back(std::cref(expr));
     }
     return result;
 }
@@ -936,8 +956,15 @@ NJson::TJsonValue TOpLimit::ToJson(ui32 explainFlags) {
     return res;
 }
 
-TVector<std::reference_wrapper<TExpression>> TOpLimit::GetExpressions() {
-    return {LimitCond};
+TVector<std::reference_wrapper<const TExpression>> TOpLimit::GetExpressions() const {
+    return {std::cref(LimitCond)};
+}
+
+void TOpLimit::BindExpressionPlanProps(TPlanProps* props) {
+    IOperator::BindExpressionPlanProps(props);
+    if (OffsetCond) {
+        OffsetCond->BindPlanProps(props);
+    }
 }
 
 /**
@@ -1246,8 +1273,8 @@ TString TOpRoot::ToString(TExprContext& ctx) {
 
 TString TOpRoot::PlanToString(TExprContext& ctx, ui32 printOptions) {
     auto builder = TStringBuilder();
-    for (const auto& [iu, subplan] : PlanProps.Subplans.PlanMap) {
-        builder << "Subplan binding to " << iu.GetFullName() << ":\n";
+    for (const auto& [binding, subplan] : PlanProps.Subplans) {
+        builder << "Subplan binding to " << binding.GetFullName() << ":\n";
         PlanToStringRec(CastOperator<IOperator>(subplan.Plan), ctx, builder, 0, printOptions);
     }
     PlanToStringRec(GetInput(), ctx, builder, 0, printOptions);
@@ -1364,17 +1391,26 @@ void TOpIterator::Advance() {
             return;
         }
 
-        if (RecurseIntoSubplans && !frame.SubplansLoaded) {
-            Y_ENSURE(PlanProps);
-            frame.SubplanIUs = frame.Current->GetSubplanIUs(*PlanProps);
-            frame.SubplansLoaded = true;
+        if (RecurseIntoSubplans && !frame.SubplanCandidates) {
+            frame.SubplanCandidates = &frame.Current->GetSubplanCandidates();
         }
 
-        if (RecurseIntoSubplans && frame.NextSubplanIdx < frame.SubplanIUs.size()) {
-            const auto& iu = frame.SubplanIUs[frame.NextSubplanIdx++];
-            const auto& subplan = PlanProps->Subplans.PlanMap.at(iu);
-            PushFrame(CastOperator<IOperator>(subplan.Plan), nullptr, size_t(0), std::make_shared<TInfoUnit>(iu));
-            continue;
+        if (RecurseIntoSubplans) {
+            bool pushedSubplan = false;
+            while (frame.NextSubplanCandidateIdx < frame.SubplanCandidates->size()) {
+                const auto& iu = (*frame.SubplanCandidates)[frame.NextSubplanCandidateIdx++];
+                const auto* subplan = PlanProps->Subplans.Find(iu);
+                if (!subplan) {
+                    continue;
+                }
+                if (PushFrame(CastOperator<IOperator>(subplan->Plan), nullptr, size_t(0), std::make_shared<TInfoUnit>(iu))) {
+                    pushedSubplan = true;
+                    break;
+                }
+            }
+            if (pushedSubplan) {
+                continue;
+            }
         }
 
         const auto& children = frame.Current->GetChildren();

@@ -30,7 +30,9 @@ bool RenameInfoUnits(TVector<TInfoUnit>& ius, const THashMap<TInfoUnit, TInfoUni
 }
 
 void RenameMapRenameSources(TOpMap& map, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
-    for (auto& el : map.MapElements) {
+    const auto& mapElements = map.GetMapElements();
+    for (size_t index = 0; index < mapElements.size(); ++index) {
+        const auto& el = mapElements[index];
         if (!el.IsRename()) {
             continue;
         }
@@ -42,7 +44,7 @@ void RenameMapRenameSources(TOpMap& map, const THashMap<TInfoUnit, TInfoUnit, TI
         }
 
         auto expr = el.GetExpression();
-        el.SetExpression(MakeColumnAccess(it->second, map.Pos, expr.Ctx, expr.PlanProps));
+        map.SetMapElementExpression(index, MakeColumnAccess(it->second, map.Pos, expr.Ctx, expr.PlanProps));
     }
 }
 
@@ -94,37 +96,25 @@ bool RenameExternalSubplanReferences(
 
 } // anonymous namespace
 
-bool TSubplans::RenameReferences(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
-    if (renameMap.empty() || PlanMap.empty()) {
+bool TSubplans::RenameExternalReferences(const TRenameMap& renameMap, TExprContext& ctx) {
+    if (renameMap.empty() || Empty()) {
         return false;
     }
 
-    THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> renamedPlanMap;
-    TVector<TInfoUnit> renamedOrderedList;
-    renamedOrderedList.reserve(OrderedList.size());
+    for (const auto& [from, to] : renameMap) {
+        Y_ENSURE(!Contains(from) && !Contains(to),
+            "Subplan bindings are immutable: cannot rename " << from.GetFullName()
+                << " to " << to.GetFullName());
+    }
+
     bool changed = false;
 
-    for (const auto& iu : OrderedList) {
-        auto entry = PlanMap.at(iu);
-        const auto renamedIU = RenameInfoUnit(iu, renameMap);
-
-        changed |= renamedIU != iu;
-
-        const auto renamedEntryIU = RenameInfoUnit(entry.IU, renameMap);
-        changed |= renamedEntryIU != entry.IU;
-        entry.IU = renamedEntryIU;
-
+    for (auto& item : Entries) {
+        auto& entry = item.second;
         changed |= RenameInfoUnits(entry.Tuple, renameMap);
         changed |= RenameInfoUnits(entry.DependentIUs, renameMap);
         changed |= RenameExternalSubplanReferences(CastOperator<IOperator>(entry.Plan), renameMap, ctx);
-
-        const auto inserted = renamedPlanMap.emplace(renamedIU, std::move(entry)).second;
-        Y_ENSURE(inserted, "Subplan rename produced duplicate binding " << renamedIU.GetFullName());
-        renamedOrderedList.push_back(renamedIU);
     }
-
-    PlanMap = std::move(renamedPlanMap);
-    OrderedList = std::move(renamedOrderedList);
     return changed;
 }
 
@@ -157,9 +147,9 @@ void TOpMap::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::T
 void TOpMap::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
     Y_UNUSED(ctx);
 
-    for (auto& el : MapElements) {
-        if (!el.IsRename()) {
-            el.SetExpression(el.GetExpression().ApplyRenames(renameMap));
+    for (size_t index = 0; index < MapElements.size(); ++index) {
+        if (!MapElements[index].IsRename()) {
+            SetMapElementExpression(index, MapElements[index].GetExpression().ApplyRenames(renameMap));
         }
     }
 }
@@ -171,7 +161,7 @@ void TOpAddDependencies::RenameProducedIUs(const THashMap<TInfoUnit, TInfoUnit, 
 
 void TOpFilter::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
     Y_UNUSED(ctx);
-    FilterExpr = FilterExpr.ApplyRenames(renameMap);
+    SetFilterExpression(FilterExpr.ApplyRenames(renameMap));
 }
 
 void TOpJoin::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {

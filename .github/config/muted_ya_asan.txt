@@ -245,13 +245,6 @@ ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeData
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle
-ydb/public/sdk/cpp/tests/unit/client/driver CppGrpcClientSimpleTest.WithoutDiscoveryClientLevel
-ydb/public/sdk/cpp/tests/unit/client/driver CppGrpcClientSimpleTest.WithoutDiscoveryDriverLevel
-ydb/public/sdk/cpp/tests/unit/client/table TableTest.AlterTableDroppedMetricsSettings
-ydb/public/sdk/cpp/tests/unit/client/table TableTest.AlterTableNoMetricsSettings
-ydb/public/sdk/cpp/tests/unit/client/table TableTest.AlterTableSetMetricsSettings
-ydb/public/sdk/cpp/tests/unit/client/table TableTest.CreateTableNoMetricsSettings
-ydb/public/sdk/cpp/tests/unit/client/table TableTest.CreateTableWithMetricsSettings
 ydb/services/persqueue_v1/ut TPersQueueTest.BillingRequestUnits
 ydb/services/persqueue_v1/ut TPersQueueTest.CheckDecompressionTasksWithoutSession
 ydb/services/persqueue_v1/ut TPersQueueTest.ConsumerAvailabilityPeriodCleanup
@@ -528,4 +521,5 @@ ydb/tests/stress/vector_workload/tests test_workload.py.TestYdbVectorWorkload.te
 ydb/tools/mnc/viewer/ut py3test.sole chunk
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_edit_cluster_config_revalidates_and_selects_file
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_failing_cluster_config_is_not_selected
+ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_host_details_include_agent_tasks_and_disks
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

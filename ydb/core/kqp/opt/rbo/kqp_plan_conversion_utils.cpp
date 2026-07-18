@@ -166,11 +166,6 @@ bool GetForceOptional(const TKqpOpMapElementLambda& mapElement) {
     return mapElement.ForceOptional().StringValue() == "True";
 }
 
-bool GetOrdered(const TKqpOpMap& map) {
-    auto maybeOrdered = map.Ordered();
-    return maybeOrdered && maybeOrdered.Cast().StringValue() == "True";
-}
-
 bool GetProject(const TKqpOpMap& map) {
     return map.Project().IsValid();
 }
@@ -360,7 +355,6 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
     auto opMap = TKqpOpMap(node);
     auto input = ExprNodeToOperator(opMap.Input().Ptr());
     const auto project = GetProject(opMap);
-    const auto ordered = GetOrdered(opMap);
     TVector<TMapElement> mapElements;
 
     for (const auto& mapElement : opMap.MapElements()) {
@@ -403,7 +397,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
         }
     }
 
-    return MakeIntrusive<TOpMap>(input, node->Pos(), mapElements, ordered);
+    return MakeIntrusive<TOpMap>(input, node->Pos(), mapElements);
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpInfuseDependents(TExprNode::TPtr node) {
@@ -675,7 +669,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpReplaceAlias(TExprNode::TPt
         }
     }
 
-    return MakeIntrusive<TOpMap>(input, node->Pos(), mapElements, true);
+    return MakeIntrusive<TOpMap>(input, node->Pos(), mapElements);
 }
 
 } // namespace NKikimr::Nkqp

@@ -216,7 +216,7 @@ TPushMapElementsThroughInputRule::SimpleMatchAndApply(const TIntrusivePtr<IOpera
         return op;
     }
 
-    return MakeIntrusive<TOpMap>(op, topMap->Pos, topElements, topMap->IsOrdered());
+    return MakeIntrusive<TOpMap>(op, topMap->Pos, topElements);
 }
 
 } // namespace NKqp

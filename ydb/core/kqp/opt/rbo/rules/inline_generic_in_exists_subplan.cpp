@@ -137,7 +137,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
         auto comparePredicate = MakeBinaryPredicate(">", MakeColumnAccess(countResult, filter->Pos, &ctx.ExprCtx, &props), zero);
         TVector<TMapElement> mapElements;
         mapElements.emplace_back(subplanIU, comparePredicate);
-        auto compareResMap = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements, false);
+        auto compareResMap = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements);
 
         // make a left join with the main plan on the keys of the plan
         // fail if the keys don't exist or some are nullable
@@ -161,7 +161,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
         auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
         TVector<TMapElement> countMapElements;
         countMapElements.emplace_back(countResult, zero);
-        auto countMap = MakeIntrusive<TOpMap>(limit, filter->Pos, countMapElements, true);
+        auto countMap = MakeIntrusive<TOpMap>(limit, filter->Pos, countMapElements);
 
         TOpAggregationTraits aggFunction(countResult, "count", countResult);
         TVector<TOpAggregationTraits> aggs = {aggFunction};
@@ -173,7 +173,7 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
         TVector<TMapElement> mapElements;
         mapElements.emplace_back(subplanIU, comparePredicate);
 
-        auto map = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements, true);
+        auto map = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements);
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         join = MakeIntrusive<TOpJoin>(filter->GetInput(), map, filter->Pos, "Cross", joinKeys, joinFilters);

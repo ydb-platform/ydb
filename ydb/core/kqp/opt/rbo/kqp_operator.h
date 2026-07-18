@@ -451,9 +451,8 @@ private:
 
 class TOpMap: public IUnaryOperator {
 public:
-    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool ordered = false);
-    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements,
-           bool ordered = false);
+    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements);
+    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements);
 
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual const TVector<TInfoUnit>& GetSubplanCandidates() const override;
@@ -476,10 +475,6 @@ public:
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "Map"; }
 
-    bool IsOrdered() const {
-        return Ordered;
-    }
-
     const TVector<TMapElement>& GetMapElements() const { return MapElements; }
     void SetMapElements(TVector<TMapElement> mapElements);
     void AddMapElement(TMapElement mapElement);
@@ -496,7 +491,6 @@ private:
     void MarkSubplanCandidatesDirty();
 
     TVector<TMapElement> MapElements;
-    bool Ordered = false;
     mutable bool SubplanCandidatesDirty = true;
     mutable TVector<TInfoUnit> SubplanCandidates;
 };

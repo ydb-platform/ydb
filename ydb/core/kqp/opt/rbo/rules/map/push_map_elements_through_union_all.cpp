@@ -305,8 +305,8 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
         return input;
     }
 
-    unionAll->Children[0] = MakeIntrusive<TOpMap>(unionAll->Children[0], topMap->Pos, pushedElements, topMap->IsOrdered());
-    unionAll->Children[1] = MakeIntrusive<TOpMap>(unionAll->Children[1], topMap->Pos, pushedElements, topMap->IsOrdered());
+    unionAll->Children[0] = MakeIntrusive<TOpMap>(unionAll->Children[0], topMap->Pos, pushedElements);
+    unionAll->Children[1] = MakeIntrusive<TOpMap>(unionAll->Children[1], topMap->Pos, pushedElements);
     unionAll->Columns = std::move(newColumns);
     if (!renameMap.empty()) {
         props.Subplans.RenameExternalReferences(renameMap, ctx.ExprCtx);
@@ -316,7 +316,7 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
         return unionAll;
     }
 
-    return MakeIntrusive<TOpMap>(unionAll, topMap->Pos, residualElements, topMap->IsOrdered());
+    return MakeIntrusive<TOpMap>(unionAll, topMap->Pos, residualElements);
 }
 
 } // namespace NKqp

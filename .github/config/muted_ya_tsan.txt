@@ -90,16 +90,19 @@ ydb/core/kqp/ut/indexes/fulltext unittest.[*/*] chunk
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery-EnableIndexStreamWrite
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
+ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
 ydb/core/kqp/ut/query KqpLimits.ComputeNodeMemoryLimit
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
+ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlocksOnColumnsLimit
 ydb/core/kqp/ut/rbo KqpRboOlap.DoubleOutOfRangeInJson
 ydb/core/kqp/ut/rbo KqpRboYql.Aggregation-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
+ydb/core/kqp/ut/runtime KqpScanLogs.WideCombine-EnabledLogs
 ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi-EnableIndexStreamWrite
@@ -127,6 +130,7 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.Shoul
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldSwitchHostToTemporaryOfflineAndBack
 ydb/core/nbs/cloud/blockstore/libs/vhost/ut TServerTest.ShouldCancelRequestsInFlightWhenStopEndpointOrStopServer
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_DoubleSplit_3min
+ydb/core/persqueue/public/describer/ut TDescriberTests.TopicNotCanonizedPath
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithoutDatabase
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
@@ -156,6 +160,8 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingTargetTableOthe
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.Upsert_DifferentBatch
 ydb/core/transfer/ut/column_table unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
+ydb/core/transfer/ut/functional Transfer.MessageField_Partition_Local
+ydb/core/transfer/ut/functional Transfer.MessageField_Partition_Remote
 ydb/core/transfer/ut/functional unittest.sole chunk
 ydb/core/transfer/ut/row_table Transfer_RowTable.TableWithAsyncIndex
 ydb/core/transfer/ut/row_table unittest.sole chunk
@@ -1100,10 +1106,12 @@ ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorklo
 ydb/tests/stress/kv_volume_tool/tests py3test.sole chunk
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[128MB]
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[1GB]
+ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_upload_download[256MB]
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
 ydb/tests/stress/min_max_workload/tests test_workload.py.TestMinMaxWorkload.test
 ydb/tests/stress/mixedpy/tests py3test.sole chunk
 ydb/tests/stress/mixedpy/tests test_workload.py.TestYdbMixedWorkload.test[column]
+ydb/tests/stress/mixedpy/tests test_workload.py.TestYdbMixedWorkload.test[row]
 ydb/tests/stress/nfs_backups/tests py3test.sole chunk
 ydb/tests/stress/nfs_backups/tests test_workload.py.TestYdbNfsWorkload.test
 ydb/tests/stress/node_broker/tests py3test.sole chunk

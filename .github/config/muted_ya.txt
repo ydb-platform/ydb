@@ -41,6 +41,7 @@ ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReb
 ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
 ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
 ydb/library/actors/http/ut Http2Integration.Http2UpgradeFrom101
+ydb/library/actors/interconnect/ut InterconnectDirectSession.UnregisterRestoresActorSystemDelivery
 ydb/public/sdk/cpp/tests/integration/topic gtest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffset
@@ -51,7 +52,6 @@ ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_
 ydb/tests/compatibility/common test_data_type.py.TestDataType.test_parametrized_data_type[restart_stable-26-3-1_to_stable-26-3-1-COLUMN]
 ydb/tests/compatibility/common test_system_views.py.TestSystemViewsRegistry.test_domain_sys_dir[restart_stable-26-1-1_to_stable-26-2-1]
 ydb/tests/compatibility/common test_system_views.py.TestSystemViewsRegistry.test_domain_sys_dir[restart_stable-26-2-1_to_prestable-26-3]
-ydb/tests/compatibility/common test_system_views.py.TestSystemViewsRegistry.test_domain_sys_dir[restart_stable-26-2-1_to_stable-26-3-1]
 ydb/tests/compatibility/common test_user_management.py.TestUserManagementRollingUpgrade.test_user_management[rolling_stable-26-2-1_to_stable-26-3-1]
 ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-3_to_prestable-26-3]
 ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-3_to_stable-26-2-1]

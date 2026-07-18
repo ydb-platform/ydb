@@ -211,52 +211,52 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "supports_manual": False,
     }
 
-    # --- tablet kills -------------------------------------------------------
-    for wire, cls, sched in _KILL_TABLET_SPECS:
-        out[wire] = {
-            "runner": cls(),
-            "schedule": sched,
-            "ui_group": _TABLET_UI_GROUP,
-            "target_kind": TargetKind.TABLET,
-            "impact_scope": ImpactScope.NODE,
-            "guard_mode": GuardMode.BYPASS,
-        }
-
-    out["KickTabletsFromNodeNemesis"] = {
-        "runner": ClusterKickTabletsFromNodeNemesis(),
-        "schedule": 200,
-        "ui_group": _TABLET_UI_GROUP,
-        "target_kind": TargetKind.NODE,
-        "impact_scope": ImpactScope.NODE,
-        "guard_mode": GuardMode.FULL,
-    }
-    out["ReBalanceTabletsNemesis"] = {
-        "runner": ClusterReBalanceTabletsNemesis(),
-        "schedule": 120,
-        "ui_group": _TABLET_UI_GROUP,
-        "target_kind": TargetKind.TABLET,
-        "impact_scope": ImpactScope.NODE,
-        "guard_mode": GuardMode.BYPASS,
-    }
-
-    # One scheduled type per tablet kind is enough (orchestrator picks hosts at random per tick).
-    for tt in _CHANGE_TABLET_TYPES:
-        out[f"ChangeTabletGroup_{tt.name}"] = {
-            "runner": ClusterChangeTabletGroupNemesis(tt, channels=()),
-            "schedule": 120,
-            "ui_group": _TABLET_UI_GROUP,
-            "target_kind": TargetKind.TABLET,
-            "impact_scope": ImpactScope.NODE,
-            "guard_mode": GuardMode.BYPASS,
-        }
-        out[f"BulkChangeTabletGroup_{tt.name}"] = {
-            "runner": ClusterBulkChangeTabletGroupNemesis(tt, percent=None, channels=()),
-            "schedule": 180,
-            "ui_group": _TABLET_UI_GROUP,
-            "target_kind": TargetKind.TABLET,
-            "impact_scope": ImpactScope.NODE,
-            "guard_mode": GuardMode.BYPASS,
-        }
+    # --- tablet chaos (temporarily disabled: BYPASS / not in failure-model budget) ---
+    # for wire, cls, sched in _KILL_TABLET_SPECS:
+    #     out[wire] = {
+    #         "runner": cls(),
+    #         "schedule": sched,
+    #         "ui_group": _TABLET_UI_GROUP,
+    #         "target_kind": TargetKind.TABLET,
+    #         "impact_scope": ImpactScope.NODE,
+    #         "guard_mode": GuardMode.BYPASS,
+    #     }
+    #
+    # out["KickTabletsFromNodeNemesis"] = {
+    #     "runner": ClusterKickTabletsFromNodeNemesis(),
+    #     "schedule": 200,
+    #     "ui_group": _TABLET_UI_GROUP,
+    #     "target_kind": TargetKind.NODE,
+    #     "impact_scope": ImpactScope.NODE,
+    #     "guard_mode": GuardMode.FULL,
+    # }
+    # out["ReBalanceTabletsNemesis"] = {
+    #     "runner": ClusterReBalanceTabletsNemesis(),
+    #     "schedule": 120,
+    #     "ui_group": _TABLET_UI_GROUP,
+    #     "target_kind": TargetKind.TABLET,
+    #     "impact_scope": ImpactScope.NODE,
+    #     "guard_mode": GuardMode.BYPASS,
+    # }
+    #
+    # # One scheduled type per tablet kind is enough (orchestrator picks hosts at random per tick).
+    # for tt in _CHANGE_TABLET_TYPES:
+    #     out[f"ChangeTabletGroup_{tt.name}"] = {
+    #         "runner": ClusterChangeTabletGroupNemesis(tt, channels=()),
+    #         "schedule": 120,
+    #         "ui_group": _TABLET_UI_GROUP,
+    #         "target_kind": TargetKind.TABLET,
+    #         "impact_scope": ImpactScope.NODE,
+    #         "guard_mode": GuardMode.BYPASS,
+    #     }
+    #     out[f"BulkChangeTabletGroup_{tt.name}"] = {
+    #         "runner": ClusterBulkChangeTabletGroupNemesis(tt, percent=None, channels=()),
+    #         "schedule": 180,
+    #         "ui_group": _TABLET_UI_GROUP,
+    #         "target_kind": TargetKind.TABLET,
+    #         "impact_scope": ImpactScope.NODE,
+    #         "guard_mode": GuardMode.BYPASS,
+    #     }
 
     # --- daemon kills -------------------------------------------------------
     # SIGKILL + no-op extract: systemd auto-restarts the daemon, so the guard releases the rack

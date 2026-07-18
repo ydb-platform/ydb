@@ -241,4 +241,30 @@ Y_UNIT_TEST_SUITE(SubColumnsNativeScalars) {
             UNIT_ASSERT_VALUES_EQUAL(ExtractDoubleScalar(bj), expected);   // re-encoded value preserved exactly
         }
     }
+
+    // Recovery for portions written before the Others/Separated value_type fix: a separated column persisted
+    // as String may physically hold a BinaryJson blob. Re-encoding it (compaction demotion) must pass the
+    // blob through rather than abort on UTF8_ERROR, while a genuine native string still re-encodes normally.
+    Y_UNIT_TEST(ReencodeStringColumnHoldingBinaryJson) {
+        const auto binaryArrayOf = [](const TStringBuf bytes) {
+            arrow::BinaryBuilder b;
+            UNIT_ASSERT(b.Append(bytes.data(), bytes.size()).ok());
+            std::shared_ptr<arrow::Array> arr;
+            UNIT_ASSERT(b.Finish(&arr).ok());
+            return arr;
+        };
+
+        // Corrupt case: bytes are a BinaryJson blob (not valid UTF-8) but the column is labeled String.
+        auto blob = std::get<NBinaryJson::TBinaryJson>(NBinaryJson::SerializeToBinaryJson("\"agent/file_input/read\""));
+        auto corrupt = binaryArrayOf(TStringBuf(blob.data(), blob.size()));
+        auto recovered = ArrayElementToBinaryJson(*corrupt, 0, EValueType::String);
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(recovered.data(), recovered.size()), TStringBuf(blob.data(), blob.size()));
+        UNIT_ASSERT_VALUES_EQUAL(ExtractStringScalar(recovered), "agent/file_input/read");
+
+        // Genuine native string: raw UTF-8 bytes re-encode to the BinaryJson of that string.
+        auto genuine = binaryArrayOf("just text");
+        auto encoded = ArrayElementToBinaryJson(*genuine, 0, EValueType::String);
+        UNIT_ASSERT_VALUES_EQUAL(ExtractStringScalar(encoded), "just text");
+    }
+
 };

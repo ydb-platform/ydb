@@ -28,6 +28,19 @@ NBinaryJson::TBinaryJson ToBinaryJson(const NJson::TJsonValue& json) {
     return std::get<NBinaryJson::TBinaryJson>(std::move(result));
 }
 
+NBinaryJson::TBinaryJson StringScalarToBinaryJson(const TStringBuf raw) {
+    auto result = NBinaryJson::SerializeToBinaryJson(WriteJsonRoundTripSafe(NJson::TJsonValue(raw)));
+    if (std::holds_alternative<NBinaryJson::TBinaryJson>(result)) {
+        return std::get<NBinaryJson::TBinaryJson>(std::move(result));
+    }
+    // Recovery for portions written before the Others/Separated value_type fix: a separated column may be
+    // persisted as String yet physically hold a BinaryJson blob (a key promoted from Others with the wrong
+    // value_type). Such bytes can't re-encode as a UTF-8 string; if they are themselves a valid BinaryJson,
+    // pass them through unchanged instead of aborting.
+    AFL_VERIFY(NBinaryJson::IsValidBinaryJson(raw))("error", std::get<TString>(result))("input_dump", EscapeC(raw));
+    return NBinaryJson::TBinaryJson(raw.data(), raw.size());
+}
+
 EValueType ValueTypeForItem(const NBinaryJson::TBinaryJson& blob) {
     auto reader = NBinaryJson::TBinaryJsonReader::Make(blob);
     auto rootCursor = reader->GetRootCursor();
@@ -139,7 +152,10 @@ NBinaryJson::TBinaryJson ArrayElementToBinaryJson(const arrow::Array& array, con
             const auto view = static_cast<const arrow::BinaryArray&>(array).GetView(index);
             return NBinaryJson::TBinaryJson(view.data(), view.size());
         }
-        case EValueType::String:
+        case EValueType::String: {
+            const auto view = static_cast<const arrow::BinaryArray&>(array).GetView(index);
+            return StringScalarToBinaryJson(TStringBuf(view.data(), view.size()));
+        }
         case EValueType::Double:
         case EValueType::Bool:
             return ToBinaryJson(ArrayElementToJsonValue(array, index, valueType));

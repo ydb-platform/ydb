@@ -114,10 +114,15 @@ public:
             DataSize += str.size();
         }
 
-        void Add(const TDictStats& stats, const ui32 idx) {
+        void Add(const TDictStats& stats, const ui32 idx, const bool sourceIsOthers) {
             RecordsCount += stats.GetColumnRecordsCount(idx);
             DataSize += stats.GetColumnSize(idx);
-            DeducedValueType = MergeValueTypes(DeducedValueType, stats.GetValueType(idx));
+            // The Others store physically holds (and reads) every value as BinaryJson regardless of the
+            // logical value_type its stats record, so fold an Others source as BinaryJson. Otherwise a key
+            // promoted from Others to a separated column would be typed by that logical type (e.g. String)
+            // while filled with BinaryJson data - a mismatch that later aborts on re-encode.
+            const EValueType valueType = sourceIsOthers ? EValueType::BinaryJson : stats.GetValueType(idx);
+            DeducedValueType = MergeValueTypes(DeducedValueType, valueType);
         }
 
         // Decides only the Array-vs-Sparsed axis and never returns Dictionary,
@@ -154,7 +159,8 @@ public:
         }
     };
 
-    static TDictStats Merge(const std::vector<const TDictStats*>& stats, const TSettings& settings, const ui32 recordsCount);
+    static TDictStats Merge(const std::vector<const TDictStats*>& columnsStats, const std::vector<const TDictStats*>& othersStats,
+        const TSettings& settings, const ui32 recordsCount);
 
     TSplittedColumns SplitByVolume(const TSettings& settings, const ui32 recordsCount) const;
 

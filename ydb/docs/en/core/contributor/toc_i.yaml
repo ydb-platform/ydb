@@ -10,10 +10,10 @@ items:
   include:
     mode: link
     path: documentation/toc_p.yaml
-- name: Developer UI security guidelines
-  href: developer-ui-security-guidelines.md
 - name: Core
   items:
+  - name: Developer UI security guidelines
+    href: core/developer-ui-security-guidelines.md
   - name: General schema
     href: general-schema.md
   - name: Distributed storage

@@ -13636,7 +13636,7 @@ END DO)",
             disposition.mutable_from_last_checkpoint()->set_force(true);
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
-                {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
+                {"resource_pool", ""},
                 {"streaming_disposition", disposition.SerializeAsString()},
                 {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
@@ -13653,7 +13653,7 @@ END DO)",
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
-                {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
+                {"resource_pool", ""},
                 {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
         }
@@ -13670,7 +13670,7 @@ END DO)",
             disposition.mutable_from_last_checkpoint()->set_force(true);
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
-                {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
+                {"resource_pool", ""},
                 {"streaming_disposition", disposition.SerializeAsString()},
                 {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
@@ -14451,7 +14451,7 @@ END DO)",
         TString queryText = " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic ";
         CheckObjectProperties(*ydb->GetRuntime(), queryName, {
             {"run", "true"},
-            {"resource_pool", "default"},
+            {"resource_pool", ""},
             {"__query_text", queryText}
         });
 
@@ -14476,7 +14476,7 @@ END DO)",
                 UNIT_ASSERT_STRING_CONTAINS(*resultParser.ColumnParser("Ast").GetOptionalUtf8(), "/Root/test-serverless/MySource");
                 UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Text").GetOptionalUtf8(), text);
                 UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Run").GetOptionalBool(), true);
-                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("ResourcePool").GetOptionalUtf8(), "default");
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("ResourcePool").GetOptionalUtf8(), "");
                 UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("RetryCount").GetOptionalUint64(), 0);
                 UNIT_ASSERT(!resultParser.ColumnParser("LastFailAt").GetOptionalTimestamp());
                 UNIT_ASSERT(!resultParser.ColumnParser("SuspendedUntil").GetOptionalTimestamp());
@@ -14502,7 +14502,7 @@ END DO)",
         queryText = " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic ";
         CheckObjectProperties(*ydb->GetRuntime(), queryName, {
             {"run", "true"},
-            {"resource_pool", "default"},
+            {"resource_pool", ""},
             {"__query_text", queryText}
         });
 

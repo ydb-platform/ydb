@@ -76,6 +76,27 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 37009:Supported new operations for `JSON` index. Implemented new tests with and without `RETURNING` for these statements:
+- `INSERT INTO`
+- `UPSERT INTO`
+- `REPLACE INTO`
+- `UPDATE`
+- `DELETE FROM`
+
+Implemented tests for `BATCH UPDATE` and `BATCH DELETE` operations: they are not supported for tables with `JSON` indexes.
+
+... [#37009](https://github.com/ydb-platform/ydb/pull/37009) ([Daniil Timižev](https://github.com/dahbka-lis))
+* 36626:Add PDisk's maintenance status to sys view table [#36626](https://github.com/ydb-platform/ydb/pull/36626) ([Sergey Belyakov](https://github.com/serbel324))
+* 36609:Added a possibility to set secret values in SQL commands `CREATE SECRET` and `ALTER SECRET` via parameters, i.e.
+```sql
+DECLARE $value AS String;
+CREATE SECRET sec WITH (VALUE = $value);
+ALTER SECRET sec WITH (VALUE = $value);
+``` [#36609](https://github.com/ydb-platform/ydb/pull/36609) ([Yury Kiselev](https://github.com/yurikiselev))
+* 36526:- Improve `dstool` output with capacity metrics for vdisk, group, and pool. [#36526](https://github.com/ydb-platform/ydb/pull/36526) ([Yaroslav Dynnikov](https://github.com/rosik))
+* 36478:The first iteration of JSON index: only supports `SELECT ... WHERE JSON_EXISTS(...)`.
+
+... [#36478](https://github.com/ydb-platform/ydb/pull/36478) ([Daniil Timižev](https://github.com/dahbka-lis))
 
 ### Bug fixes
 
@@ -146,12 +167,11 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
-
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* None:CreateStreamingQueryMatchRecognize
+* 37216:fix http cache compression handling, closes #37215 [#37216](https://github.com/ydb-platform/ydb/pull/37216) ([Alexey Efimov](https://github.com/adameat))
+* 37130:Fixed streaming query timeout overflow (timeout value is ui64, but saved into ui32 protobuf field) [#37130](https://github.com/ydb-platform/ydb/pull/37130) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 36958:Fix local committed config update in distconf [#36958](https://github.com/ydb-platform/ydb/pull/36958) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 36915:Fix too often request restarts in 2dc [#36915](https://github.com/ydb-platform/ydb/pull/36915) ([Alexander Rutkovsky](https://github.com/alexvru))
 
 ### YDB UI
 
@@ -178,4 +198,5 @@ Also increased default test logs level [#25408](https://github.com/ydb-platform/
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
 * 25668:Used AS threads in topic sdk IO operations [#25668](https://github.com/ydb-platform/ydb/pull/25668) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 36739:Fixes this performance problem: https://github.com/ydb-platform/ydb/issues/36262 [#36739](https://github.com/ydb-platform/ydb/pull/36739) ([Pavel Velikhov](https://github.com/pavelvelikhov))
 

@@ -324,7 +324,7 @@ ORDER BY c DESC
 LIMIT 10;
 -- Q35: Группировка по IP с вычислениями
 SELECT
-    client_ip
+    client_ip,
     client_ip_1,
     client_ip_2,
     client_ip_3,
@@ -416,7 +416,7 @@ WHERE service_name = 'service1'
     AND JSON_VALUE(metadata, "$.referer_hash") = '3594120000172545465'
 GROUP BY
     JSON_VALUE(metadata, "$.url_hash") AS url_hash,
-    CAST(timestamp AS Date) AS date 
+    CAST(timestamp AS Date) AS date
 ORDER BY views DESC
 LIMIT 10
 OFFSET 100;

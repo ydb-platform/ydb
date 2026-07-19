@@ -1,0 +1,94 @@
+#include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
+
+namespace NKikimr::NKqp {
+
+using namespace NWorkload;
+using namespace NYdb;
+
+
+namespace {
+
+TIntrusivePtr<NWorkload::IYdbSetup> MakeStreamingYdb() {
+    return NWorkload::TYdbSetupSettings().Create([](Tests::TServerSettings& ss) {
+        ss.FeatureFlags.SetEnableTopicsSqlIoOperations(true);
+        ss.FeatureFlags.SetEnableStreamingQueryDisposition(true);
+        if (ss.AppConfig) {
+            ss.AppConfig->MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+            ss.AppConfig->MutableFeatureFlags()->SetEnableStreamingQueryDisposition(true);
+        }
+    });
+}
+
+void CreateTopic(TIntrusivePtr<NWorkload::IYdbSetup> ydb, TString name) {
+    const auto& result = ydb->ExecuteQuery(TStringBuilder() << "CREATE TOPIC " << name);
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+}
+// std::optional<int> GetQueryCountInPool(TIntrusivePtr<NWorkload::IYdbSetup> ydb, TString /*poolId*/) {
+//     const auto& result = ydb->ExecuteQuery(TStringBuilder() << R"(
+//         SELECT COUNT(*) as cnt 
+//         FROM `.metadata/workload_manager/running_requests` 
+        
+//         )");
+
+//     if (result.GetStatus() != NYdb::EStatus::SUCCESS) {
+//         return std::nullopt;
+//     }
+//     // UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+//     NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+//     UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+//     auto cnt = resultSet.ColumnParser("cnt").GetOptionalInt64();
+//     UNIT_ASSERT(cnt.has_value());
+//     return cnt;
+// }
+
+}  // anonymous namespace
+
+
+Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
+
+    Y_UNIT_TEST(TestStreamingQueryClassificationByPath) {
+        auto ydb = MakeStreamingYdb();
+
+        const TString& poolId = "streaming_pool";
+        CreateTopic(ydb, "input_topic");
+        CreateTopic(ydb, "output_topic");
+
+        {
+            const auto& result = ydb->ExecuteQuery(TStringBuilder() << R"(
+                CREATE RESOURCE POOL )" << poolId << R"( WITH (
+                    CONCURRENT_QUERY_LIMIT = 10,
+                    QUEUE_SIZE = 100,
+                    TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 10,
+                    QUERY_CPU_LIMIT_PERCENT_PER_NODE = 1
+                );
+                CREATE RESOURCE POOL CLASSIFIER streaming_classifier WITH (
+                    RESOURCE_POOL=")" << poolId << R"(",
+                    HAS_PATH = "*input_topic*"
+                );
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        auto settings = TQueryRunnerSettings().PoolId(poolId);
+
+        WaitForClassifierSuccess(ydb, "SELECT * FROM input_topic", settings);
+
+        {
+            const auto& result = ydb->ExecuteQuery(R"(
+                CREATE STREAMING QUERY MyStreamingQuery
+                AS DO BEGIN
+                    INSERT INTO output_topic SELECT * FROM input_topic;
+                END DO
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 1}, poolId);
+    }
+
+}
+
+}  // namespace NKikimr::NKqp

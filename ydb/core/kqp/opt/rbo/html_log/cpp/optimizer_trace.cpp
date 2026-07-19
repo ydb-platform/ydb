@@ -1879,6 +1879,14 @@ Trace& TracePage::trace(const std::string& title) {
     return traces_.back();
 }
 
+Trace& TracePage::trace(const std::string& title, const std::string& id) {
+    Trace& result = trace(title);
+    if (!id.empty()) {
+        result.id_ = id;
+    }
+    return result;
+}
+
 GenerateResult TracePage::submit(Trace::Tile& tile) {
     if (!stream_) {
         return GenerateResult::failure(

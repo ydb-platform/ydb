@@ -33,6 +33,7 @@ public:
     const std::string& error() const;
 
     Trace& trace(const std::string& title);
+    Trace& trace(const std::string& title, const std::string& id);
     GenerateResult submit(Trace::Tile& tile);
     GenerateResult flush();
 

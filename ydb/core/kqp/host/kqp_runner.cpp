@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy.h>
+#include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_trace_ast_snapshot.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_transformer.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/query_compiler/kqp_query_compiler.h>
@@ -403,17 +404,35 @@ private:
             funcRegistry,
             Config));
 
+        auto oldOptimizerTraceLog = CreateKqpRboTraceAstSnapshotLog("Old optimizer");
+
         Transformer = CreateCompositeGraphTransformer(
             {
                 TTransformStage{ physicalOptimizeTransformer, "PhysicalOptimize", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalOptimize"),
+                TTransformStage{
+                    CreateKqpRboTraceAstSnapshotTransformer(oldOptimizerTraceLog, "After PhysicalOptimize"),
+                    "TraceOldAfterPhysicalOptimize",
+                    TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ physicalBuildTxsTransformer, "PhysicalBuildTxs", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalBuildTxs"),
+                TTransformStage{
+                    CreateKqpRboTraceBuildQuerySnapshotTransformer(oldOptimizerTraceLog, "After PhysicalBuildTxs", BuildQueryCtx),
+                    "TraceOldAfterPhysicalBuildTxs",
+                    TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ physicalBuildQueryTransformer, "PhysicalBuildQuery", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalBuildQuery"),
+                TTransformStage{
+                    CreateKqpRboTraceAstSnapshotTransformer(oldOptimizerTraceLog, "After PhysicalBuildQuery"),
+                    "TraceOldAfterPhysicalBuildQuery",
+                    TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ CreateSaveExplainTransformerInput(*TransformCtx), "SaveExplainTransformerInput", TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ physicalPeepholeTransformer, "PhysicalPeephole", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalPeephole"),
+                TTransformStage{
+                    CreateKqpRboTraceAstSnapshotTransformer(oldOptimizerTraceLog, "After PhysicalPeephole"),
+                    "TraceOldAfterPhysicalPeephole",
+                    TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ compilePhysicalQuery, "CompilePhysicalQuery", TIssuesIds::DEFAULT_ERROR },
                 TTransformStage{ preparedExplainTransformer, "ExplainQuery", TIssuesIds::DEFAULT_ERROR }, // TODO(sk): only on stats mode or if explain-only
             },

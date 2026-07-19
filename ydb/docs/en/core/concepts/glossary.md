@@ -901,7 +901,7 @@ In the case of read-only transactions, similar to "read uncommitted" in other da
 
 #### Plan step {#planstep}
 
-**Plan step**, **Step** is the logical time at which the execution of a set of transactions is scheduled.
+**Plan step**, **PlanStep**, **Step** is the logical time at which the execution of a set of transactions is scheduled.
 
 #### Mediator time {#mediator-time}
 

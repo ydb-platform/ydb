@@ -1007,7 +1007,7 @@ public:
         }
 
         bool sent = false;
-        const auto result = classifier->PostCompileClassify(*QueryState->PreparedQuery);
+        const auto result = classifier->PostCompileClassify(*QueryState->PreparedQuery, *QueryState->UserRequestContext);
 
         using TError = std::optional<std::pair<Ydb::StatusIds::StatusCode, TString>>;
         auto error = std::visit(TOverloaded {

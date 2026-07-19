@@ -115,6 +115,10 @@ private:
                     const auto& hasPath = config.GetConfigJson()["has_path"].GetString();
                     return TCell(hasPath.data(), hasPath.size());
                 }});
+                insert({TSchema::HasStream::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
+                    const char hasStream = config.GetConfigJson()["has_stream"].GetBoolean();
+                    return TCell(&hasStream, sizeof(hasStream));
+                }});
             }
         };
         static TExtractorsMap extractors;

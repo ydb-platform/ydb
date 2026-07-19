@@ -85,6 +85,7 @@ namespace NKikimr::NHullComp {
             Y_DEBUG_ABORT_UNLESS(levelOfInterest.has_value() == !compact.TablesToDelete.Empty());
 
             if (levelOfInterest) {
+                Task->IsFullCompaction = true;
                 if (HullCtx->VCtx->ActorSystem) {
                     YDB_LOG_INFO_CTX_COMP(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyExplicit decided to compact level",
                         {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},

@@ -91,7 +91,6 @@ PEERDIR(
     yql/essentials/types/dynumber
     yql/essentials/types/uuid
 
-    contrib/libs/icu
     contrib/libs/libc_compat
     contrib/libs/libxml
     contrib/libs/lz4

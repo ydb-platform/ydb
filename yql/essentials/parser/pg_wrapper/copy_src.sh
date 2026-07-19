@@ -35,7 +35,7 @@ export CFLAGS="-ffunction-sections -fdata-sections -DWAIT_USE_SELF_PIPE"
 
 echo configuring
 ./configure \
-    --with-openssl --with-icu --with-libxml --enable-debug --without-systemd \
+    --with-openssl --without-icu --with-libxml --enable-debug --without-systemd \
     --without-gssapi --with-lz4 --with-ossp-uuid \
     || errexit "Configure failed"
 echo building

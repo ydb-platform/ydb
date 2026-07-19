@@ -32,7 +32,7 @@
 #define BLCKSZ 8192
 
 /* Saved arguments from configure */
-#define CONFIGURE_ARGS " '--with-openssl' '--with-icu' '--with-libxml' '--enable-debug' '--without-systemd' '--without-gssapi' '--with-lz4' '--with-ossp-uuid' 'CC=clang' 'CFLAGS=-ffunction-sections -fdata-sections -DWAIT_USE_SELF_PIPE'"
+#define CONFIGURE_ARGS " '--with-openssl' '--without-icu' '--with-libxml' '--enable-debug' '--without-systemd' '--without-gssapi' '--with-lz4' '--with-ossp-uuid' 'CC=clang' 'CFLAGS=-ffunction-sections -fdata-sections -DWAIT_USE_SELF_PIPE'"
 
 /* Define to the default TCP port number on which the server listens and to
    which clients will try to connect. This can be overridden at run-time, but
@@ -718,7 +718,7 @@
 /* #undef USE_BSD_AUTH */
 
 /* Define to build with ICU support. (--with-icu) */
-#define USE_ICU 1
+/* #undef USE_ICU */
 
 /* Define to 1 to build with LDAP support. (--with-ldap) */
 /* #undef USE_LDAP */

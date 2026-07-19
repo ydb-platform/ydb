@@ -22,6 +22,8 @@
 
 #include <exception>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
+
 namespace NKikimr::NKqp::NPrivate {
 
 namespace {
@@ -43,7 +45,8 @@ public:
     }
 
     void Bootstrap() {
-        LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Bootstrap");
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Bootstrap",
+            {"logPrefix", LogPrefix()});
         Become(&TThis::StateFunc);
         ScheduleLeaseUpdate(TInstant::Now() + Ctx->LeaseDuration);
     }
@@ -76,9 +79,18 @@ private:
         const auto executionEntryExists = ev->Get()->ExecutionEntryExists;
         const auto currentDeadline = ev->Get()->CurrentDeadline;
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Lease update " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString() << ", execution entry exists: " << executionEntryExists);
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Lease update failed execution entry",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender},
+                {"status", status},
+                {"issues", issues.ToOneLineString()},
+                {"exists", executionEntryExists});
         } else {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Lease updated by " << ev->Sender << ", current deadline: " << currentDeadline << ", execution entry exists: " << executionEntryExists);
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Lease updated by current execution entry",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender},
+                {"deadline", currentDeadline},
+                {"exists", executionEntryExists});
         }
 
         if (!executionEntryExists) {
@@ -95,14 +107,18 @@ private:
     void ScheduleLeaseUpdate(const TInstant currentDeadline) {
         LeaseUpdateScheduleTime = TInstant::Now();
         const auto leaseUpdateTime = std::max(currentDeadline - Ctx->LeaseDuration / LEASE_UPDATE_FREQUENCY, TInstant::Now() + TDuration::Seconds(1));
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Scheduling lease update on " << leaseUpdateTime);
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Scheduling lease update",
+            {"logPrefix", LogPrefix()},
+            {"leaseUpdateTime", leaseUpdateTime});
 
         Schedule(leaseUpdateTime, new TEvents::TEvWakeup());
     }
 
     void StartLeaseUpdate() {
         const auto& updaterId = Register(CreateScriptLeaseUpdateActor(SelfId(), Ctx->UserRequestContext->Database, Ctx->UserRequestContext->CurrentExecutionId, Ctx->LeaseDuration, Ctx->LeaseGeneration));
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Run lease updater " << updaterId);
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Run lease updater",
+            {"logPrefix", LogPrefix()},
+            {"updaterId", updaterId});
 
         LeaseUpdateStartTime = TInstant::Now();
 
@@ -121,9 +137,13 @@ private:
 
     void Finish(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
         if (status != Ydb::StatusIds::SUCCESS) {
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Finish with error " << status << ", issues: " << issues.ToOneLineString());
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Finish with error",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
         } else if (!FinishInfo.IsFailed()) {
-            LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Finish successfully");
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Finish successfully",
+                {"logPrefix", LogPrefix()});
         }
 
         FinishInfo.Update(status, std::move(issues));

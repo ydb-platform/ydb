@@ -5,6 +5,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
+
 
 namespace NKikimr::NKqp {
 
@@ -47,14 +49,14 @@ void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, c
 
     NYql::IKikimrGateway::TGenericResult result;
     if (operationId != OperationId) {
-        ALOG_CRIT(NKikimrServices::KQP_GATEWAY,
-            "TAnalyzeActor, TEvAnalyzeResponse has operationId=" << operationId
-            << " , but expected " << OperationId);
+        YDB_LOG_CRIT("TAnalyzeActor, TEvAnalyzeResponse has but expected",
+            {"operationId", operationId},
+            {"operationId", OperationId});
         result.SetStatus(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR);
         result.AddIssue(NYql::TIssue("ANALYZE failed: OperationId mismatch"));
     } else if (status != NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS) {
-        ALOG_CRIT(NKikimrServices::KQP_GATEWAY,
-            "TAnalyzeActor, TEvAnalyzeResponse has status=" << status);
+        YDB_LOG_CRIT("TAnalyzeActor, TEvAnalyzeResponse has",
+            {"status", status});
         result.SetStatus(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR);
         NYql::TIssue error("Executing ANALYZE");
         for (const auto& issue : record.GetIssues()) {
@@ -232,9 +234,8 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const TNavigate::TEntry& ent
 }
 
 void TAnalyzeActor::Handle(TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
-    ALOG_NOTICE(
-        NKikimrServices::KQP_GATEWAY,
-        "got TEvAbortExecution, issues: " << ev->Get()->GetIssues().ToOneLineString());
+    YDB_LOG_NOTICE("Got TEvAbortExecution",
+        {"issues", ev->Get()->GetIssues().ToOneLineString()});
 
     // ANALYZE is a long-running operation: tying its lifetime to the calling query
     // would mean a session timeout silently cancels work the user may want to keep.
@@ -248,9 +249,8 @@ void TAnalyzeActor::Handle(TEvKqp::TEvAbortExecution::TPtr& ev, const TActorCont
 }
 
 void TAnalyzeActor::HandleUnexpectedEvent(ui32 typeRewrite) {
-    ALOG_CRIT(
-        NKikimrServices::KQP_GATEWAY,
-        "TAnalyzeActor, unexpected event, request type: " << typeRewrite);
+    YDB_LOG_CRIT("TAnalyzeActor, unexpected event, request",
+        {"type", typeRewrite});
 
     Promise.SetValue(
         NYql::NCommon::ResultFromError<NYql::IKikimrGateway::TGenericResult>(

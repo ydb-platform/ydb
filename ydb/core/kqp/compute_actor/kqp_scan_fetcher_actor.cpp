@@ -11,6 +11,8 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 namespace NKikimr::NKqp::NScanPrivate {
 
 namespace {
@@ -49,7 +51,8 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     Y_UNUSED(traceId);
     AFL_ENSURE(!Meta.GetReads().empty());
     AFL_ENSURE(TableKind != NKqp::ETableKind::SysView);
-    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "META:" << meta.DebugString();
+    YDB_LOG_DEBUG("",
+        {"META", meta.DebugString()});
     KeyColumnTypes.reserve(Meta.GetKeyColumnTypes().size());
     for (size_t i = 0; i < Meta.KeyColumnTypesSize(); i++) {
         NScheme::TTypeId typeId = Meta.GetKeyColumnTypes().at(i);
@@ -87,8 +90,11 @@ void TKqpScanFetcherActor::Bootstrap() {
     for (auto&& c : ComputeActorIds) {
         Sender<TEvScanExchange::TEvRegisterFetcher>().SendTo(c);
     }
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "bootstrap")("compute", ComputeActorIds.size())("shards", PendingShards.size())(
-        "self_id", SelfId());
+    YDB_LOG_DEBUG("",
+        {"event", "bootstrap"},
+        {"compute", ComputeActorIds.size()},
+        {"shards", PendingShards.size()},
+        {"selfId", SelfId()});
     StartTableScan();
     Become(&TKqpScanFetcherActor::StateFunc);
     Schedule(PING_PERIOD, new NActors::TEvents::TEvWakeup());
@@ -97,16 +103,24 @@ void TKqpScanFetcherActor::Bootstrap() {
 void TKqpScanFetcherActor::HandleExecute(TEvScanExchange::TEvAckData::TPtr& ev) {
     RegistrationFinished = true;
     AFL_ENSURE(ev->Get()->GetFreeSpace());
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "AckDataFromCompute")("self_id", SelfId())("scan_id", ScanId)(
-        "packs_to_send", InFlightComputes.GetPacksToSendCount())("from", ev->Sender)("shards remain", PendingShards.size())(
-        "in flight scans", InFlightShards.GetScansCount())("in flight shards", InFlightShards.GetShardsCount());
+    YDB_LOG_DEBUG("",
+        {"event", "AckDataFromCompute"},
+        {"selfId", SelfId()},
+        {"scanId", ScanId},
+        {"packsToSend", InFlightComputes.GetPacksToSendCount()},
+        {"from", ev->Sender},
+        {"#_shards remain", PendingShards.size()},
+        {"#_in flight scans", InFlightShards.GetScansCount()},
+        {"#_in flight shards", InFlightShards.GetShardsCount()});
     InFlightComputes.OnComputeAck(ev->Sender, ev->Get()->GetFreeSpace());
     CheckFinish();
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvScanExchange::TEvTerminateFromCompute::TPtr& ev) {
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "TEvTerminateFromCompute")("sender", ev->Sender)(
-        "info", ev->Get()->GetIssues().ToOneLineString());
+    YDB_LOG_DEBUG("",
+        {"event", "TEvTerminateFromCompute"},
+        {"sender", ev->Sender},
+        {"info", ev->Get()->GetIssues().ToOneLineString()});
     TStringBuilder sb;
     sb << "Send abort execution from compute actor, message: " << ev->Get()->GetIssues().ToOneLineString();
 
@@ -133,20 +147,28 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     }
     AFL_ENSURE(state->State == EShardState::Running)("state", state->State)("actor_id", state->ActorId)("ev_sender", ev->Sender);
 
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)
-    ("Recv TEvScanData from ShardID=", ev->Sender)("ScanId", ev->Get()->ScanId)("Finished", ev->Get()->Finished)("Lock", [&]() {
+    auto lock = [&]() {
         TStringBuilder builder;
         for (const auto& lock : ev->Get()->LocksInfo.Locks) {
             builder << lock.ShortDebugString();
         }
         return builder;
-    }())("BrokenLocks", [&]() {
+    }();
+
+    auto brokenLocks = [&]() {
         TStringBuilder builder;
         for (const auto& lock : ev->Get()->LocksInfo.BrokenLocks) {
             builder << lock.ShortDebugString();
         }
         return builder;
-    }());
+    }();
+
+    YDB_LOG_DEBUG("",
+        {"#_Recv TEvScanData from ShardID=", ev->Sender},
+        {"scanId", ev->Get()->ScanId},
+        {"finished", ev->Get()->Finished},
+        {"lock", lock},
+        {"brokenLocks", brokenLocks});
 
     TInstant startTime = TActivationContext::Now();
     if (ev->Get()->Finished) {
@@ -178,7 +200,10 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) 
     if (!state) {
         state = InFlightShards.GetShardState(msg.GetTabletId());
         if (!state) {
-            AFL_WARN(NKikimrServices::KQP_COMPUTE)("event", "incorrect_error_source")("actor_id", ev->Sender)("tablet_id", msg.GetTabletId());
+            YDB_LOG_WARN("",
+                {"event", "incorrect_error_source"},
+                {"actorId", ev->Sender},
+                {"tabletId", msg.GetTabletId()});
             return;
         }
     }
@@ -298,8 +323,13 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
     }
 
     const auto& tr = *AppData()->TypeRegistry;
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "on_resolving")("tablet_id", state.TabletId)("state", state.State)("gen", state.Generation)(
-        "kind", TableKind)("has_program", Meta.HasOlapProgram());
+    YDB_LOG_DEBUG("",
+        {"event", "on_resolving"},
+        {"tabletId", state.TabletId},
+        {"state", state.State},
+        {"gen", state.Generation},
+        {"kind", TableKind},
+        {"hasProgram", Meta.HasOlapProgram()});
     if (TableKind == NKqp::ETableKind::Olap) {
         bool found = false;
         for (auto&& partition : keyDesc->GetPartitions()) {
@@ -390,8 +420,12 @@ void TKqpScanFetcherActor::HandleExecute(TEvents::TEvUndelivered::TPtr& ev) {
             auto info = InFlightShards.GetShardScanner(ev->Cookie);
             if (!!info) {
                 auto state = InFlightShards.GetShardStateVerified(info->GetTabletId());
-                AFL_WARN(NKikimrServices::KQP_COMPUTE)("event", "TEvents::TEvUndelivered")("from_tablet", info->GetTabletId())(
-                    "state", state->State)("details", info->ToString())("node", SelfId().NodeId());
+                YDB_LOG_WARN("",
+                    {"event", "TEvents::TEvUndelivered"},
+                    {"fromTablet", info->GetTabletId()},
+                    {"state", state->State},
+                    {"details", info->ToString()},
+                    {"node", SelfId().NodeId()});
                 AFL_ENSURE(state->State == EShardState::Running || state->State == EShardState::Starting)("state", state->State);
                 RetryDeliveryProblem(state);
             }
@@ -537,12 +571,23 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
     if (msg.ArrowBatch) {
         TotalBytesReceived += NArrow::GetTableDataSize(msg.ArrowBatch);
     }
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("action", "got EvScanData")("rows", rowsCount)("finished", msg.Finished)(
-        "generation", msg.Generation)("exceeded", msg.RequestedBytesLimitReached)("scan", ScanId)(
-        "packs_to_send", InFlightComputes.GetPacksToSendCount())("from", ev->Sender)("shards remain", PendingShards.size())(
-        "in flight scans", InFlightShards.GetScansCount())("cursor", state->CursorDebugString())(
-        "in flight shards", InFlightShards.GetShardsCount())("delayed_for_seconds_by_ratelimiter", latency.SecondsFloat())(
-        "tablet_id", state->TabletId)("locks", msg.LocksInfo.Locks.size())("broken locks", msg.LocksInfo.BrokenLocks.size());
+    YDB_LOG_DEBUG("",
+        {"action", "got EvScanData"},
+        {"rows", rowsCount},
+        {"finished", msg.Finished},
+        {"generation", msg.Generation},
+        {"exceeded", msg.RequestedBytesLimitReached},
+        {"scan", ScanId},
+        {"packsToSend", InFlightComputes.GetPacksToSendCount()},
+        {"from", ev->Sender},
+        {"#_shards remain", PendingShards.size()},
+        {"#_in flight scans", InFlightShards.GetScansCount()},
+        {"cursor", state->CursorDebugString()},
+        {"#_in flight shards", InFlightShards.GetShardsCount()},
+        {"delayedForSecondsByRatelimiter", latency.SecondsFloat()},
+        {"tabletId", state->TabletId},
+        {"locks", msg.LocksInfo.Locks.size()},
+        {"#_broken locks", msg.LocksInfo.BrokenLocks.size()});
     auto shardScanner = InFlightShards.GetShardScannerVerified(state->TabletId);
     auto tasksForCompute = shardScanner->OnReceiveData(msg, shardScanner);
     AFL_ENSURE(tasksForCompute.size() == 1 || tasksForCompute.size() == 0 || tasksForCompute.size() == ComputeActorIds.size())(
@@ -700,7 +745,9 @@ void TKqpScanFetcherActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr&) {
     if (RegistrationFinished) {
         InFlightShards.PingAllScanners();
     } else if (Now() - RegistrationStartTime > REGISTRATION_TIMEOUT) {
-        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "TEvWakeup")("info", "Abort fetcher due to Registration timeout");
+        YDB_LOG_DEBUG("",
+            {"event", "TEvWakeup"},
+            {"info", "Abort fetcher due to Registration timeout"});
         InFlightShards.AbortAllScanners("Abort fetcher due to Registration timeout");
         TIssues issues;
         issues.AddIssue(TIssue("Abort fetcher due to Registration timeout"));

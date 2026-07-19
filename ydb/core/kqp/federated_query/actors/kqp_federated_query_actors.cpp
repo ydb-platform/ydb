@@ -9,6 +9,8 @@
 #include <ydb/services/scheme_secret/resolver.h>
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
+
 namespace NKikimr::NKqp {
 
 void RegisterDescribeSecretsActor(
@@ -196,17 +198,21 @@ private:
                 .Database(state->Database)
                 .SslCredentials(NYdb::TSslCredentials(state->Ssl, state->CaCert))
                 .AuthToken(state->Token);
-            LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
-                    "DescribeResourceId: SelfId=" << selfId << " DescribeTable " << state->Database << " at " << state->Endpoint << (state->Ssl ? " (Ssl)" : ""));
+            YDB_LOG_DEBUG_CTX(*actorSystem, "DescribeResourceId: DescribeTable",
+                {"selfId", selfId},
+                {"#_state->Database", state->Database},
+                {"#_state->Endpoint", state->Endpoint},
+                {"#_num_0", (state->Ssl ? " (Ssl)" : "")});
             NYdb::NTable::TTableClient tableClient(*Driver, settings);
             tableClient.GetSession().Subscribe([actorSystem, selfId, state](const NYdb::NTable::TAsyncCreateSessionResult& future) mutable {
                 try {
                     auto& result = future.GetValue();
                     if (!result.IsSuccess()) {
-                        LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " GetSession failed"
-                                << ", status# " << result.GetStatus()
-                                << ", issues# " << result.GetIssues().ToOneLineString()
-                                << ", iteration# " << state->Backoff.GetIteration());
+                        YDB_LOG_WARN_CTX(*actorSystem, "DescribeResourceId: GetSession failed",
+                            {"selfId", selfId},
+                            {"status", result.GetStatus()},
+                            {"issues", result.GetIssues().ToOneLineString()},
+                            {"iteration", state->Backoff.GetIteration()});
                         if (IsRetryableError(result) && state->Backoff.HasMore()) {
                             auto delay = state->Backoff.Next();
                             actorSystem->Schedule(delay,
@@ -224,10 +230,11 @@ private:
                               try {
                                   const auto& result = future.GetValue();
                                   if (!result.IsSuccess()) {
-                                      LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " DescribeTable failed"
-                                          << ", status# " << result.GetStatus()
-                                          << ", issues# " << result.GetIssues().ToOneLineString()
-                                          << ", iteration# " << state->Backoff.GetIteration());
+                                      YDB_LOG_WARN_CTX(*actorSystem, "DescribeResourceId: DescribeTable failed",
+                                          {"selfId", selfId},
+                                          {"status", result.GetStatus()},
+                                          {"issues", result.GetIssues().ToOneLineString()},
+                                          {"iteration", state->Backoff.GetIteration()});
 
                                       if (IsRetryableError(result) && state->Backoff.HasMore()) {
                                           auto delay = state->Backoff.Next();
@@ -239,32 +246,43 @@ private:
                                       }
                                       return;
                                   }
-                                  LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
-                                          "DescribeResourceId: SelfId=" << selfId << " Succeed");
+                                  YDB_LOG_DEBUG_CTX(*actorSystem, "DescribeResourceId: Succeed",
+                                      {"selfId", selfId});
 
                                   for (const auto& [k, v] : result.GetTableDescription().GetAttributes()) {
-                                      LOG_TRACE_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
-                                              "DescribeResourceId: SelfId=" << selfId << " key=" << k << " value=" << v);
+                                      YDB_LOG_TRACE_CTX(*actorSystem, "DescribeResourceId",
+                                          {"selfId", selfId},
+                                          {"key", k},
+                                          {"value", v});
                                       if (k == "cloud_id") {
-                                          LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " Resolved ResourceId=" << v);
+                                          YDB_LOG_DEBUG_CTX(*actorSystem, "DescribeResourceId: Resolved",
+                                              {"selfId", selfId},
+                                              {"resourceId", v});
                                           state->Promise.SetValue(TEvDescribeResourceIdResponse::TDescription(TString(v)));
                                           return;
                                       }
                                   }
-                                  LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " cloud_id not found");
+                                  YDB_LOG_WARN_CTX(*actorSystem, "DescribeResourceId: cloud_id not found",
+                                      {"selfId", selfId});
                                   state->Promise.SetValue(TEvDescribeResourceIdResponse::TDescription(""));
                               } catch(const std::exception& ex) {
-                                  LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
+                                  YDB_LOG_WARN_CTX(*actorSystem, "DescribeResourceId: got",
+                                      {"selfId", selfId},
+                                      {"exception", ex.what()});
                                   state->Promise.SetException(std::current_exception());
                               }
                           });
                   } catch(const std::exception& ex) {
-                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
+                    YDB_LOG_WARN_CTX(*actorSystem, "DescribeResourceId: got",
+                        {"selfId", selfId},
+                        {"exception", ex.what()});
                     state->Promise.SetException(std::current_exception());
                   }
             });
         } catch(const std::exception& ex) {
-            LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
+            YDB_LOG_WARN_CTX(*actorSystem, "DescribeResourceId: got",
+                {"selfId", selfId},
+                {"exception", ex.what()});
             state->Promise.SetException(std::current_exception());
         }
     }

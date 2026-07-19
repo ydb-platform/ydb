@@ -29,6 +29,8 @@
 #include <exception>
 #include <forward_list>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -76,7 +78,9 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Bootstrap, StreamingDisposition: " << (Ctx->UserRequestContext->StreamingDisposition ? Ctx->UserRequestContext->StreamingDisposition->DebugString() : "null"));
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Bootstrap",
+            {"logPrefix", LogPrefix()},
+            {"streamingDisposition", (Ctx->UserRequestContext->StreamingDisposition ? Ctx->UserRequestContext->StreamingDisposition->DebugString() : "null")});
         Become(&TThis::StateFuncCreating);
     }
 
@@ -141,16 +145,20 @@ private:
 
     void HandleCreatingFinished() {
         if (FinishInfo.IsFinished()) {
-            LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Script execution metadata saved after failure, continue finishing");
+            YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Script execution metadata saved after failure, continue finishing",
+                {"logPrefix", LogPrefix()});
             Finish(); // Continue finishing
             return;
         }
 
-        LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Script execution metadata saved, creating new session");
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Script execution metadata saved, creating new session",
+            {"logPrefix", LogPrefix()});
         Become(&TThis::StateFuncInitialize);
 
         ScriptLeaseWatcherActor.Id = RegisterWithSameMailbox(CreateScriptLeaseWatcherActor(Ctx));
-        LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Started ScriptLeaseWatcherActor: " << ScriptLeaseWatcherActor.Id);
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Started",
+            {"logPrefix", LogPrefix()},
+            {"scriptLeaseWatcherActor", ScriptLeaseWatcherActor.Id});
 
         auto ev = std::make_unique<TEvKqp::TEvCreateSessionRequest>();
         ev->Record.SetTraceId(Ctx->UserRequestContext->TraceId);
@@ -164,7 +172,9 @@ private:
     }
 
     void HandleCancellation(TEvKqp::TEvCancelScriptExecutionRequest::TPtr& ev) {
-        LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Got cancel request: " << ev->Sender);
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got cancel",
+            {"logPrefix", LogPrefix()},
+            {"request", ev->Sender});
 
         CancelRequests.emplace_front(std::move(ev));
 
@@ -174,7 +184,9 @@ private:
     }
 
     void HandleCheckAlive(TEvCheckAliveRequest::TPtr& ev) {
-        LOG_WARN_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Lease was expired in database, checker actor: " << ev->Sender);
+        YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Lease was expired in database, checker",
+            {"logPrefix", LogPrefix()},
+            {"actor", ev->Sender});
         Send(ev->Sender, new TEvCheckAliveResponse());
     }
 
@@ -192,7 +204,10 @@ private:
         const auto& record = ev->Get()->Record;
         if (const auto status = record.GetYdbStatus(); status != Ydb::StatusIds::SUCCESS) {
             const auto resourceExhausted = record.GetResourceExhausted();
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Create new session failed: " << status << ", resource exhausted: " << resourceExhausted);
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Create new session resource",
+                {"logPrefix", LogPrefix()},
+                {"failed", status},
+                {"exhausted", resourceExhausted});
 
             auto error = TStringBuilder() << "Create new session failed with " << status;
 
@@ -211,13 +226,16 @@ private:
         QueryRequest->Record.MutableRequest()->SetSessionId(Ctx->UserRequestContext->SessionId);
 
         if (FinishInfo.IsFinished()) {
-            LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Session created after finish, continue finishing");
+            YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Session created after finish, continue finishing",
+                {"logPrefix", LogPrefix()});
             Finish();
             return;
         }
 
         if (session.GetNodeId() != SelfId().NodeId()) {
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"New session started on unexpected node: " << session.GetNodeId());
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "New session started on unexpected",
+                {"logPrefix", LogPrefix()},
+                {"node", session.GetNodeId()});
             Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Session created on wrong node " << session.GetNodeId() << ", expected local session on node " << SelfId().NodeId());
             return;
         }
@@ -226,7 +244,10 @@ private:
 
         const auto& physicalGraph = QueryRequest->GetQueryPhysicalGraph();
         ScriptResultHandlerActor.Id = RegisterWithSameMailbox(CreateScriptResultHandlerActor(Ctx, physicalGraph ? std::optional(*physicalGraph) : std::nullopt, QueryServiceConfig));
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Started ScriptResultHandlerActor: " << ScriptResultHandlerActor.Id << ", starting query, has physical graph: " << (physicalGraph ? "YES" : "NO"));
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Started starting query, has physical",
+            {"logPrefix", LogPrefix()},
+            {"scriptResultHandlerActor", ScriptResultHandlerActor.Id},
+            {"graph", (physicalGraph ? "YES" : "NO")});
 
         Ctx->UserRequestContext->RunScriptActorId = ScriptResultHandlerActor.Id;
         ActorIdToProto(ScriptResultHandlerActor.Id, QueryRequest->Record.MutableRequestActorId());
@@ -238,10 +259,16 @@ private:
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS || !FinishInfo.IsFinished()) {
             const auto& issues = ev->Get()->Issues;
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Got lease watcher finished: " << ev->Sender << " with status " << status << ", issues: " << issues.ToOneLineString());
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got lease watcher with status",
+                {"logPrefix", LogPrefix()},
+                {"finished", ev->Sender},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
             Finish(status, AddRootIssue("Script lease watcher error", issues));
         } else {
-            LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Got lease watcher finished: " << ev->Sender);
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got lease watcher",
+                {"logPrefix", LogPrefix()},
+                {"finished", ev->Sender});
             Finish();
         }
     }
@@ -262,11 +289,17 @@ private:
             const auto& response = record.GetResponse();
             NYql::TIssues issues;
             NYql::IssuesFromMessage(response.GetQueryIssues(), issues);
-            LOG_WARN_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Ignored query response from " << ev->Sender << ", execution already finished, status: " << record.GetYdbStatus() << ", issues: " << issues.ToOneLineString());
+            YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Ignored query response from execution already finished",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender},
+                {"status", record.GetYdbStatus()},
+                {"issues", issues.ToOneLineString()});
             return;
         }
 
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Forward query response from " << ev->Sender << " to result handler");
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Forward query response from to result handler",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Sender", ev->Sender});
         Forward(ev, ScriptResultHandlerActor.Id);
     }
 
@@ -274,9 +307,15 @@ private:
         ScriptResultHandlerActor.Id = {};
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Got result handler finished: " << ev->Sender << " with status " << status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got result handler with status",
+                {"logPrefix", LogPrefix()},
+                {"finished", ev->Sender},
+                {"status", status},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
         } else {
-            LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Got result handler finished: " << ev->Sender);
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got result handler",
+                {"logPrefix", LogPrefix()},
+                {"finished", ev->Sender});
         }
 
         ExecutionInfo = std::move(ev->Get()->Info);
@@ -302,9 +341,17 @@ private:
         const auto& issues = ev->Get()->Issues;
         const auto& info = ev->Get()->Info;
         if (status != Ydb::StatusIds::SUCCESS) {
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Got finalize: " << ev->Sender << " with status " << status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got with status",
+                {"logPrefix", LogPrefix()},
+                {"finalize", ev->Sender},
+                {"status", status},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
         } else {
-            LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Got finalize: " << ev->Sender << ", already finished: " << info.AlreadyStopped << ", execution entry exists: " << info.ExecutionEntryExists);
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got already execution entry",
+                {"logPrefix", LogPrefix()},
+                {"finalize", ev->Sender},
+                {"finished", info.AlreadyStopped},
+                {"exists", info.ExecutionEntryExists});
         }
 
         const auto alreadyStopped = info.AlreadyStopped || FinishInfo.IsSuccess();
@@ -327,37 +374,48 @@ private:
 
     void Finish(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
         if (status != Ydb::StatusIds::SUCCESS) {
-            LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Finish with error " << status << ", issues: " << issues.ToOneLineString());
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Finish with error",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
         } else if (!FinishInfo.IsFailed()) {
-            LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Finish successfully");
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Finish successfully",
+                {"logPrefix", LogPrefix()});
         }
 
         FinishInfo.Update(status, std::move(issues));
 
         if (ScriptResultHandlerActor.Id) {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Stop script result handler " << ScriptResultHandlerActor.Id);
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Stop script result handler",
+                {"logPrefix", LogPrefix()},
+                {"#_ScriptResultHandlerActor.Id", ScriptResultHandlerActor.Id});
             ScriptResultHandlerActor.Stop(SelfId());
             return;
         }
 
         if (SessionState.WaitCreation) {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Wait for session creation before exit");
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Wait for session creation before exit",
+                {"logPrefix", LogPrefix()});
             return;
         }
 
         if (SessionState.SessionOpen) {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Close session");
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Close session",
+                {"logPrefix", LogPrefix()});
             SessionState.Close(SelfId(), *Ctx);
         }
 
         if (ScriptLeaseWatcherActor.Id) {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Stop script lease watcher " << ScriptLeaseWatcherActor.Id);
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Stop script lease watcher",
+                {"logPrefix", LogPrefix()},
+                {"#_ScriptLeaseWatcherActor.Id", ScriptLeaseWatcherActor.Id});
             ScriptLeaseWatcherActor.Stop(SelfId());
             return;
         }
 
         if (!WaitFinalizationRequest) {
-            LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Start script execution finalization");
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Start script execution finalization",
+                {"logPrefix", LogPrefix()});
             Become(&TThis::StateFuncFinalize);
 
             const auto cancelledByUser = !CancelRequests.empty();
@@ -387,7 +445,10 @@ private:
             Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptFinalizeRequest.release());
             WaitFinalizationRequest = true;
         } else {
-            LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() <<"Skip finish with error " << *FinishInfo.Status << ", issues: " << FinishInfo.Issues.ToOneLineString() << ", already waiting finalization");
+            YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Skip finish with error already waiting finalization",
+                {"logPrefix", LogPrefix()},
+                {"#_*FinishInfo.Status", *FinishInfo.Status},
+                {"issues", FinishInfo.Issues.ToOneLineString()});
         }
     }
 

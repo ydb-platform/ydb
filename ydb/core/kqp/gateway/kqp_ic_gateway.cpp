@@ -42,6 +42,8 @@
 
 #include <ydb/core/protos/auth.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -302,8 +304,9 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received abort execution event for scan query: " << msg);
+        YDB_LOG_DEBUG_CTX(ctx, "Received abort execution event for scan",
+            {"selfId", SelfId()},
+            {"query", msg});
 
         TBase::HandleError(msg, ctx);
     }
@@ -399,8 +402,9 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, this->SelfId()
-            << "Received abort execution event for data query: " << msg);
+        YDB_LOG_DEBUG_CTX(ctx, "Received abort execution event for data",
+            {"#_this->SelfId", this->SelfId()},
+            {"query", msg});
 
         TBase::HandleError(msg, ctx);
     }
@@ -465,8 +469,9 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received abort execution event for query: " << msg);
+        YDB_LOG_DEBUG_CTX(ctx, "Received abort execution event",
+            {"selfId", SelfId()},
+            {"query", msg});
 
         TBase::HandleError(msg, ctx);
     }

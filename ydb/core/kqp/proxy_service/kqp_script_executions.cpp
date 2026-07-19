@@ -60,6 +60,8 @@
 #include <memory>
 #include <vector>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
+
 namespace NKikimr::NKqp {
 
 using namespace NKikimr::NKqp::NPrivate;
@@ -287,7 +289,9 @@ public:
 protected:
     bool ValidateUserSID() {
         if (const auto& error = CheckScriptExecutionAccess(UserSID)) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Token validation failed: " << error);
+            YDB_LOG_WARN("[ScriptExecutions] Token validation",
+                {"logPrefix", LogPrefix()},
+                {"failed", error});
             TBase::Finish(Ydb::StatusIds::UNAUTHORIZED, error);
             return false;
         }
@@ -301,7 +305,9 @@ protected:
         }
 
         if (const auto& ownerUser = result.ColumnParser("user_token").GetOptionalUtf8(); ownerUser && *ownerUser != *UserSID) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Access denied for user " << *UserSID);
+            YDB_LOG_WARN("[ScriptExecutions] Access denied for user",
+                {"logPrefix", LogPrefix()},
+                {"#_*UserSID", *UserSID});
             TBase::Finish(Ydb::StatusIds::UNAUTHORIZED, "Access denied. User is not owner of script execution operation.");
             return false;
         }
@@ -493,7 +499,9 @@ public:
 private:
     void OnRunQuery() override {
         const auto metaTtl = std::min(MaxRunTime.MicroSeconds(), NYql::NUdf::MAX_TIMESTAMP - 1);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Creating query in database, meta ttl: " << TDuration::MicroSeconds(metaTtl));
+        YDB_LOG_DEBUG("[ScriptExecutions] Creating query in database, meta",
+            {"logPrefix", LogPrefix()},
+            {"ttl", TDuration::MicroSeconds(metaTtl)});
 
         constexpr char sql[] = R"(
             -- TCreateScriptOperationQuery::OnRunQuery
@@ -614,11 +622,12 @@ private:
     }
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Create script execution operation"
-            << ", RetryState: " << RetryState.ShortDebugString()
-            << ", has PhysicalGraph: " << PhysicalGraph.has_value()
-            << ", Result: " << status
-            << ", Issues: " << issues.ToOneLineString());
+        YDB_LOG_DEBUG("[ScriptExecutions] Create script execution operation has",
+            {"logPrefix", LogPrefix()},
+            {"retryState", RetryState.ShortDebugString()},
+            {"physicalGraph", PhysicalGraph.has_value()},
+            {"result", status},
+            {"issues", issues.ToOneLineString()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
             Send(Owner, new TEvPrivate::TEvCreateScriptOperationResponse(ExecutionId, std::move(issues)));
@@ -713,17 +722,27 @@ public:
         }
 
         const auto& creatorId = Register(TCreateScriptOperationQuery::MakeRetry(SelfId(), ExecutionId, RunScriptActorId, ev.Record, std::move(meta), MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, std::move(disposition), ev.Generation));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Bootstrap. Start TCreateScriptOperationQuery " << creatorId << ", RunScriptActorId: " << RunScriptActorId);
+        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap. Start TCreateScriptOperationQuery",
+            {"logPrefix", LogPrefix()},
+            {"creatorId", creatorId},
+            {"runScriptActorId", RunScriptActorId});
     }
 
     void Handle(TEvPrivate::TEvCreateScriptOperationResponse::TPtr& ev) {
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Create script operation " << ev->Sender << " failed " << status << ", Issues: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Create script operation failed",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender},
+                {"status", status},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             SendFailResponse(status, AddRootIssue("Internal error. Failed to save meta information about new script execution", ev->Get()->Issues));
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Create script operation " << ev->Sender << " succeeded, RunScriptActorId: " << RunScriptActorId);
+        YDB_LOG_DEBUG("[ScriptExecutions] Create script operation succeeded",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Sender", ev->Sender},
+            {"runScriptActorId", RunScriptActorId});
 
         Send(Event->Sender, new TEvKqp::TEvScriptResponse(
             ScriptExecutionOperationFromExecutionId(ev->Get()->ExecutionId),
@@ -736,7 +755,9 @@ public:
     }
 
     bool OnUnhandledException(const std::exception& ex) final {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Got unexpected exception: " << ex.what());
+        YDB_LOG_ERROR("[ScriptExecutions] Got unexpected",
+            {"logPrefix", LogPrefix()},
+            {"exception", ex.what()});
         SendFailResponse(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Got unexpected exception: " << ex.what());
         return true;
     }
@@ -832,7 +853,9 @@ public:
 
 private:
     void OnRunQuery() override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Update lease on duration: " << LeaseDuration);
+        YDB_LOG_DEBUG("[ScriptExecutions] Update lease",
+            {"logPrefix", LogPrefix()},
+            {"duration", LeaseDuration});
 
         constexpr char sql[] = R"(
             -- TScriptLeaseUpdaterQuery::OnRunQuery
@@ -868,7 +891,7 @@ private:
 
     void UpdateLease() {
         // Updating the lease in the table can take a long time,
-        // so the query uses CurrentUtcTimestamp(), 
+        // so the query uses CurrentUtcTimestamp(),
         // but for the next update, LeaseDeadline is used,
         // which corresponds to a strictly shorter time.
         LeaseDeadline = TInstant::Now() + LeaseDuration;
@@ -1133,7 +1156,10 @@ private:
             .StreamingDisposition = streamingDisposition,
         }, QueryServiceConfig));
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Restart with RunScriptActorId: " << RunScriptActorId << ", has PhysicalGraph: " << hasPhysicalGraph);
+        YDB_LOG_DEBUG("[ScriptExecutions] Restart with has",
+            {"logPrefix", LogPrefix()},
+            {"runScriptActorId", RunScriptActorId},
+            {"physicalGraph", hasPhysicalGraph});
         RestartScriptExecution();
     }
 
@@ -1250,7 +1276,9 @@ public:
 
 private:
     void OnRunQuery() override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Start, Cookie: " << Cookie);
+        YDB_LOG_DEBUG("[ScriptExecutions] Start",
+            {"logPrefix", LogPrefix()},
+            {"cookie", Cookie});
 
         constexpr char sql[] = R"(
             -- TCheckLeaseStatusQueryActor::OnRunQuery
@@ -1460,7 +1488,10 @@ public:
 
     void Bootstrap() {
         const auto& checkerId = Register(TCheckLeaseStatusQueryActor::MakeRetry(SelfId(), Database, ExecutionId, TCheckLeaseStatusQueryActor::TSettings{}));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Bootstrap, Cookie: " << Settings.Cookie << ". Start TCheckLeaseStatusQueryActor " << checkerId);
+        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap, Start TCheckLeaseStatusQueryActor",
+            {"logPrefix", LogPrefix()},
+            {"cookie", Settings.Cookie},
+            {"checkerId", checkerId});
         Become(&TThis::StateFunc);
     }
 
@@ -1487,30 +1518,42 @@ private:
     void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
         auto& event = *ev->Get();
         if (event.Status != Ydb::StatusIds::SUCCESS) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Failed to check lease " << ev->Sender << " status, Status: " << event.Status << ", Issues: " << event.Issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Failed to check lease status",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender},
+                {"status", event.Status},
+                {"issues", event.Issues.ToOneLineString()});
             return Reply(event.Status, std::move(event.Issues));
         }
 
         if (!event.EntryExists) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Lease check " << ev->Sender << " finished with not found, Status: " << event.Status << ", Issues: " << event.Issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Lease check finished with not found",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender},
+                {"status", event.Status},
+                {"issues", event.Issues.ToOneLineString()});
             return ReplyNotFound();
         }
 
         RunScriptActorId = event.RunScriptActorId;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Extracted script execution operation " << ev->Sender
-            << ", Status: " << event.Status
-            << ", Issues: " << event.Issues.ToOneLineString()
-            << ", LeaseExpired: " << event.LeaseExpired
-            << ", RetryRequired: " << event.RetryRequired
-            << (event.OperationStatus ? ", OperationStatus: " + Ydb::StatusIds::StatusCode_Name(*event.OperationStatus) : "")
-            << (event.ExecutionStatus ? ", ExecutionStatus: " + Ydb::Query::ExecStatus_Name(*event.ExecutionStatus) : "")
-            << ", OperationIssues: " << event.OperationIssues.ToOneLineString()
-            << (event.FinalizationStatus ? (TStringBuilder() << ", FinalizationStatus: " << static_cast<ui64>(*event.FinalizationStatus)) : TStringBuilder())
-            << ", RunScriptActorId: " << RunScriptActorId
-            << ", LeaseGeneration: " << event.LeaseGeneration);
+        TStringBuilder finStatus = (event.FinalizationStatus ? (TStringBuilder() << ", FinalizationStatus: " << static_cast<ui64>(*event.FinalizationStatus)) : TStringBuilder());
+        YDB_LOG_DEBUG("[ScriptExecutions] Extracted script execution operation",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Sender", ev->Sender},
+            {"status", event.Status},
+            {"issues", event.Issues.ToOneLineString()},
+            {"leaseExpired", event.LeaseExpired},
+            {"retryRequired", event.RetryRequired},
+            {"#_num_0", (event.OperationStatus ? ", OperationStatus: " + Ydb::StatusIds::StatusCode_Name(*event.OperationStatus) : "")},
+            {"#_num_1", (event.ExecutionStatus ? ", ExecutionStatus: " + Ydb::Query::ExecStatus_Name(*event.ExecutionStatus) : "")},
+            {"operationIssues", event.OperationIssues.ToOneLineString()},
+            {"finalizationStatus", finStatus},
+            {"runScriptActorId", RunScriptActorId},
+            {"leaseGeneration", event.LeaseGeneration});
 
         if (!event.LeaseExpired) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Lease finalization skipped, lease not expired");
+            YDB_LOG_NOTICE("[ScriptExecutions] Lease finalization skipped, lease not expired",
+                {"logPrefix", LogPrefix()});
             LeaseVerified = true;
             return Reply();
         }
@@ -1518,9 +1561,13 @@ private:
         if (event.RetryRequired) {
             if (Settings.AllowRestart) {
                 const auto& restartActorId = Register(TRestartScriptOperationQuery::MakeRetry(SelfId(), Database, ExecutionId, event.LeaseGeneration, QueryServiceConfig, Counters));
-                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Restarting script execution " << restartActorId << ", lease generation: " << event.LeaseGeneration);
+                YDB_LOG_NOTICE("[ScriptExecutions] Restarting script execution lease",
+                    {"logPrefix", LogPrefix()},
+                    {"restartActorId", restartActorId},
+                    {"generation", event.LeaseGeneration});
             } else {
-                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Lease finalization skipped, script execution wait retry");
+                YDB_LOG_NOTICE("[ScriptExecutions] Lease finalization skipped, script execution wait retry",
+                    {"logPrefix", LogPrefix()});
                 Reply();
             }
             return;
@@ -1541,12 +1588,13 @@ private:
             execStatus = *event.ExecutionStatus;
         }
 
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Script execution lease is expired"
-            << ", FinalizationStatus: " << finalizationStatus
-            << ", Status: " << status
-            << ", ExecStatus: " << Ydb::Query::ExecStatus_Name(execStatus)
-            << ", Issues: " << issues.ToOneLineString()
-            << ", LeaseGeneration: " << event.LeaseGeneration);
+        YDB_LOG_WARN("[ScriptExecutions] Script execution lease is expired",
+            {"logPrefix", LogPrefix()},
+            {"finalizationStatus", finalizationStatus},
+            {"status", status},
+            {"execStatus", Ydb::Query::ExecStatus_Name(execStatus)},
+            {"issues", issues.ToOneLineString()},
+            {"leaseGeneration", event.LeaseGeneration});
 
         ScriptFinalizeRequest = std::make_unique<TEvScriptFinalizeRequest>(
             finalizationStatus,
@@ -1574,9 +1622,13 @@ private:
 
     void Handle(TEvCheckAliveResponse::TPtr& ev) {
         if (WaitFinishQuery) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Script execution " << ev->Sender << " lease was verified after started finalization");
+            YDB_LOG_WARN("[ScriptExecutions] Script execution lease was verified after started finalization",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender});
         } else {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Script execution " << ev->Sender << " lease successfully verified");
+            YDB_LOG_NOTICE("[ScriptExecutions] Script execution lease successfully verified",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender});
             LeaseVerified = true;
             Reply();
         }
@@ -1587,20 +1639,25 @@ private:
             case EWakeup::RetryCheckAlive:
                 WaitRetryCheckAlive = false;
                 if (WaitFinishQuery) {
-                    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Skipped retry check alive query, already waiting finish query");
+                    YDB_LOG_NOTICE("[ScriptExecutions] Skipped retry check alive query, already waiting finish query",
+                        {"logPrefix", LogPrefix()});
                 } else {
                     CheckAliveRetries++;
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Start check alive request #" << CheckAliveRetries + 1);
+                    YDB_LOG_DEBUG("[ScriptExecutions] Start check alive request",
+                        {"logPrefix", LogPrefix()},
+                        {"#_CheckAliveRetries + 1", CheckAliveRetries + 1});
                     Send(RunScriptActorId, new TEvCheckAliveRequest(), CheckAliveFlags);
                     Schedule(CHECK_ALIVE_REQUEST_SOFT_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveSoftTimeout)));
                 }
                 break;
             case EWakeup::CheckAliveSoftTimeout:
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Deliver TRunScriptActor check alive request soft timeout, retry check alive");
+                YDB_LOG_WARN("[ScriptExecutions] Deliver TRunScriptActor check alive request soft timeout, retry check alive",
+                    {"logPrefix", LogPrefix()});
                 RetryCheckAlive(/* longDelay */ false);
                 break;
             case EWakeup::CheckAliveHardTimeout:
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Deliver TRunScriptActor check alive request hard timeout, start finalization");
+                YDB_LOG_WARN("[ScriptExecutions] Deliver TRunScriptActor check alive request hard timeout, start finalization",
+                    {"logPrefix", LogPrefix()});
                 RunScriptFinalizeRequest();
                 break;
         }
@@ -1614,16 +1671,23 @@ private:
             // 2. Script execution may be already under finalization
             // 3. Script execution may be retried
             // We will start finalization only in first and second cases
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Got delivery problem to " << ev->Sender << " TRunScriptActor not found, start finalization");
+            YDB_LOG_WARN("[ScriptExecutions] Got delivery problem to TRunScriptActor not found, start finalization",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender});
             RunScriptFinalizeRequest();
         } else {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Got delivery problem to " << ev->Sender << ", node with TRunScriptActor unavailable, reason: " << reason);
+            YDB_LOG_WARN("[ScriptExecutions] Got delivery problem to node with TRunScriptActor unavailable",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender},
+                {"reason", reason});
             RetryCheckAlive(/* longDelay */ true);
         }
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Node " << ev->Get()->NodeId << " with TRunScriptActor was disconnected, retry check alive");
+        YDB_LOG_WARN("[ScriptExecutions] Node with TRunScriptActor was disconnected, retry check alive",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Get()->NodeId", ev->Get()->NodeId});
         RetryCheckAlive(/* longDelay */ false);
     }
 
@@ -1631,9 +1695,15 @@ private:
         const auto status = ev->Get()->Status;
         const auto& issues = ev->Get()->Issues;
         if (status != Ydb::StatusIds::SUCCESS) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Failed to restart " << ev->Sender << " script execution operation, status: " << status << ", issues: " << issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Failed to restart script execution operation",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Successfully restarted " << ev->Sender << " script execution operation");
+            YDB_LOG_DEBUG("[ScriptExecutions] Successfully restarted script execution operation",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender});
         }
 
         Reply(status, AddRootIssue("Restart script execution operation", issues, /* addEmptyRoot  */ false));
@@ -1642,12 +1712,19 @@ private:
     void HandleFinalized(TEvScriptExecutionFinished::TPtr& ev) {
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Failed to finalize " << ev->Sender << " script execution operation, status: " << status << ", issues: " << issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Failed to finalize script execution operation",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
             return Reply(status, AddRootIssue("Finish script execution operation failed", issues));
         }
 
         const auto& info = ev->Get()->Info;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Successfully finalized " << ev->Sender << " script execution operation, entry exists: " << info.ExecutionEntryExists);
+        YDB_LOG_DEBUG("[ScriptExecutions] Successfully finalized script execution operation, entry",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Sender", ev->Sender},
+            {"exists", info.ExecutionEntryExists});
 
         if (info.ExecutionEntryExists) {
             Reply();
@@ -1665,12 +1742,13 @@ private:
         Y_VALIDATE(ScriptFinalizeRequest, "Script finalize request is not set");
 
         const auto& description = ScriptFinalizeRequest->Description;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Run script finalization request"
-            << ", FinalizationStatus: " << static_cast<i32>(description.FinalizationStatus)
-            << ", OperationStatus: " << description.OperationStatus
-            << ", ExecStatus: " << Ydb::Query::ExecStatus_Name(description.ExecStatus)
-            << ", Issues: " << description.Issues.ToOneLineString()
-            << ", LeaseGeneration: " << description.LeaseGeneration);
+        YDB_LOG_DEBUG("[ScriptExecutions] Run script finalization request",
+            {"logPrefix", LogPrefix()},
+            {"finalizationStatus", static_cast<i32>(description.FinalizationStatus)},
+            {"operationStatus", description.OperationStatus},
+            {"execStatus", Ydb::Query::ExecStatus_Name(description.ExecStatus)},
+            {"issues", description.Issues.ToOneLineString()},
+            {"leaseGeneration", description.LeaseGeneration});
 
         Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), ScriptFinalizeRequest.release());
     }
@@ -1694,23 +1772,29 @@ private:
         }
 
         if (const auto delay = CheckAliveRetryState->GetNextRetryDelay(longDelay)) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Schedule retry check alive in " << *delay);
+            YDB_LOG_DEBUG("[ScriptExecutions] Schedule retry check alive",
+                {"logPrefix", LogPrefix()},
+                {"#_*delay", *delay});
             Schedule(*delay, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RetryCheckAlive)));
             WaitRetryCheckAlive = true;
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Retry limit " << MAX_CHECK_ALIVE_RETRIES << " exceeded for TRunScriptActor check alive, start finalization");
+            YDB_LOG_ERROR("[ScriptExecutions] Retry limit exceeded for TRunScriptActor check alive, start finalization",
+                {"logPrefix", LogPrefix()},
+                {"MAXCHECKALIVERETRIES", MAX_CHECK_ALIVE_RETRIES});
             RunScriptFinalizeRequest();
         }
     }
 
     void ReplyNotFound() {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Script execution operation not found");
+        YDB_LOG_WARN("[ScriptExecutions] Script execution operation not found",
+            {"logPrefix", LogPrefix()});
         EntryExists = false;
         return Reply(Settings.FailOnNotFound ? Ydb::StatusIds::NOT_FOUND : Ydb::StatusIds::SUCCESS, "Script execution operation not found");
     }
 
     void Reply() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Reply success");
+        YDB_LOG_DEBUG("[ScriptExecutions] Reply success",
+            {"logPrefix", LogPrefix()});
         Send(ReplyActorId, new TEvPrivate::TEvFinalizeScriptLeaseResult(Ydb::StatusIds::SUCCESS, {
             .LeaseVerified = LeaseVerified,
             .ExecutionEntryExists = EntryExists,
@@ -1723,7 +1807,10 @@ private:
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Reply " << status << ", issues: " << issues.ToOneLineString());
+        YDB_LOG_WARN("[ScriptExecutions] Reply",
+            {"logPrefix", LogPrefix()},
+            {"status", status},
+            {"issues", issues.ToOneLineString()});
         Send(ReplyActorId, new TEvPrivate::TEvFinalizeScriptLeaseResult(status, {
             .LeaseVerified = LeaseVerified,
             .ExecutionEntryExists = EntryExists,
@@ -1861,7 +1948,9 @@ private:
     }
 
     void DeleteScriptResults() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Do deleting of script results, amount result sets: " << ResultSets.size());
+        YDB_LOG_DEBUG("[ScriptExecutions] Do deleting of script results, amount result",
+            {"logPrefix", LogPrefix()},
+            {"sets", ResultSets.size()});
 
         if (ResultSets.empty()) {
             Finish();
@@ -1869,7 +1958,11 @@ private:
         }
 
         auto& resultSet = ResultSets.back();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Deleting rows from result set #" << resultSet.Id << ", remains rows range [" << resultSet.MinRowId << "; " << resultSet.MaxRowId << "]");
+        YDB_LOG_DEBUG("[ScriptExecutions] Deleting rows from result set remains rows range",
+            {"logPrefix", LogPrefix()},
+            {"#_resultSet.Id", resultSet.Id},
+            {"#_resultSet.MinRowId", resultSet.MinRowId},
+            {"#_resultSet.MaxRowId", resultSet.MaxRowId});
 
         constexpr char sql[] = R"(
             -- TForgetScriptExecutionOperationQueryActor::DeleteScriptResults
@@ -1914,7 +2007,10 @@ private:
         auto& resultSet = ResultSets.back();
         resultSet.MaxRowId -= NUMBER_ROWS_IN_BATCH + 1;
         if (resultSet.MaxRowId < resultSet.MinRowId) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Deleting of script result set #" << resultSet.Id << " is finished, remains result sets: " << ResultSets.size() - 1);
+            YDB_LOG_DEBUG("[ScriptExecutions] Deleting of script result set is finished, remains result",
+                {"logPrefix", LogPrefix()},
+                {"#_resultSet.Id", resultSet.Id},
+                {"sets", ResultSets.size() - 1});
             ResultSets.pop_back();
         }
 
@@ -1962,7 +2058,9 @@ public:
         ExecutionId = std::move(*executionId);
 
         const auto& checkerId = Register(TCheckLeaseStatusQueryActor::MakeRetry(SelfId(), Database, ExecutionId, TCheckLeaseStatusQueryActor::TSettings{.UserSID = userSID}));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Bootstrap. Start TCheckLeaseStatusQueryActor " << checkerId);
+        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap. Start TCheckLeaseStatusQueryActor",
+            {"logPrefix", LogPrefix()},
+            {"checkerId", checkerId});
 
         Become(&TThis::StateFunc);
     }
@@ -1977,7 +2075,11 @@ private:
     void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Lease check " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Lease check failed",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
             Reply(status, AddRootIssue("Check lease status", issues));
             return;
         }
@@ -1987,44 +2089,64 @@ private:
 
         if (ExecutionEntryExists && (!ev->Get()->OperationStatus || ev->Get()->FinalizationStatus || ev->Get()->WaitRetry)) {
             if (Request->Get()->Settings.CancelIfRunning) {
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Lease check " << ev->Sender << " finished, but operation is still running. Cancel it");
+                YDB_LOG_WARN("[ScriptExecutions] Lease check finished, but operation is still running. Cancel it",
+                    {"logPrefix", LogPrefix()},
+                    {"#_ev->Sender", ev->Sender});
                 Send(MakeKqpProxyID(SelfId().NodeId()), new TEvCancelScriptExecutionOperation(Database, Request->Get()->OperationId, Request->Get()->UserSID, {
                     .FailOnNotFound = false,
                     .FailOnAlreadyStopped = false,
                 }));
             } else {
-                LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Lease check " << ev->Sender << " finished, but operation is still running");
+                YDB_LOG_INFO("[ScriptExecutions] Lease check finished, but operation is still running",
+                    {"logPrefix", LogPrefix()},
+                    {"#_ev->Sender", ev->Sender});
                 Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Operation is still running");
             }
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Lease check " << ev->Sender << " success, execution entry exists: " << ExecutionEntryExists);
+        YDB_LOG_DEBUG("[ScriptExecutions] Lease check success, execution entry",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Sender", ev->Sender},
+            {"exists", ExecutionEntryExists});
         StartForgetOperation();
     }
 
     void Handle(TEvCancelScriptExecutionOperationResponse::TPtr& ev) {
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Cancel operation " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Cancel operation failed",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
             Reply(status, AddRootIssue("Cancel script execution operation", issues));
             return;
         }
 
         ExecutionEntryExists = ev->Get()->ExecutionEntryExists;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Cancel script execution operation " << ev->Sender << " finished, execution entry exists: " << ExecutionEntryExists);
+        YDB_LOG_DEBUG("[ScriptExecutions] Cancel script execution operation finished, execution entry",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Sender", ev->Sender},
+            {"exists", ExecutionEntryExists});
         StartForgetOperation();
     }
 
     void Handle(TEvForgetScriptExecutionOperationResponse::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Forget operation " << ev->Sender << " finished " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+        YDB_LOG_DEBUG("[ScriptExecutions] Forget operation finished",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Sender", ev->Sender},
+            {"#_ev->Get()->Status", ev->Get()->Status},
+            {"issues", ev->Get()->Issues.ToOneLineString()});
         Reply(ev->Get()->Status, AddRootIssue("Forget script execution operation", ev->Get()->Issues, /* addEmptyRoot */ false));
     }
 
     void StartForgetOperation() {
         const auto& forgetId = Register(TForgetScriptExecutionOperationQueryActor::MakeRetry(SelfId(), ExecutionId, Database, std::move(ResultSetMetas)));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Start TForgetOperationRetryActor " << forgetId);
+        YDB_LOG_DEBUG("[ScriptExecutions] Start TForgetOperationRetryActor",
+            {"logPrefix", LogPrefix()},
+            {"forgetId", forgetId});
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
@@ -2036,9 +2158,13 @@ private:
         }
 
         if (status == Ydb::StatusIds::SUCCESS) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Reply success");
+            YDB_LOG_DEBUG("[ScriptExecutions] Reply success",
+                {"logPrefix", LogPrefix()});
         } else {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Reply " << status << ", issues: " << issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Reply",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
         }
 
         Send(Request->Sender, new TEvForgetScriptExecutionOperationResponse(status, std::move(issues)), /* flags */ 0, Request->Cookie);
@@ -2233,9 +2359,10 @@ private:
     }
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Finish"
-            << ", OperationStatus: " << (OperationStatus ? Ydb::StatusIds::StatusCode_Name(*OperationStatus) : "null")
-            << ", LeaseStatus: " << (LeaseStatus ? static_cast<i64>(*LeaseStatus) : -1));
+        YDB_LOG_DEBUG("[ScriptExecutions] Finish",
+            {"logPrefix", LogPrefix()},
+            {"operationStatus", (OperationStatus ? Ydb::StatusIds::StatusCode_Name(*OperationStatus) : "null")},
+            {"leaseStatus", (LeaseStatus ? static_cast<i64>(*LeaseStatus) : -1)});
 
         bool ready = !!OperationStatus;
         if (LeaseStatus && OperationStatus) {
@@ -2323,7 +2450,10 @@ private:
     }
 
     void OnRunQuery() override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"List with PageToken: " << PageToken << ", PageSize: " << PageSize);
+        YDB_LOG_DEBUG("[ScriptExecutions] List with",
+            {"logPrefix", LogPrefix()},
+            {"pageToken", PageToken},
+            {"pageSize", PageSize});
 
         if (!ValidateUserSID()) {
             return;
@@ -2525,13 +2655,15 @@ private:
             operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
             if (!operationStatus || !executionStatus) {
                 OperationStillRunning = true;
-                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Can not reset retry state then operation is running now");
+                YDB_LOG_NOTICE("[ScriptExecutions] Can not reset retry state then operation is running now",
+                    {"logPrefix", LogPrefix()});
                 return Finish();
             }
 
             if (result.ColumnParser("finalization_status").GetOptionalInt32()) {
                 OperationStillRunning = true;
-                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Can not reset retry state then operation is finalizing now");
+                YDB_LOG_NOTICE("[ScriptExecutions] Can not reset retry state then operation is finalizing now",
+                    {"logPrefix", LogPrefix()});
                 return Finish();
             }
 
@@ -2548,7 +2680,9 @@ private:
             if (const auto leaseState = result.ColumnParser("lease_state").GetOptionalInt32()) {
                 if (static_cast<ELeaseState>(*leaseState) != ELeaseState::WaitRetry) {
                     OperationStillRunning = true;
-                    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Can not reset retry state then operation is running or not finalized, lease state: " << static_cast<ELeaseState>(*leaseState));
+                    YDB_LOG_NOTICE("[ScriptExecutions] Can not reset retry state then operation is running or not finalized, lease",
+                        {"logPrefix", LogPrefix()},
+                        {"state", static_cast<ELeaseState>(*leaseState)});
                     return Finish();
                 }
 
@@ -2651,7 +2785,8 @@ public:
 
     void Bootstrap() {
         Become(&TThis::StateFunc);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Bootstrap");
+        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap",
+            {"logPrefix", LogPrefix()});
 
         UserSID = Request->Get()->UserSID;
         if (const auto& error = CheckScriptExecutionAccess(UserSID)) {
@@ -2688,7 +2823,11 @@ private:
     void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Check lease " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Check lease failed",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
             return Reply(status, AddRootIssue("Fetch script execution info failed", issues));
         }
 
@@ -2701,11 +2840,13 @@ private:
         const auto& operationStatus = ev->Get()->OperationStatus;
         const auto& finalizationStatus = ev->Get()->FinalizationStatus;
         const auto leaseExpired = ev->Get()->LeaseExpired;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Check lease " << ev->Sender << " success"
-            << ", operation status: " << (operationStatus ? Ydb::StatusIds::StatusCode_Name(*operationStatus) : "<null>")
-            << ", finalization status: " << (finalizationStatus ? ToString(*finalizationStatus) : "<null>")
-            << ", has retries: " << HasRetryPolicy
-            << ", lease expired: " << leaseExpired);
+        YDB_LOG_DEBUG("[ScriptExecutions] Check lease success has lease",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Sender", ev->Sender},
+            {"operationStatus", (operationStatus ? Ydb::StatusIds::StatusCode_Name(*operationStatus) : "<null>")},
+            {"finalizationStatus", (finalizationStatus ? ToString(*finalizationStatus) : "<null>")},
+            {"retries", HasRetryPolicy},
+            {"expired", leaseExpired});
 
         // Possible script execution states:
         // 1. Is running now
@@ -2736,17 +2877,24 @@ private:
         // In case of TLI (status ABORTED) retry cancel operation
         const auto status = ev->Get()->Status;
         if (status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::ABORTED) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Reset retry state " << ev->Sender << " failed " << status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Reset retry state failed",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender},
+                {"status", status},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             return Reply(status, AddRootIssue("Reset retry state failed", ev->Get()->Issues));
         }
 
         const auto& issues = ev->Get()->Issues;
         const auto& info = ev->Get()->Info;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Reset retry state " << ev->Sender << " finished " << status
-            << ", execution entry exists: " << info.ExecutionEntryExists
-            << ", operation still running: " << info.OperationStillRunning
-            << ", already stopped: " << info.AlreadyStopped
-            << ", issues: " << issues.ToOneLineString());
+        YDB_LOG_DEBUG("[ScriptExecutions] Reset retry state finished execution entry operation still already",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Sender", ev->Sender},
+            {"status", status},
+            {"exists", info.ExecutionEntryExists},
+            {"running", info.OperationStillRunning},
+            {"stopped", info.AlreadyStopped},
+            {"issues", issues.ToOneLineString()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
             if (!info.ExecutionEntryExists) {
@@ -2773,16 +2921,23 @@ private:
         // In case of TLI (status ABORTED) retry cancel operation
         const auto status = ev->Get()->Status;
         if (status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::ABORTED) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Finalize script execution " << ev->Sender << " failed " << status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Finalize script execution failed",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Sender", ev->Sender},
+                {"status", status},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             return Reply(status, AddRootIssue("Finalize script execution failed", ev->Get()->Issues));
         }
 
         const auto& issues = ev->Get()->Issues;
         const auto& info = ev->Get()->Info;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Finalize script execution " << ev->Sender << " finished " << status
-            << ", lease verified: " << info.LeaseVerified
-            << ", execution entry exists: " << info.ExecutionEntryExists
-            << ", issues: " << issues.ToOneLineString());
+        YDB_LOG_DEBUG("[ScriptExecutions] Finalize script execution finished lease execution entry",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Sender", ev->Sender},
+            {"status", status},
+            {"verified", info.LeaseVerified},
+            {"exists", info.ExecutionEntryExists},
+            {"issues", issues.ToOneLineString()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
             if (!info.ExecutionEntryExists) {
@@ -2814,15 +2969,22 @@ private:
         // In case of TLI (status ABORTED) retry cancel operation
         const auto status = ev->Get()->Record.GetStatus();
         if (status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::ABORTED) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Script execution cancel failed " << status << " from RunScriptActor: " << ev->Sender << ", issues: " << issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Script execution cancel failed",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"runScriptActor", ev->Sender},
+                {"issues", issues.ToOneLineString()});
             return Reply(status, AddRootIssue("Cancel script execution failed", issues));
         }
 
         const auto alreadyFinished = ev->Get()->Record.GetAlreadyFinished();
         const auto executionEntryExists = ev->Get()->Record.GetExecutionEntryExists();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Got cancel response from RunScriptActor: " << ev->Sender << ", status: " << status
-            << ", already finished: " << alreadyFinished
-            << ", issues: " << issues.ToOneLineString());
+        YDB_LOG_DEBUG("[ScriptExecutions] Got cancel response from already",
+            {"logPrefix", LogPrefix()},
+            {"runScriptActor", ev->Sender},
+            {"status", status},
+            {"finished", alreadyFinished},
+            {"issues", issues.ToOneLineString()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
             if (!executionEntryExists) {
@@ -2841,7 +3003,10 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         const auto reason = ev->Get()->Reason;
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Delivery failed " << reason << " to RunScriptActor: " << ev->Sender);
+        YDB_LOG_WARN("[ScriptExecutions] Delivery failed",
+            {"logPrefix", LogPrefix()},
+            {"reason", reason},
+            {"runScriptActor", ev->Sender});
 
         if (ev->Cookie != CancellationCookie || !RunScriptActor) {
             return;
@@ -2854,7 +3019,9 @@ private:
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         const auto nodeId = ev->Get()->NodeId;
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Delivery failed to RunScriptActor, node " << nodeId << " disconnected");
+        YDB_LOG_WARN("[ScriptExecutions] Delivery failed to RunScriptActor, node disconnected",
+            {"logPrefix", LogPrefix()},
+            {"nodeId", nodeId});
 
         if (!RunScriptActor || nodeId != RunScriptActor.NodeId()) {
             return;
@@ -2874,12 +3041,16 @@ private:
     void GetScriptExecutionOperationStatus() {
         WaitRetry = false;
         const auto& checkerId = Register(TCheckLeaseStatusQueryActor::MakeRetry(SelfId(), Request->Get()->Database, ExecutionId, TCheckLeaseStatusQueryActor::TSettings{.UserSID = UserSID}));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Start TCheckLeaseStatusQueryActor " << checkerId);
+        YDB_LOG_DEBUG("[ScriptExecutions] Start TCheckLeaseStatusQueryActor",
+            {"logPrefix", LogPrefix()},
+            {"checkerId", checkerId});
     }
 
     void ResetRetryPolicy() {
         const auto& resetActorId = Register(TResetScriptExecutionRetriesQueryActor::MakeRetry(SelfId(), Request->Get()->Database, ExecutionId));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Start TResetRetryStateRetryActor " << resetActorId);
+        YDB_LOG_DEBUG("[ScriptExecutions] Start TResetRetryStateRetryActor",
+            {"logPrefix", LogPrefix()},
+            {"resetActorId", resetActorId});
     }
 
     void FinalizeScriptLease() {
@@ -2887,12 +3058,16 @@ private:
             .AllowRestart = false,
             .FailOnNotFound = false,
         }));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Start TFinalizeScriptLeaseActor " << finalizeActorId);
+        YDB_LOG_DEBUG("[ScriptExecutions] Start TFinalizeScriptLeaseActor",
+            {"logPrefix", LogPrefix()},
+            {"finalizeActorId", finalizeActorId});
     }
 
     void SendCancelToRunScriptActor() {
         CancellationCookie++;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Send cancel request to RunScriptActor, CancellationCookie: " << CancellationCookie);
+        YDB_LOG_DEBUG("[ScriptExecutions] Send cancel request to RunScriptActor",
+            {"logPrefix", LogPrefix()},
+            {"cancellationCookie", CancellationCookie});
         ResetSessionSubscribe();
 
         ui64 flags = IEventHandle::FlagTrackDelivery;
@@ -2930,7 +3105,10 @@ private:
                 delay = TDuration::Zero();
             }
 
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Schedule retry for error: " << issues.ToOneLineString() << " in " << *delay);
+            YDB_LOG_WARN("[ScriptExecutions] Schedule retry for",
+                {"logPrefix", LogPrefix()},
+                {"error", issues.ToOneLineString()},
+                {"#_*delay", *delay});
             Issues.AddIssues(issues);
             Schedule(*delay, new TEvents::TEvWakeup());
             WaitRetry = true;
@@ -2945,13 +3123,15 @@ private:
     }
 
     void ReplyNotFound() {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Script execution operation not found");
+        YDB_LOG_WARN("[ScriptExecutions] Script execution operation not found",
+            {"logPrefix", LogPrefix()});
         EntryExists = false;
         return Reply(Request->Get()->Settings.FailOnNotFound ? Ydb::StatusIds::NOT_FOUND : Ydb::StatusIds::SUCCESS, "Script execution operation not found");
     }
 
     void ReplyAlreadyStopped() {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Script execution operation is already finished");
+        YDB_LOG_WARN("[ScriptExecutions] Script execution operation is already finished",
+            {"logPrefix", LogPrefix()});
         return Reply(Request->Get()->Settings.FailOnAlreadyStopped ? Ydb::StatusIds::PRECONDITION_FAILED : Ydb::StatusIds::SUCCESS, "Script execution operation is already finished");
     }
 
@@ -2959,9 +3139,14 @@ private:
         Issues.AddIssues(issues);
 
         if (status == Ydb::StatusIds::SUCCESS) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Reply success, issues: " << Issues.ToOneLineString());
+            YDB_LOG_DEBUG("[ScriptExecutions] Reply success",
+                {"logPrefix", LogPrefix()},
+                {"issues", Issues.ToOneLineString()});
         } else {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Reply failed, status: " << status << ", issues: " << Issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] Reply failed",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"issues", Issues.ToOneLineString()});
         }
 
         Send(Request->Sender, new TEvCancelScriptExecutionOperationResponse(status, EntryExists, std::move(Issues)));
@@ -3100,7 +3285,13 @@ private:
             .EndList()
             .Build();
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Save result #" << ResultSetId << ", FirstRow: " << FirstRow << ", AccumulatedSize: " << AccumulatedSize << ", rows to save: " << ResultSet.rows_size() << ", size to save: " << SavedSize);
+        YDB_LOG_DEBUG("[ScriptExecutions] Save result rows size",
+            {"logPrefix", LogPrefix()},
+            {"resultSetId", ResultSetId},
+            {"firstRow", FirstRow},
+            {"accumulatedSize", AccumulatedSize},
+            {"toSave", ResultSet.rows_size()},
+            {"#_dup_to_save", SavedSize});
 
         RunDataQuery(sql, &params);
     }
@@ -3143,14 +3334,22 @@ public:
 
         i64 numberRows = ResultSets.back().rows_size();
         const auto& saverId = Register(TSaveScriptExecutionResultQuery::MakeRetry(SelfId(), Database, ExecutionId, ResultSetId, ExpireAt, FirstRow, AccumulatedSize, ResultSets.back()));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Start saving rows range [" << FirstRow << "; " << FirstRow + numberRows << "), remains parts: " << ResultSets.size() << ", saver actor: " << saverId);
+        YDB_LOG_DEBUG("[ScriptExecutions] Start saving rows range remains saver",
+            {"logPrefix", LogPrefix()},
+            {"firstRow", FirstRow},
+            {"#_FirstRow + numberRows", FirstRow + numberRows},
+            {"parts", ResultSets.size()},
+            {"actor", saverId});
 
         FirstRow += numberRows;
         ResultSets.pop_back();
     }
 
     void Bootstrap() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Bootstrap. FirstRow: " << FirstRow << ", AccumulatedSize: " << AccumulatedSize);
+        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap",
+            {"logPrefix", LogPrefix()},
+            {"firstRow", FirstRow},
+            {"accumulatedSize", AccumulatedSize});
 
         NFq::TSplittedResultSets splittedResultSets = RowsSplitter.Split();
         if (!splittedResultSets.Success) {
@@ -3172,13 +3371,18 @@ public:
 private:
     void Handle(TEvSaveScriptResultPartFinished::TPtr& ev) {
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Failed to save result part, saver actor: " << ev->Sender);
+            YDB_LOG_WARN("[ScriptExecutions] Failed to save result part, saver",
+                {"logPrefix", LogPrefix()},
+                {"actor", ev->Sender});
             Reply(status, std::move(ev->Get()->Issues));
             return;
         }
 
         AccumulatedSize += ev->Get()->SavedSize;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Result part successfully saved, AccumulatedSize: " << AccumulatedSize << ", saver actor: " << ev->Sender);
+        YDB_LOG_DEBUG("[ScriptExecutions] Result part successfully saved, saver",
+            {"logPrefix", LogPrefix()},
+            {"accumulatedSize", AccumulatedSize},
+            {"actor", ev->Sender});
 
         StartSaveResultQuery();
     }
@@ -3188,7 +3392,10 @@ private:
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Reply " << status << ", issues: " << issues.ToOneLineString());
+        YDB_LOG_DEBUG("[ScriptExecutions] Reply",
+            {"logPrefix", LogPrefix()},
+            {"status", status},
+            {"issues", issues.ToOneLineString()});
         Send(ReplyActorId, new TEvSaveScriptResultFinished(status, ResultSetId, std::move(issues)));
         PassAway();
     }
@@ -3225,7 +3432,10 @@ private:
         }
 
         if (RowsLimit < 0 || SizeLimit < 0) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Invalid fetch result limits, RowsLimit: " << RowsLimit << ", SizeLimit: " << SizeLimit);
+            YDB_LOG_WARN("[ScriptExecutions] Invalid fetch result limits",
+                {"logPrefix", LogPrefix()},
+                {"rowsLimit", RowsLimit},
+                {"sizeLimit", SizeLimit});
             return Finish(Ydb::StatusIds::BAD_REQUEST, "Result rows limit and size limit should not be negative");
         }
 
@@ -3351,7 +3561,12 @@ private:
     }
 
     void FetchScriptResults() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Fetch results #" << ResultSetIndex << " with offset: " << Offset << ", limit: " << RowsLimit << ", saved rows: " << NumberOfSavedRows);
+        YDB_LOG_DEBUG("[ScriptExecutions] Fetch results with saved",
+            {"logPrefix", LogPrefix()},
+            {"resultSetIndex", ResultSetIndex},
+            {"offset", Offset},
+            {"limit", RowsLimit},
+            {"rows", NumberOfSavedRows});
 
         constexpr char sql[] = R"(
             -- TGetScriptExecutionResultQuery::FetchScriptResults
@@ -3414,14 +3629,19 @@ private:
             const i64 rowSize = serializedRow->size();
             if (SizeLimit && ResultSet.rows_size()) {
                 if (const auto newSize = ResultSetSize + rowSize + AdditionalRowSize; newSize > SizeLimit) {
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Finish by SizeLimit: " << SizeLimit << ", new result size: " << newSize);
+                    YDB_LOG_DEBUG("[ScriptExecutions] Finish by new result",
+                        {"logPrefix", LogPrefix()},
+                        {"sizeLimit", SizeLimit},
+                        {"size", newSize});
                     CancelFetchQuery();
                     return;
                 }
             }
 
             if (RowsLimit && ResultSet.rows_size() >= RowsLimit) {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Finish by RowsLimit: " << RowsLimit);
+                YDB_LOG_DEBUG("[ScriptExecutions] Finish by",
+                    {"logPrefix", LogPrefix()},
+                    {"rowsLimit", RowsLimit});
                 CancelFetchQuery();
                 return;
             }
@@ -3440,14 +3660,18 @@ private:
         }
 
         if (TInstant::Now() + TDuration::Seconds(5) + GetAverageTime() >= Deadline) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Finish by operation deadline: " << Deadline);
+            YDB_LOG_DEBUG("[ScriptExecutions] Finish by operation",
+                {"logPrefix", LogPrefix()},
+                {"deadline", Deadline});
             CancelFetchQuery();
         }
     }
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         if (status == Ydb::StatusIds::SUCCESS) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Successfully fetched " << ResultSet.rows_size() << " rows");
+            YDB_LOG_DEBUG("[ScriptExecutions] Successfully fetched rows",
+                {"logPrefix", LogPrefix()},
+                {"#_ResultSet.rows_size", ResultSet.rows_size()});
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::move(ResultSet), HasMoreResults, std::move(issues)));
         } else {
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::nullopt, true, std::move(issues)));
@@ -3553,7 +3777,11 @@ private:
     }
 
     void SaveExternalEffect() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Save #" << Request.Sinks.size() << " sinks, #" << Request.SecretNames.size() << " secret names, CustomerSuppliedId: " << Request.CustomerSuppliedId);
+        YDB_LOG_DEBUG("[ScriptExecutions] Save sinks, secret names",
+            {"logPrefix", LogPrefix()},
+            {"#_Request.Sinks.size", Request.Sinks.size()},
+            {"#_Request.SecretNames.size", Request.SecretNames.size()},
+            {"customerSuppliedId", Request.CustomerSuppliedId});
 
         constexpr char sql[] = R"(
             -- TSaveScriptExternalEffectActor::OnRunQuery
@@ -3920,13 +4148,16 @@ private:
         }
 
         const auto operationTtl = std::min(OperationTtl.MicroSeconds(), NYql::NUdf::MAX_TIMESTAMP - 1);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Do finalization with status " << Request.OperationStatus
-            << ", exec status: " << Ydb::Query::ExecStatus_Name(Request.ExecStatus)
-            << ", finalization status (applicate effect: " << Response->ApplicateScriptExternalEffectRequired << "): " << Request.FinalizationStatus
-            << ", issues: " << Request.Issues.ToOneLineString()
-            << ", retry deadline: " << retryDeadline
-            << ", lease state: " << leaseState
-            << ", operation_ttl: " << TDuration::MicroSeconds(operationTtl));
+        YDB_LOG_DEBUG("[ScriptExecutions] Do finalization with status exec finalization status (applicate retry lease",
+            {"logPrefix", LogPrefix()},
+            {"#_Request.OperationStatus", Request.OperationStatus},
+            {"status", Ydb::Query::ExecStatus_Name(Request.ExecStatus)},
+            {"effect", Response->ApplicateScriptExternalEffectRequired},
+            {"#_)", Request.FinalizationStatus},
+            {"issues", Request.Issues.ToOneLineString()},
+            {"deadline", retryDeadline},
+            {"state", leaseState},
+            {"operationTtl", TDuration::MicroSeconds(operationTtl)});
 
         auto params = CreateParams();
         params
@@ -3988,9 +4219,10 @@ private:
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         if (!Response->FinalStatusAlreadySaved) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Finish script execution operation"
-                << ". Status: " << Ydb::StatusIds::StatusCode_Name(Request.OperationStatus)
-                << ". Issues: " << Request.Issues.ToOneLineString());
+            YDB_LOG_DEBUG("[ScriptExecutions] Finish script execution operation",
+                {"logPrefix", LogPrefix()},
+                {"status", Ydb::StatusIds::StatusCode_Name(Request.OperationStatus)},
+                {"issues", Request.Issues.ToOneLineString()});
         }
 
         Response->Status = status;
@@ -4023,7 +4255,10 @@ public:
 
 private:
     void OnRunQuery() override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Start" << (OperationStatus ? " with status " + Ydb::StatusIds::StatusCode_Name(*OperationStatus) : "") << ", issues: " << OperationIssues.ToOneLineString());
+        YDB_LOG_DEBUG("[ScriptExecutions] Start",
+            {"logPrefix", LogPrefix()},
+            {"#_num_0", (OperationStatus ? " with status " + Ydb::StatusIds::StatusCode_Name(*OperationStatus) : "")},
+            {"issues", OperationIssues.ToOneLineString()});
 
         constexpr char sql[] = R"(
             -- TScriptFinalizationFinisherActor::OnRunQuery
@@ -4171,11 +4406,13 @@ private:
         sql << leaseInfo.Sql;
         retryDeadline += leaseInfo.Backoff;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Do finalization with status " << *OperationStatus
-            << ", exec status: " << Ydb::Query::ExecStatus_Name(ExecutionStatus)
-            << ", issues: " << OperationIssues.ToOneLineString()
-            << ", retry deadline: " << retryDeadline
-            << ", lease state: " << static_cast<i32>(leaseInfo.NewLeaseState));
+        YDB_LOG_DEBUG("[ScriptExecutions] Do finalization with status exec retry lease",
+            {"logPrefix", LogPrefix()},
+            {"#_*OperationStatus", *OperationStatus},
+            {"status", Ydb::Query::ExecStatus_Name(ExecutionStatus)},
+            {"issues", OperationIssues.ToOneLineString()},
+            {"deadline", retryDeadline},
+            {"state", static_cast<i32>(leaseInfo.NewLeaseState)});
 
         auto params = CreateParams();
         params
@@ -4240,7 +4477,9 @@ private:
     void OnRunQuery() override {
         const auto& artifacts = CompressScriptArtifacts(QueryAst, QueryPlan, Compressor);
         if (artifacts.Issues) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Compress script artifacts finished with issues: " << artifacts.Issues.ToOneLineString());
+            YDB_LOG_NOTICE("[ScriptExecutions] Compress script artifacts finished with",
+                {"logPrefix", LogPrefix()},
+                {"issues", artifacts.Issues.ToOneLineString()});
         }
 
         auto parameters = TStringBuilder() << R"(
@@ -4378,20 +4617,26 @@ private:
         while (result.TryNextRow()) {
             std::optional<TString> database = result.ColumnParser("database").GetOptionalUtf8();
             if (!database) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Database field is null for script execution lease");
+                YDB_LOG_ERROR("[ScriptExecutions] Database field is null for script execution lease",
+                    {"logPrefix", LogPrefix()});
                 continue;
             }
 
             std::optional<TString> executionId = result.ColumnParser("execution_id").GetOptionalUtf8();
             if (!executionId) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Execution id field is null for script execution lease in database " << *database);
+                YDB_LOG_ERROR("[ScriptExecutions] Execution id field is null for script execution lease in database",
+                    {"logPrefix", LogPrefix()},
+                    {"#_*database", *database});
                 continue;
             }
 
             Leases.emplace_back(TEvListExpiredLeasesResponse::TLeaseInfo{std::move(*database), std::move(*executionId)});
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Found " << Leases.size() << " expired leases (fetched rows " << rowsCount << ")");
+        YDB_LOG_DEBUG("[ScriptExecutions] Found expired leases (fetched rows",
+            {"logPrefix", LogPrefix()},
+            {"#_Leases.size", Leases.size()},
+            {"rowsCount", rowsCount});
         Finish();
     }
 
@@ -4413,7 +4658,9 @@ public:
 
     void Bootstrap() {
         const auto& listerId = Register(new TListExpiredLeasesQueryActor());
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Bootstrap. Started TListExpiredLeasesQueryActor: " << listerId);
+        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap. Started",
+            {"logPrefix", LogPrefix()},
+            {"TListExpiredLeasesQueryActor", listerId});
 
         Become(&TThis::StateFunc);
     }
@@ -4427,22 +4674,34 @@ private:
     void Handle(TEvListExpiredLeasesResponse::TPtr& ev) {
         const auto& leases = ev->Get()->Leases;
         ExpiredLeasesCount = leases.size();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Got list expired leases response " << ev->Sender << ", found " << ExpiredLeasesCount << " expired leases");
+        YDB_LOG_DEBUG("[ScriptExecutions] Got list expired leases response found expired leases",
+            {"logPrefix", LogPrefix()},
+            {"#_ev->Sender", ev->Sender},
+            {"expiredLeasesCount", ExpiredLeasesCount});
 
         for (const auto& lease : leases) {
             const auto& checkerId = Register(new TFinalizeScriptLeaseActor(SelfId(), lease.Database, lease.ExecutionId, QueryServiceConfig, Counters, {.Cookie = CookieId++}));
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Database: " << lease.Database << "ExecutionId: " << lease.ExecutionId << ", start TFinalizeScriptLeaseActor #" << CookieId << " " << checkerId);
+            YDB_LOG_DEBUG("[ScriptExecutions] start TFinalizeScriptLeaseActor",
+                {"logPrefix", LogPrefix()},
+                {"database", lease.Database},
+                {"executionId", lease.ExecutionId},
+                {"cookieId", CookieId},
+                {"checkerId", checkerId});
             ++OperationsToCheck;
         }
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"List expired leases failed with status " << status << ", issues: " << issues.ToOneLineString());
+            YDB_LOG_WARN("[ScriptExecutions] List expired leases failed with status",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
 
             Success = false;
             Issues.AddIssues(AddRootIssue(TStringBuilder() << "Failed to list expired leases (" << status << ")", issues, true));
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"List expired leases successfully completed");
+            YDB_LOG_DEBUG("[ScriptExecutions] List expired leases successfully completed",
+                {"logPrefix", LogPrefix()});
         }
 
         MaybeFinish();
@@ -4455,12 +4714,22 @@ private:
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Lease check #" << ev->Cookie << " " << ev->Sender << " failed, status: " << status << ", issues: " << issues.ToOneLineString() << ", OperationsToCheck: " << OperationsToCheck);
+            YDB_LOG_WARN("[ScriptExecutions] Lease check failed",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Cookie", ev->Cookie},
+                {"#_ev->Sender", ev->Sender},
+                {"status", status},
+                {"issues", issues.ToOneLineString()},
+                {"operationsToCheck", OperationsToCheck});
 
             Success = false;
             Issues.AddIssues(AddRootIssue(TStringBuilder() << "Lease check failed #" << ev->Cookie << " (" << status << ")", issues, true));
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Lease check #" << ev->Cookie << " " << ev->Sender << " successfully completed, OperationsToCheck: " << OperationsToCheck);
+            YDB_LOG_DEBUG("[ScriptExecutions] Lease check successfully completed",
+                {"logPrefix", LogPrefix()},
+                {"#_ev->Cookie", ev->Cookie},
+                {"#_ev->Sender", ev->Sender},
+                {"operationsToCheck", OperationsToCheck});
         }
 
         MaybeFinish();
@@ -4471,7 +4740,10 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, "[ScriptExecutions] " << LogPrefix() <<"Finish, success: " << Success << ", issues: " << Issues.ToOneLineString());
+        YDB_LOG_DEBUG("[ScriptExecutions] Finish",
+            {"logPrefix", LogPrefix()},
+            {"success", Success},
+            {"issues", Issues.ToOneLineString()});
         Send(ReplyActorId, new TEvRefreshScriptExecutionLeasesResponse(Success, ExpiredLeasesCount, std::move(Issues)));
         PassAway();
     }

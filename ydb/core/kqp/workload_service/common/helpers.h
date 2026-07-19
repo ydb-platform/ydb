@@ -37,7 +37,8 @@ public:
             return;
         }
 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Scheme service is unavailable");
+        YDB_LOG_ERROR_COMP(NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] Scheme service is unavailable",
+            {"logPrefix", LogPrefix()});
         OnFatalError(Ydb::StatusIds::UNAVAILABLE, NYql::TIssue("Scheme service is unavailable"));
     }
 
@@ -61,7 +62,9 @@ protected:
         if (const auto delay = RetryState->GetNextRetryDelay(longDelay)) {
             Issues.AddIssues(issues);
             this->Schedule(*delay, new TEvents::TEvWakeup());
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << "Scheduled retry for error: " << issues.ToOneLineString());
+            YDB_LOG_WARN_COMP(NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] Scheduled retry",
+                {"logPrefix", LogPrefix()},
+                {"error", issues.ToOneLineString()});
             return true;
         }
 

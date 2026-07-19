@@ -156,7 +156,9 @@ TMaybe<google::protobuf::Any> TKqpScanComputeActor::ExtraData() {
 }
 
 void TKqpScanComputeActor::HandleEvWakeup(EEvWakeupTag tag) {
-    AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "HandleEvWakeup")("self_id", SelfId());
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+        {"event", "HandleEvWakeup"},
+        {"selfId", SelfId()});
     switch (tag) {
         case RlSendAllowedTag:
             DoExecute();
@@ -174,7 +176,9 @@ void TKqpScanComputeActor::HandleEvWakeup(EEvWakeupTag tag) {
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr& ev) {
-    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvTerminateFromFetcher: " << ev->Sender << "/" << SelfId();
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+        {"TEvTerminateFromFetcher", ev->Sender},
+        {"selfId", SelfId()});
     TBase::InternalError(ev->Get()->GetStatusCode(), ev->Get()->GetIssues());
     State = ev->Get()->GetState();
 }
@@ -182,7 +186,9 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
     ScanDataInFlight = false;
     ++SendDataReceived;
-    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvSendData: " << ev->Sender << "/" << SelfId();
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+        {"TEvSendData", ev->Sender},
+        {"selfId", SelfId()});
     auto& msg = *ev->Get();
 
     for (const auto& lock : msg.GetLocksInfo().Locks) {
@@ -208,7 +214,8 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvRegisterFetcher::TPtr& ev) {
-    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvRegisterFetcher: " << ev->Sender;
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+        {"TEvRegisterFetcher", ev->Sender});
     Y_ABORT_UNLESS(Fetchers.emplace(ev->Sender).second);
     Send(ev->Sender, new TEvScanExchange::TEvAckData(CalculateFreeSpace()));
     ++AcksSent;
@@ -216,7 +223,8 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvRegisterFetcher::TPtr& ev)
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvFetcherFinished::TPtr& ev) {
-    ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvFetcherFinished: " << ev->Sender;
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+        {"TEvFetcherFinished", ev->Sender});
     Y_ABORT_UNLESS(Fetchers.erase(ev->Sender) == 1);
     if (Fetchers.size() == 0) {
         ScanData->Finish();
@@ -283,8 +291,10 @@ void TKqpScanComputeActor::DoBootstrap() {
     NDq::TLogFunc logger;
     if (IsDebugLogEnabled(actorSystem, NKikimrServices::KQP_TASKS_RUNNER)) {
         logger = [actorSystem, txId = TxId, taskId = GetTask().GetId()](const TString& message) {
-            LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId
-                << ", task: " << taskId << ": " << message);
+            YDB_LOG_DEBUG_CTX_COMP(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "",
+                {"txId", txId},
+                {"task", taskId},
+                {"message", message});
         };
     }
 

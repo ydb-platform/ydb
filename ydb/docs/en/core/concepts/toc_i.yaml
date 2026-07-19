@@ -45,5 +45,8 @@ items:
 - name: Data transfer
   href: transfer.md
   when: feature_transfer
-- name: Streaming queries
-  href: streaming-query.md
+- name: Streaming processing
+  href: streaming-query/index.md
+  include:
+    path: streaming-query/toc_p.yaml
+    mode: link

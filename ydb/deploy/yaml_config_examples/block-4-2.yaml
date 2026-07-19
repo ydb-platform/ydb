@@ -10,7 +10,7 @@ config:
   erasure: block-4-2 # erasue is the parameter that describes
                      # the fault tolerance mode of the cluster.
                      # See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
-  fail_domain_type: disk
+  fail_domain_type: rack
   self_management_config: # automatic management of static resources (static group, state storage, etc)
     enabled: true
   default_disk_type: SSD # default disk type used for group creation of both kinds

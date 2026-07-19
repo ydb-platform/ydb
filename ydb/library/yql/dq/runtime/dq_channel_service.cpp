@@ -1856,14 +1856,17 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
-            auto waitQueueBytes = result->WaitQueueBytes.load();
-            if (waitQueueBytes) {
-                if (quotaManager && !quotaManager->AllocateQuota(waitQueueBytes)) {
-                    result->AbortChannelByMemoryLimit(waitQueueBytes);
-                    quotaManager = nullptr;
+            {
+                std::lock_guard lock(result->WaitQueueMutex);
+                auto waitQueueBytes = result->WaitQueueBytes.load();
+                if (waitQueueBytes) {
+                    if (quotaManager && !quotaManager->AllocateQuota(waitQueueBytes)) {
+                        result->AbortChannelByMemoryLimit(waitQueueBytes);
+                        quotaManager = nullptr;
+                    }
                 }
+                result->QuotaManager = quotaManager;
             }
-            result->QuotaManager = quotaManager;
             ActorSystem->Send(result->Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
         return result;

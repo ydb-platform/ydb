@@ -1853,50 +1853,60 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
 }
 
 std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bound, bool leading) {
-    std::lock_guard lock(Mutex);
-    auto it = OutputDescriptors.find(info);
-    if (it != OutputDescriptors.end()) {
-        auto result = it->second;
-        if (bound) {
-            std::lock_guard lock(result->FlowControlMutex);
-            result->IsBound = true;
-            result->Info.SrcStageId = info.SrcStageId;
-            result->Info.DstStageId = info.DstStageId;
-            if (quotaManager) {
-                std::lock_guard lock(result->WaitQueueMutex);
-                auto waitQueueBytes = result->WaitQueueBytes.load();
-                if (waitQueueBytes) {
-                    if (!quotaManager->AllocateQuota(waitQueueBytes)) {
-                        result->AbortChannelByMemoryLimit(waitQueueBytes);
-                        quotaManager = nullptr;
-                    }
+
+    std::shared_ptr<TOutputDescriptor> result;
+    bool allocateWaitQueueBytes = false;
+
+    {
+        std::lock_guard lock(Mutex);
+
+        auto it = OutputDescriptors.find(info);
+        if (it != OutputDescriptors.end()) {
+            result = it->second;
+            if (bound) {
+                std::lock_guard lock(result->FlowControlMutex);
+                result->IsBound = true;
+                result->Info.SrcStageId = info.SrcStageId;
+                result->Info.DstStageId = info.DstStageId;
+                if (quotaManager) {
+                    allocateWaitQueueBytes = true;
                 }
-                result->QuotaManager = quotaManager;
+                ActorSystem->Send(result->Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
             }
-            ActorSystem->Send(result->Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+        } else {
+            if (!bound && !leading) {
+                LOG_T(LogPrefix << "OD NOT FOUND, ChannelId=" << info.ChannelId
+                    << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
+                    << ", OD=" << OutputDescriptors.size());
+            } else {
+                result = std::make_shared<TOutputDescriptor>(info, quotaManager, ActorSystem, OutputBufferBytes, OutputBufferChunks,
+                    Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10, Limits.RemoteChannelColdInflightBytes);
+                OutputDescriptors.emplace(info, result);
+                (*OutputBufferCount)++;
+                if (bound) {
+                    result->IsBound = true;
+                } else {
+                    UnboundOutputs.emplace(info, TInstant::Now() + UnboundWaitPeriod);
+                }
+                LOG_T(LogPrefix << "OD CREATE, ChannelId=" << result->Info.ChannelId
+                    << ", OA=" << result->Info.OutputActorId << ", IA=" << result->Info.InputActorId
+                );
+            }
         }
-        return result;
     }
 
-    if (!bound && !leading) {
-        LOG_T(LogPrefix << "OD NOT FOUND, ChannelId=" << info.ChannelId
-            << ", OA=" << info.OutputActorId << ", IA=" << info.InputActorId
-            << ", OD=" << OutputDescriptors.size());
-        return {};
+    if (allocateWaitQueueBytes) {
+        std::lock_guard lock(result->WaitQueueMutex);
+        auto waitQueueBytes = result->WaitQueueBytes.load();
+        if (waitQueueBytes) {
+            if (!quotaManager->AllocateQuota(waitQueueBytes)) {
+                result->AbortChannelByMemoryLimit(waitQueueBytes);
+                quotaManager = nullptr;
+            }
+        }
+        result->QuotaManager = quotaManager;
     }
 
-    auto result = std::make_shared<TOutputDescriptor>(info, quotaManager, ActorSystem, OutputBufferBytes, OutputBufferChunks,
-        Limits.RemoteChannelInflightBytes, Limits.RemoteChannelInflightBytes * 8 / 10, Limits.RemoteChannelColdInflightBytes);
-    OutputDescriptors.emplace(info, result);
-    (*OutputBufferCount)++;
-    if (bound) {
-        result->IsBound = true;
-    } else {
-        UnboundOutputs.emplace(info, TInstant::Now() + UnboundWaitPeriod);
-    }
-    LOG_T(LogPrefix << "OD CREATE, ChannelId=" << result->Info.ChannelId
-        << ", OA=" << result->Info.OutputActorId << ", IA=" << result->Info.InputActorId
-    );
     return result;
 }
 

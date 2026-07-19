@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <chrono>
+#include <thread>
 
 namespace NKikimr::NKqp {
 
@@ -26,29 +28,12 @@ void CreateTopic(TIntrusivePtr<NWorkload::IYdbSetup> ydb, TString name) {
     const auto& result = ydb->ExecuteQuery(TStringBuilder() << "CREATE TOPIC " << name);
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 }
-// std::optional<int> GetQueryCountInPool(TIntrusivePtr<NWorkload::IYdbSetup> ydb, TString /*poolId*/) {
-//     const auto& result = ydb->ExecuteQuery(TStringBuilder() << R"(
-//         SELECT COUNT(*) as cnt 
-//         FROM `.metadata/workload_manager/running_requests` 
-        
-//         )");
-
-//     if (result.GetStatus() != NYdb::EStatus::SUCCESS) {
-//         return std::nullopt;
-//     }
-//     // UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-//     NYdb::TResultSetParser resultSet(result.GetResultSet(0));
-//     UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
-//     auto cnt = resultSet.ColumnParser("cnt").GetOptionalInt64();
-//     UNIT_ASSERT(cnt.has_value());
-//     return cnt;
-// }
 
 }  // anonymous namespace
 
 
 Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
-
+    using namespace std::chrono_literals;
     Y_UNIT_TEST(TestStreamingQueryClassificationByPath) {
         auto ydb = MakeStreamingYdb();
 
@@ -71,10 +56,7 @@ Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
             )");
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
-
-        auto settings = TQueryRunnerSettings().PoolId(poolId);
-
-        WaitForClassifierSuccess(ydb, "SELECT * FROM input_topic", settings);
+        ydb->WaitForClassifierPropagation();
 
         {
             const auto& result = ydb->ExecuteQuery(R"(
@@ -84,9 +66,13 @@ Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
                 END DO
             )");
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-        }
+            ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 1}, poolId);
 
-        ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 1}, poolId);
+        }
+        {
+            std::this_thread::sleep_for(5s);
+            ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 1}, poolId);
+        }
     }
 
 }

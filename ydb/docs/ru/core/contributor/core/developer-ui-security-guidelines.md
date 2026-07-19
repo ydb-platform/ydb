@@ -116,6 +116,7 @@ str << "<style>.my-table th { text-align: center; }</style>";
 //   .mon-table th { text-align: center; }
 str << "<div class='mon-warning'>...</div>";
 ```
+
 Когда в заголовок будет добавлена более строгая `style-src`, её не ослабляют с помощью `'unsafe-inline'` или внешних доменов.
 
 ## Внешние ресурсы {#no-external-resources}

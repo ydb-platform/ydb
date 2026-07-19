@@ -1,5 +1,7 @@
 #include "sequenceshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SEQUENCESHARD
+
 namespace NKikimr {
 namespace NSequenceShard {
 
@@ -16,21 +18,24 @@ namespace NSequenceShard {
 
             auto pathId = msg->GetPathId();
 
-            SLOG_T("TTxCreateSequence.Execute"
-                << " PathId# " << pathId
-                << " Record# " << msg->Record.ShortDebugString());
+            YDB_LOG_TRACE("TTxCreateSequence.Execute",
+                {"logPrefix", LogPrefix},
+                {"pathId", pathId},
+                {"record", msg->Record});
 
             if (!Self->CheckPipeRequest(Ev->Recipient)) {
                 SetResult(NKikimrTxSequenceShard::TEvCreateSequenceResult::PIPE_OUTDATED);
-                SLOG_T("TTxCreateSequence.Execute PIPE_OUTDATED"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxCreateSequence.Execute PIPE_OUTDATED",
+                    {"logPrefix", LogPrefix},
+                    {"pathId", pathId});
                 return true;
             }
 
             if (Self->Sequences.contains(pathId)) {
                 SetResult(NKikimrTxSequenceShard::TEvCreateSequenceResult::SEQUENCE_ALREADY_EXISTS);
-                SLOG_T("TTxCreateSequence.Execute SEQUENCE_ALREADY_EXISTS"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxCreateSequence.Execute SEQUENCE_ALREADY_EXISTS",
+                    {"logPrefix", LogPrefix},
+                    {"pathId", pathId});
                 return true;
             }
 
@@ -102,20 +107,22 @@ namespace NSequenceShard {
                 NIceDb::TUpdate<Schema::Sequences::Cycle>(sequence.Cycle),
                 NIceDb::TUpdate<Schema::Sequences::State>(sequence.State));
             SetResult(NKikimrTxSequenceShard::TEvCreateSequenceResult::SUCCESS);
-            SLOG_N("TTxCreateSequence.Execute SUCCESS"
-                << " PathId# " << pathId
-                << " MinValue# " << sequence.MinValue
-                << " MaxValue# " << sequence.MaxValue
-                << " StartValue# " << sequence.StartValue
-                << " Cache# " << sequence.Cache
-                << " Increment# " << sequence.Increment
-                << " Cycle# " << (sequence.Cycle ? "true" : "false")
-                << " State# " << (frozen ? "Frozen" : "Active"));
+            YDB_LOG_NOTICE("TTxCreateSequence.Execute SUCCESS",
+                {"logPrefix", LogPrefix},
+                {"pathId", pathId},
+                {"minValue", sequence.MinValue},
+                {"maxValue", sequence.MaxValue},
+                {"startValue", sequence.StartValue},
+                {"cache", sequence.Cache},
+                {"increment", sequence.Increment},
+                {"cycle", (sequence.Cycle ? "true" : "false")},
+                {"state", (frozen ? "Frozen" : "Active")});
             return true;
         }
 
         void Complete(const TActorContext& ctx) override {
-            SLOG_T("TTxCreateSequence.Complete");
+            YDB_LOG_TRACE("TTxCreateSequence.Complete",
+                {"logPrefix", LogPrefix});
 
             if (Result) {
                 ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

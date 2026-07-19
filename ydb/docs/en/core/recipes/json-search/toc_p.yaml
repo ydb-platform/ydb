@@ -1,0 +1,9 @@
+items:
+- name: JSON index quickstart
+  href: json-index-quickstart.md
+- name: JSON index catalog
+  href: json-index-catalog.md
+- name: JSON index parameters
+  href: json-index-parameters.md
+- name: JSON index typecheck
+  href: json-index-typecheck.md

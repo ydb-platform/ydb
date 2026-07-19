@@ -1008,17 +1008,14 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     auto bytes = data.Bytes;
     auto rows = data.Rows;
 
-    auto quoted = !!descriptor->QuotaManager;
-    if (quoted && !descriptor->QuotaManager->AllocateQuota(bytes)) {
-        descriptor->AbortChannelByMemoryLimit(bytes);
-        return;
-    }
-
     if (descriptor->WaitQueueSize.load()) {
         // we are not allowed to reorder messages
         std::lock_guard lock(descriptor->WaitQueueMutex);
         if (!descriptor->WaitQueue.empty()) {
-
+            if (descriptor->QuotaManager && !descriptor->QuotaManager->AllocateQuota(bytes)) {
+                descriptor->AbortChannelByMemoryLimit(bytes);
+                return;
+            }
             descriptor->WaitQueue.push(std::move(data));
             descriptor->WaitQueueBytes += bytes;
             descriptor->WaitQueueSize++;
@@ -1037,6 +1034,11 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
         std::lock_guard lock(Mutex);
         if (Reconciliation.load() == 0 && InflightBytes.load() < Limits.RemoteSessionInflightBytes && Queue.size() < MaxInflightMessages) {
             if (descriptor->CheckGenMajor(GenMajor, "Inconsistent Send GenMajor")) {
+                auto quoted = !!descriptor->QuotaManager;
+                if (quoted && !descriptor->QuotaManager->AllocateQuota(bytes)) {
+                    descriptor->AbortChannelByMemoryLimit(bytes);
+                    return;
+                }
                 descriptor->AddPopChunk(bytes, rows);
                 auto item = std::make_shared<TOutputItem>(std::move(data), descriptor);
                 item->SeqNo = ++SeqNo;
@@ -1056,6 +1058,10 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     bool result = false;
 
     std::lock_guard lock(descriptor->WaitQueueMutex);
+    if (descriptor->QuotaManager && !descriptor->QuotaManager->AllocateQuota(bytes)) {
+        descriptor->AbortChannelByMemoryLimit(bytes);
+        return;
+    }
     if (descriptor->WaitQueue.empty()) {
         descriptor->WaitTimestamp = data.Timestamp;
         result = true;
@@ -1856,11 +1862,11 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
-            {
+            if (quotaManager) {
                 std::lock_guard lock(result->WaitQueueMutex);
                 auto waitQueueBytes = result->WaitQueueBytes.load();
                 if (waitQueueBytes) {
-                    if (quotaManager && !quotaManager->AllocateQuota(waitQueueBytes)) {
+                    if (!quotaManager->AllocateQuota(waitQueueBytes)) {
                         result->AbortChannelByMemoryLimit(waitQueueBytes);
                         quotaManager = nullptr;
                     }

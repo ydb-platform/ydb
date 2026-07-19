@@ -76,6 +76,10 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 39794:Add new StoragePool stats metrics for estimated number and size of groups which BSC is able to create immediately. New status accounts for DriveStatus and MaintenanceStatus [#39794](https://github.com/ydb-platform/ydb/pull/39794) ([Sergey Belyakov](https://github.com/serbel324))
+* 39610:Updated default settings for ObjectStorage federated queries, enabling parallel runtime listing and faster reading without lengty configuration [#39610](https://github.com/ydb-platform/ydb/pull/39610) ([Ivan Sukhov](https://github.com/evanevanevanevannnn))
+* 39465:improved paths limit error for federated s3 queries [#39465](https://github.com/ydb-platform/ydb/pull/39465) ([Ivan Sukhov](https://github.com/evanevanevanevannnn))
+* 39461:now schema inference with parquet format takes nullability information from parquet schema as is, and doesnt try to infer it. [#39461](https://github.com/ydb-platform/ydb/pull/39461) ([Ivan Sukhov](https://github.com/evanevanevanevannnn))
 
 ### Bug fixes
 
@@ -146,12 +150,11 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
-
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* None:CreateStreamingQueryMatchRecognize
+* 39481:fix https://github.com/ydb-platform/ydb/issues/38701 a bug where tablets could become stuck in group assignment after all storage groups run out of space [#39481](https://github.com/ydb-platform/ydb/pull/39481) ([vporyadke](https://github.com/vporyadke))
+* 39480:improved auth fields validation for external data sources, trying to read data with empty secrets will now lead to BAD_REQUEST error [#39480](https://github.com/ydb-platform/ydb/pull/39480) ([Ivan Sukhov](https://github.com/evanevanevanevannnn))
+* 39282:Enforce the invariants of DSProxy blackboards, which previously could be broken by DEADLINE and BLOCKED sub-replies
+https://github.com/ydb-platform/ydb/issues/38433 [#39282](https://github.com/ydb-platform/ydb/pull/39282) ([Sergey Belyakov](https://github.com/serbel324))
 
 ### YDB UI
 

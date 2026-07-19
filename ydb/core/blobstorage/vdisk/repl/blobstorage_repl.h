@@ -12,8 +12,12 @@ namespace NKikimr {
     };
 
     struct TBlobIdQueue {
-        std::deque<TLogoBlobID> Queue;
+        TTrackableDeque<TLogoBlobID> Queue;
         ui64 WorkUnits = 0;
+
+        explicit TBlobIdQueue(TMemoryConsumer consumer)
+            : Queue(std::move(consumer))
+        {}
 
         void Push(const TLogoBlobID& id) {
             WorkUnits += id.BlobSize();

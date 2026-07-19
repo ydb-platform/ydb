@@ -76,6 +76,23 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 35559:Enable kernel liveness as an optional per-session mode negotiated in handshake. Session enters kernel mode only when both sides requested it and both sockets successfully applied SO_KEEPALIVE/TCP_KEEP* plus mandatory TCP_USER_TIMEOUT; otherwise connection falls back to legacy user-space liveness without handshake failure.
+
+When negotiated:
+- disable user-space dead-peer watchdog in input/session paths
+- preserve flow-control confirms and undelivered semantics
+- keep clock-skew/ping metrics via flush-scheduled periodic pings (ClockSkewPingTimeout)
+
+Test coverage:
+- interconnect UT negotiation/fallback/idle-packet reduction/ACK/clock-skew with and without RDMA
+- dedicated tcp_user_timeout blackhole tests verifying disconnect and undelivered invariants [#35559](https://github.com/ydb-platform/ydb/pull/35559) ([Daniil Cherednik](https://github.com/dcherednik))
+* 35553:Fixed that EvAuthorizeTicketRelust::Error is considered an error only if there is a text Message [#35553](https://github.com/ydb-platform/ydb/pull/35553) ([Vladislav Serikov](https://github.com/NewBediver))
+* 35511:Added HTTP handler that queries cluster info from YDB and resolves configured support links. Introduced interface  for pluggable link sources.
+
+The improvement does not include specific source implementations. [#35511](https://github.com/ydb-platform/ydb/pull/35511) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 35216:Add RDMA support for XDC shuffle [#35216](https://github.com/ydb-platform/ydb/pull/35216) ([Robert Drynkin](https://github.com/robdrynkin))
+* 35061:- Implement a new inverted index type: JSON, to optimize queries on JSON fields [#35061](https://github.com/ydb-platform/ydb/pull/35061) ([Vitaliy Filippov](https://github.com/vitalif))
+* 34245:Add Workload Manager State to .sys/query_sessions [#34245](https://github.com/ydb-platform/ydb/pull/34245) ([Slusarenko Igor](https://github.com/buhtr))
 
 ### Bug fixes
 
@@ -146,12 +163,23 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
+* None:CreateStreamingQueryMatchRecognize
+* 35834:Fixed a bug when some errors from s3 were mishandled and parsed, instead of being returned to the user [#35834](https://github.com/ydb-platform/ydb/pull/35834) ([Ivan Sukhov](https://github.com/evanevanevanevannnn))
+* 35815:Fix binding assertion failure [#35815](https://github.com/ydb-platform/ydb/pull/35815) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 35636:Fault fixes:
 
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
+* Fixed race with PQ gateway [cause of UB / UAF / faults]
+* Fixed race with Solomon gateway [cause of UB / UAF / faults]
+* Fixed missing `break` in streaming query creation status handler [cause fault with VERIFY when PassAway called twice]
+* Fixed race on multi node kqprun initialization if enabled viewer and storage [UB / fault in tests]
+* Fixed race in metadata service registration (singleton modification) [UB / fault in tests]
 
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+Other fixes:
+
+* Added retries for script execution creation
+* Added retries for scheme shard tablet pipe creation in streaming queries
+* Added retries for scheme shard tablet pipe destruction in streaming queries [#35636](https://github.com/ydb-platform/ydb/pull/35636) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 35497:Backward compatibility fix for https://github.com/ydb-platform/ydb/issues/35053 [#35497](https://github.com/ydb-platform/ydb/pull/35497) ([Sergey Belyakov](https://github.com/serbel324))
 
 ### YDB UI
 
@@ -178,4 +206,5 @@ Also increased default test logs level [#25408](https://github.com/ydb-platform/
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
 * 25668:Used AS threads in topic sdk IO operations [#25668](https://github.com/ydb-platform/ydb/pull/25668) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 35687:Portion interval tree use only PortionId for hashing and comparisons instead of full portion Address, because all pathId's are equal in one capsule. [#35687](https://github.com/ydb-platform/ydb/pull/35687) ([Stanislav Yablonskiy](https://github.com/neyrox))
 

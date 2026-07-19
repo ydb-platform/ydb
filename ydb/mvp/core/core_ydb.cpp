@@ -293,11 +293,11 @@ void TParameters::ParamsToProto(google::protobuf::Message& proto, TJsonSettings:
 }
 
 TString TRequest::GetAuthToken() const {
-    NHttp::THeaders headers(Request->Headers);
-    return GetAuthToken(headers);
+    return GetAuthToken(Request);
 }
 
-TString TRequest::GetAuthToken(const NHttp::THeaders& headers) const {
+TString TRequest::GetAuthToken(NHttp::THttpIncomingRequestPtr request) const {
+    NHttp::THeaders headers(request->Headers);
     NHttp::TCookies cookies(headers["Cookie"]);
     TStringBuf authorization = headers["Authorization"];
     if (!authorization.empty()) {
@@ -312,7 +312,12 @@ TString TRequest::GetAuthToken(const NHttp::THeaders& headers) const {
     }
     TStringBuf sessionId = cookies["Session_id"];
     if (!sessionId.empty()) {
-        return BlackBoxTokenFromSessionId(sessionId);
+        TString userIp = TString(NKikimr::NSecurity::DefaultUserIp());
+        if (request->Address) {
+            TIpPort port;
+            NHttp::CrackAddress(request->Address->ToString(), userIp, port);
+        }
+        return BlackBoxTokenFromSessionId(sessionId, userIp);
     }
     return TString();
 }
@@ -348,22 +353,22 @@ void TRequest::SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const T
 }
 
 void TRequest::ForwardHeaders(NYdbGrpc::TCallMeta& meta) const {
-    NHttp::THeaders headers(Request->Headers);
-    TString token = GetAuthToken(headers);
+    TString token = GetAuthToken(Request);
     if (!token.empty()) {
         SetHeader(meta, "authorization", "Bearer " + token);
         SetHeader(meta, NYdb::YDB_AUTH_TICKET_HEADER, token);
     }
+    NHttp::THeaders headers(Request->Headers);
     ForwardHeader(headers, meta, "x-request-id");
 }
 
 void TRequest::ForwardHeaders(NHttp::THttpOutgoingRequestPtr& request) const {
-    NHttp::THeaders headers(Request->Headers);
-    TString token = GetAuthToken(headers);
+    TString token = GetAuthToken(Request);
     if (!token.empty()) {
         request->Set("authorization", "Bearer " + token);
         request->Set(NYdb::YDB_AUTH_TICKET_HEADER, token);
     }
+    NHttp::THeaders headers(Request->Headers);
     ForwardHeader(headers, request, "x-request-id");
 }
 

@@ -3,113 +3,152 @@ name: Run and debug tests
 on:
   workflow_dispatch:
     inputs:
-      test_targets:
-        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/")'
-        required: false
-        type: string
-        default: 'ydb/tests/olap/'
       build_preset:
-        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo")'
+        description: 'Build preset'
+        required: false
+        type: choice
+        default: relwithdebinfo
+        options:
+          - relwithdebinfo
+          - release
+          - debug
+          - release-asan
+          - release-tsan
+          - release-msan
+      build_target:
+        description: 'ya make target'
         required: false
         type: string
-        default: 'relwithdebinfo, release-asan'
-      branches:
-        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path)'
-        required: false
-        type: string
-        default: ''
-      use_branches_config:
-        description: 'If true, use branches from .github/config/stable_tests_branches.json'
-        required: false
-        type: boolean
-        default: false
+        default: 'ydb/apps/ydbd'
 
 jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      branches_json: ${{ steps.format-branches.outputs.branches_json }}
-      build_preset_array: ${{ steps.format-build-preset.outputs.build_preset_array }}
+  clean_build_benchmark:
+    name: Clean build (${{ inputs.build_preset }})
+    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
+    timeout-minutes: 600
     steps:
-      - name: Format branches
-        id: format-branches
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Clean local caches
+        shell: bash
         run: |
-          if [ -z "${{ inputs.branches }}" ]; then
-            # Empty - will use branches_config_path or default
-            echo "branches_json=" >> $GITHUB_OUTPUT
-          elif [[ "${{ inputs.branches }}" == \[* ]]; then
-            # Already JSON array
-            echo "branches_json=${{ inputs.branches }}" >> $GITHUB_OUTPUT
-          else
-            # Comma-separated format: "main, stable-25-3" -> ["main", "stable-25-3"]
-            IFS=',' read -ra BRANCHES <<< "${{ inputs.branches }}"
-            JSON_BRANCHES="["
-            FIRST=true
-            for branch in "${BRANCHES[@]}"; do
-              branch=$(echo "$branch" | xargs)  # trim whitespace
-              if [ -n "$branch" ]; then
-                if [ "$FIRST" = true ]; then
-                  FIRST=false
-                else
-                  JSON_BRANCHES+=", "
-                fi
-                JSON_BRANCHES+="\"$branch\""
-              fi
-            done
-            JSON_BRANCHES+="]"
-            echo "branches_json=$JSON_BRANCHES" >> $GITHUB_OUTPUT
-            echo "Converted '${{ inputs.branches }}' to $JSON_BRANCHES"
+          set -x
+          rm -rf ~/.ya
+          rm -rf .ya
+          if command -v ccache >/dev/null 2>&1; then
+            ccache -C || true
+            ccache -z || true
           fi
 
-      - name: Format build presets
-        id: format-build-preset
+      - name: Run clean build (no caches)
+        id: build
+        shell: bash
         run: |
-          BUILD_PRESET_INPUT="${{ inputs.build_preset }}"
-          if [ -z "$BUILD_PRESET_INPUT" ]; then
-            BUILD_PRESET_INPUT="relwithdebinfo"
-          fi
-          
-          # Check if already JSON array
-          if [[ "$BUILD_PRESET_INPUT" == \[* ]]; then
-            echo "build_preset_array=$BUILD_PRESET_INPUT" >> $GITHUB_OUTPUT
-          else
-            # Comma-separated format: "relwithdebinfo, release-asan" -> ["relwithdebinfo", "release-asan"]
-            IFS=',' read -ra PRESETS <<< "$BUILD_PRESET_INPUT"
-            JSON_PRESETS="["
-            FIRST=true
-            for preset in "${PRESETS[@]}"; do
-              preset=$(echo "$preset" | xargs)  # trim whitespace
-              if [ -n "$preset" ]; then
-                if [ "$FIRST" = true ]; then
-                  FIRST=false
-                else
-                  JSON_PRESETS+=", "
-                fi
-                JSON_PRESETS+="\"$preset\""
-              fi
-            done
-            JSON_PRESETS+="]"
-            echo "build_preset_array=$JSON_PRESETS" >> $GITHUB_OUTPUT
-            echo "Converted '$BUILD_PRESET_INPUT' to $JSON_PRESETS"
-          fi
+          set -o pipefail
+          BUILD_PRESET="${{ inputs.build_preset }}"
+          BUILD_TARGET="${{ inputs.build_target }}"
 
-  main:
-    name: Run and debug tests
-    needs: prepare
-    uses: ./.github/workflows/run_tests.yml
-    secrets: inherit
-    strategy:
-      fail-fast: false
-      matrix:
-        build_preset: ${{ fromJson(needs.prepare.outputs.build_preset_array) }}
-    with:
-      test_targets: ${{ inputs.test_targets }}
-      test_size: small,medium
-      build_preset: ${{ matrix.build_preset }}
-      branches: ${{ needs.prepare.outputs.branches_json || '' }}
-      branches_config_path: ${{ inputs.use_branches_config && '.github/config/stable_tests_branches.json' || '' }}
+          params=(
+            --stat
+            -DCONSISTENT_DEBUG
+            --no-dir-outputs
+            --build-all
+            --force-build-depends
+            -DDEBUGINFO_LINES_ONLY
+          )
 
-  collect_combined_summary:
-    needs: main
-    if: always()
-    uses: ./.github/workflows/collect_combined_summary.yml
+          case "$BUILD_PRESET" in
+            debug)
+              params+=(--build debug)
+              ;;
+            release)
+              params+=(--build release)
+              ;;
+            relwithdebinfo)
+              params+=(--build relwithdebinfo)
+              ;;
+            release-asan)
+              params+=(--build release --sanitize=address)
+              ;;
+            release-tsan)
+              params+=(--build release --sanitize=thread)
+              ;;
+            release-msan)
+              params+=(--build release --sanitize=memory)
+              ;;
+            *)
+              echo "Unknown build preset: $BUILD_PRESET"
+              exit 1
+              ;;
+          esac
+
+          echo "Build command: ./ya make ${params[*]} $BUILD_TARGET"
+          START_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          START_SEC=$(date +%s)
+
+          /usr/bin/time -f 'REAL_SECONDS=%e' -o time_result.txt \
+            ./ya make "${params[@]}" "$BUILD_TARGET" 2>&1 | tee ya_make_clean_build.log
+          RC=${PIPESTATUS[0]}
+
+          END_SEC=$(date +%s)
+          END_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          DURATION=$((END_SEC - START_SEC))
+          REAL_SECONDS=$(grep '^REAL_SECONDS=' time_result.txt | cut -d= -f2 || echo "n/a")
+
+          {
+            echo "duration_sec=$DURATION"
+            echo "real_seconds=$REAL_SECONDS"
+            echo "start_ts=$START_TS"
+            echo "end_ts=$END_TS"
+            echo "build_rc=$RC"
+          } >> "$GITHUB_OUTPUT"
+
+          tail -40 ya_make_clean_build.log > ya_stat_tail.txt || true
+          exit "$RC"
+
+      - name: Write summary
+        if: always()
+        shell: bash
+        run: |
+          DURATION_SEC="${{ steps.build.outputs.duration_sec }}"
+          DURATION_SEC="${DURATION_SEC:-0}"
+          DURATION_HUMAN=$(python3 -c "sec=int('${DURATION_SEC}'); h, rem = divmod(sec, 3600); m, s = divmod(rem, 60); print(f'{h}h {m}m {s}s' if h else f'{m}m {s}s')")
+          {
+            echo "## Clean build benchmark (cache-free)"
+            echo ""
+            echo "| Parameter | Value |"
+            echo "|---|---|"
+            echo "| Branch | \`${{ github.ref_name }}\` |"
+            echo "| Commit | [\`${{ github.sha }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |"
+            echo "| Runner | \`${{ runner.name }}\` |"
+            echo "| Build preset | \`${{ inputs.build_preset }}\` |"
+            echo "| Build target | \`${{ inputs.build_target }}\` |"
+            echo "| Started (UTC) | ${{ steps.build.outputs.start_ts }} |"
+            echo "| Finished (UTC) | ${{ steps.build.outputs.end_ts }} |"
+            echo "| Wall time | **${{ steps.build.outputs.duration_sec }} sec** ($DURATION_HUMAN) |"
+            echo "| \`/usr/bin/time\` real | **${{ steps.build.outputs.real_seconds }} sec** |"
+            echo "| Exit code | ${{ steps.build.outputs.build_rc }} |"
+            echo ""
+            echo "### Cache policy"
+            echo "- Removed \`~/.ya\` and repo \`.ya\` before build"
+            echo "- Cleared ccache if present"
+            echo "- No bazel-remote / dist cache"
+            echo "- No \`--cache-tests\`"
+            echo ""
+            echo "### ya make stat (tail)"
+            echo '```text'
+            cat ya_stat_tail.txt 2>/dev/null || echo "(no output)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clean-build-benchmark-logs
+          path: |
+            ya_make_clean_build.log
+            ya_stat_tail.txt
+            time_result.txt
+          retention-days: 7

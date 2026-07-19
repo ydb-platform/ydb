@@ -22,6 +22,7 @@ select
     max(total_revenue) as max_revenue
 from
     $revenue0
+group by (total_revenue < $z0) as FAKE
 );
 $join1 = (
 select

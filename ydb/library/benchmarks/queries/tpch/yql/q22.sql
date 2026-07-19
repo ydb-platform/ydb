@@ -31,6 +31,7 @@ from
     $c
 where
     c_acctbal > $z0_12
+group by (c_acctbal < $z0) as FAKE
 );
 
 $join1 = (
@@ -53,7 +54,7 @@ select
     j.c_acctbal as c_acctbal
 from
     $join1 as j
-left only join 
+left only join
     {{orders}} as o
 on
     o.o_custkey = j.c_custkey

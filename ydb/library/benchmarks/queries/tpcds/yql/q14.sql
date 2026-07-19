@@ -118,7 +118,13 @@ $week_seq_1999 = (select d_week_seq
        group by item.i_brand_id,item.i_class_id,item.i_category_id
        having sum(ws_quantity*ws_list_price) > $avg_sales
  ) y
- group by rollup (channel, i_brand_id,i_class_id,i_category_id)
+ -- group by rollup (channel, i_brand_id,i_class_id,i_category_id)
+
+ group by grouping sets (
+    (channel, i_brand_id,i_class_id,i_category_id), (channel, i_brand_id,i_class_id), (channel, i_brand_id), (channel),
+    ((i_category_id < 0) AS FAKE)
+ )
+
  order by channel,i_brand_id,i_class_id,i_category_id
  limit 100;
 

@@ -189,7 +189,7 @@ namespace NActors {
     }
 
     TExecutorThread::TProcessingResult TExecutorThread::Execute(TMailbox* mailbox, bool isTailExecution,
-            NHPTimer::STime mailboxScheduledTimestampTs) {
+            NHPTimer::STime mailboxScheduledTimestampTs, NHPTimer::STime timeNow) {
         EXECUTOR_THREAD_DEBUG(EDebugLevel::Activation, "Execute mailbox");
         Y_ABORT_UNLESS(mailbox, "mailbox must be not null");
         Y_DEBUG_ABORT_UNLESS(DyingActors.empty());
@@ -198,7 +198,7 @@ namespace NActors {
 
         if (!isTailExecution) {
             execCtx.ExecutedEvents = 0;
-            execCtx.HPStart = GetCycleCountFast();
+            execCtx.HPStart = timeNow;
         }
 
         IActor* actor = nullptr;
@@ -221,7 +221,7 @@ namespace NActors {
         Y_ABORT_UNLESS(mailboxScheduledTimestampTs, "mailbox scheduled timestamp must be set");
         ThreadCtx.SetMailboxScheduledTimestampTs(mailboxScheduledTimestampTs);
         for (; execCtx.ExecutedEvents < ThreadCtx.OverwrittenEventsPerMailbox(); execCtx.ExecutedEvents++) {
-            if (std::unique_ptr<IEventHandle> evExt = mailbox->Pop()) {
+            if (IEventHandle* evExt = mailbox->Pop()) {
                 EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "mailbox->Pop()");
                 ThreadCtx.SetEventEnqueuedTimestampTs(evExt->SendTime);
                 ThreadCtx.SetEventDeliveryTimeUs(CalculateWaitingTimeUs(evExt->SendTime, hpprev));
@@ -238,7 +238,7 @@ namespace NActors {
                 TActorContext ctx(*mailbox, *this, eventStart, recipient);
                 TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system
                 // move for destruct before ctx;
-                TAutoPtr<IEventHandle> ev = evExt.release();
+                TAutoPtr<IEventHandle> ev(evExt);
                 if (actor) {
                     EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "actor is not null");
                     wasWorking = true;
@@ -465,7 +465,7 @@ namespace NActors {
                     nonExecCycles += hpnow - hpprev;
                     hpprev = hpnow;
                     {
-                        auto result = Execute(mailbox, isTailExecution, mailboxScheduledTimestampTs);
+                        auto result = Execute(mailbox, isTailExecution, mailboxScheduledTimestampTs, hpnow);
                         if (result.IsPreempted) {
                             TlsThreadContext->ChangeCapturedSendingType(ESendingType::Lazy);
                         }

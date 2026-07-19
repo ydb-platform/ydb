@@ -1,6 +1,6 @@
 # Чтение данных из топика
 
-Можно выполнять чтение данных из [топика](../../../../concepts/datamodel/topic.md) обычным [`SELECT`] без создания [потокового запроса](../../../../concepts/streaming-query/streaming-query.md).
+Можно выполнять чтение данных из [топика](../../../../concepts/datamodel/topic.md) обычным `SELECT` без создания [потокового запроса](../../../../concepts/streaming-query/streaming-query.md).
 
 {% note warning %}
 
@@ -32,7 +32,7 @@ WITH (
     FORMAT = raw,
     SCHEMA = (
         Data String
-    ),
+    )
 )
 ```
 

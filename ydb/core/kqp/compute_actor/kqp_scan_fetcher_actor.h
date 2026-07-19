@@ -113,12 +113,12 @@ private:
 
     std::vector<NActors::TActorId> ComputeActorIds;
 
-    void StopOnError(const TString& errorMessage) const;
-    bool SendGlobalFail(
-        const NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssuesIds::EIssueCode issueCode, const TString& message) const;
+    void StopOnError(const TString& errorMessage);
+    void SendGlobalFail(
+        const NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssuesIds::EIssueCode issueCode, const TString& message);
 
-    bool SendGlobalFail(
-        const NYql::NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues) const;
+    void SendGlobalFail(
+        const NYql::NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues);
 
     bool SendScanFinished();
 

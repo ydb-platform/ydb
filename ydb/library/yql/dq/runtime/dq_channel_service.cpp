@@ -1008,7 +1008,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     auto bytes = data.Bytes;
     auto rows = data.Rows;
 
-    auto quoted = descriptor->QuotaManager.operator bool();
+    auto quoted = !!descriptor->QuotaManager;
     if (quoted && !descriptor->QuotaManager->AllocateQuota(bytes)) {
         descriptor->AbortChannelByMemoryLimit(bytes);
         return;
@@ -1600,6 +1600,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
                 item->SeqNo = ++SeqNo;
                 item->ChannelSeqNo = waiter->SeqNo.fetch_add(1) + 1;
                 item->Leading = waiter->Leading.exchange(false);
+                item->Quoted = !!waiter->QuotaManager;
                 Queue.push_back(item);
                 SendMessage(item);
                 inflightBytes += bytes;

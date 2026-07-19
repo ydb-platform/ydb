@@ -74,7 +74,7 @@ public:
     void Bootstrap() {
         //Counters->VectorResolveActorsCount->Inc();
 
-        CA_LOG_D("Start vector resolve actor");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Start vector resolve actor");
         Become(&TKqpVectorResolveActor::StateFunc);
     }
 
@@ -138,7 +138,7 @@ private:
             }
         }
 
-        CA_LOG_D("Returned " << totalDataSize << " bytes, finished: " << finished);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Returned " << totalDataSize << " bytes, finished: " << finished);
         return totalDataSize;
     }
 

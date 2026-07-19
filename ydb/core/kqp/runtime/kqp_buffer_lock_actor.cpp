@@ -68,7 +68,7 @@ public:
     }
 
     void Bootstrap() {
-        CA_LOG_D("Start buffer lock actor");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Start buffer lock actor");
 
         Settings.Counters->StreamLookupActorsCount->Inc();
         Become(&TKqpBufferLockActor::StateFunc);
@@ -251,7 +251,7 @@ public:
         Settings.Counters->SentLocks->Inc();
         auto& record = request->Record;
 
-        CA_LOG_D("Start locking of table: " << Settings.TablePath << ", requestId: " << record.GetRequestId()
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Start locking of table: " << Settings.TablePath << ", requestId: " << record.GetRequestId()
             << ", shardId: " << shardId);
 
         Settings.TxManager->AddShard(shardId, false, Settings.TablePath);
@@ -291,7 +291,7 @@ public:
 
         auto requestIt = LockIdToState.find(record.GetRequestId());
         if (requestIt == LockIdToState.end() || requestIt->second.Blocked) {
-            CA_LOG_D("Drop lock with requestId: " << record.GetRequestId() << ", because it's already completed or blocked");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Drop lock with requestId: " << record.GetRequestId() << ", because it's already completed or blocked");
             return;
         }
 
@@ -307,7 +307,7 @@ public:
         AFL_ENSURE(lockState.Worker);
         AFL_ENSURE(lockState.LocksInflight > 0);
 
-        CA_LOG_D("Recv TEvLockRowsResult (buffer lock) from ShardID=" << shardId
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Recv TEvLockRowsResult (buffer lock) from ShardID=" << shardId
             << ", Table = " << Settings.TablePath
             << ", RequestId=" << record.GetRequestId()
             << ", Status=" << NKikimrDataEvents::TEvLockRowsResult::EStatus_Name(record.GetStatus()));
@@ -329,7 +329,7 @@ public:
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS:
                 break;
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN: {
-                CA_LOG_D("STATUS_LOCKS_BROKEN from shard: " << shardId);
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"STATUS_LOCKS_BROKEN from shard: " << shardId);
                 BrokenLocksCount += record.GetLocks().size();
                 Settings.TxManager->SetError(shardId);
                 RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
@@ -338,7 +338,7 @@ public:
                 return;
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_OVERLOADED: {
-                CA_LOG_D("STATUS_OVERLOADED from shard: " << shardId);
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"STATUS_OVERLOADED from shard: " << shardId);
                 if (!RetryLockRequest(record.GetRequestId(), false)) {
                     return RuntimeError(
                         NYql::NDqProto::StatusIds::OVERLOADED,
@@ -349,7 +349,7 @@ public:
                 return;
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK: {
-                CA_LOG_D("STATUS_DEADLOCK from shard: " << shardId);
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"STATUS_DEADLOCK from shard: " << shardId);
                 return RuntimeError(
                     NYql::NDqProto::StatusIds::ABORTED,
                     NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
@@ -421,7 +421,7 @@ public:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
         ShardToState.at(ev->Get()->TabletId).HasPipe = false;
 
         TVector<ui64> toRetry;
@@ -449,7 +449,7 @@ public:
         const ui64 failedRequestId = ev->Get()->RequestId;
         auto requestIt = LockIdToState.find(failedRequestId);
         if (requestIt == LockIdToState.end()) {
-            CA_LOG_D("received retry request for already finished/non-existing request, request_id: " << failedRequestId);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"received retry request for already finished/non-existing request, request_id: " << failedRequestId);
             return;
         }
 
@@ -461,7 +461,7 @@ public:
     bool RetryLockRequest(const ui64 failedRequestId, bool allowInstantRetry) {
         auto& failedRequest = LockIdToState.at(failedRequestId);
         auto& lockState = CookieToLockState.at(failedRequest.LockCookie);
-        CA_LOG_D("Retry locking of table: " << Settings.TablePath << ", failedRequestId: " << failedRequestId
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Retry locking of table: " << Settings.TablePath << ", failedRequestId: " << failedRequestId
             << ", shardId: " << failedRequest.ShardId);
         failedRequest.Blocked = true;
 

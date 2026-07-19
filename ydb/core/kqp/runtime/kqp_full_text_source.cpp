@@ -2125,7 +2125,7 @@ public:
             }
         }
 
-        CA_LOG_D("Sending ack for read #" << readId << " seqno = " << readInfo.LastSeqNo);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Sending ack for read #" << readId << " seqno = " << readInfo.LastSeqNo);
 
         bool newPipe = PipesCreated.insert(shardId).second;
         TlsActivationContext->Send(new NActors::IEventHandle(
@@ -2144,7 +2144,7 @@ public:
         auto readId = request->Record.GetReadId();
         const bool needToCreatePipe = PipesCreated.insert(shardId).second;
 
-        CA_LOG_D(TStringBuilder() << "Send EvRead (full text source) to shardId=" << shardId
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<TStringBuilder() << "Send EvRead (full text source) to shardId=" << shardId
             << ", readId = " << record.GetReadId()
             << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
             << ", lockTxId=" << record.GetLockTxId()
@@ -2843,7 +2843,7 @@ private:
                 }
             }
             if (IsNgram && bestTokenLimit < Words.size()) {
-                CA_LOG_I("Selecting " << bestTokenLimit << " balanced ngrams out of " << Words.size()
+                LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Selecting " << bestTokenLimit << " balanced ngrams out of " << Words.size()
                     << " (imbalance: " << Words[byFreq[0]]->Frequency << " vs " << Words[byFreq[bestTokenLimit]]->Frequency << ")");
                 TVector<TWordStatePtr> newWords;
                 for (size_t i = 0; i < bestTokenLimit; i++) {
@@ -2852,7 +2852,7 @@ private:
                 }
                 std::swap(Words, newWords);
             } else if (MainTableReader->GetWithRelevance() && bestTokenLimit < Words.size() && defaultOperator == EDefaultOperator::And) {
-                CA_LOG_I("Selecting " << bestTokenLimit << " balanced tokens out of " << Words.size()
+                LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Selecting " << bestTokenLimit << " balanced tokens out of " << Words.size()
                     << " (imbalance: " << Words[byFreq[0]]->Frequency << " vs " << Words[byFreq[bestTokenLimit]]->Frequency << ")");
 
                 needL2Layer = true;
@@ -3301,7 +3301,7 @@ public:
     // Handle broken pipe to a datashard tablet.
     // Resets pipe tracking and schedules a retry for all reads on that shard.
     void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        CA_LOG_E("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
 
         ui64 shardId = ev->Get()->TabletId;
         ReadsState.UntrackPipe(shardId);
@@ -3316,12 +3316,12 @@ public:
     //   - If relevance mode: read stats + dict tables, then proceed to StartWordReads.
     //   - If plain mode: go directly to StartWordReads.
     void HandleResolve(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        CA_LOG_D("TEvResolveKeySetResult was received for table.");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"TEvResolveKeySetResult was received for table.");
         ResolveInProgress = false;
 
         if (ev->Get()->Request->ErrorCount > 0) {
             for(const auto& entry : ev->Get()->Request->ResultSet) {
-                CA_LOG_E("Table " << entry.KeyDescription->TableId << " error status: " << entry.Status);
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Table " << entry.KeyDescription->TableId << " error status: " << entry.Status);
             }
 
             TString errorMsg = TStringBuilder() << "Failed to get partitioning for table. ";
@@ -3659,7 +3659,7 @@ public:
         L1MergedDocuments.insert(L1MergedDocuments.end(), l1matched.begin(), l1matched.end());
 
         std::vector<TDocInfoPtr> matches = L2MergeAlgo->FindMatches();
-        CA_LOG_D("L2Merge done: " << L2MergeAlgo->Done());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"L2Merge done: " << L2MergeAlgo->Done());
         MergeL2MatchFrequencies(matches);
         FetchDocumentDetails(matches);
     }
@@ -3840,7 +3840,7 @@ public:
         NYql::IssuesFromMessage(record.GetStatus().GetIssues(), shardIssues);
         const TString tablePath = GetReadTablePath(static_cast<EReadKind>(readInfo.ReadKind));
 
-        CA_LOG_W("Read result error, ReadId=" << readId
+        LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Read result error, ReadId=" << readId
             << ", ShardId=" << shardId
             << ", ReadKind=" << ReadKindName(static_cast<EReadKind>(readInfo.ReadKind))
             << ", Table=" << tablePath
@@ -3889,7 +3889,7 @@ public:
 
         auto& readInfo = *it;
 
-        CA_LOG_D("Recv TEvReadResult (full text source)"
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Recv TEvReadResult (full text source)"
             << ", Cookie=" << readInfo.Cookie
             << ", ReadKind=" << (ui32)readInfo.ReadKind
             << ", ShardId=" << readInfo.ShardId

@@ -161,7 +161,7 @@ void TKqpComputeActor::DoBootstrap() {
 }
 
 STFUNC(TKqpComputeActor::StateFunc) {
-    CA_LOG_D("CA StateFunc " << ev->GetTypeRewrite());
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"CA StateFunc " << ev->GetTypeRewrite());
     try {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);
@@ -204,7 +204,7 @@ void TKqpComputeActor::PollSources(ui64 prevFreeSpace) {
         return;
     }
 
-    CA_LOG_D("Poll sources, free space: " << freeSpace);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Poll sources, free space: " << freeSpace);
     Send(SysViewActorId, new TEvKqpCompute::TEvScanDataAck(freeSpace));
 }
 
@@ -253,7 +253,7 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev) 
 
     Y_DEBUG_ABORT_UNLESS(SysViewActorId == ActorIdFromProto(msg.GetScanActorId()));
 
-    CA_LOG_D("Got sysview scan initial event, scan actor: " << SysViewActorId << ", scanId: 0");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Got sysview scan initial event, scan actor: " << SysViewActorId << ", scanId: 0");
     Send(ev->Sender, new TEvKqpCompute::TEvScanDataAck(GetMemoryLimits().ChannelBufferSize));
     return;
 }
@@ -287,11 +287,11 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
         }
     }
 
-    CA_LOG_D("Got sysview scandata, rows: " << rowsCount << ", bytes: " << bytes
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Got sysview scandata, rows: " << rowsCount << ", bytes: " << bytes
         << ", finished: " << msg.Finished << ", from: " << SysViewActorId);
 
     if (msg.Finished) {
-        CA_LOG_D("Finishing rows buffer");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Finishing rows buffer");
         ScanData->Finish();
     }
 
@@ -306,7 +306,7 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     }
 
     if (const auto freeSpace = CalculateFreeSpace(); freeSpace > 0) {
-        CA_LOG_D("Send scan data ack, freeSpace: " << freeSpace);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Send scan data ack, freeSpace: " << freeSpace);
 
         Send(SysViewActorId, new TEvKqpCompute::TEvScanDataAck(freeSpace));
     }

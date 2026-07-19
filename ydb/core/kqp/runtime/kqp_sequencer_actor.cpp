@@ -143,7 +143,7 @@ public:
     void Bootstrap() {
         Counters->SequencerActorsCount->Inc();
 
-        CA_LOG_D("Start stream lookup actor");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Start stream lookup actor");
         Become(&TKqpSequencerActor::StateFunc);
     }
 
@@ -191,7 +191,7 @@ private:
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         } 
 
-        CA_LOG_D("Returned " << totalDataSize << " bytes, finished: " << finished);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Returned " << totalDataSize << " bytes, finished: " << finished);
         return totalDataSize;
     }
 

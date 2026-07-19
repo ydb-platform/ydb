@@ -75,7 +75,7 @@ public:
     }
 
     void Bootstrap() {
-        CA_LOG_D("Start buffer lookup actor");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Start buffer lookup actor");
 
         Settings.Counters->StreamLookupActorsCount->Inc();
         Become(&TKqpBufferLookupActor::StateFunc);
@@ -325,7 +325,7 @@ public:
 
         auto& worker = CookieToLookupState.at(cookie).Worker;
 
-        CA_LOG_D("Start reading of table: " << worker->GetTablePath() << ", readId: " << record.GetReadId()
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Start reading of table: " << worker->GetTablePath() << ", readId: " << record.GetReadId()
             << ", shardId: " << shardId);
 
         Settings.TxManager->AddShard(shardId, false, worker->GetTablePath());
@@ -358,7 +358,7 @@ public:
         record.SetMaxBytes(defaultSettings.GetMaxBytes());
         record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
 
-        CA_LOG_D(TStringBuilder() << "Send EvRead (buffer lookup) to shardId=" << shardId
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<TStringBuilder() << "Send EvRead (buffer lookup) to shardId=" << shardId
             << ", readId = " << record.GetReadId()
             << ", tablePath: " << worker->GetTablePath()
             << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
@@ -402,7 +402,7 @@ public:
 
         auto readIt = ReadIdToState.find(record.GetReadId());
         if (readIt == ReadIdToState.end() || readIt->second.Blocked) {
-            CA_LOG_D("Drop read with readId: " << record.GetReadId() << ", because it's already completed or blocked");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Drop read with readId: " << record.GetReadId() << ", because it's already completed or blocked");
             return;
         }
 
@@ -418,7 +418,7 @@ public:
         AFL_ENSURE(lookupState.Worker);
         AFL_ENSURE(lookupState.ReadsInflight > 0);
 
-        CA_LOG_D("Recv TEvReadResult (buffer lookup) from ShardID=" << shardId
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Recv TEvReadResult (buffer lookup) from ShardID=" << shardId
             << ", Table = " << lookupState.Worker->GetTablePath()
             << ", ReadId=" << record.GetReadId() << " (current ReadId=" << ReadId << ")"
             << ", SeqNo=" << record.GetSeqNo()
@@ -482,7 +482,7 @@ public:
                     getIssues());
             }
             case Ydb::StatusIds::OVERLOADED: {
-                CA_LOG_D("OVERLOADED was received from tablet: " << shardId << "."
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"OVERLOADED was received from tablet: " << shardId << "."
                     << getIssues().ToOneLineString());
                 const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
                     ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
@@ -498,7 +498,7 @@ public:
                 return;
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
-                CA_LOG_D("INTERNAL_ERROR was received from tablet: " << shardId << "."
+                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"INTERNAL_ERROR was received from tablet: " << shardId << "."
                     << getIssues().ToOneLineString());
                 if (!RetryTableRead(record.GetReadId(), true)) {
                     return RuntimeError(
@@ -562,7 +562,7 @@ public:
                 LookupActorSpan.GetTraceId());
 
             shardState.HasPipe = true;
-            CA_LOG_D("TEvReadAck was sent to shard: " << shardId);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"TEvReadAck was sent to shard: " << shardId);
         }
 
         if (failOnUniqueCheck && record.GetRowCount() != 0) {
@@ -583,7 +583,7 @@ public:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
         ShardToState.at(ev->Get()->TabletId).HasPipe = false;
 
         TVector<ui64> toRetry;
@@ -612,7 +612,7 @@ public:
         const ui64 failedReadId = ev->Get()->ReadId;
         auto readIt = ReadIdToState.find(failedReadId);
         if (readIt == ReadIdToState.end()) {
-            CA_LOG_D("received retry request for already finished/non-existing read, read_id: " << failedReadId);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"received retry request for already finished/non-existing read, read_id: " << failedReadId);
             return;
         }
 
@@ -627,7 +627,7 @@ public:
     bool RetryTableRead(const ui64 failedReadId, bool allowInstantRetry, std::optional<TDuration> throttleDelay = std::nullopt) {
         auto& failedRead = ReadIdToState.at(failedReadId);
         auto& lookupState = CookieToLookupState.at(failedRead.LookupCookie);
-        CA_LOG_D("Retry reading of table: " << lookupState.Worker->GetTablePath() << ", failedReadId: " << failedReadId
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Retry reading of table: " << lookupState.Worker->GetTablePath() << ", failedReadId: " << failedReadId
             << ", shardId: " << failedRead.ShardId);
         failedRead.Blocked = true;
 

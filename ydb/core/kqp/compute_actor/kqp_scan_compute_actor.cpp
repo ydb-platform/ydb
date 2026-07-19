@@ -47,7 +47,7 @@ TKqpScanComputeActor::~TKqpScanComputeActor() {
 void TKqpScanComputeActor::ProcessRlNoResourceAndDie() {
     const NYql::TIssue issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED,
         "Throughput limit exceeded for query");
-    CA_LOG_E("Throughput limit exceeded stream will be terminated");
+    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Throughput limit exceeded stream will be terminated");
 
     State = NDqProto::COMPUTE_STATE_FAILURE;
     ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::OVERLOADED, TIssues({ issue }));
@@ -82,7 +82,7 @@ void TKqpScanComputeActor::AcquireRateQuota() {
         rlFullPath, 0, RL_MAX_BATCH_DELAY,
         std::move(onSendAllowed), std::move(onSendTimeout), TActivationContext::AsActorContext());
 
-    CA_LOG_D("Launch rate limiter actor: " << rlActor);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Launch rate limiter actor: " << rlActor);
 }
 
 void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
@@ -247,17 +247,17 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
         return;
     }
     const ui64 freeSpace = CalculateFreeSpace();
-    CA_LOG_D("POLL_SOURCES:START:" << Fetchers.size() << ";fs=" << freeSpace);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"POLL_SOURCES:START:" << Fetchers.size() << ";fs=" << freeSpace);
     for (auto&& i : Fetchers) {
         Send(i, new TEvScanExchange::TEvAckData(freeSpace));
     }
     ++AcksSent;
     ScanDataInFlight = true;
-    CA_LOG_D("POLL_SOURCES:FINISH");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"POLL_SOURCES:FINISH");
 }
 
 void TKqpScanComputeActor::DoBootstrap() {
-    CA_LOG_D("EVLOGKQP START");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"EVLOGKQP START");
     NDq::TDqTaskRunnerContext execCtx;
     execCtx.FuncRegistry = TBase::FunctionRegistry;
     execCtx.ComputeCtx = &ComputeCtx;

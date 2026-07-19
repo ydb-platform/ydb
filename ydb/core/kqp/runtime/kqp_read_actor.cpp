@@ -971,25 +971,22 @@ public:
             return;
         }
 
+        TStringBuilder txLocks;
+        for (const auto& lock : record.GetTxLocks()) {
+            txLocks << lock.ShortDebugString();
+        }
+        TStringBuilder brokenTxlocks;
+        for (const auto& lock : record.GetBrokenTxLocks()) {
+            brokenTxlocks << lock.ShortDebugString();
+        }
+
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Recv TEvReadResult from ShardID=" << Reads[id].Shard->TabletId
             << ", ReadId=" << id
             << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
             << ", Finished=" << record.GetFinished()
             << ", RowCount=" << record.GetRowCount()
-            << ", TxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
-            << ", BrokenTxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetBrokenTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }());
+            << ", TxLocks= " << txLocks
+            << ", BrokenTxLocks= " << brokenTxlocks);
 
         if (!record.HasNodeId()) {
             Counters->ReadActorAbsentNodeId->Inc();

@@ -832,16 +832,15 @@ public:
             return issues;
         };
 
+        TStringBuilder txLocks;
+        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+            txLocks << lock.ShortDebugString();
+        }
+
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Recv EvWriteResult from ShardID=" << ev->Get()->Record.GetOrigin()
             << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
             << ", TxId=" << ev->Get()->Record.GetTxId()
-            << ", Locks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
+            << ", Locks= " << txLocks
             << ", Cookie=" << ev->Cookie);
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
@@ -1116,17 +1115,17 @@ public:
     }
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+
+        TStringBuilder txLocks;
+        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+            txLocks << lock.ShortDebugString();
+        }
+
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
             << ", Cookie=" << ev->Cookie
             << ", Mode=" << static_cast<int>(Mode)
-            << ", Locks=" << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }());
+            << ", Locks=" << txLocks);
 
         // Only collect locks in WRITE mode (COLLECTING state required by AddLock)
         if (Mode == EMode::WRITE) {
@@ -1326,15 +1325,13 @@ public:
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "WriteActor");
 
+        TStringBuilder locks;
+        for (const auto& lock : evWrite->Record.GetLocks().GetLocks()) {
+            locks << lock.ShortDebugString();
+        };
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Send EvWrite to ShardID=" << shardId << ", isPrepare=" << isPrepare << ", isImmediateCommit=" << isImmediateCommit << ", TxId=" << evWrite->Record.GetTxId()
             << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
-            << ", Locks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : evWrite->Record.GetLocks().GetLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
+            << ", Locks= " << locks
             << ", Size=" << serializationResult.TotalDataSize << ", Cookie=" << metadata->Cookie
             << ", OperationsCount=" << evWrite->Record.OperationsSize() << ", IsFinal=" << metadata->IsFinal
             << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode)
@@ -4566,15 +4563,15 @@ public:
 
         const auto rollbackCookie = isRollback ? RollbackMessageCookie : 0;
         SendTime[shardId] = TInstant::Now();
+
+        TStringBuilder locks;
+        for (const auto& lock : evWrite->Record.GetLocks().GetLocks()) {
+            locks << lock.ShortDebugString();
+        }
+
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Send EvWrite (external) to ShardID=" << shardId << ", isPrepare=" << !isImmediate << ", isRollback=" << isRollback << ", TxId=" << evWrite->Record.GetTxId()
             << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
-            << ", Locks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : evWrite->Record.GetLocks().GetLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
+            << ", Locks= " << locks
             << ", Size=" << 0 << ", Cookie=" << rollbackCookie
             << ", OperationsCount=" << 0 << ", IsFinal=" << 1
             << ", Attempts=" << 0);
@@ -5140,16 +5137,15 @@ public:
     }
 
     void HandlePrepare(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        TStringBuilder txLocks;
+        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+            txLocks << lock.ShortDebugString();
+        }
+
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Recv EvWriteResult (external) from ShardID=" << ev->Get()->Record.GetOrigin()
             << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
             << ", TxId=" << ev->Get()->Record.GetTxId()
-            << ", Locks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
+            << ", Locks= " << txLocks
             << ", Cookie=" << ev->Cookie);
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
@@ -5173,16 +5169,14 @@ public:
     }
 
     void HandleCommit(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        TStringBuilder locks;
+        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+            locks << lock.ShortDebugString();
+        }
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Recv EvWriteResult (external) from ShardID=" << ev->Get()->Record.GetOrigin()
             << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
             << ", TxId=" << ev->Get()->Record.GetTxId()
-            << ", Locks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
+            << ", Locks= " << locks
             << ", Cookie=" << ev->Cookie);
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
@@ -5206,16 +5200,15 @@ public:
     }
 
     void HandleRollback(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        TStringBuilder locks;
+        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+            locks << lock.ShortDebugString();
+        }
+
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Recv EvWriteResult (external) from ShardID=" << ev->Get()->Record.GetOrigin()
             << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
             << ", TxId=" << ev->Get()->Record.GetTxId()
-            << ", Locks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
+            << ", Locks= " << locks
             << ", Cookie=" << ev->Cookie);
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
@@ -5501,16 +5494,15 @@ public:
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         OnMessageReceived(ev->Get()->Record.GetOrigin());
+        TStringBuilder locks;
+        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+            locks << lock.ShortDebugString();
+        }
+
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
             << ", Cookie=" << ev->Cookie
-            << ", Locks=" << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }());
+            << ", Locks=" << locks);
 
         CollectTliStats(ev->Get()->Record);
 

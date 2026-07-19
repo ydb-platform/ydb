@@ -3889,6 +3889,16 @@ public:
 
         auto& readInfo = *it;
 
+        TStringBuilder txLocks;
+        for (const auto& lock : record.GetTxLocks()) {
+            txLocks << lock.ShortDebugString();
+        }
+
+        TStringBuilder borkenTxlocks;
+        for (const auto& lock : record.GetBrokenTxLocks()) {
+            borkenTxlocks << lock.ShortDebugString();
+        }
+
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Recv TEvReadResult (full text source)"
             << ", Cookie=" << readInfo.Cookie
             << ", ReadKind=" << (ui32)readInfo.ReadKind
@@ -3899,20 +3909,8 @@ public:
             << ", Finished=" << record.GetFinished()
             << ", RowCount=" << record.GetRowCount()
             << ", ResultFormat=" << NKikimrDataEvents::EDataFormat_Name(record.GetResultFormat())
-            << ", TxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
-            << ", BrokenTxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetBrokenTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }());
+            << ", TxLocks= " << txLocks
+            << ", BrokenTxLocks= " << borkenTxlocks);
 
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             HandleReadResultError(readId, readInfo, record);

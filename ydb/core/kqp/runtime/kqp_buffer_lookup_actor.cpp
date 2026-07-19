@@ -418,6 +418,16 @@ public:
         AFL_ENSURE(lookupState.Worker);
         AFL_ENSURE(lookupState.ReadsInflight > 0);
 
+        TStringBuilder txLocks;
+        for (const auto& lock : record.GetTxLocks()) {
+            txLocks << lock.ShortDebugString();
+        }
+
+        TStringBuilder borkenTxLocks;
+        for (const auto& lock : record.GetBrokenTxLocks()) {
+            borkenTxLocks << lock.ShortDebugString();
+        }
+
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Recv TEvReadResult (buffer lookup) from ShardID=" << shardId
             << ", Table = " << lookupState.Worker->GetTablePath()
             << ", ReadId=" << record.GetReadId() << " (current ReadId=" << ReadId << ")"
@@ -425,20 +435,8 @@ public:
             << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
             << ", Finished=" << record.GetFinished()
             << ", RowCount=" << record.GetRowCount()
-            << ", TxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
-            << ", BrokenTxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetBrokenTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }());
+            << ", TxLocks= " << txLocks
+            << ", BrokenTxLocks= " << borkenTxLocks);
 
         if (!record.GetBrokenTxLocks().empty()) {
             BrokenLocksCount += record.GetBrokenTxLocks().size();

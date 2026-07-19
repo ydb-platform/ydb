@@ -629,6 +629,15 @@ private:
         auto& read = readIt->second;
         ui64 shardId = read.ShardId;
 
+        TStringBuilder txLocks;
+        for (const auto& lock : record.GetTxLocks()) {
+            txLocks << lock.ShortDebugString();
+        }
+        TStringBuilder brokenTxLocks;
+        for (const auto& lock : record.GetBrokenTxLocks()) {
+            brokenTxLocks << lock.ShortDebugString();
+        }
+
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Recv TEvReadResult (stream lookup) from ShardID=" << read.ShardId
             << ", Table = " << StreamLookupWorker->GetTablePath()
             << ", ReadId=" << record.GetReadId() << " (current OperationId=" << OperationId << ")"
@@ -636,20 +645,8 @@ private:
             << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
             << ", Finished=" << record.GetFinished()
             << ", RowCount=" << record.GetRowCount()
-            << ", Locks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
-            << ", BrokenTxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetBrokenTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }());
+            << ", Locks= " << txLocks
+            << ", BrokenTxLocks= " << brokenTxLocks);
 
         for (auto& lock : record.GetBrokenTxLocks()) {
             BrokenLocks.push_back(lock);

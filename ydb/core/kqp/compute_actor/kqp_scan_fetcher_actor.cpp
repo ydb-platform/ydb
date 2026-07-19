@@ -147,27 +147,21 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     }
     AFL_ENSURE(state->State == EShardState::Running)("state", state->State)("actor_id", state->ActorId)("ev_sender", ev->Sender);
 
-    auto lock = [&]() {
-        TStringBuilder builder;
-        for (const auto& lock : ev->Get()->LocksInfo.Locks) {
-            builder << lock.ShortDebugString();
-        }
-        return builder;
-    }();
+    TStringBuilder locks;
+    for (const auto& lock : ev->Get()->LocksInfo.Locks) {
+        locks << lock.ShortDebugString();
+    }
 
-    auto brokenLocks = [&]() {
-        TStringBuilder builder;
-        for (const auto& lock : ev->Get()->LocksInfo.BrokenLocks) {
-            builder << lock.ShortDebugString();
-        }
-        return builder;
-    }();
+    TStringBuilder brokenLocks;
+    for (const auto& lock : ev->Get()->LocksInfo.BrokenLocks) {
+        brokenLocks << lock.ShortDebugString();
+    }
 
     YDB_LOG_DEBUG("",
         {"#_Recv TEvScanData from ShardID=", ev->Sender},
         {"scanId", ev->Get()->ScanId},
         {"finished", ev->Get()->Finished},
-        {"lock", lock},
+        {"lock", locks},
         {"brokenLocks", brokenLocks});
 
     TInstant startTime = TActivationContext::Now();

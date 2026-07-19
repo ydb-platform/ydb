@@ -53,6 +53,11 @@ public:
                 auto pathInfo = TYtPathInfo(path);
                 auto tableInfo = pathInfo.Table;
 
+                if (!tableInfo->Meta) {
+                    AddIssue(ctx, TIssue("table without meta"));
+                    return false;
+                }
+
                 if (!tableInfo->Meta->IsDynamic) {
                     AddIssue(ctx, TIssue("static table"));
                     return false;

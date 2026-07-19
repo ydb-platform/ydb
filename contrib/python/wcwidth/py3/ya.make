@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.7.0)
+VERSION(0.8.1)
 
 LICENSE(MIT)
 
@@ -25,7 +25,31 @@ PY_SRCS(
     wcwidth/sgr_state.py
     wcwidth/table_ambiguous.py
     wcwidth/table_grapheme.py
+    wcwidth/table_grapheme_overrides/__init__.py
+    wcwidth/table_grapheme_overrides/_known_27e0693f.py
+    wcwidth/table_grapheme_overrides/_known_3d4826b8.py
+    wcwidth/table_grapheme_overrides/_known_45d92e98.py
+    wcwidth/table_grapheme_overrides/_known_4cdf59ce.py
+    wcwidth/table_grapheme_overrides/_known_50bf0759.py
+    wcwidth/table_grapheme_overrides/_known_529fbb4a.py
+    wcwidth/table_grapheme_overrides/_known_5bfac390.py
+    wcwidth/table_grapheme_overrides/_known_813fee16.py
+    wcwidth/table_grapheme_overrides/_known_8589765c.py
+    wcwidth/table_grapheme_overrides/_known_8f94b404.py
+    wcwidth/table_grapheme_overrides/_known_970dbe10.py
+    wcwidth/table_grapheme_overrides/_known_c0a2cdbf.py
+    wcwidth/table_grapheme_overrides/_known_c2157f7e.py
+    wcwidth/table_grapheme_overrides/_known_c3db41c0.py
+    wcwidth/table_grapheme_overrides/_known_da9ceb0a.py
+    wcwidth/table_grapheme_overrides/_known_e08bd75e.py
+    wcwidth/table_grapheme_overrides/_known_e22030f3.py
+    wcwidth/table_grapheme_overrides/_known_fcc05a0f.py
+    wcwidth/table_grapheme_overrides/_known_fd9d4c44.py
+    wcwidth/table_grapheme_overrides/_registry.py
     wcwidth/table_mc.py
+    wcwidth/table_overrides.py
+    wcwidth/table_term_programs.py
+    wcwidth/table_vs15.py
     wcwidth/table_vs16.py
     wcwidth/table_wide.py
     wcwidth/table_zero.py

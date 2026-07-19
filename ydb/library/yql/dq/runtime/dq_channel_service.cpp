@@ -691,10 +691,8 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
 }
 
 TOutputItem::~TOutputItem() {
-    if (Quoted) {
-        if (Descriptor->QuotaManager) {
-            Descriptor->QuotaManager->FreeQuota(Data.Bytes);
-        }
+    if (Quoted && Descriptor->QuotaManager) {
+        Descriptor->QuotaManager->FreeQuota(Data.Bytes);
     }
 }
 

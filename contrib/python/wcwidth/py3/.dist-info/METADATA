@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: wcwidth
-Version: 0.7.0
+Version: 0.8.1
 Summary: Measures the displayed width of unicode strings in a terminal
 Project-URL: Homepage, https://github.com/jquast/wcwidth
 Author-email: Jeff Quast <contact@jeffquast.com>
@@ -20,6 +20,7 @@ Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: 3.15
 Classifier: Topic :: Software Development :: Internationalization
 Classifier: Topic :: Software Development :: Libraries
 Classifier: Topic :: Software Development :: Localization
@@ -72,7 +73,8 @@ and `wcswidth()`_.  These functions return -1 when C0 and C1 control codes are p
 
 An easy-to-use `width()`_ function is provided as a wrapper of `wcswidth()`_ that is also capable of
 measuring most terminal control codes and sequences, like colors, bold, tabstops, and horizontal
-cursor movement.
+cursor movement. `width()`_ argument ``term_program`` may provide more accurate terminal measurement
+Corrections_ as a wrapper of `wcstwidth()`_.
 
 Text-justification is solved by the sequence-aware functions `ljust()`_, `rjust()`_, `center()`_,
 and the grapheme-aware function `wrap()`_, serving as drop-in replacements to python standard
@@ -83,25 +85,31 @@ The `clip()`_ function extracts substrings by their displayed column positions, 
 
 The iterator functions `iter_graphemes()`_ and `iter_sequences()`_ allow for careful navigation of
 grapheme and terminal control sequence boundaries as required by editors or REPLs with cursor
-control.  `iter_graphemes_reverse()`_, and `grapheme_boundary_before()`_ are often necessary for
-backward cursor control over complex unicode.
+control.  `iter_graphemes_reverse()`_ and `grapheme_boundary_before()`_ are necessary for backward
+cursor control over complex unicode.
 
 Discrepancies
 -------------
 
-You may find that support *varies* for complex unicode sequences or codepoints. This library may be
-considered to presume the terminal is enabled for DEC Private Mode 2027 ("Grapheme Clustering"), but
-the specification does not fully describe varying unicode versions, feature levels, or details of
-specific language support.  This library does *not* support any alternate "legacy width"
-measurement.
+You may find that support *varies* for complex unicode sequences or codepoints.
 
-See `Grapheme Clusters and Terminal Emulators`_ and `terminal-unicode-core.tex`_, and `State of
-Terminal Emulators in 2025`_ for more details on Mode 2027 and unicode-aware terminals.
+This library may be considered to presume the terminal is enabled for DEC Private Mode 2027
+("Grapheme Clustering") by default, which may require to be enabled by a TUI application but
+is often the default mode for those terminals that support it: Windows Terminal, WezTerm, ghostty,
+contour, and foot. This library does support any specific "legacy width" measurement, but does
+provide Corrections_ for those terminals without grapheme support.
 
-The `jquast/ucs-detect`_ utility is used to gather and publish the results of compliance to our
-standard for Wide character, Languages, grapheme clustering, complex or combining scripts, emojis,
-zero-width joiner, variations, and regional indicator (flags) as a `General
-Tabulated Summary`_ by terminal emulator software and version.
+See also:
+
+- `Grapheme Clusters and Terminal Emulators`_
+- `terminal-unicode-core.tex`_
+- `State of Terminal Emulators in 2025`_
+- `Perfecting Terminal Character Width Using Correction Tables (2026)`_
+
+The `jquast/ucs-detect`_ project publishes automatic results of compliance to our standard for Wide
+character, Languages, grapheme clustering, complex or combining scripts, emojis, zero-width joiner,
+variations, and regional indicator (flags) as a `General Tabulated Summary`_ by terminal emulator
+software and version. The results of the ucs-detect project create our correction tables.
 
 ========
 Overview
@@ -148,15 +156,38 @@ Use function `wcswidth()`_ to determine the length of many, a *string of unicode
 See specification_ of character measurements. Note that ``-1`` is returned if control codes occurs
 anywhere in the string.
 
+wcstwidth()
+-----------
+
+Same behavior as `wcswidth()`_ with automatic terminal-specific Corrections_, reading
+``TERM_PROGRAM`` or ``TERM`` when ``True`` (default), or caller can provide terminal query
+XTVERSION_ or ENQ_ response:
+
+.. code-block:: python
+
+    >>> # '♀️' emoji w/vs-16, uncorrected:
+    >>> wcwidth.wcswidth('\u2640\ufe0f')
+    2
+    >>> # corrected,
+    >>> wcwidth.wcstwidth('\u2640\ufe0f', term_program='vte')
+    1
+
 width()
 -------
 
-Use function `width()`_ to measure a string with improved handling of ``control_codes``.
+Use function `width()`_ to measure a string with improved handling of ``control_codes`` and
+measurement Corrections_ through ``term_program``:.
 
 .. code-block:: python
 
     >>> # same support as wcswidth(), eg. regional indicator flag:
     >>> wcwidth.width('\U0001F1FF\U0001F1FC')
+    2
+    >>> # set term_program=True to use wcstwidth()
+    >>> wcwidth.width('\U0001F1FF\U0001F1FC', term_program=True)
+    1
+    >>> # or set term_program for measurement of a specific terminal
+    >>> wcwidth.width('\U0001F1FF\U0001F1FC', term_program='contour')
     2
     >>> # but also supports sequences, like SGR colored text, "WARN", followed by reset
     >>> wcwidth.width('\x1b[38;2;255;150;100mWARN\x1b[0m')
@@ -190,8 +221,9 @@ terminal sequences for slightly improved performance. Note that TAB (``'\t'``) i
 character and is also ignored, you may want to use `str.expandtabs()`_, first.
 
 Use ``control_codes='strict'`` when input is known to contain some control sequences, such as
-SGR color, bold, hyperlinks and cursor movement. Any sequence that cannot be accurately parsed,
-such as clearing the screen, vertical, or absolute cursor movement will raise ``ValueError``:
+SGR color, bold, hyperlinks and cursor movement. Any sequence that cannot be accurately parsed
+for horizontal measurement, such as clearing the screen, vertical, or absolute cursor movement will
+raise ``ValueError``:
 
 .. code-block:: python
 
@@ -368,13 +400,16 @@ Use `strip_sequences()`_ to remove all terminal escape sequences from text.
 
 .. _ambiguous_width:
 
-ambiguous_width
+Ambiguous Width
 ---------------
 
 Some Unicode characters have "East Asian Ambiguous" (A) width. These characters display as 1 cell by
 default, matching Western terminal contexts, but many CJK (Chinese, Japanese, Korean) environments
 may have a preference for 2 cells.  This is often found as boolean option, "Ambiguous width as wide"
 in Terminal Emulator software preferences.
+
+The ``ambiguous_width`` parameter is available on all width-measuring functions: `wcwidth()`_,
+`wcswidth()`_, `width()`_, `ljust()`_, `rjust()`_, `center()`_, `wrap()`_, and `clip()`_.
 
 By default, wcwidth treats ambiguous characters as narrow (width 1). For CJK environments where your
 terminal is configured to display ambiguous characters as double-width, pass ``ambiguous_width=2``:
@@ -386,9 +421,6 @@ terminal is configured to display ambiguous characters as double-width, pass ``a
     1
     >>> wcwidth.width('\u2460', ambiguous_width=2)
     2
-
-The ``ambiguous_width`` parameter is available on all width-measuring functions: `wcwidth()`_,
-`wcswidth()`_, `width()`_, `ljust()`_, `rjust()`_, `center()`_, `wrap()`_, and `clip()`_.
 
 **Terminal Detection**
 
@@ -412,6 +444,91 @@ possible timeout, slow network, or non-response when working with "dumb terminal
     >>> # result depends on attached terminal mode
     >>> awidth('\u2460')
     1
+
+Corrections
+-----------
+
+Corrections may be automatically applied depending on the detected or given terminal software name
+beginning with wcwidth release 0.8.0. This allows to correct widths for terminal software that
+differs from the python wcwidth specification_.  These corrections are sourced from the
+`jquast/ucs-detect`_ project.
+
+The ``term_program`` parameter is available on all width-measuring functions: `wcstwidth()`_,
+`width()`_, `ljust()`_, `rjust()`_, `center()`_, `wrap()`_, and `clip()`_.
+
+`wcstwidth()`_ defaults to ``term_program=True``, auto-detecting the terminal from the
+``TERM_PROGRAM`` or ``TERM`` environment variable.  All other functions default to
+``term_program=False``, disabling corrections.  Use ``term_program=True`` for automatic
+detection by environment values of ``TERM`` and ``TERM_PROGRAM``.
+
+.. code-block:: python
+
+    # VTE terminals (Gnome Terminal Et al.) still render trigrams as narrow (1 cell), but their
+    # definition was changed to wide in Unicode 16 (September 2024).
+    >>> wcwidth.wcswidth('\u2630')
+    2
+    >>> wcwidth.wcstwidth('\u2630', term_program='vte')
+    1
+
+    # account for Alacritty non-support of emoji ZWJ:
+    # man + ZWJ + woman + ZWJ + girl + ZWJ + boy
+    >>> family = '\U0001F468\u200D\U0001F469\u200D\U0001F467\u200D\U0001F466'
+    >>> wcwidth.wcswidth(family)
+    2
+    >>> wcwidth.wcstwidth(family, term_program='alacritty')
+    8
+
+Only detectable_ terminals are included: those that identify themselves by XTVERSION_, ENQ_, any
+``TERM_PROGRAM`` or a unique ``TERM`` environment value.  For the most accurate correction tables,
+query the terminal's software version via XTVERSION_ (``CSI > q``) using a higher-level interactive
+terminal library like `jquast/blessed`_:
+
+.. code-block:: python
+
+    >>> import blessed, wcwidth
+    >>> term = blessed.Terminal()
+    >>> sw_ver = term.get_software_version()
+    >>> print(sw_ver)
+    SoftwareVersion(name='VTE', version='7600')
+    >>> wcwidth.width('\u2630', term_program=sw_ver.name)
+    1
+
+This is important because ``TERM_PROGRAM`` is not forwarded for remote hosts, like SSH, and many
+terminals may only be identified using XTVERSION_ or ENQ_.  Use `list_term_programs()`_ to see all
+recognized names:
+
+.. BEGIN_LIST_TERM_PROGRAMS
+.. code-block:: python
+
+    >>> wcwidth.list_term_programs()
+    ('alacritty', 'apple_terminal', 'bobcat', 'contour', 'extraterm', 'foot',
+     'ghostty', 'hyper', 'iterm.app', 'iterm2', 'kitty', 'konsole', 'mintty',
+     'mlterm', 'pterm', 'putty', 'rio', 'rxvt', 'rxvt-unicode-256color', 'st',
+     'st-256color', 'tabby', 'terminology', 'urxvt', 'vscode', 'vte', 'warp',
+     'warpterminal', 'wezterm', 'xterm', 'xterm-ghostty', 'xterm-kitty',
+     'xterm.js')
+
+.. END_LIST_TERM_PROGRAMS
+
+``term_program=False`` (the default for `width()`_, `ljust()`_, `rjust()`_, `center()`_,
+`wrap()`_, and `clip()`_) disables terminal corrections.  `wcstwidth()`_ defaults to
+``term_program=True`` for auto-detection.
+
+For automatic tests and other purposes that require cross-environment consistency, set static values
+or unset ``TERM`` and ``TERM_PROGRAM`` environment values, such as in ``conftest.py`` with pytest:
+
+.. code-block:: python
+
+    @pytest.fixture(autouse=True)
+    def _clear_term_program():
+        """unset TERM/TERM_PROGRAM before each test."""
+        saved_term = os.environ.pop('TERM', None)
+        saved_tprog = os.environ.pop('TERM_PROGRAM', None)
+        yield
+        if saved_term is not None:
+            os.environ['TERM'] = saved_term
+        if saved_tprog is not None:
+            os.environ['TERM_PROGRAM'] = saved_tprog
 
 ==========
 Developing
@@ -536,10 +653,15 @@ This library is used in:
 Other Languages
 ===============
 
-There are similar implementations of the `wcwidth()`_ and `wcswidth()`_ functions in other
-languages.
+The following libraries provide grapheme and emoji support and closely align with our
+specification_:
 
-- `contour-terminal/libunicode`_: C++20
+- `jacobsandlund/uucode`_ Zig
+- `contour-terminal/libunicode`_ C++20
+
+There are similar implementations of at least the `wcwidth()`_ and `wcswidth()`_ functions in other
+languages:
+
 - `ridiculousfish/widecharwidth`_: Python
 - `termux/wcwidth`_: C
 - `powerman/wcwidth-icons`_: C
@@ -562,6 +684,24 @@ languages.
 =======
 History
 =======
+
+0.8.1 *2026-06-08*
+  * **Improved** `wcstwidth()`_ with new ``zeroer``, ``narrow_wider``, and ``narrow_zeroer``
+    Corrections_. `PR #226`_
+
+0.8.0 *2026-06-05*
+  * **New** support for Variation Selector 15 Emojis as narrow, `Issue #211`_.
+  * **New** argument, ``term_program`` for `wcstwidth()`_, `width()`_, `clip()`_, `wrap()`_,
+    `ljust()`_, `rjust()`_, and `center()`_.  ``False`` disables Corrections_; ``True``
+    auto-detects by ``TERM_PROGRAM`` or ``TERM``; string values accept canonical names matching
+    `list_term_programs()`_.  `wcstwidth()`_ defaults to ``True``; all other functions
+    default to ``False``.
+  * **Improved** performance on Python 3.15 using standard library iter_graphemes() `PR #206`_.
+  * **Improved** memory usage and import time for Python 3.15 using lazy imports `PR #221`_.
+  * **Bugfix** Invisible_Stacker viramas now form conjuncts (Burmese, Khmer, etc.) and
+    change some Virama width calculations to match `jacobsandlund/uucode`_ (ghostty) `PR #223`_.
+  * **Updated** graphemes width maximum now 2, matching Ghostty, foot, and Windows Terminal `PR
+    #224`_.
 
 0.7.0 *2026-05-02*
   * **New** support for `kitty text sizing protocol`_ (OSC 66) in `width()`_ and `clip()`_.
@@ -793,9 +933,15 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`PR #200`: https://github.com/jquast/wcwidth/pull/200
 .. _`PR #202`: https://github.com/jquast/wcwidth/pull/202
 .. _`PR #204`: https://github.com/jquast/wcwidth/pull/204
+.. _`PR #206`: https://github.com/jquast/wcwidth/pull/206
+.. _`PR #221`: https://github.com/jquast/wcwidth/pull/221
+.. _`PR #223`: https://github.com/jquast/wcwidth/pull/223
+.. _`PR #224`: https://github.com/jquast/wcwidth/pull/224
+.. _`PR #226`: https://github.com/jquast/wcwidth/pull/226
 .. _`Issue #101`: https://github.com/jquast/wcwidth/issues/101
 .. _`Issue #155`: https://github.com/jquast/wcwidth/issues/155
 .. _`Issue #190`: https://github.com/jquast/wcwidth/issues/190
+.. _`Issue #211`: https://github.com/jquast/wcwidth/issues/211
 .. _`jquast/blessed`: https://github.com/jquast/blessed
 .. _`jquast/telix`: https://github.com/jquast/telix
 .. _`selectel/pyte`: https://github.com/selectel/pyte
@@ -823,6 +969,7 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`joshuarubin/wcwidth9`: https://github.com/joshuarubin/wcwidth9
 .. _`spectreconsole/wcwidth`: https://github.com/spectreconsole/wcwidth
 .. _`contour-terminal/libunicode`: https://github.com/contour-terminal/libunicode
+.. _`jacobsandlund/uucode`: https://github.com/jacobsandlund/uucode
 .. _`ridiculousfish/widecharwidth`: https://github.com/ridiculousfish/widecharwidth
 .. _`termux/wcwidth`: https://github.com/termux/wcwidth
 .. _`powerman/wcwidth-icons`: https://github.com/powerman/wcwidth-icons
@@ -834,7 +981,7 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`ihabunek/toot`: https://github.com/ihabunek/toot
 .. _`saulpw/visidata`: https://github.com/saulpw/visidata
 .. _`urwid/urwid`: https://github.com/urwid/urwid
-.. _`prettytable/prettytable`: https://github.com/urwid/urwid
+.. _`prettytable/prettytable`: https://github.com/prettytable/prettytable
 .. _`leviathan0992/Pylsy`: https://github.com/leviathan0992/Pylsy
 .. _`pip-tools`: https://pip-tools.readthedocs.io/
 .. _`sphinx`: https://www.sphinx-doc.org/
@@ -846,6 +993,7 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`General Tabulated Summary`: https://ucs-detect.readthedocs.io/results.html#tabulated-results
 .. _`wcwidth()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.wcwidth
 .. _`wcswidth()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.wcswidth
+.. _`wcstwidth()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.wcstwidth
 .. _`width()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.width
 .. _`iter_graphemes()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.iter_graphemes
 .. _`iter_graphemes_reverse()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.iter_graphemes_reverse
@@ -861,6 +1009,7 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`TextSizingParams`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.TextSizingParams
 .. _`iter_sequences()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.iter_sequences
 .. _`list_versions()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.list_versions
+.. _`list_term_programs()`: https://wcwidth.readthedocs.io/en/latest/api.html#wcwidth.list_term_programs
 .. _`Unicode Standard Annex #29`: https://www.unicode.org/reports/tr29/
 .. _`Terminal.detect_ambiguous_width()`: https://blessed.readthedocs.io/en/latest/api/terminal.html#blessed.terminal.Terminal.detect_ambiguous_width
 .. _`parity padding`: https://jazcap53.github.io/pythons-eccentric-strcenter.html
@@ -868,6 +1017,10 @@ https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c::
 .. _`Grapheme Clusters and Terminal Emulators`: https://mitchellh.com/writing/grapheme-clusters-in-terminals
 .. _`terminal-unicode-core.tex`: https://github.com/contour-terminal/terminal-unicode-core/blob/master/spec/terminal-unicode-core.tex
 .. _`State of Terminal Emulators in 2025`: https://www.jeffquast.com/post/state-of-terminal-emulation-2025/
+.. _`Perfecting Terminal Character Width Using Correction Tables (2026)`: https://www.jeffquast.com/post/perfecting-terminal-character-width-using-correction-tables/
+.. _XTVERSION: https://vtdn.dev/docs/dcs/xtversion/
+.. _ENQ: https://documentation.help/PuTTY/config-answerback.html
+.. _detectable: https://ucs-detect.readthedocs.io/results.html#terminal-identification
 .. |pypi_downloads| image:: https://img.shields.io/pypi/dm/wcwidth.svg?logo=pypi
     :alt: Downloads
     :target: https://pypi.org/project/wcwidth/

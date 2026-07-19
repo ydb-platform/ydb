@@ -1,6 +1,6 @@
 # #########################     LICENSE     ############################ #
 
-# Copyright (c) 2005-2021, Michele Simionato
+# Copyright (c) 2005-2026, Michele Simionato
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -37,10 +37,21 @@ import sys
 import inspect
 import operator
 import itertools
+import functools
 from contextlib import _GeneratorContextManager
 from inspect import getfullargspec, iscoroutinefunction, isgeneratorfunction
+from typing import Any, Dict, List, Optional
+try:
+    import annotationlib  # in Python 3.14+
 
-__version__ = '5.1.1'
+    def inspect_sig(func):
+        return inspect.signature(
+            func, annotation_format=annotationlib.Format.FORWARDREF)
+
+except ImportError:
+    inspect_sig = inspect.signature
+
+__version__ = '5.3.1'
 
 DEF = re.compile(r'\s*def\s*([_\w][_\w\d]*)\s*\(')
 POS = inspect.Parameter.POSITIONAL_OR_KEYWORD
@@ -48,7 +59,7 @@ EMPTY = inspect.Parameter.empty
 
 
 # this is not used anymore in the core, but kept for backward compatibility
-class FunctionMaker(object):
+class FunctionMaker:
     """
     An object with the ability to create functions with a given signature.
     It has attributes name, doc, module, signature, defaults, dict and
@@ -59,7 +70,10 @@ class FunctionMaker(object):
     _compile_count = itertools.count()
 
     # make pylint happy
-    args = varargs = varkw = defaults = kwonlyargs = kwonlydefaults = ()
+    args: List[str] = []
+    varargs = varkw = defaults = None
+    kwonlyargs: List[str] = []
+    kwonlydefaults: Optional[Dict[str, Any]] = None
 
     def __init__(self, func=None, name=None, signature=None,
                  defaults=None, doc=None, module=None, funcdict=None):
@@ -71,7 +85,7 @@ class FunctionMaker(object):
                 self.name = '_lambda_'
             self.doc = func.__doc__
             self.module = func.__module__
-            if inspect.isroutine(func):
+            if inspect.isroutine(func) or isinstance(func, functools.partial):
                 argspec = getfullargspec(func)
                 self.annotations = getattr(func, '__annotations__', {})
                 for a in ('args', 'varargs', 'varkw', 'defaults', 'kwonlyargs',
@@ -88,7 +102,7 @@ class FunctionMaker(object):
                     allargs.append('*')  # single star syntax
                 for a in self.kwonlyargs:
                     allargs.append('%s=None' % a)
-                    allshortargs.append('%s=%s' % (a, a))
+                    allshortargs.append('{}={}'.format(a, a))
                 if self.varkw:
                     allargs.append('**' + self.varkw)
                     allshortargs.append('**' + self.varkw)
@@ -146,7 +160,7 @@ class FunctionMaker(object):
                               self.shortsignature.split(',')])
         for n in names:
             if n in ('_func_', '_call_'):
-                raise NameError('%s is overridden in\n%s' % (n, src))
+                raise NameError('{} is overridden in\n{}'.format(n, src))
 
         if not src.endswith('\n'):  # add a newline for old Pythons
             src += '\n'
@@ -189,8 +203,8 @@ class FunctionMaker(object):
         ibody = '\n'.join('    ' + line for line in body.splitlines())
         caller = evaldict.get('_call_')  # when called from `decorate`
         if caller and iscoroutinefunction(caller):
-            body = ('async def %(name)s(%(signature)s):\n' + ibody).replace(
-                'return', 'return await')
+            body = ('async def %(name)s(%(signature)s):\n' + ibody)
+            body = re.sub(r'\breturn\b', 'return await', body)
         else:
             body = 'def %(name)s(%(signature)s):\n' + ibody
         return self.make(body, evaldict, addsource, **attrs)
@@ -213,7 +227,9 @@ def decorate(func, caller, extras=(), kwsyntax=False):
     even if such argument are positional, similarly to what functools.wraps
     does. By default kwsyntax is False and the the arguments are untouched.
     """
-    sig = inspect.signature(func)
+    sig = inspect_sig(func)
+    if isinstance(func, functools.partial):
+        func = functools.update_wrapper(func, func.func)
     if iscoroutinefunction(caller):
         async def fun(*args, **kw):
             if not kwsyntax:
@@ -223,14 +239,13 @@ def decorate(func, caller, extras=(), kwsyntax=False):
         def fun(*args, **kw):
             if not kwsyntax:
                 args, kw = fix(args, kw, sig)
-            for res in caller(func, *(extras + args), **kw):
-                yield res
+            yield from caller(func, *(extras + args), **kw)
     else:
         def fun(*args, **kw):
             if not kwsyntax:
                 args, kw = fix(args, kw, sig)
             return caller(func, *(extras + args), **kw)
-    fun.__name__ = func.__name__
+
     fun.__doc__ = func.__doc__
     fun.__wrapped__ = func
     fun.__signature__ = sig
@@ -252,6 +267,10 @@ def decorate(func, caller, extras=(), kwsyntax=False):
         fun.__module__ = func.__module__
     except AttributeError:
         pass
+    try:
+        fun.__name__ = func.__name__
+    except AttributeError:  # happens with old versions of numpy.vectorize
+        func.__name__ == 'noname'
     try:
         fun.__dict__.update(func.__dict__)
     except AttributeError:
@@ -282,7 +301,7 @@ def decorator(caller, _func=None, kwsyntax=False):
         # this is obsolete behavior; you should use decorate instead
         return decorate(_func, caller, (), kwsyntax)
     # else return a decorator function
-    sig = inspect.signature(caller)
+    sig = inspect_sig(caller)
     dec_params = [p for p in sig.parameters.values() if p.kind is POS]
 
     def dec(func=None, *args, **kw):
@@ -392,7 +411,7 @@ def dispatch_on(*dispatch_args):
                 n_vas = len(vas)
                 if n_vas > 1:
                     raise RuntimeError(
-                        'Ambiguous dispatch for %s: %s' % (t, vas))
+                        'Ambiguous dispatch for {}: {}'.format(t, vas))
                 elif n_vas == 1:
                     va, = vas
                     mro = type('t', (t, va), {}).mro()[1:]
@@ -419,8 +438,8 @@ def dispatch_on(*dispatch_args):
             """
             check(types)
             lst = []
-            for anc in itertools.product(*ancestors(*types)):
-                lst.append(tuple(a.__name__ for a in anc))
+            for ancs in itertools.product(*ancestors(*types)):
+                lst.append(tuple(a.__name__ for a in ancs))
             return lst
 
         def _dispatch(dispatch_args, *args, **kw):

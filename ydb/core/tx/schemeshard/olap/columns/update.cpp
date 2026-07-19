@@ -274,12 +274,17 @@ bool TOlapColumnBase::ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollect
         return false;
     }
     if (diffColumn.GetNotNull().has_value()) {
-        if (IsKeyColumn() && !*diffColumn.GetNotNull()) {
+        if (*diffColumn.GetNotNull()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "SET NOT NULL is not supported for column tables (column '" << Name << "')");
+            return false;
+        }
+        if (IsKeyColumn()) {
             errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
                 << "Cannot drop NOT NULL from primary key column '" << Name << "'");
             return false;
         }
-        NotNullFlag = *diffColumn.GetNotNull();
+        NotNullFlag = false;
     }
     if (diffColumn.GetSerializer()) {
         if (*diffColumn.GetSerializer()) {

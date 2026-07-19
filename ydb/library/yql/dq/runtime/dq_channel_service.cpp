@@ -1904,6 +1904,8 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
                 quotaManager = nullptr;
             }
         }
+
+        std::lock_guard lock1(Mutex);
         result->QuotaManager = quotaManager;
     }
 

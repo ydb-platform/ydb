@@ -32,7 +32,7 @@ The main role of database nodes is to run various [tablets](#tablet) and [actors
 
 #### Storage node {#storage-node}
 
-**Storage nodes** are stateful nodes responsible for long-term storage of data fragments. The set of storage nodes of a given [cluster {{ ydb-short-name }}](#cluster) is called [distributed storage](#distributed-storage) and can be considered as the storage layer of that cluster. Thus, adding more storage nodes and their disks is the primary way to increase the cluster's storage capacity and I/O throughput.
+**Storage nodes** are stateful nodes responsible for long-term storage of data fragments. The set of storage nodes of a given [cluster {{ ydb-short-name }}](#cluster) is called [distributed storage](#distributed-storage) and can be considered as the storage layer of that cluster. Thus, adding more storage nodes and their disks are the main ways to increase the cluster's storage capacity and I/O throughput.
 
 #### Hybrid node {#hybrid-mode}
 
@@ -891,7 +891,7 @@ For read-only transactions, similar to "read uncommitted" in other database mana
 
 #### Transaction order ID {#transaction-order-id}
 
-**Transaction order ID** — is a unique identifier assigned to each transaction during planning. It consists of [PlanStep](#planstep) and [Transaction ID](#txid).
+**Transaction order ID** or **transaction order id** — is a unique identifier assigned to each transaction during planning. It consists of [PlanStep](#planstep) and [Transaction ID](#txid).
 
 #### Plan step {#planstep}
 

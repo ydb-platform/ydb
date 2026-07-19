@@ -62,6 +62,10 @@ Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
             ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 1}, poolId);
 
         }
+        {
+            std::this_thread::sleep_for(5s);
+            ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 1}, poolId);
+        }
     }
 
 }

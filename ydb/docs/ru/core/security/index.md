@@ -49,4 +49,4 @@
     - [шифрования данных при передаче](./encryption/data-in-transit.md) для обеспечения безопасности данных, передаваемых между клиентом и {{ ydb-short-name }}, между узлами самого кластера {{ ydb-short-name }};
     - [шифрования данных при хранении](./encryption/data-at-rest.md).
 
-Требования безопасности при разработке страниц Developer UI на C++ описаны в [{#T}](../contributor/developer-ui-security-guidelines.md).
+Требования безопасности при разработке страниц Developer UI на C++ описаны в [{#T}](../contributor/core/developer-ui-security-guidelines.md).

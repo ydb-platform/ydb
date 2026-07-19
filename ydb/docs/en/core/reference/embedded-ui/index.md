@@ -7,4 +7,4 @@
 * [Logs](logs.md): Each {{ ydb-short-name }} component writes messages to logs of different levels. They can be used to detect severe issues or identify the root causes of issues.
 * [Charts](charts.md): {{ ydb-short-name }} collects a range of metrics that can be used to determine the health of the entire system or of a specific component.
 
-When developing or changing Developer UI pages in C++, see [{#T}](../../contributor/developer-ui-security-guidelines.md).
+When developing or changing Developer UI pages in C++, see [{#T}](../../contributor/core/developer-ui-security-guidelines.md).

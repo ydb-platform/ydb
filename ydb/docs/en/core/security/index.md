@@ -50,4 +50,4 @@ Security model in {{ ydb-short-name }} introduces the following concepts:
 
     - [data encryption at rest](./encryption/data-at-rest.md).
 
-Security requirements for developing Developer UI pages in C++ are described in [{#T}](../contributor/developer-ui-security-guidelines.md).
+Security requirements for developing Developer UI pages in C++ are described in [{#T}](../contributor/core/developer-ui-security-guidelines.md).

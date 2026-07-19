@@ -1,7 +1,5 @@
 items:
-- name: Overview
-  href: index.md
-- name: SQL dialect converter
-  href: sql-dialect-converter.md
 - name: SQLGlot
   href: sqlglot.md
+- name: SQL dialect converter to YQL
+  href: sql-dialect-converter.md

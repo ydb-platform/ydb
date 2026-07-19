@@ -76,6 +76,15 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 46347:Add `HAS_PATH` regex predicate on workload manager resource pool classifiers to match queries whose plan touches any object at a matching path [#46347](https://github.com/ydb-platform/ydb/pull/46347) ([Slusarenko Igor](https://github.com/buhtr))
+* 46335:Currently `dstool cluster balance` uses a call to HTTP `/viewer/json/vdiskinfo` API, which cannot be used programmatically on external installations with authentication enabled.
+
+This PR replaces the HTTP request with call to GRPC API QueryBaseConfig/VDiskMetrics, the latter being already used in the dstool code. [#46335](https://github.com/ydb-platform/ydb/pull/46335) ([Maksim Zinal](https://github.com/zinal))
+* 46301:Add support for DiskScope optional parameter in host configuration in cfg and ydbd_slice tools, follow-up for https://github.com/ydb-platform/ydb/pull/45890 [#46301](https://github.com/ydb-platform/ydb/pull/46301) ([Sergey Belyakov](https://github.com/serbel324))
+* 46268:Added the `DisableFileStoreSSDSystemSpaceAccounting` feature flag, which disables accumulating the SSD-system component of FileStore (filesystem) space into the per-domain allocated counter. This prevents `ui64` overflow in domains hosting many large system filesystems. The counter itself is additionally hardened to saturate instead of wrapping on overflow and to clamp at zero instead of aborting on underflow. [#46268](https://github.com/ydb-platform/ydb/pull/46268) ([Mikhail Montsev](https://github.com/SvartMetal))
+* 46267:Add `HAS_FULL_SCAN` regex predicate on workload manager resource pool classifiers to match queries whose plan reads a matching table with no key filter [#46267](https://github.com/ydb-platform/ydb/pull/46267) ([Slusarenko Igor](https://github.com/buhtr))
+* 46051:Add `ACTION="reject"` on workload manager resource pool classifiers to reject matched requests before pool routing [#46051](https://github.com/ydb-platform/ydb/pull/46051) ([Slusarenko Igor](https://github.com/buhtr))
+* 45890:Introduce a DiskScope parameter which allows for allocating a certain amount of fail domains on one node. [#45890](https://github.com/ydb-platform/ydb/pull/45890) ([Sergey Belyakov](https://github.com/serbel324))
 
 ### Bug fixes
 
@@ -146,12 +155,12 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
-
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* None:CreateStreamingQueryMatchRecognize
+* 46612:Restore `ESysViewType` enum values `EPgTables` (31), `EInformationSchemaTables` (32) and `EPgClass` (33), removed in #45922, to preserve backward compatibility. [#46612](https://github.com/ydb-platform/ydb/pull/46612) ([Innokentii Mokin](https://github.com/Enjection))
+* 46364:- Fix InferPDiskSlotCount producing misconfig for drives smaller than `unit_size` https://github.com/ydb-platform/ydb/issues/46363 [#46364](https://github.com/ydb-platform/ydb/pull/46364) ([Yaroslav Dynnikov](https://github.com/rosik))
+* 46033:Fix script executions leak form streaming queries [#46033](https://github.com/ydb-platform/ydb/pull/46033) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 46025:Fix BSC infinite crash loop which may occur when first state initialization was interrupted before it was able to write its CompatibilityInfo.
+https://github.com/ydb-platform/ydb/issues/45130 [#46025](https://github.com/ydb-platform/ydb/pull/46025) ([Sergey Belyakov](https://github.com/serbel324))
 
 ### YDB UI
 

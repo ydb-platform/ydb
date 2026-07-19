@@ -497,6 +497,12 @@ def test_zwj_at_end_of_string():
     assert wcwidth.wcswidth('a\u200D') == 1
 
 
+def test_wcswidth_n_exceeds_length():
+    """Verify wcswidth() with n > len(string) does not raise IndexError."""
+    assert wcwidth.wcswidth('hello', n=999) == 5
+    assert wcwidth.wcswidth('\u30B3\u30F3', n=999) == 4
+
+
 def test_soft_hyphen():
     # Test SOFT HYPHEN, category 'Cf' usually are zero-width, but most
     # implementations agree to draw it was '1' cell, visually

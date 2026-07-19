@@ -1,3 +1,5 @@
+{% include [index.md](_includes/index.md) %}
+
 To work with {{ ydb-short-name }}, OpenSource SDKs are available for the following programming languages:
 
 | Language | GitHub Repository | API Reference |
@@ -25,10 +27,10 @@ The SDK documentation contains the following sections:
 - [{#T}](error_handling.md)
 - [SDK feature comparison](feature-parity.md)
 - [Parameterized queries](parameterized_queries.md)
-- [Data formats](data-formats/index.md)
+- Data formats
 - [Working with topics](topic.md)
 - [Working with coordination nodes](coordination.md)
-- [{#T}](observability/index.md)
+- Observability
 
 See also:
 

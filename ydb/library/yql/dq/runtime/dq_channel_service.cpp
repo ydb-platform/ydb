@@ -425,8 +425,9 @@ void TLocalBuffer::AbortChannelByMemoryLimit(ui64 bytes) {
 }
 
 TOutputDescriptor::~TOutputDescriptor() {
-    if (QuotaManager) {
-        QuotaManager->FreeQuota(WaitQueueBytes.load());
+    auto waitQueueBytes = WaitQueueBytes.load();
+    if (waitQueueBytes && QuotaManager) {
+        QuotaManager->FreeQuota(waitQueueBytes);
     }
 }
 
@@ -690,8 +691,10 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
 }
 
 TOutputItem::~TOutputItem() {
-    if (Descriptor->QuotaManager) {
-        Descriptor->QuotaManager->FreeQuota(Data.Bytes);
+    if (Quoted) {
+        if (Descriptor->QuotaManager) {
+            Descriptor->QuotaManager->FreeQuota(Data.Bytes);
+        }
     }
 }
 
@@ -1007,8 +1010,9 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
     auto bytes = data.Bytes;
     auto rows = data.Rows;
 
-    if (descriptor->QuotaManager && !descriptor->QuotaManager->AllocateQuota(data.Bytes)) {
-        descriptor->AbortChannelByMemoryLimit(data.Bytes);
+    auto quoted = descriptor->QuotaManager.operator bool();
+    if (quoted && !descriptor->QuotaManager->AllocateQuota(bytes)) {
+        descriptor->AbortChannelByMemoryLimit(bytes);
         return;
     }
 
@@ -1040,6 +1044,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
                 item->SeqNo = ++SeqNo;
                 item->ChannelSeqNo = descriptor->SeqNo.fetch_add(1) + 1;
                 item->Leading = descriptor->Leading.exchange(false);
+                item->Quoted = quoted;
                 Queue.push_back(item);
                 SendMessage(item);
                 InflightBytes += bytes;
@@ -1852,6 +1857,13 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
+            auto waitQueueBytes = result->WaitQueueBytes.load();
+            if (waitQueueBytes) {
+                if (quotaManager && !quotaManager->AllocateQuota(waitQueueBytes)) {
+                    result->AbortChannelByMemoryLimit(waitQueueBytes);
+                    quotaManager = nullptr;
+                }
+            }
             result->QuotaManager = quotaManager;
             ActorSystem->Send(result->Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
@@ -1890,12 +1902,16 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
             result->IsBound = true;
             result->Info.SrcStageId = info.SrcStageId;
             result->Info.DstStageId = info.DstStageId;
-            if (result->QuotaManager) {
-                result->QuotaManager->FreeQuota(result->QueueBytes);
-            }
-            if (quotaManager && !quotaManager->AllocateQuota(result->QueueBytes)) {
-                result->AbortChannelByMemoryLimit(result->QueueBytes);
-                quotaManager = nullptr;
+            auto queueBytes = result->QueueBytes.load();
+            if (queueBytes) {
+                if (result->QuotaManager) {
+                    // be prepared for per node quota manager
+                    result->QuotaManager->FreeQuota(queueBytes);
+                }
+                if (quotaManager && !quotaManager->AllocateQuota(queueBytes)) {
+                    result->AbortChannelByMemoryLimit(queueBytes);
+                    quotaManager = nullptr;
+                }
             }
             result->QuotaManager = quotaManager;
             ActorSystem->Send(result->Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});

@@ -1,6 +1,6 @@
-# Потоковое чтение данных из топика
+# Чтение данных из топика
 
-Можно выполнять чтение данных из [топика](../../../../concepts/datamodel/topic.md) обычным `SELECT` без создания [потокового запроса](../../../../concepts/streaming-query/streaming-query.md). Для этого необходимо указать `STREAMING = "TRUE"` в блоке `WITH` и задать ограничение на количество выходных строк через `LIMIT`, иначе запрос не завершится.
+Можно выполнять чтение данных из [топика](../../../../concepts/datamodel/topic.md) обычным [`SELECT`] без создания [потокового запроса](../../../../concepts/streaming-query/streaming-query.md).
 
 {% note warning %}
 
@@ -19,7 +19,9 @@
 
 {% endnote %}
 
-## Пример
+## Примеры
+
+### Чтение текущих данных
 
 ```yql
 SELECT
@@ -31,13 +33,31 @@ WITH (
     SCHEMA = (
         Data String
     ),
+)
+```
+
+### Чтение с ожиданием новых данных
+
+```yql
+SELECT
+    Data
+FROM
+    input_topic -- или внешний топик ext_source.input_topic
+WITH (
+    FORMAT = raw,
+    SCHEMA = (
+        Data String
+    ),
     STREAMING = "TRUE"
 )
 LIMIT 1
 ```
 
+Подробнее — [чтение из топика](../../../../concepts/query_execution/topics.md#topic-read).
+
+
 ## См. также
 
-* [{#T}](../../../../concepts/query_execution/topics.md#streaming-read) — описание потокового чтения из топика
+* [{#T}](../../../../concepts/query_execution/topics.md#topic-read)
 * [{#T}](../../../../concepts/streaming-query/streaming-query.md)
 * [{#T}](../create-streaming-query.md)

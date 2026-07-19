@@ -460,6 +460,9 @@ void TTopicSession::Bootstrap() {
 
 void TTopicSession::PassAway() {
     LOG_ROW_DISPATCHER_INFO("PassAway");
+    // Stop the executor proxy first to prevent the SDK from posting
+    // new decompression/handler events to the actor's mailbox.
+    StopExecuterProxy();
     StopReadSession();
     for (const auto& [actorId, clientInfo] : Clients) {
         if (const auto formatIt = FormatHandlers.find(clientInfo->HandlerSettings); formatIt != FormatHandlers.end()) {

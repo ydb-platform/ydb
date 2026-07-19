@@ -146,6 +146,24 @@ def cmd_resolve_path(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_profile_has_issues(args: argparse.Namespace) -> int:
+    """Exit 0 when (branch, build_type) has an issue/digest profile; else 1."""
+    try:
+        with open(args.profiles_config, encoding='utf-8') as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            raise ValueError(f'{args.profiles_config}: expected JSON object')
+        for p in data.get('profiles') or []:
+            if not isinstance(p, dict):
+                continue
+            if p.get('branch') == args.branch and p.get('build_type') == args.build_type:
+                return 0
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f'::error::{exc}', file=sys.stderr)
+        return 1
+    return 1
+
+
 def cmd_issue_build_types(args: argparse.Namespace) -> int:
     try:
         with open(args.profiles_config, encoding='utf-8') as f:
@@ -239,6 +257,15 @@ def main() -> int:
         help='Branch name to select matching profiles',
     )
     ib.set_defaults(func=cmd_issue_build_types)
+
+    ph = sub.add_parser(
+        'profile-has-issues',
+        help='Exit 0 if mute_issue_and_digest_config has profile for branch+build_type',
+    )
+    ph.add_argument('--profiles-config', required=True)
+    ph.add_argument('--branch', required=True)
+    ph.add_argument('--build-type', required=True)
+    ph.set_defaults(func=cmd_profile_has_issues)
 
     args = parser.parse_args()
     return args.func(args)

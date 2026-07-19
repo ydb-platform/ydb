@@ -1,0 +1,90 @@
+---
+description: "YDB QA analytics: YQL investigations, marts, MCP ydb-qa — read ARCHITECTURE.md and ydb_qa_config.json first"
+globs:
+  - ".github/scripts/analytics/**/*.sql"
+  - ".github/scripts/analytics/**/*.py"
+  - ".github/scripts/analytics/ARCHITECTURE.md"
+  - ".github/config/ydb_qa_config.json"
+  - ".github/workflows/collect_analytics*.yml"
+  - ".github/workflows/update_muted_ya.yml"
+  - ".github/workflows/create_issues_for_muted_tests.yml"
+  - ".github/workflows/monitoring_queries.yml"
+alwaysApply: false
+---
+
+# Analytics Skill (router)
+
+**Canonical map:** [`.github/scripts/analytics/ARCHITECTURE.md`](../../.github/scripts/analytics/ARCHITECTURE.md) — overview diagram, **table dependency maps** (mute/github/PR chains), mart SQL registry, maintenance checklist.
+
+**Table registry (source of truth):** `.github/config/ydb_qa_config.json` **and** GitHub var `YDB_QA_CONFIG` (CI reads var, not repo file). Never invent paths.
+
+## Stack
+
+YQL + Python collectors + MCP `user-ydb-qa` · Repo: `ydb-platform/ydb`
+
+## Agent rules
+
+1. **New table / mart / workflow** → update `ARCHITECTURE.md` + config JSON + `YDB_QA_CONFIG` var (same PR).
+2. Verify sync: `python3 .github/scripts/analytics/check_architecture_sync.py --base origin/main`
+3. **Live data** → MCP `ydb_query` first; setup: [`.github/scripts/analytics/mcp.ydb-qa.example.json`](../../.github/scripts/analytics/mcp.ydb-qa.example.json)
+4. **Probe before non-trivial YQL:** `SELECT * FROM \`test_results/test_runs_column\` LIMIT 1`
+5. Copy SQL patterns from `data_mart_queries/` (CTEs `$name = (SELECT ...)`, `PRAGMA AnsiInForEmptyOrNullableItemsCollections`)
+
+## Key tables (examples only — full list in config)
+
+| Alias | Role |
+|-------|------|
+| `test_results` | Raw CI runs (`test_results/test_runs_column`) |
+| `test_history_fast` | Per-test history with logs |
+| `tests_monitor` | Mute/unmute decisions input |
+| `mute_events` | Mute rule changes (`commit_time`, not `event_timestamp`) |
+| `pr_blocked_by_failed_tests_rich` | PR blocked by failures |
+
+## YQL pitfalls
+
+| Error | Fix |
+|-------|-----|
+| `Member not found: full_name` on `test_runs_column` | Use `suite_folder \|\| '/' \|\| test_name`; no `full_name` in WHERE on raw table |
+| Wrong `mute_events` columns | `commit_time`, `event` (`added`\|`removed`) — not `event_timestamp` |
+| Alias in HAVING | Repeat expression or subquery |
+| Empty test lookup | `String::Contains(test_name, '…')`, not exact `=` |
+| `ydb_describe_path` Root not found | Use `ydb_query LIMIT 1` or read Python collector schema |
+
+## `test_runs_column` columns
+
+`suite_folder`, `test_name`, `status` (passed|failure|mute|skipped), `job_name`, `branch`, `build_type`, `run_timestamp`, `pull`, `job_id`, `commit`
+
+**`job_name` examples:** `PR-check`, `Postmerge`, `Postcommit_relwithdebinfo`, `Postcommit_asan`, `Regression-run`, … — see CI skill when adding new workflow names.
+
+## Investigating regressions (template)
+
+```sql
+SELECT suite_folder || '/' || test_name AS full_name, status, job_name,
+       MIN(run_timestamp) AS first_seen, COUNT(*) AS cnt
+FROM `test_results/test_runs_column`
+WHERE branch = 'main' AND build_type = 'relwithdebinfo'
+  AND status IN ('failure', 'mute')
+  AND run_timestamp >= DateTime('<MERGE_TS>')
+  AND String::Contains(suite_folder, '<fragment>')
+GROUP BY suite_folder, test_name, status, job_name
+ORDER BY first_seen LIMIT 50
+```
+
+Then: `gh pr list --search "merged:>=<DATE>"` · `gh pr diff <N>` · mute: `mute_events` where `event = 'added'`.
+
+## Helpers
+
+| Path | Role |
+|------|------|
+| `ydb_wrapper.py` | YDB client |
+| `data_mart_executor.py` | SQL file → YDB table |
+| `check_architecture_sync.py` | Fail if analytics changed without ARCHITECTURE.md |
+| `list_mart_dependencies.py` | Print mart SQL reads/writes (`--markdown` for registry table) |
+
+## Cross-links
+
+| Topic | Where |
+|-------|--------|
+| PR-check, test_ya, merge SHA | `.cursor/rules/ci-testing.mdc`, `CI_PIPELINE.md`, `CI_PLATFORM.md` |
+| Mute rules | `.github/config/mute_rules.md` |
+| Ingestion from CI | `upload_tests_results.py` in `test_ya` |

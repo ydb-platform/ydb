@@ -904,7 +904,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             TTestData::ColumnTable()
         }, TTestData::Items(EPathTypeColumnTable));
     }
-    
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnTablesAndColumnTables, 6, 1, false, IsFs) {
+        if (IsFs) {
+            return; // Column table FS export is not supported yet
+        }
+        RunExport<IsFs>(t, {
+            TTestData::Table(),
+            TTestData::ColumnTable()
+        }, {{"/MyRoot/Table", "table"}, {"/MyRoot/ColumnTable", "column_table"}});
+    }
+
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleColumnTable, 2, 1, false, IsFs) {
         if (IsFs) {
             return; // It is not supported yet

@@ -14,14 +14,7 @@ using namespace NYdb;
 namespace {
 
 TIntrusivePtr<NWorkload::IYdbSetup> MakeStreamingYdb() {
-    return NWorkload::TYdbSetupSettings().Create([](Tests::TServerSettings& ss) {
-        ss.FeatureFlags.SetEnableTopicsSqlIoOperations(true);
-        ss.FeatureFlags.SetEnableStreamingQueryDisposition(true);
-        if (ss.AppConfig) {
-            ss.AppConfig->MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
-            ss.AppConfig->MutableFeatureFlags()->SetEnableStreamingQueryDisposition(true);
-        }
-    });
+    return NWorkload::TYdbSetupSettings().Create([](auto) {});
 }
 
 void CreateTopic(TIntrusivePtr<NWorkload::IYdbSetup> ydb, TString name) {

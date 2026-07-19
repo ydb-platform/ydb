@@ -329,9 +329,11 @@ public:
     }
 
     int Run(TConfig& /*config*/) override {
-        auto rec = ReadPDiskMetadata(Path, MainKey);
-        if (rec.ByteSizeLong() == 0) {
-            Cerr << "Failed to read PDisk metadata from: " << Path << Endl;
+        NKikimrBlobStorage::TPDiskMetadataRecord rec;
+        try {
+            rec = ReadPDiskMetadata(Path, MainKey);
+        } catch (const yexception& ex) {
+            Cerr << "Failed to read PDisk metadata from: " << Path << ": " << ex.what() << Endl;
             return EXIT_FAILURE;
         }
 
@@ -512,11 +514,16 @@ public:
             *rec.MutableCommittedStorageConfig()->MutablePrevConfig() = oldCommitted;
         }
 
-        if (!applyYaml(CommittedYamlPath, "committed", rec.MutableCommittedStorageConfig())) {
-            return EXIT_FAILURE;
+        if (!CommittedYamlPath.empty()) {
+            if (!applyYaml(CommittedYamlPath, "committed", rec.MutableCommittedStorageConfig())) {
+                return EXIT_FAILURE;
+            }
         }
-        if (!applyYaml(ProposedYamlPath, "proposed", rec.MutableProposedStorageConfig())) {
-            return EXIT_FAILURE;
+
+        if (!ProposedYamlPath.empty()) {
+            if (!applyYaml(ProposedYamlPath, "proposed", rec.MutableProposedStorageConfig())) {
+                return EXIT_FAILURE;
+            }
         }
 
         if (rec.HasCommittedStorageConfig() && rec.GetCommittedStorageConfig().HasPrevConfig()) {

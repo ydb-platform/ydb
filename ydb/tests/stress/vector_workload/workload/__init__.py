@@ -15,7 +15,7 @@ QUERY_TABLE_NAME = "vector_query_table"
 
 
 class YdbVectorWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, mode="standalone", data_dir=None, targets=1000, warmup=0, rows=10000, threads=10, clusters=None, levels=None):
+    def __init__(self, endpoint, database, duration, mode="standalone", data_dir=None, targets=1000, warmup=0, rows=10000, threads=10, clusters=None, levels=None, s3_endpoint=None, s3_bucket=None, s3_source=None, s3_destination=None, s3_query_source=None, s3_query_destination=None):
         super().__init__(None, '', 'vector_workload', None)
         self.endpoint = endpoint
         self.database = database
@@ -28,8 +28,31 @@ class YdbVectorWorkload(WorkloadBase):
         self.threads = str(threads)
         self.clusters = str(clusters) if clusters is not None else None
         self.levels = str(levels) if levels is not None else None
+        self.s3_endpoint = s3_endpoint
+        self.s3_bucket = s3_bucket
+        self.s3_source = s3_source
+        self.s3_destination = s3_destination
+        self.s3_query_source = s3_query_source
+        self.s3_query_destination = s3_query_destination
+        # Table the workload operates on. In s3 mode the data is imported to a
+        # user-provided destination path, otherwise the default workload table.
+        self.table_name = "vector_index_workload"
+        self.query_table_name = QUERY_TABLE_NAME
+        if self.mode == "s3":
+            if self.s3_destination:
+                self.table_name = self._rel_to_database(self.s3_destination)
+            if self.s3_query_source:
+                query_dest = self.s3_query_destination or f"{self.database}/{QUERY_TABLE_NAME}"
+                self.query_table_name = self._rel_to_database(query_dest)
         self.tempdir = None
         self._unpack_resource('ydb_cli')
+
+    def _rel_to_database(self, path):
+        """Convert an absolute database path to a name relative to the database."""
+        prefix = self.database.rstrip('/') + '/'
+        if path.startswith(prefix):
+            return path[len(prefix):]
+        return path.lstrip('/')
 
     def __del__(self):
         if self.tempdir is not None:
@@ -80,18 +103,32 @@ class YdbVectorWorkload(WorkloadBase):
                 print(f"Attempt {attempt}/{retries} failed, retrying in {delay}s...")
                 time.sleep(delay)
 
+    def _build_index_subcmds(self):
+        """Subcommands to build the index on the workload table."""
+        subcmds = ['build-index', '--distance', 'cosine', '--table', self.table_name]
+        if self.mode == "s3":
+            # An imported dataset has a fixed, externally-defined vector dimension
+            # and type. Pass 0 so the CLI omits them from the DDL and the server
+            # autodetects both from the data.
+            subcmds += ['--vector-dimension', '0']
+        if self.clusters is not None:
+            subcmds += ['--kmeans-tree-clusters', self.clusters]
+        if self.levels is not None:
+            subcmds += ['--kmeans-tree-levels', self.levels]
+        return subcmds
+
     def _create_query_table(self):
         """Create a query table with N rows from the main table."""
-        print(f"Creating query table {QUERY_TABLE_NAME} with {self.targets} rows...")
+        print(f"Creating query table {self.query_table_name} with {self.targets} rows...")
         create_sql = (
-            f"CREATE TABLE `{QUERY_TABLE_NAME}` "
+            f"CREATE TABLE `{self.query_table_name}` "
             f"(id Uint64 NOT NULL, embedding String, PRIMARY KEY(id));"
         )
         self.cmd_run(self.get_cli_prefix() + ['yql', '-s', create_sql])
 
         populate_sql = (
-            f"UPSERT INTO `{QUERY_TABLE_NAME}` "
-            f"SELECT id, embedding FROM `vector_index_workload` "
+            f"UPSERT INTO `{self.query_table_name}` "
+            f"SELECT id, embedding FROM `{self.table_name}` "
             f"ORDER BY id LIMIT {self.targets};"
         )
         self.cmd_run(self.get_cli_prefix() + ['yql', '-s', populate_sql])
@@ -104,7 +141,7 @@ class YdbVectorWorkload(WorkloadBase):
         self.cmd_run(
             self.get_tools_prefix(subcmds=[
                 'dump',
-                '-p', self.database + '/' + QUERY_TABLE_NAME,
+                '-p', self.database + '/' + self.query_table_name,
                 '-o', self.data_dir,
             ])
         )
@@ -135,13 +172,8 @@ class YdbVectorWorkload(WorkloadBase):
             ])
         )
         # Build index explicitly and wait for completion
-        build_index_subcmds = ['build-index', '--distance', 'cosine']
-        if self.clusters is not None:
-            build_index_subcmds += ['--kmeans-tree-clusters', self.clusters]
-        if self.levels is not None:
-            build_index_subcmds += ['--kmeans-tree-levels', self.levels]
         self.cmd_run_with_retry(
-            self.get_command_prefix(subcmds=build_index_subcmds)
+            self.get_command_prefix(subcmds=self._build_index_subcmds())
         )
         # Wait for table statistics to be calculated after index build
         print("Waiting for table statistics to be calculated...")
@@ -153,9 +185,10 @@ class YdbVectorWorkload(WorkloadBase):
             '--seconds', str(seconds),
             '--threads', self.threads,
             '--targets', self.targets,
+            '--table', self.table_name,
         ]
-        if self.mode in ('generate', 'load'):
-            subcmds.extend(['--query-table', QUERY_TABLE_NAME])
+        if self.mode in ('generate', 'load', 's3'):
+            subcmds.extend(['--query-table', self.query_table_name])
         return subcmds
 
     def _run_select(self):
@@ -196,10 +229,45 @@ class YdbVectorWorkload(WorkloadBase):
             self.get_command_prefix(subcmds=['clean'])
         )
 
+    def _import_s3_data(self):
+        """Import data from S3 using ydb import s3, optionally including the queries table."""
+        item_main = f"Source={self.s3_source},Destination={self.s3_destination}"
+        cmd = self.get_cli_prefix() + [
+            "import", "s3",
+            "--s3-endpoint", self.s3_endpoint,
+            "--bucket", self.s3_bucket,
+            "--item", item_main,
+        ]
+        if self.s3_query_source:
+            query_dest = self.s3_query_destination or f"{self.database}/{QUERY_TABLE_NAME}"
+            item_query = f"Source={self.s3_query_source},Destination={query_dest}"
+            cmd += ["--item", item_query]
+            print(f"Importing queries table from S3: {self.s3_query_source} -> {query_dest}")
+        self.cmd_run(cmd)
+        # Build index explicitly and wait for completion
+        self.cmd_run_with_retry(
+            self.get_command_prefix(subcmds=self._build_index_subcmds())
+        )
+        # Wait for table statistics to be calculated after index build
+        print("Waiting for table statistics to be calculated...")
+        time.sleep(30)
+
+    def __loop_s3(self):
+        """S3 mode: import data from S3, optionally import queries table, build index, run select, clean."""
+        self._import_s3_data()
+        if not self.s3_query_source:
+            self._create_query_table()
+        self._run_select()
+        self.cmd_run(
+            self.get_command_prefix(subcmds=['clean'])
+        )
+
     def get_workload_thread_funcs(self):
         if self.mode == "generate":
             return [self.__loop_generate]
         elif self.mode == "load":
             return [self.__loop_load]
+        elif self.mode == "s3":
+            return [self.__loop_s3]
         else:
             return [self.__loop_standalone]

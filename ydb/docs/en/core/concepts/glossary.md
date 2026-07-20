@@ -114,7 +114,7 @@ The implementation of distributed transactions is covered in a separate article 
 
 ### Sessions
 
-Logical connections to the database that store the context required for executing queries and managing transactions. Sessions are described in more detail in section [{#T}](query_execution/index.md#sessions).
+Logical connections to the database that store the context required for executing queries and managing transactions. Sessions are described in more detail in section [{#T}](query_execution/execution_process.md#sessions).
 
 ### Client-side timeout {#client-timeout}
 
@@ -196,11 +196,11 @@ Special types of secondary indexes are highlighted separately — [vector index]
 
 **vector index** — is an additional data structure used to speed up solving the task of [vector search](query_execution/vector_search.md) when the data volume is large and [exact vector search without an index](../yql/reference/udf/list/knn.md) does not work satisfactorily. The capabilities {{ ydb-short-name }} for approximate nearest neighbor (ANN) search using vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
 
-**Vector index** — is a specialized type of [secondary index](#secondary-index) designed for similarity-based search, unlike traditional secondary indexes that are optimized for equality or range searches.
+**vector index** — is a specialized type of [secondary index](#secondary-index) designed for similarity-based search, unlike traditional secondary indexes that are optimized for equality or range searches.
 
 #### Full-text index {#fulltext-index}
 
-**Full-text index** — is an additional data structure used to accelerate text search on a table column (by words and phrases, and when using n-grams — also by substrings).
+**full-text index** — is an additional data structure used to accelerate text search on a table column (by words and phrases, and when using n-grams — also by substrings).
 
 The full-text search capabilities and index parameters are described in the articles [{#T}](../dev/fulltext-indexes.md) and [{#T}](query_execution/fulltext_search.md).
 
@@ -218,7 +218,7 @@ A local index is an auxiliary structure that is stored together with the table d
 
 A Bloom filter is a [probabilistic data structure](https://en.wikipedia.org/wiki/Bloom_filter) that allows you to quickly test whether an element belongs to a set. False positives are possible, but false negatives are not.
 
-#### Local bloom index {#local-bloom-skip-index}
+#### Local Bloom index {#local-bloom-skip-index}
 
 Local Bloom index — a special case of [local index](#local-index): a probabilistic filter on column values based on the [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter), accelerating selective queries by skipping data fragments where the sought value is guaranteed to be absent. More details: [Bloom indexes](../dev/bloom-skip-indexes.md), [local indexes](query_execution/local_indexes.md).
 
@@ -339,7 +339,7 @@ See more details [{#T}](datamodel/backup-collection.md).
 
 ### Resource pool {#resource-pool}
 
-**resource pool** — a schema object that describes limits applied to resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query always runs in some resource pool. By `default`, all queries run in the resource pool named , which imposes no limits. More details on using resource pools can be found in the article [{#T}](../dev/resource-consumption-management.md).
+**Resource pool** — a schema object that describes limits applied to resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query always runs in some resource pool. By default, all queries run in the resource pool named `default`, which imposes no limits. More details on using resource pools can be found in the article [{#T}](../dev/resource-consumption-management.md).
 
 ### Resource pool classifier {#resource-pool-classifier}
 
@@ -878,13 +878,13 @@ For read‑only transactions, similar to “read uncommitted” in other databas
 
 #### Mediator time {#mediator-time}
 
-During the execution of distributed transactions, **mediator time** — this is the logical time up to which (inclusive) a participant shard must know the entire execution plan. It is used to advance time when there are no transactions on a particular shard, to determine whether it can read from a snapshot.
+During the execution of distributed transactions, **Mediator time**, **mediator time** — this is the logical time up to which (inclusive) a participant shard must know the entire execution plan. It is used to advance time when there are no transactions on a particular shard, to determine whether it can read from a snapshot.
 
 #### MiniKQL {#minikql}
 
 **MiniKQL** — is a language that allows expressing a single [deterministic transaction](#deterministic-transactions) in the system. It is a functional, strongly typed language. Conceptually, the language describes a read graph from the database, the execution of computations over the read data, and the writing of results back to the database and/or to a special document representing the query result (for display to the user). A MiniKQL transaction must explicitly specify its read set (the data to be read) and assume a deterministic choice of execution branches (for example, no randomness).
 
-MiniKQL is a low‑level language. End users of the system see only queries in the [YQL](#yql) language, which relies on MiniKQL in its implementation.
+**MiniKQL** is a low-level language. End users of the system see only queries in the [**YQL**](#yql) language, which relies on **MiniKQL** in its implementation.
 
 #### Query Processor {#kqp}
 

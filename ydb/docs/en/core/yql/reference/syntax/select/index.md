@@ -1,4 +1,4 @@
-## Select
+## SELECT
 
 Returns the result of evaluating the expressions specified after `SELECT`.
 

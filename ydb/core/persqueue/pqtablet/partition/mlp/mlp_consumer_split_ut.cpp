@@ -32,27 +32,30 @@ namespace {
         std::atomic<i64> Offset = 0;
     };
 
-    // Install before actor system start; restore only after actors are stopped
-    // (declare this before setup so dtor runs after setup). Avoids TSAN data race
-    // on TAppData::TimeProvider swap vs concurrent actor reads (#40339 / #47065).
+    // Install before actor system start; restore the previous provider after actors
+    // are stopped (declare this before setup so dtor runs after setup). Avoids
+    // TSAN data race on TAppData::TimeProvider swap vs concurrent actor reads
+    // (#40339 / #47065).
     class TScopedLeapTimeProvider: TNonCopyable {
     public:
         TScopedLeapTimeProvider()
-            : Provider_(MakeIntrusive<TLeapTimeProvider>())
+            : Leap_(MakeIntrusive<TLeapTimeProvider>())
+            , Previous_(Leap_)
         {
-            TAppData::TimeProvider = Provider_;
+            DoSwap(TAppData::TimeProvider, Previous_);
         }
 
         ~TScopedLeapTimeProvider() {
-            TAppData::TimeProvider = CreateDefaultTimeProvider();
+            DoSwap(TAppData::TimeProvider, Previous_);
         }
 
         TLeapTimeProvider* operator->() const {
-            return Provider_.Get();
+            return Leap_.Get();
         }
 
     private:
-        TIntrusivePtr<TLeapTimeProvider> Provider_;
+        TIntrusivePtr<TLeapTimeProvider> Leap_;
+        TIntrusivePtr<ITimeProvider> Provider_;
     };
 
     class TBufferedCerr: TNonCopyable {

@@ -121,8 +121,16 @@ enum class EExpectedResult {
 
 static constexpr ui32 PORTION_ROWS = 80 * 1000;
 
-void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::TTypeId ttlColumnTypeId)
-{
+// Ticks the shard's mediator time forward by one plan step via an empty PlanCommit (updating planStep
+// in place). Internal TTL/tiering actualization commits at GetOutdatedStep()+1 (i.e. planStep+1); with
+// no coordinator running in these tests, that snapshot never arrives on its own, so we advance it here
+// to make the latest compaction/eviction result visible to reads positioned at the new planStep.
+void AdvancePlanStep(TTestBasicRuntime& runtime, TActorId& sender, TPlanStep& planStep) {
+    planStep = planStep + 1;
+    PlanCommit(runtime, sender, planStep, TSet<ui64>{});
+}
+
+void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::TTypeId ttlColumnTypeId) {
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     csControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
@@ -200,6 +208,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     };
 
     auto getRowCount = [&]() {
+        AdvancePlanStep(runtime, sender, planStep);
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { ttlColumnName }));
         auto rb = reader.ReadAll();
@@ -581,6 +590,9 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
             Cerr << "INTERMEDIATE REBOOT(" << i << ")" << Endl;
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
+
+        // Make the internal eviction result (committed at planStep+1) visible to the read below.
+        AdvancePlanStep(runtime, sender, planStep);
 
         // Read data after eviction
         TString columnToRead = specs[i].TtlColumn;

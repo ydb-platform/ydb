@@ -1679,9 +1679,6 @@ endDiskTypeCheck:   ;
         return replaceRequest;
     }
 
-<<<<<<< HEAD
-    void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config, bool transform, bool relaxed) {
-=======
     const TVector<TOpaqueField>& OpaqueConfigFields() {
         static const TVector<TOpaqueField> fields = [] {
             TVector<TOpaqueField> result;
@@ -1712,20 +1709,7 @@ endDiskTypeCheck:   ;
         }
     }
 
-    void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config,
-               bool transform, EParsePhase* phase, bool relaxed) {
-        auto runPhase = [phase](EParsePhase value, auto&& func) {
-            try {
-                func();
-            } catch (const yexception&) {
-                if (phase) {
-                    *phase = value;
-                }
-                throw;
-            }
-        };
-
->>>>>>> e1ba7f0175c (Introduce cluster-opaque TAppConfig::PrivateDatabaseConfig (#43238))
+    void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config, bool transform, bool relaxed) {
         auto jsonNode = json;
         TTransformContext ctx;
         NKikimrConfig::TEphemeralInputFields ephemeralConfig;
@@ -1750,15 +1734,9 @@ endDiskTypeCheck:   ;
             ClearEphemeralFields(jsonNode);
         }
 
-<<<<<<< HEAD
         CoerceBoolEnumsToNames(jsonNode, config.GetDescriptor());
-        NProtobufJson::MergeJson2Proto(jsonNode, config, convertConfig);
-=======
         CaptureOpaqueConfigFields(jsonNode);
-        runPhase(EParsePhase::JsonToProto, [&] {
-            NProtobufJson::MergeJson2Proto(jsonNode, config, convertConfig);
-        });
->>>>>>> e1ba7f0175c (Introduce cluster-opaque TAppConfig::PrivateDatabaseConfig (#43238))
+        NProtobufJson::MergeJson2Proto(jsonNode, config, convertConfig);
 
         if (transform) {
             TransformProtoConfig(ctx, config, ephemeralConfig, relaxed);

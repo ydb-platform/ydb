@@ -1600,4 +1600,39 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         UNIT_ASSERT(edge0Result && edge0Result->GetTypeRewrite() == TEvBlobStorage::EvCompactVDiskResult);
     }
 
+    // End-to-end check that the single-pass per-SST storage-ratio path (VDiskControls.HullCompStorageRatioSinglePass)
+    // produces the SAME ratio-driven compaction/GC outcome as the legacy per-SST walk, on real data that has
+    // inplaced blobs, huge blobs, keep/DoNotKeep flags (from GC) and multi-level keys. If the single-pass mis-computed
+    // any ratio, DelSst/FreeSpace decisions would diverge and huge-heap garbage would not be fully collected.
+    Y_UNIT_TEST(StorageRatioSinglePassMatchesLegacy) {
+        auto run = [](ui64 singlePass) {
+            TTestEnvCompDefragIndependent env(0.0);
+            env.SetIcbControl("VDiskControls.HullCompStorageRatioSinglePass", singlePass);
+
+            const ui32 N = 50000;
+            const ui32 batchSize = 1000;
+            env.WriteData(N, batchSize);
+            env.RunFullCompaction();
+            const ui64 totalHugeChunks = env.GetMetrics().HugeUsedChunks;
+
+            DeleteHugeBlobsOfTablet(env, N, 1);
+            env.Env.Sim(TDuration::Minutes(30));
+
+            return std::make_pair(totalHugeChunks, env.PrintMetrics());
+        };
+
+        const auto [legacyTotal, legacyM] = run(0);
+        const auto [singleTotal, singleM] = run(1);
+
+        // The write+compact phase is deterministic, so both runs start from the same huge-heap size...
+        UNIT_ASSERT_VALUES_EQUAL(singleTotal, legacyTotal);
+        // ...both fully collect huge-heap garbage...
+        UNIT_ASSERT_VALUES_EQUAL(legacyM.HugeChunksCanBeFreed, 0);
+        UNIT_ASSERT_VALUES_EQUAL(singleM.HugeChunksCanBeFreed, 0);
+        UNIT_ASSERT_LT(legacyM.HugeUsedChunks, legacyTotal);
+        UNIT_ASSERT_LT(singleM.HugeUsedChunks, singleTotal);
+        // ...and reach the same final huge-heap state (identical ratio-driven decisions).
+        UNIT_ASSERT_VALUES_EQUAL(singleM.HugeUsedChunks, legacyM.HugeUsedChunks);
+    }
+
 }

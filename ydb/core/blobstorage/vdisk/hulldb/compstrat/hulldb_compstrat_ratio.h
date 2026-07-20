@@ -39,6 +39,11 @@ namespace NKikimr {
             void Work() {
                 TInstant startTime(TAppData::TimeProvider->Now());
                 TStat stat;
+                // The selector recomputes per-SST ratios here incrementally, time-budgeted, on the jittered
+                // schedule (NBYDB-1732) that spreads recomputes across calcPeriod after a restart. When the
+                // shared single pass is enabled (HullCompStorageRatioSinglePass), the defrag planner ALSO
+                // computes and publishes ratios in its one whole-DB walk, so this loop finds the bulk fresh
+                // and only recomputes the churn.
                 UpdateStorageRatioForDb(startTime, stat);
                 TInstant finishTime(TAppData::TimeProvider->Now());
                 if (HullCtx->VCtx->ActorSystem) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <atomic>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_outofspace.h>
@@ -26,6 +27,10 @@ namespace NKikimr {
         NMonGroup::TDefragGroup DefragMonGroup;
         bool RunDefragBySchedule;
         std::shared_ptr<TEventsQuoter> Throttler;
+        // Last time the defrag planner published per-SST storage ratio (usec since epoch). Used to rate-limit
+        // ratio recomputation to at most once per HullCompStorageRatioCalcPeriod, so frequent active-defrag
+        // scans don't re-walk the whole tree for ratio every time.
+        std::atomic<ui64> LastRatioPublishUs{0};
 
         TDefragCtx(
                 const TIntrusivePtr<TVDiskContext> &vctx,

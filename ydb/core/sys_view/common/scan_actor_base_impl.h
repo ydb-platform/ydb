@@ -64,7 +64,7 @@ protected:
         YDB_LOG_DEBUG_COMP(NKikimrServices::SYSTEM_VIEWS, "TScanActorBase::SendBatch: sending scan batch",
             {"actorId", TBase::SelfId()},
             {"rowCount", batch->Rows.size()},
-            {"finished", batch->Finished});
+            {"isFinished", batch->Finished});
 
         bool finished = batch->Finished;
         TBase::Send(OwnerActorId, batch.Release());
@@ -82,7 +82,7 @@ protected:
             {"actorId", TBase::SelfId()},
             {"ownerId", OwnerActorId},
             {"scanId", ScanId},
-            {"info", SysViewInfo.ShortDebugString()},
+            {"sysViewInfo", SysViewInfo.ShortDebugString()},
             {"code", NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())},
             {"error", ev->Get()->GetIssues().ToOneLineString()});
 
@@ -98,7 +98,7 @@ protected:
             {"actorId", TBase::SelfId()},
             {"ownerId", OwnerActorId},
             {"scanId", ScanId},
-            {"info", SysViewInfo.ShortDebugString()},
+            {"sysViewInfo", SysViewInfo.ShortDebugString()},
             {"issues", issues.ToOneLineString()});
 
         auto error = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>();
@@ -119,11 +119,11 @@ protected:
     }
 
     void PassAway() override {
-        YDB_LOG_INFO_COMP(NKikimrServices::SYSTEM_VIEWS, "TScanActorBase::ReplyEmptyAndDie: scan finished",
+        YDB_LOG_INFO_COMP(NKikimrServices::SYSTEM_VIEWS, "TScanActorBase::PassAway: scan finished",
             {"actorId", TBase::SelfId()},
             {"ownerId", OwnerActorId},
             {"scanId", ScanId},
-            {"info", SysViewInfo.ShortDebugString()});
+            {"sysViewInfo", SysViewInfo.ShortDebugString()});
 
         if (AllowedByLimiter) {
             ScanLimiter->Dec();
@@ -326,7 +326,7 @@ private:
             {"database", TenantName},
             {"databaseOwner", DatabaseOwner},
             {"domainKey", DomainKey},
-            {"tenantNodeCount", TenantNodes.size()});
+            {"databaseNodeCount", TenantNodes.size()});
 
         ProceedToScan();
     }

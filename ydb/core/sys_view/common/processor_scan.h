@@ -60,7 +60,7 @@ private:
     void RequestBatch() {
         if (!this->SysViewProcessorId) {
             YDB_LOG_WARN_COMP(NKikimrServices::SYSTEM_VIEWS, "TProcessorScan::ProceedToScan: sysview processor not configured, sending empty response",
-                {"tenantName", this->TenantName});
+                {"database", this->TenantName});
             this->ReplyEmptyAndDie();
             return;
         }

@@ -102,21 +102,13 @@ runs:
             return 1
           fi
 
+          # Parse binaries via the helper script (not an inline heredoc):
+          # unindented heredoc body ends the YAML `|` scalar and breaks the
+          # action manifest ("could not find expected ':'").
           local -a binary_args=()
           while IFS= read -r bin; do
             [ -f "$bin" ] && binary_args+=(--binary "$bin")
-          done < <(python3 - "$ya_log" <<'PY'
-import re, sys
-log = open(sys.argv[1]).read()
-# The `'llvm-cov', 'export'` invocation is on one line; grab its arg list
-# and pull out every `'-object', 'PATH'` pair.
-m = re.search(r"bin/llvm-cov', 'export'.*?\]", log)
-if not m:
-    sys.exit(0)
-for path in re.findall(r"'-object', '([^']+)'", m.group(0)):
-    print(path)
-PY
-)
+          done < <(python3 .github/scripts/tests/aggregate_cli_coverage.py list-binaries "$ya_log")
 
           if [ ${#binary_args[@]} -eq 0 ]; then
             echo "no instrumented binaries parsed from $ya_log" >&2

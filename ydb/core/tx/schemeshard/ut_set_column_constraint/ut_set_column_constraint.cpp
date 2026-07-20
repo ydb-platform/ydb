@@ -2693,7 +2693,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         }
     }
 
-    Y_UNIT_TEST(SetNotNullFailsWhileCopyTableInProgress) {
+    Y_UNIT_TEST_TWIN(SetNotNullFailsWhileCopyTableInProgress, IsBackup) {
         TTestBasicRuntime runtime;
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
@@ -2721,7 +2721,23 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         TBlockEvents<TEvDataShard::TEvProposeTransaction> copyProposeBlocker(runtime);
 
         ui64 copyTxId = ++txId;
-        AsyncCopyTable(runtime, copyTxId, root, "TableCopy", tablePath);
+        if (IsBackup) {
+            AsyncConsistentCopyTables(runtime, copyTxId, root, R"(
+                CopyTableDescriptions {
+                    SrcPath: "/MyRoot/Table"
+                    DstPath: "/MyRoot/TableCopy"
+                    IsBackup: true
+                }
+            )");
+        } else {
+            AsyncConsistentCopyTables(runtime, copyTxId, root, R"(
+                CopyTableDescriptions {
+                    SrcPath: "/MyRoot/Table"
+                    DstPath: "/MyRoot/TableCopy"
+                    IsBackup: false
+                }
+            )");
+        }
 
         runtime.WaitFor("block copy propose to datashards", [&]{ return copyProposeBlocker.size() > 0; });
 

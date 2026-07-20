@@ -163,7 +163,7 @@ private:
             Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvResolveSchemeBoard(path), 0, cookie);
             Schedule(DefaultTimeout, new TEvents::TEvWakeup(cookie));
 
-            YDB_LOG_DEBUG("ProcessPaths paths",
+            YDB_LOG_DEBUG("ProcessPaths",
                 {"selfId", this->SelfId()},
                 {"path", path},
                 {"cookie", cookie},

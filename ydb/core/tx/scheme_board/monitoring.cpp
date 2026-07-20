@@ -1766,7 +1766,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 BackupProgress = TBackupProgress();
                 BackupProgress.Status = TBackupProgress::EStatus::Starting;
 
-                YDB_LOG_INFO("Starting backup in-flight require",
+                YDB_LOG_INFO("Starting backup",
                     {"selfId", this->SelfId()},
                     {"filePath", filePath},
                     {"inFlightLimit", inFlightLimit},
@@ -1821,7 +1821,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 RestoreProgress = TRestoreProgress();
                 RestoreProgress.Status = TRestoreProgress::EStatus::Starting;
 
-                YDB_LOG_INFO("Starting restore from for SchemeShard of",
+                YDB_LOG_INFO("Starting restore",
                     {"selfId", this->SelfId()},
                     {"filePath", filePath},
                     {"schemeShardId", schemeShardId},

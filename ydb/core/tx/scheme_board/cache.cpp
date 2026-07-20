@@ -299,7 +299,7 @@ namespace {
                 ) {
 
                     if (Context->ResolvedDomainInfo->DomainKey != entry.DomainInfo->DomainKey) {
-                        YDB_LOG_WARN("Path does not belong to the specified domain path's",
+                        YDB_LOG_WARN("Path does not belong to the specified domain",
                             {"self", this->SelfId()},
                             {"contextDomain", Context->ResolvedDomainInfo->DomainKey},
                             {"entryDomain", entry.DomainInfo->DomainKey});

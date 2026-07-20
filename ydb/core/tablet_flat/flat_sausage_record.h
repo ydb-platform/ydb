@@ -1,5 +1,6 @@
 #pragma once
 
+#include "flat_sausage_misc.h"
 #include "flat_sausage_layout.h"
 #include "flat_util_binary.h"
 #include "util_basics.h"
@@ -33,10 +34,15 @@ namespace NPageCollection {
             return Blobs.emplace_back(one), *this;
         }
 
-        ui32 Push(ui32 type, TArrayRef<const char> body)
+        ui32 Push(ui32 type, TArrayRef<const char> body, ui32* crc32 = nullptr)
         {
             Index.push_back({ Offset += body.size(), Inbound.size() });
-            Extra.push_back({ type, Checksum(body) });
+            const auto c = Checksum(body);
+            Extra.push_back({ type, c });
+
+            if (crc32) {
+                *crc32 = c;
+            }
 
             return Index.size() - 1;
         }

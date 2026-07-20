@@ -249,9 +249,9 @@ public:
         return Meta.GetRowCount();
     }
 
-    TPageId GetPageId() const override {
+    TPageLocation GetLocation() const override {
         Y_ENSURE(IsLeaf());
-        return State.back().PageId;
+        return Part->GetPageLocation(State.back().PageId, GroupId);
     }
 
     TRowId GetRowId() const override {
@@ -360,7 +360,7 @@ private:
             return true;
         }
 
-        auto page = Env->TryGetPage(Part, state.PageId, {});
+        auto page = Env->TryGetPage(Part, Part->GetPageLocation(state.PageId, {}), {});
         if (page) {
             state.Node.emplace(*page);
             return true;

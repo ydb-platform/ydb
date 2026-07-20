@@ -54,7 +54,7 @@ namespace NTable {
             }
 
             // Make sure we have the correct data page loaded
-            if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
+            if (!LoadPage(Index.GetLocation(), Index.GetRowId())) {
                 return EReady::Page;
             }
             Y_DEBUG_ABORT_UNLESS(Page.BaseRow() <= rowId, "Index and row have an unexpected relation");
@@ -78,15 +78,15 @@ namespace NTable {
         }
 
     protected:
-        bool LoadPage(TPageId pageId, TRowId baseRow)
+        bool LoadPage(TPageLocation location, TRowId baseRow)
         {
-            if (PageId != pageId) {
+            if (Offset != location.Offset) {
                 Data = { };
-                if (!Page.Set(Env->TryGetPage(Part, pageId, GroupId))) {
-                    PageId = Max<TPageId>();
+                if (!Page.Set(Env->TryGetPage(Part, location, GroupId))) {
+                    Offset = TPageOffset::Max();
                     return false;
                 }
-                PageId = pageId;
+                Offset = location.Offset;
             }
             Y_DEBUG_ABORT_UNLESS(Page.BaseRow() == baseRow, "Index and data are out of sync");
             return true;
@@ -97,7 +97,7 @@ namespace NTable {
         IPages* const Env;
         const NPage::TGroupId GroupId;
 
-        TPageId PageId = Max<TPageId>();
+        TPageOffset Offset = TPageOffset::Max();
 
         THolder<IPartGroupIndexIter> Index_;
         IPartGroupIndexIter& Index;
@@ -159,7 +159,7 @@ namespace NTable {
                 }
             }
 
-            if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
+            if (!LoadPage(Index.GetLocation(), Index.GetRowId())) {
                 // Exact RowId unknown, don't allow Next until another Seek
                 return Terminate(EReady::Page);
             }
@@ -240,7 +240,7 @@ namespace NTable {
                 }
             }
 
-            if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
+            if (!LoadPage(Index.GetLocation(), Index.GetRowId())) {
                 // Exact RowId unknown, don't allow Next until another Seek
                 return Terminate(EReady::Page);
             }
@@ -444,7 +444,7 @@ namespace NTable {
             Y_DEBUG_ABORT_UNLESS(Index.IsValid() && Index.GetRowId() <= RowId,
                 "Called without a valid index record");
 
-            if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
+            if (!LoadPage(Index.GetLocation(), Index.GetRowId())) {
                 return EReady::Page;
             }
 
@@ -628,7 +628,7 @@ namespace NTable {
                 Y_DEBUG_ABORT_UNLESS(Index.IsValid());
                 Y_DEBUG_ABORT_UNLESS(!Data);
 
-                if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
+                if (!LoadPage(Index.GetLocation(), Index.GetRowId())) {
                     return EReady::Page;
                 }
 
@@ -658,7 +658,7 @@ namespace NTable {
                 RowId = Max<TRowId>();
             }
 
-            if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
+            if (!LoadPage(Index.GetLocation(), Index.GetRowId())) {
                 // It's ok to repeat binary search on the next iteration,
                 // since page faults take a long time and optimizing it
                 // wouldn't be worth it.
@@ -705,7 +705,7 @@ namespace NTable {
                 RowId = Max<TRowId>();
             }
 
-            if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
+            if (!LoadPage(Index.GetLocation(), Index.GetRowId())) {
                 // We don't want to repeat binary search on the next
                 // iteration, as we already know the row is not on a
                 // previous page, but index search would point to it

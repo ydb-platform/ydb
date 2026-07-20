@@ -63,6 +63,13 @@ namespace NTest {
             return &PageCollections.at(room).at(page);
         }
 
+        const TSharedData* GetPage(ui32 room, NPage::TPageOffset offset) const
+        {
+            Y_ENSURE(room < PageCollections.size(), "Room is out of bounds");
+            // TStore stores pages indexed by page index.
+            return &PageCollections.at(room).at(offset.AsPageIndex());
+        }
+
         size_t GetPageSize(ui32 room, ui32 page) const
         {
             Y_ENSURE(room < PageCollections.size(), "Room is out of bounds");
@@ -75,6 +82,13 @@ namespace NTest {
             Y_ENSURE(room < PageCollections.size(), "Room is out of bounds");
 
             return PageTypes.at(room).at(page);
+        }
+
+        ui32 GetPageChecksum(ui32 room, ui32 page) const
+        {
+            Y_ENSURE(room < PageCrc32.size(), "Room is out of bounds");
+
+            return PageCrc32.at(room).at(page);
         }
 
         TArrayRef<const TSharedData> PageCollectionArray(ui32 room) const
@@ -213,18 +227,20 @@ namespace NTest {
 
             auto room = GetOuterRoom();
             TPageId pageId = PageCollections[room].size();
+            auto crc32 = NPageCollection::Checksum(page);
 
             PageCollections[room].emplace_back(std::move(page));
             PageTypes[room].push_back(EPage::Opaque);
+            PageCrc32[room].push_back(crc32);
 
             return pageId;
         }
 
-        TPageId Write(TSharedData page, EPage type, ui32 group)
+        TPageOffset Write(TSharedData page, EPage type, ui32 group)
         {
             Y_ENSURE(group < PageCollections.size() - 1, "Invalid column group");
             Y_ENSURE(!Finished, "This store is already finished");
-            NPageCollection::Checksum(page); /* will catch uninitialized values */
+            auto crc32 = NPageCollection::Checksum(page); /* also catches uninitialized values */
 
             if (type == EPage::DataPage) {
                 DataBytes[group] += page.size();
@@ -232,6 +248,7 @@ namespace NTest {
             TPageId pageId = PageCollections[group].size();
             PageCollections[group].emplace_back(std::move(page));
             PageTypes[group].push_back(type);
+            PageCrc32[group].push_back(crc32);
 
             if (group == 0) {
                 switch (type) {
@@ -257,7 +274,7 @@ namespace NTest {
                 }
             }
 
-            return pageId;
+            return TPageOffset::FromPageIndex(pageId);
         }
 
         void WriteInplace(TPageId page, TArrayRef<const char> body)
@@ -267,15 +284,22 @@ namespace NTest {
             Meta = TSharedData::Copy(body.data(), body.size());
         }
 
+        ui32 GetWrittenPageId(ui32 group) const
+        {
+            return PageCollections[group].size() - 1;
+        }
+
         NPageCollection::TGlobId WriteLarge(TSharedData data)
         {
             Y_ENSURE(!Finished, "This store is already finished");
 
             auto room = GetExternRoom();
             TPageId pageId = PageCollections[room].size();
+            auto crc32 = NPageCollection::Checksum(data);
 
             PageCollections[room].emplace_back(std::move(data));
             PageTypes[room].push_back(EPage::Opaque);
+            PageCrc32[room].push_back(crc32);
 
             return GlobForBlob(pageId);
         }
@@ -291,6 +315,7 @@ namespace NTest {
             , GlobOffset(globOffset)
             , PageCollections(groups + 2)
             , PageTypes(groups + 2)
+            , PageCrc32(groups + 2)
             , DataBytes(groups + 2)
         { }
 
@@ -304,6 +329,7 @@ namespace NTest {
         const ui32 GlobOffset;
         TVector<TVector<TSharedData>> PageCollections;
         TVector<TVector<EPage>> PageTypes;
+        TVector<TVector<ui32>> PageCrc32;
         TVector<ui64> DataBytes;
 
         /*_ Sometimes will be replaced just with one root TPageId */

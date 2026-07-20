@@ -5,11 +5,14 @@
 #include "flat_fwd_misc.h"
 #include "flat_part_screen.h"
 #include "flat_part_slice.h"
+#include "flat_sausage_gut.h"
 #include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NTable {
 namespace NFwd {
+
+    using TPageOffset = NPage::TPageOffset;
 
     class TBlobs : public IPageLoadingLogic {
         using THoles = TScreen::TCook;
@@ -17,9 +20,11 @@ namespace NFwd {
     public:
         using TEdges = TVector<ui32>;
 
-        TBlobs(TIntrusiveConstPtr<NPage::TFrames> frames, TIntrusiveConstPtr<TSlices> slices, TEdges edge, bool trace)
+        TBlobs(TIntrusiveConstPtr<NPage::TFrames> frames, TIntrusiveConstPtr<TSlices> slices, TEdges edge, bool trace,
+                TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
             : Edge(std::move(edge))
             , Frames(std::move(frames))
+            , PageCollection(std::move(pageCollection))
             , Filter(std::move(slices))
             , Trace(trace ? new THoles{ } : nullptr)
         {
@@ -32,21 +37,23 @@ namespace NFwd {
         {
         }
 
-        TResult Get(IPageLoadingQueue *head, ui32 ref, EPage, ui64 lower) override
+        TResult Get(IPageLoadingQueue *head, TPageOffset offset, EPage, ui64 lower) override
         {
-            Y_ENSURE(ref >= Lower, "Cannot handle backward blob reads");
+            auto pageId = offset.AsPageIndex();
 
-            auto again = (std::exchange(Tags.at(FrameTo(ref)), 1) == 0);
+            Y_ENSURE(pageId >= Lower, "Cannot handle backward blob reads");
+
+            auto again = (std::exchange(Tags.at(FrameTo(pageId)), 1) == 0);
 
             Grow = again ? Lower : Max(Lower, Grow);
 
-            Rewind(Lower).Shrink(false); /* points Offset to current frame */
+            Rewind(Lower).Shrink(false); /* points Position to current frame */
 
             bool more = Grow < Max<TPageId>() && (OnHold + OnFetch < lower);
 
-            auto &page = Preload(head, 0).Lookup(ref);
+            auto &page = Preload(head, 0).Lookup(pageId);
 
-            return { page.Touch(ref, Stat), more, page.Size < Edge[page.Tag] };
+            return { page.Touch(offset, Stat), more, page.Size < Edge[page.Tag] };
         }
 
         void Forward(IPageLoadingQueue *head, ui64 upper) override
@@ -56,9 +63,9 @@ namespace NFwd {
 
         void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage) override
         {
-            if (!Pages || page.PageId < Pages.front().PageId) {
+            if (!Pages || page.Location.Offset < Pages.front().Offset) {
                 Y_TABLET_ERROR("Blobs fwd cache got page below queue");
-            } else if (page.PageId > Pages.back().PageId) {
+            } else if (page.Location.Offset > Pages.back().Offset) {
                 Y_TABLET_ERROR("Blobs fwd cache got page above queue");
             } else if (page.Data.size() > OnFetch) {
                 Y_TABLET_ERROR("Blobs fwd cache ahead counters is out of sync");
@@ -66,7 +73,7 @@ namespace NFwd {
 
             Stat.Saved += page.Data.size();
             OnFetch -= page.Data.size();
-            OnHold += Lookup(page.PageId).Settle(page, std::move(sharedPageRef));
+            OnHold += Lookup(page.Location.Offset.AsPageIndex()).Settle(page, std::move(sharedPageRef));
 
             Shrink(false /* do not drop loading pages */);
         }
@@ -89,16 +96,17 @@ namespace NFwd {
         }
 
     private:
-        TPage& Lookup(ui32 ref)
+        TPage& Lookup(TPageId id)
         {
-            const auto end = Pages.begin() + Offset;
+            const auto end = Pages.begin() + Position;
+            auto offset = TPageOffset::FromPageIndex(id);
 
-            if (ref >= end->PageId) {
-                return Pages.at(Offset + (ref - end->PageId));
+            if (offset >= end->Offset) {
+                return Pages.at(Position + (id - end->Offset.AsPageIndex()));
             } else {
-                auto it = std::lower_bound(Pages.begin(), end, ref);
+                auto it = std::lower_bound(Pages.begin(), end, offset);
 
-                Y_ENSURE(it != end && it->PageId == ref);
+                Y_ENSURE(it != end && it->Offset == offset);
 
                 return *it;
             }
@@ -108,7 +116,7 @@ namespace NFwd {
         {
             if (ref >= Lower && ref < Upper) {
                 return Lookup(ref).Tag;
-            } else if (!Pages || Pages.back().PageId < ref) {
+            } else if (!Pages || Pages.back().Offset < TPageOffset::FromPageIndex(ref)) {
                 return FrameTo(ref, Frames->Relation(ref));
             } else {
                 const auto &page = Lookup(ref);
@@ -146,8 +154,7 @@ namespace NFwd {
                     if (!Tags.at(page.Tag) || page.Size >= Edge.at(page.Tag) || !Filter.Has(rel.Row)) {
                         /* Page doesn't fits to load criteria   */
                     } else if (page.Fetch == EFetch::None) {
-                        auto size = head->AddToQueue(Grow, EPage::Opaque);
-
+                         auto size = head->AddToQueue(TPageOffset::FromPageIndex(Grow), EPage::Opaque, page.Size, page.Crc32);
                         Y_ENSURE(size == page.Size, "Inconsistent page sizes");
 
                         page.Fetch = EFetch::Wait;
@@ -162,9 +169,9 @@ namespace NFwd {
 
         TPageId Propagate(const TPageId base)
         {
-            if (Pages && base <= Pages.back().PageId) {
+            if (Pages && TPageOffset::FromPageIndex(base) <= Pages.back().Offset) {
                 return Lookup(base).Refer;
-            } else if (Pages && base != Lower && base - Pages.back().PageId != 1) {
+            } else if (Pages && base != Lower && base - Pages.back().Offset.AsPageIndex() != 1) {
                 Y_TABLET_ERROR("Cannot do so long jumps around of frames");
             } else {
                 const auto end = Frames->Relation(base).AbsRef(base);
@@ -174,8 +181,11 @@ namespace NFwd {
                 for (auto page = base; page < end; page++) {
                     const auto rel = Frames->Relation(page);
                     const auto ref = rel.AbsRef(page);
+                    const auto crc32 = PageCollection
+                        ? PageCollection->GetLocation(page).Crc32
+                        : ui32(0);
 
-                    Pages.emplace_back(page, rel.Size, rel.Tag, ref);
+                    Pages.emplace_back(TPageOffset::FromPageIndex(page), rel.Size, rel.Tag, ref, crc32);
                 }
 
                 return end == base ? Max<TPageId>() : end;
@@ -184,10 +194,10 @@ namespace NFwd {
 
         TBlobs& Rewind(TPageId until)
         {
-            for (; Offset < Pages.size(); Offset++) {
-                auto &page = Pages.at(Offset);
+            for (; Position < Pages.size(); Position++) {
+                auto &page = Pages.at(Position);
 
-                if (page.PageId >= until) {
+                if (page.Offset >= TPageOffset::FromPageIndex(until)) {
                     break;
                 } else if (page.Size == 0) {
                     Y_TABLET_ERROR("Dropping page that hasn't been propagated");
@@ -204,7 +214,7 @@ namespace NFwd {
 
         TBlobs& Shrink(bool force = false)
         {
-            for (; Offset && (Pages[0].Ready() || force); Offset--) {
+            for (; Position && (Pages[0].Ready() || force); Position--) {
 
                 if (Trace && Pages.front().Usage == EUsage::Seen) {
                     /* Trace mode is used to track entities that was used by
@@ -213,7 +223,7 @@ namespace NFwd {
                         resource lifetime prolongation.
                      */
 
-                    Trace->Pass(Pages.front().PageId);
+                    Trace->Pass(Pages.front().Offset.AsPageIndex());
                 }
 
                 Y_ENSURE(Pages.front().Released(), "Forward cache page still holds data");
@@ -226,19 +236,19 @@ namespace NFwd {
     private:
         const TVector<ui32> Edge;       /* Desired bytes limit of blobs */
         const TIntrusiveConstPtr<NPage::TFrames> Frames;
+        const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         const TSlicesRowFilter Filter;
         TVector<ui8> Tags;              /* Ever used col tags on env    */
         TPageId Lower = 0;              /* Pinned frame lower bound ref */
         TPageId Upper = 0;              /* Pinned frame upper bound ref */
         TPageId Grow = Max<TPageId>();  /* Edge page of loading process */
-
         TAutoPtr<THoles> Trace;
 
         /*_ Forward cache line state */
 
         ui64 OnHold = 0;
         ui64 OnFetch = 0;
-        ui32 Offset = 0;
+        ui32 Position = 0;
         TDeque<TPage> Pages;
     };
 

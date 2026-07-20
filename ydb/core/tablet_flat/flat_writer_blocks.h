@@ -17,6 +17,7 @@ namespace NWriter {
         using ECacheMode = NTable::NPage::ECacheMode;
         using EPage = NTable::NPage::EPage;
         using TPageId = NTable::NPage::TPageId;
+        using TPageOffset = NTable::NPage::TPageOffset;
         using TPageCollection = TPrivatePageCache::TPageCollection;
 
         struct TResult : TMoveOnly {
@@ -25,12 +26,13 @@ namespace NWriter {
             TVector<NPageCollection::TLoadedPage> StickyPages;
         };
 
-        TBlocks(ICone *cone, ui8 channel, ECache cache, ECacheMode cacheMode, ui32 block, bool stickyFlatIndex)
+        TBlocks(ICone *cone, ui8 channel, ECache cache, ECacheMode cacheMode, ui32 block, bool stickyFlatIndex, bool isOuter = false)
             : Cone(cone)
             , Channel(channel)
             , Cache(cache)
             , CacheMode(cacheMode)
             , StickyFlatIndex(stickyFlatIndex)
+            , IsOuter(isOuter)
             , Writer(Cone->CookieRange(1), Channel, block)
         {
         }
@@ -48,31 +50,55 @@ namespace NWriter {
                 }
 
                 auto largeGlobId = CutToChunks(meta);
-                Result.PageCollection = MakeIntrusiveConst<NPageCollection::TPageCollection>(largeGlobId, std::move(meta));
+
+                if (IsOuter) {
+                    Result.PageCollection = MakeIntrusiveConst<NPageCollection::TOuterPageCollection>(largeGlobId, std::move(meta));
+                } else {
+                    Result.PageCollection = MakeIntrusiveConst<NPageCollection::TPageCollection>(largeGlobId, std::move(meta));
+                }
             }
 
             Y_ENSURE(!Writer, "Block writer is not empty after Finish");
 
+            Offset = 0;
+            WrittenPageCount = 0;
             return std::exchange(Result, {});
         }
 
-        TPageId Write(TSharedData raw, EPage type)
+        TPageOffset Write(TSharedData raw, EPage type)
         {
-            auto pageId = Writer.AddPage(raw, (ui32)type);
+            ui32 crc32 = 0;
+
+            Writer.AddPage(raw, (ui32)type, &crc32);
 
             for (auto &glob : Writer.Grab()) {
                 Cone->Put(std::move(glob));
             }
 
+            TPageLocation location;
+            if (IsOuter) {
+                location = TPageLocation::FromPageIndex(WrittenPageCount, raw.size(), type, crc32);
+            }
+            else {
+                location = TPageLocation::FromByteOffset(Offset, raw.size(), type, crc32);
+            }
+            Offset += raw.size();
+            WrittenPageCount++;
+
             if (NTable::TLoader::NeedIn(type) || Cache == ECache::Ever || StickyFlatIndex && type == EPage::FlatIndex) {
-                Result.StickyPages.emplace_back(pageId, std::move(raw));
+                Result.StickyPages.emplace_back(location, std::move(raw));
             } else if (bool(Cache) && type == EPage::DataPage || type == EPage::BTreeIndex || CacheMode == ECacheMode::TryKeepInMemory) {
                 // TODO: take into account memory limits for TryKeepInMemory mode
                 // Note: save b-tree index pages to shared cache regardless of a cache mode
-                Result.RegularPages.emplace_back(pageId, std::move(raw));
+                Result.RegularPages.emplace_back(location, std::move(raw));
             }
 
-            return pageId;
+            return location.Offset;
+        }
+
+        ui32 GetWrittenPageId(ui32 /*group*/) const noexcept
+        {
+            return WrittenPageCount - 1;
         }
 
         void WriteInplace(TPageId page, TArrayRef<const char> body)
@@ -92,9 +118,12 @@ namespace NWriter {
         const ECache Cache = ECache::None;
         const ECacheMode CacheMode = ECacheMode::Regular;
         const bool StickyFlatIndex;
+        const bool IsOuter;
 
         NPageCollection::TWriter Writer;
         TResult Result;
+        ui64 Offset = 0;
+        ui32 WrittenPageCount = 0;
     };
 }
 }

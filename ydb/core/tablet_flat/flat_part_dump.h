@@ -22,7 +22,7 @@ namespace NTable {
         void Bloom(const NPage::TBloom&);
         void Index(const TPart&, ui32 depth = 10);
         void BTreeIndex(const TPart&);
-        void DataPage(const TPart&, ui32 page);
+        void DataPage(const TPart&, NPage::TPageLocation location);
         void TName(ui32 num);
         void Key(TCellsRef cells, const TPartScheme&);
         void BTreeIndexNode(const TPart &part, NPage::TBtreeIndexNode::TChild meta, ui32 level = 0);

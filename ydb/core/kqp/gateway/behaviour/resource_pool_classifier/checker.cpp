@@ -323,6 +323,19 @@ private:
             return;
         }
 
+        if (!featureFlags.GetEnableHasPredicatesInResourcePoolClassifiers()) {
+            for (const auto& object : PatchedObjects) {
+                const auto& configMap = object.GetConfigJson().GetMap();
+                if (configMap.count("has_full_scan") || configMap.count("has_path") ||
+                        configMap.count("has_stream") || configMap.count("has_app_name") ||
+                        configMap.count("action")) {
+                    FailAndPassAway("Advanced resource pool classifier properties (has_full_scan, has_path, has_stream, has_app_name, action) are disabled. "
+                        "Please contact your system administrator to enable it");
+                    return;
+                }
+            }
+        }
+
         FeatureFlagChecked = true;
         ValidateExistence();
         ValidatePools();

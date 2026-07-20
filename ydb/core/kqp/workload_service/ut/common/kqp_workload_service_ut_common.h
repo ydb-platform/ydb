@@ -81,6 +81,7 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(bool, EnableMetadataObjectsOnServerless, true);
     FLUENT_SETTING_DEFAULT(bool, EnableExternalDataSourcesOnServerless, true);
     FLUENT_SETTING_DEFAULT(bool, EnableStreamingQueries, true);
+    FLUENT_SETTING_DEFAULT(bool, EnableHasPredicatesInResourcePoolClassifiers, true);
     FLUENT_SETTING(NKikimrConfig::TWorkloadManagerConfig, WorkloadManagerConfig);
     FLUENT_SETTING_DEFAULT(i32, DedicatedDiskQuota, -1);
 

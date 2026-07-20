@@ -14,7 +14,9 @@ using namespace NYdb;
 namespace {
 
 TIntrusivePtr<NWorkload::IYdbSetup> MakeStreamingYdb() {
-    return NWorkload::TYdbSetupSettings().Create([](auto) {});
+    return NWorkload::TYdbSetupSettings()
+        .EnableHasPredicatesInResourcePoolClassifiers(true)
+        .Create([](auto) {});
 }
 
 void CreateTopic(TIntrusivePtr<NWorkload::IYdbSetup> ydb, TString name) {

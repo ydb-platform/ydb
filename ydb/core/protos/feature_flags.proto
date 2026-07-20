@@ -353,4 +353,5 @@ message TFeatureFlags {
     // RequireRestart: the in-memory counter is rebuilt from all FileStores at SchemeShard start,
     // the counter can be re-enabled, which requires restarting the SchemeShard tablet.
     optional bool DisableFileStoreSSDSystemSpaceAccounting = 302 [default = false, (RequireRestart) = true];
+    optional bool EnableHasPredicatesInResourcePoolClassifiers = 303 [default = false];
 }

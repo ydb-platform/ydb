@@ -536,10 +536,6 @@ private:
             Send(msg.Client, new TEvDqSpilling::TEvError(*fd.Error));
 
             fd.Ops.clear();
-            // The operation whose response we are handling has finished, so the file no longer
-            // has an active op. Reset the flag before CloseFile() so that its cleanup operation
-            // (which closes handles and unlinks the partially written files) is actually
-            // dispatched to the IO thread pool instead of being queued behind a phantom active op.
             fd.HasActiveOp = false;
             CloseFile(it, fd.Error);
             return;
@@ -689,9 +685,6 @@ private:
             Send(msg.Client, new TEvDqSpilling::TEvError(*fd.Error));
 
             fd.Ops.clear();
-            // See the corresponding comment in the write error path: reset HasActiveOp so that
-            // CloseFile() can dispatch its cleanup operation instead of enqueueing it behind a
-            // phantom active op that will never complete, leaking file handles and on-disk files.
             fd.HasActiveOp = false;
             CloseFile(it, fd.Error);
             return;

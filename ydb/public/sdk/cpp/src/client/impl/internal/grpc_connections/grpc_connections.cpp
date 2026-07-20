@@ -340,8 +340,8 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
 #endif
     , MetricRegistry_(params->GetExternalMetricRegistry())
     , TraceProvider_(params->GetTraceProvider())
-    , BuildInfo_(BuildFullBuildInfo(*params, false))
-    , DiscoveryBuildInfo_(BuildFullBuildInfo(*params, true))
+    , BuildInfoWithoutObservability_(BuildFullBuildInfo(*params, false))
+    , BuildInfo_(BuildFullBuildInfo(*params, true))
     , NetworkThreadsNum_(params->GetNetworkThreadsNum())
     , UsePerChannelTcpConnection_(params->GetUsePerChannelTcpConnection())
     , GRpcClientLow_(NetworkThreadsNum_)
@@ -597,7 +597,7 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
 
     TRpcRequestSettings rpcSettings;
     rpcSettings.Deadline = TDeadline::AfterDuration(GET_ENDPOINTS_TIMEOUT);
-    rpcSettings.UseDiscoveryBuildInfo = true;
+    rpcSettings.IncludeObservabilityInBuildInfo = true;
 
     RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse>(
         std::move(request),
@@ -762,7 +762,7 @@ TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestS
 
     meta.Aux.push_back({
         YDB_SDK_BUILD_INFO_HEADER,
-        requestSettings.UseDiscoveryBuildInfo ? DiscoveryBuildInfo_ : BuildInfo_});
+        requestSettings.IncludeObservabilityInBuildInfo ? BuildInfo_ : BuildInfoWithoutObservability_});
     meta.Aux.push_back({YDB_CLIENT_PID, clientPid});
     meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end());
 

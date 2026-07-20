@@ -81,20 +81,6 @@ on:
         description: 'Number of levels in kmeans tree for vector index (empty = server auto-detect)'
         required: false
         default: ''
-      flamegraph:
-        description: 'Collect CPU flamegraphs (requires perf_event_paranoid <= 1 or perf_sudo=true on the runner)'
-        required: false
-        type: boolean
-        default: false
-      perf_sudo:
-        description: 'Run perf under sudo (requires passwordless sudo on the runner)'
-        required: false
-        type: boolean
-        default: false
-      perf_freq:
-        description: 'perf record sampling frequency in Hz'
-        required: false
-        default: '9'
       dataset_source:
         description: 'Source of the test dataset: generate (random data) or s3 (import fixed dataset from S3)'
         required: false
@@ -178,6 +164,13 @@ jobs:
           BASELINE_SHA: ${{ steps.resolve-ref.outputs.baseline_sha }}
           INPUT_BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
         run: |
+          # Self-hosted runners reuse the workspace, so a ../baseline worktree
+          # (and its .git/worktrees admin entry) may linger from a prior run and
+          # make `git worktree add` fail with "'../baseline' already exists".
+          # Clean any stale copy first so the step is idempotent.
+          git worktree remove --force ../baseline 2>/dev/null || true
+          rm -rf ../baseline
+          git worktree prune
           git fetch --depth=1 origin "$BASELINE_SHA"
           git worktree add ../baseline "$BASELINE_SHA"
           cd ../baseline
@@ -206,8 +199,6 @@ jobs:
           INPUT_BASELINE_YDBD: ${{ steps.build-baseline.outputs.binary }}
           INPUT_VECTOR_CLUSTERS: ${{ inputs.vector_clusters || '' }}
           INPUT_VECTOR_LEVELS: ${{ inputs.vector_levels || '' }}
-          INPUT_FLAMEGRAPH: ${{ inputs.flamegraph || 'false' }}
-          INPUT_PERF_SUDO: ${{ inputs.perf_sudo || 'false' }}
           INPUT_DATASET_SOURCE: ${{ inputs.dataset_source || 'generate' }}
           INPUT_S3_ENDPOINT: ${{ inputs.s3_endpoint || '' }}
           INPUT_S3_BUCKET: ${{ inputs.s3_bucket || '' }}
@@ -215,7 +206,6 @@ jobs:
           INPUT_S3_DESTINATION: ${{ inputs.s3_destination || '' }}
           INPUT_S3_QUERY_SOURCE: ${{ inputs.s3_query_source || '' }}
           INPUT_S3_QUERY_DESTINATION: ${{ inputs.s3_query_destination || '' }}
-          INPUT_PERF_FREQ: ${{ inputs.perf_freq || '9' }}
         run: |
           # The feature-flag / table_service_config inputs are comma-separated
           # strings; the test splits them itself, so they are passed through as-is.
@@ -228,15 +218,6 @@ jobs:
           fi
           if [[ -n "$INPUT_VECTOR_LEVELS" ]]; then
             EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_vector_levels=$INPUT_VECTOR_LEVELS"
-          fi
-          if [[ "$INPUT_FLAMEGRAPH" == "true" ]]; then
-            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_flamegraph=1"
-          fi
-          if [[ "$INPUT_PERF_SUDO" == "true" ]]; then
-            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_perf_sudo=1"
-          fi
-          if [[ "$INPUT_PERF_FREQ" != "9" ]]; then
-            EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_perf_freq=$INPUT_PERF_FREQ"
           fi
           if [[ "$INPUT_DATASET_SOURCE" == "s3" ]]; then
             EXTRA_PARAMS="$EXTRA_PARAMS --test-param compare_dataset_source=s3"

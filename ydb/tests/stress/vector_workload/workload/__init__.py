@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import shutil
@@ -103,6 +104,51 @@ class YdbVectorWorkload(WorkloadBase):
                 print(f"Attempt {attempt}/{retries} failed, retrying in {delay}s...")
                 time.sleep(delay)
 
+    def _wait_for_table_stats(self, timeout=90, interval=3):
+        """Poll until the table's row-count statistic is non-zero.
+
+        After an index build the row-count estimate is computed asynchronously.
+        The vector workload's Init() reads it via DescribeTable().GetTableRows()
+        and aborts ("statistics is not calculated yet") if it starts too early.
+        We poll the same underlying datashard stat through the .sys/partition_stats
+        system view and return as soon as it lands — usually far quicker than a
+        fixed sleep. This is best-effort: if the view is not queryable we fall
+        back to a short fixed wait, and on timeout we proceed anyway (the select's
+        own cmd_run_with_retry is the backstop)."""
+        full_path = f"{self.database.rstrip('/')}/{self.table_name}"
+        query = (
+            "SELECT COALESCE(SUM(RowCount), 0u) AS rows "
+            f"FROM `.sys/partition_stats` WHERE Path = '{full_path}';"
+        )
+        cmd = self.get_cli_prefix() + ['yql', '-s', query, '--format', 'json-unicode']
+        print(f"Waiting for table statistics on {full_path}...")
+        deadline = time.time() + timeout
+        query_ok = False
+        while time.time() < deadline:
+            rows = None
+            try:
+                proc = subprocess.run(cmd, check=True, text=True, capture_output=True)
+                query_ok = True
+                for line in proc.stdout.splitlines():
+                    line = line.strip()
+                    if line:
+                        val = json.loads(line).get('rows')
+                        if val is not None:
+                            rows = int(val)
+            except (subprocess.CalledProcessError, ValueError) as e:
+                if not query_ok:
+                    # System view not queryable here: don't spin, fall back to a
+                    # brief fixed wait and let the select's retry cover the rest.
+                    print(f"Cannot query table statistics ({e}); falling back to fixed wait")
+                    time.sleep(30)
+                    return
+                print("Stats poll query failed, retrying...")
+            if rows:
+                print(f"Table statistics ready: {full_path} has ~{rows} rows")
+                return
+            time.sleep(interval)
+        print(f"Timed out after {timeout}s waiting for statistics on {full_path}; proceeding")
+
     def _build_index_subcmds(self):
         """Subcommands to build the index on the workload table."""
         subcmds = ['build-index', '--distance', 'cosine', '--table', self.table_name]
@@ -175,9 +221,9 @@ class YdbVectorWorkload(WorkloadBase):
         self.cmd_run_with_retry(
             self.get_command_prefix(subcmds=self._build_index_subcmds())
         )
-        # Wait for table statistics to be calculated after index build
-        print("Waiting for table statistics to be calculated...")
-        time.sleep(30)
+        # Wait until table statistics (row-count estimate) are computed after the
+        # index build; the select workload aborts if it starts before they land.
+        self._wait_for_table_stats()
 
     def _get_select_subcmds(self, seconds):
         subcmds = [
@@ -248,9 +294,9 @@ class YdbVectorWorkload(WorkloadBase):
         self.cmd_run_with_retry(
             self.get_command_prefix(subcmds=self._build_index_subcmds())
         )
-        # Wait for table statistics to be calculated after index build
-        print("Waiting for table statistics to be calculated...")
-        time.sleep(30)
+        # Wait until table statistics (row-count estimate) are computed after the
+        # index build; the select workload aborts if it starts before they land.
+        self._wait_for_table_stats()
 
     def __loop_s3(self):
         """S3 mode: import data from S3, optionally import queries table, build index, run select, clean."""

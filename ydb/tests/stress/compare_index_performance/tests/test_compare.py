@@ -33,10 +33,14 @@
 # if perf cannot profile, the test fails. perf adds overhead, so measured
 # Txs/Sec are perturbed when on.
 
+import contextlib
 import os
 import signal
 import statistics
 import subprocess
+import threading
+import time
+import traceback
 import urllib.request
 
 import pytest
@@ -284,44 +288,113 @@ class TestCompareIndexPerformance:
         )
         cluster = KiKiMR(config)
         cluster.start()
+        # A stray SIGINT keeps aborting the flamegraph run during teardown even
+        # though this process no longer sends any signal (perf is stopped via a
+        # sentinel file). _sigint_debug logs where it comes from and SWALLOWS it
+        # (which, if signal masking works here at all, is also the fix).
+        shield = self._sigint_debug(label) if self.flamegraph else contextlib.nullcontext()
+        with shield:
+            try:
+                endpoint = "grpc://localhost:%s" % cluster.nodes[1].port
+                log_file = yatest.common.output_path(log_name)
+                err_file = yatest.common.output_path(log_name + ".err")
+                print(f"--- Running {label} workload against {ydbd_path} ---")
+                # stdout and stderr go to separate files: the Txs/Sec line is parsed
+                # from stdout, so stderr noise must not interleave into it.
+                with open(log_file, "w") as out, open(err_file, "w") as err:
+                    perf = self._perf_start(cluster.nodes[1].pid, svg_name) if self.flamegraph else None
+                    workload_ok = False
+                    try:
+                        run_workload(endpoint, out, err)
+                        workload_ok = True
+                    finally:
+                        if perf is not None:
+                            # Convert/validate the profile only if the workload
+                            # itself succeeded; otherwise just stop perf so its
+                            # error does not mask the original workload failure.
+                            self._perf_finish(perf, svg_name, validate=workload_ok)
+                return extract_total_txs_sec(log_file)
+            finally:
+                cluster.stop()
+
+    @contextlib.contextmanager
+    def _sigint_debug(self, label):
+        # Diagnose (and, if possible, suppress) the stray SIGINT that aborts the
+        # flamegraph run. Writes findings to a published sigint_diag.log:
+        #   - whether we are on the main thread (signal.signal only works there),
+        #   - whether installing a SIGINT handler succeeds,
+        #   - for every SIGINT: a timestamp and the full Python stack (which frame
+        #     / subprocess call it interrupted).
+        # The handler SWALLOWS the signal (returns without raising), so if signal
+        # masking is effective in this py3test the run survives — making this both
+        # the probe and the fix. If signal.signal() raises (not the main thread),
+        # that is logged and tells us in-process masking is impossible here.
+        diag = yatest.common.output_path("sigint_diag.log")
+
+        def log(msg):
+            with open(diag, "a") as f:
+                f.write("[%.3f][%s] %s\n" % (time.time(), label, msg))
+
+        on_main = threading.current_thread() is threading.main_thread()
+        log("enter: on_main_thread=%s pid=%s" % (on_main, os.getpid()))
+        hits = []
+
+        def handler(signum, frame):
+            hits.append(signum)
+            log("SIGINT #%d (signum=%d) SWALLOWED; interrupted stack:\n%s"
+                % (len(hits), signum, "".join(traceback.format_stack(frame))))
+
+        prev, installed = None, False
         try:
-            endpoint = "grpc://localhost:%s" % cluster.nodes[1].port
-            log_file = yatest.common.output_path(log_name)
-            err_file = yatest.common.output_path(log_name + ".err")
-            print(f"--- Running {label} workload against {ydbd_path} ---")
-            # stdout and stderr go to separate files: the Txs/Sec line is parsed
-            # from stdout, so stderr noise must not interleave into it.
-            with open(log_file, "w") as out, open(err_file, "w") as err:
-                perf = self._perf_start(cluster.nodes[1].pid, svg_name) if self.flamegraph else None
-                workload_ok = False
-                try:
-                    run_workload(endpoint, out, err)
-                    workload_ok = True
-                finally:
-                    if perf is not None:
-                        # Convert/validate the profile only if the workload
-                        # itself succeeded; otherwise just stop perf so its error
-                        # does not mask the original workload failure.
-                        self._perf_finish(perf, svg_name, validate=workload_ok)
-            return extract_total_txs_sec(log_file)
+            prev = signal.signal(signal.SIGINT, handler)
+            installed = True
+            log("signal.signal(SIGINT, handler) OK")
+        except (ValueError, OSError) as exc:
+            log("signal.signal FAILED (%r) -> cannot mask SIGINT in-process" % (exc,))
+        try:
+            yield
         finally:
-            cluster.stop()
+            if installed:
+                try:
+                    signal.signal(signal.SIGINT, prev)
+                except (ValueError, OSError):
+                    pass
+            log("exit: sigint_hits=%d" % len(hits))
 
     # --- flamegraph collection (perf record -> stackcollapse -> flamegraph) ---
     def _perf_start(self, pid, svg_name):
-        # Profile the live ydbd process for the whole workload run (until SIGINT).
-        # Run perf in its own session/process group so we can interrupt it
-        # reliably, including when wrapped in `sudo` (which would otherwise not
-        # forward our SIGINT to the perf child).
-        # perf.data is an intermediate; keep it in the work dir (not the
-        # published output dir). Under sudo it is written owned by root, which
-        # would make ya's output collection fail with PermissionError if it lived
-        # under output_path — it is chowned back to us in _perf_stop.
+        # Profile the live ydbd process for the whole workload run.
+        #
+        # `perf record` finalizes perf.data only when it receives SIGINT/SIGTERM,
+        # so it MUST be signaled to stop. We deliberately do NOT signal it from
+        # this (pytest) process: under sudo on the CI runner that SIGINT leaked
+        # back into pytest and aborted the session as a KeyboardInterrupt, and
+        # in-process signal masking proved ineffective here (signal.signal() is a
+        # no-op off the main thread / gets reset around yatest.common.execute).
+        #
+        # Instead perf runs inside a small shell wrapper that waits for a sentinel
+        # file and then sends `kill -INT` to perf ITSELF. _perf_stop just creates
+        # that file — pytest never sends a signal, so none can leak to it. The
+        # wrapper runs in its own session (start_new_session), so the internal
+        # SIGINT stays fully contained. perf.data is an intermediate; keep it in
+        # the work dir (not the published output dir). Under sudo it is written
+        # owned by root, which would make ya's output collection fail with
+        # PermissionError under output_path — it is chowned back in _perf_stop.
         perf_data = yatest.common.work_path(svg_name + ".perf.data")
         perf_log = yatest.common.output_path(svg_name + ".perf.log")
+        stop_file = yatest.common.work_path(svg_name + ".perf.stop")
+        if os.path.exists(stop_file):
+            os.remove(stop_file)
+        # Positional args ($1..$4) avoid any dependency on sudo env passing.
+        wrapper = (
+            'perf record -F "$1" --call-graph dwarf -g --proc-map-timeout=10000 '
+            '--pid "$2" -o "$3" & p=$!; '
+            'while [ ! -e "$4" ]; do sleep 0.2; done; '
+            'kill -INT "$p"; wait "$p"'
+        )
         cmd = (["sudo"] if self.perf_sudo else []) + [
-            "perf", "record", "-F", str(self.perf_freq), "--call-graph", "dwarf",
-            "-g", "--proc-map-timeout=10000", "--pid", str(pid), "-o", perf_data,
+            "sh", "-c", wrapper, "perfwrap",
+            str(self.perf_freq), str(pid), perf_data, stop_file,
         ]
         log = open(perf_log, "w")
         try:
@@ -331,24 +404,29 @@ class TestCompareIndexPerformance:
             log.close()
             pytest.fail(f"failed to start perf for flamegraph {svg_name}: {exc}; "
                         f"perf log: {perf_log}")
-        return {"proc": proc, "log": log, "data": perf_data, "perf_log": perf_log}
+        return {"proc": proc, "log": log, "data": perf_data,
+                "perf_log": perf_log, "stop": stop_file}
 
     def _perf_stop(self, perf):
-        # Send SIGINT to perf's process group (perf flushes perf.data on SIGINT).
-        # With sudo, perf is not our direct child, so signal the whole group via
-        # `sudo kill` to reach the privileged perf process.
+        # Ask perf to stop by creating the sentinel file the wrapper is waiting
+        # on (see _perf_start); the wrapper then sends perf its SIGINT internally.
+        # pytest itself sends NO signal, so nothing can leak back into it.
         proc = perf["proc"]
         try:
-            if self.perf_sudo:
-                subprocess.call(["sudo", "kill", "-INT", f"-{proc.pid}"])
-            else:
-                os.killpg(proc.pid, signal.SIGINT)
+            open(perf["stop"], "w").close()
         except OSError:
-            proc.send_signal(signal.SIGINT)
+            pass
         try:
             proc.wait(timeout=120)
         except subprocess.TimeoutExpired:
-            proc.kill()
+            # Wrapper never noticed the sentinel; kill the whole perf session
+            # group. It is isolated (start_new_session) so a negative-pgid kill
+            # cannot reach pytest. Under sudo the group is root-owned.
+            pgid = os.getpgid(proc.pid)
+            if self.perf_sudo:
+                subprocess.call(["sudo", "kill", "-KILL", "--", f"-{pgid}"])
+            else:
+                os.killpg(pgid, signal.SIGKILL)
             proc.wait()
         perf["log"].close()
         # perf ran as root under sudo, so perf.data is root-owned. Chown it back

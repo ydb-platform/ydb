@@ -2047,7 +2047,7 @@ private:
     THashMap<ui64, NKikimrConsole::TConfigItem::EKind> ConfigSubscriptions;
     THashMap<ui64, TActorId> TimeoutTimers;
 
-    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
+    std::shared_ptr<NResourceManager::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     TIntrusivePtr<TKqpShutdownState> ShutdownState;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;

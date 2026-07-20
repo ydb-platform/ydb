@@ -13,19 +13,17 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/resource_broker.h>
 
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
-#include <library/cpp/monlib/service/pages/templates.h>
 
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/monlib/service/pages/templates.h>
 
-namespace NKikimr {
-namespace NKqp {
-namespace NRm {
+namespace NKikimr::NKqp {
+namespace NResourceManager {
 
 using namespace NActors;
 using namespace NResourceBroker;
@@ -46,15 +44,14 @@ using namespace NResourceBroker;
 #define LOG_AS_W(stream) LOG_AS_SAFE(LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
 #define LOG_AS_N(stream) LOG_AS_SAFE(LOG_NOTICE_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
 
-TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
-    const TString& database, bool collectBacktrace)
+TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, TString poolId, const double memoryPoolPercent, TString database, bool collectBacktrace)
     : ResourceManager(resourceManager)
     , Counters(resourceManager->GetCounters())
     , TxId(txId)
     , CreatedAt(now)
-    , PoolId(poolId)
+    , PoolId(std::move(poolId))
     , MemoryPoolPercent(memoryPoolPercent)
-    , Database(database)
+    , Database(std::move(database))
     , CollectBacktrace(collectBacktrace)
 {}
 
@@ -1055,17 +1052,17 @@ private:
     TDuration WarmupDeadline;
 };
 
-} // namespace NRm
+} // namespace NResourceManager
 
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
     TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker,
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources, ui32 nodeId, TDuration warmupDeadline)
 {
-    return new NRm::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources), nodeId, warmupDeadline);
+    return new NResourceManager::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources), nodeId, warmupDeadline);
 }
 
-std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _nodeId) {
+std::shared_ptr<NResourceManager::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _nodeId) {
     if (auto rm = TryGetKqpResourceManager(_nodeId)) {
         return rm;
     }
@@ -1078,17 +1075,17 @@ std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _no
     Y_ABORT("KqpResourceManager not ready yet, node #%" PRIu32, nodeId);
 }
 
-std::shared_ptr<NRm::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> _nodeId) {
+std::shared_ptr<NResourceManager::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> _nodeId) {
     ui32 nodeId = _nodeId ? *_nodeId : TActivationContext::ActorSystem()->NodeId;
-    std::shared_ptr<NRm::TKqpResourceManager> rm = NRm::ResourceManagers.Default.lock();
+    std::shared_ptr<NResourceManager::TKqpResourceManager> rm = NResourceManager::ResourceManagers.Default.lock();
     if (Y_LIKELY(rm && rm->GetNodeId() == nodeId)) {
         return rm;
     }
 
     // for tests only
-    with_lock (NRm::ResourceManagers.Lock) {
-        auto it = NRm::ResourceManagers.ByNodeId.find(nodeId);
-        if (it != NRm::ResourceManagers.ByNodeId.end()) {
+    with_lock (NResourceManager::ResourceManagers.Lock) {
+        auto it = NResourceManager::ResourceManagers.ByNodeId.find(nodeId);
+        if (it != NResourceManager::ResourceManagers.ByNodeId.end()) {
             return it->second.lock();
         }
     }
@@ -1096,5 +1093,5 @@ std::shared_ptr<NRm::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> 
     return nullptr;
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp
+

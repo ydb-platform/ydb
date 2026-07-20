@@ -43,7 +43,7 @@ public:
         hFunc(NKikimr::NKqp::TEvKqp::TEvQueryResponse, Handle);
         hFunc(NKikimr::NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
     )
-    
+
     void Handle(NKikimr::NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         auto response = MakeHolder<NKikimr::NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(ResultSizeLimit_);
@@ -133,7 +133,7 @@ public:
     TResourcesWaiterActor(NThreading::TPromise<void> promise, const TWaitResourcesSettings& settings)
         : Settings_(settings)
         , RetryPolicy_(IRetryPolicy::GetExponentialBackoffPolicy(
-            &TResourcesWaiterActor::Retryable, REFRESH_PERIOD, 
+            &TResourcesWaiterActor::Retryable, REFRESH_PERIOD,
             TDuration::MilliSeconds(100), TDuration::Seconds(1),
             std::numeric_limits<size_t>::max(), std::max(2 * REFRESH_PERIOD, Settings_.HealthCheckTimeout)
         ))
@@ -288,7 +288,7 @@ private:
     NThreading::TPromise<void> Promise_;
 
     EHealthCheck HealthCheckStage_ = EHealthCheck::None;
-    std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
+    std::shared_ptr<NKikimr::NKqp::NResourceManager::IKqpResourceManager> ResourceManager_;
 };
 
 class TSessionHolderActor : public NActors::TActorBootstrapped<TSessionHolderActor> {
@@ -385,7 +385,7 @@ public:
 
 private:
     void FailAndPassAway(const TString& error) {
-        if (!OpenPromise_.HasValue()) {  
+        if (!OpenPromise_.HasValue()) {
             OpenPromise_.SetException(error);
         }
         ClosePromise_.SetException(error);

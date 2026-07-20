@@ -243,7 +243,7 @@ public:
 
    TKqpSessionActor(const TActorId& owner,
             TKqpQueryCachePtr queryCache,
-            std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager,
+            std::shared_ptr<NKikimr::NKqp::NResourceManager::IKqpResourceManager> resourceManager,
             std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory,
             const TString& sessionId, TIntrusiveConstPtr<NYql::TKikimrConfiguration> kqpConfig,
             const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
@@ -4028,7 +4028,7 @@ private:
     TKqpQueryCachePtr QueryCache;
     TString SessionId;
 
-    std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
+    std::shared_ptr<NKikimr::NKqp::NResourceManager::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     // cached lookups to issue counters
     THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr> CachedIssueCounters;
@@ -4069,7 +4069,7 @@ private:
 
 IActor* CreateKqpSessionActor(const TActorId& owner,
     TKqpQueryCachePtr queryCache,
-    std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager,
+    std::shared_ptr<NKikimr::NKqp::NResourceManager::IKqpResourceManager> resourceManager,
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> caFactory, const TString& sessionId,
     TIntrusiveConstPtr<NYql::TKikimrConfiguration> kqpConfig,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,

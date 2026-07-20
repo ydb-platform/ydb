@@ -158,17 +158,17 @@ namespace {
 // Minimal IKqpResourceManager for driving TKqpPlanner placement in unit tests. Only the methods on the
 // AssignTasksToNodes() path return meaningful values; everything else aborts if ever reached. GetLocalResources()
 // returns zero so the planner always takes the cluster (greedy) placement path instead of collapsing to local.
-class TStubResourceManager : public NRm::IKqpResourceManager {
+class TStubResourceManager : public NResourceManager::IKqpResourceManager {
 public:
     const TIntrusivePtr<TKqpCounters>& GetCounters() const override {
         return Counters_;
     }
 
-    NRm::TKqpRMAllocateResult AllocateResources(NRm::TTxState&, ui64, const NRm::TKqpResourcesRequest&) override {
+    NResourceManager::TKqpRMAllocateResult AllocateResources(NResourceManager::TTxState&, ui64, const NResourceManager::TKqpResourcesRequest&) override {
         Y_ABORT("TStubResourceManager::AllocateResources is not used in tests");
     }
 
-    NRm::TPlannerPlacingOptions GetPlacingOptions() override {
+    NResourceManager::TPlannerPlacingOptions GetPlacingOptions() override {
         return {};
     }
 
@@ -180,15 +180,15 @@ public:
         // Leave TotalMemoryLimit as computed by BuildInitialTaskResources() - it is enough to drive the greedy planner.
     }
 
-    void FreeResources(NRm::TTxState&, ui64, const NRm::TKqpResourcesRequest&) override {}
-    void FinishTx(NRm::TTxState&) override {}
-    void RequestClusterResourcesInfo(NRm::TOnResourcesSnapshotCallback&&) override {}
+    void FreeResources(NResourceManager::TTxState&, ui64, const NResourceManager::TKqpResourcesRequest&) override {}
+    void FinishTx(NResourceManager::TTxState&) override {}
+    void RequestClusterResourcesInfo(NResourceManager::TOnResourcesSnapshotCallback&&) override {}
 
     TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const override {
         return {};
     }
 
-    NRm::TKqpLocalNodeResources GetLocalResources() const override {
+    NResourceManager::TKqpLocalNodeResources GetLocalResources() const override {
         return {}; // zero: force the planner onto the cluster (greedy) path, never "run locally".
     }
 
@@ -369,7 +369,7 @@ private:
         TIntrusiveConstPtr<NACLib::TUserToken> userToken;
         TMaybe<NKikimrKqp::TRlPath> rlPath;
         TActorId checkpointCoordinator;
-        std::shared_ptr<NRm::IKqpResourceManager> resourceManager = std::make_shared<TStubResourceManager>();
+        std::shared_ptr<NResourceManager::IKqpResourceManager> resourceManager = std::make_shared<TStubResourceManager>();
         std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> caFactory; // unused on this path
 
         TKqpPlanner planner(TKqpPlanner::TArgs{

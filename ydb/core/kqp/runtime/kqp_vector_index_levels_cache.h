@@ -210,7 +210,7 @@ private:
 
 IActor* CreateVectorIndexLevelsCacheMaintainer(
     TIntrusivePtr<TVectorIndexLevelsCache> cache,
-    std::shared_ptr<NRm::IKqpResourceManager> rm,
+    std::shared_ptr<NResourceManager::IKqpResourceManager> rm,
     const NKikimrConfig::TTableServiceConfig::TResourceManager& initialConfig);
 
 } // namespace NKikimr::NKqp

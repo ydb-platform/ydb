@@ -45,7 +45,7 @@ NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb:
 
 void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount) {
     const auto timeout = TInstant::Now() + TDuration::Seconds(10);
-    std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager;
+    std::shared_ptr<NKikimr::NKqp::NResourceManager::IKqpResourceManager> resourceManager;
     while (true) {
         if (!resourceManager) {
             resourceManager = NKikimr::NKqp::TryGetKqpResourceManager(nodeId);

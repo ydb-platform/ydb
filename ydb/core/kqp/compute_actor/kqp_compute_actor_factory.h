@@ -110,7 +110,7 @@ public:
         const ui32 LockNodeId;
         const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
         NYql::NDqProto::TDqTask* Task;
-        TIntrusivePtr<NRm::TTxState> TxInfo;
+        TIntrusivePtr<NResourceManager::TTxState> TxInfo;
         NYql::NDq::IMemoryQuotaManager::TPtr TaskQuotaManager;
         NYql::NDq::IMemoryQuotaManager::TPtr ChannelQuotaManager;
         TMaybe<NYql::NDq::TReportStatsSettings> ReportStatsSettings;
@@ -143,7 +143,7 @@ public:
 };
 
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-        std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
+        std::shared_ptr<NResourceManager::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         std::shared_ptr<NYql::NDq::IDqChannelService> channelService);

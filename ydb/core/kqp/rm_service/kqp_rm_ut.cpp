@@ -194,12 +194,12 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(t->GetCounter("InFlyTasks")->Val(), infly);
     }
 
-    TIntrusivePtr<NRm::TTxState> MakeTx(ui64 txId, std::shared_ptr<NRm::IKqpResourceManager> rm) {
-        return MakeIntrusive<NRm::TTxState>(rm, txId, TInstant::Now(), "", (double)100, "", false);
+    TIntrusivePtr<NResourceManager::TTxState> MakeTx(ui64 txId, std::shared_ptr<NResourceManager::IKqpResourceManager> rm) {
+        return MakeIntrusive<NResourceManager::TTxState>(rm, txId, TInstant::Now(), "", (double)100, "", false);
     }
 
     void AssertResourceManagerStats(
-            std::shared_ptr<NRm::IKqpResourceManager> rm, ui64 scanQueryMemory, ui32 executionUnits) {
+            std::shared_ptr<NResourceManager::IKqpResourceManager> rm, ui64 scanQueryMemory, ui32 executionUnits) {
         Y_UNUSED(executionUnits);
         auto stats = rm->GetLocalResources();
         UNIT_ASSERT_VALUES_EQUAL(scanQueryMemory, stats.Memory);
@@ -231,7 +231,7 @@ public:
     };
 
     void CheckSnapshot(ui32 nodeIndToCheck, TVector<TCheckedResources> verificationData,
-            std::shared_ptr<NRm::IKqpResourceManager> currentRm) {
+            std::shared_ptr<NResourceManager::IKqpResourceManager> currentRm) {
         TVector<NKikimrKqp::TKqpNodeResources> snapshot;
         std::atomic<int> ready = 0;
 
@@ -319,7 +319,7 @@ void KqpRm::SingleTask() {
     auto stats = rm->GetLocalResources();
     UNIT_ASSERT_VALUES_EQUAL(1000, stats.Memory);
 
-    NRm::TKqpResourcesRequest request{.ExecutionUnits = 1, .Memory = 100};
+    NResourceManager::TKqpResourcesRequest request{.ExecutionUnits = 1, .Memory = 100};
 
     {
         auto tx = MakeTx(1, rm);
@@ -345,7 +345,7 @@ void KqpRm::ManyTasks() {
 
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
-    NRm::TKqpResourcesRequest request{.ExecutionUnits = 1, .Memory = 100};
+    NResourceManager::TKqpResourcesRequest request{.ExecutionUnits = 1, .Memory = 100};
 
     {
         auto tx = MakeTx(1, rm);
@@ -372,7 +372,7 @@ void KqpRm::NotEnoughMemory() {
     auto tx = MakeTx(1, rm);
     auto task = 2;
 
-    bool allocated = rm->AllocateResources(*tx, task, NRm::TKqpResourcesRequest{.ExecutionUnits = 10, .Memory = 10'000});
+    bool allocated = rm->AllocateResources(*tx, task, NResourceManager::TKqpResourcesRequest{.ExecutionUnits = 10, .Memory = 10'000});
     UNIT_ASSERT(!allocated);
 
     AssertResourceManagerStats(rm, 1000, 100);
@@ -388,7 +388,7 @@ void KqpRm::NotEnoughExecutionUnits() {
     auto tx = MakeTx(1, rm);
     auto task = 2;
 
-    bool allocated = rm->AllocateResources(*tx, task, NRm::TKqpResourcesRequest{.ExecutionUnits = 1000, .Memory = 100});
+    bool allocated = rm->AllocateResources(*tx, task, NResourceManager::TKqpResourcesRequest{.ExecutionUnits = 1000, .Memory = 100});
     UNIT_ASSERT(!allocated);
 
     AssertResourceManagerStats(rm, 1000, 100);
@@ -407,10 +407,10 @@ void KqpRm::ResourceBrokerNotEnoughResources() {
     auto tx = MakeTx(1, rm);
     auto task = 2;
 
-    bool allocated = rm->AllocateResources(*tx, task, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 1'000});
+    bool allocated = rm->AllocateResources(*tx, task, NResourceManager::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 1'000});
     UNIT_ASSERT(allocated);
 
-    allocated = rm->AllocateResources(*tx, task, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 100'000});
+    allocated = rm->AllocateResources(*tx, task, NResourceManager::TKqpResourcesRequest{.ExecutionUnits = 1, .Memory = 100'000});
     UNIT_ASSERT(!allocated);
 
     AssertResourceManagerStats(rm, config.GetQueryMemoryLimit() - 1000, 99);
@@ -423,7 +423,7 @@ void KqpRm::Snapshot() {
 
     auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
 
-    NRm::TKqpResourcesRequest request{.ExecutionUnits = 10, .Memory = 100};
+    NResourceManager::TKqpResourcesRequest request{.ExecutionUnits = 10, .Memory = 100};
 
     {
         auto tx1 = MakeTx(1, rm);
@@ -472,16 +472,16 @@ void KqpRm::Reduce() {
     auto tx = MakeTx(1, rm);
     auto task = 1;
 
-    bool allocated = rm->AllocateResources(*tx, task, NRm::TKqpResourcesRequest{.ExecutionUnits = 10, .Memory = 100});
+    bool allocated = rm->AllocateResources(*tx, task, NResourceManager::TKqpResourcesRequest{.ExecutionUnits = 10, .Memory = 100});
     UNIT_ASSERT(allocated);
 
     AssertResourceManagerStats(rm, 1000 - 100, 100 - 10);
     AssertResourceBrokerSensors(0, 100, 0, 0, 1);
 
-    NRm::TKqpResourcesRequest reduceRequest;
+    NResourceManager::TKqpResourcesRequest reduceRequest;
     reduceRequest.Memory = 70;
 
-    rm->FreeResources(*tx, task, NRm::TKqpResourcesRequest{.ExecutionUnits = 7, .Memory = 70});
+    rm->FreeResources(*tx, task, NResourceManager::TKqpResourcesRequest{.ExecutionUnits = 7, .Memory = 70});
     AssertResourceManagerStats(rm, 1000 - 100 + 70, 100 - 10 + 7);
     AssertResourceBrokerSensors(0, 30, 0, 0, 1);
 }
@@ -504,7 +504,7 @@ void KqpRm::ConcurrentTasks() {
                 auto count = 0u;
                 for (auto n = 0u; n < 20u; n++) {
                     for (auto j = 0u; j < 20u; j++) {
-                        if (!rm->AllocateResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = j, .Memory = j * 10u})) {
+                        if (!rm->AllocateResources(*tx, taskId, NResourceManager::TKqpResourcesRequest{.ExecutionUnits = j, .Memory = j * 10u})) {
                             failedAllocations++;
                             Sleep(TDuration::MilliSeconds(j * 10));
                             break;
@@ -515,11 +515,11 @@ void KqpRm::ConcurrentTasks() {
                         if (count < j) {
                             break;
                         }
-                        rm->FreeResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = j, .Memory = j * 10u});
+                        rm->FreeResources(*tx, taskId, NResourceManager::TKqpResourcesRequest{.ExecutionUnits = j, .Memory = j * 10u});
                         count -= j;
                     }
                 }
-                rm->FreeResources(*tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = count, .Memory = count * 10u});
+                rm->FreeResources(*tx, taskId, NResourceManager::TKqpResourcesRequest{.ExecutionUnits = count, .Memory = count * 10u});
                 events[taskId - 1].Signal();
             }, i + 1, NPar::TLocalExecutor::MED_PRIORITY);
         }
@@ -603,7 +603,7 @@ void KqpRm::SnapshotSharing() {
     CheckSnapshot(0, {{1000, 100}, {1000, 100}}, rm_first);
     CheckSnapshot(1, {{1000, 100}, {1000, 100}}, rm_second);
 
-    NRm::TKqpResourcesRequest request{.ExecutionUnits = 10, .Memory = 100};
+    NResourceManager::TKqpResourcesRequest request{.ExecutionUnits = 10, .Memory = 100};
 
     auto tx1Rm1 = MakeTx(1, rm_first);
     auto tx2Rm1 = MakeTx(2, rm_first);
@@ -707,7 +707,7 @@ void KqpRm::DisonnectNodes() {
 
     auto prevObserverFunc = Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            case NRm::TEvKqpResourceInfoExchanger::TEvSendResources::EventType: {
+            case NResourceManager::TEvKqpResourceInfoExchanger::TEvSendResources::EventType: {
                 return TTestActorRuntime::EEventAction::DROP;
             }
         }

@@ -60,7 +60,7 @@ public:
         const ui64 OutputChunkMaxSize = 0;
         const TGUCSettings::TPtr GUCSettings;
         const bool MayRunTasksLocally = false;
-        const std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager>& ResourceManager_;
+        const std::shared_ptr<NKikimr::NKqp::NResourceManager::IKqpResourceManager>& ResourceManager_;
         const std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory>& CaFactory_;
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
         const TMaybe<ui8> ArrayBufferMinFillPercentage;
@@ -138,9 +138,9 @@ private:
     const ui64 OutputChunkMaxSize;
     const TGUCSettings::TPtr GUCSettings;
     TString SerializedGUCSettings;
-    std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
+    std::shared_ptr<NKikimr::NKqp::NResourceManager::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
-    TIntrusivePtr<NRm::TTxState> TxInfo;
+    TIntrusivePtr<NResourceManager::TTxState> TxInfo;
     TVector<TProgressStat> LastStats;
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TMaybe<ui8> ArrayBufferMinFillPercentage;

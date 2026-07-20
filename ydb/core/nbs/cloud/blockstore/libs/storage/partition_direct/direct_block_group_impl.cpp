@@ -112,14 +112,18 @@ CreateWaitSessionCbForSyncWithPBuffer(
         }
 
         if (auto self = weakSelf.lock()) {
-            childSpan->Event("ConnectionReady");
+            NWilson::TTraceId traceId;
+            if (childSpan) {
+                childSpan->Event("ConnectionReady");
+                traceId = childSpan->GetTraceId();
+            }
 
             self->SyncWithPBuffer(
                     vChunkIndex,
                     pbufferHostIndex,
                     ddiskHostIndex,
                     segments,
-                    childSpan->GetTraceId())
+                    traceId)
                 .Subscribe([promise = std::move(promise)]   //
                            (const TDBGFlushResponseFuture& f) mutable
                            { promise.SetValue(f.GetValue()); });
@@ -127,8 +131,8 @@ CreateWaitSessionCbForSyncWithPBuffer(
             for (size_t i = 0; i < segments.size(); ++i) {
                 flushResponse.Errors.push_back(MakeError(E_CANCELLED));
             }
+            promise.SetValue(std::move(flushResponse));
         }
-        promise.SetValue(std::move(flushResponse));
     };
 
     return cb;
@@ -315,14 +319,18 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
             }
 
             if (auto self = weakSelf.lock()) {
-                childSpan->Event("ConnectionReady");
+                NWilson::TTraceId traceId;
+                if (childSpan) {
+                    childSpan->Event("ConnectionReady");
+                    traceId = childSpan->GetTraceId();
+                }
 
                 self->ReadBlocksFromDDisk(
                         vChunkIndex,
                         hostIndex,
                         range,
                         guardedSglist,
-                        childSpan->GetTraceId())
+                        traceId)
                     .Subscribe([promise = std::move(promise)]   //
                                (const TDBGReadBlocksResponseFuture& f) mutable
                                { promise.SetValue(UnsafeExtractValue(f)); });
@@ -519,14 +527,18 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                 return;
             }
             if (auto self = weakSelf.lock()) {
-                childSpan->Event("ConnectionReady");
+                NWilson::TTraceId traceId;
+                if (childSpan) {
+                    childSpan->Event("ConnectionReady");
+                    traceId = childSpan->GetTraceId();
+                }
 
                 self->WriteBlocksToDDisk(
                         vChunkIndex,
                         hostIndex,
                         range,
                         guardedSglist,
-                        childSpan->GetTraceId())
+                        traceId)
                     .Subscribe([promise = std::move(promise)]   //
                                (const TDBGWriteBlocksResponseFuture& f) mutable
                                { promise.SetValue(f.GetValue()); });
@@ -1557,7 +1569,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s connection failed for host %s: %s",
+            "%s connection failed %s: %s",
             LogTitle.GetWithTime().c_str(),
             PrintHostIndex(hostIndex).c_str(),
             FormatError(error).c_str());
@@ -1581,7 +1593,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
 
 void TDirectBlockGroup::ReEstablishConnection(
     EConnectionType connectionType,
-    size_t hostIndex)
+    THostIndex hostIndex)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     auto& connections = connectionType == EConnectionType::DDisk

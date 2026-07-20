@@ -196,7 +196,7 @@ private:
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
     void ReEstablishConnection(
         EConnectionType connectionType,
-        size_t hostIndex);
+        THostIndex hostIndex);
     void OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId);
 
     [[nodiscard]] bool HasPBufferQuorum() const;

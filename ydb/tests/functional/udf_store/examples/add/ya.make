@@ -2,7 +2,7 @@ BUILD_ONLY_IF(OS_EMSCRIPTEN)
 
 DLL()
 
-LD_PLUGIN(ydb/tests/functional/udf_store/sdk/ld_plugin.py)
+LD_PLUGIN(ydb/tests/functional/udf_store/examples/sdk/ld_plugin.py)
 
 NO_UTIL()
 NO_RUNTIME()

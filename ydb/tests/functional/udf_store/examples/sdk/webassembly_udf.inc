@@ -9,4 +9,4 @@ EXPORT_ALL_DYNAMIC_SYMBOLS()
 # and arcadia_compat.flags), otherwise opensource ya.conf may emit Tag section ID 13
 # for __cpp_exception and WAVM will reject the module.
 LDFLAGS(-Wl,--allow-undefined)
-LD_PLUGIN(ydb/tests/functional/udf_store/sdk/ld_plugin.py)
+LD_PLUGIN(ydb/tests/functional/udf_store/examples/sdk/ld_plugin.py)

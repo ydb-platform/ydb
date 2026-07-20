@@ -53,6 +53,7 @@ class TCdcPartitionWorker: public TActorBootstrapped<TCdcPartitionWorker> {
             {"logPrefix", GetLogPrefix()},
             {"eventDetails", ev->Get()->ToString()});
 
+        const auto& response = ev->Get()->Record;
         switch (response.GetStatus()) {
         case NMsgBusProxy::MSTATUS_OK:
             if (response.GetErrorCode() == NPersQueue::NErrorCode::OK) {

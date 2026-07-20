@@ -116,8 +116,7 @@ private:
                     return TCell(hasPath.data(), hasPath.size());
                 }});
                 insert({TSchema::HasStream::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
-                    const char hasStream = config.GetConfigJson()["has_stream"].GetBoolean();
-                    return TCell(&hasStream, sizeof(hasStream));
+                    return TCell::Make<bool>(config.GetConfigJson()["has_stream"].GetBoolean());
                 }});
             }
         };

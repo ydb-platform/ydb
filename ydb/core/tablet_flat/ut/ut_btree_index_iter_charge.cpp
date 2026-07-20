@@ -18,15 +18,16 @@ namespace {
     using TChild = TBtreeIndexNode::TChild;
 
     struct TTouchEnv : public NTest::TTestEnv {
-        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, TPageLocation location, TGroupId groupId) override
         {
+            auto pageId = location.GetPageIndex();
             if (Sticky[groupId].contains(pageId)) {
                 Loaded[groupId].insert(pageId);
             }
 
             Touched[groupId].insert(pageId);
             if (Loaded[groupId].contains(pageId)) {
-                return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
+                return NTest::TTestEnv::TryGetPage(part, location, groupId);
             }
             return nullptr;
         }
@@ -77,7 +78,8 @@ namespace {
             // Note: it's possible that B-Tree index touches extra first / last page because it doesn't have boundary keys
             // this should be resolved using slices (see ChargeRange)
             if (allowAdditionalFirstLastPartPages) {
-                for (auto additionalPageId : {IndexTools::GetFirstPageId(part, groupId), IndexTools::GetLastPageId(part, groupId)}) {
+                for (auto additionalLoc : {IndexTools::GetFirstPageLocation(part, groupId), IndexTools::GetLastPageLocation(part, groupId)}) {
+                    auto additionalPageId = additionalLoc.GetPageIndex();
                     if (bTreeDataPages.contains(additionalPageId)) {
                         flatDataPages.insert(additionalPageId);
                     }
@@ -315,7 +317,7 @@ Y_UNIT_TEST_SUITE(TPartGroupBtreeIndexIter) {
         UNIT_ASSERT_VALUES_EQUAL_C(bTreeReady, flatReady, message);
         UNIT_ASSERT_VALUES_EQUAL_C(bTree.IsValid(), flat.IsValid(), message);
         if (flat.IsValid()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(bTree.GetPageId(), flat.GetPageId(), message);
+            UNIT_ASSERT_VALUES_EQUAL_C(bTree.GetLocation().Offset, flat.GetLocation().Offset, message);
             UNIT_ASSERT_VALUES_EQUAL_C(bTree.GetRowId(), flat.GetRowId(), message);
             UNIT_ASSERT_VALUES_EQUAL_C(bTree.GetNextRowId(), flat.GetNextRowId(), message);
         }

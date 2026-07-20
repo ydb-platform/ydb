@@ -38,7 +38,7 @@ namespace NBlockIO {
         TActorId Sender;
         EPriority Priority;
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
-        TVector<TPageId> Pages;
+        TVector<TPageLocation> Pages;
         NWilson::TTraceId TraceId;
         ui64 RequestCookie;
 

@@ -90,6 +90,10 @@ namespace NPage {
             return { size, { page, 0 }, { page, size } };
         }
 
+        NPageCollection::TBorder Bounds(TPageLocation location) const override {
+            return Bounds(location.Offset.AsPageIndex());
+        }
+
         NPageCollection::TGlobId Glob(ui32 page) const noexcept override
         {
             return page < Array.size() ? Array[page] : Empty;
@@ -98,6 +102,15 @@ namespace NPage {
         bool Verify(ui32 page, TArrayRef<const char> data) const noexcept override
         {
             return data && data.size() == Array.at(page).Bytes();
+        }
+
+        bool Verify(TPageLocation location, TArrayRef<const char> data) const override {
+            return data && data.size() == location.Size;
+        }
+
+        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override
+        {
+            return NTable::NPage::TPageLocation::FromPageIndex(pageId, Glob(pageId).Bytes(), NTable::NPage::EPage::Opaque);
         }
 
         size_t BackingSize() const noexcept override

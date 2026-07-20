@@ -200,7 +200,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "requires the unique-index feature");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "JSON index over a table without a single integer primary key requires the __ydb_row_id doc_id feature");
         }
     }
 
@@ -458,7 +459,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "requires the unique-index feature");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "JSON index over a table without a single integer primary key requires the __ydb_row_id doc_id feature");
         }
     }
 

@@ -624,6 +624,62 @@ private:
             }
 
             SerializerCtx.Tables[tablePath].Reads.push_back(std::move(readInfo));
+        } else if (auto maybeVectorSearch = connection.Maybe<TKqpCnVectorSearch>()) {
+            auto vectorSearch = maybeVectorSearch.Cast();
+
+            planNode.TypeName = "VectorSearch";
+            const TString indexName(vectorSearch.Index().Value());
+            planNode.NodeInfo["Index"] = indexName;
+
+            // The actor always reads the kmeans-tree level and posting index tables; whether it also
+            // reads the main table depends on the index being covering for the requested columns. When
+            // it is covering, every output column is served from the posting table and the main table
+            // is not touched — reflect that so covered-index plans show no main-table access.
+            TString tablePath(vectorSearch.Table().Path().Value());
+            auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
+            const auto& tableMeta = tableData.Metadata;
+
+            THashSet<TString> coveredColumns;
+            if (tableMeta) {
+                coveredColumns.insert(tableMeta->KeyColumnNames.begin(), tableMeta->KeyColumnNames.end());
+                for (const auto& index : tableMeta->Indexes) {
+                    if (index.Name == indexName) {
+                        coveredColumns.insert(index.KeyColumns.begin(), index.KeyColumns.end());
+                        coveredColumns.insert(index.DataColumns.begin(), index.DataColumns.end());
+                        break;
+                    }
+                }
+            }
+
+            bool covered = true;
+            auto& columns = planNode.NodeInfo["Columns"];
+            TVector<TString> readColumns;
+            readColumns.reserve(vectorSearch.Columns().Size());
+            for (const auto& column : vectorSearch.Columns()) {
+                columns.AppendValue(column.Value());
+                readColumns.push_back(TString(column.Value()));
+                if (!coveredColumns.contains(column.Value())) {
+                    covered = false;
+                }
+            }
+
+            if (!covered) {
+                planNode.NodeInfo["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
+                planNode.NodeInfo["Path"] = tablePath;
+
+                TTableRead readInfo;
+                readInfo.Type = EPlanTableReadType::Lookup;
+                readInfo.Columns = readColumns;
+                SerializerCtx.Tables[tablePath].Reads.push_back(std::move(readInfo));
+            }
+
+            // TopK (LIMIT) is either a literal or a query parameter resolved at runtime.
+            TExprBase topK = vectorSearch.TopK();
+            if (auto literal = topK.Maybe<TCoUint64>()) {
+                planNode.NodeInfo["TopK"] = TString(literal.Cast().Literal().Value());
+            } else if (auto param = topK.Maybe<TCoParameter>()) {
+                planNode.NodeInfo["TopK"] = TString(param.Cast().Name().Value());
+            }
         } else {
             planNode.TypeName = connection.Ref().Content();
         }

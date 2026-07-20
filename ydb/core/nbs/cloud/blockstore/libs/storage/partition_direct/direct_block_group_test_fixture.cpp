@@ -192,7 +192,11 @@ NThreading::TFuture<void> TDBGFixture::RunAndGetInitialReady(
 {
     auto service =
         std::make_shared<TPartitionDirectServiceMock>(dropScheduledCallbacks);
-    Services.push_back(service);
+    if (Service) {
+        OldServices.push_back(std::move(Service));
+    }
+    Service = service;
+
     return dbg->Run(service.get());
 }
 

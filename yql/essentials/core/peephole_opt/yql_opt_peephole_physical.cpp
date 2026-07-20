@@ -6478,7 +6478,8 @@ private:
         bool isSuitableGuess = NKikimr::NMiniKQL::RuntimeVersion >= 79 && node->IsCallable("Guess");
         bool isSuitableWay = NKikimr::NMiniKQL::RuntimeVersion >= 80 && node->IsCallable("Way");
         bool isSuitableVariant = NKikimr::NMiniKQL::RuntimeVersion >= 81 && node->IsCallable("Variant");
-        if (node->IsList() || rewriteAsIs || isSuitableGuess || isSuitableWay || isSuitableVariant ||
+        bool isSuitableVariantItem = NKikimr::NMiniKQL::RuntimeVersion >= 82 && node->IsCallable("VariantItem");
+        if (node->IsList() || rewriteAsIs || isSuitableGuess || isSuitableWay || isSuitableVariant || isSuitableVariantItem ||
             node->IsCallable({"DecimalMul", "DecimalDiv", "DecimalMod", "And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"})) {
             if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), Ctx_, Types_, /*reportUnspported=*/true)) {
                 YQL_CLOG(TRACE, CorePeepHole) << Log(node) << "Type are not supported";

@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/tables/table_queries.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -13,6 +14,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
+#include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NKqp::NWorkload {
 
@@ -639,6 +641,29 @@ public:
             errorString = TStringBuilder() << "number handlers = " << counter->Val();
             return counter->Val() == finalCount;
         });
+    }
+
+    void WaitForClassifierPropagation() const override {
+        const auto nodeIndex = 0;
+        auto* runtime = GetRuntime();
+        const ui32 nodeId = runtime->GetNodeId(nodeIndex);
+        const TActorId edgeActor = runtime->AllocateEdgeActor(nodeIndex);
+
+        runtime->Send(
+            NMetadata::NProvider::MakeServiceId(nodeId),
+            edgeActor,
+            new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()),
+            nodeIndex);
+
+        const auto response = runtime->GrabEdgeEvent<NMetadata::NProvider::TEvRefreshSubscriberData>(
+            edgeActor, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT_C(response, "Timed out waiting for resource pool classifier snapshot refresh");
+
+        runtime->Send(
+            MakeKqpProxyID(nodeId),
+            edgeActor,
+            new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()),
+            nodeIndex);
     }
 
     void StopWorkloadService(ui64 nodeIndex = 0) const override {

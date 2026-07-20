@@ -3454,6 +3454,25 @@ TMaybe<EDeferredFinalizeOp> GetSingleDeferredPublicationFinalizeOp(const NKikimr
     return result;
 }
 
+bool DeferredPublicationFinalizePartitionsMatchStaged(
+    const NKikimrPQ::TDataTransaction& txBody,
+    const THashMap<ui32, TPartitionId>& stagedPartitions)
+{
+    THashSet<ui32> opPartitions;
+    for (const auto& operation : txBody.GetOperations()) {
+        opPartitions.insert(operation.GetPartitionId());
+    }
+    if (opPartitions.size() != stagedPartitions.size()) {
+        return false;
+    }
+    for (const auto& [partitionId, _] : stagedPartitions) {
+        if (!opPartitions.contains(partitionId)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> ev,
@@ -3529,6 +3548,18 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
                                         event.GetTxId(),
                                         NKikimrPQ::TError::BAD_REQUEST,
                                         "deferred publication finalize requires matching Publish or Cancel op",
+                                        ctx);
+            return;
+        }
+
+        const TWriteId writeId = GetWriteId(txBody);
+        if (TxWrites.contains(writeId)
+            && !DeferredPublicationFinalizePartitionsMatchStaged(txBody, TxWrites.at(writeId).Partitions)) {
+            PQ_LOG_TX_W("TxId " << event.GetTxId() << " deferred publication finalize partition set mismatch");
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::BAD_REQUEST,
+                                        "deferred publication finalize partition set mismatch",
                                         ctx);
             return;
         }

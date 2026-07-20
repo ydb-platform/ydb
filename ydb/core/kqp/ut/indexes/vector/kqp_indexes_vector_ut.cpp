@@ -554,6 +554,62 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoTestOrderByCosine(3, F_OVERLAP, EnableIndexStreamWrite);
     }
 
+    void DoTestVectorIndexPlanShape(int flags, bool enableVectorSearchActor) {
+        // Assert the compiled read plan changes with EnableVectorSearchActor: when on, the
+        // vector ORDER BY ... LIMIT is lowered into the specialized TKqpCnVectorSearch connection
+        // (rendered as a "VectorSearch" plan node); when off, it falls back to the legacy
+        // StreamLookup chain (rendered as "TableLookup" nodes) and no VectorSearch node appears.
+        auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableAndVectorIndex(db, flags);
+
+        const TString query(Q1_(R"(
+            $target = "\x67\x71\x02";
+            SELECT pk, data FROM `/Root/TestTable` VIEW index1
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 3;
+        )"));
+
+        auto result = session.ExplainDataQuery(query).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+        const auto vectorSearchNodes = CountPlanNodesByKv(plan, "Node Type", "VectorSearch");
+        const auto tableLookupNodes = CountPlanNodesByKv(plan, "Node Type", "TableLookup");
+        const auto mainTableAccess = CountPlanNodesByKv(plan, "Table", "TestTable");
+
+        if (enableVectorSearchActor) {
+            // Exactly one specialized vector search node, no legacy lookup chain.
+            UNIT_ASSERT_VALUES_EQUAL_C(vectorSearchNodes, 1, result.GetPlan());
+            UNIT_ASSERT_VALUES_EQUAL_C(tableLookupNodes, 0, result.GetPlan());
+            // Covering index is served entirely from the posting table: no main-table read.
+            // Non-covering index still needs the main table for the `data` column.
+            if (flags & F_COVERING) {
+                UNIT_ASSERT_VALUES_EQUAL_C(mainTableAccess, 0, result.GetPlan());
+            } else {
+                UNIT_ASSERT_C(mainTableAccess > 0, result.GetPlan());
+            }
+        } else {
+            // Legacy path: no vector search node, the read goes through the StreamLookup chain.
+            UNIT_ASSERT_VALUES_EQUAL_C(vectorSearchNodes, 0, result.GetPlan());
+            UNIT_ASSERT_C(tableLookupNodes > 0, result.GetPlan());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(VectorIndexPlanShape, EnableVectorSearchActor) {
+        DoTestVectorIndexPlanShape(0, EnableVectorSearchActor);
+    }
+
+    Y_UNIT_TEST_TWIN(VectorIndexPlanShapeCovered, EnableVectorSearchActor) {
+        DoTestVectorIndexPlanShape(F_COVERING, EnableVectorSearchActor);
+    }
+
     Y_UNIT_TEST_QUAD(BadFormat, OnBuild, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();

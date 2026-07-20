@@ -76,6 +76,9 @@ namespace NActors {
 
     void TInterconnectSessionTCP::Init(const TSessionParams& params) {
         Params = params;
+        if (Params.AllowRdmaSendReceive) {
+            OutgoingStream = NInterconnect::TOutgoingStream(Proxy->Common->RdmaMemPool);
+        }
         Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
         Proxy->Metrics->SetConnected(0);
         DirectSession = std::make_shared<TDirectSessionV1>(TActivationContext::ActorSystem(), SelfId(), Proxy->PeerNodeId);
@@ -600,7 +603,7 @@ namespace NActors {
         bool notEnoughCpu = false;
 
         while (Socket) {
-            ProducePackets();
+            const bool canProduceMorePackets = ProducePackets();
             if (!Socket) {
                 return;
             }
@@ -612,6 +615,9 @@ namespace NActors {
             }
             if (!Socket) {
                 return;
+            }
+            if (!canProduceMorePackets) {
+                break;
             }
 
             bool canProducePackets;
@@ -653,7 +659,7 @@ namespace NActors {
         UpdateState(finished ? EState::Idle : notEnoughCpu ? EState::WaitingCpu : EState::Utilized);
     }
 
-    void TInterconnectSessionTCP::ProducePackets() {
+    bool TInterconnectSessionTCP::ProducePackets() {
         // first, we create as many data packets as we can generate under certain conditions; they include presence
         // of events in channels queues and in flight fitting into requested limit; after we hit one of these conditions
         // we exit cycle
@@ -668,13 +674,19 @@ namespace NActors {
                 break;
             }
             try {
-                bytesProduced += MakePacket(true);
+                auto packetSize = MakePacket(true);
+                if (!packetSize) {
+                    return false;
+                }
+                bytesProduced += *packetSize;
             } catch (const TExSerializedEventTooLarge& ex) {
                 // terminate session if the event can't be serialized properly
                 LOG_CRIT_IC("ICS31", "serialized event Type# 0x%08" PRIx32 " is too large", ex.Type);
-                return Terminate(TDisconnectReason::EventTooLarge());
+                Terminate(TDisconnectReason::EventTooLarge());
+                return false;
             }
         }
+        return true;
     }
 
     void TInterconnectSessionTCP::StartHandshake() {
@@ -1363,7 +1375,7 @@ namespace NActors {
         }
     }
 
-    ui32 TInterconnectSessionTCP::MakePacket(bool data, TMaybe<ui64> pingMask) {
+    std::optional<ui32> TInterconnectSessionTCP::MakePacket(bool data, TMaybe<ui64> pingMask) {
         NInterconnect::TOutgoingStream& stream = data ? OutgoingStream : OutOfBandStream;
 
 #ifndef NDEBUG
@@ -1374,7 +1386,15 @@ namespace NActors {
         stream.Align();
         XdcStream.Align();
 
-        TTcpPacketOutTask packet(Params, stream, XdcStream);
+        const bool usePreallocatedInternalStream = data && Params.AllowRdmaSendReceive;
+        if (usePreallocatedInternalStream &&
+                !stream.PreallocateForWriting(sizeof(TTcpPacketHeader_v2) + TTcpPacketBuf::PacketDataLen)) {
+            Proxy->Metrics->IncRdmaSendBufferAllocationFails();
+            IssueRam(false);
+            return std::nullopt;
+        }
+
+        TTcpPacketOutTask packet(Params, stream, XdcStream, usePreallocatedInternalStream);
         ui64 serial = 0;
 
         if (data) {

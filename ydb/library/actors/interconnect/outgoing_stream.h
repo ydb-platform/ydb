@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/event_load.h>
 #include <ydb/library/actors/util/rc_buf.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include "rdma/mem_pool.h"
 #include <deque>
 
 namespace NInterconnect {
@@ -16,14 +17,25 @@ namespace NInterconnect {
             ui32 RefCount;
             ui32 Index;
 
-            struct TDeleter {
-                void operator ()(TBuffer *buffer) const {
-                    free(buffer);
+            struct TBufOwner {
+                TBufOwner() = default;
+
+                TBufOwner(NRdma::TMemRegionPtr region)
+                    : MemRegion(std::move(region))
+                {}
+
+                NRdma::TMemRegionPtr MemRegion;
+                void operator ()(void *buffer) const noexcept {
+                    if (!MemRegion) {
+                        free(buffer);
+                    }
                 }
             };
         };
 
         static_assert(sizeof(TBuffer) == TotalSize);
+
+        using TBufferPtr = std::unique_ptr<TBuffer, typename TBuffer::TBufOwner>;
 
         struct TSendChunk {
             TContiguousSpan Span;
@@ -31,7 +43,8 @@ namespace NInterconnect {
             ui32* ZcTransferId = nullptr;
         };
 
-        std::vector<std::unique_ptr<TBuffer, typename TBuffer::TDeleter>> Buffers;
+        std::vector<TBufferPtr> Buffers;
+        std::vector<TBufferPtr> PreallocatedBuffers;
         TBuffer *AppendBuffer = nullptr;
         size_t AppendOffset = BufferSize; // into the last buffer
         std::deque<TSendChunk> SendQueue;
@@ -39,7 +52,14 @@ namespace NInterconnect {
         size_t SendOffset = 0;
         size_t UnsentBytes = 0;
 
+        std::shared_ptr<NRdma::IMemPool> Allocator;
+
     public:
+        explicit TOutgoingStreamT(std::shared_ptr<NRdma::IMemPool> allocator)
+            : Allocator(std::move(allocator))
+        { }
+
+        TOutgoingStreamT() = default;
         /*
          * Allow to share buffer between socket to produce safe zero copy operation
          */
@@ -95,12 +115,53 @@ namespace NInterconnect {
             return SendQueue.size();
         }
 
+        bool PreallocateForWriting(size_t len) {
+            const size_t buffersNeeded = GetBuffersNeededForWriting(len);
+            if (buffersNeeded <= PreallocatedBuffers.size()) {
+                return true;
+            }
+
+            const size_t extraBuffersNeeded = buffersNeeded - PreallocatedBuffers.size();
+            std::vector<TBufferPtr> allocatedBuffers;
+            allocatedBuffers.reserve(extraBuffersNeeded);
+            for (size_t i = 0; i != extraBuffersNeeded; ++i) {
+                TBufferPtr buffer = AllocateBuffer();
+                if (!buffer) {
+                    return false;
+                }
+                allocatedBuffers.emplace_back(std::move(buffer));
+            }
+
+            PreallocatedBuffers.reserve(PreallocatedBuffers.size() + extraBuffersNeeded);
+            for (auto& buffer : allocatedBuffers) {
+                PreallocatedBuffers.emplace_back(std::move(buffer));
+            }
+            return true;
+        }
+
         TMutableContiguousSpan AcquireSpanForWriting(size_t maxLen) {
             if (!maxLen) {
                 return {nullptr, 0};
             }
             if (AppendOffset == BufferSize) { // we have no free buffer, allocate one
-                Buffers.emplace_back(static_cast<TBuffer*>(malloc(sizeof(TBuffer))));
+                Y_ABORT_UNLESS(AddBuffer());
+                AppendBuffer = Buffers.back().get();
+                Y_ABORT_UNLESS(AppendBuffer);
+                AppendBuffer->RefCount = 1; // through AppendBuffer pointer
+                AppendBuffer->Index = Buffers.size() - 1;
+                AppendOffset = 0;
+            }
+            return {AppendBuffer->Data + AppendOffset, Min(maxLen, BufferSize - AppendOffset)};
+        }
+
+        TMutableContiguousSpan AcquireSpanForWritingNoAlloc(size_t maxLen) {
+            if (!maxLen) {
+                return {nullptr, 0};
+            }
+            if (AppendOffset == BufferSize) {
+                Y_ABORT_UNLESS(!PreallocatedBuffers.empty());
+                Buffers.emplace_back(std::move(PreallocatedBuffers.back()));
+                PreallocatedBuffers.pop_back();
                 AppendBuffer = Buffers.back().get();
                 Y_ABORT_UNLESS(AppendBuffer);
                 AppendBuffer->RefCount = 1; // through AppendBuffer pointer
@@ -256,6 +317,7 @@ namespace NInterconnect {
         }
 
         void CompleteSharedBuffers() {
+            PreallocatedBuffers.clear();
             for (size_t i = 0; i < Buffers.size(); i++) {
                 DropBufferReference(Buffers[i]);
             }
@@ -263,6 +325,41 @@ namespace NInterconnect {
         }
 
     private:
+        size_t GetBuffersNeededForWriting(size_t len) const {
+            const size_t freeBytes = AppendOffset == BufferSize ? 0 : BufferSize - AppendOffset;
+            if (len <= freeBytes) {
+                return 0;
+            }
+            return (len - freeBytes + BufferSize - 1) / BufferSize;
+        }
+
+        TBufferPtr AllocateBuffer() noexcept {
+            if (auto memPool = Allocator.get()) {
+                if (NRdma::TMemRegionPtr p = memPool->Alloc(sizeof(TBuffer), NRdma::IMemPool::EMPTY)) {
+                    return TBufferPtr(static_cast<TBuffer*>(p->GetAddr()), typename TBuffer::TBufOwner(std::move(p)));
+                } else {
+                    return nullptr;
+                }
+            } else {
+                void* p = malloc(sizeof(TBuffer));
+                if (Y_UNLIKELY(!p)) {
+                    return nullptr;
+                }
+                return TBufferPtr(static_cast<TBuffer*>(p));
+            }
+        }
+
+        bool AddBuffer() noexcept {
+            TBufferPtr buffer = AllocateBuffer();
+            if (!buffer) {
+                return false;
+            }
+            buffer->RefCount = 1;
+            buffer->Index = Buffers.size();
+            Buffers.emplace_back(std::move(buffer));
+            return true;
+        }
+
         void AppendAcquiredSpan(TContiguousSpan span) {
             TBuffer *buffer = AppendBuffer;
             Y_DEBUG_ABORT_UNLESS(buffer);

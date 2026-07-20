@@ -32,7 +32,7 @@ config:
   hosts:
   - host: ydb-node-zone-a-1.local     # storage node DNS name
     host_config_id: 1                 # numeric host configuration template identifier
-    location:                   # this parameter describes where host is located.
+    location:                         # this parameter describes where host is located.
       body: 1                         # string representing a host serial number.
       data_center: 'zone-a'           # string representing the datacenter / availability zone where the host is located.
                                       # if cluster is deployed using mirror-3-dc fault tolerance mode, all hosts must be distributed

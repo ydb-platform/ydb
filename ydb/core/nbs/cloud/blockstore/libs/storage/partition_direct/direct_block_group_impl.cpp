@@ -1205,9 +1205,11 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
     }
 
     const auto& connection = PBufferConnections[hostIndex];
+    // Hold a local copy of the connect future,
+    // do not put an address of changeable field into a wait.
+    auto connectFuture = connection.GetFuture();
     // Switch co-routine context if needed.
-    const NProto::TError& connectError =
-        Executor->WaitFor(connection.GetFuture());
+    const NProto::TError& connectError = Executor->WaitFor(connectFuture);
     if (HasError(connectError)) {
         return MakeFuture(TListPBufferResponse{.Error = connectError});
     }
@@ -1576,11 +1578,11 @@ void TDirectBlockGroup::ReEstablishConnection(
     size_t hostIndex)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    Y_ABORT_UNLESS(hostIndex < DDiskConnections.size());
-
-    TDDiskConnection& connection = connectionType == EConnectionType::DDisk
-                                       ? DDiskConnections[hostIndex]
-                                       : PBufferConnections[hostIndex];
+    auto& connections = connectionType == EConnectionType::DDisk
+                            ? DDiskConnections
+                            : PBufferConnections;
+    Y_ABORT_UNLESS(hostIndex < connections.size());
+    TDDiskConnection& connection = connections[hostIndex];
 
     if (BlockedGenerationDetected) {
         LOG_WARN(

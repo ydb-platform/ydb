@@ -183,7 +183,7 @@ void CollectHashShuffleDescriptions(const NJson::TJsonValue& planNode, TVector<T
 
     const auto& planMap = planNode.GetMapSafe();
     if (auto nodeType = planMap.find("Node Type");
-            nodeType != planMap.end() && nodeType->second.GetStringSafe().StartsWith("HashShuffle")) {
+            nodeType != planMap.end() && nodeType->second.GetStringSafe() == "HashShuffle") {
         if (auto keyColumns = planMap.find("KeyColumns"); keyColumns != planMap.end()) {
             TVector<TString> keys;
             for (const auto& key : keyColumns->second.GetArraySafe()) {
@@ -874,8 +874,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         {
             auto join = joinFinder.Find({"t1", "t2", "t3"});
             UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (BlockHash)");
-            UNIT_ASSERT(join.LhsShuffled);
-            UNIT_ASSERT(!join.RhsShuffled);
+            UNIT_ASSERT(!join.LhsShuffled);
+            UNIT_ASSERT(join.RhsShuffled);
         }
 
         UNIT_ASSERT(resultSets.size() == 1);

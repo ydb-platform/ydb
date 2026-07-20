@@ -27,6 +27,23 @@ enum class EHostHealth
     Offline,
 };
 
+struct TOracleHostStat
+{
+    TOracleHostStat(
+        THostIndex index,
+        const THostState& state,
+        EHostHealth health,
+        const THostStat& hostStat,
+        TInstant now);
+
+    THostIndex Index;
+    EHostState State;
+    EHostHealth Health;
+    TInflightByOperation InflightByOperation;
+    THostStat::TErrorsInfo Errors;
+    ui64 PBufferUsedSize;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class IOracle
@@ -121,10 +138,6 @@ public:
     [[nodiscard]] TDuration GetDDiskReconnectDelay(
         THostIndex hostIndex) override;
 
-    void OnHostAdded();
-
-    [[nodiscard]] size_t GetHostCount() const;
-
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
         EOperation operation) const override;
@@ -151,10 +164,16 @@ public:
         THostIndex hostIndex) const override;
     [[nodiscard]] TString Dump() const override;
 
+    // If necessary, adds hosts to make the hostIndex valid.
+    void AddHostIfNeeded(THostIndex hostIndex);
+
+    [[nodiscard]] TVector<TOracleHostStat> BuildHostStats(TInstant now) const;
+
 private:
     [[nodiscard]] TTimePredictor& AccessTimePredictor(EOperation operation);
     [[nodiscard]] const TTimePredictor& GetTimePredictor(
         EOperation operation) const;
+    [[nodiscard]] size_t GetHostCount() const;
 
     const TStorageConfigPtr StorageConfig;
     const TOracleConfigPtr OracleConfig;

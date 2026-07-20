@@ -9,6 +9,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
@@ -73,7 +74,6 @@ public:
         NKikimr::TTabletStorageInfo* info);
 
     ~TPartitionActor() override;
-    void PassAway() override;
 
     static constexpr ui32 LogComponent = NKikimrServices::NBS_PARTITION;
     using TCounters = TPartitionCounters;
@@ -110,11 +110,6 @@ private:
     void CreateBSControllerPipeClient(const NActors::TActorContext& ctx);
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
-
-    void SendAllocateDDiskForAddHost(
-        const NActors::TActorContext& ctx,
-        size_t dbgId,
-        THostIndex newHostIndex);
 
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::
@@ -159,6 +154,10 @@ private:
         const TEvPartitionDirectPrivate::TEvFastPathServiceStopped::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandlePoisonByBlockedGeneration(
+        const TEvPartitionDirectPrivate::TEvPoison::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleAddHostToDBG(
         const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -167,12 +166,18 @@ private:
     // request is invalid; true if it may proceed.
     bool ValidateAddHostToDBGRequest(
         const NActors::TActorContext& ctx,
-        size_t dbgId);
-
+        size_t dbgId,
+        THostIndex newHostIndex);
     void RejectAddHost(
         const NActors::TActorContext& ctx,
         size_t dbgId,
         const TString& message);
+    void SendAllocateDDiskForAddHost(
+        const NActors::TActorContext& ctx,
+        size_t dbgId,
+        THostIndex newHostIndex);
+
+    [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
 
     void Start(
         const NActors::TActorContext& ctx,

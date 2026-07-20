@@ -62,11 +62,6 @@ def with_fields(fields):
         def innermost(*args, **kwargs):
             func(fields, *args, **kwargs)
 
-        # Drop annotation for injected fields argument
-        annotations = getattr(func, '__annotations__', {}).copy()
-        annotations.pop('fields', None)
-        innermost.__annotations__ = annotations
-
         return innermost
 
     return inner
@@ -871,6 +866,22 @@ class Requirements:
     @classmethod
     def from_unit(cls, unit, flat_args, spec_args):
         requirements = get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+        return serialize_list(requirements)
+
+    @classmethod
+    def from_unit_with_cpu(cls, unit, flat_args, spec_args):
+        requirements = get_values_list(unit, "TEST_REQUIREMENTS_VALUE")
+
+        defaults = {
+            "cpu": "cpu:4",
+            "ram": "ram:16",
+            "ram_disk": "ram_disk:4",
+        }
+
+        for prefix, value in defaults.items():
+            if not any(r and r.startswith(f"{prefix}:") for r in requirements):
+                requirements.append(value)
+
         return serialize_list(requirements)
 
     @classmethod

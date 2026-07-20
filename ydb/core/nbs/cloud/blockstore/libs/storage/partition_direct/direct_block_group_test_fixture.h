@@ -14,6 +14,12 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+struct TBlockedDetectedState
+{
+    bool DDiskSessionBroken = false;
+    bool BlockedGenerationDetected = false;
+};
+
 struct TDBGFixture: public NUnitTest::TBaseFixture
 {
     static constexpr auto DefaultWaitFutureTimeout = TDuration::Seconds(10);
@@ -23,10 +29,11 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TVector<TExecutorPtr> Executors;
 
+    std::shared_ptr<TPartitionDirectServiceMock> Service;
     // Mock services created by RunAndGetInitialReady(). Kept alive for the
     // whole test because TDirectBlockGroup::Run() stores a raw pointer to the
     // service.
-    TVector<std::shared_ptr<TPartitionDirectServiceMock>> Services;
+    TVector<IPartitionDirectServicePtr> OldServices;
 
     void SetUp(NUnitTest::TTestContext& context) override;
     void TearDown(NUnitTest::TTestContext& context) override;
@@ -41,6 +48,21 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
     bool DispatchRuntimeOnce(NActors::TDispatchOptions options = {}) const;
     // Dispatches everything currently queued in the runtime.
     void DrainRuntime() const;
+
+    [[nodiscard]] static TBlockedDetectedState GetBlockedDetected(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        THostIndex hostIndex,
+        TDuration waitTimeout);
+    [[nodiscard]] static TVector<ui64> ReadAllDDiskSeqNos(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        TDuration waitTimeout);
+    [[nodiscard]] ui64 GetDDiskSessionSeqNo(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        size_t index,
+        TDuration waitTimeout);
 
     [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
         const TExecutorPtr& executor,

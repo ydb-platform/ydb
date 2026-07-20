@@ -52,7 +52,7 @@ struct TSampleParams {
 
 enum class EYtSettingType: ui64 {
     // Table reads
-    Initial           /* "initial" */,
+    Initial                  /* "initial" */,
     InferScheme              /* "infer_scheme" "inferscheme" "infer_schema" "inferschema" */,
     ForceInferScheme         /* "force_infer_schema" "forceinferschema" */,
     DoNotFailOnInvalidSchema /* "do_not_fail_on_invalid_schema" */,
@@ -114,6 +114,7 @@ enum class EYtSettingType: ui64 {
     ReduceInputType          /* "reduceInputType" */,          // hybrid supported
     NoDq                     /* "noDq" */,
     Transparent              /* "transparent" */,
+    PruneUnusedColumns       /* "prune_unused_columns" "pruneunusedcolumns" */,
     // Out tables
     UniqueBy                 /* "uniqueBy" */,
     OpHash                   /* "opHash" */,

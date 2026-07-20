@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(22.1.1)
+VERSION(22.1.8)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-22.1.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-22.1.8.tar.gz)
 
 NO_COMPILER_WARNINGS()
 
@@ -93,6 +93,13 @@ IF (ARCH_ARM64 OR ARCH_X86_64)
             trunctfbf2.c
         )
     ENDIF()
+ENDIF()
+
+IF (ARCH_WASM64 OR ARCH_WASM32)
+    SRCS(
+        wasm/__c_longjmp.S
+        wasm/__cpp_exception.S
+    )
 ENDIF()
 
 IF (ARCH_ARM6 OR ARCH_ARM7)

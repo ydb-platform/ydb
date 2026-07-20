@@ -126,7 +126,7 @@ Y_UNIT_TEST_LLVM(TestWideSkipBlocks) {
     const auto flow = MakeFlow(setup);
 
     const auto part = pb.WideSkipBlocks(pb.FromFlow(flow), NTest::ConvertValueToLiteralNode(pb, ui64(7)));
-    const auto plain = pb.ToFlow(pb.WideFromBlocks(part));
+    const auto plain = pb.ToFlow(pb.WideFromBlocks(part), {});
 
     const auto singleValueFlow = pb.NarrowMap(plain, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return pb.Add(items[0], items[1]);
@@ -145,7 +145,7 @@ Y_UNIT_TEST_LLVM(TestWideTakeBlocks) {
     const auto flow = MakeFlow(setup);
 
     const auto part = pb.WideTakeBlocks(pb.FromFlow(flow), NTest::ConvertValueToLiteralNode(pb, ui64(4)));
-    const auto plain = pb.ToFlow(pb.WideFromBlocks(part));
+    const auto plain = pb.ToFlow(pb.WideFromBlocks(part), {});
 
     const auto singleValueFlow = pb.NarrowMap(plain, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return pb.Add(items[0], items[1]);
@@ -164,7 +164,7 @@ Y_UNIT_TEST_LLVM(TestWideTakeSkipBlocks) {
     const auto flow = MakeFlow(setup);
 
     const auto part = pb.WideTakeBlocks(pb.WideSkipBlocks(pb.FromFlow(flow), NTest::ConvertValueToLiteralNode(pb, ui64(3))), NTest::ConvertValueToLiteralNode(pb, ui64(5)));
-    const auto plain = pb.ToFlow(pb.WideFromBlocks(part));
+    const auto plain = pb.ToFlow(pb.WideFromBlocks(part), {});
 
     const auto singleValueFlow = pb.NarrowMap(plain, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         // 0,  0;

@@ -119,12 +119,21 @@ void TVChunkConfig::DisableHost(THostIndex hostIndex)
 void TVChunkConfig::AppendHost()
 {
     Y_ABORT_UNLESS(PBufferHosts.HostCount() == DDiskHosts.HostCount());
-    const auto newHostIndex = static_cast<THostIndex>(HostCount);
 
-    PBufferHosts.AppendRole(EHostRole::None);
-    DDiskHosts.AppendRole(EHostRole::None);
-    EnabledHosts.Reset(newHostIndex);
-    Watermarks.push_back(std::nullopt);
+    const auto newHostIndex = static_cast<THostIndex>(HostCount);
+    const size_t ddiskCount = GetDDisks().Count();
+
+    if (ddiskCount < QuorumDirectBlockGroupHostCount) {
+        PBufferHosts.AppendRole(EHostRole::Primary);
+        DDiskHosts.AppendRole(EHostRole::Primary);
+        Watermarks.push_back(0);
+    } else {
+        PBufferHosts.AppendRole(EHostRole::HandOff);
+        DDiskHosts.AppendRole(EHostRole::None);
+        Watermarks.push_back(std::nullopt);
+    }
+
+    EnabledHosts.Set(newHostIndex);
     ++HostCount;
 }
 
@@ -263,9 +272,9 @@ THostMask TVChunkConfig::GetHealthyDDisks() const
 
 void TVChunkConfig::SetWatermark(
     THostIndex hostIndex,
-    std::optional<ui64> watermark)
+    std::optional<ui64> watermarkBlockCount)
 {
-    Watermarks[hostIndex] = watermark;
+    Watermarks[hostIndex] = watermarkBlockCount;
 }
 
 std::optional<ui64> TVChunkConfig::GetWatermark(THostIndex hostIndex) const
@@ -289,8 +298,9 @@ bool TVChunkConfig::IsValid() const
 TString TVChunkConfig::DebugPrint() const
 {
     TStringBuilder result;
-    result << "[" << VChunkIndex << "] PBuffer{" << PBufferHosts.DebugPrint()
-           << "} DDisk{" << DDiskHosts.DebugPrint() << "} Enabled{";
+    result << "[" << DBGIndex << "/" << VChunkIndex << "] PBuffer{"
+           << PBufferHosts.DebugPrint() << "} DDisk{" << DDiskHosts.DebugPrint()
+           << "} Enabled{";
     for (THostIndex hostIndex = 0; hostIndex < PBufferHosts.HostCount();
          ++hostIndex)
     {

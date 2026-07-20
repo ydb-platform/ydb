@@ -33,6 +33,7 @@ public:
         YDB_ACCESSOR(ui64, BatchSizeBytes, 1_MB);
         YDB_ACCESSOR(TDuration, BatchCreationTimeout, TDuration::Seconds(1));
         YDB_ACCESSOR(ui64, BufferCellCount, 1000'000);
+        YDB_ACCESSOR(bool, StructuredParsing, true);
     };
 
     class TCompileServiceSettings {
@@ -65,7 +66,7 @@ public:
 
     TRowDispatcherSettings() = default;
     TRowDispatcherSettings(const NConfig::TRowDispatcherConfig& config);
-    TRowDispatcherSettings(const NKikimrConfig::TStreamingQueriesConfig_TExternalStorageConfig& config);
+    TRowDispatcherSettings(const NKikimrConfig::TStreamingQueriesConfig_TExternalStorageConfig& config, bool enableStructuredJsonParsing = false);
 
 private:
     YDB_ACCESSOR_MUTABLE(TCoordinatorSettings, Coordinator, {});

@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(YtWriterTests) {
             pb.NewStruct(map3)
         });
 
-        const auto pgmReturn = pb.Discard(pb.Map(pb.ToFlow(list),
+        const auto pgmReturn = pb.Discard(pb.Map(pb.ToFlow(list, {}),
             [&](TRuntimeNode item) {
                 return MakeYtWrite(setup, item);
             }
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(YtWriterTests) {
             pb.NewStruct(map3)
         });
 
-        const auto pgmReturn = pb.Discard(MakeYtWrite(setup, pb.ToFlow(list)));
+        const auto pgmReturn = pb.Discard(MakeYtWrite(setup, pb.ToFlow(list, {})));
 
         const TString spec = R"({
             tables = [{
@@ -274,7 +274,7 @@ Y_UNIT_TEST_SUITE(YtWriterTests) {
             pb.NewStruct(map3)
         });
 
-        const auto flow = pb.ExpandMap(pb.ToFlow(list),
+        const auto flow = pb.ExpandMap(pb.ToFlow(list, {}),
             [&](TRuntimeNode item) -> TRuntimeNode::TList {
                 return { pb.Member(item, "key"), pb.Member(item, "payload")};
             }

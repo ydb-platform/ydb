@@ -35,12 +35,12 @@ namespace NActors {
             return EActivityType::INTERCONNECT_SESSION_TCP;
         }
 
-        TInterconnectSessionTCPv2(TInterconnectProxyTCP* proxy, TSessionParams params);
+        explicit TInterconnectSessionTCPv2(TInterconnectProxyTCP* proxy);
 
         // IInterconnectSession
         IActor& SessionActor() noexcept override { return *this; }
 
-        void Init() override;
+        void Init(const TSessionParams& params) override;
         void SetNewConnection(TEvHandshakeDone::TPtr& ev) override;
         void Terminate(TDisconnectReason reason) override;
         THolder<TEvHandshakeAck> ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) override;
@@ -85,13 +85,13 @@ namespace NActors {
         IEventBase* MakeNodeConnectedEvent() const;
 
         TInterconnectProxyTCP* const Proxy;
-        const TSessionParams Params;
+        TSessionParams Params;
 
         TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
         TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
 
         // thread-safe direct send/receive handle shared with users via TEvNodeConnected
-        std::shared_ptr<TDirectSession> DirectSession;
+        std::shared_ptr<TDirectSessionV2> DirectSession;
 
         // subscribers awaiting connection state notifications (actor id -> cookie)
         std::unordered_map<TActorId, ui64, TActorId::THash> Subscribers;

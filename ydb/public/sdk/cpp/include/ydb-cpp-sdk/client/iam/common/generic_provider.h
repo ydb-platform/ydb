@@ -234,26 +234,11 @@ private:
 
             try {
                 RequestFiller_(req);
-            } catch (...) {
-                const std::string error = TStringBuilder()
-                    << "Last request error was at " << FormatSysTimeUtcIsoMicros(SysClock::now())
-                    << ". Failed to prepare IAM request: " << CurrentExceptionMessage();
-                {
-                    std::lock_guard guard(Lock_);
-                    ResetContextImpl();
-                }
-                Fail(error);
-                return;
-            }
-
-            try {
                 Rpc_(Stub_.get(), &*Context_, &req, response.get(), std::move(cb));
             } catch (...) {
-                {
-                    std::lock_guard guard(Lock_);
-                    ResetContextImpl();
-                }
-                Fail(CurrentExceptionMessage());
+                std::lock_guard guard(Lock_);
+                ResetContextImpl();
+                RescheduleOnFailure();
             }
         }
 

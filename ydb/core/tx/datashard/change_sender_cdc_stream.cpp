@@ -63,13 +63,13 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     void Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
 
         const auto& result = *ev->Get();
         if (!result.IsSuccess()) {
-            YDB_LOG_ERROR("Error",
+            YDB_LOG_ERROR("CDC partition writer initialization failed",
                 {"logPrefix", GetLogPrefix()},
-                {"initError", result.GetError()});
+                {"initErrorMessage", result.GetError()});
             return Leave();
         }
 
@@ -117,7 +117,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         NKikimrClient::TPersQueueRequest request;
 
         for (auto recordPtr : ev->Get()->Records) {
@@ -168,30 +168,30 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
 
         const auto& result = *ev->Get();
         if (!result.IsSuccess()) {
-            YDB_LOG_ERROR("Error",
+            YDB_LOG_ERROR("CDC partition writer write failed",
                 {"logPrefix", GetLogPrefix()},
-                {"writeError", result.DumpError()});
+                {"writeErrorMessage", result.DumpError()});
             return Leave();
         }
 
         const auto& response = result.Record.GetPartitionResponse();
         if (response.GetCookie() != Cookie) {
-            YDB_LOG_ERROR("Cookie mismatch",
+            YDB_LOG_ERROR("PersQueue write cookie mismatch",
                 {"logPrefix", GetLogPrefix()},
-                {"expected", Cookie},
-                {"got", response.GetCookie()});
+                {"expectedCookie", Cookie},
+                {"actualCookie", response.GetCookie()});
             return Leave();
         }
 
         if (response.CmdWriteResultSize() != Pending.size()) {
-            YDB_LOG_ERROR("Write result size mismatch",
+            YDB_LOG_ERROR("PersQueue write result count mismatch",
                 {"logPrefix", GetLogPrefix()},
-                {"expected", Pending.size()},
-                {"got", response.CmdWriteResultSize()});
+                {"expectedCount", Pending.size()},
+                {"actualCount", response.CmdWriteResultSize()});
             return Leave();
         }
 
@@ -204,10 +204,10 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                 continue;
             }
 
-            YDB_LOG_ERROR("SeqNo mismatch",
+            YDB_LOG_ERROR("PersQueue sequence number mismatch",
                 {"logPrefix", GetLogPrefix()},
-                {"expected", expected},
-                {"got", got});
+                {"expectedSeqNo", expected},
+                {"actualSeqNo", got});
             return Leave();
         }
 
@@ -245,7 +245,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Disconnected() {
-        YDB_LOG_DEBUG("Disconnected",
+        YDB_LOG_DEBUG("PersQueue pipe disconnected during initialization",
             {"logPrefix", GetLogPrefix()});
 
         if (CurrentStateFunc() != static_cast<TReceiveFunc>(&TThis::StateInit)) {
@@ -257,7 +257,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     }
 
     void Lost() {
-        YDB_LOG_WARN("Lost",
+        YDB_LOG_WARN("CDC stream partition change sender lost",
             {"logPrefix", GetLogPrefix()});
         Leave();
     }
@@ -414,16 +414,16 @@ class TCdcChangeSenderMain
     }
 
     void LogCritAndRetry(const TString& error) {
-        YDB_LOG_CRIT("",
+        YDB_LOG_CRIT("Critical error during change exchange operation, retrying",
             {"logPrefix", GetLogPrefix()},
-            {"error", error});
+            {"errorMessage", error});
         Retry();
     }
 
     void LogWarnAndRetry(const TString& error) {
-        YDB_LOG_WARN("",
+        YDB_LOG_WARN("Recoverable error during change exchange operation, retrying",
             {"logPrefix", GetLogPrefix()},
-            {"error", error});
+            {"errorMessage", error});
         Retry();
     }
 
@@ -494,7 +494,7 @@ class TCdcChangeSenderMain
 
         YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
             {"logPrefix", GetLogPrefix()},
-            {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
+            {"navigateResult", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -523,7 +523,7 @@ class TCdcChangeSenderMain
         }
 
         if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
-            YDB_LOG_DEBUG("Stream is planned to drop, waiting for the EvRemoveSender command",
+            YDB_LOG_DEBUG("CDC stream is planned to drop, waiting for remove sender command",
                 {"logPrefix", GetLogPrefix()});
 
             RemoveRecords();
@@ -566,7 +566,7 @@ class TCdcChangeSenderMain
 
         YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
             {"logPrefix", GetLogPrefix()},
-            {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
+            {"navigateResult", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -661,42 +661,42 @@ class TCdcChangeSenderMain
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         EnqueueRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         ForgetRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         OnReady(ev->Get()->PartitionId);
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         OnGone(ev->Get()->PartitionId);
     }
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         Y_ENSURE(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
@@ -706,7 +706,7 @@ class TCdcChangeSenderMain
     void AutoRemove(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         RemoveRecords(std::move(ev->Get()->Records));
     }
 

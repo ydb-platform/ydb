@@ -73,8 +73,7 @@ class TChangeSender: public TActor<TChangeSender> {
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
-        auto& records = ev->Get()->Records;
+            {"eventDetails", ev->Get()->ToString()});
 
         if (!IsActive()) {
             std::move(records.begin(), records.end(), std::back_inserter(Enqueued));
@@ -108,26 +107,24 @@ class TChangeSender: public TActor<TChangeSender> {
     void Handle(TEvChangeExchange::TEvAddSender::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
-
-        const auto& msg = *ev->Get();
+            {"eventDetails", ev->Get()->ToString()});
 
         auto it = Senders.find(msg.PathId);
         if (it != Senders.end()) {
             Y_ENSURE(it->second.UserTableId == msg.UserTableId);
             Y_ENSURE(it->second.Type == msg.Type);
-            YDB_LOG_WARN("Trying to add duplicate sender",
+            YDB_LOG_WARN("Duplicate change sender registration ignored",
                 {"logPrefix", GetLogPrefix()},
                 {"userTableId", msg.UserTableId},
-                {"type", msg.Type},
+                {"senderType", msg.Type},
                 {"pathId", msg.PathId});
             return;
         }
 
-        YDB_LOG_NOTICE("Add sender",
+        YDB_LOG_NOTICE("Registered change sender",
             {"logPrefix", GetLogPrefix()},
             {"userTableId", msg.UserTableId},
-            {"type", msg.Type},
+            {"senderType", msg.Type},
             {"pathId", msg.PathId});
 
         auto& sender = AddChangeSender(msg.PathId, msg.UserTableId, msg.Type);
@@ -139,20 +136,19 @@ class TChangeSender: public TActor<TChangeSender> {
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
-        const auto& pathId = ev->Get()->PathId;
+            {"eventDetails", ev->Get()->ToString()});
 
         auto it = Senders.find(pathId);
         if (it == Senders.end()) {
-            YDB_LOG_WARN("Trying to remove unknown sender",
+            YDB_LOG_WARN("Unknown change sender removal ignored",
                 {"logPrefix", GetLogPrefix()},
                 {"pathId", pathId});
             return;
         }
 
-        YDB_LOG_NOTICE("Remove sender",
+        YDB_LOG_NOTICE("Removed change sender",
             {"logPrefix", GetLogPrefix()},
-            {"type", it->second.Type},
+            {"senderType", it->second.Type},
             {"pathId", it->first});
 
         if (const auto& actorId = it->second.ActorId) {
@@ -165,9 +161,7 @@ class TChangeSender: public TActor<TChangeSender> {
     void Handle(TEvChangeExchange::TEvActivateSender::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
-
-        Become(&TThis::StateActive);
+            {"eventDetails", ev->Get()->ToString()});
         LogPrefix.Clear();
 
         for (auto& [pathId, sender] : Senders) {

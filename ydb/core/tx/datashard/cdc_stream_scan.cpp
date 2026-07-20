@@ -230,14 +230,14 @@ public:
         const auto& readVersion = ev.ReadVersion;
         const auto& valueTags = ev.ValueTags;
 
-        YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan][",
-            {"tabletID", TabletID()},
+        YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Processing CDC stream scan progress batch",
+            {"tabletId", TabletID()},
             {"streamPathId", streamPathId},
-            {"rows", ev.Rows.size()});
+            {"rowCount", ev.Rows.size()});
 
         if (!Self->GetUserTables().contains(tablePathId.LocalPathId)) {
-            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan][",
-                {"tabletID", TabletID()},
+            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] CDC stream scan skipped: unknown table",
+                {"tabletId", TabletID()},
                 {"tablePathId", tablePathId});
             return true;
         }
@@ -246,8 +246,8 @@ public:
 
         auto it = table->CdcStreams.find(streamPathId);
         if (it == table->CdcStreams.end()) {
-            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan][",
-                {"tabletID", TabletID()},
+            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] CDC stream scan skipped: unknown stream",
+                {"tabletId", TabletID()},
                 {"streamPathId", streamPathId});
             return true;
         }
@@ -259,22 +259,22 @@ public:
         }
 
         if (!ev.ReservationCookie) {
-            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan][",
-                {"tabletID", TabletID()});
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] CDC stream scan rescheduled: failed to reserve change queue capacity",
+                {"tabletId", TabletID()});
             Reschedule = true;
             return true;
         }
 
         if (Self->GetFreeChangeQueueCapacity(ev.ReservationCookie) < ev.Rows.size()) {
-            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan][",
-                {"tabletID", TabletID()});
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] CDC stream scan rescheduled: insufficient change queue capacity",
+                {"tabletId", TabletID()});
             Reschedule = true;
             return true;
         }
 
         if (Self->CheckChangesQueueOverflow(ev.ReservationCookie)) {
-            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan][",
-                {"tabletID", TabletID()});
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] CDC stream scan rescheduled: change queue overflow",
+                {"tabletId", TabletID()});
             Reschedule = true;
             return true;
         }
@@ -376,16 +376,16 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Response) {
-            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan][ change record(s)",
-                {"tabletID", TabletID()},
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] Enqueuing CDC stream scan change records",
+                {"tabletId", TabletID()},
                 {"changeRecordsCount", ChangeRecords.size()},
                 {"streamPathId", Request->Get()->StreamPathId});
 
             Self->EnqueueChangeRecords(std::move(ChangeRecords), Request->Get()->ReservationCookie);
             ctx.Send(Request->Sender, Response.Release());
         } else if (Reschedule) {
-            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan][",
-                {"tabletID", TabletID()},
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] CDC stream scan progress rescheduled",
+                {"tabletId", TabletID()},
                 {"streamPathId", Request->Get()->StreamPathId});
 
             // re-schedule tx
@@ -586,9 +586,9 @@ public:
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
 
-        YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan][",
-            {"tabletID", TabletID()},
-            {"ev", record.ShortDebugString()});
+        YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Handling CDC stream scan request",
+            {"tabletId", TabletID()},
+            {"requestRecord", record.ShortDebugString()});
 
         const auto tablePathId = TPathId::FromProto(record.GetTablePathId());
         if (!Self->GetUserTables().contains(tablePathId.LocalPathId)) {
@@ -708,8 +708,8 @@ public:
         );
         Self->CdcStreamScanManager.Enqueue(streamPathId, localTxId, scanId);
 
-        YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan][",
-            {"tabletID", TabletID()},
+        YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] Starting CDC stream scan",
+            {"tabletId", TabletID()},
             {"streamPathId", streamPathId});
 
         Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::ACCEPTED);
@@ -730,8 +730,9 @@ void TDataShard::Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const T
 
 void TDataShard::Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx) {
     if (!CdcStreamScanManager.Has(ev->Get()->TxId)) {
-        YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan][",
-            {"tabletID", TabletID()});
+        YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Ignoring CDC stream scan registration for unknown transaction",
+            {"tabletId", TabletID()},
+            {"txId", ev->Get()->TxId});
         return;
     }
 

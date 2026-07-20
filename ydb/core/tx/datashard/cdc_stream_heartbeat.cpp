@@ -35,9 +35,9 @@ public:
             return true;
         }
 
-        YDB_LOG_INFO("[CdcStreamHeartbeat] Emit change records",
+        YDB_LOG_INFO("[CdcStreamHeartbeat] Emitting CDC stream heartbeat change records",
             {"edge", Edge},
-            {"tablet", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
         const auto heartbeats = Self->GetCdcStreamHeartbeatManager().EmitHeartbeats(txc.DB, Edge);
@@ -72,9 +72,9 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_INFO("[CdcStreamHeartbeat] Enqueue change record(s)",
+        YDB_LOG_INFO("[CdcStreamHeartbeat] Enqueuing CDC stream heartbeat change records",
             {"changeRecordsCount", ChangeRecords.size()},
-            {"tablet", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
         Self->EnqueueChangeRecords(std::move(ChangeRecords));
         Self->EmitHeartbeats();
     }
@@ -82,8 +82,8 @@ public:
 }; // TTxCdcStreamEmitHeartbeats
 
 void TDataShard::EmitHeartbeats() {
-    YDB_LOG_DEBUG("[CdcStreamHeartbeat] Emit heartbeats",
-        {"tablet", TabletID()});
+    YDB_LOG_DEBUG("[CdcStreamHeartbeat] Scheduling CDC stream heartbeat emission",
+        {"tabletId", TabletID()});
 
     if (State != TShardState::Ready) {
         return;

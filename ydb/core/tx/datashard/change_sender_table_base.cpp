@@ -41,9 +41,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
-
-        LeaderPipeCache = ev->Get()->Services.LeaderPipeCache;
+            {"eventDetails", ev->Get()->ToString()});
         Handshake();
     }
 
@@ -67,8 +65,8 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
         if (ev->Cookie != LeaseConfirmationCookie) {
             YDB_LOG_WARN("Readonly lease confirmation cookie mismatch",
                 {"logPrefix", GetLogPrefix()},
-                {"expected", LeaseConfirmationCookie},
-                {"got", ev->Cookie});
+                {"expectedCookie", LeaseConfirmationCookie},
+                {"actualCookie", ev->Cookie});
             return;
         }
 
@@ -82,7 +80,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     void Handshake(TEvChangeExchange::TEvStatus::TPtr& ev) {
         YDB_LOG_DEBUG("Handshake",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
@@ -90,10 +88,10 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
             LastRecordOrder = record.GetLastRecordOrder();
             return Ready();
         default:
-            YDB_LOG_ERROR("Handshake status",
+            YDB_LOG_ERROR("Change exchange handshake failed",
                 {"logPrefix", GetLogPrefix()},
-                {"status", static_cast<ui32>(record.GetStatus())},
-                {"reason", static_cast<ui32>(record.GetReason())});
+                {"statusCode", static_cast<ui32>(record.GetStatus())},
+                {"reasonCode", static_cast<ui32>(record.GetReason())});
             return Leave();
         }
     }
@@ -130,9 +128,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
-
-        auto records = MakeHolder<TEvChangeExchange::TEvApplyRecords>();
+            {"eventDetails", ev->Get()->ToString()});
         records->Record.SetOrigin(DataShard.TabletId);
         records->Record.SetGeneration(DataShard.Generation);
 
@@ -209,7 +205,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     void Handle(TEvChangeExchange::TEvStatus::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
@@ -218,10 +214,10 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
             return Ready();
         // TODO: REJECT?
         default:
-            YDB_LOG_ERROR("Apply status",
+            YDB_LOG_ERROR("Change record apply failed",
                 {"logPrefix", GetLogPrefix()},
-                {"status", static_cast<ui32>(record.GetStatus())},
-                {"reason", static_cast<ui32>(record.GetReason())});
+                {"statusCode", static_cast<ui32>(record.GetStatus())},
+                {"reasonCode", static_cast<ui32>(record.GetReason())});
             return Leave();
         }
     }
@@ -238,10 +234,10 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
         ++Attempt;
         Delay = Min(2 * Delay, MaxDelay);
 
-        YDB_LOG_NOTICE("Retry",
+        YDB_LOG_NOTICE("Retrying change sender connection",
             {"logPrefix", GetLogPrefix()},
-            {"attempt", Attempt},
-            {"delay", Delay});
+            {"retryAttempt", Attempt},
+            {"retryDelay", Delay});
 
         const auto random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
         Schedule(Delay + random, new TEvents::TEvWakeup());

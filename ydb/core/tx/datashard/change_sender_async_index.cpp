@@ -53,7 +53,7 @@ private:
 
         YDB_LOG_DEBUG("HandleIndex TEvTxProxySchemeCache::TEvNavigateKeySetResult",
             {"logPrefix", GetLogPrefix()},
-            {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
+            {"navigateResult", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!AsDerived()->CheckNotEmpty(result)) {
             return;
@@ -78,7 +78,7 @@ private:
         }
 
         if (entry.Self && entry.Self->Info.GetPathState() == NKikimrSchemeOp::EPathStateDrop) {
-            YDB_LOG_DEBUG("Index is planned to drop, waiting for the EvRemoveSender command",
+            YDB_LOG_DEBUG("Async index is planned to drop, waiting for remove sender command",
                 {"logPrefix", GetLogPrefix()});
 
             return AsDerived()->OnIndexUnderRemove();
@@ -191,16 +191,16 @@ class TAsyncIndexChangeSenderMain
     }
 
     void LogCritAndRetry(const TString& error) {
-        YDB_LOG_CRIT("",
+        YDB_LOG_CRIT("Critical error during change exchange operation, retrying",
             {"logPrefix", GetLogPrefix()},
-            {"error", error});
+            {"errorMessage", error});
         Retry();
     }
 
     void LogWarnAndRetry(const TString& error) {
-        YDB_LOG_WARN("",
+        YDB_LOG_WARN("Recoverable error during change exchange operation, retrying",
             {"logPrefix", GetLogPrefix()},
-            {"error", error});
+            {"errorMessage", error});
         Retry();
     }
 
@@ -231,42 +231,42 @@ class TAsyncIndexChangeSenderMain
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         EnqueueRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         ForgetRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         OnReady(ev->Get()->PartitionId);
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         OnGone(ev->Get()->PartitionId);
     }
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         Y_ENSURE(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
@@ -276,7 +276,7 @@ class TAsyncIndexChangeSenderMain
     void AutoRemove(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", GetLogPrefix()},
-            {"ev", ev->Get()->ToString()});
+            {"eventDetails", ev->Get()->ToString()});
         RemoveRecords(std::move(ev->Get()->Records));
     }
 

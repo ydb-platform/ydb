@@ -23,7 +23,8 @@ class YdbTpccWorkload(WorkloadBase):
         self._unpack_resource('ydb_cli')
 
     def __del__(self):
-        self.tempdir.cleanup()
+        if self.tempdir:
+            self.tempdir.cleanup()
 
     def _unpack_resource(self, name):
         self.tempdir = tempfile.TemporaryDirectory(dir=os.getcwd())

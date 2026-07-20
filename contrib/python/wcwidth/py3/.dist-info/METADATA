@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: wcwidth
-Version: 0.8.1
+Version: 0.8.2
 Summary: Measures the displayed width of unicode strings in a terminal
 Project-URL: Homepage, https://github.com/jquast/wcwidth
 Author-email: Jeff Quast <contact@jeffquast.com>
@@ -684,6 +684,10 @@ languages:
 =======
 History
 =======
+
+0.8.2 *2026-06-29*
+  * **Bugfix** Do not raise IndexError when given legacy POSIX ``n`` argument to `wcswidth()`_ or
+    `wcstwidth()`_ exceed string length without raising IndexError
 
 0.8.1 *2026-06-08*
   * **Improved** `wcstwidth()`_ with new ``zeroer``, ``narrow_wider``, and ``narrow_zeroer``

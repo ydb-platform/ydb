@@ -98,7 +98,7 @@ def wcswidth(
 
     _wcwidth = wcwidth if ambiguous_width == 1 else lambda c: wcwidth(c, 'auto', ambiguous_width)
 
-    end = len(pwcs) if n is None else n
+    end = len(pwcs) if n is None else min(n, len(pwcs))
     total_width = 0
     idx = 0
 
@@ -262,7 +262,7 @@ def wcstwidth(
     # Select wcwidth call pattern for best lru_cache performance
     _wcwidth = wcwidth if ambiguous_width == 1 else lambda c: wcwidth(c, 'auto', ambiguous_width)
 
-    end = len(pwcs) if n is None else n
+    end = len(pwcs) if n is None else min(n, len(pwcs))
     total_width = 0
     idx = 0
 

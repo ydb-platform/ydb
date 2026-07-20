@@ -77,7 +77,7 @@ After installation by any method, restart VS Code. The **YDB** icon will appear 
    | Field | Description | Example |
    | --- | --- | --- |
    | **Connection Name** | Arbitrary connection name | `my-ydb` |
-   | **Host** | Host of the [endpoint](../../concepts/connect.md#endpoint) of the {{ ydb-name }} cluster | `ydb.example.com` |
+   | **Host** | Endpoint of the [endpoint](../../concepts/connect.md#endpoint) of the {{ ydb-name }} cluster | `ydb.example.com` |
    | **Port** | Port (default `2135`) | `2135` |
    | **Database** | Path to the [database](../../concepts/glossary.md#database) | `/Root/database` |
    | **Monitoring URL** | URL of [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md), used for the dashboard (filled in automatically based on the host, can be overridden) | `http://ydb.example.com:8765` |

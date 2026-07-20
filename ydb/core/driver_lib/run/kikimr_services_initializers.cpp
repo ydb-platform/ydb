@@ -272,6 +272,7 @@
 #include <ydb/core/graph/api/service.h>
 #include <ydb/core/graph/api/shard.h>
 
+#include <library/cpp/containers/absl/btree_set.h>
 #include <library/cpp/logger/global/global.h>
 #include <library/cpp/logger/log.h>
 
@@ -1887,6 +1888,22 @@ TGRpcServicesInitializer::TGRpcServicesInitializer(
     , Factories(factories)
 {}
 
+static void JoinServicesListTo(TVector<TString>& dst, const NKikimrConfig::TGRpcConfig& config) {
+    if ((config.ServicesSize() == 0 || config.ServicesEnabledSize() == 0)
+        && config.ServicesDisabledSize() == 0) { // sets are disjoint
+        dst.insert(dst.end(), config.GetServices().begin(), config.GetServices().end());
+        dst.insert(dst.end(), config.GetServicesEnabled().begin(), config.GetServicesEnabled().end());
+        return;
+    }
+    absl::btree_set<TString> resultSet;
+    resultSet.insert(config.GetServices().begin(), config.GetServices().end());
+    resultSet.insert(config.GetServicesEnabled().begin(), config.GetServicesEnabled().end());
+    for (const auto& service : config.GetServicesDisabled()) {
+        resultSet.erase(service);
+    }
+    dst.insert(dst.end(), resultSet.begin(), resultSet.end());
+}
+
 void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                   const NKikimr::TAppData* appData)
 {
@@ -1971,7 +1988,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             stringsFromProto(desc->AddressesV4, config.GetPublicAddressesV4());
             stringsFromProto(desc->AddressesV6, config.GetPublicAddressesV6());
 
-            desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end());
+            JoinServicesListTo(desc->ServedServices, config);
             if (config.HasEndpointId()) {
                 desc->EndpointId = config.GetEndpointId();
             }
@@ -1988,7 +2005,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
             stringsFromProto(desc->AddressesV6, config.GetPublicAddressesV6());
             desc->TargetNameOverride = config.GetPublicTargetNameOverride();
 
-            desc->ServedServices.insert(desc->ServedServices.end(), config.GetServices().begin(), config.GetServices().end());
+            JoinServicesListTo(desc->ServedServices, config);
             if (config.HasEndpointId()) {
                 desc->EndpointId = config.GetEndpointId();
             }
@@ -2018,7 +2035,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                 stringsFromProto(desc->AddressesV4, sx.GetPublicAddressesV4());
                 stringsFromProto(desc->AddressesV6, sx.GetPublicAddressesV6());
 
-                desc->ServedServices.insert(desc->ServedServices.end(), sx.GetServices().begin(), sx.GetServices().end());
+                JoinServicesListTo(desc->ServedServices, sx);
                 if (sx.HasEndpointId()) {
                     desc->EndpointId = sx.GetEndpointId();
                 }

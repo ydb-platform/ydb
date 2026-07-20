@@ -1,6 +1,7 @@
 import logging
 import re
 from collections.abc import Mapping, Sequence
+from typing import Any, cast
 
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.driver import Client
@@ -23,34 +24,34 @@ class Cursor:
 
     def __init__(self, client: Client):
         self.client = client
-        self.arraysize = 1
+        self.arraysize: int = 1
         self.data: Sequence | None = None
-        self.names = []
-        self.types = []
-        self._rowcount = 0
-        self._summary: list[dict[str, str]] = []
-        self._ix = 0
+        self.names: Sequence[str] = []
+        self.types: Sequence[Any] = []
+        self._rowcount: int = 0
+        self._summary: list[dict[str, Any]] = []
+        self._ix: int = 0
 
-    def check_valid(self):
+    def check_valid(self) -> None:
         if self.data is None:
             raise ProgrammingError("Cursor is not valid")
 
     @property
-    def description(self):
+    def description(self) -> list[tuple[str, Any, None, None, None, None, bool]]:
         return [(n, t, None, None, None, None, True) for n, t in zip(self.names, self.types)]
 
     @property
-    def rowcount(self):
+    def rowcount(self) -> int:
         return self._rowcount
 
     @property
-    def summary(self) -> list[dict[str, str]]:
+    def summary(self) -> list[dict[str, Any]]:
         return self._summary
 
-    def close(self):
+    def close(self) -> None:
         self.data = None
 
-    def execute(self, operation: str, parameters=None):
+    def execute(self, operation: str, parameters: Any = None) -> None:
         if not parameters and isinstance(operation, str):
             # Per PEP 249 pyformat paramstyle, callers (e.g. SQLAlchemy) escape
             # literal percent signs as %% in operation strings.  When there are
@@ -80,7 +81,7 @@ class Cursor:
                     self.names = meta_result.column_names
                     self.types = [x.name for x in meta_result.column_types]
 
-    def _try_bulk_insert(self, operation: str, data):
+    def _try_bulk_insert(self, operation: str, data: Any) -> bool:
         match = insert_re.match(remove_sql_comments(operation))
         if not match:
             return False
@@ -94,24 +95,31 @@ class Cursor:
             op_columns = None
         if "VALUES" not in temp.upper():
             return False
+        if not isinstance(data, Sequence) or len(data) == 0:
+            return False
         first_row = data[0]
+        col_names: list[str] | str
+        data_values: Sequence[Sequence[Any]]
         if isinstance(first_row, Mapping):
-            col_names = list(first_row.keys())
-            if op_columns and {unescape_identifier(x) for x in op_columns} != set(col_names):
+            col_names = [str(k) for k in first_row.keys()]
+            if op_columns and {unescape_identifier(str(x)) for x in op_columns} != set(col_names):
                 return False  # Data sent in doesn't match the columns in the insert statement
             data_values = [list(row.values()) for row in data]
         elif isinstance(first_row, Sequence) and not isinstance(first_row, (str, bytes)):
             # PEP 249 also allows rows as sequences; take column names from the
             # insert statement if present, otherwise insert into all columns
-            col_names = [unescape_identifier(x) for x in op_columns] if op_columns else "*"
+            col_names = [unescape_identifier(str(x)) for x in op_columns] if op_columns else "*"
             data_values = data
         else:
             return False
-        self.client.insert(table, data_values, col_names)
+        insert_summary = self.client.insert(table, data_values, col_names)
         self.data = []
+        self._rowcount = insert_summary.written_rows
+        self._ix = 0
+        self._summary.append(insert_summary.summary)
         return True
 
-    def executemany(self, operation, parameters):
+    def executemany(self, operation: str, parameters: Any) -> None:
         if not parameters or self._try_bulk_insert(operation, parameters):
             return
         self.data = []
@@ -138,22 +146,25 @@ class Cursor:
         # Need to reset cursor _ix after performing an execute
         self._ix = 0
 
-    def fetchall(self):
+    def fetchall(self) -> Sequence:
         self.check_valid()
-        ret = self.data[self._ix :]
+        data = cast(Sequence, self.data)
+        ret = data[self._ix :]
         self._ix = self._rowcount
         return ret
 
-    def fetchone(self):
+    def fetchone(self) -> Any:
         self.check_valid()
         if self._ix >= self._rowcount:
             return None
-        val = self.data[self._ix]
+        data = cast(Sequence, self.data)
+        val = data[self._ix]
         self._ix += 1
         return val
 
-    def fetchmany(self, size: int = -1):
+    def fetchmany(self, size: int = -1) -> Sequence:
         self.check_valid()
+        data = cast(Sequence, self.data)
 
         if size < 0:
             # Fetch all remaining rows
@@ -163,12 +174,12 @@ class Cursor:
             return []
 
         end = min(self._ix + size, self._rowcount)
-        ret = self.data[self._ix : end]
+        ret = data[self._ix : end]
         self._ix = end
         return ret
 
-    def nextset(self):
+    def nextset(self) -> None:
         raise NotImplementedError
 
-    def callproc(self, *args, **kwargs):
+    def callproc(self, *args, **kwargs) -> None:
         raise NotImplementedError

@@ -8,46 +8,51 @@ Full statespace search for:
 	cycle checks       	- (disabled by -DSAFETY)
 	invalid end states	- (disabled by -E flag)
 
-State-vector 140 byte, depth reached 101, errors: 0
-    26434 states, stored
-    27215 states, matched
-    53649 transitions (= stored+matched)
-     6647 atomic steps
-hash conflicts:        13 (resolved)
+State-vector 148 byte, depth reached 143, errors: 0
+   384577 states, stored
+   521860 states, matched
+   906437 transitions (= stored+matched)
+   397265 atomic steps
+hash conflicts:      2651 (resolved)
 
 Stats on memory usage (in Megabytes):
-    4.235	equivalent memory usage for states (stored*(State-vector + overhead))
-    2.422	actual memory usage for states (compression: 57.19%)
-	state-vector as stored = 68 byte + 28 byte overhead
+   64.550	equivalent memory usage for states (stored*(State-vector + overhead))
+   44.220	actual memory usage for states (compression: 68.51%)
+	state-vector as stored = 93 byte + 28 byte overhead
   128.000	memory used for hash table (-w24)
     5.341	memory used for DFS stack (-m100000)
-  135.684	total actual memory usage
+  177.481	total actual memory usage
 
 
 unreached in proctype BSC
-	slay_recovery_v1.pml:113, state 40, "-end-"
-	(1 of 40 states)
+	slay_recovery_v1.pml:132, state 27, "printf('[BSC] resync ServiceSet(WIPE) after restart\n')"
+	slay_recovery_v1.pml:133, state 28, "bsc_to_nw!SERVICE_SET_WIPE,bsc_vdisk_id"
+	slay_recovery_v1.pml:152, state 44, "printf('[BSC] ignore WIPED vdisk=%d while VSlot is deleting\n',report_id)"
+	slay_recovery_v1.pml:184, state 78, "-end-"
+	(4 of 78 states)
 unreached in proctype NodeWarden
-	slay_recovery_v1.pml:162, state 35, "printf('[NodeWarden] PDisk restarted; no slay needs replay\n')"
-	slay_recovery_v1.pml:163, state 36, "(1)"
-	slay_recovery_v1.pml:204, state 71, "-end-"
-	(3 of 71 states)
+	slay_recovery_v1.pml:207, state 21, "(1)"
+	slay_recovery_v1.pml:206, state 22, "((nw_slay_action==ACTION_WIPE))"
+	slay_recovery_v1.pml:206, state 22, "else"
+	slay_recovery_v1.pml:290, state 105, "(1)"
+	slay_recovery_v1.pml:318, state 136, "-end-"
+	(4 of 136 states)
 unreached in proctype VDisk
-	slay_recovery_v1.pml:211, state 7, "-end-"
+	slay_recovery_v1.pml:325, state 7, "-end-"
 	(1 of 7 states)
 unreached in proctype PDisk
-	slay_recovery_v1.pml:237, state 21, "-end-"
-	(1 of 21 states)
+	slay_recovery_v1.pml:369, state 37, "-end-"
+	(1 of 37 states)
 unreached in proctype ScenarioDriver
-	(0 of 30 states)
+	(0 of 45 states)
 unreached in init
 	(0 of 7 states)
-unreached in claim live_destroy_eventually_reported
-	_spin_nvr.tmp:3, state 5, "((!(!((scenario_finished&&bsc_pending)))&&!(bsc_reported_destroyed)))"
+unreached in claim live_delete_eventually_frees_vslot
+	_spin_nvr.tmp:3, state 5, "((!(!(bsc_delete_pending))&&!(!(bsc_vslot_allocated))))"
 	_spin_nvr.tmp:3, state 5, "(1)"
-	_spin_nvr.tmp:8, state 10, "(!(bsc_reported_destroyed))"
+	_spin_nvr.tmp:8, state 10, "(!(!(bsc_vslot_allocated)))"
 	_spin_nvr.tmp:10, state 13, "-end-"
 	(3 of 13 states)
 
-pan: elapsed time 0.02 seconds
-pan: rate   1321700 states/second
+pan: elapsed time 0.28 seconds
+pan: rate 1373489.3 states/second

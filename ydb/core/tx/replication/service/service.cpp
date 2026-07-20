@@ -526,14 +526,12 @@ namespace NKikimr::NReplication {
 namespace NService {
 
 class TReplicationService: public TActorBootstrapped<TReplicationService> {
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[Service]"
-                << SelfId() << " ";
-        }
 
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TReplicationService"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", SelfId()});
     }
 
     void RunBoardPublisher() {
@@ -550,7 +548,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     void Handle(TEvService::TEvHandshake::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
@@ -565,7 +562,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         if (session.GetGeneration() > controller.GetGeneration()) {
             YDB_LOG_WARN("Ignore stale controller",
-                {"logPrefix", GetLogPrefix()},
                 {"controller", controller.GetTabletId()},
                 {"generation", controller.GetGeneration()});
             return;
@@ -669,7 +665,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     void Handle(TEvService::TEvRunWorker::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
@@ -679,7 +674,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto it = Sessions.find(controller.GetTabletId());
         if (it == Sessions.end()) {
             YDB_LOG_WARN("Cannot run worker",
-                {"logPrefix", GetLogPrefix()},
                 {"controller", controller.GetTabletId()},
                 {"worker", id},
                 {"reason", R"("unknown session")"});
@@ -689,7 +683,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto& session = it->second;
         if (session.GetGeneration() != controller.GetGeneration()) {
             YDB_LOG_WARN("Cannot run worker",
-                {"logPrefix", GetLogPrefix()},
                 {"controller", controller.GetTabletId()},
                 {"generation", controller.GetGeneration()},
                 {"worker", id},
@@ -702,7 +695,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         YDB_LOG_INFO("Run worker",
-            {"logPrefix", GetLogPrefix()},
             {"worker", id});
 
         const auto& cmd = record.GetCommand();
@@ -720,8 +712,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             const auto& writerSettings = cmd.GetTransferWriter();
             const auto* transferWriterFactory = AppData()->TransferWriterFactory.get();
             if (!transferWriterFactory) {
-                YDB_LOG_CRIT("Run transfer but TransferWriterFactory does not exists",
-                    {"logPrefix", GetLogPrefix()});
+                YDB_LOG_CRIT("Run transfer but TransferWriterFactory does not exists");
                 return;
             }
             autoCommit = false;
@@ -745,7 +736,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     void Handle(TEvService::TEvStopWorker::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
@@ -755,7 +745,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto it = Sessions.find(controller.GetTabletId());
         if (it == Sessions.end()) {
             YDB_LOG_WARN("Cannot stop worker",
-                {"logPrefix", GetLogPrefix()},
                 {"controller", controller.GetTabletId()},
                 {"worker", id},
                 {"reason", R"("unknown session")"});
@@ -765,7 +754,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto& session = it->second;
         if (session.GetGeneration() != controller.GetGeneration()) {
             YDB_LOG_WARN("Cannot stop worker",
-                {"logPrefix", GetLogPrefix()},
                 {"controller", controller.GetTabletId()},
                 {"generation", controller.GetGeneration()},
                 {"worker", id},
@@ -778,7 +766,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         YDB_LOG_INFO("Stop worker",
-            {"logPrefix", GetLogPrefix()},
             {"worker", id});
         WorkerActorIdToSession.erase(session.GetWorkerActorId(id));
         session.StopWorker(this, id);
@@ -786,7 +773,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     void Handle(TEvService::TEvGetTxId::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         auto* session = SessionFromWorker(ev->Sender);
@@ -796,7 +782,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         if (!session->HasWorker(ev->Sender)) {
             YDB_LOG_ERROR("Cannot find worker",
-                {"logPrefix", GetLogPrefix()},
                 {"worker", ev->Sender});
             return;
         }
@@ -806,7 +791,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     void Handle(TEvService::TEvTxIdResult::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
@@ -815,7 +799,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto it = Sessions.find(controller.GetTabletId());
         if (it == Sessions.end()) {
             YDB_LOG_WARN("Cannot process tx id result",
-                {"logPrefix", GetLogPrefix()},
                 {"controller", controller.GetTabletId()},
                 {"reason", R"("unknown session")"});
             return;
@@ -824,7 +807,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto& session = it->second;
         if (session.GetGeneration() != controller.GetGeneration()) {
             YDB_LOG_WARN("Cannot process tx id result",
-                {"logPrefix", GetLogPrefix()},
                 {"controller", controller.GetTabletId()},
                 {"generation", controller.GetGeneration()},
                 {"reason", R"("generation mismatch")"});
@@ -836,7 +818,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     void Handle(TEvService::TEvHeartbeat::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         auto* session = SessionFromWorker(ev->Sender);
@@ -846,13 +827,11 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         if (!session->HasWorker(ev->Sender)) {
             YDB_LOG_ERROR("Cannot find worker",
-                {"logPrefix", GetLogPrefix()},
                 {"worker", ev->Sender});
             return;
         }
 
         YDB_LOG_INFO("Heartbeat",
-            {"logPrefix", GetLogPrefix()},
             {"worker", ev->Sender},
             {"version", TRowVersion::FromProto(ev->Get()->Record.GetVersion())});
         session->Handle(this, ev);
@@ -860,7 +839,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         auto* session = SessionFromWorker(ev->Sender);
@@ -870,13 +848,11 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         if (!session->HasWorker(ev->Sender)) {
             YDB_LOG_ERROR("Cannot find worker",
-                {"logPrefix", GetLogPrefix()},
                 {"worker", ev->Sender});
             return;
         }
 
         YDB_LOG_INFO("Worker has ended",
-            {"logPrefix", GetLogPrefix()},
             {"worker", ev->Sender});
         session->SendWorkerDataEnd(this, session->GetWorkerId(ev->Sender), ev->Get()->PartitionId,
             std::move(ev->Get()->AdjacentPartitionsIds), std::move(ev->Get()->ChildPartitionsIds));
@@ -884,7 +860,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     void Handle(TEvWorker::TEvStatsWakeup::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         if (ev->Get()->SessionToAdd) {
@@ -913,7 +888,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         auto* session = SessionFromWorker(ev->Sender);
@@ -923,13 +897,11 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         if (!session->HasWorker(ev->Sender)) {
             YDB_LOG_ERROR("Cannot find worker",
-                {"logPrefix", GetLogPrefix()},
                 {"worker", ev->Sender});
             return;
         }
 
         YDB_LOG_INFO("Worker has gone",
-            {"logPrefix", GetLogPrefix()},
             {"worker", ev->Sender});
         WorkerActorIdToSession.erase(ev->Sender);
         session->StopWorker(this, ev->Sender, ToReason(ev->Get()->Status), ev->Get()->ErrorDescription);
@@ -937,7 +909,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     void Handle(TEvWorker::TEvStatus::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         auto* session = SessionFromWorker(ev->Sender);
@@ -955,7 +926,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto wit = WorkerActorIdToSession.find(id);
         if (wit == WorkerActorIdToSession.end()) {
             YDB_LOG_WARN("Unknown worker has gone",
-                {"logPrefix", GetLogPrefix()},
                 {"worker", id});
             return nullptr;
         }
@@ -963,7 +933,6 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto it = Sessions.find(wit->second);
         if (it == Sessions.end()) {
             YDB_LOG_ERROR("Cannot find session",
-                {"logPrefix", GetLogPrefix()},
                 {"worker", id},
                 {"session", wit->second});
             return nullptr;
@@ -982,6 +951,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void PassAway() override {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         if (auto actorId = std::exchange(BoardPublisher, {})) {
             Send(actorId, new TEvents::TEvPoison());
         }
@@ -1007,11 +977,14 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         Become(&TThis::StateWork);
         RunBoardPublisher();
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorStateFunc", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvService::TEvHandshake, Handle);
             hFunc(TEvService::TEvRunWorker, Handle);
@@ -1028,7 +1001,6 @@ public:
     }
 
 private:
-    mutable TMaybe<TString> LogPrefix;
     TActorId BoardPublisher;
     THashMap<ui64, TSessionInfo> Sessions;
 

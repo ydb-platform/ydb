@@ -27,16 +27,12 @@
 namespace NKikimr::NReplication::NService {
 
 class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[TablePartitionWriter]"
-                << TableId
-                << "[" << TabletId << "]"
-                << SelfId() << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+         return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TTablePartitionWriter"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", SelfId()},
+            {"tabletId", TabletId});
     }
 
     void GetProxyServices() {
@@ -45,6 +41,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     STATEFN(StateGetProxyServices) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorStateFunc", "StateGetProxyServices"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle);
         default:
@@ -54,7 +52,6 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
 
     void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         LeaderPipeCache = ev->Get()->Services.LeaderPipeCache;
@@ -67,6 +64,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     STATEFN(StateWaitingRecords) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorStateFunc", "StateWaitingRecords"});
         switch (ev->GetTypeRewrite()) {
             hFunc(NChangeExchange::TEvChangeExchange::TEvRecords, Handle);
         default:
@@ -76,7 +75,6 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         auto event = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>();
@@ -106,6 +104,8 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     STATEFN(StateWaitingStatus) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorStateFunc", "StateWaitingStatus"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDataShard::TEvApplyReplicationChangesResult, Handle);
         default:
@@ -115,7 +115,6 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
 
     void Handle(TEvDataShard::TEvApplyReplicationChangesResult::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
@@ -124,7 +123,6 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
             return Ready();
         default:
             YDB_LOG_ERROR("Apply result",
-                {"logPrefix", GetLogPrefix()},
                 {"status", static_cast<ui32>(record.GetStatus())},
                 {"reason", static_cast<ui32>(record.GetReason())},
                 {"error", record.GetErrorDescription()});
@@ -160,7 +158,6 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
 
     void Leave(bool hardError = false) {
         YDB_LOG_INFO("Leave hard",
-            {"logPrefix", GetLogPrefix()},
             {"error", hardError});
 
         Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(TabletId, hardError));
@@ -174,6 +171,7 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void PassAway() override {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         Unlink();
         TActorBootstrapped::PassAway();
     }
@@ -195,10 +193,13 @@ public:
     {}
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         GetProxyServices();
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorStateFunc", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             sFunc(TEvents::TEvWakeup, Leave);
@@ -210,7 +211,6 @@ private:
     const TActorId Parent;
     const ui64 TabletId;
     const TTableId TableId;
-    mutable TMaybe<TString> LogPrefix;
 
     TActorId LeaderPipeCache;
     ui64 SubscribeCookie = 0;
@@ -226,15 +226,12 @@ class TLocalTableWriter
     , public NChangeExchange::IChangeSenderFactory
     , private NSchemeCache::TSchemeCacheHelpers
 {
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[LocalTableWriter]"
-                << TablePathId
-                << SelfId() << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "LocalTableWriter"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", SelfId()},
+            {"tablePathId", TablePathId});
     }
 
     static TSerializedTableRange GetFullRange(ui32 keyColumnsCount) {
@@ -244,14 +241,12 @@ class TLocalTableWriter
     }
 
     void LogCritAndLeave(const TString& error) {
-        YDB_LOG_CRIT(error,
-            {"logPrefix", GetLogPrefix()});
+        YDB_LOG_CRIT(error);
         Leave(TEvWorker::TEvGone::SCHEME_ERROR, error);
     }
 
     void LogWarnAndRetry(const TString& error) {
-        YDB_LOG_WARN(error,
-            {"logPrefix", GetLogPrefix()});
+        YDB_LOG_WARN(error);
         Retry();
     }
 
@@ -290,6 +285,7 @@ class TLocalTableWriter
     }
 
     void Resolve() override {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         ResolveTable();
     }
 
@@ -304,7 +300,6 @@ class TLocalTableWriter
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
         YDB_LOG_DEBUG("Handshake",
-            {"logPrefix", GetLogPrefix()},
             {"worker", Worker});
 
         ResolveTable();
@@ -324,7 +319,6 @@ class TLocalTableWriter
         const auto& result = ev->Get()->Request;
 
         YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
-            {"logPrefix", GetLogPrefix()},
             {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(result)) {
@@ -401,7 +395,6 @@ class TLocalTableWriter
         const auto& result = ev->Get()->Request;
 
         YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvResolveKeySetResult",
-            {"logPrefix", GetLogPrefix()},
             {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(result)) {
@@ -432,7 +425,6 @@ class TLocalTableWriter
 
         if (!Initialized) {
             YDB_LOG_DEBUG("Send handshake",
-                {"logPrefix", GetLogPrefix()},
                 {"worker", Worker});
             Send(Worker, new TEvWorker::TEvHandshake());
             Initialized = true;
@@ -442,13 +434,13 @@ class TLocalTableWriter
     }
 
     IActor* CreateSender(ui64 partitionId) const override {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         const auto tableId = TTableId(TablePathId, Schema->Version);
         return new TTablePartitionWriter(SelfId(), partitionId, tableId, Serializer->Clone());
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         Y_ABORT_UNLESS(PendingRecords.empty());
@@ -509,7 +501,6 @@ class TLocalTableWriter
 
     void Handle(TEvWorker::TEvTerminateWriter::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         Terminating = true;
@@ -520,7 +511,6 @@ class TLocalTableWriter
 
     void Handle(TEvService::TEvTxIdResult::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
@@ -588,7 +578,6 @@ class TLocalTableWriter
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         TVector<NChangeExchange::IChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
@@ -604,7 +593,6 @@ class TLocalTableWriter
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         for (const auto& record : ev->Get()->Records) {
@@ -623,7 +611,6 @@ class TLocalTableWriter
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
         OnReady(ev->Get()->PartitionId);
 
@@ -634,7 +621,6 @@ class TLocalTableWriter
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         if (ev->Get()->HardError) {
@@ -650,14 +636,14 @@ class TLocalTableWriter
 
     template <typename... Args>
     void Leave(Args&&... args) {
-        YDB_LOG_INFO("Leave",
-            {"logPrefix", GetLogPrefix()});
+        YDB_LOG_INFO("Leave");
 
         Send(Worker, new TEvWorker::TEvGone(std::forward<Args>(args)...));
         PassAway();
     }
 
     void PassAway() override {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         KillSenders();
         TActor::PassAway();
     }
@@ -690,6 +676,8 @@ public:
     }
 
     STFUNC(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorStateFunc", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, Handle);

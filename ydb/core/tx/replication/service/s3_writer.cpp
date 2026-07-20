@@ -51,15 +51,12 @@ struct TS3Request {
 class TS3Writer
     : public TActor<TS3Writer>
 {
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[S3Writer]"
-                << TableName
-                << SelfId() << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "S3Writer"},
+            {"actorActivityType", ActorActivityType()},
+            {"selfId", SelfId()},
+            {"tableName", TableName});
     }
 
     template <typename TResult>
@@ -69,7 +66,6 @@ class TS3Writer
         }
 
         YDB_LOG_ERROR("Error at",
-            {"logPrefix", GetLogPrefix()},
             {"marker", marker},
             {"error", result});
         RetryOrLeave(result.GetError());
@@ -109,7 +105,6 @@ class TS3Writer
 
     void Leave(const TString& error) {
         YDB_LOG_INFO("Leave",
-            {"logPrefix", GetLogPrefix()},
             {"error", error});
 
         // TODO support different error kinds
@@ -126,7 +121,6 @@ class TS3Writer
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
         YDB_LOG_DEBUG("Handshake",
-            {"logPrefix", GetLogPrefix()},
             {"worker", Worker});
 
         S3Client = RegisterWithSameMailbox(NWrappers::CreateStorageWrapper(ExternalStorageConfig->ConstructStorageOperator()));
@@ -159,7 +153,6 @@ class TS3Writer
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         if (!ev->Get()->Records) {
@@ -187,7 +180,6 @@ class TS3Writer
         const auto& result = ev->Get()->Result;
 
         YDB_LOG_DEBUG("Handle",
-            {"logPrefix", GetLogPrefix()},
             {"ev", ev->Get()->ToString()});
 
         if (!CheckResult(result, TStringBuf("PutObject"))) {
@@ -222,6 +214,8 @@ public:
     {}
 
     STFUNC(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorStateFunc", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, Handle);
@@ -233,7 +227,6 @@ public:
 
 private:
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
-    mutable TMaybe<TString> LogPrefix;
     const TString TableName;
     const TString WriterName;
     TActorId Worker;

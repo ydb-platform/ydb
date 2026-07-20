@@ -1,3 +1,0 @@
-RECURSE(
-    proto_schema
-)

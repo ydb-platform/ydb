@@ -2739,10 +2739,6 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         Cerr << "SET COLUMN CONSTRAINT RESPONSE (while copying): " << response.ShortDebugString() << Endl;
 
-        UNIT_ASSERT_VALUES_UNEQUAL_C(
-            response.GetStatus(),
-            Ydb::StatusIds::SUCCESS,
-            response.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL_C(
             response.GetStatus(),
             Ydb::StatusIds::OVERLOADED,
@@ -2775,6 +2771,54 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         env.TestWaitNotification(runtime, txId, TTestTxConfig::SchemeShard);
 
         TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+    }
+
+    Y_UNIT_TEST(SetNotNullWithUsualSchemeOperation) {
+        // As example of 'usual' scheme operation, there is gotten TRUNCATE TABLE
+
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> truncateTableBlocker(runtime);
+        const ui64 truncateTxId = ++txId;
+        AsyncTruncateTable(runtime, truncateTxId, root, "Table", TTestTxConfig::SchemeShard);
+        runtime.WaitFor("block truncate propose to datashards", [&]{ return truncateTableBlocker.size() > 0; });
+
+        ui64 setConstraintTxId = ++txId;
+        auto response = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetStatus(),
+            Ydb::StatusIds::OVERLOADED,
+            response.ShortDebugString());
+
+        // Column must remain nullable - SetNotNull never actually ran.
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+
+        truncateTableBlocker.Stop();
+        truncateTableBlocker.Unblock();
+        env.TestWaitNotification(runtime, truncateTxId);
     }
 } // Y_UNIT_TEST_SUITE(SetNotNullTest)
 

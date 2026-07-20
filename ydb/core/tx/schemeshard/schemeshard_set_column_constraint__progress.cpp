@@ -210,9 +210,7 @@ public:
             auto statusCode = TranslateStatusCode(record.GetStatus());
 
             if (statusCode != Ydb::StatusIds::SUCCESS) {
-                // TODO(flown4qqqq): persist issue
-                // TODO(flown4qqqq): forget operation on error
-                // TODO(flown4qqqq): EraseBuildInfo(operationInfo);
+                Self->ForgetSetColumnConstraint(db, operationInfo);
             }
 
             ReplyOnCreation(operationInfo, statusCode);
@@ -249,52 +247,62 @@ public:
             return true;
         };
 
-        if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Locking) {
-            Y_ENSURE(txId == operationInfo.LockTxId);
-            if (shouldRetry()) {
-                operationInfo.LockTxId = InvalidTxId;
-                Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
-                waitingForDependency = true;
-            } else {
+        switch (operationInfo.OperationState) {
+            case TSetColumnConstraintOperationInfo::EOperationState::Locking: {
+                Y_ENSURE(txId == operationInfo.LockTxId);
                 operationInfo.LockTxStatus = record.GetStatus();
                 Self->PersistSetColumnConstraintLockTxStatus(db, operationInfo);
 
                 if (!replyOnCreation()) {
                     return false;
                 }
+
+                break;
             }
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites) {
-            Y_ENSURE(txId == operationInfo.LockNullWritesTxId);
-            if (shouldRetry()) {
-                operationInfo.LockNullWritesTxId = InvalidTxId;
-                Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
-                waitingForDependency = true;
-            } else {
-                operationInfo.LockNullWritesTxStatus = record.GetStatus();
-                Self->PersistSetColumnConstraintLockNullWritesTxStatus(db, operationInfo);
+            case TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites: {
+                Y_ENSURE(txId == operationInfo.LockNullWritesTxId);
+                if (shouldRetry()) {
+                    operationInfo.LockNullWritesTxId = InvalidTxId;
+                    Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
+                    waitingForDependency = true;
+                } else {
+                    operationInfo.LockNullWritesTxStatus = record.GetStatus();
+                    Self->PersistSetColumnConstraintLockNullWritesTxStatus(db, operationInfo);
+                }
+
+                break;
             }
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Finishing) {
-            Y_ENSURE(txId == operationInfo.UnlockNullWritesTxId);
-            if (shouldRetry()) {
-                operationInfo.UnlockNullWritesTxId = InvalidTxId;
-                Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
-                waitingForDependency = true;
-            } else {
-                operationInfo.UnlockNullWritesTxStatus = record.GetStatus();
-                Self->PersistSetColumnConstraintUnlockNullWritesTxStatus(db, operationInfo);
+            case TSetColumnConstraintOperationInfo::EOperationState::Finishing: {
+                Y_ENSURE(txId == operationInfo.UnlockNullWritesTxId);
+                if (shouldRetry()) {
+                    operationInfo.UnlockNullWritesTxId = InvalidTxId;
+                    Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
+                    waitingForDependency = true;
+                } else {
+                    operationInfo.UnlockNullWritesTxStatus = record.GetStatus();
+                    Self->PersistSetColumnConstraintUnlockNullWritesTxStatus(db, operationInfo);
+                }
+
+                break;
             }
-        } else if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Unlocking) {
-            Y_ENSURE(txId == operationInfo.UnlockTxId);
-            if (shouldRetry()) {
-                operationInfo.UnlockTxId = InvalidTxId;
-                Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
-                waitingForDependency = true;
-            } else {
-                operationInfo.UnlockTxStatus = record.GetStatus();
-                Self->PersistSetColumnConstraintUnlockTxStatus(db, operationInfo);
+            case TSetColumnConstraintOperationInfo::EOperationState::Unlocking: {
+                Y_ENSURE(txId == operationInfo.UnlockTxId);
+                if (shouldRetry()) {
+                    operationInfo.UnlockTxId = InvalidTxId;
+                    Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
+                    waitingForDependency = true;
+                } else {
+                    operationInfo.UnlockTxStatus = record.GetStatus();
+                    Self->PersistSetColumnConstraintUnlockTxStatus(db, operationInfo);
+                }
+
+                break;
             }
-        } else {
-            Y_UNREACHABLE();
+            case TSetColumnConstraintOperationInfo::EOperationState::Invalid:
+            case TSetColumnConstraintOperationInfo::EOperationState::Validating:
+            case TSetColumnConstraintOperationInfo::EOperationState::Done: {
+                Y_UNREACHABLE();
+            }
         }
 
         if (!waitingForDependency) {

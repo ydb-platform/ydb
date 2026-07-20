@@ -205,16 +205,15 @@ public:
             << ", status# " << NKikimrScheme::EStatus_Name(record.GetStatus()));
 
         NIceDb::TNiceDb db(txc.DB);
-
-        auto replyOnCreation = [&] {
+        bool shouldForget = false;
+        auto replyOnCreation = [&]() -> void {
             auto statusCode = TranslateStatusCode(record.GetStatus());
 
             if (statusCode != Ydb::StatusIds::SUCCESS) {
-                Self->ForgetSetColumnConstraint(db, operationInfo);
+                shouldForget = true;
             }
 
             ReplyOnCreation(operationInfo, statusCode);
-            return true;
         };
 
         // Most modifications of the main table are forbidden while SetColumnConstraint
@@ -252,11 +251,7 @@ public:
                 Y_ENSURE(txId == operationInfo.LockTxId);
                 operationInfo.LockTxStatus = record.GetStatus();
                 Self->PersistSetColumnConstraintLockTxStatus(db, operationInfo);
-
-                if (!replyOnCreation()) {
-                    return false;
-                }
-
+                replyOnCreation();
                 break;
             }
             case TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites: {
@@ -308,6 +303,11 @@ public:
         if (!waitingForDependency) {
             Progress(BuildId);
         }
+
+        if (shouldForget) {
+            Self->ForgetSetColumnConstraint(db, operationInfo);
+        }
+
         return true;
     }
 

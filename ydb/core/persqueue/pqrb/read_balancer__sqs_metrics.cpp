@@ -387,10 +387,10 @@ void TTopicSqsMetricsHandler::ApplyActionCounterMetrics(
         } else if (actionCounters.Success) {
             actionCounters.Success->Inc();
         }
-        if (actionCounters.Duration && durationMs > 0) {
+        if (actionCounters.Duration) {
             actionCounters.Duration->Collect(durationMs);
         }
-        if (actionCounters.WorkingDuration && workingDurationMs > 0) {
+        if (actionCounters.WorkingDuration) {
             actionCounters.WorkingDuration->Collect(workingDurationMs);
         }
         return;
@@ -409,7 +409,7 @@ void TTopicSqsMetricsHandler::ApplyActionCounterMetrics(
     } else if (actionCounters.Success) {
         actionCounters.Success->Inc();
     }
-    if (actionCounters.Duration && durationMs > 0) {
+    if (actionCounters.Duration) {
         actionCounters.Duration->Collect(durationMs);
     }
 }

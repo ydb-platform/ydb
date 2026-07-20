@@ -168,6 +168,12 @@ private:
 
     void OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev);
 
+    void ProcessProgressWatermarks(ui64 tabletId, const TEvKqpCompute::TEvScanData& msg);
+    // Returns true if currentTabletId was aborted (caller must not ack that shard).
+    bool TryAbortDominatedShards(const std::optional<ui64> currentTabletId = std::nullopt);
+    void InsertBestKey(TOwnedCellVec key);
+    void AddBestKeysFromArrow(const std::shared_ptr<arrow::Table>& table);
+
 private:
     void PassAway() override {
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
@@ -200,6 +206,23 @@ private:
 
     ui64 BlocksReceived = 0;
     ui64 TotalBytesReceived = 0;
+
+    // Top-N progress watermarks early abort (KqpCollectOlapWatermarks)
+    bool CollectProgressWatermarks = false;
+    bool SortDescending = false;
+    TVector<TString> KeyColumnNames;
+    THashMap<ui64, TOwnedCellVec> ShardWatermarks; // tabletId -> latest watermark
+    // Natural ASC order of keys; size capped at ItemsLimit (best N keys)
+    struct TKeyLess {
+        const TVector<NScheme::TTypeInfo>* Types = nullptr;
+        bool operator()(const TOwnedCellVec& a, const TOwnedCellVec& b) const {
+            AFL_ENSURE(Types);
+            AFL_ENSURE(a.size() == Types->size());
+            AFL_ENSURE(b.size() == Types->size());
+            return CompareTypedCellVectors(a.data(), b.data(), Types->data(), Types->size()) < 0;
+        }
+    };
+    std::multiset<TOwnedCellVec, TKeyLess> BestKeys;
 };
 
 }   // namespace NKikimr::NKqp::NScanPrivate

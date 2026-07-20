@@ -633,4 +633,36 @@ Y_UNIT_TEST_SUITE(SubColumnsDictStats) {
         auto restored = TDictStats::DeserializeFromBlob(NArrow::SerializeBatchNoCompression(legacyBatch));
         AssertStatsMatch(restored, rows);
     }
+
+    // Regression: a key living in the Others store carries a logical value_type in its stats (e.g. String),
+    // but Others data is physically always BinaryJson. Merge must fold an Others source as BinaryJson so a key
+    // promoted from Others into a separated column is typed BinaryJson (matching its data), not by its logical
+    // type - which would later abort on re-encode during compaction (UTF8_ERROR on a BinaryJson header byte).
+    Y_UNIT_TEST(MergeCoercesOthersSourceToBinaryJson) {
+        const NSubColumns::TSettings settings(4, 1024, 0, 0, TDataAdapterContainer::GetDefault());
+        const auto mkStats = [](const EValueType vt) {
+            auto b = TDictStats::MakeBuilder();
+            b.Add(TString("k"), 4, 40, IChunkedArray::EType::Array, vt);
+            return b.Finish();
+        };
+        auto empty = TDictStats::BuildEmpty();
+
+        // "k" typed String but coming from an Others source -> merged type coerced to BinaryJson.
+        auto othersK = mkStats(EValueType::String);
+        auto fromOthers = TDictStats::Merge({ &empty }, { &othersK }, settings, 4);
+        UNIT_ASSERT_VALUES_EQUAL(fromOthers.GetColumnsCount(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fromOthers.GetColumnNameString(0), "k");
+        UNIT_ASSERT_VALUES_EQUAL((ui32)fromOthers.GetValueType(0), (ui32)EValueType::BinaryJson);
+
+        // The same key from a columns (separated) source keeps its native String type.
+        auto columnsK = mkStats(EValueType::String);
+        auto fromColumns = TDictStats::Merge({ &columnsK }, { &empty }, settings, 4);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)fromColumns.GetValueType(0), (ui32)EValueType::String);
+
+        // Same key present in both a separated (String) and an Others source: collapses to BinaryJson.
+        auto columnsK2 = mkStats(EValueType::String);
+        auto othersK2 = mkStats(EValueType::String);
+        auto mixed = TDictStats::Merge({ &columnsK2 }, { &othersK2 }, settings, 8);
+        UNIT_ASSERT_VALUES_EQUAL((ui32)mixed.GetValueType(0), (ui32)EValueType::BinaryJson);
+    }
 }

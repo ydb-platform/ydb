@@ -184,6 +184,7 @@ void MergeReadInfoToTaskMeta(TTaskMeta& meta, ui64 shardId, TMaybe<TShardKeyRang
     FillReadInfo(meta, readSettings.ItemsLimit, readSettings.GetSorting());
     if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
         FillOlapReadInfo(meta, readSettings.ResultType, op.GetReadOlapRange());
+        meta.ReadInfo.CollectProgressWatermarks = readSettings.CollectProgressWatermarks;
     }
 
     if (!meta.Reads) {
@@ -350,6 +351,7 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
             *protoTaskMeta.AddKeyColumnTypeInfos() = columnType.TypeInfo ?
                 *columnType.TypeInfo :
                 NKikimrProto::TTypeInfo();
+            protoTaskMeta.AddKeyColumnNames(keyColumnName);
         }
 
         for (bool skipNullKey : stageInfo.Meta.SkipNullKeys) {
@@ -383,6 +385,9 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
             protoTaskMeta.SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
             if (task.Meta.HasEnableShardsSequentialScan()) {
                 protoTaskMeta.SetEnableShardsSequentialScan(task.Meta.GetEnableShardsSequentialScanUnsafe());
+            }
+            if (task.Meta.ReadInfo.CollectProgressWatermarks) {
+                protoTaskMeta.SetCollectProgressWatermarks(true);
             }
             protoTaskMeta.SetReadType(ReadTypeToProto(task.Meta.ReadInfo.ReadType));
 
@@ -1858,6 +1863,7 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
             auto& readInfo = newTask.Meta.ReadInfo;
             readInfo.SetSorting(static_cast<ERequestSorting>(meta.GetOptionalSorting()));
             readInfo.ItemsLimit = meta.GetItemsLimit();
+            readInfo.CollectProgressWatermarks = meta.GetCollectProgressWatermarks();
             readInfo.GroupByColumnNames.assign(meta.GetGroupByColumnNames().begin(), meta.GetGroupByColumnNames().end());
             readInfo.OlapProgram.Program = meta.GetOlapProgram().GetProgram();
 

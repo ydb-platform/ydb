@@ -49,6 +49,8 @@ public:
     NCommon::TConfSetting<bool, Static> KqpPushOlapProcess;
 
     NCommon::TConfSetting<bool, Static> KqpForceImmediateEffectsExecution;
+    /* Enable OLAP Top-N progress watermarks for early scan abort */
+    NCommon::TConfSetting<bool, Static> KqpCollectOlapWatermarks;
 
     /* Compile time */
     NCommon::TConfSetting<ui64, Static> _CommitPerShardKeysSizeLimitBytes;
@@ -170,6 +172,7 @@ public:
     bool DisableLlvmForUdfStages() const;
 
     bool HasOptDisableTopSort() const;
+    bool HasKqpCollectOlapWatermarks() const;
     bool HasOptDisableSqlInToJoin() const;
     bool HasOptEnableOlapPushdown() const;
     bool HasOptEnableOlapPushdownAggregate() const;

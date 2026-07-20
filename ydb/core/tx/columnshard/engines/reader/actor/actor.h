@@ -76,6 +76,9 @@ private:
     // Returns true if it was able to produce new batch
     bool ProduceResults() noexcept;
 
+    // Sends progress-only watermark when no row batch is ready
+    bool ProduceProgressWatermark() noexcept;
+
     void ContinueProcessing();
 
     void HandleScan(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) noexcept;
@@ -95,6 +98,8 @@ private:
     NKqp::TScanStatistics GetScanStats();
 
     TOwnedCellVec ConvertLastKey(const std::shared_ptr<arrow::RecordBatch>& lastReadKey);
+    // Last result row PK (padded) for Top-N BestKeys; last row is sort-worst in ASC/DESC batches.
+    TOwnedCellVec ExtractResultBoundaryKey(const std::shared_ptr<arrow::Table>& batch) const;
 
     class TScanStatsOwner: public NKqp::TEvKqpCompute::IShardScanStats {
     private:

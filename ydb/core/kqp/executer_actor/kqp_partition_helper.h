@@ -12,6 +12,7 @@ namespace NKikimr::NKqp {
 struct TPhysicalShardReadSettings: public NYql::TSortingOperator<NYql::ERequestSorting::ASC> {
     ui64 ItemsLimit = 0;
     NKikimr::NMiniKQL::TType* ResultType = nullptr;
+    bool CollectProgressWatermarks = false;
 };
 
 struct TPartitionPrunerConfig {

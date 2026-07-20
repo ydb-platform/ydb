@@ -16,6 +16,11 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType valueType);
 
+// Serialize a JSON value to text with round-trip-safe number formatting. WriteJson's default (10 significant
+// digits) rounds a near-max double up past the representable range, which SerializeToBinaryJson then rejects
+// as overflow; PREC_AUTO emits the shortest representation that re-parses to the same double.
+TString WriteJsonRoundTripSafe(const NJson::TJsonValue& json);
+
 
 // Dictionary encoding only enabled for the binary-backed types (BinaryJson blobs and raw strings).
 // Integral types would trade fixed-size position in array for fixed-size dictionary ref.

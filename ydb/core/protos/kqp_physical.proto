@@ -210,6 +210,8 @@ message TKqpPhyOpReadOlapRanges {
     repeated string GroupByColumnNames = 14;
     // If set, only data from the specified tablet will be processed
     optional uint64 TabletId = 15;
+    // When true, column shards report progress watermarks for Top-N early abort
+    optional bool CollectProgressWatermarks = 16;
 }
 
 message TKqpPhyOpReadRanges {

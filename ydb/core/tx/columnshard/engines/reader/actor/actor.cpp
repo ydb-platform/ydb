@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
@@ -400,11 +401,39 @@ bool TColumnShardScan::ProduceResults() noexcept {
         Result->LastKey = ConvertLastKey(CurrentLastReadKey->GetPKCursor()->ToBatch());
     }
     Result->LastCursorProto = CurrentLastReadKey->SerializeToProto();
+    // For Top-N watermarks: LastKey must be the last *result* row PK (sort-worst in the batch),
+    // not a portion-finish bound. Portion progress is reported via ProduceProgressWatermark().
+    if (ReadMetadataRange->GetCollectProgressWatermarks() && Result->ArrowBatch && Result->ArrowBatch->num_rows() > 0) {
+        auto boundary = ExtractResultBoundaryKey(Result->ArrowBatch);
+        if (!boundary.empty()) {
+            Result->LastKey = std::move(boundary);
+        }
+    }
     SendResult(false, false, result.GetSourceId());
     ScanIterator->OnSentDataFromInterval(result.GetNotFinishedInterval());
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"stage", "finished"},
         {"iterator", ScanIterator->DebugString()});
+    return true;
+}
+
+bool TColumnShardScan::ProduceProgressWatermark() noexcept {
+    if (Finished || !ScanIterator || !ChunksLimiter.HasMore()) {
+        return false;
+    }
+    if (!ReadMetadataRange->GetCollectProgressWatermarks() || ReadMetadataRange->GetFakeSort() || !ReadMetadataRange->IsSorted()) {
+        return false;
+    }
+    auto keyBatch = ScanIterator->PopProgressWatermark();
+    if (!keyBatch) {
+        return false;
+    }
+    // Progress-only message: do not carry over byte accounting from a prior data pack
+    Rows = 0;
+    Bytes = 0;
+    MakeResult(0);
+    Result->ProgressWatermark = ConvertLastKey(keyBatch);
+    SendResult(false, false, 0);
     return true;
 }
 
@@ -417,6 +446,10 @@ void TColumnShardScan::ContinueProcessing() {
     }
     // Send new results if there is available capacity
     while (ScanIterator && ProduceResults()) {
+    }
+    // At most one progress watermark per ack window (MaxChunksCount == 1)
+    if (ScanIterator && AckReceivedInstant) {
+        ProduceProgressWatermark();
     }
     if (!!AckReceivedInstant) {
         LastResultInstant = TMonotonic::Now();
@@ -445,6 +478,9 @@ void TColumnShardScan::ContinueProcessing() {
                 } else if (!*hasMoreData) {
                     break;
                 }
+            }
+            if (ScanIterator && AckReceivedInstant) {
+                ProduceProgressWatermark();
             }
         }
     }
@@ -490,6 +526,61 @@ NKikimr::TOwnedCellVec TColumnShardScan::ConvertLastKey(const std::shared_ptr<ar
 
     Y_ABORT_UNLESS(singleRowWriter.Done);
     return singleRowWriter.Row;
+}
+
+NKikimr::TOwnedCellVec TColumnShardScan::ExtractResultBoundaryKey(const std::shared_ptr<arrow::Table>& batch) const {
+    if (!batch || batch->num_rows() == 0 || KeyYqlSchema.empty()) {
+        return {};
+    }
+
+    size_t presentPrefix = 0;
+    for (; presentPrefix < KeyYqlSchema.size(); ++presentPrefix) {
+        if (batch->schema()->GetFieldIndex(std::string(KeyYqlSchema[presentPrefix].first)) < 0) {
+            break;
+        }
+    }
+    if (presentPrefix == 0) {
+        return {};
+    }
+
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> presentSchema(KeyYqlSchema.begin(), KeyYqlSchema.begin() + presentPrefix);
+
+    struct TSingeRowWriter: public IRowWriter {
+        TOwnedCellVec Row;
+        bool Done = false;
+
+        void AddRow(const TConstArrayRef<TCell>& row) override {
+            Y_ABORT_UNLESS(!Done);
+            Row = TOwnedCellVec::Make(row);
+            Done = true;
+        }
+    } writer;
+
+    auto recordBatch = NArrow::ToBatch(batch);
+    if (!recordBatch || recordBatch->num_rows() == 0) {
+        return {};
+    }
+    // Last row is sort-worst for both ASC and DESC ordered result batches.
+    auto lastRow = recordBatch->Slice(recordBatch->num_rows() - 1, 1);
+    NArrow::TArrowToYdbConverter converter(presentSchema, writer, false, false);
+    TString err;
+    if (!converter.Process(*lastRow, err) || !writer.Done) {
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "ExtractResultBoundaryKey failed", {"error", err});
+        return {};
+    }
+
+    if (presentPrefix == KeyYqlSchema.size()) {
+        return writer.Row;
+    }
+    TVector<TCell> padded;
+    padded.reserve(KeyYqlSchema.size());
+    for (size_t i = 0; i < writer.Row.size(); ++i) {
+        padded.push_back(writer.Row[i]);
+    }
+    while (padded.size() < KeyYqlSchema.size()) {
+        padded.emplace_back();
+    }
+    return TOwnedCellVec::Make(padded);
 }
 
 bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch, ui64 sourceId) {
@@ -601,6 +692,7 @@ void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish s
     AFL_VERIFY(StartInstant);
     FinishInstant = TMonotonic::Now();
     ScanCountersPool.OnScanFinished(status, *FinishInstant - *StartInstant);
+    NYDBTest::TControllers::GetColumnShardController()->OnScanFinished((ui32)status);
     ReportStats();
     YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"event", "scan_finish"},

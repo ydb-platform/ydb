@@ -120,8 +120,10 @@ public:
     TDictStats BuildStats(const TSettings& settings, const ui32 recordsCount) const {
         TDictStats::TBuilder statBuilder;
         for (auto&& i : UsedKeys) {
+            // The Others store always holds/reads BinaryJson, so its stats record value_type BinaryJson
+            // regardless of the values' logical type (see TDictStats::Merge / SplitByVolume).
             statBuilder.Add(i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize(),
-                i.second.GetAccessorType(settings, recordsCount), i.second.GetValueType());
+                i.second.GetAccessorType(settings, recordsCount), EValueType::BinaryJson);
         }
         return statBuilder.Finish();
     }

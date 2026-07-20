@@ -1037,6 +1037,9 @@ private:
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
                 FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
+                if (Config->HasKqpCollectOlapWatermarks()) {
+                    tableOp.MutableReadOlapRange()->SetCollectProgressWatermarks(true);
+                }
                 if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
                     tableOp.SetEstimatedRows(stats->Nrows);
                 } else if (tableMeta->RecordsCount) {
@@ -1056,6 +1059,9 @@ private:
                 FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
+                if (Config->HasKqpCollectOlapWatermarks()) {
+                    tableOp.MutableReadOlapRange()->SetCollectProgressWatermarks(true);
+                }
                 if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
                     tableOp.SetEstimatedRows(stats->Nrows);
                 } else if (tableMeta->RecordsCount) {

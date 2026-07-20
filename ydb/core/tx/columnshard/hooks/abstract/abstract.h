@@ -108,6 +108,9 @@ protected:
     virtual void DoOnAfterGCAction(const NColumnShard::TColumnShard& /*shard*/, const NOlap::IBlobsGCAction& /*action*/) {
     }
 
+    virtual void DoOnScanFinished(const ui32 /*statusFinish*/) {
+    }
+
     virtual void DoOnDataSharingFinished(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
     }
 
@@ -333,6 +336,10 @@ public:
 
     void OnAfterGCAction(const NColumnShard::TColumnShard& shard, const NOlap::IBlobsGCAction& action) {
         DoOnAfterGCAction(shard, action);
+    }
+
+    void OnScanFinished(const ui32 statusFinish) {
+        DoOnScanFinished(statusFinish);
     }
 
     void OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& result) {

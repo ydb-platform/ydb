@@ -969,6 +969,446 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         CompareYson(expectedYson, ysonResult);
     }
 
+    Y_UNIT_TEST(PKDescScanWithOlapWatermarks) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 128);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto selectQuery = TString(R"(
+            --!syntax_v1
+            PRAGMA kikimr.KqpCollectOlapWatermarks = "true";
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable` ORDER BY `timestamp` DESC LIMIT 4;
+        )");
+
+        auto it = tableClient.StreamExecuteScanQuery(selectQuery).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        auto ysonResult = CollectStreamResult(it).ResultSetYson;
+        auto expectedYson = TString(R"([
+            [1000127u];
+            [1000126u];
+            [1000125u];
+            [1000124u]
+        ])");
+        CompareYson(expectedYson, ysonResult);
+
+        // Filtered Top-N with watermarks must match baseline without pragma
+        auto filteredWithPragma = TString(R"(
+            --!syntax_v1
+            PRAGMA kikimr.KqpCollectOlapWatermarks = "true";
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable`
+            WHERE resource_id = "5"u
+            ORDER BY `timestamp` DESC LIMIT 2;
+        )");
+        auto filteredWithoutPragma = TString(R"(
+            --!syntax_v1
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable`
+            WHERE resource_id = "5"u
+            ORDER BY `timestamp` DESC LIMIT 2;
+        )");
+
+        auto itWith = tableClient.StreamExecuteScanQuery(filteredWithPragma).GetValueSync();
+        UNIT_ASSERT_C(itWith.IsSuccess(), itWith.GetIssues().ToString());
+        auto withYson = CollectStreamResult(itWith).ResultSetYson;
+
+        auto itWithout = tableClient.StreamExecuteScanQuery(filteredWithoutPragma).GetValueSync();
+        UNIT_ASSERT_C(itWithout.IsSuccess(), itWithout.GetIssues().ToString());
+        auto withoutYson = CollectStreamResult(itWithout).ResultSetYson;
+
+        CompareYson(withoutYson, withYson);
+    }
+
+    namespace {
+        TCollectedStreamResult RunOlapTopNQuery(NYdb::NTable::TTableClient& tableClient, const TString& query) {
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            return CollectStreamResult(it);
+        }
+
+        TString MakeWatermarkTopNQuery(bool withPragma, const TString& whereClause, ui32 limit,
+            bool ascending = false, const TString& columns = "`timestamp`")
+        {
+            TStringBuilder sb;
+            sb << "--!syntax_v1\n";
+            if (withPragma) {
+                sb << "PRAGMA kikimr.KqpCollectOlapWatermarks = \"true\";\n";
+            }
+            sb << "SELECT " << columns << " FROM `/Root/olapStore/olapTable`\n";
+            if (whereClause) {
+                sb << "WHERE " << whereClause << "\n";
+            }
+            sb << "ORDER BY `timestamp` " << (ascending ? "ASC" : "DESC") << " LIMIT " << limit << ";\n";
+            return sb;
+        }
+
+        struct TWatermarkQueryStats {
+            TCollectedStreamResult Result;
+            TDuration WallTime;
+            i64 FilteredRecords = 0;
+            i64 ExternalAborts = 0;
+            i64 ScanSuccess = 0;
+        };
+
+        TWatermarkQueryStats RunOlapTopNQueryWithStats(NYdb::NTable::TTableClient& tableClient, const TString& query,
+            NYDBTest::TControllers::TGuard<NYDBTest::NColumnShard::TController>& csController)
+        {
+            const i64 filteredBefore = csController->GetFilteredRecordsCount().Val();
+            const i64 abortsBefore = csController->GetScanFinishedExternalAbort().Val();
+            const i64 successBefore = csController->GetScanFinishedSuccess().Val();
+            const TInstant t0 = TInstant::Now();
+            auto result = RunOlapTopNQuery(tableClient, query);
+            const TInstant t1 = TInstant::Now();
+            TWatermarkQueryStats stats;
+            stats.Result = std::move(result);
+            stats.WallTime = t1 - t0;
+            stats.FilteredRecords = csController->GetFilteredRecordsCount().Val() - filteredBefore;
+            stats.ExternalAborts = csController->GetScanFinishedExternalAbort().Val() - abortsBefore;
+            stats.ScanSuccess = csController->GetScanFinishedSuccess().Val() - successBefore;
+            return stats;
+        }
+    }
+
+    // Sparse matches across many shards: LIMIT is larger than per-shard average but smaller than total.
+    // Watermarks must produce the same Top-N as the baseline path.
+    Y_UNIT_TEST(OlapWatermarksSparseAcrossShards) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        const ui32 numShards = 8;
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", numShards, numShards);
+
+        // ~20 rows/shard on average; collect LIMIT 50 from the global top
+        for (ui32 i = 0; i < 20; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 2000000 + i * 1000, 80);
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        const ui32 limit = 50;
+        auto withPragma = MakeWatermarkTopNQuery(true, "", limit);
+        auto withoutPragma = MakeWatermarkTopNQuery(false, "", limit);
+
+        auto baseline = RunOlapTopNQuery(tableClient, withoutPragma);
+        auto withWm = RunOlapTopNQuery(tableClient, withPragma);
+        UNIT_ASSERT_VALUES_EQUAL(baseline.RowsCount, limit);
+        UNIT_ASSERT_VALUES_EQUAL(withWm.RowsCount, limit);
+        CompareYson(baseline.ResultSetYson, withWm.ResultSetYson);
+    }
+
+    // Selective filter leaves some shards with no matching rows. After Top-N is filled from
+    // shards that have matches, empty/slow shards should be externally aborted via watermarks.
+    Y_UNIT_TEST(OlapWatermarksEmptyShardEarlyStop) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        const ui32 numShards = 6;
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", numShards, numShards);
+
+        // Large amount of non-matching noise so empty shards stay busy while Top-N is collected
+        for (ui32 i = 0; i < 80; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000, 1000000 + i * 500, 300);
+        }
+        // Matching rows (resource_id starts at 0) with higher timestamps so they win Top-N DESC
+        for (ui32 i = 0; i < 15; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 5000000 + i * 100, 50);
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        // resource_id = "0" matches only the first row of each matching batch
+        const TString where = "resource_id = \"0\"u";
+        const ui32 limit = 5;
+
+        auto withoutPragma = MakeWatermarkTopNQuery(false, where, limit);
+        auto withPragma = MakeWatermarkTopNQuery(true, where, limit);
+
+        const auto baseline = RunOlapTopNQuery(tableClient, withoutPragma);
+        const i64 abortsBefore = csController->GetScanFinishedExternalAbort().Val();
+        const i64 successBefore = csController->GetScanFinishedSuccess().Val();
+        const auto withWm = RunOlapTopNQuery(tableClient, withPragma);
+        const i64 abortsAfter = csController->GetScanFinishedExternalAbort().Val();
+        const i64 successAfter = csController->GetScanFinishedSuccess().Val();
+
+        UNIT_ASSERT_VALUES_EQUAL(baseline.RowsCount, limit);
+        UNIT_ASSERT_VALUES_EQUAL(withWm.RowsCount, limit);
+        CompareYson(baseline.ResultSetYson, withWm.ResultSetYson);
+        UNIT_ASSERT_C(abortsAfter > abortsBefore,
+            TStringBuilder() << "expected ExternalAbort after watermark Top-N; before=" << abortsBefore
+                             << " after=" << abortsAfter
+                             << " success_delta=" << (successAfter - successBefore));
+    }
+
+    // Few matches per shard; LIMIT requires aggregating across shards. Correctness vs baseline,
+    // and early abort of dominated shards once the global Top-N boundary is known.
+    Y_UNIT_TEST(OlapWatermarksFewPerShardTotalCollected) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        const ui32 numShards = 8;
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", numShards, numShards);
+
+        // Noise rows that do not match the filter
+        for (ui32 i = 0; i < 30; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 500, 1000000 + i * 400, 150);
+        }
+        // Sparse matches: resource_id = "7" appears once per batch (pathIdBegin=7, first row)
+        for (ui32 i = 0; i < 24; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 7, 3000000 + i * 200, 30);
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        const TString where = "resource_id = \"7\"u";
+        // 24 matching rows total (~few per shard); ask for 15
+        const ui32 limit = 15;
+
+        auto withoutPragma = MakeWatermarkTopNQuery(false, where, limit);
+        auto withPragma = MakeWatermarkTopNQuery(true, where, limit);
+
+        const auto baseline = RunOlapTopNQuery(tableClient, withoutPragma);
+        const i64 abortsBefore = csController->GetScanFinishedExternalAbort().Val();
+        const auto withWm = RunOlapTopNQuery(tableClient, withPragma);
+        const i64 abortsAfter = csController->GetScanFinishedExternalAbort().Val();
+
+        UNIT_ASSERT_VALUES_EQUAL(baseline.RowsCount, limit);
+        UNIT_ASSERT_VALUES_EQUAL(withWm.RowsCount, limit);
+        CompareYson(baseline.ResultSetYson, withWm.ResultSetYson);
+        UNIT_ASSERT_C(abortsAfter > abortsBefore,
+            TStringBuilder() << "expected ExternalAbort for sparse cross-shard Top-N; before=" << abortsBefore
+                             << " after=" << abortsAfter);
+    }
+
+    // ASC Top-N with watermarks must match baseline (symmetric to DESC path).
+    Y_UNIT_TEST(OlapWatermarksAscLimitCorrectness) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 4, 4);
+        for (ui32 i = 0; i < 10; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 100, 40);
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        auto withPragma = TString(R"(
+            --!syntax_v1
+            PRAGMA kikimr.KqpCollectOlapWatermarks = "true";
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable` ORDER BY `timestamp` ASC LIMIT 10;
+        )");
+        auto withoutPragma = TString(R"(
+            --!syntax_v1
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable` ORDER BY `timestamp` ASC LIMIT 10;
+        )");
+
+        auto baseline = RunOlapTopNQuery(tableClient, withoutPragma);
+        auto withWm = RunOlapTopNQuery(tableClient, withPragma);
+        UNIT_ASSERT_VALUES_EQUAL(baseline.RowsCount, 10);
+        UNIT_ASSERT_VALUES_EQUAL(withWm.RowsCount, 10);
+        CompareYson(baseline.ResultSetYson, withWm.ResultSetYson);
+    }
+
+    // Fewer matching rows than LIMIT: return all matches, do not hang or invent rows.
+    Y_UNIT_TEST(OlapWatermarksFewerMatchesThanLimit) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 4, 4);
+        for (ui32 i = 0; i < 20; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000, 1000000 + i * 200, 100);
+        }
+        // Exactly 3 matching rows (resource_id = "0" once per batch)
+        for (ui32 i = 0; i < 3; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 4000000 + i * 50, 20);
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        const TString where = "resource_id = \"0\"u";
+        const ui32 limit = 100;
+        auto baseline = RunOlapTopNQuery(tableClient, MakeWatermarkTopNQuery(false, where, limit));
+        auto withWm = RunOlapTopNQuery(tableClient, MakeWatermarkTopNQuery(true, where, limit));
+        UNIT_ASSERT_VALUES_EQUAL(baseline.RowsCount, 3);
+        UNIT_ASSERT_VALUES_EQUAL(withWm.RowsCount, 3);
+        CompareYson(baseline.ResultSetYson, withWm.ResultSetYson);
+    }
+
+    // No matching rows: empty result with pragma on.
+    Y_UNIT_TEST(OlapWatermarksZeroMatches) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 4, 4);
+        for (ui32 i = 0; i < 15; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000, 1000000 + i * 300, 80);
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        const TString where = "resource_id = \"0\"u";
+        auto baseline = RunOlapTopNQuery(tableClient, MakeWatermarkTopNQuery(false, where, 10));
+        auto withWm = RunOlapTopNQuery(tableClient, MakeWatermarkTopNQuery(true, where, 10));
+        UNIT_ASSERT_VALUES_EQUAL(baseline.RowsCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(withWm.RowsCount, 0);
+        CompareYson(baseline.ResultSetYson, withWm.ResultSetYson);
+    }
+
+    // LIMIT 1 domination edge: correct single row + early abort under skew.
+    Y_UNIT_TEST(OlapWatermarksLimitOne) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        const ui32 numShards = 6;
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", numShards, numShards);
+        for (ui32 i = 0; i < 40; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000, 1000000 + i * 400, 200);
+        }
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 9000000, 30);
+
+        auto tableClient = kikimr.GetTableClient();
+        const TString where = "resource_id = \"0\"u";
+        auto without = RunOlapTopNQueryWithStats(tableClient, MakeWatermarkTopNQuery(false, where, 1), csController);
+        auto withWm = RunOlapTopNQueryWithStats(tableClient, MakeWatermarkTopNQuery(true, where, 1), csController);
+
+        UNIT_ASSERT_VALUES_EQUAL(without.Result.RowsCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(withWm.Result.RowsCount, 1);
+        CompareYson(without.Result.ResultSetYson, withWm.Result.ResultSetYson);
+        UNIT_ASSERT_C(withWm.ExternalAborts > 0,
+            TStringBuilder() << "LIMIT 1 skewed scan should abort dominated shards; aborts=" << withWm.ExternalAborts);
+    }
+
+    // Without pragma, the same skewed layout must not use ExternalAbort.
+    Y_UNIT_TEST(OlapWatermarksPragmaOffNoAbort) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        const ui32 numShards = 6;
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", numShards, numShards);
+        for (ui32 i = 0; i < 50; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000, 1000000 + i * 500, 250);
+        }
+        for (ui32 i = 0; i < 10; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 5000000 + i * 100, 40);
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        const TString where = "resource_id = \"0\"u";
+        auto stats = RunOlapTopNQueryWithStats(tableClient, MakeWatermarkTopNQuery(false, where, 5), csController);
+        UNIT_ASSERT_VALUES_EQUAL(stats.Result.RowsCount, 5);
+        UNIT_ASSERT_VALUES_EQUAL_C(stats.ExternalAborts, 0,
+            TStringBuilder() << "pragma-off scan must not ExternalAbort; got=" << stats.ExternalAborts
+                             << " success=" << stats.ScanSuccess);
+    }
+
+    // Same timestamp, different uid: pragma on/off must agree on full-PK Top-N.
+    // Keep the dataset small (no noise) so early-abort races do not mask correctness.
+    Y_UNIT_TEST(OlapWatermarksPkPrefixTies) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 4, 4);
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto insert = queryClient.ExecuteQuery(R"(
+            --!syntax_v1
+            INSERT INTO `/Root/olapStore/olapTable` (timestamp, uid, resource_id) VALUES
+                (Timestamp('1970-01-01T00:00:05.000000Z'), 'uid_tie_c', '0'),
+                (Timestamp('1970-01-01T00:00:05.000000Z'), 'uid_tie_a', '0'),
+                (Timestamp('1970-01-01T00:00:05.000000Z'), 'uid_tie_b', '0'),
+                (Timestamp('1970-01-01T00:00:06.000000Z'), 'uid_tie_d', '0'),
+                (Timestamp('1970-01-01T00:00:04.000000Z'), 'uid_tie_e', '0');
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(insert.IsSuccess(), insert.GetIssues().ToString());
+
+        auto makeQuery = [](bool withPragma, ui32 limit) {
+            TStringBuilder sb;
+            sb << "--!syntax_v1\n";
+            if (withPragma) {
+                sb << "PRAGMA kikimr.KqpCollectOlapWatermarks = \"true\";\n";
+            }
+            sb << "SELECT `timestamp`, `uid` FROM `/Root/olapStore/olapTable`\n"
+               << "WHERE resource_id = \"0\"u\n"
+               << "ORDER BY `timestamp` DESC, `uid` DESC LIMIT " << limit << ";\n";
+            return sb;
+        };
+
+        auto tableClient = kikimr.GetTableClient();
+        auto allRows = RunOlapTopNQuery(tableClient, makeQuery(false, 100));
+        UNIT_ASSERT_VALUES_EQUAL_C(allRows.RowsCount, 5, allRows.ResultSetYson);
+
+        auto without = RunOlapTopNQuery(tableClient, makeQuery(false, 4));
+        auto withWm = RunOlapTopNQuery(tableClient, makeQuery(true, 4));
+        UNIT_ASSERT_VALUES_EQUAL(without.RowsCount, 4);
+        UNIT_ASSERT_VALUES_EQUAL(withWm.RowsCount, 4);
+        CompareYson(without.ResultSetYson, withWm.ResultSetYson);
+    }
+
+    // Motivating skew: few high matches + huge low non-matching volume across shards.
+    // Stable benefit signals: ExternalAbort + fewer ScanSuccess. Wall time is logged only
+    // (single-shot UT timings are too noisy for a hard assert).
+    Y_UNIT_TEST(OlapWatermarksSkewedEarlyStopBenefit) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        const ui32 numShards = 8;
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", numShards, numShards);
+
+        for (ui32 i = 0; i < 120; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000, 1000000 + i * 400, 400);
+        }
+        for (ui32 i = 0; i < 20; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 8000000 + i * 100, 40);
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        const TString where = "resource_id = \"0\"u";
+        const ui32 limit = 10;
+        const auto withoutQuery = MakeWatermarkTopNQuery(false, where, limit);
+        const auto withQuery = MakeWatermarkTopNQuery(true, where, limit);
+
+        Y_UNUSED(RunOlapTopNQuery(tableClient, withoutQuery));
+
+        const auto without = RunOlapTopNQueryWithStats(tableClient, withoutQuery, csController);
+        const auto withWm = RunOlapTopNQueryWithStats(tableClient, withQuery, csController);
+
+        UNIT_ASSERT_VALUES_EQUAL(without.Result.RowsCount, limit);
+        UNIT_ASSERT_VALUES_EQUAL(withWm.Result.RowsCount, limit);
+        CompareYson(without.Result.ResultSetYson, withWm.Result.ResultSetYson);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(without.ExternalAborts, 0,
+            TStringBuilder() << "baseline must not ExternalAbort; got=" << without.ExternalAborts);
+        UNIT_ASSERT_C(withWm.ExternalAborts > 0,
+            TStringBuilder() << "watermark path must ExternalAbort dominated shards; aborts=" << withWm.ExternalAborts);
+
+        Cerr << "OlapWatermarksSkewedEarlyStopBenefit"
+             << " success_without=" << without.ScanSuccess
+             << " success_with=" << withWm.ScanSuccess
+             << " abort_with=" << withWm.ExternalAborts
+             << " wall_without_ms=" << without.WallTime.MilliSeconds()
+             << " wall_with_ms=" << withWm.WallTime.MilliSeconds()
+             << Endl;
+
+        UNIT_ASSERT_C(withWm.ScanSuccess < without.ScanSuccess,
+            TStringBuilder() << "watermark early-stop must finish fewer shards with Success; without="
+                             << without.ScanSuccess << " with=" << withWm.ScanSuccess
+                             << " aborts=" << withWm.ExternalAborts);
+    }
+
     Y_UNIT_TEST(CheckEarlyFilterOnEmptySelect) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);

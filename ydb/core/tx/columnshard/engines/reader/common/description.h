@@ -35,6 +35,7 @@ private:
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
     YDB_ACCESSOR(ERequestSorting, Sorting, ERequestSorting::NONE);
     YDB_ACCESSOR_DEF(bool, FakeSort);
+    YDB_ACCESSOR(bool, CollectProgressWatermarks, false);
     YDB_READONLY(ui64, TabletId, 0);
 
 public:

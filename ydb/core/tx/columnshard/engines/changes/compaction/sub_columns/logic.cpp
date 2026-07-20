@@ -15,18 +15,19 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
     for (auto&& i : input) {
         OrderedIterators.emplace_back(NSubColumns::TChunksIterator(i, Context.GetLoader(), RemapKeyIndex, OrderedIterators.size()));
     }
-    std::vector<const TDictStats*> stats;
+    std::vector<const TDictStats*> columnsStats;
+    std::vector<const TDictStats*> othersStats;
     ui32 statRecordsCount = 0;
     for (auto&& i : OrderedIterators) {
         if (i.GetCurrentSubColumnsArray()) {
-            stats.emplace_back(&i.GetCurrentSubColumnsArray()->GetColumnsData().GetStats());
-            stats.emplace_back(&i.GetCurrentSubColumnsArray()->GetOthersData().GetStats());
+            columnsStats.emplace_back(&i.GetCurrentSubColumnsArray()->GetColumnsData().GetStats());
+            othersStats.emplace_back(&i.GetCurrentSubColumnsArray()->GetOthersData().GetStats());
             statRecordsCount += i.GetCurrentSubColumnsArray()->GetRecordsCount();
         }
     }
-    AFL_VERIFY(stats.size());
+    AFL_VERIFY(columnsStats.size());
     AFL_VERIFY(statRecordsCount);
-    auto commonStats = TDictStats::Merge(stats, GetSettings(), statRecordsCount);
+    auto commonStats = TDictStats::Merge(columnsStats, othersStats, GetSettings(), statRecordsCount);
     auto splitted = commonStats.SplitByVolume(GetSettings(), statRecordsCount);
     ResultColumnStats = splitted.ExtractColumns();
     ResultColumnStats->CreateJsonPathAccessorTrieCache();

@@ -47,6 +47,8 @@ private:
 
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(
         const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
+        // Limit-sorted resume is source/record based; PK cursor stays empty so portion-finish
+        // bounds are reported only via progress watermarks (not as fake result keys).
         if (AppDataVerified().ColumnShardConfig.GetEnableCursorV1()) {
             return std::make_shared<TSimpleScanCursor>(nullptr, source->GetSourceIdx(), readyRecords, source->GetPortionIdOptional());
         } else {

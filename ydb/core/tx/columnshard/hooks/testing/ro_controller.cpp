@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_tables.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -20,6 +21,15 @@ bool TReadOnlyController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow:
         FilteredRecordsCount.Add(batch->num_rows());
     }
     return true;
+}
+
+void TReadOnlyController::DoOnScanFinished(const ui32 statusFinish) {
+    using EStatus = NKikimr::NColumnShard::TScanCounters::EStatusFinish;
+    if (statusFinish == (ui32)EStatus::Success) {
+        ScanFinishedSuccess.Inc();
+    } else if (statusFinish == (ui32)EStatus::ExternalAbort) {
+        ScanFinishedExternalAbort.Inc();
+    }
 }
 
 bool TReadOnlyController::DoOnWriteIndexComplete(

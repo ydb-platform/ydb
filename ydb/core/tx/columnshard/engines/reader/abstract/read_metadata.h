@@ -25,6 +25,7 @@ public:
 private:
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
     YDB_ACCESSOR_DEF(bool, FakeSort);
+    YDB_ACCESSOR(bool, CollectProgressWatermarks, false);
     std::optional<ui64> FilteredCountLimit;
     std::optional<ui64> RequestedLimit;
     const ESorting Sorting = ESorting::ASC;   // Sorting inside returned batches

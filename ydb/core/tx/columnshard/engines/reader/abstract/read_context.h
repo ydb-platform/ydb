@@ -71,7 +71,39 @@ private:
     std::shared_ptr<NArrow::NSSA::IColumnResolver> Resolver;
     std::shared_ptr<NLWTrace::TOrbit> ScanOrbit;
 
+    mutable TMutex ProgressWatermarksMutex;
+    std::deque<std::shared_ptr<arrow::RecordBatch>> ProgressWatermarks;
+    bool ProgressWatermarkPending = false;
+
 public:
+    void EnqueueProgressWatermark(const std::shared_ptr<arrow::RecordBatch>& keyBatch) {
+        if (!keyBatch || !ReadMetadata->GetCollectProgressWatermarks() || ReadMetadata->GetFakeSort() || !ReadMetadata->IsSorted()) {
+            return;
+        }
+        TGuard<TMutex> g(ProgressWatermarksMutex);
+        // Keep at most one outstanding coarse watermark (latest frontier wins)
+        ProgressWatermarks.clear();
+        ProgressWatermarks.emplace_back(keyBatch);
+        ProgressWatermarkPending = true;
+    }
+
+    std::shared_ptr<arrow::RecordBatch> PopProgressWatermark() {
+        TGuard<TMutex> g(ProgressWatermarksMutex);
+        if (ProgressWatermarks.empty()) {
+            ProgressWatermarkPending = false;
+            return nullptr;
+        }
+        auto result = std::move(ProgressWatermarks.front());
+        ProgressWatermarks.pop_front();
+        ProgressWatermarkPending = !ProgressWatermarks.empty();
+        return result;
+    }
+
+    bool HasProgressWatermark() const {
+        TGuard<TMutex> g(ProgressWatermarksMutex);
+        return ProgressWatermarkPending || !ProgressWatermarks.empty();
+    }
+
     const NArrow::NSSA::IColumnResolver* GetResolver() const {
         AFL_VERIFY(!!Resolver);
         return Resolver.get();

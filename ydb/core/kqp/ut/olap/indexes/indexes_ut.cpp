@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
 #include <ydb/core/kqp/ut/olap/combinatory/variator.h>
 #include <ydb/core/kqp/ut/olap/helpers/local.h>
+#include <ydb/core/kqp/ut/olap/helpers/plan_step.h>
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -161,6 +162,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
         csController->WaitActualization(TDuration::Seconds(10));
+        // Make the just-actualized portions (with index data) visible to the following scan.
+        AdvancePlanStep(kikimr);
         {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(
@@ -2036,6 +2039,8 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
         csController->WaitActualization(TDuration::Seconds(10));
+        // Make the just-actualized portions (with index data) visible to the following scan.
+        AdvancePlanStep(kikimr);
         {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(

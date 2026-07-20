@@ -17,7 +17,7 @@ config:
   host_configs: # the list of available host configurations in the cluster.
   - host_config_id: 1
     drive:
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01    # path of the first disk in the host configration.
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01    # path of the first disk in the host configuration.
       type: SSD                                       # kind of the disk: available kinds are SSD, NVME, HDD
     - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
       type: SSD

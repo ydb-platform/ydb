@@ -1,0 +1,128 @@
+{
+    "Plan" : {
+        "Plans" : [
+            {
+                "PlanNodeId" : 8,
+                "Plans" : [
+                    {
+                        "PlanNodeId" : 7,
+                        "Subplan Name" : "CTE Stage_3",
+                        "Plans" : [
+                            {
+                                "PlanNodeId" : 6,
+                                "Operators" : [
+                                    {
+                                        "Inputs" : [ ],
+                                        "ExternalDataSource" : "pq",
+                                        "Name" : "Read pq",
+                                        "SourceType" : "pq"
+                                    }
+                                ],
+                                "Node Type" : "Source"
+                            }
+                        ],
+                        "Node Type" : "Stage",
+                        "Parent Relationship" : "InitPlan"
+                    }
+                ],
+                "Operators" : [
+                    {
+                        "Inputs" : [ ],
+                        "ExternalDataSource" : "pq",
+                        "Name" : "Write pq",
+                        "SinkType" : "pq"
+                    }
+                ],
+                "Node Type" : "Sink"
+            },
+            {
+                "PlanNodeId" : 5,
+                "Plans" : [
+                    {
+                        "PlanNodeId" : 4,
+                        "Plans" : [
+                            {
+                                "PlanNodeId" : 3,
+                                "Plans" : [
+                                    {
+                                        "PlanNodeId" : 2,
+                                        "Plans" : [
+                                            {
+                                                "PlanNodeId" : 1,
+                                                "Node Type" : "UnionAll",
+                                                "PlanNodeType" : "Connection",
+                                                "CTE Name" : "Stage_3"
+                                            }
+                                        ],
+                                        "Node Type" : "Stage"
+                                    }
+                                ],
+                                "HashFunc" : "HashV2",
+                                "Node Type" : "HashShuffle",
+                                "KeyColumns" : [
+                                    "k"
+                                ],
+                                "PlanNodeType" : "Connection"
+                            }
+                        ],
+                        "Node Type" : "Stage"
+                    }
+                ],
+                "Operators" : [
+                    {
+                        "Inputs" : [ ],
+                        "ExternalDataSource" : "pq",
+                        "Name" : "Write pq",
+                        "SinkType" : "pq"
+                    }
+                ],
+                "Node Type" : "Sink"
+            }
+        ],
+        "Node Type" : "Query",
+        "Stats" : {
+            "ResourcePoolId" : "default"
+        },
+        "PlanNodeType" : "Query"
+    },
+    "meta" : {
+        "version" : "0.2",
+        "type" : "query"
+    },
+    "tables" : [ ],
+    "SimplifiedPlan" : {
+        "PlanNodeId" : 0,
+        "Plans" : [
+            {
+                "PlanNodeId" : 1,
+                "Operators" : [
+                    {
+                        "ExternalDataSource" : "pq",
+                        "Name" : "Write pq",
+                        "SinkType" : "pq"
+                    }
+                ],
+                "Node Type" : "Write pq"
+            },
+            {
+                "PlanNodeId" : 2,
+                "Operators" : [
+                    {
+                        "ExternalDataSource" : "pq",
+                        "Name" : "Write pq",
+                        "SinkType" : "pq"
+                    }
+                ],
+                "Node Type" : "Write pq"
+            }
+        ],
+        "Node Type" : "Query",
+        "OptimizerStats" : {
+            "EquiJoinsCount" : 0,
+            "CBOTreesOptimized" : 0,
+            "JoinsCount" : 0,
+            "CBOTreesTotal" : 0
+        },
+        "PlanNodeType" : "Query"
+    }
+}

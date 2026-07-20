@@ -52,6 +52,7 @@ jobs:
           params=(
             --stat
             --link-threads 12
+            --no-bazel-remote-store
             -DCONSISTENT_DEBUG
             --no-dir-outputs
             --build-all
@@ -134,7 +135,7 @@ jobs:
             echo "### Cache policy"
             echo "- Removed \`~/.ya\` and repo \`.ya\` before build"
             echo "- Cleared ccache if present"
-            echo "- No bazel-remote / dist cache"
+            echo "- Passed \`--no-bazel-remote-store\` (overrides \`build/internal/ya.conf\`)"
             echo "- No \`--cache-tests\`"
             echo ""
             echo "### ya make stat (tail)"

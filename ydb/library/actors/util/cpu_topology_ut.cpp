@@ -229,6 +229,33 @@ Y_UNIT_TEST_SUITE(CpuTopology) {
         AssertGroup(topology->PlacementGroups, 0, 0, "0");
     }
 
+    Y_UNIT_TEST(CpusetEffectiveCpusFiltersTopologyMasks) {
+        TTempDir tempDir;
+        WriteCpu(tempDir.Name(), 0, 0, "0-1", 10, "0-3");
+        WriteCpu(tempDir.Name(), 1, 0, "0-1", 10, "0-3");
+        WriteCpu(tempDir.Name(), 2, 1, "2-3", 10, "0-3");
+        WriteCpu(tempDir.Name(), 3, 1, "2-3", 10, "0-3");
+        for (TCpuId cpuId = 0; cpuId < 4; ++cpuId) {
+            WriteFile(tempDir.Name(), "cpu/cpu" + ToString(cpuId) + "/topology/package_cpus_list", "0-3\n");
+        }
+        WriteFile(tempDir.Name(), "node/node0/cpulist", "0-3\n");
+        WriteFile(tempDir.Name(), "fs/cgroup/cpuset/cpuset.effective_cpus", "0,2\n");
+
+        auto topology = ParseSysfsCpuTopology(tempDir.Name());
+        UNIT_ASSERT_C(topology.has_value(), topology.error());
+        UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(topology->AllCpus), "0,2");
+
+        UNIT_ASSERT_VALUES_EQUAL(topology->NumaNodes.size(), 1);
+        AssertGroup(topology->NumaNodes, 0, 0, "0,2");
+        UNIT_ASSERT_VALUES_EQUAL(topology->Dies.size(), 2);
+        AssertGroup(topology->Dies, 0, 0, "0");
+        AssertGroup(topology->Dies, 1, 1, "2");
+        UNIT_ASSERT_VALUES_EQUAL(topology->L3CacheGroups.size(), 1);
+        AssertGroup(topology->L3CacheGroups, 0, 10, "0,2");
+        UNIT_ASSERT_VALUES_EQUAL(topology->PlacementGroups.size(), 1);
+        AssertGroup(topology->PlacementGroups, 0, 0, "0,2");
+    }
+
     Y_UNIT_TEST(AmdEpyc9654SnapshotUsesL3PlacementGroups) {
         const TCpuTopology topology = LoadSnapshot("amd-epyc-9654");
 

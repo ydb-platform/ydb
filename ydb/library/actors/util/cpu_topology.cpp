@@ -19,6 +19,10 @@
 namespace {
 
 constexpr TStringBuf CpuDir = "cpu";
+constexpr TStringBuf FsDir = "fs";
+constexpr TStringBuf CgroupDir = "cgroup";
+constexpr TStringBuf CpusetDir = "cpuset";
+constexpr TStringBuf CpusetEffectiveCpusFile = "cpuset.effective_cpus";
 constexpr TStringBuf NodeDir = "node";
 
 TFsPath CpuRootPath(const TFsPath& root) {
@@ -27,6 +31,17 @@ TFsPath CpuRootPath(const TFsPath& root) {
 
 TFsPath NodeRootPath(const TFsPath& root) {
     return root / NodeDir;
+}
+
+TFsPath SysRootPath(const TFsPath& root) {
+    if (root.GetName() == "system" && root.Parent().GetName() == "devices") {
+        return root.Parent().Parent();
+    }
+    return root;
+}
+
+TFsPath CpusetEffectiveCpusPath(const TFsPath& root) {
+    return SysRootPath(root) / FsDir / CgroupDir / CpusetDir / CpusetEffectiveCpusFile;
 }
 
 TFsPath CpuPath(const TFsPath& root, TCpuId cpuId) {
@@ -150,6 +165,24 @@ std::expected<TCpuMask, TString> ReadCpuMask(const TFsPath& path) {
     }
     if (!*data) {
         return TCpuMask();
+    }
+    if ((*data)->empty() || **data == "(null)") {
+        return TCpuMask();
+    }
+    try {
+        return TCpuMask(**data);
+    } catch (...) {
+        return std::unexpected("failed to parse CPU list field " + path.GetPath() + ": " + CurrentExceptionMessage());
+    }
+}
+
+std::expected<std::optional<TCpuMask>, TString> ReadOptionalCpuMask(const TFsPath& path) {
+    auto data = ReadValue(path);
+    if (!data) {
+        return std::unexpected{std::move(data).error()};
+    }
+    if (!*data) {
+        return std::nullopt;
     }
     if ((*data)->empty() || **data == "(null)") {
         return TCpuMask();
@@ -352,17 +385,24 @@ void AddUniqueGroup(TVector<TCpuTopologyGroup>& groups, TCpuTopologyGroup group)
     groups.push_back(std::move(group));
 }
 
-void BuildDerivedGroups(TCpuTopology& topology) {
+void BuildDerivedGroups(TCpuTopology& topology, const std::optional<TCpuMask>& cpusetEffectiveCpus = std::nullopt) {
     TCpuMask offlineCpus;
     for (const auto& cpu : topology.Cpus) {
         if (!cpu.Online) {
             offlineCpus.Set(cpu.CpuId);
         }
     }
+    auto filterCpus = [&](TCpuMask cpus) {
+        if (cpusetEffectiveCpus) {
+            cpus = cpus & *cpusetEffectiveCpus;
+        }
+        return cpus - offlineCpus;
+    };
+
     TVector<TCpuTopologyGroup> numaNodes;
     numaNodes.reserve(topology.NumaNodes.size());
     for (auto& node : topology.NumaNodes) {
-        node.Cpus = node.Cpus - offlineCpus;
+        node.Cpus = filterCpus(std::move(node.Cpus));
         if (!node.Cpus.IsEmpty()) {
             numaNodes.push_back(std::move(node));
         }
@@ -370,13 +410,13 @@ void BuildDerivedGroups(TCpuTopology& topology) {
     topology.NumaNodes = std::move(numaNodes);
 
     for (auto& cpu : topology.Cpus) {
-        cpu.CoreCpus = cpu.CoreCpus - offlineCpus;
-        cpu.ThreadSiblings = cpu.ThreadSiblings - offlineCpus;
-        cpu.ClusterCpus = cpu.ClusterCpus - offlineCpus;
-        cpu.L3CacheCpus = cpu.L3CacheCpus - offlineCpus;
-        cpu.DieCpus = cpu.DieCpus - offlineCpus;
-        cpu.PackageCpus = cpu.PackageCpus - offlineCpus;
-        cpu.NumaNodeCpus = cpu.NumaNodeCpus - offlineCpus;
+        cpu.CoreCpus = filterCpus(std::move(cpu.CoreCpus));
+        cpu.ThreadSiblings = filterCpus(std::move(cpu.ThreadSiblings));
+        cpu.ClusterCpus = filterCpus(std::move(cpu.ClusterCpus));
+        cpu.L3CacheCpus = filterCpus(std::move(cpu.L3CacheCpus));
+        cpu.DieCpus = filterCpus(std::move(cpu.DieCpus));
+        cpu.PackageCpus = filterCpus(std::move(cpu.PackageCpus));
+        cpu.NumaNodeCpus = filterCpus(std::move(cpu.NumaNodeCpus));
 
         AddUniqueGroup(topology.Clusters, TCpuTopologyGroup{cpu.ClusterId, cpu.ClusterCpus});
         AddUniqueGroup(topology.L3CacheGroups, TCpuTopologyGroup{cpu.L3CacheId, cpu.L3CacheCpus});
@@ -491,13 +531,19 @@ std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root) 
     if (result.Cpus.empty()) {
         return std::unexpected("no CPU topology data found under " + CpuRootPath(root).GetPath());
     }
+
+    auto cpusetEffectiveCpus = ReadOptionalCpuMask(CpusetEffectiveCpusPath(root));
+    if (!cpusetEffectiveCpus) {
+        return std::unexpected{std::move(cpusetEffectiveCpus).error()};
+    }
+
     for (const auto& cpu : result.Cpus) {
-        if (cpu.Online) {
+        if (cpu.Online && (!*cpusetEffectiveCpus || (*cpusetEffectiveCpus)->IsSet(cpu.CpuId))) {
             result.AllCpus.Set(cpu.CpuId);
         }
     }
     if (result.AllCpus.IsEmpty()) {
-        return std::unexpected("no online CPU topology data found under " + CpuRootPath(root).GetPath());
+        return std::unexpected("no available CPU topology data found under " + CpuRootPath(root).GetPath());
     }
 
     auto numaNodes = ParseNumaNodes(root);
@@ -515,7 +561,7 @@ std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root) 
         }
     }
 
-    BuildDerivedGroups(result);
+    BuildDerivedGroups(result, *cpusetEffectiveCpus);
     return result;
 }
 

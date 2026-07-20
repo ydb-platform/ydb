@@ -116,7 +116,7 @@ enum class ETableColumnDefaultKind : ui32 {
     None = 0,
     FromSequence = 1,
     FromLiteral = 2,
-    FromGenerated = 3,
+    FromExpression = 3,
 };
 
 enum class EAttachChildResult : ui32 {

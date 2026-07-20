@@ -100,7 +100,7 @@ message TColumnCompression {
     optional int64 Level = 2;
 }
 
-message TGeneratedColumnDescription {
+message TDefaultExpressionColumnDescription {
     optional string ExprText = 1;
     optional string Context = 2;
     repeated string DependencyColumnNames = 3;
@@ -119,7 +119,7 @@ message TColumnDescription {
         string DefaultFromSequence = 7; // Path to sequence for default values
         Ydb.TypedValue DefaultFromLiteral = 10; // Literal default value
         google.protobuf.NullValue EmptyDefault = 12; // Drop default case
-        TGeneratedColumnDescription DefaultFromGenerated = 15; // GENERATED ALWAYS AS (<expr>)
+        TDefaultExpressionColumnDescription DefaultFromExpression = 15; // GENERATED ALWAYS AS (<expr>)
     }
     optional bool NotNull = 8;
     // flag that indicates that column is currently under the build

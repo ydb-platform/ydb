@@ -315,8 +315,8 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
             defaultFromSequencePathId = sequenceIt->second;
         } else if (columnDesc.IsDefaultFromLiteral()) {
             defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
-        } else if (columnDesc.IsDefaultFromGenerated()) {
-            defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_GENERATED;
+        } else if (columnDesc.IsDefaultFromExpression()) {
+            defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION;
         }
 
         auto emplaceResult = tableMeta->Columns.emplace(
@@ -336,14 +336,14 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
                 columnDesc.SetNotNullInProgress
             )
         );
-        if (columnDesc.IsDefaultFromGenerated()) {
+        if (columnDesc.IsDefaultFromExpression()) {
             auto& columnMeta = emplaceResult.first->second;
-            columnMeta.Generated.ConstructInPlace();
-            columnMeta.Generated->Context = columnDesc.Generated->Context;
-            columnMeta.Generated->ExprText = columnDesc.Generated->ExprText;
-            columnMeta.Generated->Stored = columnDesc.Generated->Stored;
-            columnMeta.Generated->Dependencies.assign(
-                columnDesc.Generated->Dependencies.begin(), columnDesc.Generated->Dependencies.end());
+            columnMeta.DefaultExpression.ConstructInPlace();
+            columnMeta.DefaultExpression->Context = columnDesc.DefaultExpression->Context;
+            columnMeta.DefaultExpression->ExprText = columnDesc.DefaultExpression->ExprText;
+            columnMeta.DefaultExpression->Stored = columnDesc.DefaultExpression->Stored;
+            columnMeta.DefaultExpression->Dependencies.assign(
+                columnDesc.DefaultExpression->Dependencies.begin(), columnDesc.DefaultExpression->Dependencies.end());
         }
         if (columnDesc.KeyOrder >= 0) {
             keyColumns[columnDesc.KeyOrder] = columnDesc.Name;

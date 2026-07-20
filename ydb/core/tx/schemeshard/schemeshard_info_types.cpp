@@ -557,8 +557,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 }
             }
 
-            if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromGenerated && columnFamily && columnFamily->GetId() != 0) {
-                NKikimrSchemeOp::TGeneratedColumnDescription generatedDesc;
+            if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromExpression && columnFamily && columnFamily->GetId() != 0) {
+                NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
                 if (generatedDesc.ParseFromString(sourceColumn.DefaultValue) && !generatedDesc.GetStored()) {
                     errStr = Sprintf("Cannot set column family for virtual generated column '%s'", colName.c_str());
                     return nullptr;
@@ -566,17 +566,17 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             if (isChangeNotNullConstraint || isChangeSetNotNullInProgress) {
-                if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromGenerated) {
+                if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromExpression) {
                     errStr = Sprintf("Can't change nullability of generated column '%s'", colName.c_str());
                     return nullptr;
                 }
 
                 for (const auto& [_, srcCol] : source->Columns) {
-                    if (srcCol.DefaultKind != ETableColumnDefaultKind::FromGenerated || srcCol.IsDropped()) {
+                    if (srcCol.DefaultKind != ETableColumnDefaultKind::FromExpression || srcCol.IsDropped()) {
                         continue;
                     }
 
-                    NKikimrSchemeOp::TGeneratedColumnDescription generatedDesc;
+                    NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
                     if (!generatedDesc.ParseFromString(srcCol.DefaultValue)) {
                         continue;
                     }
@@ -723,8 +723,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            if (col.HasDefaultFromGenerated()) {
-                const bool stored = col.GetDefaultFromGenerated().GetStored();
+            if (col.HasDefaultFromExpression()) {
+                const bool stored = col.GetDefaultFromExpression().GetStored();
                 if (stored && !featureFlags.EnableGeneratedStored) {
                     errStr = Sprintf("STORED GENERATED columns are disabled. Column: %s", colName.c_str());
                     return nullptr;
@@ -757,9 +757,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             } else if (col.HasDefaultFromLiteral()) {
                 column.DefaultKind = ETableColumnDefaultKind::FromLiteral;
                 column.DefaultValue = col.GetDefaultFromLiteral().SerializeAsString();
-            } else if (col.HasDefaultFromGenerated()) {
-                column.DefaultKind = ETableColumnDefaultKind::FromGenerated;
-                column.DefaultValue = col.GetDefaultFromGenerated().SerializeAsString();
+            } else if (col.HasDefaultFromExpression()) {
+                column.DefaultKind = ETableColumnDefaultKind::FromExpression;
+                column.DefaultValue = col.GetDefaultFromExpression().SerializeAsString();
             }
         }
     }
@@ -800,7 +800,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
             for (const auto& [srcColId, srcCol] : source->Columns) {
-                if (srcCol.DefaultKind != ETableColumnDefaultKind::FromGenerated || srcCol.IsDropped()) {
+                if (srcCol.DefaultKind != ETableColumnDefaultKind::FromExpression || srcCol.IsDropped()) {
                     continue;
                 }
 
@@ -810,7 +810,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     continue;
                 }
 
-                NKikimrSchemeOp::TGeneratedColumnDescription generatedDesc;
+                NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
                 if (generatedDesc.ParseFromString(srcCol.DefaultValue)) {
                     for (const auto& dependency : generatedDesc.GetDependencyColumnNames()) {
                         if (dependency == colName) {

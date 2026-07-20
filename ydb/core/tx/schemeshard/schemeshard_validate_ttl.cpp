@@ -51,7 +51,7 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
             return false;
         }
 
-        if (column->DefaultKind == ETableColumnDefaultKind::FromGenerated) {
+        if (column->DefaultKind == ETableColumnDefaultKind::FromExpression) {
             errStr = Sprintf("Cannot enable TTL on generated column: '%s'", colName.data());
             return false;
         }
@@ -68,11 +68,11 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
 
         for (const auto& [_, id] : colName2Id) {
             const auto* candidate = effectiveColumn(id);
-            if (!candidate || candidate->DefaultKind != ETableColumnDefaultKind::FromGenerated || IsDropped(*candidate)) {
+            if (!candidate || candidate->DefaultKind != ETableColumnDefaultKind::FromExpression || IsDropped(*candidate)) {
                 continue;
             }
 
-            NKikimrSchemeOp::TGeneratedColumnDescription generatedDesc;
+            NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
             if (!generatedDesc.ParseFromString(candidate->DefaultValue)) {
                 continue;
             }

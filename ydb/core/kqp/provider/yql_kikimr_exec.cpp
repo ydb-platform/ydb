@@ -2149,16 +2149,16 @@ public:
                     THashSet<TString> generatedDependencyColumns;
 
                     for (const auto& [genName, genMeta] : table.Metadata->Columns) {
-                        if (!genMeta.IsDefaultFromGenerated()) {
+                        if (!genMeta.IsDefaultFromExpression()) {
                             continue;
                         }
 
                         generatedColumns.insert(genName);
-                        if (!genMeta.Generated->Stored) {
+                        if (!genMeta.DefaultExpression->Stored) {
                             virtualGeneratedColumns.insert(genName);
                         }
 
-                        for (const auto& dep : genMeta.Generated->Dependencies) {
+                        for (const auto& dep : genMeta.DefaultExpression->Dependencies) {
                             generatedDependencyColumns.insert(dep);
                         }
                     }

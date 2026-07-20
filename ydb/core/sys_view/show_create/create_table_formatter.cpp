@@ -499,7 +499,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
 
     auto type = columnDesc.GetType();
     std::optional<Ydb::TypedValue> defaultFromLiteral;
-    const NKikimrSchemeOp::TGeneratedColumnDescription* generated = nullptr;
+    const NKikimrSchemeOp::TDefaultExpressionColumnDescription* generated = nullptr;
     switch (columnDesc.GetDefaultValueCase()) {
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
             defaultFromLiteral = columnDesc.GetDefaultFromLiteral();
@@ -516,8 +516,8 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
             }
             break;
         }
-        case NKikimrSchemeOp::TColumnDescription::kDefaultFromGenerated: {
-            generated = &columnDesc.GetDefaultFromGenerated();
+        case NKikimrSchemeOp::TColumnDescription::kDefaultFromExpression: {
+            generated = &columnDesc.GetDefaultFromExpression();
             break;
         }
         default: break;

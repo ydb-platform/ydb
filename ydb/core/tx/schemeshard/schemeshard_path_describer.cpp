@@ -136,8 +136,8 @@ static void FillColumns(
                 Y_ABORT_UNLESS(colDescr->MutableDefaultFromLiteral()->ParseFromString(
                     cinfo.DefaultValue));
                 break;
-            case ETableColumnDefaultKind::FromGenerated:
-                Y_ABORT_UNLESS(colDescr->MutableDefaultFromGenerated()->ParseFromString(
+            case ETableColumnDefaultKind::FromExpression:
+                Y_ABORT_UNLESS(colDescr->MutableDefaultFromExpression()->ParseFromString(
                     cinfo.DefaultValue));
                 break;
         }
@@ -607,7 +607,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
                 break;
             case ETableColumnDefaultKind::FromLiteral:
                 break;
-            case ETableColumnDefaultKind::FromGenerated:
+            case ETableColumnDefaultKind::FromExpression:
                 break;
         }
     }

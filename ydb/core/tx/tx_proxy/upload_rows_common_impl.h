@@ -424,7 +424,7 @@ private:
                 defaultColumnsLeft.insert(name);
             }
 
-            if (colInfo.IsDefaultFromGenerated() && colInfo.Generated->Stored) {
+            if (colInfo.IsDefaultFromExpression() && colInfo.DefaultExpression->Stored) {
                 return TConclusionStatus::Fail(TStringBuilder()
                     << "Bulk upsert is not supported for tables with STORED generated columns: column "
                     << name);

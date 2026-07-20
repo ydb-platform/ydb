@@ -21,10 +21,10 @@ struct TSysTables {
             DEFAULT_UNDEFINED = 0,
             DEFAULT_SEQUENCE = 1,
             DEFAULT_LITERAL = 2,
-            DEFAULT_GENERATED = 3
+            DEFAULT_EXPRESSION = 3
         };
 
-        struct TGeneratedColumnInfo {
+        struct TDefaultExpressionColumnInfo {
             TString ExprText;
             TString Context;
             TVector<TString> Dependencies;
@@ -42,7 +42,7 @@ struct TSysTables {
         bool IsBuildInProgress = false;
         bool IsNotNullColumn = false; //maybe move into TTypeInfo?
         bool SetNotNullInProgress = false;
-        TMaybe<TGeneratedColumnInfo> Generated;
+        TMaybe<TDefaultExpressionColumnInfo> DefaultExpression;
 
         TTableColumnInfo() = default;
 
@@ -54,8 +54,8 @@ struct TSysTables {
             DefaultKind = DEFAULT_LITERAL;
         }
 
-        void SetDefaultFromGenerated() {
-            DefaultKind = DEFAULT_GENERATED;
+        void SetDefaultFromExpression() {
+            DefaultKind = DEFAULT_EXPRESSION;
         }
 
         bool IsDefaultFromSequence() const {
@@ -66,8 +66,8 @@ struct TSysTables {
             return DefaultKind == DEFAULT_LITERAL;
         }
 
-        bool IsDefaultFromGenerated() const {
-            return DefaultKind == DEFAULT_GENERATED;
+        bool IsDefaultFromExpression() const {
+            return DefaultKind == DEFAULT_EXPRESSION;
         }
 
         TTableColumnInfo(TString name, ui32 colId, NScheme::TTypeInfo type,

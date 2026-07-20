@@ -180,11 +180,11 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(TKikimrTableMetadata& meta, c
     const TTypeAnnotationContext& typeCtx, TExprContext& ctx)
 {
     for (auto& [name, col] : meta.Columns) {
-        if (!col.Generated || col.Generated->Expr) {
+        if (!col.DefaultExpression || col.DefaultExpression->Expr) {
             continue;
         }
 
-        const TString generatedQuery = AssembleGeneratedQuery(col.Generated->Context, col.Generated->ExprText);
+        const TString generatedQuery = AssembleGeneratedQuery(col.DefaultExpression->Context, col.DefaultExpression->ExprText);
         NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
             sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
         settingsBuilder.SetFromConfig(sessionCtx.Config());
@@ -194,7 +194,7 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(TKikimrTableMetadata& meta, c
             return IGraphTransformer::TStatus::Error;
         }
 
-        col.Generated->Expr = lambda;
+        col.DefaultExpression->Expr = lambda;
     }
 
     return IGraphTransformer::TStatus::Ok;
@@ -656,7 +656,7 @@ namespace {
 
         for (const auto& [name, col] : meta.Columns) {
             allColumns.insert(name);
-            if (col.IsDefaultFromGenerated()) {
+            if (col.IsDefaultFromExpression()) {
                 generatedColumns.insert(name);
             }
         }
@@ -693,7 +693,7 @@ namespace {
             }
 
             auto& columnMeta = meta.Columns[columnName];
-            const bool stored = columnMeta.Generated->Stored;
+            const bool stored = columnMeta.DefaultExpression->Stored;
 
             if (stored && !sessionCtx.Config().FeatureFlags.GetEnableGeneratedStored()) {
                 ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
@@ -714,7 +714,7 @@ namespace {
             }
 
             // Recompile the stored SQL text into (lambda '(row) <expr>)
-            const TString generatedQuery = AssembleGeneratedQuery(columnMeta.Generated->Context, columnMeta.Generated->ExprText);
+            const TString generatedQuery = AssembleGeneratedQuery(columnMeta.DefaultExpression->Context, columnMeta.DefaultExpression->ExprText);
             NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
                 sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
             settingsBuilder.SetFromConfig(sessionCtx.Config());
@@ -751,8 +751,8 @@ namespace {
             }
 
             // Persist the dependency columns
-            columnMeta.Generated->Dependencies.assign(refs.begin(), refs.end());
-            Sort(columnMeta.Generated->Dependencies);
+            columnMeta.DefaultExpression->Dependencies.assign(refs.begin(), refs.end());
+            Sort(columnMeta.DefaultExpression->Dependencies);
 
             // Type the expression against the row struct
             if (!UpdateLambdaAllArgumentsTypes(lambda, {rowType}, ctx)) {
@@ -777,7 +777,7 @@ namespace {
                 return status;
             }
 
-            columnMeta.Generated->Expr = lambda;
+            columnMeta.DefaultExpression->Expr = lambda;
         }
 
         return IGraphTransformer::TStatus::Ok;
@@ -862,11 +862,11 @@ namespace {
             const auto& generatedValue = constraint.Value().Cast().Ref();
             YQL_ENSURE(generatedValue.ChildrenSize() >= 3);
 
-            columnMeta.Generated = TGeneratedColumnInfo{};
-            columnMeta.Generated->Context = TString(generatedValue.Child(0)->Content());
-            columnMeta.Generated->ExprText = TString(generatedValue.Child(1)->Content());
-            columnMeta.Generated->Stored = generatedValue.Child(2)->Content() == "stored";
-            columnMeta.SetDefaultFromGenerated();
+            columnMeta.DefaultExpression = TDefaultExpressionColumnInfo{};
+            columnMeta.DefaultExpression->Context = TString(generatedValue.Child(0)->Content());
+            columnMeta.DefaultExpression->ExprText = TString(generatedValue.Child(1)->Content());
+            columnMeta.DefaultExpression->Stored = generatedValue.Child(2)->Content() == "stored";
+            columnMeta.SetDefaultFromExpression();
         }
 
         return true;
@@ -1042,7 +1042,7 @@ private:
                 return TStatus::Error;
             }
 
-            if (info.IsDefaultFromGenerated() && rowType->FindItem(name)) {
+            if (info.IsDefaultFromExpression() && rowType->FindItem(name)) {
                 ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
                     << "Column " << name << " is a GENERATED ALWAYS column and its value cannot be set explicitly"
                     << " for table: " << table->Metadata->Name));
@@ -1061,7 +1061,7 @@ private:
                 continue;
             }
 
-            if (info.IsDefaultKindDefined() && !info.IsDefaultFromGenerated()) {
+            if (info.IsDefaultKindDefined() && !info.IsDefaultFromExpression()) {
                 if (op == TYdbOperation::Upsert && !info.IsBuildInProgress) {
                     generateColumnsIfInsertColumnsSet.emplace(name);
                 }
@@ -2128,7 +2128,7 @@ private:
                     return TStatus::Error;
                 }
 
-                if (const auto* ttlColumn = meta->Columns.FindPtr(ttlSettings.ColumnName); ttlColumn && ttlColumn->IsDefaultFromGenerated()) {
+                if (const auto* ttlColumn = meta->Columns.FindPtr(ttlSettings.ColumnName); ttlColumn && ttlColumn->IsDefaultFromExpression()) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), TStringBuilder()
                         << "TTL column " << ttlSettings.ColumnName << " can not be a GENERATED column"));
                     return TStatus::Error;

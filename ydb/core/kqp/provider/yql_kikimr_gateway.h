@@ -603,12 +603,12 @@ struct TColumnEncoding {
 
 using TColumnEncodingsList = TVector<TColumnEncoding>;
 
-struct TGeneratedColumnInfo {
-    TString Context;
+struct TDefaultExpressionColumnInfo {
     TString ExprText;
-    NYql::TExprNode::TPtr Expr;
-    bool Stored = false;
+    NYql::TExprNode::TPtr Expr; // Compiled ExprText
+    TString Context;
     TVector<TString> Dependencies;
+    bool Stored = false;
 };
 
 struct TKikimrColumnMetadata {
@@ -628,7 +628,7 @@ struct TKikimrColumnMetadata {
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
     TMaybe<TColumnEncodingsList> Encoding;
-    TMaybe<TGeneratedColumnInfo> Generated;
+    TMaybe<TDefaultExpressionColumnInfo> DefaultExpression;
 
     TKikimrColumnMetadata() = default;
 
@@ -695,13 +695,13 @@ struct TKikimrColumnMetadata {
             }
         }
 
-        if (IsDefaultFromGenerated()) {
-            const auto& generated = message->GetGenerated();
-            Generated = TGeneratedColumnInfo{};
-            Generated->Context = generated.GetContext();
-            Generated->ExprText = generated.GetExprText();
-            Generated->Stored = generated.GetStored();
-            Generated->Dependencies.assign(generated.GetDependencies().begin(), generated.GetDependencies().end());
+        if (IsDefaultFromExpression()) {
+            const auto& defaultExpression = message->GetDefaultExpression();
+            DefaultExpression = TDefaultExpressionColumnInfo{};
+            DefaultExpression->ExprText = defaultExpression.GetExprText();
+            DefaultExpression->Context = defaultExpression.GetContext();
+            DefaultExpression->Stored = defaultExpression.GetStored();
+            DefaultExpression->Dependencies.assign(defaultExpression.GetDependencies().begin(), defaultExpression.GetDependencies().end());
         }
     }
 
@@ -714,8 +714,8 @@ struct TKikimrColumnMetadata {
     }
 
 
-    void SetDefaultFromGenerated() {
-        DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_GENERATED;
+    void SetDefaultFromExpression() {
+        DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION;
     }
 
     bool IsDefaultFromSequence() const {
@@ -726,8 +726,8 @@ struct TKikimrColumnMetadata {
         return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
     }
 
-    bool IsDefaultFromGenerated() const {
-        return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_GENERATED;
+    bool IsDefaultFromExpression() const {
+        return DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION;
     }
 
     bool IsDefaultKindDefined() const {
@@ -747,13 +747,13 @@ struct TKikimrColumnMetadata {
         message->SetDefaultKind(DefaultKind);
         message->MutableDefaultFromLiteral()->CopyFrom(DefaultFromLiteral);
         message->SetIsBuildInProgress(IsBuildInProgress);
-        if (Generated) {
-            auto& generated = *message->MutableGenerated();
-            generated.SetContext(Generated->Context);
-            generated.SetExprText(Generated->ExprText);
-            generated.SetStored(Generated->Stored);
-            for (const auto& dep : Generated->Dependencies) {
-                generated.AddDependencies(dep);
+        if (DefaultExpression) {
+            auto& defaultExpression = *message->MutableDefaultExpression();
+            defaultExpression.SetExprText(DefaultExpression->ExprText);
+            defaultExpression.SetContext(DefaultExpression->Context);
+            defaultExpression.SetStored(DefaultExpression->Stored);
+            for (const auto& dep : DefaultExpression->Dependencies) {
+                defaultExpression.AddDependencies(dep);
             }
         }
         if (columnType.TypeInfo) {

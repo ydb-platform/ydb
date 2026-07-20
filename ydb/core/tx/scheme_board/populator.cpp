@@ -87,7 +87,7 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
 
         if (msg->HasDescription()) {
             if (msg->Description.Status != NKikimrScheme::StatusSuccess) {
-                YDB_LOG_ERROR("Ignore",
+                YDB_LOG_ERROR("Ignore description",
                     {"selfId", SelfId()},
                     {"description", msg->Description});
             } else {

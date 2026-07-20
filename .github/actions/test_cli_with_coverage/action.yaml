@@ -87,29 +87,39 @@ runs:
           local out_dir="$1"
           local json_out="$2"
           local profdata="$out_dir/coverage.report/coverage.profdata"
-          # Extract the exact llvm-cov path ya used (it must match the LLVM
-          # version that produced the profdata). ya logs the path multiple
-          # times in build_clang_coverage_report.log.
+          # ya logs the exact llvm-cov invocation (with the tool path and all
+          # -object args) in build_clang_coverage_report.log. Reusing that
+          # tool + binary list gives coverage numbers consistent with ya's own
+          # report (matching the LLVM version that produced the profdata and
+          # covering all instrumented binaries — including UT test binaries
+          # that our heuristic find would miss).
+          local ya_log="$out_dir/build_clang_coverage_report.log"
           local llvm_cov
           llvm_cov=$(grep -oE "$HOME/\.ya/tools/v[0-9]+/[0-9]+/bin/llvm-cov" \
-                      "$out_dir/build_clang_coverage_report.log" 2>/dev/null | head -1)
+                      "$ya_log" 2>/dev/null | head -1)
           if [ -z "$llvm_cov" ] || [ ! -x "$llvm_cov" ]; then
             echo "llvm-cov not found via build_clang_coverage_report.log" >&2
             return 1
           fi
 
-          # Ya creates many build_root subdirs per build context; each has its
-          # own copy of the same binary. Pick one of each kind — all copies
-          # have equivalent instrumentation for llvm-cov's purposes.
           local -a binary_args=()
-          local cli_main cli_exp
-          cli_main=$(find "$HOME/.ya/build/build_root" -maxdepth 8 -path '*/ydb/apps/ydb/ydb' -type f 2>/dev/null | head -1)
-          cli_exp=$(find "$HOME/.ya/build/build_root" -maxdepth 8 -path '*/ydb/apps/ydb/experimental/ydb/ydb' -type f 2>/dev/null | head -1)
-          [ -n "$cli_main" ] && binary_args+=(--binary "$cli_main")
-          [ -n "$cli_exp" ] && binary_args+=(--binary "$cli_exp")
+          while IFS= read -r bin; do
+            [ -f "$bin" ] && binary_args+=(--binary "$bin")
+          done < <(python3 - "$ya_log" <<'PY'
+import re, sys
+log = open(sys.argv[1]).read()
+# The `'llvm-cov', 'export'` invocation is on one line; grab its arg list
+# and pull out every `'-object', 'PATH'` pair.
+m = re.search(r"bin/llvm-cov', 'export'.*?\]", log)
+if not m:
+    sys.exit(0)
+for path in re.findall(r"'-object', '([^']+)'", m.group(0)):
+    print(path)
+PY
+)
 
           if [ ${#binary_args[@]} -eq 0 ]; then
-            echo "no CLI binaries found in build_root" >&2
+            echo "no instrumented binaries parsed from $ya_log" >&2
             return 1
           fi
 

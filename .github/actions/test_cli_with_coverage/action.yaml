@@ -39,6 +39,12 @@ runs:
         echo -n "${{ inputs.bazel_remote_password }}" > "$BAZEL_REMOTE_PASSWORD_FILE"
 
         # ydb/apps/ydb has a trailing slash in the regex to avoid matching ydb/apps/ydbd.
+        # PY3TEST integration tests in ydb/tests/functional/ydb_cli DO contribute
+        # coverage (verified: LLVM_PROFILE_FILE is inherited by CLI subprocess,
+        # profraws land in the suite's coverage.tar). Kept in the target list.
+        # --keep-temps preserves build_root binaries so we can rerun llvm-cov
+        # ourselves to produce per-directory breakdown (ya's report only gives
+        # one overall number).
         run_cli_coverage() {
           local out_dir="$1"
           mkdir -p "$out_dir"
@@ -51,6 +57,7 @@ runs:
             --coverage-prefix-filter=ydb/library/workload
             --test-threads "${{ inputs.test_threads }}"
             --link-threads "${{ inputs.link_threads }}"
+            --keep-temps
             --output "$out_dir"
             --no-dir-outputs
           )
@@ -65,50 +72,95 @@ runs:
               --dist-cache-evict-bins
             )
           fi
-          # EXPERIMENT: ydb/tests/functional/ydb_cli temporarily removed to
-          # verify whether its PY3TEST integration tests actually contribute
-          # to coverage. If line_pct drops significantly vs. previous runs
-          # (~15.97%), functional tests were working and this line goes back.
-          # If line_pct stays roughly the same, they were not contributing.
           ./ya make "${params[@]}" \
             ydb/apps/ydb \
             ydb/public/lib/ydb_cli \
-            ydb/library/workload
+            ydb/library/workload \
+            ydb/tests/functional/ydb_cli
+        }
+
+        # Extracts overall + per-prefix line coverage from ya's coverage.report.
+        # Runs llvm-cov export ourselves against the merged profdata and the
+        # instrumented CLI binaries (which --keep-temps preserved in build_root),
+        # then aggregates by prefix in Python.
+        extract_cli_coverage() {
+          local out_dir="$1"
+          local json_out="$2"
+          local profdata="$out_dir/coverage.report/coverage.profdata"
+          # Extract the exact llvm-cov path ya used (it must match the LLVM
+          # version that produced the profdata). ya logs the path multiple
+          # times in build_clang_coverage_report.log.
+          local llvm_cov
+          llvm_cov=$(grep -oE "$HOME/\.ya/tools/v[0-9]+/[0-9]+/bin/llvm-cov" \
+                      "$out_dir/build_clang_coverage_report.log" 2>/dev/null | head -1)
+          if [ -z "$llvm_cov" ] || [ ! -x "$llvm_cov" ]; then
+            echo "llvm-cov not found via build_clang_coverage_report.log" >&2
+            return 1
+          fi
+
+          # Ya creates many build_root subdirs per build context; each has its
+          # own copy of the same binary. Pick one of each kind — all copies
+          # have equivalent instrumentation for llvm-cov's purposes.
+          local -a binary_args=()
+          local cli_main cli_exp
+          cli_main=$(find "$HOME/.ya/build/build_root" -maxdepth 8 -path '*/ydb/apps/ydb/ydb' -type f 2>/dev/null | head -1)
+          cli_exp=$(find "$HOME/.ya/build/build_root" -maxdepth 8 -path '*/ydb/apps/ydb/experimental/ydb/ydb' -type f 2>/dev/null | head -1)
+          [ -n "$cli_main" ] && binary_args+=(--binary "$cli_main")
+          [ -n "$cli_exp" ] && binary_args+=(--binary "$cli_exp")
+
+          if [ ${#binary_args[@]} -eq 0 ]; then
+            echo "no CLI binaries found in build_root" >&2
+            return 1
+          fi
+
+          python3 .github/scripts/tests/aggregate_cli_coverage.py \
+            --llvm-cov "$llvm_cov" \
+            --profdata "$profdata" \
+            "${binary_args[@]}" \
+            --prefix ydb/apps/ydb/ \
+            --prefix ydb/public/lib/ydb_cli/ \
+            --prefix ydb/library/workload/ \
+            --output "$json_out"
         }
 
         MERGE_HEAD=$(git rev-parse HEAD)
         BASE_REF="${{ github.event.pull_request.base.ref }}"
         BASE_OUT="$(pwd)/coverage_workspace/$BASE_REF"
         PR_OUT="$(pwd)/coverage_workspace/pr"
-        BASE_COVERAGE_JSON="$BASE_OUT/line_coverage.json"
-        PR_COVERAGE_JSON="$PR_OUT/line_coverage.json"
+        BASE_COVERAGE_JSON="$BASE_OUT/coverage_summary.json"
+        PR_COVERAGE_JSON="$PR_OUT/coverage_summary.json"
 
         git fetch origin "$BASE_REF"
         git checkout "origin/$BASE_REF"
         run_cli_coverage "$BASE_OUT"
+        extract_cli_coverage "$BASE_OUT" "$BASE_COVERAGE_JSON"
 
         git checkout "$MERGE_HEAD"
-        python3 .github/scripts/tests/compare_coverage.py extract \
-          "$BASE_OUT/coverage.report" "$BASE_COVERAGE_JSON"
         run_cli_coverage "$PR_OUT"
-        python3 .github/scripts/tests/compare_coverage.py extract \
-          "$PR_OUT/coverage.report" "$PR_COVERAGE_JSON"
+        extract_cli_coverage "$PR_OUT" "$PR_COVERAGE_JSON"
 
-        CURRENT=$(python3 -c 'import json; print(json.load(open("'"$PR_COVERAGE_JSON"'"))["line_pct"])')
-        BASELINE=$(python3 -c 'import json; print(json.load(open("'"$BASE_COVERAGE_JSON"'"))["line_pct"])')
-        if python3 .github/scripts/tests/compare_coverage.py check --label "YDB CLI" --tolerance 5.0 "$PR_COVERAGE_JSON" "$BASE_COVERAGE_JSON"; then
-          STATE=success; COLOR=green; MSG="YDB CLI line coverage: ${CURRENT}% (${BASE_REF}: ${BASELINE}%) — OK"
+        CURRENT=$(python3 -c 'import json; print(json.load(open("'"$PR_COVERAGE_JSON"'"))["overall"]["line_pct"])')
+        BASELINE=$(python3 -c 'import json; print(json.load(open("'"$BASE_COVERAGE_JSON"'"))["overall"]["line_pct"])')
+
+        MSG_FILE=$(mktemp)
+        trap 'rm -f "$BAZEL_REMOTE_PASSWORD_FILE" "$MSG_FILE"' EXIT
+        if python3 .github/scripts/tests/compare_coverage.py check \
+            --label "YDB CLI" --tolerance 5.0 \
+            "$PR_COVERAGE_JSON" "$BASE_COVERAGE_JSON" 2> "$MSG_FILE"; then
+          STATE=success; COLOR=green
         else
-          STATE=failure; COLOR=red; MSG="YDB CLI line coverage: ${CURRENT}% (${BASE_REF}: ${BASELINE}%) — REGRESSED"
+          STATE=failure; COLOR=red
         fi
+
         if [[ "${{ inputs.warn_only }}" == "true" && "$STATE" == "failure" ]]; then
-          MSG="$MSG (warn-only mode, not blocking the PR)"
+          printf '\n(warn-only mode, not blocking the PR)\n' >> "$MSG_FILE"
           STATE=success
         fi
+
         SHA="${{ github.event.pull_request.head.sha }}"
         curl --retry 5 --fail -L -X POST \
           -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
           "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$SHA" \
           -d "{\"state\":\"$STATE\",\"description\":\"${CURRENT}% vs ${BASE_REF} ${BASELINE}%\",\"context\":\"coverage_cli\"}"
-        echo "$MSG" | .github/scripts/tests/comment-pr.py --color "$COLOR"
+        cat "$MSG_FILE" | .github/scripts/tests/comment-pr.py --color "$COLOR"
         [[ "$STATE" == success ]]

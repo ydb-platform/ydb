@@ -1700,8 +1700,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonNativeScalars) {
     }
 
     // A full cycle test for doubles near max magnitude. The stored value stays exact; reading back renders
-    // it with fewer digits (17 in, 16 out), so the result is a JsonDocument that would be rejected on insert -
-    // this just checks that something sensible happens, while the better behavior would be to return as is.
+    // it with fewer digits (17 in, 16 out) on BinaryJson level.
     Y_UNIT_TEST(CompactionNearMaxDouble) {
         const TString script = TStringBuilder() << NativeTableSetup() << R"(
         DATA:

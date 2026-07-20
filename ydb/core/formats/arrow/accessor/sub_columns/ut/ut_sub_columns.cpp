@@ -633,4 +633,18 @@ Y_UNIT_TEST_SUITE(SubColumnsDictStats) {
         auto restored = TDictStats::DeserializeFromBlob(NArrow::SerializeBatchNoCompression(legacyBatch));
         AssertStatsMatch(restored, rows);
     }
+
+    // SelectSeparatedColumns keeps the largest keys as separated columns (preserving their value_type),
+    // bounded here by ColumnsLimit=1; the rest are left for the Others store.
+    Y_UNIT_TEST(SelectSeparatedColumns) {
+        const NSubColumns::TSettings settings(0, 1, 0, 0, TDataAdapterContainer::GetDefault());
+        auto b = TDictStats::MakeBuilder();
+        b.Add(TString("a"), 4, 100, IChunkedArray::EType::Array, EValueType::String);
+        b.Add(TString("b"), 4, 10, IChunkedArray::EType::Array, EValueType::String);
+        auto columns = b.Finish().SelectSeparatedColumns(settings, 4);
+
+        UNIT_ASSERT_VALUES_EQUAL(columns.GetColumnsCount(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(columns.GetColumnNameString(0), "a");
+        UNIT_ASSERT_VALUES_EQUAL((ui32)columns.GetValueType(0), (ui32)EValueType::String);
+    }
 }

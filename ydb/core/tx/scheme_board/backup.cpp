@@ -164,7 +164,6 @@ private:
             Schedule(DefaultTimeout, new TEvents::TEvWakeup(cookie));
 
             YDB_LOG_DEBUG("ProcessPaths paths",
-                {"selfId", this->SelfId()},
                 {"path", path},
                 {"cookie", cookie},
                 {"inProgress", PathByCookie.size()});
@@ -201,7 +200,6 @@ private:
 
         const TString& path = it->second;
         YDB_LOG_DEBUG("Handle",
-            {"selfId", this->SelfId()},
             {"ev", ev->Get()->ToString()},
             {"path", path});
 
@@ -251,7 +249,6 @@ private:
 
         const TString path = it->second;
         YDB_LOG_DEBUG("Handle",
-            {"selfId", this->SelfId()},
             {"ev", ev->Get()->ToString()},
             {"path", path});
 
@@ -357,7 +354,6 @@ private:
             return;
         }
         YDB_LOG_INFO("Timeout",
-            {"selfId", this->SelfId()},
             {"path", it->second});
         Timeouts.emplace(it->second);
         MarkPathCompleted(it);
@@ -384,7 +380,6 @@ private:
 
     void SendProgressUpdate() {
         YDB_LOG_DEBUG("SendProgressUpdate",
-            {"selfId", this->SelfId()},
             {"inProgress", PathByCookie.size()},
             {"processedPaths", ProcessedPaths},
             {"totalPaths", TotalPaths},

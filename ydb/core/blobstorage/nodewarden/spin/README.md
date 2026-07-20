@@ -121,7 +121,7 @@ Expected result: `errors: 1`. In the saved trace, Slay enters InputQueue in epoc
 
 ## Successful v1 Core Profile
 
-The core profile checks the fix for the same failure. It disables only the periodic confirmation timer; retry after `NOTREADY` remains enabled.
+The core profile verifies v1 against the same failure scenario. It disables only the periodic confirmation timer; retry after `NOTREADY` remains enabled.
 
 ```bash
 SPIN_DIR=$PWD
@@ -178,9 +178,9 @@ spin \
 
 Safety: `45858 states stored`, `54741 transitions`, `errors: 0`. Weak-fair liveness: `61687 states visited`, `163972 transitions`, `errors: 0`.
 
-## Discovered WIPE -> DESTROY Race
+## WIPE -> DESTROY Race
 
-Action-aware recovery fixes the lost Slay, but it does not eliminate another race:
+Action-aware recovery prevents the lost-Slay failure, but it does not eliminate this separate race:
 
 1. WIPE removes the owner, and BSC accepts `WIPED`.
 2. The replacement VDisk allocates a new `InitOwnerRound`, but has not necessarily sent `YardInit` yet.
@@ -208,7 +208,7 @@ Expected result: `errors: 1`. `REQUIRE_WIPE_COMPLETION` uses a monotonic ghost t
 
 Safety holds with `ENABLE_CONFIRMATION_RETRY=1`, but the untimed Promela model cannot prove delete liveness using weak process fairness alone. A fair cycle is possible: the confirmation timer repeatedly overtakes the matching result, creates a fresh round, and makes the arriving result stale. Every process still runs, so weak process fairness does not rule out the cycle.
 
-This is not a reason to remove the production retry. A complete liveness check requires either an explicit model of time or an assumption that a matching response is handled before the next confirmation timeout. The saved successful liveness result therefore applies only to the core profile with `ENABLE_CONFIRMATION_RETRY=0`.
+The saved successful liveness result covers only the core profile with `ENABLE_CONFIRMATION_RETRY=0`. Proving liveness with the retry enabled requires either an explicit model of time or an assumption that a matching response is handled before the next confirmation timeout.
 
 ## Limitations
 

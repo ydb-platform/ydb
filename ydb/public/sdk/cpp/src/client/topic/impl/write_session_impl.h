@@ -377,6 +377,7 @@ private:
     TStringBuilder LogPrefixImpl() const;
 
     void UpdateTokenIfNeededImpl();
+    void UpdateTokenImpl(const NThreading::TFuture<std::string>& future);
 
     void WriteInternal(TContinuationToken&& continuationToken, TWriteMessage&& message);
 

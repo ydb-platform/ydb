@@ -908,7 +908,7 @@ private:
             {"ctx", *GetUserRequestContext()},
             {"status", msg->Status},
             {"step", msg->Snapshot.Step},
-            {"txId", msg->Snapshot.TxId},
+            {"#_dup_txId", msg->Snapshot.TxId},
             {"traceId", TraceId()});
 
         if (msg->Status != Ydb::StatusIds::SUCCESS) {
@@ -939,7 +939,7 @@ private:
         }
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
-        YDB_LOG_DEBUG("become ExecuteState",
+        YDB_LOG_DEBUG("Become ExecuteState",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},
             {"txId", TxId},

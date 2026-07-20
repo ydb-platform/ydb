@@ -12,6 +12,8 @@
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 
 namespace NKikimr {
 namespace NKqp {
@@ -75,7 +77,8 @@ public:
     }
 
     void Bootstrap() {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Start buffer lookup actor");
+        YDB_LOG_DEBUG("Start buffer lookup actor",
+            {"#_this->LogPrefix", this->LogPrefix});
 
         Settings.Counters->StreamLookupActorsCount->Inc();
         Become(&TKqpBufferLookupActor::StateFunc);
@@ -325,8 +328,11 @@ public:
 
         auto& worker = CookieToLookupState.at(cookie).Worker;
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Start reading of table: " << worker->GetTablePath() << ", readId: " << record.GetReadId()
-            << ", shardId: " << shardId);
+        YDB_LOG_DEBUG("Start reading of",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"table", worker->GetTablePath()},
+            {"readId", record.GetReadId()},
+            {"shardId", shardId});
 
         Settings.TxManager->AddShard(shardId, false, worker->GetTablePath());
         Settings.TxManager->AddAction(shardId, IKqpTransactionManager::EAction::READ);
@@ -358,12 +364,15 @@ public:
         record.SetMaxBytes(defaultSettings.GetMaxBytes());
         record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<TStringBuilder() << "Send EvRead (buffer lookup) to shardId=" << shardId
-            << ", readId = " << record.GetReadId()
-            << ", tablePath: " << worker->GetTablePath()
-            << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
-            << ", lockTxId=" << record.GetLockTxId()
-            << ", lockNodeId=" << record.GetLockNodeId());
+        YDB_LOG_DEBUG("Send EvRead (buffer lookup) to readId",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"shardId", shardId},
+            {"#_record.GetReadId", record.GetReadId()},
+            {"tablePath", worker->GetTablePath()},
+            {"#_snapshot=(txid", record.GetSnapshot().GetTxId()},
+            {"step", record.GetSnapshot().GetStep()},
+            {"lockTxId", record.GetLockTxId()},
+            {"lockNodeId", record.GetLockNodeId()});
 
         auto& shardState = ShardToState[shardId];
 
@@ -402,7 +411,9 @@ public:
 
         auto readIt = ReadIdToState.find(record.GetReadId());
         if (readIt == ReadIdToState.end() || readIt->second.Blocked) {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Drop read with readId: " << record.GetReadId() << ", because it's already completed or blocked");
+            YDB_LOG_DEBUG("Drop read with because it's already completed or blocked",
+                {"#_this->LogPrefix", this->LogPrefix},
+                {"readId", record.GetReadId()});
             return;
         }
 
@@ -428,15 +439,18 @@ public:
             borkenTxLocks << lock.ShortDebugString();
         }
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Recv TEvReadResult (buffer lookup) from ShardID=" << shardId
-            << ", Table = " << lookupState.Worker->GetTablePath()
-            << ", ReadId=" << record.GetReadId() << " (current ReadId=" << ReadId << ")"
-            << ", SeqNo=" << record.GetSeqNo()
-            << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
-            << ", Finished=" << record.GetFinished()
-            << ", RowCount=" << record.GetRowCount()
-            << ", TxLocks= " << txLocks
-            << ", BrokenTxLocks= " << borkenTxLocks);
+        YDB_LOG_DEBUG("Recv TEvReadResult (buffer lookup) from Table (current",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"shardID", shardId},
+            {"#_lookupState.Worker->GetTablePath", lookupState.Worker->GetTablePath()},
+            {"#_,_ReadId", record.GetReadId()},
+            {"#_(current_ReadId", ReadId},
+            {"seqNo", record.GetSeqNo()},
+            {"status", Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())},
+            {"finished", record.GetFinished()},
+            {"rowCount", record.GetRowCount()},
+            {"txLocks", txLocks},
+            {"brokenTxLocks", borkenTxLocks});
 
         if (!record.GetBrokenTxLocks().empty()) {
             BrokenLocksCount += record.GetBrokenTxLocks().size();
@@ -480,8 +494,10 @@ public:
                     getIssues());
             }
             case Ydb::StatusIds::OVERLOADED: {
-                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"OVERLOADED was received from tablet: " << shardId << "."
-                    << getIssues().ToOneLineString());
+                YDB_LOG_DEBUG("OVERLOADED was received",
+                    {"#_this->LogPrefix", this->LogPrefix},
+                    {"tablet", shardId},
+                    {"#_getIssues().ToOneLineString", getIssues().ToOneLineString()});
                 const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
                     ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
                     : std::nullopt;
@@ -496,8 +512,10 @@ public:
                 return;
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
-                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"INTERNAL_ERROR was received from tablet: " << shardId << "."
-                    << getIssues().ToOneLineString());
+                YDB_LOG_DEBUG("INTERNAL_ERROR was received",
+                    {"#_this->LogPrefix", this->LogPrefix},
+                    {"tablet", shardId},
+                    {"#_getIssues().ToOneLineString", getIssues().ToOneLineString()});
                 if (!RetryTableRead(record.GetReadId(), true)) {
                     return RuntimeError(
                         NYql::NDqProto::StatusIds::INTERNAL_ERROR,
@@ -560,7 +578,9 @@ public:
                 LookupActorSpan.GetTraceId());
 
             shardState.HasPipe = true;
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"TEvReadAck was sent to shard: " << shardId);
+            YDB_LOG_DEBUG("TEvReadAck was sent",
+                {"#_this->LogPrefix", this->LogPrefix},
+                {"shard", shardId});
         }
 
         if (failOnUniqueCheck && record.GetRowCount() != 0) {
@@ -581,7 +601,9 @@ public:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        YDB_LOG_DEBUG("TEvDeliveryProblem was received",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"tablet", ev->Get()->TabletId});
         ShardToState.at(ev->Get()->TabletId).HasPipe = false;
 
         TVector<ui64> toRetry;
@@ -610,7 +632,9 @@ public:
         const ui64 failedReadId = ev->Get()->ReadId;
         auto readIt = ReadIdToState.find(failedReadId);
         if (readIt == ReadIdToState.end()) {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"received retry request for already finished/non-existing read, read_id: " << failedReadId);
+            YDB_LOG_DEBUG("Received retry request for already finished/non-existing read",
+                {"#_this->LogPrefix", this->LogPrefix},
+                {"readId", failedReadId});
             return;
         }
 
@@ -625,8 +649,11 @@ public:
     bool RetryTableRead(const ui64 failedReadId, bool allowInstantRetry, std::optional<TDuration> throttleDelay = std::nullopt) {
         auto& failedRead = ReadIdToState.at(failedReadId);
         auto& lookupState = CookieToLookupState.at(failedRead.LookupCookie);
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Retry reading of table: " << lookupState.Worker->GetTablePath() << ", failedReadId: " << failedReadId
-            << ", shardId: " << failedRead.ShardId);
+        YDB_LOG_DEBUG("Retry reading of",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"table", lookupState.Worker->GetTablePath()},
+            {"failedReadId", failedReadId},
+            {"shardId", failedRead.ShardId});
         failedRead.Blocked = true;
 
         TDuration delay;

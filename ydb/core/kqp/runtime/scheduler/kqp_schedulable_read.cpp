@@ -80,7 +80,9 @@ void TSchedulableRead::ReturnQuota(NHPTimer::STime elapsedCycles) {
     YDB_LOG_TRACE("TSchedulableRead",
         {"#_uintptr_t(this)", uintptr_t(this)},
         {"returnedQuotaMs", ms});
-    LOG_TRACE_S (*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER,"TSchedulableRead [" << uintptr_t(this) << "] AvailableQuotaMs: " << AvailableQuotaMs);
+    YDB_LOG_TRACE("TSchedulableRead",
+        {"#_uintptr_t(this)", uintptr_t(this)},
+        {"availableQuotaMs", AvailableQuotaMs});
 
     DecreaseUsage(TDuration::MilliSeconds(ms), READ_DEFAULT);
 }

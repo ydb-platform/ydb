@@ -13,6 +13,8 @@
 
 #include <util/string/vector.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -74,7 +76,8 @@ public:
     void Bootstrap() {
         //Counters->VectorResolveActorsCount->Inc();
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Start vector resolve actor");
+        YDB_LOG_DEBUG("Start vector resolve actor",
+            {"#_this->LogPrefix", this->LogPrefix});
         Become(&TKqpVectorResolveActor::StateFunc);
     }
 
@@ -138,7 +141,10 @@ private:
             }
         }
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Returned " << totalDataSize << " bytes, finished: " << finished);
+        YDB_LOG_DEBUG("Returned bytes",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"totalDataSize", totalDataSize},
+            {"finished", finished});
         return totalDataSize;
     }
 

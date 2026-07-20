@@ -283,7 +283,7 @@ private:
     {
         if (Planner) {
             if (!Planner->GetPendingComputeTasks().empty()) {
-                YDB_LOG_DEBUG("terminate pending resources request",
+                YDB_LOG_DEBUG("Terminate pending resources request",
                     {"marker", "KQPSCAN"},
                     {"actorId", SelfId()},
                     {"txId", TxId},

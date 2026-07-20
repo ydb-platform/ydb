@@ -88,6 +88,8 @@
 
 #include <cmath>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -2125,7 +2127,10 @@ public:
             }
         }
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Sending ack for read #" << readId << " seqno = " << readInfo.LastSeqNo);
+        YDB_LOG_DEBUG("Sending ack for read seqno",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"readId", readId},
+            {"#_readInfo.LastSeqNo", readInfo.LastSeqNo});
 
         bool newPipe = PipesCreated.insert(shardId).second;
         TlsActivationContext->Send(new NActors::IEventHandle(
@@ -2144,11 +2149,14 @@ public:
         auto readId = request->Record.GetReadId();
         const bool needToCreatePipe = PipesCreated.insert(shardId).second;
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<TStringBuilder() << "Send EvRead (full text source) to shardId=" << shardId
-            << ", readId = " << record.GetReadId()
-            << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
-            << ", lockTxId=" << record.GetLockTxId()
-            << ", lockNodeId=" << record.GetLockNodeId());
+        YDB_LOG_DEBUG("Send EvRead (full text source) to readId",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"shardId", shardId},
+            {"#_record.GetReadId", record.GetReadId()},
+            {"#_snapshot=(txid", record.GetSnapshot().GetTxId()},
+            {"step", record.GetSnapshot().GetStep()},
+            {"lockTxId", record.GetLockTxId()},
+            {"lockNodeId", record.GetLockNodeId()});
 
         TlsActivationContext->Send(new NActors::IEventHandle(
             NKikimr::MakePipePerNodeCacheID(false),
@@ -2843,8 +2851,12 @@ private:
                 }
             }
             if (IsNgram && bestTokenLimit < Words.size()) {
-                LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Selecting " << bestTokenLimit << " balanced ngrams out of " << Words.size()
-                    << " (imbalance: " << Words[byFreq[0]]->Frequency << " vs " << Words[byFreq[bestTokenLimit]]->Frequency << ")");
+                YDB_LOG_INFO("Selecting balanced ngrams out of vs",
+                    {"#_this->LogPrefix", this->LogPrefix},
+                    {"bestTokenLimit", bestTokenLimit},
+                    {"#_Words.size", Words.size()},
+                    {"#_(imbalance", Words[byFreq[0]]->Frequency},
+                    {"#_Words[byFreq[bestTokenLimit]]->Frequency", Words[byFreq[bestTokenLimit]]->Frequency});
                 TVector<TWordStatePtr> newWords;
                 for (size_t i = 0; i < bestTokenLimit; i++) {
                     newWords.emplace_back(std::move(Words[byFreq[i]]));
@@ -2852,8 +2864,12 @@ private:
                 }
                 std::swap(Words, newWords);
             } else if (MainTableReader->GetWithRelevance() && bestTokenLimit < Words.size() && defaultOperator == EDefaultOperator::And) {
-                LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Selecting " << bestTokenLimit << " balanced tokens out of " << Words.size()
-                    << " (imbalance: " << Words[byFreq[0]]->Frequency << " vs " << Words[byFreq[bestTokenLimit]]->Frequency << ")");
+                YDB_LOG_INFO("Selecting balanced tokens out of vs",
+                    {"#_this->LogPrefix", this->LogPrefix},
+                    {"bestTokenLimit", bestTokenLimit},
+                    {"#_Words.size", Words.size()},
+                    {"#_(imbalance", Words[byFreq[0]]->Frequency},
+                    {"#_Words[byFreq[bestTokenLimit]]->Frequency", Words[byFreq[bestTokenLimit]]->Frequency});
 
                 needL2Layer = true;
                 TVector<TWordStatePtr> newWords;
@@ -3301,7 +3317,9 @@ public:
     // Handle broken pipe to a datashard tablet.
     // Resets pipe tracking and schedules a retry for all reads on that shard.
     void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        YDB_LOG_ERROR("TEvDeliveryProblem was received",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"tablet", ev->Get()->TabletId});
 
         ui64 shardId = ev->Get()->TabletId;
         ReadsState.UntrackPipe(shardId);
@@ -3316,12 +3334,16 @@ public:
     //   - If relevance mode: read stats + dict tables, then proceed to StartWordReads.
     //   - If plain mode: go directly to StartWordReads.
     void HandleResolve(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"TEvResolveKeySetResult was received for table.");
+        YDB_LOG_DEBUG("TEvResolveKeySetResult was received for table",
+            {"#_this->LogPrefix", this->LogPrefix});
         ResolveInProgress = false;
 
         if (ev->Get()->Request->ErrorCount > 0) {
             for(const auto& entry : ev->Get()->Request->ResultSet) {
-                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Table " << entry.KeyDescription->TableId << " error status: " << entry.Status);
+                YDB_LOG_ERROR("Table error",
+                    {"#_this->LogPrefix", this->LogPrefix},
+                    {"#_entry.KeyDescription->TableId", entry.KeyDescription->TableId},
+                    {"status", entry.Status});
             }
 
             TString errorMsg = TStringBuilder() << "Failed to get partitioning for table. ";
@@ -3659,7 +3681,9 @@ public:
         L1MergedDocuments.insert(L1MergedDocuments.end(), l1matched.begin(), l1matched.end());
 
         std::vector<TDocInfoPtr> matches = L2MergeAlgo->FindMatches();
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"L2Merge done: " << L2MergeAlgo->Done());
+        YDB_LOG_DEBUG("L2Merge",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"done", L2MergeAlgo->Done()});
         MergeL2MatchFrequencies(matches);
         FetchDocumentDetails(matches);
     }
@@ -3840,12 +3864,14 @@ public:
         NYql::IssuesFromMessage(record.GetStatus().GetIssues(), shardIssues);
         const TString tablePath = GetReadTablePath(static_cast<EReadKind>(readInfo.ReadKind));
 
-        LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Read result error, ReadId=" << readId
-            << ", ShardId=" << shardId
-            << ", ReadKind=" << ReadKindName(static_cast<EReadKind>(readInfo.ReadKind))
-            << ", Table=" << tablePath
-            << ", Status=" << Ydb::StatusIds::StatusCode_Name(statusCode)
-            << ", Issues=[" << shardIssues.ToOneLineString() << "]");
+        YDB_LOG_WARN("Read result error, Issues=[",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"readId", readId},
+            {"shardId", shardId},
+            {"readKind", ReadKindName(static_cast<EReadKind>(readInfo.ReadKind))},
+            {"table", tablePath},
+            {"status", Ydb::StatusIds::StatusCode_Name(statusCode)},
+            {"#_shardIssues.ToOneLineString", shardIssues.ToOneLineString()});
 
         switch (statusCode) {
             case Ydb::StatusIds::OVERLOADED: {
@@ -3899,18 +3925,19 @@ public:
             borkenTxlocks << lock.ShortDebugString();
         }
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Recv TEvReadResult (full text source)"
-            << ", Cookie=" << readInfo.Cookie
-            << ", ReadKind=" << (ui32)readInfo.ReadKind
-            << ", ShardId=" << readInfo.ShardId
-            << ", ReadId=" << record.GetReadId()
-            << ", SeqNo=" << record.GetSeqNo()
-            << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
-            << ", Finished=" << record.GetFinished()
-            << ", RowCount=" << record.GetRowCount()
-            << ", ResultFormat=" << NKikimrDataEvents::EDataFormat_Name(record.GetResultFormat())
-            << ", TxLocks= " << txLocks
-            << ", BrokenTxLocks= " << borkenTxlocks);
+        YDB_LOG_DEBUG("Recv TEvReadResult (full text source)",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"cookie", readInfo.Cookie},
+            {"readKind", (ui32)readInfo.ReadKind},
+            {"shardId", readInfo.ShardId},
+            {"readId", record.GetReadId()},
+            {"seqNo", record.GetSeqNo()},
+            {"status", Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())},
+            {"finished", record.GetFinished()},
+            {"rowCount", record.GetRowCount()},
+            {"resultFormat", NKikimrDataEvents::EDataFormat_Name(record.GetResultFormat())},
+            {"txLocks", txLocks},
+            {"brokenTxLocks", borkenTxlocks});
 
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             HandleReadResultError(readId, readInfo, record);

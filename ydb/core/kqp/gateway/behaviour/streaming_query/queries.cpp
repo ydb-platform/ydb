@@ -479,7 +479,7 @@ protected:
         }
 
         if (const auto delay = RetryState->GetNextRetryDelay(longDelay)) {
-            YDB_LOG_WARN("[StreamingQueries] Schedule retry for",
+            YDB_LOG_WARN("[StreamingQueries] Schedule retry",
                 {"logPrefix", LogPrefix()},
                 {"error", issues.ToOneLineString()},
                 {"#_*delay", *delay});

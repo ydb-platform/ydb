@@ -3105,7 +3105,7 @@ private:
                 delay = TDuration::Zero();
             }
 
-            YDB_LOG_WARN("[ScriptExecutions] Schedule retry for",
+            YDB_LOG_WARN("[ScriptExecutions] Schedule retry",
                 {"logPrefix", LogPrefix()},
                 {"error", issues.ToOneLineString()},
                 {"#_*delay", *delay});

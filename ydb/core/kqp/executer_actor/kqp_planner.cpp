@@ -627,7 +627,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
         {"txId", TxId},
         {"ctx", *UserRequestContext},
         {"tasks", TasksGraph.GetTasks().size()},
-        {"read_only", true},
+        {"readOnly", true},
         {"scanTasksCount", scanTasksCount},
         {"#_TasksPerNode.size", TasksPerNode.size()},
         {"localComputeTasks", TasksGraph.GetMeta().LocalComputeTasks},
@@ -928,12 +928,12 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
                 selfUpdates.emplace(channelId);
             }
 
-            YDB_LOG_DEBUG("input src at actor",
+            YDB_LOG_DEBUG("Input src at actor",
                 {"txId", TxId},
                 {"ctx", *UserRequestContext},
                 {"task", task.Id},
                 {"channelId", channelId},
-                {"task", channel.SrcTask},
+                {"#_dup_task", channel.SrcTask},
                 {"#_srcTask.ComputeActorId", srcTask.ComputeActorId});
         }
     }
@@ -952,12 +952,12 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
                     updates[dstTask.ComputeActorId].emplace(channelId);
                 }
 
-                YDB_LOG_DEBUG("output dst at actor",
+                YDB_LOG_DEBUG("Output dst at actor",
                     {"txId", TxId},
                     {"ctx", *UserRequestContext},
                     {"task", task.Id},
                     {"channelId", channelId},
-                    {"task", channel.DstTask},
+                    {"#_dup_task", channel.DstTask},
                     {"#_dstTask.ComputeActorId", dstTask.ComputeActorId});
             }
         }

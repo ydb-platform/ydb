@@ -319,7 +319,7 @@ protected:
         }
 
         if (shardIds.size() > 0) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Start resolving tablets nodes..",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Start resolving tablets nodes.",
                 {"marker", "KQPDATA"},
                 {"actorId", SelfId()},
                 {"txId", TxId},

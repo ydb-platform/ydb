@@ -43,7 +43,7 @@ public:
         if (Scheduler->IsEnabled()) {
             YDB_LOG_INFO("Enabled on start");
         } else {
-            LOG_INFO_S  (*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER,"Disabled on start");
+            YDB_LOG_INFO("Disabled on start");
         }
 
         Scheduler->SetTotalCpuLimit(CalculateTotalCpuLimit()); // TODO: take total cpu limit from outside
@@ -84,7 +84,7 @@ public:
         if (Scheduler->IsEnabled()) {
             YDB_LOG_INFO("Become enabled");
         } else {
-            LOG_INFO_S  (*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER,"Become disabled");
+            YDB_LOG_INFO("Become disabled");
         }
 
         auto responseEvent = std::make_unique<NKikimr::NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
@@ -126,7 +126,7 @@ public:
 
         Y_ASSERT(!poolId.empty());
 
-        YDB_LOG_DEBUG("Add ",
+        YDB_LOG_DEBUG("Add",
             {"pool", databaseId},
             {"poolId", poolId},
             {"attrs", attrs});
@@ -175,7 +175,7 @@ public:
 
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
 
-            YDB_LOG_DEBUG("Update ",
+            YDB_LOG_DEBUG("Update",
                 {"pool", databaseId},
                 {"poolId", poolId},
                 {"attrs", attrs});
@@ -191,7 +191,7 @@ public:
                 // TODO: Scheduler->UpdatePool(…);
             }
         } else {
-            YDB_LOG_ERROR("Trying to remove unknown ",
+            YDB_LOG_ERROR("Trying to remove unknown",
                 {"pool", databaseId},
                 {"poolId", poolId});
             // TODO: the removing message for unknown pool - should we check?
@@ -210,7 +210,7 @@ public:
         if (Scheduler->IsEnabled()) {
             auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
             response->Query = query;
-            YDB_LOG_DEBUG("Add ",
+            YDB_LOG_DEBUG("Add",
                 {"query", databaseId},
                 {"poolId", poolId},
                 {"txId", queryId});

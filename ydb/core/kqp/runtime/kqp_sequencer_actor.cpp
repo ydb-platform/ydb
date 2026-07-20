@@ -22,6 +22,8 @@
 
 #include <list>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -143,7 +145,8 @@ public:
     void Bootstrap() {
         Counters->SequencerActorsCount->Inc();
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Start stream lookup actor");
+        YDB_LOG_DEBUG("Start stream lookup actor",
+            {"#_this->LogPrefix", this->LogPrefix});
         Become(&TKqpSequencerActor::StateFunc);
     }
 
@@ -191,7 +194,10 @@ private:
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         } 
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Returned " << totalDataSize << " bytes, finished: " << finished);
+        YDB_LOG_DEBUG("Returned bytes",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"totalDataSize", totalDataSize},
+            {"finished", finished});
         return totalDataSize;
     }
 

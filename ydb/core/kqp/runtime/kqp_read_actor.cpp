@@ -24,6 +24,8 @@
 #include <util/generic/intrlist.h>
 #include <util/string/vector.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 namespace {
 
 bool IsDebugLogEnabled(const NActors::TActorSystem* actorSystem, NActors::NLog::EComponent component) {
@@ -448,7 +450,9 @@ public:
             }
         }
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Shards State: " << state.ToString(KeyColumnTypes));
+        YDB_LOG_DEBUG("Shards",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"state", state.ToString(KeyColumnTypes)});
 
         if (!Settings->HasShardIdHint()) {
             state.IsFake = true;
@@ -462,11 +466,17 @@ public:
 
     bool StartShards() {
         const ui32 maxAllowedInFlight = Settings->GetSorted() || Settings->GetIsBatch() ? 1 : MaxInFlight;
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"effective maxinflight " << maxAllowedInFlight << " sorted " << Settings->GetSorted());
+        YDB_LOG_DEBUG("Effective maxinflight sorted",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"maxAllowedInFlight", maxAllowedInFlight},
+            {"#_Settings->GetSorted", Settings->GetSorted()});
         bool isFirst = true;
         while (!PendingShards.Empty() && RunningReads() + 1 <= maxAllowedInFlight) {
             if (isFirst) {
-                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"BEFORE: " << PendingShards.Size() << "." << RunningReads());
+                YDB_LOG_DEBUG("",
+                    {"#_this->LogPrefix", this->LogPrefix},
+                    {"BEFORE", PendingShards.Size()},
+                    {"runningReads", RunningReads()});
                 isFirst = false;
             }
             if (Settings->GetReverse()) {
@@ -480,11 +490,16 @@ public:
             }
         }
         if (!isFirst) {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"AFTER: " << PendingShards.Size() << "." << RunningReads());
+            YDB_LOG_DEBUG("",
+                {"#_this->LogPrefix", this->LogPrefix},
+                {"AFTER", PendingShards.Size()},
+                {"runningReads", RunningReads()});
         }
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Scheduled table scans, in flight: " << RunningReads() << " shards. "
-            << "pending shards to read: " << PendingShards.Size() << ", ");
+        YDB_LOG_DEBUG("Scheduled table scans, in shards. pending shards",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"flight", RunningReads()},
+            {"read", PendingShards.Size()});
 
         return RunningReads() > 0 || !PendingShards.Empty();
     }
@@ -513,9 +528,11 @@ public:
         auto keyDesc = MakeHolder<TKeyDesc>(TableId, range, TKeyDesc::ERowOperation::Read,
             KeyColumnTypes, columns);
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Sending TEvResolveKeySet update for table '" << Settings->GetTable().GetTablePath() << "'"
-            << ", range: " << DebugPrintRange(KeyColumnTypes, range, *AppData()->TypeRegistry)
-            << ", attempt #" << state->ResolveAttempt);
+        YDB_LOG_DEBUG("Sending TEvResolveKeySet update for table attempt",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"#_Settings->GetTable().GetTablePath", Settings->GetTable().GetTablePath()},
+            {"range", DebugPrintRange(KeyColumnTypes, range, *AppData()->TypeRegistry)},
+            {"#_state->ResolveAttempt", state->ResolveAttempt});
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
         request->DatabaseName = Settings->GetDatabase();
@@ -532,7 +549,9 @@ public:
     }
 
     void HandleResolve(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Received TEvResolveKeySetResult update for table '" << Settings->GetTable().GetTablePath() << "'");
+        YDB_LOG_DEBUG("Received TEvResolveKeySetResult update for table",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"#_Settings->GetTable().GetTablePath", Settings->GetTable().GetTablePath()});
 
         auto* request = ev->Get()->Request.Get();
         THolder<TShardState> state;
@@ -544,7 +563,10 @@ public:
         }
 
         if (request->ErrorCount > 0 || !state) {
-            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Resolve request failed for table '" << Settings->GetTable().GetTablePath() << "', ErrorCount# " << request->ErrorCount);
+            YDB_LOG_ERROR("Resolve request failed for table",
+                {"#_this->LogPrefix", this->LogPrefix},
+                {"#_Settings->GetTable().GetTablePath", Settings->GetTable().GetTablePath()},
+                {"errorCount", request->ErrorCount});
 
             auto statusCode = NDqProto::StatusIds::UNAVAILABLE;
             TString error;
@@ -583,7 +605,9 @@ public:
 
         if (keyDesc->GetPartitions().empty()) {
             TString error = TStringBuilder() << "No partitions to read from '" << Settings->GetTable().GetTablePath() << "'";
-            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<error);
+            YDB_LOG_ERROR("",
+                {"#_this->LogPrefix", this->LogPrefix},
+                {"error", error});
             return RuntimeError(error, NDqProto::StatusIds::SCHEME_ERROR);
         } else if (keyDesc->GetPartitions().size() == 1) {
             auto& partition = keyDesc->GetPartitions()[0];
@@ -637,26 +661,34 @@ public:
                 keyDesc->GetPartitions()[idx].Range->IsInclusive
             };
 
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Processing resolved ShardId# " << partition.ShardId
-                << ", partition range: " << DebugPrintRange(KeyColumnTypes, partitionRange, tr)
-                << ", i: " << rangeIndex << ", state ranges: " << ranges.size()
-                << ", points: " << points.size());
+            YDB_LOG_DEBUG("Processing resolved partition state",
+                {"#_this->LogPrefix", this->LogPrefix},
+                {"shardId", partition.ShardId},
+                {"range", DebugPrintRange(KeyColumnTypes, partitionRange, tr)},
+                {"i", rangeIndex},
+                {"ranges", ranges.size()},
+                {"points", points.size()});
 
             auto newShard = MakeHolder<TShardState>(partition.ShardId);
 
             if (state->HasRanges()) {
                 for (ui64 j = rangeIndex; j < ranges.size(); ++j) {
                     auto comparison = CompareRanges(partitionRange, ranges[j].ToTableRange(), KeyColumnTypes);
-                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Compare range #" << j << " " << DebugPrintRange(KeyColumnTypes, ranges[j].ToTableRange(), tr)
-                        << " with partition range " << DebugPrintRange(KeyColumnTypes, partitionRange, tr)
-                        << " : " << comparison);
+                    YDB_LOG_DEBUG("Compare range with partition range",
+                        {"#_this->LogPrefix", this->LogPrefix},
+                        {"j", j},
+                        {"#_DebugPrintRange(KeyColumnTypes, ranges[j].ToTableRange(), tr)", DebugPrintRange(KeyColumnTypes, ranges[j].ToTableRange(), tr)},
+                        {"#_DebugPrintRange(KeyColumnTypes, partitionRange, tr)", DebugPrintRange(KeyColumnTypes, partitionRange, tr)},
+                        {"comparison", comparison});
 
                     if (comparison > 0) {
                         continue;
                     } else if (comparison == 0) {
                         auto intersection = Intersect(KeyColumnTypes, partitionRange, ranges[j].ToTableRange());
-                        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Add range to new shardId: " << partition.ShardId
-                            << ", range: " << DebugPrintRange(KeyColumnTypes, intersection, tr));
+                        YDB_LOG_DEBUG("Add range to new",
+                            {"#_this->LogPrefix", this->LogPrefix},
+                            {"shardId", partition.ShardId},
+                            {"range", DebugPrintRange(KeyColumnTypes, intersection, tr)});
 
                         newShard->AddRange(TSerializedTableRange(intersection));
                     } else {
@@ -678,7 +710,9 @@ public:
 
                     if (intersection == 0) {
                         newShard->AddPoint(std::move(points[pointIndex]));
-                        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Add point to new shardId: " << partition.ShardId);
+                        YDB_LOG_DEBUG("Add point to new",
+                            {"#_this->LogPrefix", this->LogPrefix},
+                            {"shardId", partition.ShardId});
                     } else {
                         YQL_ENSURE(intersection > 0, "Missed intersection of point and partition ranges.");
                         break;
@@ -727,7 +761,9 @@ public:
                     sb << st.ToString(KeyColumnTypes) << "; ";
                 }
             }
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<sb);
+            YDB_LOG_DEBUG("",
+                {"#_this->LogPrefix", this->LogPrefix},
+                {"sb", sb});
         }
         StartShards();
     }
@@ -782,7 +818,10 @@ public:
             return DoRetryRead(id);
         }
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"schedule retry #" << id << " after " << delay);
+        YDB_LOG_DEBUG("Schedule retry after",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"id", id},
+            {"delay", delay});
         TlsActivationContext->Schedule(delay, new IEventHandle(SelfId(), SelfId(), new TEvRetryShard(id, Reads[id].LastSeqNo)));
     }
 
@@ -792,7 +831,9 @@ public:
         }
 
         auto state = Reads[id].Shard;
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Retrying read #" << id);
+        YDB_LOG_DEBUG("Retrying read",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"id", id});
 
         ResetRead(id);
 
@@ -903,14 +944,18 @@ public:
             record.SetPoolId(Settings->GetPoolId());
         }
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings->GetTable().GetTablePath()
-            << ", ranges: " << DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)
-            << ", limit: " << limit
-            << ", readId = " << id
-            << ", reverse = " << record.GetReverse()
-            << ", snapshot = (txid=" << Settings->GetSnapshot().GetTxId() << ",step=" << Settings->GetSnapshot().GetStep() << ")"
-            << ", lockTxId = " << Settings->GetLockTxId()
-            << ", lockNodeId = " << Settings->GetLockNodeId());
+        YDB_LOG_DEBUG("Send EvRead to readId reverse snapshot = lockTxId lockNodeId",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"shardId", state->TabletId},
+            {"tablePath", Settings->GetTable().GetTablePath()},
+            {"ranges", DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)},
+            {"limit", limit},
+            {"id", id},
+            {"#_record.GetReverse", record.GetReverse()},
+            {"#_(txid", Settings->GetSnapshot().GetTxId()},
+            {"#_,step", Settings->GetSnapshot().GetStep()},
+            {"#_Settings->GetLockTxId", Settings->GetLockTxId()},
+            {"#_Settings->GetLockNodeId", Settings->GetLockNodeId()});
 
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
@@ -950,9 +995,10 @@ public:
     }
 
     void ReportNullValue(const THolder<TEventHandle<TEvDataShard::TEvReadResult>>& result, size_t columnIndex) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<TStringBuilder() << "validation failed, "
-            << " seqno = " << result->Get()->Record.GetSeqNo()
-            << " finished = " << result->Get()->Record.GetFinished());
+        YDB_LOG_DEBUG("Validation failed, seqno finished",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"#_result->Get()->Record.GetSeqNo", result->Get()->Record.GetSeqNo()},
+            {"#_result->Get()->Record.GetFinished", result->Get()->Record.GetFinished()});
         NYql::TIssue issue;
         issue.SetCode(NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, NYql::TSeverityIds::S_FATAL);
         issue.SetMessage(TStringBuilder()
@@ -980,13 +1026,15 @@ public:
             brokenTxlocks << lock.ShortDebugString();
         }
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Recv TEvReadResult from ShardID=" << Reads[id].Shard->TabletId
-            << ", ReadId=" << id
-            << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
-            << ", Finished=" << record.GetFinished()
-            << ", RowCount=" << record.GetRowCount()
-            << ", TxLocks= " << txLocks
-            << ", BrokenTxLocks= " << brokenTxlocks);
+        YDB_LOG_DEBUG("Recv TEvReadResult",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"shardID", Reads[id].Shard->TabletId},
+            {"readId", id},
+            {"status", Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())},
+            {"finished", record.GetFinished()},
+            {"rowCount", record.GetRowCount()},
+            {"txLocks", txLocks},
+            {"brokenTxLocks", brokenTxlocks});
 
         if (!record.HasNodeId()) {
             Counters->ReadActorAbsentNodeId->Inc();
@@ -994,14 +1042,20 @@ public:
             auto* state = Reads[id].Shard;
             if (!state->NodeId) {
                 state->NodeId = record.GetNodeId();
-                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Node mismatch for tablet " << state->TabletId << " " << *state->NodeId << " != SelfId: " << SelfId().NodeId());
+                YDB_LOG_DEBUG("Node mismatch for tablet !=",
+                    {"#_this->LogPrefix", this->LogPrefix},
+                    {"#_state->TabletId", state->TabletId},
+                    {"#_*state->NodeId", *state->NodeId},
+                    {"selfId", SelfId().NodeId()});
                 if (state->IsFirst) {
                     Counters->ReadActorRemoteFirstFetch->Inc();
                 }
                 Counters->ReadActorRemoteFetch->Inc();
             }
         } else {
-            LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Node match for tablet " << Reads[id].Shard->TabletId);
+            YDB_LOG_TRACE("Node match for tablet",
+                {"#_this->LogPrefix", this->LogPrefix},
+                {"#_Reads[id].Shard->TabletId", Reads[id].Shard->TabletId});
         }
 
         Counters->DataShardIteratorMessages->Inc();
@@ -1010,7 +1064,10 @@ public:
         }
 
         for (auto& issue : record.GetStatus().GetIssues()) {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"read id #" << id << " got issue " << issue.Getmessage());
+            YDB_LOG_DEBUG("Read id got issue",
+                {"#_this->LogPrefix", this->LogPrefix},
+                {"id", id},
+                {"#_issue.Getmessage", issue.Getmessage()});
             Reads[id].Shard->Issues.push_back(issue);
         }
 
@@ -1094,7 +1151,9 @@ public:
             YQL_ENSURE(Locks.empty());
         }
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Taken " << Locks.size() << " locks");
+        YDB_LOG_DEBUG("Taken locks",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"#_Locks.size", Locks.size()});
         Reads[id].SerializedContinuationToken = record.GetContinuationToken();
 
         ui64 seqNo = record.GetSeqNo();
@@ -1107,10 +1166,16 @@ public:
 
         ReceivedRowCount += msg.GetRowsCount();
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<TStringBuilder() << "new data for read #" << id
-            << " seqno = " << seqNo
-            << " finished = " << record.GetFinished());
-        LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(&msg) << " continuation token " << DebugPrintContinuationToken(record.GetContinuationToken()));
+        YDB_LOG_DEBUG("New data for read seqno finished",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"id", id},
+            {"seqNo", seqNo},
+            {"#_record.GetFinished", record.GetFinished()});
+        YDB_LOG_TRACE("Read pushed continuation token",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"id", id},
+            {"#_DebugPrintCells(&msg)", DebugPrintCells(&msg)},
+            {"#_DebugPrintContinuationToken(record.GetContinuationToken())", DebugPrintContinuationToken(record.GetContinuationToken())});
 
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), id, seqNo});
         NotifyCA();
@@ -1122,7 +1187,10 @@ public:
         HasEstablishedPipe.erase(msg.TabletId);
         TVector<ui32> reads;
         reads = ReadIdByTabletId[msg.TabletId];
-        LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"Got EvDeliveryProblem, TabletId: " << msg.TabletId << ", NotDelivered: " << msg.NotDelivered);
+        YDB_LOG_WARN("Got EvDeliveryProblem",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"tabletId", msg.TabletId},
+            {"notDelivered", msg.NotDelivered});
         for (auto read : reads) {
             if (Reads[read]) {
                 Counters->IteratorDeliveryProblems->Inc();
@@ -1263,11 +1331,12 @@ public:
         auto& [shardId, result, batch, processedRows, packed, readId, seqNo] = handle;
         NMiniKQL::TBytesStatistics stats;
         batch->reserve(batch->size());
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<TStringBuilder() << "enter pack cells method "
-            << " shardId: " << shardId
-            << " processedRows: " << processedRows
-            << " packed rows: " << packed
-            << " freeSpace: " << freeSpace);
+        YDB_LOG_DEBUG("Enter pack cells method packed",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"shardId", shardId},
+            {"processedRows", processedRows},
+            {"rows", packed},
+            {"freeSpace", freeSpace});
 
         for (size_t rowIndex = packed; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
             const auto& row = result->Get()->GetCells(rowIndex);
@@ -1310,11 +1379,12 @@ public:
             }
         }
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<TStringBuilder() << "exit pack cells method "
-            << " shardId: " << shardId
-            << " processedRows: " << processedRows
-            << " packed rows: " << packed
-            << " freeSpace: " << freeSpace);
+        YDB_LOG_DEBUG("Exit pack cells method packed",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"shardId", shardId},
+            {"processedRows", processedRows},
+            {"rows", packed},
+            {"freeSpace", freeSpace});
         return stats;
     }
 
@@ -1336,8 +1406,10 @@ public:
 
         YQL_ENSURE(!resultBatch.IsWide(), "Wide stream is not supported");
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<TStringBuilder() << " enter getasyncinputdata results size " << Results.size()
-            << ", freeSpace " << freeSpace);
+        YDB_LOG_DEBUG("Enter getasyncinputdata results size freeSpace",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"#_Results.size", Results.size()},
+            {"freeSpace", freeSpace});
 
         ui64 bytes = 0;
         while (!Results.empty()) {
@@ -1372,11 +1444,15 @@ public:
                 bytes += rowSize.AllocatedBytes;
                 if (ProcessedRowCount == Settings->GetItemsLimit()) {
                     finished = true;
-                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<TStringBuilder() << " returned async data because limit reached");
+                    YDB_LOG_DEBUG("Returned async data because limit reached",
+                        {"#_this->LogPrefix", this->LogPrefix});
                     return bytes;
                 }
             }
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<TStringBuilder() << "returned " << resultBatch.RowCount() << " rows; processed " << ProcessedRowCount << " rows");
+            YDB_LOG_DEBUG("Returned rows; processed rows",
+                {"#_this->LogPrefix", this->LogPrefix},
+                {"#_resultBatch.RowCount", resultBatch.RowCount()},
+                {"processedRowCount", ProcessedRowCount});
 
             size_t rowCount = result.ReadResult.Get()->Get()->GetRowsCount();
             if (rowCount == result.ProcessedRows) {
@@ -1396,7 +1472,11 @@ public:
                             request->Record.SetMaxRows(*limit);
                         }
                         Counters->SentIteratorAcks->Inc();
-                        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"sending ack for read #" << id << " limit " << limit << " seqno = " << record.GetSeqNo());
+                        YDB_LOG_DEBUG("Sending ack for read limit seqno",
+                            {"#_this->LogPrefix", this->LogPrefix},
+                            {"id", id},
+                            {"limit", limit},
+                            {"#_record.GetSeqNo", record.GetSeqNo()});
                         bool newPipe = HasEstablishedPipe.insert(Reads[id].Shard->TabletId).second;
                         Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), Reads[id].Shard->TabletId, TEvPipeCache::TEvForwardOptions{
                             .AutoConnect = newPipe,
@@ -1416,7 +1496,9 @@ public:
                 }
 
                 Results.pop();
-                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<"dropping batch for read #" << id);
+                YDB_LOG_DEBUG("Dropping batch for read",
+                    {"#_this->LogPrefix", this->LogPrefix},
+                    {"id", id});
 
                 if (LimitReached()) {
                     finished = true;
@@ -1433,15 +1515,16 @@ public:
             finished = true;
         }
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix <<TStringBuilder() << "returned async data"
-            << " processed rows " << ProcessedRowCount
-            << " left freeSpace " << freeSpace
-            << " received rows " << ReceivedRowCount
-            << " running reads " << RunningReads()
-            << " pending shards " << PendingShards.Size()
-            << " finished = " << finished
-            << " has limit " << (Settings->GetItemsLimit() != 0)
-            << " limit reached " << LimitReached());
+        YDB_LOG_DEBUG("Returned async data processed rows left freeSpace received rows running reads pending shards finished has limit limit reached",
+            {"#_this->LogPrefix", this->LogPrefix},
+            {"processedRowCount", ProcessedRowCount},
+            {"freeSpace", freeSpace},
+            {"receivedRowCount", ReceivedRowCount},
+            {"runningReads", RunningReads()},
+            {"#_PendingShards.Size", PendingShards.Size()},
+            {"finished", finished},
+            {"#_(Settings->GetItemsLimit() != 0)", (Settings->GetItemsLimit() != 0)},
+            {"limitReached", LimitReached()});
 
         return bytes;
     }

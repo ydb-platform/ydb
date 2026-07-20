@@ -703,7 +703,7 @@ private:
 
 private:
     void RebuildConfigAndStartCompilation(const TActorContext &ctx, TString&& logMessage) {
-        YDB_LOG_ERROR_CTX(ctx, "text",
+        YDB_LOG_ERROR_CTX(ctx, "Text",
             {"logMessage", logMessage},
             {"self", ctx.SelfID},
             {"database", QueryId.Database},

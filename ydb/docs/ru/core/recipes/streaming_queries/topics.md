@@ -1,6 +1,6 @@
 # Быстрый старт: чтение и запись в топики
 
-В этом руководстве вы создадите свой первый [потоковый запрос](../../concepts/streaming-query.md).
+В этом руководстве вы создадите свой первый [потоковый запрос](../../concepts/streaming-query/streaming-query.md).
 
 Запрос будет:
 
@@ -92,7 +92,7 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 
 ## Шаг 3. Создание потокового запроса {#step3}
 
-Создайте [потоковый запрос](../../concepts/streaming-query.md) с помощью [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md):
+Создайте [потоковый запрос](../../concepts/streaming-query/streaming-query.md) с помощью [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md):
 
 ```sql
 CREATE STREAMING QUERY query_example AS
@@ -198,5 +198,5 @@ DROP STREAMING QUERY query_example;
 
 ## См. также
 
-* [{#T}](../../concepts/streaming-query.md);
+* [{#T}](../../concepts/streaming-query/streaming-query.md);
 * [{#T}](../../dev/streaming-query/streaming-query-formats.md).

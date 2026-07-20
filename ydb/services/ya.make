@@ -17,7 +17,6 @@ RECURSE(
     maintenance
     metadata
     udf_store
-    udf_store_examples
     monitoring
     persqueue_cluster_discovery
     persqueue_v1

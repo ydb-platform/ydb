@@ -2,8 +2,7 @@ BUILD_ONLY_IF(OS_EMSCRIPTEN)
 
 DLL()
 
-LD_PLUGIN(ydb/services/udf_store/wasm/sdk/ld_plugin.py)
-LD_PLUGIN(ydb/services/udf_store/wasm/protobuf/ld_plugin.py)
+LD_PLUGIN(ydb/tests/functional/udf_store/sdk/ld_plugin.py)
 
 NO_UTIL()
 NO_RUNTIME()
@@ -16,7 +15,6 @@ SRCS(
 
 PEERDIR(
     ydb/services/udf_store/wasm/abi
-    ydb/services/udf_store_examples/proto_simple/gen/proto_schema
 )
 
 CFLAGS(
@@ -30,7 +28,6 @@ CFLAGS(
 
 LDFLAGS(
     -Wl,--allow-undefined
-    -Wl,--export=proto_roundtrip
     -Wl,--export=malloc
     -Wl,--export=__heap_base
     -Wl,--export=__data_end
@@ -38,12 +35,8 @@ LDFLAGS(
     -Wl,--export=_initialize
     -Wl,--initial-heap=16777216
     -flto=thin
+    -Wl,-O2
     -fvisibility=hidden
-    -Wl,-O3
 )
 
 END()
-
-RECURSE(
-    gen
-)

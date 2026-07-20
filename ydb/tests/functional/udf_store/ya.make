@@ -35,3 +35,18 @@ ELSE()
 ENDIF()
 
 END()
+
+# WASM UDF examples / SDK (cross-compile with Arcadia/YT-compatible flags):
+#   ydb/services/udf_store/wasm/ya_make --target-platform=clang18-emscripten-wasm64 --build profile \
+#     ydb/tests/functional/udf_store/sdk \
+#     ydb/tests/functional/udf_store/protobuf \
+#     ydb/tests/functional/udf_store/add \
+#     ydb/tests/functional/udf_store/proto_simple
+RECURSE(
+    add
+    lib
+    protobuf
+    proto_simple
+    sdk
+    upload_udf
+)

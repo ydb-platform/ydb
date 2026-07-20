@@ -53,6 +53,21 @@ namespace NPageCollection {
                 && Meta.GetPageChecksum(page) == Checksum(body);
         }
 
+        TBorder Bounds(TPageLocation location) const override
+        {
+            return Meta.Bounds(location);
+        }
+
+        bool Verify(TPageLocation location, TArrayRef<const char> data) const override
+        {
+            return data.size() == location.Size && Checksum(data) == location.Crc32;
+        }
+
+        TPageLocation GetLocation(ui32 pageId) const override
+        {
+            return Meta.GetLocation(pageId);
+        }
+
         size_t BackingSize() const noexcept override
         {
             return Meta.BackingSize();
@@ -71,6 +86,21 @@ namespace NPageCollection {
 
         const TLargeGlobId LargeGlobId;
         const TMeta Meta;
+    };
+
+    /// Page-index TPageOffset to satisfy forward cache
+    class TOuterPageCollection : public TPageCollection {
+    public:
+        using TPageCollection::TPageCollection;
+
+        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override
+        {
+            auto info = Meta.Page(pageId);
+            return NTable::NPage::TPageLocation::FromPageIndex(
+                pageId, info.Size,
+                static_cast<NTable::NPage::EPage>(info.Type),
+                Meta.GetPageChecksum(pageId));
+        }
     };
 }
 }

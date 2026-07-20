@@ -182,7 +182,8 @@ Y_UNIT_TEST_SUITE(TIterator) {
             return NTest::TTestEnv::Locate(part, ref, lob);
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override {
+        const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override {
+            auto pageId = location.GetPageIndex();
             if (AutoLoad) {
                 if (Loaded[groupId].insert(pageId).second) {
                     return nullptr;
@@ -192,7 +193,7 @@ Y_UNIT_TEST_SUITE(TIterator) {
                 return nullptr;
             }
 
-            return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
+            return NTest::TTestEnv::TryGetPage(part, location, groupId);
         }
 
         void Load() {

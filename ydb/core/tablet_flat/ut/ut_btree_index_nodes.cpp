@@ -120,8 +120,9 @@ namespace {
 
     void Dump(TSharedData node, const TPartScheme::TGroupInfo& groupInfo) {
         TWriterBundle pager(1, TLogoBlobID());
-        auto pageId = ((IPageWriter*)&pager)->Write(node, EPage::BTreeIndex, 0);
-        TChild page{pageId, 0, 0, 0, 0};
+        auto& writer = static_cast<IPageWriter&>(pager);
+        writer.Write(node, EPage::BTreeIndex, 0);
+        TChild page{writer.GetWrittenPageId(0), 0, 0, 0, 0};
         Dump(page, groupInfo, pager.Back());
     }
 
@@ -550,7 +551,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexBuilder) {
         TIntrusivePtr<TPartScheme> scheme = new TPartScheme(lay.RowScheme()->Cols);
 
         TBtreeIndexBuilder builder(scheme, { }, Max<ui32>(), 1, 2);
-        
+
         TVector<TString> keys;
         for (ui32 i : xrange(20)) {
             keys.push_back(MakeKey(i, std::string{char('a' + i)}, i % 2, i * 10));

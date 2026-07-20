@@ -64,6 +64,14 @@ namespace NTest {
             return Store->GetPageType(groupId.Index, pageId);
         }
 
+        NPage::TPageLocation GetPageLocation(NPage::TPageId pageId, NPage::TGroupId groupId) const override
+        {
+            auto size = Store->GetPageSize(groupId.Index, pageId);
+            auto type = Store->GetPageType(groupId.Index, pageId);
+            auto crc32 = Store->GetPageChecksum(groupId.Index, pageId);
+            return NPage::TPageLocation::FromPageIndex(pageId, size, type, crc32);
+        }
+
         ui8 GetGroupChannel(NPage::TGroupId groupId) const override
         {
             Y_UNUSED(groupId);
@@ -108,8 +116,9 @@ namespace NTest {
             return { true, Get(part, room, ref) };
         }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, TPageLocation location, TGroupId groupId) override
         {
+            auto pageId = location.GetPageIndex();
             return Get(part, groupId.Index, pageId);
         }
 
@@ -202,7 +211,8 @@ namespace NTest {
                     Y_ENSURE(ready != EReady::Page, "Unexpected page fault");
                     break;
                 }
-                result += part.GetPageSize(index->GetPageId(), groupId);
+                auto location = index->GetLocation();
+                result += location.Size;
             }
 
             return result;
@@ -214,7 +224,7 @@ namespace NTest {
             return index->GetEndRowId();
         }
 
-        inline TRowId GetPageId(const TPart& part, ui32 pageIndex) {
+        inline TPageLocation GetPageLocation(const TPart& part, ui32 pageIndex) {
             TTestEnv env;
             auto index = CreateIndexIter(&part, &env, { });
 
@@ -223,7 +233,7 @@ namespace NTest {
                 Y_ENSURE(index->Next() == EReady::Data);
             }
 
-            return index->GetPageId();
+            return index->GetLocation();
         }
 
         inline TRowId GetRowId(const TPart& part, ui32 pageIndex) {
@@ -238,18 +248,18 @@ namespace NTest {
             return index->GetRowId();
         }
 
-        inline TPageId GetFirstPageId(const TPart& part, TGroupId groupId) {
+        inline TPageLocation GetFirstPageLocation(const TPart& part, TGroupId groupId) {
             TTestEnv env;
             auto index = CreateIndexIter(&part, &env, groupId);
             index->Seek(0);
-            return index->GetPageId();
+            return index->GetLocation();
         }
 
-        inline TPageId GetLastPageId(const TPart& part, TGroupId groupId) {
+        inline TPageLocation GetLastPageLocation(const TPart& part, TGroupId groupId) {
             TTestEnv env;
             auto index = CreateIndexIter(&part, &env, groupId);
             index->Seek(index->GetEndRowId() - 1);
-            return index->GetPageId();
+            return index->GetLocation();
         }
 
         inline TVector<TCell> GetKey(const TPart& part, ui32 pageIndex) {

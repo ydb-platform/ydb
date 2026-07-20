@@ -9736,7 +9736,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLockedTabletVolatileStateDependsOnMetricsFlag) {
-        return;  // https://github.com/ydb-platform/ydb/issues/46172
+        // return;  // https://github.com/ydb-platform/ydb/issues/46172
         for (bool lockedTabletsSendMetrics : {false, true}) {
             const ui64 hiveTablet = MakeDefaultHiveID();
             const ui64 testerTablet = MakeTabletID(false, 1);
@@ -9784,6 +9784,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                               tabletState(tabletIdExt));
 
             RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
+            {
+                TDispatchOptions options;
+                options.FinalEvents.emplace_back(TEvLocal::EvStatus, runtime.GetNodeCount());
+                runtime.DispatchEvents(options);
+            }
 
             SendLockTabletExecution(runtime, hiveTablet, tabletIdExt, 0,
                                     NKikimrProto::OK, owner, 60000, true);

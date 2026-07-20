@@ -204,10 +204,7 @@ public:
     TString FamilyString() const;
     void ChangeVolatileState(EVolatileState state);
 
-    bool IsReadyToBoot() const {
-        return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STOPPED;
-    }
-
+    bool IsReadyToBoot() const;
     bool IsReadyToStart(TInstant now) const;
     bool IsStarting() const;
     bool IsStartingOnNode(TNodeId nodeId) const;

@@ -150,9 +150,22 @@ void TTabletInfo::ChangeVolatileState(EVolatileState state) {
     VolatileStateChangeTime = TActivationContext::Now();
 }
 
+bool TTabletInfo::IsReadyToBoot() const {
+    if (IsLeader()) {
+        if (!AsLeader().IsReadyToWork()) {
+            return false;
+        }
+    }
+    return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STOPPED;
+}
+
 bool TTabletInfo::IsReadyToStart(TInstant now) const {
     if (IsFollower()) {
         if (!GetLeader().IsRunning()) {
+            return false;
+        }
+    } else if (IsLeader()) {
+        if (!AsLeader().IsReadyToWork()) {
             return false;
         }
     }
@@ -160,6 +173,11 @@ bool TTabletInfo::IsReadyToStart(TInstant now) const {
 }
 
 bool TTabletInfo::IsStarting() const {
+    if (IsLeader()) {
+        if (!AsLeader().IsReadyToWork()) {
+            return false;
+        }
+    }
     return NodeId == 0 && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING;
 }
 
@@ -168,6 +186,11 @@ bool TTabletInfo::IsStartingOnNode(TNodeId nodeId) const {
 }
 
 bool TTabletInfo::IsRunning() const {
+    if (IsLeader()) {
+        if (!AsLeader().IsReadyToWork()) {
+            return false;
+        }
+    }
     return Node != nullptr && VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING;
 }
 
@@ -176,6 +199,11 @@ bool TTabletInfo::IsBooting() const {
 }
 
 bool TTabletInfo::IsAlive() const {
+    if (IsLeader()) {
+        if (!AsLeader().IsReadyToWork()) {
+            return false;
+        }
+    }
     return Node != nullptr &&
             (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING
              || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
@@ -189,6 +217,11 @@ bool TTabletInfo::CanBeAlive() const {
 }
 
 bool TTabletInfo::IsAliveOnLocal(const TActorId& local) const {
+    if (IsLeader()) {
+        if (!AsLeader().IsReadyToWork()) {
+            return false;
+        }
+    }
     return Node != nullptr
             && Node->Local == local
             && (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING

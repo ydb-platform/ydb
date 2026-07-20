@@ -5136,54 +5136,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(result.GetResultSet(0).RowsCount() == 1, result.GetIssues().ToString());
         }
     }
-<<<<<<< HEAD
-=======
-
-    Y_UNIT_TEST(TruncateColumnTableFails) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
-        TKikimrRunner kikimr(settings);
-        auto client = kikimr.GetQueryClient();
-
-        {
-            const TString query = R"(
-                CREATE TABLE `/Root/TestColumnTable` (
-                    Key Uint32 NOT NULL,
-                    Value String,
-                    PRIMARY KEY (Key)
-                ) WITH (
-                    STORE = COLUMN
-                );
-            )";
-
-            auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const TString query = R"(
-                INSERT INTO `/Root/TestColumnTable` (Key, Value) VALUES
-                    (1, "one"),
-                    (2, "two"),
-                    (3, "three");
-            )";
-
-            auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            const TString query = R"(
-                TRUNCATE TABLE `/Root/TestColumnTable`;
-            )";
-
-            auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_C(result.GetIssues().ToString().contains("path is not a table"),
-                "Unexpected error message: " << result.GetIssues().ToString());
-        }
-    }
 
     Y_UNIT_TEST(AlterTableDropNotNullOnColumnTable) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
@@ -5339,7 +5291,5 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
         }
     }
-
->>>>>>> ec76ef9d606 (drop not null has been fixed for cs (#47034))
 }
 }

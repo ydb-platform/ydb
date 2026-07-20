@@ -128,7 +128,7 @@ def get_all_cgi_params(url):
             assert row.Status in status
             assert row.Text.strip() in text.strip()
             assert row.Run
-            assert row.ResourcePool == "default"
+            assert row.ResourcePool == ""
             assert row.RetryCount in retry_count
 
             if retry_count == [0]:

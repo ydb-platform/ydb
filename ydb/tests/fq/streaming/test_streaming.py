@@ -1586,7 +1586,7 @@ FROM `{table_name}`"""
         """)
 
         if additional_operator == "hop":
-            process = f"""
+            process = """
                 SELECT
                     Key,
                     SOME(Value) AS Value
@@ -1597,9 +1597,9 @@ FROM `{table_name}`"""
             """
 
             expected_data1 = []
-            expected_data2 = [f"in1-value-p-row-value-p-column:1", f"in1-value-p-row-value-p-column:2"]
+            expected_data2 = ["in1-value-p-row-value-p-column:1", "in1-value-p-row-value-p-column:2"]
         elif additional_operator == "mr":
-            process = f"""
+            process = """
                 SELECT * FROM $in MATCH_RECOGNIZE(
                     MEASURES
                         LAST(A.Key) as MatchKey
@@ -1613,7 +1613,7 @@ FROM `{table_name}`"""
             """
 
             expected_data1 = []
-            expected_data2 = [f"in1-value-p-row-value-p-column:1", f"in1-value-p-row-value-p-column:2", f"in2-value-p-row-value-p-column:1", f"in2-value-p-row-value-p-column:2"]
+            expected_data2 = ["in1-value-p-row-value-p-column:1", "in1-value-p-row-value-p-column:2", "in2-value-p-row-value-p-column:1", "in2-value-p-row-value-p-column:2"]
         elif additional_operator == "join":
             join_table = f"test_precompute_and_other_ops_join_table_{local_topics!s:.1}"
             kikimr.ydb_client.query(f"""
@@ -1639,8 +1639,8 @@ FROM `{table_name}`"""
                 LEFT JOIN `{join_table}` AS j ON i.Key = j.Key
             """
 
-            expected_data1 = [f"in1-value-p-row-value-j1-value-p-column:1", f"in1-value-p-row-value-j2-value-p-column:2"]
-            expected_data2 = [f"in2-value-p-row-value-j1-value-p-column:1", f"in2-value-p-row-value-j2-value-p-column:2"]
+            expected_data1 = ["in1-value-p-row-value-j1-value-p-column:1", "in1-value-p-row-value-j2-value-p-column:2"]
+            expected_data2 = ["in2-value-p-row-value-j1-value-p-column:1", "in2-value-p-row-value-j2-value-p-column:2"]
 
         query_name = f"test_precompute_and_other_ops_query_{local_topics!s:.1}_{additional_operator}"
         kikimr.ydb_client.query(f"""

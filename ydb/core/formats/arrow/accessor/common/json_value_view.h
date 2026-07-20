@@ -1,5 +1,8 @@
 #pragma once
 
+#include <library/cpp/json/writer/json_value.h>
+#include <yql/essentials/types/binary_json/format.h>
+
 #include <util/generic/string.h>
 
 #include <optional>
@@ -22,6 +25,9 @@ public:
     // So result will be different for a native scalar and the same scalar wrapped in BinaryJson.
     // Expected to be used only for containers, but no checks enforce that.
     std::optional<TStringBuf> GetBinaryJsonBlobOptional() const;
+
+    NJson::TJsonValue ToJsonValue() const;
+    NBinaryJson::TBinaryJson ToBinaryJson() const;
 private:
     static std::optional<TString> JsonNumberToString(double jsonNumber);
 

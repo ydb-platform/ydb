@@ -80,12 +80,12 @@ public:
         const arrow::Array& GetArray() const {
             return *CurrentArrayData;
         }
-        i64 GetLocalIndex() const {
+        ui32 GetLocalIndex() const {
             return ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex);
         }
 
         NArrow::NAccessor::TJsonValueView GetValue() const {
-            return ArrayElementToJsonValueView(*CurrentArrayData, GetLocalIndex(), ValueType);
+            return GetCodecForValueType(ValueType)->ReadValueView(*CurrentArrayData, GetLocalIndex());
         }
 
         bool HasValue() const {

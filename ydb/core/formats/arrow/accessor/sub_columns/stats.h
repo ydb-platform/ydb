@@ -194,7 +194,7 @@ public:
     std::shared_ptr<arrow::Field> GetField(const ui32 index) const {
         AFL_VERIFY(index < DataNames->length());
         auto name = DataNames->GetView(index);
-        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), GetArrowTypeForValueType(GetValueType(index)));
+        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), GetCodecForValueType(GetValueType(index))->GetArrowType());
     }
 
     TRTStats GetRTStats(const ui32 index) const {
@@ -240,7 +240,6 @@ public:
         return result;
     }
 
-    bool IsSparsed(const ui32 columnIndex, const ui32 recordsCount, const TSettings& settings) const;
     TDictStats(const std::shared_ptr<arrow::RecordBatch>& original);
 };
 

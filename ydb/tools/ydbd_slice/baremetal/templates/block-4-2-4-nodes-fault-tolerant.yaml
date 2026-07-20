@@ -16,9 +16,17 @@ host_configs: # the list of available host configurations in the cluster.
 - drive:
   - path: &disk_path_1 /dev/disk/by-partlabel/kikimr_nvme_01   # path of the first disk in the host configuration.
     type: SSD                                     # kind of the disk: available kinds are SSD, NVME or HDD
+    disk_scope: fail-domain-1                     # label to calculate fail domains for storage groups mapping
   - path: &disk_path_2 /dev/disk/by-partlabel/kikimr_nvme_02
     type: SSD
-    # Note: adding more disks will compromise fault tolerance
+    disk_scope: fail-domain-1
+  - path: &disk_path_3 /dev/disk/by-partlabel/kikimr_nvme_03
+    type: SSD
+    disk_scope: fail-domain-2
+  - path: &disk_path_4 /dev/disk/by-partlabel/kikimr_nvme_04
+    type: SSD
+    disk_scope: fail-domain-2
+  # Add more disks if needed, distribute new disks uniformly between fail-domain-1 and fail-domain-2
   host_config_id: 1 # the unique id of the host config
 hosts:
 - host: &host_1 CHANGE_ME_HOST_1 # storage node DNS name, change if required.
@@ -64,7 +72,7 @@ static_erasure: block-4-2
 state_storage:
   allow_incorrect: true
   node_ids: [1, 2, 3, 4]
-fail_domain_type: disk
+fail_domain_type: disk_scope
 
 # NOTE(shmel1k@): this template domains_config differs from production configuration.
 # It will be fixed soon, stay tuned.
@@ -90,7 +98,7 @@ domains:
       # fault tolerance mode name - none, block-4-2, or mirror-3-dc.
       # See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
       erasure: block-4-2
-      fail_domain_type: disk
+      fail_domain_type: disk_scope
       filter_properties:
         type: SSD # device type to match host_configs.drive.type
 
@@ -138,7 +146,7 @@ blob_storage_config:    # configuration of static blobstorage group.
         - vdisk_locations:
           - node_id: 1
             pdisk_category: *pdisk_category
-            path: *disk_path_2
+            path: *disk_path_3
             pdisk_guid: 2
         - vdisk_locations:
           - node_id: 2
@@ -148,7 +156,7 @@ blob_storage_config:    # configuration of static blobstorage group.
         - vdisk_locations:
           - node_id: 2
             pdisk_category: *pdisk_category
-            path: *disk_path_2
+            path: *disk_path_3
             pdisk_guid: 4
         - vdisk_locations:
           - node_id: 3
@@ -158,7 +166,7 @@ blob_storage_config:    # configuration of static blobstorage group.
         - vdisk_locations:
           - node_id: 3
             pdisk_category: *pdisk_category
-            path: *disk_path_2
+            path: *disk_path_3
             pdisk_guid: 6
         - vdisk_locations:
           - node_id: 4
@@ -168,7 +176,7 @@ blob_storage_config:    # configuration of static blobstorage group.
         - vdisk_locations:
           - node_id: 4
             pdisk_category: *pdisk_category
-            path: *disk_path_2
+            path: *disk_path_3
             pdisk_guid: 8
 # TODO: migrate to channel_profile_config
 profiles:

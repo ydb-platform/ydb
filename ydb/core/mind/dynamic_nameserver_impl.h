@@ -263,7 +263,7 @@ private:
                             const TActorContext &ctx);
     void ResolveStaticNode(ui32 nodeId, TActorId sender, TMonotonic deadline, const TActorContext &ctx);
     void ResolveDynamicNode(ui32 nodeId, TAutoPtr<IEventHandle> ev, TMonotonic deadline, const TActorContext &ctx);
-    void SendNodesList(TActorId recipient, bool onlyAliveNodes, const TActorContext &ctx);
+    void SendNodesList(TActorId recipient, bool onlyAliveDynamicNodes, const TActorContext &ctx);
     void SendNodesList(const TActorContext &ctx);
     void InvalidateListNodesCache();
     void PendingRequestAnswered(ui32 domain, const TActorContext &ctx);
@@ -312,7 +312,9 @@ private:
     // Domain -> Epoch ID.
     THashMap<ui32, ui64> EpochUpdates;
     ui32 ResolvePoolId;
-    THashSet<TActorId> StaticNodeChangeSubscribers;
+    // Subscriber -> its OnlyAliveDynamicNodes preference, so re-notifications
+    // respect the filter the subscriber originally requested.
+    THashMap<TActorId, bool> StaticNodeChangeSubscribers;
     bool SubscribedToConsoleNSConfig = false;
 
     bool EnableLongLease = false;

@@ -33,7 +33,7 @@
 
 ## Настройте доступ к модели {#configure-model-access}
 
-`ydb_em_ai_model_token_name` — это имя записи tokenator, которую Gateway использует для запросов к модели. Это не raw token. В token-файле это поле `Name` записи, у которой значение `Token` содержит полный HTTP-заголовок `Authorization`, ожидаемый endpoint модели.
+`ydb_em_ai_model_token_name` — это имя записи [tokenator](../../concepts/glossary.md#tokenator), которую Gateway использует для запросов к модели.
 
 Пример записи tokenator:
 

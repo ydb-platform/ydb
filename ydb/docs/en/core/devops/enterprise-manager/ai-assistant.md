@@ -2,7 +2,7 @@
 
 This guide shows how to enable AI assistant in {{ ydb-short-name }} Enterprise Manager (YDB EM). After the setup, users will see the assistant in the YDB EM web interface. The assistant sends model requests through [Gateway](index.md#architecture) and can use Model Context Protocol (MCP) tools provided by Gateway.
 
-## Before you start {#before-start}
+## Before You Start {#before-start}
 
 You can use this guide before the first YDB EM deployment or when updating an existing installation. For a new deployment, add the variables to the inventory before running the initial setup playbook. For deployment instructions, see [{#T}](initial-deployment.md).
 
@@ -21,7 +21,7 @@ Do not put model API keys, OAuth tokens, or other secrets into `ydb_em_ai_assist
 
 {% endnote %}
 
-## How it works {#how-it-works}
+## How It Works {#how-it-works}
 
 The browser works with the assistant through Gateway:
 
@@ -31,9 +31,9 @@ The browser works with the assistant through Gateway:
 1. Gateway forwards model requests to `ydb_em_ai_model_endpoint` and adds the Authorization header from tokenator.
 1. The UI sends MCP requests to `/meta/mcp`. Gateway exposes MCP tools through this endpoint and runs them against YDB EM APIs and cluster proxy endpoints. When documentation search is configured, `search_docs` is exposed through the same MCP endpoint and can be used by the assistant.
 
-## Configure model access {#configure-model-access}
+## Configure Model Access {#configure-model-access}
 
-`ydb_em_ai_model_token_name` is the tokenator entry name that Gateway uses for model requests. It must not be the raw token value. In the token file, this is the `Name` field of an entry whose `Token` value is the full HTTP `Authorization` header expected by the model endpoint.
+`ydb_em_ai_model_token_name` is the [tokenator](../../concepts/glossary.md#tokenator) entry name that Gateway uses for model requests.
 
 Example tokenator entry:
 
@@ -52,7 +52,7 @@ The default YDB EM Ansible token template renders only the `meta` credentials en
 
 {% endnote %}
 
-## Configure Ansible variables {#configure-ansible-variables}
+## Configure Ansible Variables {#configure-ansible-variables}
 
 Add the AI assistant variables to the YDB EM inventory, for example to `examples/inventory/50-inventory.yaml` or another inventory file used by your deployment.
 
@@ -84,7 +84,7 @@ Parameter | Description
 
 Gateway appends the request suffix from `/proxy/model/...` to `ydb_em_ai_model_endpoint`. With `baseURL: "/proxy/model/v1"`, a chat completion request is forwarded to `/v1/chat/completions` on the upstream endpoint. Configure the endpoint so that this path is valid for your model provider.
 
-## Configure documentation search {#configure-docs-search}
+## Configure Documentation Search {#configure-docs-search}
 
 It is recommended to enable documentation search so that the assistant gets the `search_docs` MCP tool. Gateway calls an OpenAI-compatible embeddings endpoint for this tool and appends `/embeddings` to the configured base URL when the suffix is missing. When documentation search is enabled, the assistant gets `search_docs` through the configured `/meta/mcp` server.
 
@@ -108,7 +108,7 @@ Parameter | Description
 `ydb_em_docs_search_limit` | Maximum number of documents returned.
 `ydb_em_docs_search_score` | Minimum similarity score from `0` to `1`. Documents with a lower score are filtered out.
 
-## Apply the configuration {#apply-configuration}
+## Apply The Configuration {#apply-configuration}
 
 After updating the inventory, run the YDB EM playbook from the directory with your inventory. The same playbook is used for initial deployment and for applying this change to an existing installation:
 
@@ -124,7 +124,7 @@ ansible-playbook ydb_platform.ydb_em.initial_setup --ask-vault-pass
 
 The role renders the Gateway config and the default token file and ensures that the Gateway service is started. If you deliver additional model credentials through an overridden token file or another deployment step, make sure the deployed token file contains the configured entry name. When applying these settings to an already running deployment, restart the Gateway service using your operational procedure if your Ansible run does not restart it after config or token changes.
 
-## Verify the setup {#verify}
+## Verify The Setup {#verify}
 
 Open the YDB EM web interface:
 
@@ -172,34 +172,34 @@ If documentation search is enabled, also check that `/meta/mcp` exposes `search_
 
 ## Troubleshooting {#troubleshooting}
 
-### Assistant button is not shown {#button-not-shown}
+### Assistant Button Is Not Shown {#button-not-shown}
 
 Check that `ydb_em_ai_assistant_enabled` is `true` and that `/capabilities` contains `Settings.Proxy.Model: true`. Also check the user setting for AI assistant in the YDB EM UI: YDB EM initializes it to enabled when the backend capability is present, but a user can turn it off.
 
-### Runtime config is invalid {#runtime-config-invalid}
+### Runtime Config Is Invalid {#runtime-config-invalid}
 
 Check `GET /meta/ai_assistant_client_config`. For an enabled assistant, the response must be a JSON object with `llm.baseURL` and `llm.model` string fields. A `null` response means that Gateway did not load an enabled AI assistant client config.
 
-### Model proxy returns an authorization error {#model-authorization-error}
+### Model Proxy Returns An Authorization Error {#model-authorization-error}
 
 Check that `ydb_em_ai_model_token_name` matches a tokenator entry and that the entry returns the Authorization header expected by the model endpoint. If tokenator cannot find the entry, Gateway sends the upstream request without the expected Authorization header.
 
-### Model proxy calls the wrong upstream path {#wrong-upstream-path}
+### Model Proxy Calls The Wrong Upstream Path {#wrong-upstream-path}
 
 Check `ydb_em_ai_model_endpoint` together with `llm.baseURL`. Gateway appends the path from `/proxy/model/...` to the configured endpoint. A duplicated `/v1` path often causes upstream `404` errors.
 
-### MCP tools are unavailable {#mcp-tools-unavailable}
+### MCP Tools Are Unavailable {#mcp-tools-unavailable}
 
 Check that the runtime config contains `url: "/meta/mcp"` and that user requests can reach `/meta/mcp` through Gateway. Gateway registers `/meta/mcp` only when MCP is enabled; it is enabled by default, but custom Gateway config can disable it.
 
-### Documentation search is unavailable {#docs-search-unavailable}
+### Documentation Search Is Unavailable {#docs-search-unavailable}
 
 Check the `ydb_em_docs_search_*` settings, the embeddings endpoint path, and the tokenator entry used for embeddings requests. Also make sure documentation vectors are available in the YDB EM metabase. If docs search is not configured, the `search_docs` tool is not exposed.
 
-### Embeddings endpoint rejects vector size {#embeddings-vector-size}
+### Embeddings Endpoint Rejects Vector Size {#embeddings-vector-size}
 
 If `search_docs` fails with `variable embedding size not supported`, set `ydb_em_docs_search_vector_size: 0` and verify the embeddings endpoint and model.
 
-### Documentation search returns 504 {#docs-search-504}
+### Documentation Search Returns 504 {#docs-search-504}
 
 If `search_docs` returns `504 Gateway Timeout` and Gateway logs for `/meta/docs` contain `Member not found: doc_id`, check the YDB EM metabase table `ydb/Docs.db`. The current Gateway docs search query uses the `doc_id`, `embedding`, and `payload` columns. For useful results, the table should also contain rows and be built for an embeddings model compatible with `ydb_em_docs_search_embeddings_model`.

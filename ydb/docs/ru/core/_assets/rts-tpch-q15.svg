@@ -260,14 +260,14 @@
 <text x='1231' y='16' class='texts'>0:08</text>
 <g data-group='g1' class='selectable'><title> ResultSet_1</title>
 <rect x='0' y='3' width='298' height='24' class='background'/>
-<text x='36' y='16' class='texts'>ResultSet_1</text>
+<text x='36' y='16' class='texts'>Query - ResultSet_1</text>
 </g>
 <g class='ardn button'><rect x='2' y='3' width='14' height='14' class='transparent'/>
 <use href='#icon_arrowdn' transform='translate(2 3) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
 <g class='aruu button'><rect x='2' y='17' width='14' height='14' class='transparent'/>
 <use href='#icon_arrowup' transform='translate(2 17) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
-<text x='303' y='16' class='texts'>Operators</text>
-<text x='397' y='16' class='texts'>Stages</text>
+<text x='303' y='16' class='texts'>Rows</text>
+<text x='397' y='16' class='texts'>Statistics</text>
 <text x='390' y='16' class='texte'>Tasks</text>
 <text x='390' y='26' class='texte'>105</text>
 <g><title>Ingress 774.80MB, Rows 23.43M, Width 34B, Avg 213.26MB/s</title>
@@ -931,14 +931,14 @@
 <text x='1231' y='16' class='texts'>0:08</text>
 <g data-group='g15' class='selectable selected'><title> Precompute_0</title>
 <rect x='0' y='3' width='298' height='24' class='background'/>
-<text x='36' y='16' class='texts'>Precompute_0</text>
+<text x='36' y='16' class='texts'>Query - Precompute_0</text>
 </g>
 <g class='ardn button'><rect x='2' y='3' width='14' height='14' class='transparent'/>
 <use href='#icon_arrowdn' transform='translate(2 3) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
 <g class='aruu button'><rect x='2' y='17' width='14' height='14' class='transparent'/>
 <use href='#icon_arrowup' transform='translate(2 17) scale(0.014, 0.014)' fill='var(--conn-text, #393939)'/></g>
-<text x='303' y='16' class='texts'>Operators</text>
-<text x='397' y='16' class='texts'>Stages</text>
+<text x='303' y='16' class='texts'>Rows</text>
+<text x='397' y='16' class='texts'>Statistics</text>
 <text x='390' y='16' class='texte'>Tasks</text>
 <text x='390' y='26' class='texte'>81</text>
 <g><title>Ingress 692.79MB, Rows 22.43M, Width 32B, Avg 139.56MB/s</title>

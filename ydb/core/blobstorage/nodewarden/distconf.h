@@ -518,7 +518,9 @@ namespace NKikimr::NStorage {
         bool GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
             , const NKikimrBlobStorage::TStorageConfig& baseConfig
             , std::unordered_set<ui32>& usedNodes
+            , const std::unordered_set<ui32>& nodesToUse = {}
             , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig = {}
+            , bool automaticManagement = true
             , ui32 overrideReplicasInRingCount = 0
             , ui32 overrideRingsCount = 0
             , ui32 replicasSpecificVolume = 200

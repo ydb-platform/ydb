@@ -1,7 +1,6 @@
 # YDB Tests
 
-Follow the testing style of the module you are modifying. Framework choice for
-C++ unit tests: [`GTEST_PREFFER.md`](GTEST_PREFFER.md).
+Follow the testing style of the module you are modifying.
 
 ## C++ unit tests
 

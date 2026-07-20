@@ -78,7 +78,7 @@ THolder<IComputationGraph> BuildGraph(
     }
 
     const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, rowItems);
-    auto inputFlow = pgmBuilder.ToFlow(list);
+    auto inputFlow = pgmBuilder.ToFlow(list, {});
     auto pgmReturn = pgmBuilder.MatchRecognizeCore(
         inputFlow,
         [&](TRuntimeNode item) {

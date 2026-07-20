@@ -80,7 +80,7 @@ TComputationNodeFactory GetListTestFactory() {
 
 TRuntimeNode CreateFlow(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
     if (list) {
-        return pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false));
+        return pb.ToFlow(TRuntimeNode(list, /*isImmediate=*/false), {});
     } else {
         std::vector<const TRuntimeNode> arr;
         arr.reserve(vecSize);
@@ -88,7 +88,7 @@ TRuntimeNode CreateFlow(TProgramBuilder& pb, size_t vecSize, TCallable* list) {
             arr.push_back(NTest::ConvertValueToLiteralNode(pb, ui64((i + 124515) % 6740234)));
         }
         TArrayRef<const TRuntimeNode> arrRef(std::move(arr));
-        return pb.ToFlow(pb.AsList(arrRef));
+        return pb.ToFlow(pb.AsList(arrRef), {});
     }
 }
 
@@ -363,7 +363,7 @@ TRuntimeNode CreateNarrowFlatMap(TProgramBuilder& pb, size_t vecSize, TCallable*
                      [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }),
         [&](TRuntimeNode::TList item) -> TRuntimeNode {
             auto x = pb.NewOptional(item.front());
-            return Flow ? pb.ToFlow(x) : x;
+            return Flow ? pb.ToFlow(x, {}) : x;
         });
 }
 

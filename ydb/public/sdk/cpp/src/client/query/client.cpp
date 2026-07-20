@@ -377,6 +377,49 @@ public:
         return promise.GetFuture();
     }
 
+    TAsyncStatus DeleteSession(const std::string& sessionId, const NYdb::NQuery::TDeleteSessionSettings& settings) {
+        auto request = MakeRequest<Ydb::Query::DeleteSessionRequest>();
+        request.set_session_id(TStringType{sessionId});
+
+        auto promise = NThreading::NewPromise<TStatus>();
+
+        auto obs = MakeObservation("DeleteSession");
+
+        auto responseCb = [promise, obs]
+            (Ydb::Query::DeleteSessionResponse* response, TPlainStatus status) mutable {
+                try {
+                    if (response) {
+                        NYdb::NIssue::TIssues opIssues;
+                        NYdb::NIssue::IssuesFromMessage(response->issues(), opIssues);
+                        TStatus deleteSessionStatus(TPlainStatus{static_cast<EStatus>(response->status()), std::move(opIssues),
+                            status.Endpoint, std::move(status.Metadata)});
+
+                        obs->End(deleteSessionStatus.GetStatus(), deleteSessionStatus.GetEndpoint());
+
+                        promise.SetValue(std::move(deleteSessionStatus));
+                    } else {
+                        obs->End(status.Status, status.Endpoint);
+                        promise.SetValue(TStatus(std::move(status)));
+                    }
+                } catch (...) {
+                    obs->EndWithClientInternalError();
+                    promise.SetException(std::current_exception());
+                }
+            };
+
+        auto rpcSettings = TRpcRequestSettings::Make(settings);
+        rpcSettings.PreferredEndpoint = TEndpointKey(GetNodeIdFromSession(sessionId));
+
+        Connections_->Run<Ydb::Query::V1::QueryService, Ydb::Query::DeleteSessionRequest, Ydb::Query::DeleteSessionResponse>(
+            std::move(request),
+            responseCb,
+            &Ydb::Query::V1::QueryService::Stub::AsyncDeleteSession,
+            DbDriverState_,
+            rpcSettings);
+
+        return promise.GetFuture();
+    }
+
     void DeleteSession(TKqpSessionCommon* sessionImpl) override {
         if (sessionImpl->IsOwnedBySessionPool()) {
             if (SessionPool_.CheckAndFeedWaiterNewSession(sessionImpl->NeedUpdateActiveCounter())) {
@@ -487,12 +530,10 @@ public:
     TAsyncCreateSessionResult GetSession(const TCreateSessionSettings& settings) {
         class TQueryClientGetSessionCtx : public NSessionPool::IGetSessionCtx {
         public:
-            TQueryClientGetSessionCtx(std::shared_ptr<TQueryClient::TImpl> client, const TCreateSessionSettings& settings,
-                std::shared_ptr<TQueryObservation> observation)
+            TQueryClientGetSessionCtx(std::shared_ptr<TQueryClient::TImpl> client, const TCreateSessionSettings& settings)
                 : Promise(NThreading::NewPromise<TCreateSessionResult>())
                 , Client(client)
                 , RpcSettings(TRpcRequestSettings::Make(settings))
-                , Observation(std::move(observation))
             {}
 
             TAsyncCreateSessionResult GetFuture() {
@@ -501,9 +542,6 @@ public:
 
             void ReplyError(TStatus status) override {
                 TSession session;
-                if (Observation) {
-                    Observation->End(status.GetStatus(), status.GetEndpoint());
-                }
                 ScheduleReply(TCreateSessionResult(std::move(status), std::move(session)));
             }
 
@@ -516,20 +554,18 @@ public:
                     )
                 );
 
-                if (Observation) {
-                    Observation->End(EStatus::SUCCESS, session->GetEndpoint());
-                }
                 ScheduleReply(std::move(val));
             }
 
             void ReplyNewSession() override {
+                auto obs = Client->MakeObservation("CreateSession");
                 TRpcRequestSettings deferredRpcSettings = RpcSettings;
                 deferredRpcSettings.Deadline = TDeadline::Max();
                 Client->CreateAttachedSession(
                     this->Client->Settings_.SessionPoolSettings_.UseDeferredSessionCreation_ ? 
                     deferredRpcSettings :
                     RpcSettings).Subscribe(
-                    [promise = Promise, obs = Observation](TAsyncCreateSessionResult future) mutable
+                    [promise = Promise, obs](TAsyncCreateSessionResult future) mutable
                 {
                     auto val = future.ExtractValue();
                     if (obs) {
@@ -539,7 +575,7 @@ public:
                 });
                 if (Client->Settings_.SessionPoolSettings_.UseDeferredSessionCreation_) {
                     Client->Connections_->ScheduleDelayedTask(
-                        [promise = Promise, obs = Observation, client = Client]() mutable {
+                        [promise = Promise, obs, client = Client]() mutable {
                             TSession session;
                             promise.TrySetValue(TCreateSessionResult(TStatus(TPlainStatus(EStatus::CLIENT_DEADLINE_EXCEEDED, "GetSession deadline exceeded")), std::move(session)));
                             if (obs) {
@@ -572,11 +608,9 @@ public:
             NThreading::TPromise<TCreateSessionResult> Promise;
             std::shared_ptr<TQueryClient::TImpl> Client;
             const TRpcRequestSettings RpcSettings;
-            std::shared_ptr<TQueryObservation> Observation;
         };
 
-        auto obs = MakeObservation("CreateSession");
-        auto ctx = std::make_unique<TQueryClientGetSessionCtx>(shared_from_this(), settings, obs);
+        auto ctx = std::make_unique<TQueryClientGetSessionCtx>(shared_from_this(), settings);
         auto future = ctx->GetFuture();
         SessionPool_.GetSession(std::move(ctx));
 
@@ -811,6 +845,24 @@ TAsyncFetchScriptResultsResult TQueryClient::FetchScriptResults(const NKikimr::N
 TAsyncCreateSessionResult TQueryClient::GetSession(const TCreateSessionSettings& settings)
 {
     return Impl_->GetSession(settings);
+}
+
+TAsyncStatus TQueryClient::DeleteSession(const std::string& sessionId, const TDeleteSessionSettings& settings)
+{
+    const auto resolvedRetrySettings = NRetry::ResolveRetrySettings(
+        Impl_->Settings_.RetrySettings_,
+        settings.RetrySettings_,
+        settings.ClientTimeout_,
+        NRetry::ERetryIdempotentDefault::True);
+
+    return NRetry::RunUnaryWithRetry(*this, resolvedRetrySettings,
+        [this, sessionId, settings](TDuration timeout) {
+            auto opSettings = settings;
+            if (timeout != TDuration::Max()) {
+                opSettings.ClientTimeout(timeout);
+            }
+            return Impl_->DeleteSession(sessionId, opSettings);
+        });
 }
 
 int64_t TQueryClient::GetActiveSessionCount() const {

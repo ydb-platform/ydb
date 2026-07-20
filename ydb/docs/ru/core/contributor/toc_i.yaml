@@ -16,6 +16,8 @@ items:
     href: general-schema.md
   - name: Распределённое хранилище
     href: distributed-storage.md
+  - name: Подсистемы распространения метаданных
+    href: metadata-distribution.md
   - name: LocalDB
     items:
     - name: Персистентные незакомиченные изменения

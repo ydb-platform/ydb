@@ -28,8 +28,6 @@
 
 namespace NSQLTranslationV1 {
 
-using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
-
 using namespace NSQLv1Generated;
 
 void FillTargetList(TTranslation& ctx, const TRule_set_target_list& node, TVector<TString>& targetList) {
@@ -2370,8 +2368,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TString service = Ctx_.Scoped->CurrService;
             TDeferredAtom cluster = Ctx_.Scoped->CurrCluster;
-            if (rule.HasBlock3()) {
-                if (!ClusterExpr(rule.GetBlock3().GetRule_cluster_expr2(), /*allowWildcard=*/false, service, cluster)) {
+            if (rule.HasBlock5()) {
+                if (!ClusterExpr(rule.GetBlock5().GetRule_cluster_expr2(), /*allowWildcard=*/false, service, cluster)) {
                     return false;
                 }
             }
@@ -2382,8 +2380,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             TNodePtr clusterNode = Ctx_.Scoped->WrapCluster(cluster, Ctx_);
 
             TTableHints hints;
-            if (rule.HasBlock4()) {
-                auto tmp = TableHintsImpl(rule.GetBlock4().GetRule_table_hints1(), service, "");
+            if (rule.HasBlock6()) {
+                auto tmp = TableHintsImpl(rule.GetBlock6().GetRule_table_hints1(), service, "");
                 if (!tmp) {
                     return false;
                 }
@@ -2392,7 +2390,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TString varName;
             TPosition intoPos = Ctx_.Pos();
-            if (!NamedNodeImpl(rule.GetRule_bind_parameter6(), varName, *this)) {
+            if (!NamedNodeImpl(rule.GetRule_bind_parameter4(), varName, *this)) {
                 return false;
             }
 
@@ -2779,6 +2777,17 @@ bool TSqlQuery::AlterTableAddColumn(const TRule_alter_table_add_column& node, TA
     if (columnSchema->Families.size() > 1) {
         Ctx_.Error() << "Several column families for a single column are not yet supported";
         return false;
+    }
+    if (columnSchema->Generated) {
+        const TString& service = Ctx_.Scoped->CurrService;
+        if (service != KikimrProviderName && service != YdbProviderName) {
+            Ctx_.Error(columnSchema->Pos) << "GENERATED ALWAYS AS columns are supported only for the ydb provider";
+            return false;
+        }
+        if (params.TableType != ETableType::Table) {
+            Ctx_.Error(columnSchema->Pos) << "GENERATED ALWAYS AS columns are supported only for CREATE TABLE and ALTER TABLE";
+            return false;
+        }
     }
     params.AddColumns.push_back(*columnSchema);
     return true;
@@ -5019,6 +5028,11 @@ bool BuildColumnFeatures(std::map<TString, TDeferredAtom>& result, const TRule_c
 
     const auto options = ColumnOptions(columnSchema, translation);
     if (!options) {
+        return false;
+    }
+
+    if (options->Generated) {
+        translation.Context().Error(pos) << "GENERATED ALWAYS AS columns are supported only for CREATE TABLE and ALTER TABLE";
         return false;
     }
 

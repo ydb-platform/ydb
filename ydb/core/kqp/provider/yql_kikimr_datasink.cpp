@@ -1367,6 +1367,7 @@ public:
                         .PrimaryKey(settings.PrimaryKey.Cast())
                         .Settings(settings.Other)
                         .Indexes(settings.Indexes.Cast())
+                        .Statistics(settings.Statistics.Cast())
                         .Changefeeds(settings.Changefeeds.Cast())
                         .PartitionBy(settings.PartitionBy.Cast())
                         .ColumnFamilies(settings.ColumnFamilies.Cast())
@@ -1861,7 +1862,7 @@ public:
                         .DataSink(node->Child(1))
                         .Secret().Build(key.GetSecretPath())
                         .Value(settings.Value.IsValid() ? settings.Value.Cast() : emptyAtom)
-                        .InheritPermissions(settings.InheritPermissions.IsValid() ? settings.InheritPermissions.Cast() : Build<TCoAtom>(ctx, node->Pos()).Value("0").Done())
+                        .InheritPermissions(settings.InheritPermissions.IsValid() ? settings.InheritPermissions.Cast() : emptyAtom)
                         .ValueParamName(settings.ValueParamName.IsValid() ? settings.ValueParamName.Cast() : emptyAtom)
                         .Done()
                         .Ptr();

@@ -5,6 +5,11 @@
 
 namespace NKikimr::NBsController {
 
+    // Thrown when a DDisk or PersistentBuffer referenced by a DeleteDDisks/DeletePersistentBuffers
+    // command can't be found; caught separately from generic errors to report NKikimrProto::NOT_FOUND
+    // instead of NKikimrProto::ERROR.
+    struct TDDiskNotFoundException : yexception {};
+
     class TBlobStorageController::TTxAllocateDDiskBlockGroup : public TTransactionBase<TBlobStorageController> {
         std::unique_ptr<TEventHandle<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>> RequestEv;
         std::unique_ptr<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult> Result;
@@ -42,7 +47,12 @@ namespace NKikimr::NBsController {
                         const TNodeId nodeId = vslotId.NodeId;
                         if (!NodeMap.contains(nodeId)) {
                             const auto& location = self->HostRecords->GetLocation(nodeId);
-                            const NLayoutChecker::TPDiskLayoutPosition pos(mapper, location, vslotId.ComprisingPDiskId(), geom);
+                            const TPDiskId pdiskId = vslotId.ComprisingPDiskId();
+                            std::optional<TString> diskScope;
+                            if (const auto it = self->PDisks.find(pdiskId); it != self->PDisks.end()) {
+                                diskScope = it->second->DiskScope;
+                            }
+                            const NLayoutChecker::TPDiskLayoutPosition pos(mapper, location, diskScope, pdiskId, geom);
                             const TCommonId commonId(pos.RealmGroup, pos.Realm);
                             const TDistinctId distinctId(pos.Domain);
 
@@ -539,6 +549,55 @@ namespace NKikimr::NBsController {
                         changes = true;
                     }
 
+                    for (const auto& cmd : op.GetDeletePersistentBuffers()) {
+                        const TDDiskId pbId(cmd.GetPersistentBufferId());
+                        auto it = std::ranges::find(persistentBufferIds, pbId);
+
+                        if (it == persistentBufferIds.end()) {
+                            ythrow TDDiskNotFoundException() << "PersistentBuffer not found";
+                        }
+                        getPersistentBufferPool().ReleasePersistentBuffer(*it);
+                        {
+                            auto& [chunks, refs] = vslotUpdates[it->GetKey()];
+                            --refs;
+                        }
+                        const size_t index = it - persistentBufferIds.begin();
+                        persistentBufferIds.erase(it);
+                        persistentBufferDDiskId->erase(persistentBufferDDiskId->begin() + index);
+                        changes = true;
+                    }
+
+                    for (const auto& cmd : op.GetDeleteDDisks()) {
+                        const TDDiskId ddiskId(cmd.GetDDiskId());
+                        int index = -1;
+                        for (int i = 0; i < ddiskRecord->size(); ++i) {
+                            const auto& rec = ddiskRecord->Get(i);
+                            if (rec.HasDDiskId() && TDDiskId(rec.GetDDiskId()) == ddiskId) {
+                                index = i;
+                                break;
+                            }
+                        }
+                        if (index < 0) {
+                            ythrow TDDiskNotFoundException() << "DDisk not found";
+                        }
+
+                        auto *item = ddiskRecord->Mutable(index);
+                        const ui32 currentNumChunks = item->GetNumChunksClaimed();
+
+                        getDDiskPool().ReleaseDDisk(ddiskId, currentNumChunks);
+
+                        auto it = std::ranges::find(ddiskIds, ddiskId);
+                        Y_ABORT_UNLESS(it != ddiskIds.end());
+                        std::swap(*it, ddiskIds.back());
+                        ddiskIds.pop_back();
+
+                        auto& [chunks, refs] = vslotUpdates[TVSlotId(ddiskId.GetKey())];
+                        chunks -= currentNumChunks;
+
+                        ddiskRecord->erase(ddiskRecord->begin() + index);
+                        changes = true;
+                    }
+
                     // trim excessive items
                     while (!ddiskRecord->empty() && ddiskRecord->rbegin()->GetNumChunksClaimed() == 0) {
                         ddiskRecord->RemoveLast();
@@ -573,6 +632,10 @@ namespace NKikimr::NBsController {
                         updates.emplace_back(key, std::move(allocation));
                     }
                 }
+            } catch (const TDDiskNotFoundException& e) {
+                rr.SetStatus(NKikimrProto::NOT_FOUND);
+                rr.SetErrorReason(e.what());
+                return true;
             } catch (const std::exception& e) {
                 rr.SetStatus(NKikimrProto::ERROR);
                 rr.SetErrorReason(e.what());

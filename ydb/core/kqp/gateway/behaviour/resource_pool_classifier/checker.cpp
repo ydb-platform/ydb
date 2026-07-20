@@ -4,11 +4,14 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/kqp/workload_service/actors/actors.h>
+#include <ydb/core/kqp/workload_service/common/events.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/resource_pools/resource_pool_classifier_settings.h>
 
 #include <ydb/library/query_actor/query_actor.h>
+
+#include <unordered_set>
 
 
 namespace NKikimr::NKqp {
@@ -20,7 +23,7 @@ using namespace NResourcePool;
 using namespace NWorkload;
 
 
-struct TEvPrivate {
+struct TEvCheckerPrivate {
     // Event ids
     enum EEv : ui32 {
         EvRanksCheckerResponse = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -45,7 +48,7 @@ struct TEvPrivate {
     };
 };
 
-class TRanksCheckerActor : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TRanksCheckerActor, TEvPrivate::TEvRanksCheckerResponse> {
+class TRanksCheckerActor : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TRanksCheckerActor, TEvCheckerPrivate::TEvRanksCheckerResponse> {
     using TBase = NKikimr::TQueryBase;
 
 public:
@@ -146,7 +149,7 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvPrivate::TEvRanksCheckerResponse(status, MaxRank, NumberClassifiers, std::move(issues)));
+        Send(Owner, new TEvCheckerPrivate::TEvRanksCheckerResponse(status, MaxRank, NumberClassifiers, std::move(issues)));
     }
 
 private:
@@ -173,7 +176,7 @@ public:
         GetDatabaseInfo();
     }
 
-    void Handle(TEvPrivate::TEvRanksCheckerResponse::TPtr& ev) {
+    void Handle(TEvCheckerPrivate::TEvRanksCheckerResponse::TPtr& ev) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             FailAndPassAway("Resource pool classifier rank check failed", ev->Get()->Status, ev->Get()->Issues);
             return;
@@ -246,12 +249,31 @@ public:
         TryFinish();
     }
 
+    void Handle(NWorkload::TEvPrivate::TEvFetchPoolResponse::TPtr& ev) {
+        if (ev->Get()->Status == Ydb::StatusIds::NOT_FOUND) {
+            FailAndPassAway(TStringBuilder() << "Resource pool '" << ev->Get()->PoolId << "' not found");
+            return;
+        }
+
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            FailAndPassAway("Resource pool existence check failed", ev->Get()->Status, ev->Get()->Issues);
+            return;
+        }
+
+        Y_ABORT_UNLESS(PendingPoolChecks > 0);
+        if (--PendingPoolChecks == 0) {
+            PoolsChecked = true;
+            TryFinish();
+        }
+    }
+
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvRanksCheckerResponse, Handle);
+        hFunc(TEvCheckerPrivate::TEvRanksCheckerResponse, Handle);
         hFunc(TEvFetchDatabaseResponse, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(NConsole::TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
-        hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle)
+        hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
+        hFunc(NWorkload::TEvPrivate::TEvFetchPoolResponse, Handle);
     )
 
 private:
@@ -287,6 +309,7 @@ private:
     void CheckFeatureFlag(const NKikimrConfig::TFeatureFlags& featureFlags) {
         if (Context.GetActivityType() == NMetadata::NModifications::IOperationsManager::EActivityType::Drop) {
             FeatureFlagChecked = true;
+            PoolsChecked = true;  // no pool existence check needed for Drop
             ValidateExistence();
             return;
         }
@@ -302,6 +325,7 @@ private:
 
         FeatureFlagChecked = true;
         ValidateExistence();
+        ValidatePools();
     }
 
     void ValidateExistence() {
@@ -314,6 +338,35 @@ private:
         TryFinish();
     }
 
+    void ValidatePools() {
+        // Collect unique pool IDs referenced by classifiers being created/altered
+        std::unordered_set<TString> poolIds;
+        for (auto& object : PatchedObjects) {
+            object.EnsureSettings();
+            const TString& poolId = object.GetClassifierSettings().ResourcePool;
+            // The default pool is always created on first use — skip it
+            if (poolId == NResourcePool::DEFAULT_POOL_ID) {
+                continue;
+            }
+            poolIds.insert(poolId);
+        }
+
+        if (poolIds.empty()) {
+            PoolsChecked = true;
+            TryFinish();
+            return;
+        }
+
+        PendingPoolChecks = poolIds.size();
+        const auto& externalContext = Context.GetExternalData();
+        const auto userToken = externalContext.GetUserToken() ? MakeIntrusive<NACLib::TUserToken>(*externalContext.GetUserToken()) : nullptr;
+        const TString& databaseId = externalContext.GetDatabaseId();
+        const auto& workloadManagerConfig = AppData()->WorkloadManagerConfig;
+        for (const auto& poolId : poolIds) {
+            Register(NWorkload::CreatePoolFetcherActor(SelfId(), databaseId, poolId, userToken, workloadManagerConfig));
+        }
+    }
+
     void FailAndPassAway(const TString& message, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
         FailAndPassAway(TStringBuilder() << message << ", status: " << status << ", reason: " << issues.ToOneLineString());
     }
@@ -324,7 +377,7 @@ private:
     }
 
     void TryFinish() {
-        if (!FeatureFlagChecked || !RanksChecked || !ExistenceChecked) {
+        if (!FeatureFlagChecked || !RanksChecked || !ExistenceChecked || !PoolsChecked) {
             return;
         }
 
@@ -340,6 +393,8 @@ private:
     bool FeatureFlagChecked = false;
     bool RanksChecked = false;
     bool ExistenceChecked = false;
+    bool PoolsChecked = false;
+    ui64 PendingPoolChecks = 0;
 
     NMetadata::NModifications::IAlterPreparationController<TResourcePoolClassifierConfig>::TPtr Controller;
     std::vector<TResourcePoolClassifierConfig> PatchedObjects;

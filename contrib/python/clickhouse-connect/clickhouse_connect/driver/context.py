@@ -5,7 +5,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_empty_map = {}
+_empty_map: dict[Any, Any] = {}
 
 
 class BaseQueryContext:
@@ -38,7 +38,7 @@ class BaseQueryContext:
         self.query_formats = query_formats or {}
         self.column_formats = column_formats or {}
         self.transport_settings = transport_settings
-        self.column_name = None
+        self.column_name: str | None = None
         self.encoding = encoding
         self.use_numpy = use_numpy
         self.use_extended_dtypes = use_extended_dtypes

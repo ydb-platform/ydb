@@ -42,6 +42,9 @@ namespace TEvKeyValue {
         EvGetStorageChannelStatusResponse,
         EvAcquireLockResponse,
 
+        EvAdvanceMoveDataResult = EvResponse + 512,
+        EvBlobCopied,
+
         EvEnd
     };
 
@@ -171,27 +174,32 @@ namespace TEvKeyValue {
         ui64 Step;
         NKeyValue::TRequestStat Stat;
         NMsgBusProxy::EResponseStatus Status;
+        TVector<ui32> AcquiredChannels;
         std::deque<std::pair<TLogoBlobID, bool>> RefCountsIncr;
 
         TEvNotify() { }
 
         TEvNotify(ui64 requestUid, ui64 generation, ui64 step, const NKeyValue::TRequestStat &stat,
-                NMsgBusProxy::EResponseStatus status, std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr)
+                NMsgBusProxy::EResponseStatus status, TVector<ui32> acquiredChannels,
+                std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr)
             : RequestUid(requestUid)
             , Generation(generation)
             , Step(step)
             , Stat(stat)
             , Status(status)
+            , AcquiredChannels(std::move(acquiredChannels))
             , RefCountsIncr(std::move(refCountsIncr))
         {}
 
         TEvNotify(ui64 requestUid, ui64 generation, ui64 step, const NKeyValue::TRequestStat &stat,
-                NKikimrKeyValue::Statuses::ReplyStatus status, std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr)
+                NKikimrKeyValue::Statuses::ReplyStatus status, TVector<ui32> acquiredChannels,
+                std::deque<std::pair<TLogoBlobID, bool>>&& refCountsIncr)
             : RequestUid(requestUid)
             , Generation(generation)
             , Step(step)
             , Stat(stat)
             , Status(ConvertStatus(status))
+            , AcquiredChannels(std::move(acquiredChannels))
             , RefCountsIncr(std::move(refCountsIncr))
         {}
 
@@ -282,6 +290,51 @@ namespace TEvKeyValue {
         {}
     };
 
+    struct TEvAdvanceMoveDataResult : public TEventLocal<TEvAdvanceMoveDataResult, EvAdvanceMoveDataResult> {
+        enum class EResult {
+            COPY_BLOB,
+            YIELD,
+            REPEAT,
+            FINISH,
+        };
+        EResult Result;
+        const TLogoBlobID BlobId;
+
+        explicit TEvAdvanceMoveDataResult(EResult result)
+            : Result(result)
+        {}
+
+        explicit TEvAdvanceMoveDataResult(const TLogoBlobID& blobId)
+            : Result(EResult::COPY_BLOB)
+            , BlobId(blobId)
+        {}
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> CopyBlob(const TLogoBlobID& blobId) {
+            return std::make_unique<TEvAdvanceMoveDataResult>(blobId);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> Yield() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::YIELD);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> Repeat() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::REPEAT);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> Finish() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::FINISH);
+        }
+    };
+
+    struct TEvBlobCopied : public TEventLocal<TEvBlobCopied, EvBlobCopied> {
+        const TLogoBlobID BlobId;
+        const TLogoBlobID NewBlobId;
+
+        TEvBlobCopied(const TLogoBlobID& blobId, const TLogoBlobID& newBlobId)
+            : BlobId(blobId)
+            , NewBlobId(newBlobId)
+        {}
+    };
 }
 
 } // NKikimr

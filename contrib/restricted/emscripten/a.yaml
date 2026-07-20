@@ -1,0 +1,6 @@
+service: cc
+title: Emscripten
+ci:
+  on-demand-auto:
+    - abs-paths: taxi/uservices/services/candidates/wasm/**
+      tags: on-demand-auto-trigger

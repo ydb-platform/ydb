@@ -2,8 +2,12 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fwd.h>
 
+#include <functional>
+#include <library/cpp/threading/future/future.h>
+
 #include <memory>
 #include <string>
+#include <utility>
 
 namespace NYdb::inline Dev {
 
@@ -16,14 +20,34 @@ public:
 
 using TCredentialsProviderPtr = std::shared_ptr<ICredentialsProvider>;
 
+// Implementation detail for SDK credentials factories. Symbols in NCredentials::NDetail are not
+// part of the public YDB C++ SDK API and may change or be removed without notice.
+namespace NCredentials::NDetail {
+
+using TCredentialsProviderCreator = std::function<TCredentialsProviderPtr()>;
+
+// Process-wide weak cache for no-argument factory paths whose providers own their facilities.
+// Facility-bound providers must not use it: their callbacks belong to the supplied facility.
+TCredentialsProviderPtr GetOrCreateCachedProvider(
+    const std::string& identity,
+    TCredentialsProviderCreator createProvider);
+
+} // namespace NCredentials::NDetail
+
 class ICoreFacility;
 class ICredentialsProviderFactory {
 public:
     virtual ~ICredentialsProviderFactory() = default;
     // deprecated, use CreateProvider(std::weak_ptr<ICoreFacility> facility) instead
     virtual TCredentialsProviderPtr CreateProvider() const = 0;
+    virtual NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const {
+        return NThreading::MakeFuture(CreateProvider());
+    }
     virtual TCredentialsProviderPtr CreateProvider([[maybe_unused]] std::weak_ptr<ICoreFacility> facility) const {
         return CreateProvider();
+    }
+    virtual NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const {
+        return NThreading::MakeFuture(CreateProvider(std::move(facility)));
     }
     virtual std::string GetClientIdentity() const;
 };

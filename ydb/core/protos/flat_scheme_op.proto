@@ -474,6 +474,10 @@ message TTableDescription {
     optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
 
     reserved 52;
+
+    // Multi-column statistics.
+    repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 53;
+    repeated string DropMultiColumnStatistics = 54;
 }
 
 message TCompressionOptions {
@@ -499,6 +503,7 @@ message TOlapColumnDiff {
     optional string DefaultValue = 7;
     optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
     optional string ColumnFamilyName = 9 [deprecated = true];
+    optional bool NotNull = 10;
 }
 
 message TOlapColumnDescription {
@@ -656,6 +661,19 @@ message TOlapIndexDescription {
         TBloomNGrammFilter BloomNGrammFilter = 44;
         TMinMaxIndex MinMaxIndex = 45;
     }
+}
+
+enum EMultiColumnStatisticsType {
+    MULTI_COLUMN_STATISTICS_UNSPECIFIED = 0;
+    COUNT_MIN_SKETCH = 1;
+}
+
+// Multi-column table statistics
+message TMultiColumnStatisticsDescription {
+    optional string Name = 1;
+    repeated string ColumnNames = 2;
+    repeated uint32 ColumnIds = 3;
+    repeated EMultiColumnStatisticsType Types = 4;
 }
 
 enum EColumnTableEngine {
@@ -1090,6 +1108,8 @@ message TColumnTableDescription {
     optional string CopyFromTable = 16;
 
     optional bool IsBackup = 17;
+
+    repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 18;
 }
 
 message TAlterColumnTable {
@@ -1103,6 +1123,9 @@ message TAlterColumnTable {
 
     optional TAlterShards AlterShards = 6;
     optional TReshardColumnTable ReshardColumnTable = 7;
+
+    repeated TMultiColumnStatisticsDescription UpsertMultiColumnStatistics = 8;
+    repeated string DropMultiColumnStatistics = 9;
 }
 
 message TReshardColumnTable {
@@ -1113,7 +1136,7 @@ message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2 [(Ydb.sensitive) = true];
     optional bool CanLogin = 3 [default = true];
-    optional bool IsHashedPassword = 4 [default = false, deprecated = true];
+    reserved 4; reserved "IsHashedPassword";
     optional string HashedPassword = 5 [(Ydb.sensitive) = true];
 }
 
@@ -1121,7 +1144,7 @@ message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2 [(Ydb.sensitive) = true];
     optional bool CanLogin = 3;
-    optional bool IsHashedPassword = 4 [default = false, deprecated = true];
+    reserved 4; reserved "IsHashedPassword";
     optional string HashedPassword = 5 [(Ydb.sensitive) = true];
 }
 
@@ -1361,6 +1384,7 @@ enum EIndexType {
     EIndexTypeGlobalFulltextCompact = 11;
     EIndexTypeGlobalFulltextCompactRelevance = 12;
     EIndexTypeGlobalJsonCompact = 13;
+    EIndexTypeLocalCountMinSketch = 14;
 }
 
 enum EIndexState {
@@ -2246,6 +2270,7 @@ enum EPathSubType {
     EPathSubTypeLocalBloomFilterIndex = 7;
     EPathSubTypeLocalBloomNgramFilterIndex = 8;
     EPathSubTypeLocalMinMaxIndex = 9;
+    EPathSubTypeLocalCountMinSketchIndex = 10;
 }
 
 enum EPathState {

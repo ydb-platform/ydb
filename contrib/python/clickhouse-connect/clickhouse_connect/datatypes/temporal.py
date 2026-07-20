@@ -4,9 +4,9 @@ import array
 import re
 import zoneinfo
 from abc import abstractmethod
-from collections.abc import MutableSequence, Sequence
+from collections.abc import Callable, MutableSequence, Sequence
 from datetime import date, datetime, time, timedelta, tzinfo
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 if TYPE_CHECKING:
     import numpy
@@ -50,6 +50,7 @@ class Date(ClickHouseType):
             if self.nullable:
                 column = [x if x else 0 for x in column]
         else:
+            esd: date
             if isinstance(first, datetime):
                 esd = epoch_start_datetime
             else:
@@ -112,6 +113,7 @@ class Date32(Date):
 
 class DateTimeBase(ClickHouseType, registered=False):
     __slots__ = ("tzinfo",)
+    tzinfo: tzinfo | None
     valid_formats = "native", "int"
     python_type = datetime
 
@@ -143,12 +145,13 @@ class DateTimeBase(ClickHouseType, registered=False):
                 if isinstance(column, list):
                     column = options.pd.DatetimeIndex(column)
 
-                if column.tz is None:
-                    result = column.astype(self.pandas_dtype)
+                dti = cast(Any, column)
+                if dti.tz is None:
+                    result = dti.astype(self.pandas_dtype)
                     return options.pd.array(result) if self.nullable else result
 
-                naive_ns = column.tz_convert("UTC").tz_localize(None).astype(self.pandas_dtype)
-                tz_aware_result = naive_ns.tz_localize("UTC").tz_convert(column.tz)
+                naive_ns = dti.tz_convert("UTC").tz_localize(None).astype(self.pandas_dtype)
+                tz_aware_result = naive_ns.tz_localize("UTC").tz_convert(dti.tz)
                 return options.pd.array(tz_aware_result) if self.nullable else tz_aware_result
 
             if self.nullable:
@@ -329,7 +332,6 @@ class TimeBase(ClickHouseType, registered=False):
 
     _array_type: str
     byte_size: int
-    np_type: str
     valid_formats = ("native", "string", "int", "time")
     python_type = timedelta
 
@@ -403,7 +405,7 @@ class TimeBase(ClickHouseType, registered=False):
                 return [0] * len(column)
             return []
 
-        converter_map = {
+        converter_map: dict[type, Callable[..., int]] = {
             timedelta: self._timedelta_to_ticks,
             time: self._time_to_ticks,
             float: self._numerical_to_ticks,
@@ -509,7 +511,7 @@ class TimeBase(ClickHouseType, registered=False):
         raise NotImplementedError
 
     @abstractmethod
-    def _ticks_to_np_timedelta(self, ticks: int) -> timedelta:
+    def _ticks_to_np_timedelta(self, ticks: int) -> timedelta | numpy.timedelta64:
         """Convert integer ticks into an np.timedelta."""
         raise NotImplementedError
 
@@ -638,7 +640,7 @@ class Time64(TimeBase):
         return self._SECONDS_PER_DAY * self.precision - 1
 
     @property
-    def np_type(self) -> str:
+    def np_type(self):
         return f"timedelta64{self.unit}"
 
     @property

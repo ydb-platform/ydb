@@ -38,7 +38,9 @@ private:
 
     virtual bool DoParseImpl(TColumnShard& /*owner*/, const NKikimrTxColumnShard::TCommitWriteTxBody& commitTxBody) override {
         if (!commitTxBody.HasSecondaryTabletData()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("event", "cannot read proto")("proto", commitTxBody.DebugString());
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+                {"event", "cannot read proto"},
+                {"proto", commitTxBody.DebugString()});
             return false;
         }
         auto& protoData = commitTxBody.GetSecondaryTabletData();
@@ -115,7 +117,9 @@ private:
             auto op = Self->GetProgressTxController().GetTxOperatorAs<TEvWriteCommitSecondaryTransactionOperator>(
                 TxId, ETxOperatorStatus::InProgress, /*optional*/ true);
             if (!op || op->ReceiveAck) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_ack_flag")("txId", TxId);
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                    {"event", "duplication_tablet_ack_flag"},
+                    {"txId", TxId});
             } else {
                 op->ReceiveAck = true;
                 if (!op->NeedReceiveBroken) {
@@ -153,7 +157,9 @@ private:
             auto& txController = Self->GetProgressTxController();
             auto op = txController.GetTxOperatorAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, ETxOperatorStatus::Any, /*optional*/ true);
             if (!op) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_broken_flag")("txId", TxId);
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                    {"event", "duplication_tablet_broken_flag"},
+                    {"txId", TxId});
                 // send the ack anyway, so that the primary waits less time to progress
                 TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*Self, Step, TxId, ArbiterTabletId);
                 return true;
@@ -167,7 +173,9 @@ private:
 
             // op is still in progress
             if (op->TxBroken.has_value()) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_broken_flag")("txId", TxId);
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
+                    {"event", "duplication_tablet_broken_flag"},
+                    {"txId", TxId});
                 // we cannot send the ack here, because the previous transaction (that successfully set TxBroken) may be not completed yet
             } else {
                 op->TxBroken = BrokenFlag;
@@ -186,7 +194,8 @@ private:
 
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
             if (NYDBTest::TControllers::GetColumnShardController()->GetInterruptionOnLockedTransactions()) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_continue");
+                YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"event", "skip_continue"});
                 return;
             }
             if (BrokenFlagAck != nullptr) {
@@ -219,7 +228,8 @@ private:
 
     void SendResult(TColumnShard& owner) {
         if (NYDBTest::TControllers::GetColumnShardController()->GetInterruptionOnLockedTransactions()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_continue");
+            YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "skip_continue"});
             return;
         }
         AFL_VERIFY(SelfBroken.has_value());
@@ -239,7 +249,9 @@ private:
     }
 
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* owner) const override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "prepare_for_progress_started")("lock_id", LockId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_TX, "",
+            {"event", "prepare_for_progress_started"},
+            {"lockId", LockId});
         return std::make_unique<TTxStartPreparation>(owner, GetTxId());
     }
 

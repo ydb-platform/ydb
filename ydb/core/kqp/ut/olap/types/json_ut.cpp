@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/types.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
@@ -1571,6 +1572,172 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         }
     }
 
+}
+
+namespace {
+
+using NArrow::NAccessor::NSubColumns::EValueType;
+
+constexpr const char* CreateColumnTableDdl = R"(CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 JsonDocument,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);)";
+
+// STOP_COMPACTION + create the JsonDocument table + pin the SIMPLE scan reader, then turn Col2 into a
+// SUB_COLUMNS column that separates every key (OTHERS_ALLOWED_FRACTION=0) with native scalar storage on.
+// tiling++ compaction to enforce merging of portions.
+TString NativeTableSetup() {
+    TStringBuilder script;
+    script << R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        )" << CreateColumnTableDdl << R"(
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`,
+                    `OTHERS_ALLOWED_FRACTION`=`0`, `ENABLE_NATIVE_COLUMNS`=`true`)
+        ------)";
+    return script;
+}
+
+// primary_index_stats assertion that every separated Col2 sub-column in every chunk was stored with the
+// given native `expectedValueType` (mirrors dictionary_ut's AccessorTypeCheck, but on $.columns.value_type;
+// the value_type numeric code is what ChunkDetails serializes). 0 (BinaryJson) is the non-native default.
+TString NativeValueTypeCheck(const EValueType expectedValueType) {
+    return Sprintf(R"SQL(READ: $All = SELECT COUNT(*) AS cnt FROM `/Root/ColumnTable/.sys/primary_index_stats`
+                  WHERE Activity == 1 AND EntityName = 'Col2';
+              $Ok = SELECT SUM(CASE
+                    WHEN JSON_EXISTS(CAST(ChunkDetails AS JsonDocument), "$.columns.value_type[0]") AND
+                         NOT JSON_EXISTS(CAST(ChunkDetails AS JsonDocument), "$.columns.value_type[*] ? (@ != %u)")
+                    THEN 1 ELSE 0 END) AS ok
+                  FROM `/Root/ColumnTable/.sys/primary_index_stats`
+                  WHERE Activity == 1 AND EntityName = 'Col2';
+              SELECT ($All > 0u) AND ($All == $Ok);
+        EXPECTED: [[[%%true]]])SQL",
+        (ui32)expectedValueType);
+}
+
+}   // namespace
+
+Y_UNIT_TEST_SUITE(KqpOlapJsonNativeScalars) {
+
+    Y_UNIT_TEST(Double) {
+        const TString script = TStringBuilder() << NativeTableSetup() << R"(
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a" : 1.5}')), (2u, JsonDocument('{"a" : 2.5}')),
+                                                             (3u, JsonDocument('{"a" : 3.5}'))
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"a\":1.5}"]];[2u;["{\"a\":2.5}"]];[3u;["{\"a\":3.5}"]]]
+        ------
+        )" << NativeValueTypeCheck(EValueType::Double);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    Y_UNIT_TEST(Bool) {
+        const TString script = TStringBuilder() << NativeTableSetup() << R"(
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a" : true}')), (2u, JsonDocument('{"a" : false}')),
+                                                             (3u, JsonDocument('{"a" : true}'))
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"a\":true}"]];[2u;["{\"a\":false}"]];[3u;["{\"a\":true}"]]]
+        ------
+        )" << NativeValueTypeCheck(EValueType::Bool);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    Y_UNIT_TEST(String) {
+        const TString script = TStringBuilder() << NativeTableSetup() << R"(
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a" : "x"}')), (2u, JsonDocument('{"a" : "yy"}')),
+                                                             (3u, JsonDocument('{"a" : "zzz"}'))
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"a\":\"x\"}"]];[2u;["{\"a\":\"yy\"}"]];[3u;["{\"a\":\"zzz\"}"]]]
+        ------
+        )" << NativeValueTypeCheck(EValueType::String);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    Y_UNIT_TEST(MixedDocument) {
+        const TString script = TStringBuilder() << NativeTableSetup() << R"(
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"b" : true, "n" : 1.5, "s" : "x"}')),
+                                                             (2u, JsonDocument('{"b" : false, "n" : 2.5, "s" : "yy"}'))
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"b\":true,\"n\":1.5,\"s\":\"x\"}"]];[2u;["{\"b\":false,\"n\":2.5,\"s\":\"yy\"}"]]]
+        )";
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    Y_UNIT_TEST(Compaction) {
+        const TString script = TStringBuilder() << NativeTableSetup() << R"(
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"n" : 1.5}')), (2u, JsonDocument('{"n" : 2.5}'))
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (3u, JsonDocument('{"n" : 3.5}')), (4u, JsonDocument('{"n" : 1.5}'))
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"n\":1.5}"]];[2u;["{\"n\":2.5}"]];[3u;["{\"n\":3.5}"]];[4u;["{\"n\":1.5}"]]]
+        ------
+        )" << NativeValueTypeCheck(EValueType::Double);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    Y_UNIT_TEST(CompactionDivergentTypesFallback) {
+        const TString script = TStringBuilder() << NativeTableSetup() << R"(
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"n" : 1.5}')), (2u, JsonDocument('{"n" : 2.5}'))
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (3u, JsonDocument('{"n" : "a"}')), (4u, JsonDocument('{"n" : "b"}'))
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"n\":1.5}"]];[2u;["{\"n\":2.5}"]];[3u;["{\"n\":\"a\"}"]];[4u;["{\"n\":\"b\"}"]]]
+        ------
+        )" << NativeValueTypeCheck(EValueType::BinaryJson);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    Y_UNIT_TEST(IndexOverNativeStringColumn) {
+        const TString script = TStringBuilder() << NativeTableSetup() << R"(
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"s" : "xxxx"}')), (2u, JsonDocument('{"s" : "yyyy"}')),
+                                                             (3u, JsonDocument('{"s" : "zzzz"}'))
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=s_index, TYPE=BLOOM_NGRAMM_FILTER,
+            FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096,
+                        "records_count" : 1024, "case_sensitive" : true, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"s"'}}`);
+        ------
+        ONE_ACTUALIZATION
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.s") like "%xxx%" ORDER BY Col1;
+        EXPECTED: [[1u;["{\"s\":\"xxxx\"}"]]]
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.s") like "%aaa%" ORDER BY Col1;
+        EXPECTED: []
+        ------
+        )" << NativeValueTypeCheck(EValueType::String);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
 }
 
 }   // namespace NKikimr::NKqp

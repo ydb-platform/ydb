@@ -128,7 +128,7 @@ def get_all_cgi_params(url):
             assert row.Status in status
             assert row.Text.strip() in text.strip()
             assert row.Run
-            assert row.ResourcePool == "default"
+            assert row.ResourcePool == ""
             assert row.RetryCount in retry_count
 
             if retry_count == [0]:
@@ -168,7 +168,7 @@ $script = @@#py
 import time
 
 def hang():
-    time.sleep(20)
+    time.sleep(15)
     return None
 @@;
 
@@ -212,7 +212,16 @@ END DO
                 INSERT INTO {out} SELECT Data || "_final" FROM {inp}
             END DO
         """
-        kikimr_udfs.ydb_client.query(sql)
+
+        for _ in range(5):
+            try:
+                kikimr_udfs.ydb_client.query(sql)
+                break
+            except ydb.issues.Error as e:
+                logger.info(f"Failed to create streaming query {e}")
+                time.sleep(5)
+        else:
+            raise Exception("Failed to create streaming query after several retries")
 
         time.sleep(1)
         validate_query(sql, tests_count)

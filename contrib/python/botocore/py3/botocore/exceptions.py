@@ -814,3 +814,21 @@ class EndpointResolutionError(EndpointProviderError):
 
 class UnknownEndpointResolutionBuiltInName(EndpointProviderError):
     fmt = 'Unknown builtin variable name: {name}'
+
+
+class InvalidChecksumConfigError(BotoCoreError):
+    """Error when an invalid checksum config value is supplied."""
+
+    fmt = (
+        'Unsupported configuration value for {config_key}. '
+        'Expected one of {valid_options} but got {config_value}.'
+    )
+
+
+class UnsupportedServiceProtocolsError(BotoCoreError):
+    """Error when a service does not use any protocol supported by botocore."""
+
+    fmt = (
+        'Botocore supports {botocore_supported_protocols}, but service {service} only '
+        'supports {service_supported_protocols}.'
+    )

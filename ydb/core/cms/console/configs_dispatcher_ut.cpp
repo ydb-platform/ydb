@@ -21,6 +21,8 @@
 
 #include <ydb/core/protos/netclassifier.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONFIGS_DISPATCHER
+
 namespace NKikimr {
 
 using namespace NConsole;
@@ -262,8 +264,8 @@ public:
     {
         while (!EventsQueue.empty()) {
             TAutoPtr<IEventHandle> &ev = EventsQueue.front();
-            LOG_DEBUG_S(ctx, NKikimrServices::CONFIGS_DISPATCHER,
-                        "Dequeue event type: " << ev->GetTypeRewrite());
+            YDB_LOG_DEBUG_CTX(ctx, "Dequeue event",
+                {"type", ev->GetTypeRewrite()});
             ctx.Send(ev.Release());
             EventsQueue.pop_front();
         }
@@ -1015,6 +1017,54 @@ selector_config:
         logConfig->SetDefaultLevel(5);
         UNIT_ASSERT(notifications > 0);
         UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(TestYamlFeatureFlagsTriboolBoolDeliveredInFull) {
+        // End-to-end regression for the FeatureFlags truncation bug: a YAML config
+        // that sets a Tribool feature flag (enable_mvcc) as a boolean together with
+        // a high proto-tag flag (enable_arrow_format_at_datashard, tag 49) must be
+        // delivered to subscribers in full. Previously the json->proto merge aborted
+        // at enable_mvcc (tag 47) and every higher-tag flag was silently dropped;
+        // ParseYamlProtoConfig swallowed the error and shipped the truncated config.
+        NKikimrConfig::TAppConfig config;
+        auto *label = config.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), config);
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem});
+        // Initial notification for the fresh subscription (base config, no yaml).
+        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+
+        TString yamlConfig = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+  feature_flags:
+    enable_mvcc: true
+    enable_arrow_format_at_datashard: true
+allowed_labels:
+  test:
+    type: enum
+    values:
+      ? true
+selector_config: []
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig);
+
+        auto reply = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT(reply->Config.HasFeatureFlags());
+        UNIT_ASSERT_C(reply->Config.GetFeatureFlags().GetEnableArrowFormatAtDatashard(),
+            "enable_arrow_format_at_datashard (tag 49) was dropped from the config "
+            "delivered by the dispatcher");
+        UNIT_ASSERT_VALUES_EQUAL((int)reply->Config.GetFeatureFlags().GetEnableMvcc(),
+            (int)NKikimrConfig::TFeatureFlags::VALUE_TRUE);
     }
 
     Y_UNIT_TEST(TestYamlConfigAndIcb) {

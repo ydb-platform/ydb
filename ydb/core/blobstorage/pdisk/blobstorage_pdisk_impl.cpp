@@ -67,6 +67,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
     ForsetiOpPieceSize = TControlWrapper(Cfg->IoPieceSizeBytes, 1, Cfg->BufferPoolBufferSizeBytes);
     ForsetiOpPieceSizeCached = ForsetiOpPieceSize;
+    EnableFreeChunksSortingHDD = TControlWrapper(Cfg->SortFreeChunksHDD, 0, 1);
     UseNoopSchedulerSSD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
     UseNoopSchedulerHDD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
     ChunkBaseLimitPerMille = TControlWrapper(0, 0, 130);  // 0 means ChunkBaseLimit isn't configured via ICB
@@ -1698,6 +1699,9 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         *Mon.NumActiveSlots = numActiveSlots;
         *Mon.SlotSizeInUnits = Cfg->SlotSizeInUnits;
         *Mon.ExpectedSlotCount = ExpectedSlotCount;
+        if (ExpectedSlotCount) {
+            *Mon.SlotSizeBytes = ui64(Keeper.GetUserChunkPoolSize() / ExpectedSlotCount) * ui64(Format.ChunkSize);
+        }
 
         reportResult->DiskMetrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
 
@@ -3084,6 +3088,7 @@ bool TPDisk::Initialize() {
             REGISTER_LOCAL_CONTROL(ForsetiMilliBatchSize);
             REGISTER_LOCAL_CONTROL(ForsetiMaxLogBatchNs);
             REGISTER_LOCAL_CONTROL(ForsetiOpPieceSize);
+            REGISTER_LOCAL_CONTROL(EnableFreeChunksSortingHDD);
             TControlBoard::RegisterSharedControl(UseNoopSchedulerHDD, icb->PDiskControls.UseNoopSchedulerHDD);
             TControlBoard::RegisterSharedControl(UseNoopSchedulerSSD, icb->PDiskControls.UseNoopSchedulerSSD);
             REGISTER_LOCAL_CONTROL(ChunkBaseLimitPerMille);
@@ -4223,6 +4228,10 @@ void TPDisk::Update() {
             TColor::E colorBorder = GetColorBorderIcb();
             Keeper.SetColorBorder(colorBorder);
             SemiStrictSpaceIsolationCached = currentIsolation;
+        }
+
+        if (!PDiskCategory.IsSolidState()) { // HDD
+            Keeper.SetFreeChunksSortingEnabled(EnableFreeChunksSortingHDD);
         }
 
         // Switch the scheduler when possible

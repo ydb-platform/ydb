@@ -22,15 +22,12 @@ class TestSystemViewsRegistry(RestartToAnotherVersionFixture):
         with ydb.SessionPool(self.driver, size=1) as pool:
             with pool.checkout() as session:
                 for sysview in self.driver.scheme_client.list_directory('/Root/.sys').children:
+                    if sysview.name in pg_sysviews:
+                        continue
+
                     sysview_descr = dict()
 
-                    try:
-                        response = session.describe_table(f'/Root/.sys/{sysview.name}')
-                    except TypeError:
-                        if sysview.name in pg_sysviews:
-                            continue
-                        else:
-                            raise
+                    response = session.describe_table(f'/Root/.sys/{sysview.name}')
 
                     columns = dict()
                     for col in response.columns:

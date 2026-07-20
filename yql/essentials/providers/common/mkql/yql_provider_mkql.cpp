@@ -1010,6 +1010,24 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockWay(blockVariantValue);
     });
 
+    AddCallable("BlockVariant", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto payloadValue = MkqlBuildExpr(*node.Child(0), ctx);
+        const auto variantType = node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TVariantExprType>();
+        const auto type = ctx.BuildType(*node.Child(2), *variantType);
+        if (variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+            const auto alternativeIndex = FromString<ui32>(node.Child(1)->Content());
+            return ctx.ProgramBuilder.BlockVariant(payloadValue, alternativeIndex, type);
+        }
+        YQL_ENSURE(variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Struct,
+                   "Expected tuple or struct as variant underlying type");
+        return ctx.ProgramBuilder.BlockVariant(payloadValue, node.Child(1)->Content(), type);
+    });
+
+    AddCallable("BlockVariantItem", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto blockVariantValue = MkqlBuildExpr(*node.Child(0), ctx);
+        return ctx.ProgramBuilder.BlockVariantItem(blockVariantValue);
+    });
+
     AddCallable("Visit", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto variantObj = MkqlBuildExpr(node.Head(), ctx);
         const auto type = node.Head().GetTypeAnn()->Cast<TVariantExprType>();
@@ -2147,7 +2165,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                                                  [&](TRuntimeNode item, TRuntimeNode state) { return ctx.ProgramBuilder.Append(state, item); }),
                     makePartitions);
 
-                return ETypeAnnotationKind::Stream == kind ? MkqlBuildLambda(partition.ListHandlerLambda().Ref(), ctx, {sorted}) : ctx.ProgramBuilder.ToFlow(MkqlBuildLambda(partition.ListHandlerLambda().Ref(), ctx, {ctx.ProgramBuilder.FromFlow(sorted)}));
+                return ETypeAnnotationKind::Stream == kind ? MkqlBuildLambda(partition.ListHandlerLambda().Ref(), ctx, {sorted}) : ctx.ProgramBuilder.ToFlow(MkqlBuildLambda(partition.ListHandlerLambda().Ref(), ctx, {ctx.ProgramBuilder.FromFlow(sorted)}), {});
             }
             case ETypeAnnotationKind::List: {
                 const auto sorted = ctx.ProgramBuilder.Iterator(makePartitions(input), {});
@@ -2806,14 +2824,17 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         bool rangeFunction = false;
+        ui32 collationOid = 0;
         for (const auto& child : node.Child(2)->Children()) {
             if (child->Head().Content() == "range") {
                 rangeFunction = true;
+            } else if (child->Head().Content() == "collation_oid") {
+                collationOid = FromString<ui32>(child->Tail().Content());
             }
         }
 
         auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
-        return ctx.ProgramBuilder.PgResolvedCall(node.IsCallable("PgResolvedCallCtx"), name, id, args, returnType, rangeFunction);
+        return ctx.ProgramBuilder.PgResolvedCall(node.IsCallable("PgResolvedCallCtx"), name, id, args, returnType, rangeFunction, collationOid);
     });
 
     AddCallable("PgResolvedOp", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2827,7 +2848,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
-        return ctx.ProgramBuilder.PgResolvedCall(/*useContext=*/false, procName, procId, args, returnType, /*rangeFunction=*/false);
+        return ctx.ProgramBuilder.PgResolvedCall(/*useContext=*/false, procName, procId, args, returnType, /*rangeFunction=*/false, NPg::InvalidCollationOid);
     });
 
     AddCallable("BlockPgResolvedCall", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2839,8 +2860,15 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
         }
 
+        ui32 collationOid = 0;
+        for (const auto& child : node.Child(2)->Children()) {
+            if (child->Head().Content() == "collation_oid") {
+                collationOid = FromString<ui32>(child->Tail().Content());
+            }
+        }
+
         auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
-        return ctx.ProgramBuilder.BlockPgResolvedCall(name, id, args, returnType);
+        return ctx.ProgramBuilder.BlockPgResolvedCall(name, id, args, returnType, collationOid);
     });
 
     AddCallable("BlockPgResolvedOp", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2854,7 +2882,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
-        return ctx.ProgramBuilder.BlockPgResolvedCall(procName, procId, args, returnType);
+        return ctx.ProgramBuilder.BlockPgResolvedCall(procName, procId, args, returnType, NPg::InvalidCollationOid);
     });
 
     AddCallable("PgCast", [](const TExprNode& node, TMkqlBuildContext& ctx) {

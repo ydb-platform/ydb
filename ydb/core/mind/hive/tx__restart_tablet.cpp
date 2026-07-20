@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -9,11 +11,13 @@ protected:
     TFullTabletId TabletId;
     TNodeId PreferredNodeId;
     TSideEffects SideEffects;
+    bool ForceStop = false;
 public:
-    TTxRestartTablet(TFullTabletId tabletId, THive *hive)
+    TTxRestartTablet(TFullTabletId tabletId, THive *hive, bool forceStop = false)
         : TBase(hive)
         , TabletId(tabletId)
         , PreferredNodeId(0)
+        , ForceStop(forceStop)
     {}
 
     TTxRestartTablet(TFullTabletId tabletId, TNodeId preferredNodeId, THive *hive)
@@ -29,9 +33,14 @@ public:
         TTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
             if (PreferredNodeId == 0) {
-                BLOG_D("THive::TTxRestartTablet(" << tablet->ToString() << ")::Execute");
+                YDB_LOG_DEBUG("THive::TTxRestartTablet::Execute restarting tablet",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tabletInfo", tablet->ToString()});
             } else {
-                BLOG_D("THive::TTxRestartTablet(" << tablet->ToString() << " to node " << PreferredNodeId << ")::Execute");
+                YDB_LOG_DEBUG("THive::TTxRestartTablet::Execute restarting tablet on preferred node",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tabletInfo", tablet->ToString()},
+                    {"preferredNodeId", PreferredNodeId});
             }
             if (!tablet->IsStopped()) {
                 NIceDb::TNiceDb db(txc.DB);
@@ -42,7 +51,7 @@ public:
                         db.Table<Schema::TabletFollowerTablet>().Key(tablet->GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                     }
                 }
-                tablet->InitiateStop(SideEffects, PreferredNodeId != 0);
+                tablet->InitiateStop(SideEffects, !ForceStop);
             }
             if (tablet->IsLeader() && tablet->AsLeader().ChannelProfileNewGroup.any()) {
                 tablet->AsLeader().InitiateAssignTabletGroups();
@@ -57,7 +66,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxRestartTablet(" << TabletId << ")::Complete SideEffects: " << SideEffects);
+        YDB_LOG_DEBUG("THive::TTxRestartTablet::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId},
+            {"sideEffects", SideEffects});
         SideEffects.Complete(ctx);
     }
 };
@@ -68,6 +80,10 @@ ITransaction* THive::CreateRestartTablet(TFullTabletId tabletId) {
 
 ITransaction* THive::CreateRestartTablet(TFullTabletId tabletId, TNodeId preferredNodeId) {
     return new TTxRestartTablet(tabletId, preferredNodeId, this);
+}
+
+ITransaction* THive::CreateForceRestartTablet(TFullTabletId tabletId) {
+    return new TTxRestartTablet(tabletId, this, true);
 }
 
 } // NHive

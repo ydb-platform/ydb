@@ -1443,7 +1443,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         UNIT_ASSERT_VALUES_EQUAL(updated.DDiskIdSize(), 2);
     }
 
-    Y_UNIT_TEST(DeletePersistentBufferNotFoundReturnsError) {
+    Y_UNIT_TEST(DeletePersistentBufferNotFoundReturnsNotFound) {
         TDDiskTestContext f;
         f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/2,
             /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
@@ -1455,7 +1455,9 @@ Y_UNIT_TEST_SUITE(DDisk) {
             cmd->MutablePersistentBufferId()->SetPDiskId(999);
             cmd->MutablePersistentBufferId()->SetDDiskSlotId(999);
         });
-        UNIT_ASSERT_VALUES_EQUAL(rr.GetStatus(), NKikimrProto::ERROR);
+        // A missing PersistentBuffer must be reported as NOT_FOUND, not a generic ERROR,
+        // so that callers can distinguish "target doesn't exist" from other failures.
+        UNIT_ASSERT_VALUES_EQUAL(rr.GetStatus(), NKikimrProto::NOT_FOUND);
         UNIT_ASSERT_STRING_CONTAINS(rr.GetErrorReason(), "PersistentBuffer not found");
     }
 
@@ -1484,7 +1486,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         UNIT_ASSERT_VALUES_EQUAL(updated.PersistentBufferDDiskIdSize(), 1);
     }
 
-    Y_UNIT_TEST(DeleteDDiskNotFoundReturnsError) {
+    Y_UNIT_TEST(DeleteDDiskNotFoundReturnsNotFound) {
         TDDiskTestContext f;
         f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/2,
             /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
@@ -1495,7 +1497,9 @@ Y_UNIT_TEST_SUITE(DDisk) {
             cmd->MutableDDiskId()->SetPDiskId(999);
             cmd->MutableDDiskId()->SetDDiskSlotId(999);
         });
-        UNIT_ASSERT_VALUES_EQUAL(rr.GetStatus(), NKikimrProto::ERROR);
+        // A missing DDisk must be reported as NOT_FOUND, not a generic ERROR,
+        // so that callers can distinguish "target doesn't exist" from other failures.
+        UNIT_ASSERT_VALUES_EQUAL(rr.GetStatus(), NKikimrProto::NOT_FOUND);
         UNIT_ASSERT_STRING_CONTAINS(rr.GetErrorReason(), "DDisk not found");
     }
 
@@ -1544,5 +1548,109 @@ Y_UNIT_TEST_SUITE(DDisk) {
         UNIT_ASSERT_VALUES_EQUAL(updated.PersistentBufferDDiskIdSize(), 0);
         // both DDisks removed and the last one had zero claim -> full trim
         UNIT_ASSERT_VALUES_EQUAL(updated.DDiskIdSize(), 0);
+    }
+
+    // Re-deleting a PersistentBuffer that was already removed by a prior operation
+    // must also be reported as NOT_FOUND (not a stale/cached OK, and not a generic
+    // ERROR), confirming the status is derived from actual current state each time.
+    Y_UNIT_TEST(DeletePersistentBufferTwiceReturnsNotFoundOnSecondAttempt) {
+        TDDiskTestContext f;
+        auto group = f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/1,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+        const auto pb = group.GetPersistentBufferDDiskId(0);
+
+        auto rr1 = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            op->AddDeletePersistentBuffers()->MutablePersistentBufferId()->CopyFrom(pb);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(rr1.GetStatus(), NKikimrProto::OK, rr1.GetErrorReason());
+
+        auto rr2 = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            op->AddDeletePersistentBuffers()->MutablePersistentBufferId()->CopyFrom(pb);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(rr2.GetStatus(), NKikimrProto::NOT_FOUND);
+        UNIT_ASSERT_STRING_CONTAINS(rr2.GetErrorReason(), "PersistentBuffer not found");
+    }
+
+    // Same as above, but for DeleteDDisks: deleting an already-deleted DDisk a
+    // second time must be reported as NOT_FOUND.
+    Y_UNIT_TEST(DeleteDDiskTwiceReturnsNotFoundOnSecondAttempt) {
+        TDDiskTestContext f;
+        auto group = f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/2,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+        const auto ddisk = group.GetDDiskId(1);
+
+        auto rr1 = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            op->AddDeleteDDisks()->MutableDDiskId()->CopyFrom(ddisk);
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(rr1.GetStatus(), NKikimrProto::OK, rr1.GetErrorReason());
+
+        auto rr2 = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            op->AddDeleteDDisks()->MutableDDiskId()->CopyFrom(ddisk);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(rr2.GetStatus(), NKikimrProto::NOT_FOUND);
+        UNIT_ASSERT_STRING_CONTAINS(rr2.GetErrorReason(), "DDisk not found");
+    }
+
+    // A single request mixing a not-found PersistentBuffer delete together with a
+    // valid DDisk delete must still surface NOT_FOUND for the whole operation
+    // (the exception aborts the entire DirectBlockGroupOperations loop for this
+    // transaction, so no partial changes are committed).
+    Y_UNIT_TEST(DeleteWithMixedNotFoundAndValidTargetsReturnsNotFound) {
+        TDDiskTestContext f;
+        auto group = f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/2,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+        const auto validDDisk = group.GetDDiskId(0);
+
+        auto rr = f.SendDirectBlockGroupOperation(1, [&](auto *op) {
+            // valid delete, would succeed on its own
+            op->AddDeleteDDisks()->MutableDDiskId()->CopyFrom(validDDisk);
+            // bogus, never-allocated PersistentBuffer identifier
+            auto *cmd = op->AddDeletePersistentBuffers();
+            cmd->MutablePersistentBufferId()->SetNodeId(999);
+            cmd->MutablePersistentBufferId()->SetPDiskId(999);
+            cmd->MutablePersistentBufferId()->SetDDiskSlotId(999);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(rr.GetStatus(), NKikimrProto::NOT_FOUND);
+        UNIT_ASSERT_STRING_CONTAINS(rr.GetErrorReason(), "PersistentBuffer not found");
+
+        // Verify nothing was actually committed: querying the group again must
+        // show both DDisks and the PersistentBuffer still present.
+        auto rr2 = f.SendDirectBlockGroupOperation(1, [&](auto*) {});
+        UNIT_ASSERT_VALUES_EQUAL_C(rr2.GetStatus(), NKikimrProto::OK, rr2.GetErrorReason());
+        const auto& unchanged = rr2.GetDirectBlockGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(unchanged.DDiskIdSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(unchanged.PersistentBufferDDiskIdSize(), 1);
+    }
+
+    // Errors that are NOT "not found" (e.g. combining incompatible Queries and
+    // DirectBlockGroupOperations in the same request) must remain plain ERROR,
+    // not be misreported as NOT_FOUND.
+    Y_UNIT_TEST(NonNotFoundErrorStillReturnsError) {
+        TDDiskTestContext f;
+        f.DefineDirectBlockGroup(/*directBlockGroupId=*/1, /*numDDisks=*/1,
+            /*numChunksPerDDisk=*/1, /*numPersistentBuffers=*/1);
+
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+        auto& r = ev->Record;
+        r.SetDDiskPoolName("ddisk_pool");
+        r.SetPersistentBufferDDiskPoolName("ddisk_pool");
+        r.SetTabletId(1);
+        // Queries and DirectBlockGroupOperations together are rejected up-front
+        // with a plain ERROR (see Execute() in ddisk.cpp), well before any
+        // not-found checks are reached.
+        auto *q = r.AddQueries();
+        q->SetDirectBlockGroupId(2);
+        q->SetTargetNumVChunks(1);
+        auto *op = r.AddDirectBlockGroupOperations();
+        op->SetDirectBlockGroupId(1);
+        op->AddDeleteDDisks(); // deliberately empty/bogus, shouldn't even be reached
+
+        TActorId edge = f.Env.Runtime->AllocateEdgeActor(f.Env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        f.Env.Runtime->SendToPipe(MakeBSControllerID(), edge, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+        auto response = f.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>(edge);
+        auto& rr = response->Get()->Record;
+
+        UNIT_ASSERT_VALUES_EQUAL(rr.GetStatus(), NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(rr.GetErrorReason(), "can't be provided at the same time");
     }
 }

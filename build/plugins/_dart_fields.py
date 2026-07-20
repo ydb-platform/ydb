@@ -870,10 +870,19 @@ class Requirements:
 
     @classmethod
     def from_unit_with_cpu(cls, unit, flat_args, spec_args):
-        requirements = get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
-        if [r for r in requirements if r and r.startswith("cpu:")]:
-            return serialize_list(requirements)
-        return serialize_list(requirements + ["cpu:4"])
+        requirements = get_values_list(unit, "TEST_REQUIREMENTS_VALUE")
+
+        defaults = {
+            "cpu": "cpu:4",
+            "ram": "ram:16",
+            "ram_disk": "ram_disk:4",
+        }
+
+        for prefix, value in defaults.items():
+            if not any(r and r.startswith(f"{prefix}:") for r in requirements):
+                requirements.append(value)
+
+        return serialize_list(requirements)
 
     @classmethod
     def from_unit_with_full_network(cls, unit, flat_args, spec_args):

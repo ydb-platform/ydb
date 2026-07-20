@@ -23,7 +23,7 @@ class DT64Param:
     def __init__(self, value: datetime):
         self.value = value
 
-    def format(self, tz: tzinfo, top_level: bool) -> str:
+    def format(self, tz: tzinfo | None, top_level: bool) -> str:
         value = self.value
         if tz:
             value = value.astimezone(tz)
@@ -128,12 +128,13 @@ def bind_query(
     query: str,
     parameters: Sequence | dict[str, Any] | None,
     server_tz: tzinfo | None = None,
-) -> tuple[str, dict[str, str]]:
+) -> tuple[str | bytes, dict[str, str]]:
     query = query.rstrip(";")
     if not parameters:
         return query, {}
 
     binary_binds = None
+    bound_params: dict[str, str] = {}
 
     if isinstance(parameters, dict):
         params_copy = dict_copy(parameters)
@@ -186,13 +187,14 @@ def bind_query(
                     break
                 binary_indexes[item_index + len(key)] = key, v
                 item_index += len(key)
-        query = b""
+        binary_out = b""
         start = 0
         for loc in sorted(binary_indexes.keys()):
             key, value = binary_indexes[loc]
-            query += binary_query[start:loc] + value + key
+            binary_out += binary_query[start:loc] + value + key
             start = loc
-        query += binary_query[start:]
+        binary_out += binary_query[start:]
+        return binary_out, bound_params
     return query, bound_params
 
 
@@ -232,7 +234,7 @@ def escape_bytes(value):
     return "".join(f"{BS}x{b:02x}" for b in value)
 
 
-def format_query_value(value: Any, server_tz: tzinfo = timezone.utc):
+def format_query_value(value: Any, server_tz: tzinfo | None = timezone.utc):
     """
     Format Python values in a ClickHouse query
     :param value: Python object
@@ -269,11 +271,11 @@ def format_query_value(value: Any, server_tz: tzinfo = timezone.utc):
     return value
 
 
-def str_query_value(value: Any, server_tz: tzinfo = timezone.utc):
+def str_query_value(value: Any, server_tz: tzinfo | None = timezone.utc):
     return str(format_query_value(value, server_tz))
 
 
-def format_bind_value(value: Any, server_tz: tzinfo = timezone.utc, top_level: bool = True):
+def format_bind_value(value: Any, server_tz: tzinfo | None = timezone.utc, top_level: bool = True):
     """
     Format Python values in a ClickHouse query
     :param value: Python object

@@ -1,5 +1,5 @@
 # YDB configuration options and their values
-# are described in documentaion https://ydb.tech/en/docs/deploy/configuration/config
+# are described in documentation: https://ydb.tech/en/docs/deploy/configuration/config
 
 metadata:
   kind: MainConfig
@@ -7,7 +7,7 @@ metadata:
   version: 0
 config:
   yaml_config_enabled: true
-  erasure: mirror-3-dc # erasue is the parameter that describes
+  erasure: mirror-3-dc # erasure is the parameter that describes
                        # the fault tolerance mode of the cluster.
                        # See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
   fail_domain_type: disk
@@ -21,7 +21,7 @@ config:
   host_configs:           # the list of available host configurations in the cluster.
   - host_config_id: 1
     drive:
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01    # path of the first disk in the host configration.
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01    # path of the first disk in the host configuration.
       type: SSD                                       # kind of the disk: available kinds are SSD, NVME, HDD
     - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
       type: SSD

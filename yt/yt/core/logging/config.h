@@ -10,6 +10,8 @@
 #include <yt/yt/core/ytree/public.h>
 #include <yt/yt/core/ytree/yson_struct.h>
 
+#include <library/cpp/yt/yson_string/string.h>
+
 namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -35,9 +37,15 @@ struct TLogWriterConfig
     bool EnableSourceLocation;
 
     //! Structured formatter options.
+    //! If set, every event carries the system fields "instant", "level" and "category".
     bool EnableSystemFields;
+    //! If set, every event carries the "host" field with the local hostname.
     bool EnableHostField;
-    THashMap<std::string, NYTree::INodePtr> CommonFields;
+    //! If set, a tagged message's tags go to a nested "tags" map; otherwise they
+    //! are folded into the "message" field as |Message (Key: Value, ...)|.
+    bool EnableNativeTags;
+    //! Fields injected into every event as |key -> raw YSON value|.
+    THashMap<std::string, NYson::TYsonString> CommonFields;
     NJson::TJsonFormatConfigPtr JsonFormat;
     NYson::EYsonFormat YsonFormat;
 

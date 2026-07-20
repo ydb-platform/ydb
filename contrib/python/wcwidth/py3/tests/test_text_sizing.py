@@ -155,6 +155,7 @@ def test_text_sizing_sequence(given_sequence, expected_text, expected_params, ex
     ('\x1b]66;w=2;A\x07\x1b]66;w=3;B\x07', 5),
     ('\x1b]66;s=2:w=3;text\x1b\\', 6),
     ('\x1b[31m\x1b]66;w=2;AB\x07\x1b[0m', 2),
+    ('\x1b]66;;\x01\x07', 0),
 ])
 def test_strings_with_text_sizing(text, expected):
     """Verify measured width strings containing OSC66."""
@@ -294,7 +295,7 @@ def test_clip_text_sizing_scaled_with_fillchar(text, start, end, expected):
 
 def test_clip_simple_path_padding():
     """Simple-path clip with w=N larger than text length exercises padding loop."""
-    # w=4 but only 1 grapheme 'X' — 3 empty units are padded.
+    # w=4 but only 1 grapheme 'X': 3 empty units are padded.
     # Clip window (0, 1) forces partial overlap, triggering
     # _text_sizing_clip_simple's padding branch.
     assert repr(clip('\x1b]66;w=4;X\x07', 0, 1)) == repr('\x1b]66;w=1;X\x07')

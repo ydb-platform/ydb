@@ -12789,12 +12789,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // Dedicated, enabled
         settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Shared, enabled
         settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
@@ -12883,6 +12887,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
         // Create with sample rank
         auto result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL CLASSIFIER ClassifierRank42 WITH (
@@ -12957,6 +12966,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
         // Explicit rank
         auto query = R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
@@ -12987,6 +13001,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         const auto nodeIdx = ydb->GetServerlessTenantInfo().NodeIdx;
         const auto& serverlessTenant = ydb->GetSettings().GetServerlessTenantName();
+        ydb->ExecuteQueryRetry("Wait EnableResourcePools on Serverless", R"(
+            CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);)",
+            NWorkload::TQueryRunnerSettings()
+                .PoolId("")
+                .Database(serverlessTenant)
+                .NodeIndex(nodeIdx)
+        );
         ydb->ExecuteQueryRetry("Wait EnableResourcePoolsOnServerless", R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
                 RANK=20,
@@ -13014,6 +13035,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
 
         {
             auto query = R"(
@@ -13046,6 +13072,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
 
         // Create sample pool
         {
@@ -13104,6 +13135,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
         auto query = R"(
             ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
                 SET (RESOURCE_POOL = "test", RANK = 100),
@@ -13123,6 +13159,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
 
         {
             auto query = R"(
@@ -13636,7 +13677,7 @@ END DO)",
             disposition.mutable_from_last_checkpoint()->set_force(true);
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
-                {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
+                {"resource_pool", ""},
                 {"streaming_disposition", disposition.SerializeAsString()},
                 {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
@@ -13653,7 +13694,7 @@ END DO)",
 
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
-                {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
+                {"resource_pool", ""},
                 {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
         }
@@ -13670,7 +13711,7 @@ END DO)",
             disposition.mutable_from_last_checkpoint()->set_force(true);
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
-                {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
+                {"resource_pool", ""},
                 {"streaming_disposition", disposition.SerializeAsString()},
                 {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
@@ -14451,7 +14492,7 @@ END DO)",
         TString queryText = " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic ";
         CheckObjectProperties(*ydb->GetRuntime(), queryName, {
             {"run", "true"},
-            {"resource_pool", "default"},
+            {"resource_pool", ""},
             {"__query_text", queryText}
         });
 
@@ -14476,7 +14517,7 @@ END DO)",
                 UNIT_ASSERT_STRING_CONTAINS(*resultParser.ColumnParser("Ast").GetOptionalUtf8(), "/Root/test-serverless/MySource");
                 UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Text").GetOptionalUtf8(), text);
                 UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Run").GetOptionalBool(), true);
-                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("ResourcePool").GetOptionalUtf8(), "default");
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("ResourcePool").GetOptionalUtf8(), "");
                 UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("RetryCount").GetOptionalUint64(), 0);
                 UNIT_ASSERT(!resultParser.ColumnParser("LastFailAt").GetOptionalTimestamp());
                 UNIT_ASSERT(!resultParser.ColumnParser("SuspendedUntil").GetOptionalTimestamp());
@@ -14502,7 +14543,7 @@ END DO)",
         queryText = " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic ";
         CheckObjectProperties(*ydb->GetRuntime(), queryName, {
             {"run", "true"},
-            {"resource_pool", "default"},
+            {"resource_pool", ""},
             {"__query_text", queryText}
         });
 

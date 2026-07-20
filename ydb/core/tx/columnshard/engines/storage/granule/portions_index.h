@@ -11,7 +11,7 @@ namespace NKikimr::NOlap::NGranule::NPortionsIndex {
 
 class TPortionsIndex {
 public:
-    using TPortions = THashMap<ui64, TPortionInfo::TConstPtr>;
+    using TPortions = std::vector<TPortionInfo::TConstPtr>;
 
 private:
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
@@ -36,8 +36,9 @@ public:
 
     TPortions GetPortionsSnapshot() const {
         TPortions result;
-        for (const auto& [id, portion] : Portions) {
-            result.emplace(id, portion);
+        result.reserve(Portions.size());
+        for (const auto& [_, portion] : Portions) {
+            result.emplace_back(portion);
         }
         return result;
     }

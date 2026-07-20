@@ -4,7 +4,7 @@
 namespace NKikimr::NOlap::NGranule::NPortionsIndex {
 
 bool TPortionsIndex::HasOlderIntervals(const TPortions& portions, const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions) {
-    for (auto&& [_, p] : portions) {
+    for (const auto& p : portions) {
         if (p->GetPortionId() == inputPortion.GetPortionId()) {
             continue;
         }

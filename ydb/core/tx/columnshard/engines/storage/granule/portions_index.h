@@ -11,10 +11,10 @@ namespace NKikimr::NOlap::NGranule::NPortionsIndex {
 
 class TPortionsIndex {
 public:
-    using TPortions = THashMap<ui64, std::shared_ptr<TPortionInfo>>;
+    using TPortions = THashMap<ui64, TPortionInfo::TConstPtr>;
 
 private:
-    TPortions Portions;
+    THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     const TGranuleMeta& Owner;
 
 public:
@@ -35,7 +35,11 @@ public:
     }
 
     TPortions GetPortionsSnapshot() const {
-        return Portions;
+        TPortions result;
+        for (const auto& [id, portion] : Portions) {
+            result.emplace(id, portion);
+        }
+        return result;
     }
 
     static bool HasOlderIntervals(const TPortions& portions, const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions);

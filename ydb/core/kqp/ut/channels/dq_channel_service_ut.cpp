@@ -178,10 +178,10 @@ public:
     }
 
     void HandleAbort(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
-        YDB_LOG_DEBUG("TEST WORKER ABORT",
+        YDB_LOG_DEBUG("Test worker received abort execution",
             {"selfId", SelfId()},
             {"channelId", ChannelId},
-            {"#_ev->Get()->GetIssues().ToOneLineString", ev->Get()->GetIssues().ToOneLineString()});
+            {"issues", ev->Get()->GetIssues().ToOneLineString()});
         Send(RunnerId, new TEvTestPrivate::TEvFinished(Role, true));
         PassAway();
     }

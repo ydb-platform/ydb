@@ -47,24 +47,24 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         }
         virtual void DoProposeSuccess(const TString& sessionId) const override {
             CSTransferStatus->SetProposed(true);
-            YDB_LOG_NOTICE("",
+            YDB_LOG_NOTICE("Column shard sharing proposed",
                 {"event", "sharing_proposed"},
                 {"sessionId", sessionId});
         }
         virtual void DoConfirmSuccess(const TString& sessionId) const override {
             CSTransferStatus->SetConfirmed(true);
-            YDB_LOG_NOTICE("",
+            YDB_LOG_NOTICE("Column shard sharing confirmed",
                 {"event", "sharing_confirmed"},
                 {"sessionId", sessionId});
         }
         virtual void DoFinished(const TString& sessionId) const override {
             CSTransferStatus->SetFinished(true);
-            YDB_LOG_NOTICE("",
+            YDB_LOG_NOTICE("Column shard sharing finished",
                 {"event", "sharing_finished"},
                 {"sessionId", sessionId});
         }
         virtual void DoStatus(const NOlap::NDataSharing::TStatusContainer& status) const override {
-            YDB_LOG_NOTICE("",
+            YDB_LOG_NOTICE("Column shard sharing status updated",
                 {"event", "status"},
                 {"info", status.SerializeToProto().DebugString()});
         }

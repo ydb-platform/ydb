@@ -146,7 +146,7 @@ public:
         Counters->SequencerActorsCount->Inc();
 
         YDB_LOG_DEBUG("Start stream lookup actor",
-            {"#_this->LogPrefix", this->LogPrefix});
+            {"logPrefix", this->LogPrefix});
         Become(&TKqpSequencerActor::StateFunc);
     }
 
@@ -192,10 +192,10 @@ private:
 
         if (PendingRows.size() > 0 && WaitingReplies == 0) {
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
-        } 
+        }
 
         YDB_LOG_DEBUG("Returned bytes",
-            {"#_this->LogPrefix", this->LogPrefix},
+            {"logPrefix", this->LogPrefix},
             {"totalDataSize", totalDataSize},
             {"finished", finished});
         return totalDataSize;
@@ -297,7 +297,7 @@ private:
             Counters->SequencerErrors->Inc();
             TStringBuilder result;
             result << "Failed to get next val for sequence: " << ColumnSequenceInfo[ev->Cookie].DefaultFromSequence
-                << ", status: " << ev->Get()->Status; 
+                << ", status: " << ev->Get()->Status;
             RuntimeError(result, NYql::NDq::YdbStatusToDqStatus(ev->Get()->Status), ev->Get()->Issues);
             return;
         }

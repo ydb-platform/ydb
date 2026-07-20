@@ -298,9 +298,10 @@ public:
             {"database", Database},
             {"softDeadline", softDeadline},
             {"hardDeadline", hardDeadline},
-            {"#_num_0", (Config.HardDeadline < softDeadline ? " (adjusted from " + ToString(Config.HardDeadline) + ")" : "")},
+            {"hardDeadlineAdjusted", Config.HardDeadline < softDeadline},
+            {"originalHardDeadline", Config.HardDeadline},
             {"maxConcurrent", MaxConcurrentCompilations},
-            {"#_num_1", (Config.MaxConcurrentCompilations == 0 ? " (adjusted from 0)" : "")});
+            {"maxConcurrentAdjusted", Config.MaxConcurrentCompilations == 0});
 
         // Soft deadline is armed only after the board is up (HandleCheckTopology), so a long board wait on a cold v2 bootstrap doesn't eat the compile budget.
         Schedule(hardDeadline, new TEvPrivate::TEvHardDeadline());
@@ -336,7 +337,7 @@ private:
         default:
             YDB_LOG_WARN("StateWaitingComplete: unexpected event",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                {"eventType", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -351,7 +352,7 @@ private:
         default:
             YDB_LOG_WARN("StateWaitingTopology: unexpected event",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                {"eventType", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -369,7 +370,7 @@ private:
         default:
             YDB_LOG_WARN("StateFetching: unexpected event",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                {"eventType", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -385,7 +386,7 @@ private:
         default:
             YDB_LOG_WARN("StateCompiling: unexpected event",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                {"eventType", ev->GetTypeRewrite()});
             break;
         }
     }
@@ -444,9 +445,9 @@ private:
         }
 
         if (peerCount == 0) {
-            YDB_LOG_INFO("No peers in initial kqpexch+ board sync skipping warmup",
+            YDB_LOG_INFO("No peers in initial kqpexch+ board sync, skipping warmup",
                 {"logPrefix", LogPrefix()},
-                {"#_(boardSize", boardNodeIds.size()});
+                {"boardSize", boardNodeIds.size()});
             Complete(true, "Skipped: no peers in initial kqpexch+ board sync");
             return;
         }
@@ -491,7 +492,7 @@ private:
 
         YDB_LOG_INFO("Spawning fetch cache actor, filtering by nodes",
             {"logPrefix", LogPrefix()},
-            {"#_NodeIds.size", NodeIds.size()});
+            {"nodeIdsCount", NodeIds.size()});
         const ui64 maxCompilationMs = Config.MaxCompilationDurationMs > 0
             ? Config.MaxCompilationDurationMs
             : Config.SoftDeadline.MilliSeconds() / 2;
@@ -506,12 +507,12 @@ private:
         if (!result->Success) {
             // DB may not be resolvable yet this early after start; retry before giving up.
             if (!SoftDeadlineReached && FetchAttempts < MaxFetchAttempts) {
-                YDB_LOG_WARN("Fetch failed (attempt / retrying",
+                YDB_LOG_WARN("Fetch failed, retrying",
                     {"logPrefix", LogPrefix()},
                     {"fetchAttempts", FetchAttempts},
                     {"maxFetchAttempts", MaxFetchAttempts},
                     {"fetchRetryDelay", FetchRetryDelay},
-                    {"#_result->Error", result->Error});
+                    {"error", result->Error});
                 Schedule(FetchRetryDelay, new TEvPrivate::TEvRetryFetch());
                 return;
             }
@@ -531,7 +532,7 @@ private:
         QueriesToCompile = std::move(result->Queries);
         YDB_LOG_INFO("Fetched queries from compile cache",
             {"logPrefix", LogPrefix()},
-            {"#_QueriesToCompile.size", QueriesToCompile.size()});
+            {"queriesToCompileCount", QueriesToCompile.size()});
 
         if (Counters) {
             Counters->WarmupQueriesFetched->Add(QueriesToCompile.size());
@@ -571,8 +572,8 @@ private:
                     {"logPrefix", LogPrefix()},
                     {"user", query.UserSID},
                     {"hasMetadata", !query.Metadata.empty()},
-                    {"query", query.QueryText.substr(0, 200)},
-                    {"#_num_0", (query.QueryText.size() > 200 ? "..." : "")});
+                    {"queryPreview", query.QueryText.substr(0, 200)},
+                    {"queryTruncated", query.QueryText.size() > 200});
             } else {
                 TString errorMsg;
                 const auto& issues = record.GetResponse().GetQueryIssues();
@@ -590,8 +591,8 @@ private:
                     {"hasMetadata", !query.Metadata.empty()},
                     {"status", Ydb::StatusIds::StatusCode_Name(record.GetYdbStatus())},
                     {"error", errorMsg},
-                    {"query", query.QueryText.substr(0, 200)},
-                    {"#_num_0", (query.QueryText.size() > 200 ? "..." : "")});
+                    {"queryPreview", query.QueryText.substr(0, 200)},
+                    {"queryTruncated", query.QueryText.size() > 200});
             }
             PendingQueriesByCookie.erase(it);
         } else {
@@ -770,9 +771,9 @@ private:
         }
         Completed = true;
 
-        YDB_LOG_INFO("Warmup",
+        YDB_LOG_INFO("Warmup finished",
             {"logPrefix", LogPrefix()},
-            {"#_num_0", (success ? "completed" : "finished")},
+            {"success", success},
             {"message", message});
 
         for (const auto& actorId : NotifyActorIds) {

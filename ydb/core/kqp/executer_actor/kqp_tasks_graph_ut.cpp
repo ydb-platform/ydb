@@ -334,8 +334,8 @@ public:
         // per-node distribution below is read uniformly from Meta.ExpectedNodeId.
         RunPlannerPlacement(snapshot);
 
-        YDB_LOG_DEBUG("Tasks graph after BuildAllTasks:\n",
-            {"#_Graph->DumpToString", Graph->DumpToString()});
+        YDB_LOG_DEBUG("Tasks graph after BuildAllTasks",
+            {"tasksGraphDump", Graph->DumpToString()});
 
         auto reply = MakeHolder<TEvBuildTasksDone>();
         for (const auto& [stageId, stageInfo] : Graph->GetStagesInfo()) {

@@ -291,7 +291,7 @@ private:
             NYql::IssuesFromMessage(response.GetQueryIssues(), issues);
             YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Ignored query response from execution already finished",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", record.GetYdbStatus()},
                 {"issues", issues.ToOneLineString()});
             return;
@@ -299,7 +299,7 @@ private:
 
         YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Forward query response from to result handler",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender});
+            {"sender", ev->Sender});
         Forward(ev, ScriptResultHandlerActor.Id);
     }
 
@@ -386,9 +386,9 @@ private:
         FinishInfo.Update(status, std::move(issues));
 
         if (ScriptResultHandlerActor.Id) {
-            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Stop script result handler",
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Stopping script result handler",
                 {"logPrefix", LogPrefix()},
-                {"#_ScriptResultHandlerActor.Id", ScriptResultHandlerActor.Id});
+                {"scriptResultHandlerActorId", ScriptResultHandlerActor.Id});
             ScriptResultHandlerActor.Stop(SelfId());
             return;
         }
@@ -406,9 +406,9 @@ private:
         }
 
         if (ScriptLeaseWatcherActor.Id) {
-            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Stop script lease watcher",
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Stopping script lease watcher",
                 {"logPrefix", LogPrefix()},
-                {"#_ScriptLeaseWatcherActor.Id", ScriptLeaseWatcherActor.Id});
+                {"scriptLeaseWatcherActorId", ScriptLeaseWatcherActor.Id});
             ScriptLeaseWatcherActor.Stop(SelfId());
             return;
         }
@@ -445,9 +445,9 @@ private:
             Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptFinalizeRequest.release());
             WaitFinalizationRequest = true;
         } else {
-            YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Skip finish with error already waiting finalization",
+            YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Skipping finish with error because finalization is already in progress",
                 {"logPrefix", LogPrefix()},
-                {"#_*FinishInfo.Status", *FinishInfo.Status},
+                {"finishStatus", *FinishInfo.Status},
                 {"issues", FinishInfo.Issues.ToOneLineString()});
         }
     }

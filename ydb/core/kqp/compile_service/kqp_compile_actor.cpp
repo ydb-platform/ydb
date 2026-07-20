@@ -287,15 +287,15 @@ private:
 
         Counters->ReportCompileStart(DbCounters);
 
-        YDB_LOG_DEBUG_CTX(ctx, "TraceId: verbosity trace_id",
-            {"#_std::to_string(CompileActorSpan.GetTraceId().GetVerbosity())", std::to_string(CompileActorSpan.GetTraceId().GetVerbosity())},
-            {"#_std::to_string(CompileActorSpan.GetTraceId().GetTraceId())", std::to_string(CompileActorSpan.GetTraceId().GetTraceId())});
+        YDB_LOG_DEBUG_CTX(ctx, "Starting query compilation",
+            {"traceVerbosity", std::to_string(CompileActorSpan.GetTraceId().GetVerbosity())},
+            {"traceId", std::to_string(CompileActorSpan.GetTraceId().GetTraceId())});
 
-        YDB_LOG_DEBUG_CTX(ctx, "Start compilation text",
+        YDB_LOG_DEBUG_CTX(ctx, "Starting query compilation",
             {"self", ctx.SelfID},
             {"cluster", QueryId.Cluster},
             {"database", QueryId.Database},
-            {"#_GetQueryTextForLog(QueryId.Text)", GetQueryTextForLog(QueryId.Text)},
+            {"queryText", GetQueryTextForLog(QueryId.Text)},
             {"startTime", StartTime});
 
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
@@ -676,11 +676,11 @@ private:
     }
 
     void HandleTimeout() {
-        YDB_LOG_NOTICE("Compilation timeout text",
+        YDB_LOG_NOTICE("Query compilation timed out",
             {"self", SelfId()},
             {"cluster", QueryId.Cluster},
             {"database", QueryId.Database},
-            {"#_GetQueryTextForLog(QueryId.Text)", GetQueryTextForLog(QueryId.Text)},
+            {"queryText", GetQueryTextForLog(QueryId.Text)},
             {"startTime", StartTime});
 
         NYql::TIssue issue(NYql::TPosition(), "Query compilation timed out.");
@@ -703,11 +703,11 @@ private:
 
 private:
     void RebuildConfigAndStartCompilation(const TActorContext &ctx, TString&& logMessage) {
-        YDB_LOG_ERROR_CTX(ctx, "Text",
+        YDB_LOG_ERROR_CTX(ctx, "Rebuilding compile configuration and restarting compilation",
             {"logMessage", logMessage},
             {"self", ctx.SelfID},
             {"database", QueryId.Database},
-            {"#_GetQueryTextForLog(QueryId.Text)", GetQueryTextForLog(QueryId.Text)});
+            {"queryText", GetQueryTextForLog(QueryId.Text)});
 
         // Explicitly drop a pointer to result, it holds pointer `TExprNode` allocated from `TExprContext` in KqpHost
         // and we want rebuild a KqpHost.

@@ -184,7 +184,7 @@ private:
     void Handle(TEvPrivate::TEvStopPoolHandler::TPtr& ev) {
         YDB_LOG_INFO("[WorkloadService] Got stop pool handler request, waiting for requests",
             {"logPrefix", LogPrefix()},
-            {"#_LocalSessions.size", LocalSessions.size()});
+            {"localSessionsCount", LocalSessions.size()});
         ResetCountersOnStrop = ev->Get()->ResetCounters;
         if (LocalSessions.empty()) {
             PassAway();
@@ -291,7 +291,7 @@ private:
         if (result->GetStatus() != NKikimrScheme::StatusSuccess) {
             YDB_LOG_WARN("[WorkloadService] Got bad watch notification",
                 {"logPrefix", LogPrefix()},
-                {"#_result->GetStatus", result->GetStatus()},
+                {"status", result->GetStatus()},
                 {"reason", result->GetReason()});
             return;
         }
@@ -351,7 +351,7 @@ public:
                 YDB_LOG_WARN("[WorkloadService] Reply continue error to session request",
                     {"logPrefix", LogPrefix()},
                     {"status", status},
-                    {"#_request->WorkerActorId", request->WorkerActorId},
+                    {"workerActorId", request->WorkerActorId},
                     {"id", request->SessionId},
                     {"text", request->RequestText},
                     {"issues", issues.ToOneLineString()});
@@ -471,7 +471,7 @@ private:
             Counters.CollectRequestLatency(request->ContinueTime);
             YDB_LOG_DEBUG("[WorkloadService] Reply cleanup success to session local",
                 {"logPrefix", LogPrefix()},
-                {"#_request->WorkerActorId", request->WorkerActorId},
+                {"workerActorId", request->WorkerActorId},
                 {"id", request->SessionId},
                 {"flight", LocalInFlight});
         } else {
@@ -479,7 +479,7 @@ private:
             YDB_LOG_WARN("[WorkloadService] Reply cleanup error to session",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
-                {"#_request->WorkerActorId", request->WorkerActorId},
+                {"workerActorId", request->WorkerActorId},
                 {"id", request->SessionId},
                 {"issues", issues.ToOneLineString()});
         }
@@ -494,7 +494,7 @@ private:
         Counters.CollectRequestLatency(request->ContinueTime);
         YDB_LOG_INFO("[WorkloadService] Cancel request for worker session local",
             {"logPrefix", LogPrefix()},
-            {"#_request->WorkerActorId", request->WorkerActorId},
+            {"workerActorId", request->WorkerActorId},
             {"id", request->SessionId},
             {"flight", LocalInFlight});
     }
@@ -798,7 +798,7 @@ private:
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             YDB_LOG_ERROR("[WorkloadService] refresh pool state failed",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Get()->Status", ev->Get()->Status},
+                {"status", ev->Get()->Status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
             RefreshRequired = true;
             ScheduleRefresh();
@@ -851,7 +851,7 @@ private:
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             YDB_LOG_ERROR("[WorkloadService] failed to delay request session",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Get()->Status", ev->Get()->Status},
+                {"status", ev->Get()->Status},
                 {"id", ev->Get()->SessionId},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
             NYql::TIssues issues = GroupIssues(ev->Get()->Issues, "Failed to put request in queue");
@@ -925,7 +925,7 @@ private:
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             YDB_LOG_ERROR("[WorkloadService] failed start request session",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Get()->Status", ev->Get()->Status},
+                {"status", ev->Get()->Status},
                 {"id", sessionId},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
             NYql::TIssues issues = GroupIssues(ev->Get()->Issues, "Failed to start request");
@@ -984,7 +984,7 @@ private:
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             YDB_LOG_ERROR("[WorkloadService] cleanup requests failed",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Get()->Status", ev->Get()->Status},
+                {"status", ev->Get()->Status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
         }
 

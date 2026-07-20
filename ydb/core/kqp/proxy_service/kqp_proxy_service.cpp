@@ -1116,8 +1116,8 @@ public:
 
         if (proxyResources.empty()) {
             PeerProxyNodeResources.clear();
-            YDB_LOG_DEBUG("Received unexpected data from rm for database",
-                {"#_AppData()->TenantName", AppData()->TenantName});
+            YDB_LOG_DEBUG("Received unexpected resource manager data for tenant",
+                {"tenantName", AppData()->TenantName});
             return;
         }
 
@@ -1147,7 +1147,7 @@ public:
                 nodeIds.push_back(resource.GetNodeId());
             }
             YDB_LOG_INFO("Discovered proxy nodes, starting warmup",
-                {"#_PeerProxyNodeResources.size", PeerProxyNodeResources.size()});
+                {"peerProxyNodesCount", PeerProxyNodeResources.size()});
             Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size(), std::move(nodeIds)));
         }
     }
@@ -1513,8 +1513,8 @@ private:
             return true;
         }
 
-        YDB_LOG_WARN("Reply process error for request",
-            {"#_static_cast<ui64>(request->EventType)", static_cast<ui64>(request->EventType)},
+        YDB_LOG_WARN("Replying with process error for request",
+            {"eventType", static_cast<ui64>(request->EventType)},
             {"status", ydbStatus},
             {"issues", issues.ToOneLineString()});
 
@@ -1545,7 +1545,7 @@ private:
         auto now = TInstant::Now();
         if (now >= deadline) {
             TString error = TStringBuilder() << "Request deadline has expired for " << now - deadline << " seconds";
-            YDB_LOG_ERROR("",
+            YDB_LOG_ERROR("Request deadline has expired",
                 {"requestInfo", requestInfo},
                 {"error", error});
 
@@ -1554,9 +1554,9 @@ private:
             result.Error = error;
             return false;
         } else {
-            YDB_LOG_DEBUG("Request has seconds to be completed",
+            YDB_LOG_DEBUG("Request deadline approaching",
                 {"requestInfo", requestInfo},
-                {"#_deadline - now", deadline - now});
+                {"timeUntilDeadline", deadline - now});
             return true;
         }
     }
@@ -1573,7 +1573,7 @@ private:
         if (!database.empty() && AppData()->TenantName.empty()) {
             TString error = TStringBuilder() << "Node isn't ready to serve database requests.";
 
-            YDB_LOG_ERROR("",
+            YDB_LOG_ERROR("Node is not ready to serve database requests",
                 {"requestInfo", requestInfo},
                 {"error", error});
 
@@ -1585,7 +1585,7 @@ private:
         if (ShutdownRequested) {
             TString error = TStringBuilder() << "Cannot create session: system shutdown requested.";
 
-            YDB_LOG_NOTICE("",
+            YDB_LOG_NOTICE("Cannot create session: system shutdown requested",
                 {"requestInfo", requestInfo},
                 {"error", error});
 
@@ -1599,7 +1599,7 @@ private:
         if (sessionsLimitPerNode && !LocalSessions->CheckDatabaseLimits(database, sessionsLimitPerNode)) {
             TString error = TStringBuilder() << "Active sessions limit exceeded, maximum allowed: "
                 << sessionsLimitPerNode;
-            YDB_LOG_WARN("",
+            YDB_LOG_WARN("Active sessions limit exceeded",
                 {"requestInfo", requestInfo},
                 {"error", error});
 
@@ -1650,7 +1650,7 @@ private:
         auto nodeId = TryDecodeYdbSessionId(sessionId);
         if (!nodeId) {
             TString error = TStringBuilder() << "Failed to parse session id: " << sessionId;
-            YDB_LOG_WARN("",
+            YDB_LOG_WARN("Failed to parse session id",
                 {"requestInfo", requestInfo},
                 {"error", error});
             ReplyProcessError(Ydb::StatusIds::BAD_REQUEST, error, requestId);
@@ -1659,7 +1659,7 @@ private:
 
         if (*nodeId == SelfId().NodeId()) {
             TString error = TStringBuilder() << "Session not found: " << sessionId;
-            YDB_LOG_NOTICE("",
+            YDB_LOG_NOTICE("Session not found on this node",
                 {"requestInfo", requestInfo},
                 {"error", error});
             ReplyProcessError(Ydb::StatusIds::BAD_SESSION, error, requestId);
@@ -1898,9 +1898,9 @@ private:
         TNodeId nodeId = ev->Get()->NodeId;
         auto sessions = LocalSessions->FindSessions(nodeId);
         if (sessions) {
-            YDB_LOG_TRACE("Got TEvNodeConnected event from has sessions",
+            YDB_LOG_TRACE("Received node connected event with local sessions",
                 {"node", nodeId},
-                {"#_sessions.size", sessions.size()});
+                {"sessionsCount", sessions.size()});
         } else {
             YDB_LOG_ERROR("Got TEvNodeConnected event from node without",
                 {"sessions", nodeId});
@@ -1910,9 +1910,9 @@ private:
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         TNodeId nodeId = ev->Get()->NodeId;
         auto sessions = LocalSessions->FindSessions(nodeId);
-        YDB_LOG_DEBUG("Disconnected, had sessions",
+        YDB_LOG_DEBUG("Node disconnected with active local sessions",
             {"node", nodeId},
-            {"#_sessions.size", sessions.size()});
+            {"sessionsCount", sessions.size()});
         const static auto IdleDurationAfterDisconnect = TDuration::Seconds(1);
         // Just start standard idle check with small timeout
         // It allows to use common code to close and delete expired session
@@ -1922,9 +1922,9 @@ private:
     }
 
     void Handle(TEvKqp::TEvListSessionsRequest::TPtr& ev) {
-        YDB_LOG_DEBUG("Incoming list sessions request local sessions",
-            {"#_ev->Get()->Record.ShortUtf8DebugString", ev->Get()->Record.ShortUtf8DebugString()},
-            {"#_LocalSessions->size", LocalSessions->size()});
+        YDB_LOG_DEBUG("Received list sessions request",
+            {"request", ev->Get()->Record.ShortUtf8DebugString()},
+            {"localSessionsCount", LocalSessions->size()});
 
         auto result = std::make_unique<TEvKqp::TEvListSessionsResponse>();
 

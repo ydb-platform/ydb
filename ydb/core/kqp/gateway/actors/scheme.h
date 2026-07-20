@@ -49,7 +49,7 @@ public:
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Received TEvProposeTransactionStatus for scheme request scheme",
             {"txId", response.GetTxId()},
-            {"#_,_status", status},
+            {"status", status},
             {"shardStatus", response.GetSchemeShardStatus()});
 
         switch (status) {

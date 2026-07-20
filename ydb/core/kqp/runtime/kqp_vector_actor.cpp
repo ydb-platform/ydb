@@ -77,7 +77,7 @@ public:
         //Counters->VectorResolveActorsCount->Inc();
 
         YDB_LOG_DEBUG("Start vector resolve actor",
-            {"#_this->LogPrefix", this->LogPrefix});
+            {"logPrefix", this->LogPrefix});
         Become(&TKqpVectorResolveActor::StateFunc);
     }
 
@@ -142,7 +142,7 @@ private:
         }
 
         YDB_LOG_DEBUG("Returned bytes",
-            {"#_this->LogPrefix", this->LogPrefix},
+            {"logPrefix", this->LogPrefix},
             {"totalDataSize", totalDataSize},
             {"finished", finished});
         return totalDataSize;

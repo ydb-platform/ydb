@@ -289,9 +289,9 @@ public:
 protected:
     bool ValidateUserSID() {
         if (const auto& error = CheckScriptExecutionAccess(UserSID)) {
-            YDB_LOG_WARN("[ScriptExecutions] Token validation",
+            YDB_LOG_WARN("[ScriptExecutions] Token validation failed",
                 {"logPrefix", LogPrefix()},
-                {"failed", error});
+                {"error", error});
             TBase::Finish(Ydb::StatusIds::UNAUTHORIZED, error);
             return false;
         }
@@ -307,7 +307,7 @@ protected:
         if (const auto& ownerUser = result.ColumnParser("user_token").GetOptionalUtf8(); ownerUser && *ownerUser != *UserSID) {
             YDB_LOG_WARN("[ScriptExecutions] Access denied for user",
                 {"logPrefix", LogPrefix()},
-                {"#_*UserSID", *UserSID});
+                {"userSid", *UserSID});
             TBase::Finish(Ydb::StatusIds::UNAUTHORIZED, "Access denied. User is not owner of script execution operation.");
             return false;
         }
@@ -499,9 +499,9 @@ public:
 private:
     void OnRunQuery() override {
         const auto metaTtl = std::min(MaxRunTime.MicroSeconds(), NYql::NUdf::MAX_TIMESTAMP - 1);
-        YDB_LOG_DEBUG("[ScriptExecutions] Creating query in database, meta",
+        YDB_LOG_DEBUG("[ScriptExecutions] Creating script execution query in database",
             {"logPrefix", LogPrefix()},
-            {"ttl", TDuration::MicroSeconds(metaTtl)});
+            {"metaTtl", TDuration::MicroSeconds(metaTtl)});
 
         constexpr char sql[] = R"(
             -- TCreateScriptOperationQuery::OnRunQuery
@@ -622,11 +622,11 @@ private:
     }
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        YDB_LOG_DEBUG("[ScriptExecutions] Create script execution operation has",
+        YDB_LOG_DEBUG("[ScriptExecutions] Create script execution operation finished",
             {"logPrefix", LogPrefix()},
             {"retryState", RetryState.ShortDebugString()},
             {"physicalGraph", PhysicalGraph.has_value()},
-            {"result", status},
+            {"status", status},
             {"issues", issues.ToOneLineString()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -722,7 +722,7 @@ public:
         }
 
         const auto& creatorId = Register(TCreateScriptOperationQuery::MakeRetry(SelfId(), ExecutionId, RunScriptActorId, ev.Record, std::move(meta), MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, std::move(disposition), ev.Generation));
-        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap. Start TCreateScriptOperationQuery",
+        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap: starting TCreateScriptOperationQuery",
             {"logPrefix", LogPrefix()},
             {"creatorId", creatorId},
             {"runScriptActorId", RunScriptActorId});
@@ -732,7 +732,7 @@ public:
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             YDB_LOG_WARN("[ScriptExecutions] Create script operation failed",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
             SendFailResponse(status, AddRootIssue("Internal error. Failed to save meta information about new script execution", ev->Get()->Issues));
@@ -741,7 +741,7 @@ public:
 
         YDB_LOG_DEBUG("[ScriptExecutions] Create script operation succeeded",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
+            {"sender", ev->Sender},
             {"runScriptActorId", RunScriptActorId});
 
         Send(Event->Sender, new TEvKqp::TEvScriptResponse(
@@ -755,7 +755,7 @@ public:
     }
 
     bool OnUnhandledException(const std::exception& ex) final {
-        YDB_LOG_ERROR("[ScriptExecutions] Got unexpected",
+        YDB_LOG_ERROR("[ScriptExecutions] Got unexpected exception",
             {"logPrefix", LogPrefix()},
             {"exception", ex.what()});
         SendFailResponse(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Got unexpected exception: " << ex.what());
@@ -853,9 +853,9 @@ public:
 
 private:
     void OnRunQuery() override {
-        YDB_LOG_DEBUG("[ScriptExecutions] Update lease",
+        YDB_LOG_DEBUG("[ScriptExecutions] Updating script execution lease",
             {"logPrefix", LogPrefix()},
-            {"duration", LeaseDuration});
+            {"leaseDuration", LeaseDuration});
 
         constexpr char sql[] = R"(
             -- TScriptLeaseUpdaterQuery::OnRunQuery
@@ -1156,10 +1156,10 @@ private:
             .StreamingDisposition = streamingDisposition,
         }, QueryServiceConfig));
 
-        YDB_LOG_DEBUG("[ScriptExecutions] Restart with has",
+        YDB_LOG_DEBUG("[ScriptExecutions] Restarting script execution operation",
             {"logPrefix", LogPrefix()},
             {"runScriptActorId", RunScriptActorId},
-            {"physicalGraph", hasPhysicalGraph});
+            {"hasPhysicalGraph", hasPhysicalGraph});
         RestartScriptExecution();
     }
 
@@ -1276,7 +1276,7 @@ public:
 
 private:
     void OnRunQuery() override {
-        YDB_LOG_DEBUG("[ScriptExecutions] Start",
+        YDB_LOG_DEBUG("[ScriptExecutions] Starting lease status check",
             {"logPrefix", LogPrefix()},
             {"cookie", Cookie});
 
@@ -1488,7 +1488,7 @@ public:
 
     void Bootstrap() {
         const auto& checkerId = Register(TCheckLeaseStatusQueryActor::MakeRetry(SelfId(), Database, ExecutionId, TCheckLeaseStatusQueryActor::TSettings{}));
-        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap, Start TCheckLeaseStatusQueryActor",
+        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap: starting TCheckLeaseStatusQueryActor",
             {"logPrefix", LogPrefix()},
             {"cookie", Settings.Cookie},
             {"checkerId", checkerId});
@@ -1520,34 +1520,33 @@ private:
         if (event.Status != Ydb::StatusIds::SUCCESS) {
             YDB_LOG_WARN("[ScriptExecutions] Failed to check lease status",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", event.Status},
                 {"issues", event.Issues.ToOneLineString()});
             return Reply(event.Status, std::move(event.Issues));
         }
 
         if (!event.EntryExists) {
-            YDB_LOG_WARN("[ScriptExecutions] Lease check finished with not found",
+            YDB_LOG_WARN("[ScriptExecutions] Lease check finished: script execution operation not found",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", event.Status},
                 {"issues", event.Issues.ToOneLineString()});
             return ReplyNotFound();
         }
 
         RunScriptActorId = event.RunScriptActorId;
-        TStringBuilder finStatus = (event.FinalizationStatus ? (TStringBuilder() << ", FinalizationStatus: " << static_cast<ui64>(*event.FinalizationStatus)) : TStringBuilder());
-        YDB_LOG_DEBUG("[ScriptExecutions] Extracted script execution operation",
+        YDB_LOG_DEBUG("[ScriptExecutions] Extracted script execution operation from lease check",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
+            {"sender", ev->Sender},
             {"status", event.Status},
             {"issues", event.Issues.ToOneLineString()},
             {"leaseExpired", event.LeaseExpired},
             {"retryRequired", event.RetryRequired},
-            {"#_num_0", (event.OperationStatus ? ", OperationStatus: " + Ydb::StatusIds::StatusCode_Name(*event.OperationStatus) : "")},
-            {"#_num_1", (event.ExecutionStatus ? ", ExecutionStatus: " + Ydb::Query::ExecStatus_Name(*event.ExecutionStatus) : "")},
+            {"operationStatus", (event.OperationStatus ? Ydb::StatusIds::StatusCode_Name(*event.OperationStatus) : "<null>")},
+            {"executionStatus", (event.ExecutionStatus ? Ydb::Query::ExecStatus_Name(*event.ExecutionStatus) : "<null>")},
             {"operationIssues", event.OperationIssues.ToOneLineString()},
-            {"finalizationStatus", finStatus},
+            {"finalizationStatus", (event.FinalizationStatus ? ToString(static_cast<ui64>(*event.FinalizationStatus)) : "<null>")},
             {"runScriptActorId", RunScriptActorId},
             {"leaseGeneration", event.LeaseGeneration});
 
@@ -1566,7 +1565,7 @@ private:
                     {"restartActorId", restartActorId},
                     {"generation", event.LeaseGeneration});
             } else {
-                YDB_LOG_NOTICE("[ScriptExecutions] Lease finalization skipped, script execution wait retry",
+                YDB_LOG_NOTICE("[ScriptExecutions] Lease finalization skipped because script execution is waiting for retry",
                     {"logPrefix", LogPrefix()});
                 Reply();
             }
@@ -1624,11 +1623,11 @@ private:
         if (WaitFinishQuery) {
             YDB_LOG_WARN("[ScriptExecutions] Script execution lease was verified after started finalization",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender});
+                {"sender", ev->Sender});
         } else {
             YDB_LOG_NOTICE("[ScriptExecutions] Script execution lease successfully verified",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender});
+                {"sender", ev->Sender});
             LeaseVerified = true;
             Reply();
         }
@@ -1639,24 +1638,24 @@ private:
             case EWakeup::RetryCheckAlive:
                 WaitRetryCheckAlive = false;
                 if (WaitFinishQuery) {
-                    YDB_LOG_NOTICE("[ScriptExecutions] Skipped retry check alive query, already waiting finish query",
+                    YDB_LOG_NOTICE("[ScriptExecutions] Skipped check alive retry because finalization is already in progress",
                         {"logPrefix", LogPrefix()});
                 } else {
                     CheckAliveRetries++;
-                    YDB_LOG_DEBUG("[ScriptExecutions] Start check alive request",
+                    YDB_LOG_DEBUG("[ScriptExecutions] Starting check alive request",
                         {"logPrefix", LogPrefix()},
-                        {"#_CheckAliveRetries + 1", CheckAliveRetries + 1});
+                        {"checkAliveAttempt", CheckAliveRetries + 1});
                     Send(RunScriptActorId, new TEvCheckAliveRequest(), CheckAliveFlags);
                     Schedule(CHECK_ALIVE_REQUEST_SOFT_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveSoftTimeout)));
                 }
                 break;
             case EWakeup::CheckAliveSoftTimeout:
-                YDB_LOG_WARN("[ScriptExecutions] Deliver TRunScriptActor check alive request soft timeout, retry check alive",
+                YDB_LOG_WARN("[ScriptExecutions] Check alive request to TRunScriptActor timed out, retrying",
                     {"logPrefix", LogPrefix()});
                 RetryCheckAlive(/* longDelay */ false);
                 break;
             case EWakeup::CheckAliveHardTimeout:
-                YDB_LOG_WARN("[ScriptExecutions] Deliver TRunScriptActor check alive request hard timeout, start finalization",
+                YDB_LOG_WARN("[ScriptExecutions] Check alive request to TRunScriptActor hard timeout exceeded, starting finalization",
                     {"logPrefix", LogPrefix()});
                 RunScriptFinalizeRequest();
                 break;
@@ -1671,23 +1670,23 @@ private:
             // 2. Script execution may be already under finalization
             // 3. Script execution may be retried
             // We will start finalization only in first and second cases
-            YDB_LOG_WARN("[ScriptExecutions] Got delivery problem to TRunScriptActor not found, start finalization",
+            YDB_LOG_WARN("[ScriptExecutions] TRunScriptActor not found, starting finalization",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender});
+                {"sender", ev->Sender});
             RunScriptFinalizeRequest();
         } else {
-            YDB_LOG_WARN("[ScriptExecutions] Got delivery problem to node with TRunScriptActor unavailable",
+            YDB_LOG_WARN("[ScriptExecutions] Failed to deliver check alive request to node with TRunScriptActor",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"reason", reason});
             RetryCheckAlive(/* longDelay */ true);
         }
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-        YDB_LOG_WARN("[ScriptExecutions] Node with TRunScriptActor was disconnected, retry check alive",
+        YDB_LOG_WARN("[ScriptExecutions] Node with TRunScriptActor was disconnected, retrying check alive",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->NodeId", ev->Get()->NodeId});
+            {"nodeId", ev->Get()->NodeId});
         RetryCheckAlive(/* longDelay */ false);
     }
 
@@ -1697,13 +1696,13 @@ private:
         if (status != Ydb::StatusIds::SUCCESS) {
             YDB_LOG_WARN("[ScriptExecutions] Failed to restart script execution operation",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
         } else {
             YDB_LOG_DEBUG("[ScriptExecutions] Successfully restarted script execution operation",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender});
+                {"sender", ev->Sender});
         }
 
         Reply(status, AddRootIssue("Restart script execution operation", issues, /* addEmptyRoot  */ false));
@@ -1714,17 +1713,17 @@ private:
             const auto& issues = ev->Get()->Issues;
             YDB_LOG_WARN("[ScriptExecutions] Failed to finalize script execution operation",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
             return Reply(status, AddRootIssue("Finish script execution operation failed", issues));
         }
 
         const auto& info = ev->Get()->Info;
-        YDB_LOG_DEBUG("[ScriptExecutions] Successfully finalized script execution operation, entry",
+        YDB_LOG_DEBUG("[ScriptExecutions] Successfully finalized script execution operation",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
-            {"exists", info.ExecutionEntryExists});
+            {"sender", ev->Sender},
+            {"executionEntryExists", info.ExecutionEntryExists});
 
         if (info.ExecutionEntryExists) {
             Reply();
@@ -1772,15 +1771,15 @@ private:
         }
 
         if (const auto delay = CheckAliveRetryState->GetNextRetryDelay(longDelay)) {
-            YDB_LOG_DEBUG("[ScriptExecutions] Schedule retry check alive",
+            YDB_LOG_DEBUG("[ScriptExecutions] Scheduling check alive retry",
                 {"logPrefix", LogPrefix()},
-                {"#_*delay", *delay});
+                {"delay", *delay});
             Schedule(*delay, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RetryCheckAlive)));
             WaitRetryCheckAlive = true;
         } else {
-            YDB_LOG_ERROR("[ScriptExecutions] Retry limit exceeded for TRunScriptActor check alive, start finalization",
+            YDB_LOG_ERROR("[ScriptExecutions] Retry limit exceeded for TRunScriptActor check alive, starting finalization",
                 {"logPrefix", LogPrefix()},
-                {"MAXCHECKALIVERETRIES", MAX_CHECK_ALIVE_RETRIES});
+                {"maxCheckAliveRetries", MAX_CHECK_ALIVE_RETRIES});
             RunScriptFinalizeRequest();
         }
     }
@@ -1807,7 +1806,7 @@ private:
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-        YDB_LOG_WARN("[ScriptExecutions] Reply",
+        YDB_LOG_WARN("[ScriptExecutions] Reply failed",
             {"logPrefix", LogPrefix()},
             {"status", status},
             {"issues", issues.ToOneLineString()});
@@ -1948,9 +1947,9 @@ private:
     }
 
     void DeleteScriptResults() {
-        YDB_LOG_DEBUG("[ScriptExecutions] Do deleting of script results, amount result",
+        YDB_LOG_DEBUG("[ScriptExecutions] Deleting script results",
             {"logPrefix", LogPrefix()},
-            {"sets", ResultSets.size()});
+            {"resultSetCount", ResultSets.size()});
 
         if (ResultSets.empty()) {
             Finish();
@@ -1958,11 +1957,11 @@ private:
         }
 
         auto& resultSet = ResultSets.back();
-        YDB_LOG_DEBUG("[ScriptExecutions] Deleting rows from result set remains rows range",
+        YDB_LOG_DEBUG("[ScriptExecutions] Deleting rows from result set",
             {"logPrefix", LogPrefix()},
-            {"#_resultSet.Id", resultSet.Id},
-            {"#_resultSet.MinRowId", resultSet.MinRowId},
-            {"#_resultSet.MaxRowId", resultSet.MaxRowId});
+            {"resultSetId", resultSet.Id},
+            {"minRowId", resultSet.MinRowId},
+            {"maxRowId", resultSet.MaxRowId});
 
         constexpr char sql[] = R"(
             -- TForgetScriptExecutionOperationQueryActor::DeleteScriptResults
@@ -2007,10 +2006,10 @@ private:
         auto& resultSet = ResultSets.back();
         resultSet.MaxRowId -= NUMBER_ROWS_IN_BATCH + 1;
         if (resultSet.MaxRowId < resultSet.MinRowId) {
-            YDB_LOG_DEBUG("[ScriptExecutions] Deleting of script result set is finished, remains result",
+            YDB_LOG_DEBUG("[ScriptExecutions] Finished deleting script result set",
                 {"logPrefix", LogPrefix()},
-                {"#_resultSet.Id", resultSet.Id},
-                {"sets", ResultSets.size() - 1});
+                {"resultSetId", resultSet.Id},
+                {"remainingResultSetCount", ResultSets.size() - 1});
             ResultSets.pop_back();
         }
 
@@ -2058,7 +2057,7 @@ public:
         ExecutionId = std::move(*executionId);
 
         const auto& checkerId = Register(TCheckLeaseStatusQueryActor::MakeRetry(SelfId(), Database, ExecutionId, TCheckLeaseStatusQueryActor::TSettings{.UserSID = userSID}));
-        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap. Start TCheckLeaseStatusQueryActor",
+        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap: starting TCheckLeaseStatusQueryActor",
             {"logPrefix", LogPrefix()},
             {"checkerId", checkerId});
 
@@ -2077,7 +2076,7 @@ private:
             const auto& issues = ev->Get()->Issues;
             YDB_LOG_WARN("[ScriptExecutions] Lease check failed",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
             Reply(status, AddRootIssue("Check lease status", issues));
@@ -2091,7 +2090,7 @@ private:
             if (Request->Get()->Settings.CancelIfRunning) {
                 YDB_LOG_WARN("[ScriptExecutions] Lease check finished, but operation is still running. Cancel it",
                     {"logPrefix", LogPrefix()},
-                    {"#_ev->Sender", ev->Sender});
+                    {"sender", ev->Sender});
                 Send(MakeKqpProxyID(SelfId().NodeId()), new TEvCancelScriptExecutionOperation(Database, Request->Get()->OperationId, Request->Get()->UserSID, {
                     .FailOnNotFound = false,
                     .FailOnAlreadyStopped = false,
@@ -2099,16 +2098,16 @@ private:
             } else {
                 YDB_LOG_INFO("[ScriptExecutions] Lease check finished, but operation is still running",
                     {"logPrefix", LogPrefix()},
-                    {"#_ev->Sender", ev->Sender});
+                    {"sender", ev->Sender});
                 Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Operation is still running");
             }
             return;
         }
 
-        YDB_LOG_DEBUG("[ScriptExecutions] Lease check success, execution entry",
+        YDB_LOG_DEBUG("[ScriptExecutions] Lease check succeeded",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
-            {"exists", ExecutionEntryExists});
+            {"sender", ev->Sender},
+            {"executionEntryExists", ExecutionEntryExists});
         StartForgetOperation();
     }
 
@@ -2117,7 +2116,7 @@ private:
             const auto& issues = ev->Get()->Issues;
             YDB_LOG_WARN("[ScriptExecutions] Cancel operation failed",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
             Reply(status, AddRootIssue("Cancel script execution operation", issues));
@@ -2126,25 +2125,25 @@ private:
 
         ExecutionEntryExists = ev->Get()->ExecutionEntryExists;
 
-        YDB_LOG_DEBUG("[ScriptExecutions] Cancel script execution operation finished, execution entry",
+        YDB_LOG_DEBUG("[ScriptExecutions] Cancel script execution operation finished",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
-            {"exists", ExecutionEntryExists});
+            {"sender", ev->Sender},
+            {"executionEntryExists", ExecutionEntryExists});
         StartForgetOperation();
     }
 
     void Handle(TEvForgetScriptExecutionOperationResponse::TPtr& ev) {
         YDB_LOG_DEBUG("[ScriptExecutions] Forget operation finished",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
-            {"#_ev->Get()->Status", ev->Get()->Status},
+            {"sender", ev->Sender},
+            {"status", ev->Get()->Status},
             {"issues", ev->Get()->Issues.ToOneLineString()});
         Reply(ev->Get()->Status, AddRootIssue("Forget script execution operation", ev->Get()->Issues, /* addEmptyRoot */ false));
     }
 
     void StartForgetOperation() {
         const auto& forgetId = Register(TForgetScriptExecutionOperationQueryActor::MakeRetry(SelfId(), ExecutionId, Database, std::move(ResultSetMetas)));
-        YDB_LOG_DEBUG("[ScriptExecutions] Start TForgetOperationRetryActor",
+        YDB_LOG_DEBUG("[ScriptExecutions] Starting TForgetOperationRetryActor",
             {"logPrefix", LogPrefix()},
             {"forgetId", forgetId});
     }
@@ -2161,7 +2160,7 @@ private:
             YDB_LOG_DEBUG("[ScriptExecutions] Reply success",
                 {"logPrefix", LogPrefix()});
         } else {
-            YDB_LOG_WARN("[ScriptExecutions] Reply",
+            YDB_LOG_WARN("[ScriptExecutions] Reply failed",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
@@ -2359,9 +2358,9 @@ private:
     }
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        YDB_LOG_DEBUG("[ScriptExecutions] Finish",
+        YDB_LOG_DEBUG("[ScriptExecutions] Finished getting script execution operation",
             {"logPrefix", LogPrefix()},
-            {"operationStatus", (OperationStatus ? Ydb::StatusIds::StatusCode_Name(*OperationStatus) : "null")},
+            {"operationStatus", (OperationStatus ? Ydb::StatusIds::StatusCode_Name(*OperationStatus) : "<null>")},
             {"leaseStatus", (LeaseStatus ? static_cast<i64>(*LeaseStatus) : -1)});
 
         bool ready = !!OperationStatus;
@@ -2450,7 +2449,7 @@ private:
     }
 
     void OnRunQuery() override {
-        YDB_LOG_DEBUG("[ScriptExecutions] List with",
+        YDB_LOG_DEBUG("[ScriptExecutions] Listing script execution operations",
             {"logPrefix", LogPrefix()},
             {"pageToken", PageToken},
             {"pageSize", PageSize});
@@ -2655,14 +2654,14 @@ private:
             operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
             if (!operationStatus || !executionStatus) {
                 OperationStillRunning = true;
-                YDB_LOG_NOTICE("[ScriptExecutions] Can not reset retry state then operation is running now",
+                YDB_LOG_NOTICE("[ScriptExecutions] Cannot reset retry state while operation is running",
                     {"logPrefix", LogPrefix()});
                 return Finish();
             }
 
             if (result.ColumnParser("finalization_status").GetOptionalInt32()) {
                 OperationStillRunning = true;
-                YDB_LOG_NOTICE("[ScriptExecutions] Can not reset retry state then operation is finalizing now",
+                YDB_LOG_NOTICE("[ScriptExecutions] Cannot reset retry state while operation is finalizing",
                     {"logPrefix", LogPrefix()});
                 return Finish();
             }
@@ -2680,9 +2679,9 @@ private:
             if (const auto leaseState = result.ColumnParser("lease_state").GetOptionalInt32()) {
                 if (static_cast<ELeaseState>(*leaseState) != ELeaseState::WaitRetry) {
                     OperationStillRunning = true;
-                    YDB_LOG_NOTICE("[ScriptExecutions] Can not reset retry state then operation is running or not finalized, lease",
+                    YDB_LOG_NOTICE("[ScriptExecutions] Cannot reset retry state while operation is running or not waiting for retry",
                         {"logPrefix", LogPrefix()},
-                        {"state", static_cast<ELeaseState>(*leaseState)});
+                        {"leaseState", static_cast<ELeaseState>(*leaseState)});
                     return Finish();
                 }
 
@@ -2785,7 +2784,7 @@ public:
 
     void Bootstrap() {
         Become(&TThis::StateFunc);
-        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap",
+        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap: starting cancel script execution operation",
             {"logPrefix", LogPrefix()});
 
         UserSID = Request->Get()->UserSID;
@@ -2825,7 +2824,7 @@ private:
             const auto& issues = ev->Get()->Issues;
             YDB_LOG_WARN("[ScriptExecutions] Check lease failed",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
             return Reply(status, AddRootIssue("Fetch script execution info failed", issues));
@@ -2840,13 +2839,13 @@ private:
         const auto& operationStatus = ev->Get()->OperationStatus;
         const auto& finalizationStatus = ev->Get()->FinalizationStatus;
         const auto leaseExpired = ev->Get()->LeaseExpired;
-        YDB_LOG_DEBUG("[ScriptExecutions] Check lease success has lease",
+        YDB_LOG_DEBUG("[ScriptExecutions] Lease check succeeded",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
+            {"sender", ev->Sender},
             {"operationStatus", (operationStatus ? Ydb::StatusIds::StatusCode_Name(*operationStatus) : "<null>")},
             {"finalizationStatus", (finalizationStatus ? ToString(*finalizationStatus) : "<null>")},
-            {"retries", HasRetryPolicy},
-            {"expired", leaseExpired});
+            {"hasRetryPolicy", HasRetryPolicy},
+            {"leaseExpired", leaseExpired});
 
         // Possible script execution states:
         // 1. Is running now
@@ -2879,7 +2878,7 @@ private:
         if (status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::ABORTED) {
             YDB_LOG_WARN("[ScriptExecutions] Reset retry state failed",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
             return Reply(status, AddRootIssue("Reset retry state failed", ev->Get()->Issues));
@@ -2887,13 +2886,13 @@ private:
 
         const auto& issues = ev->Get()->Issues;
         const auto& info = ev->Get()->Info;
-        YDB_LOG_DEBUG("[ScriptExecutions] Reset retry state finished execution entry operation still already",
+        YDB_LOG_DEBUG("[ScriptExecutions] Reset retry state finished",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
+            {"sender", ev->Sender},
             {"status", status},
-            {"exists", info.ExecutionEntryExists},
-            {"running", info.OperationStillRunning},
-            {"stopped", info.AlreadyStopped},
+            {"executionEntryExists", info.ExecutionEntryExists},
+            {"operationStillRunning", info.OperationStillRunning},
+            {"alreadyStopped", info.AlreadyStopped},
             {"issues", issues.ToOneLineString()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -2923,7 +2922,7 @@ private:
         if (status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::ABORTED) {
             YDB_LOG_WARN("[ScriptExecutions] Finalize script execution failed",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
             return Reply(status, AddRootIssue("Finalize script execution failed", ev->Get()->Issues));
@@ -2931,12 +2930,12 @@ private:
 
         const auto& issues = ev->Get()->Issues;
         const auto& info = ev->Get()->Info;
-        YDB_LOG_DEBUG("[ScriptExecutions] Finalize script execution finished lease execution entry",
+        YDB_LOG_DEBUG("[ScriptExecutions] Script execution finalization finished",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
+            {"sender", ev->Sender},
             {"status", status},
-            {"verified", info.LeaseVerified},
-            {"exists", info.ExecutionEntryExists},
+            {"leaseVerified", info.LeaseVerified},
+            {"executionEntryExists", info.ExecutionEntryExists},
             {"issues", issues.ToOneLineString()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -2979,11 +2978,12 @@ private:
 
         const auto alreadyFinished = ev->Get()->Record.GetAlreadyFinished();
         const auto executionEntryExists = ev->Get()->Record.GetExecutionEntryExists();
-        YDB_LOG_DEBUG("[ScriptExecutions] Got cancel response from already",
+        YDB_LOG_DEBUG("[ScriptExecutions] Received cancel response from RunScriptActor",
             {"logPrefix", LogPrefix()},
             {"runScriptActor", ev->Sender},
             {"status", status},
-            {"finished", alreadyFinished},
+            {"alreadyFinished", alreadyFinished},
+            {"executionEntryExists", executionEntryExists},
             {"issues", issues.ToOneLineString()});
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -3041,14 +3041,14 @@ private:
     void GetScriptExecutionOperationStatus() {
         WaitRetry = false;
         const auto& checkerId = Register(TCheckLeaseStatusQueryActor::MakeRetry(SelfId(), Request->Get()->Database, ExecutionId, TCheckLeaseStatusQueryActor::TSettings{.UserSID = UserSID}));
-        YDB_LOG_DEBUG("[ScriptExecutions] Start TCheckLeaseStatusQueryActor",
+        YDB_LOG_DEBUG("[ScriptExecutions] Starting TCheckLeaseStatusQueryActor",
             {"logPrefix", LogPrefix()},
             {"checkerId", checkerId});
     }
 
     void ResetRetryPolicy() {
         const auto& resetActorId = Register(TResetScriptExecutionRetriesQueryActor::MakeRetry(SelfId(), Request->Get()->Database, ExecutionId));
-        YDB_LOG_DEBUG("[ScriptExecutions] Start TResetRetryStateRetryActor",
+        YDB_LOG_DEBUG("[ScriptExecutions] Starting TResetRetryStateRetryActor",
             {"logPrefix", LogPrefix()},
             {"resetActorId", resetActorId});
     }
@@ -3058,7 +3058,7 @@ private:
             .AllowRestart = false,
             .FailOnNotFound = false,
         }));
-        YDB_LOG_DEBUG("[ScriptExecutions] Start TFinalizeScriptLeaseActor",
+        YDB_LOG_DEBUG("[ScriptExecutions] Starting TFinalizeScriptLeaseActor",
             {"logPrefix", LogPrefix()},
             {"finalizeActorId", finalizeActorId});
     }
@@ -3105,10 +3105,10 @@ private:
                 delay = TDuration::Zero();
             }
 
-            YDB_LOG_WARN("[ScriptExecutions] Schedule retry",
+            YDB_LOG_WARN("[ScriptExecutions] Scheduling cancel retry",
                 {"logPrefix", LogPrefix()},
                 {"error", issues.ToOneLineString()},
-                {"#_*delay", *delay});
+                {"delay", *delay});
             Issues.AddIssues(issues);
             Schedule(*delay, new TEvents::TEvWakeup());
             WaitRetry = true;
@@ -3285,13 +3285,13 @@ private:
             .EndList()
             .Build();
 
-        YDB_LOG_DEBUG("[ScriptExecutions] Save result rows size",
+        YDB_LOG_DEBUG("[ScriptExecutions] Saving result rows",
             {"logPrefix", LogPrefix()},
             {"resultSetId", ResultSetId},
             {"firstRow", FirstRow},
             {"accumulatedSize", AccumulatedSize},
-            {"toSave", ResultSet.rows_size()},
-            {"#_dup_to_save", SavedSize});
+            {"rowCount", ResultSet.rows_size()},
+            {"savedSize", SavedSize});
 
         RunDataQuery(sql, &params);
     }
@@ -3334,19 +3334,19 @@ public:
 
         i64 numberRows = ResultSets.back().rows_size();
         const auto& saverId = Register(TSaveScriptExecutionResultQuery::MakeRetry(SelfId(), Database, ExecutionId, ResultSetId, ExpireAt, FirstRow, AccumulatedSize, ResultSets.back()));
-        YDB_LOG_DEBUG("[ScriptExecutions] Start saving rows range remains saver",
+        YDB_LOG_DEBUG("[ScriptExecutions] Starting to save result rows batch",
             {"logPrefix", LogPrefix()},
             {"firstRow", FirstRow},
-            {"#_FirstRow + numberRows", FirstRow + numberRows},
-            {"parts", ResultSets.size()},
-            {"actor", saverId});
+            {"lastRow", FirstRow + numberRows},
+            {"remainingParts", ResultSets.size()},
+            {"saverId", saverId});
 
         FirstRow += numberRows;
         ResultSets.pop_back();
     }
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap",
+        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap: starting save script execution result",
             {"logPrefix", LogPrefix()},
             {"firstRow", FirstRow},
             {"accumulatedSize", AccumulatedSize});
@@ -3371,18 +3371,18 @@ public:
 private:
     void Handle(TEvSaveScriptResultPartFinished::TPtr& ev) {
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_WARN("[ScriptExecutions] Failed to save result part, saver",
+            YDB_LOG_WARN("[ScriptExecutions] Failed to save result part",
                 {"logPrefix", LogPrefix()},
-                {"actor", ev->Sender});
+                {"saverId", ev->Sender});
             Reply(status, std::move(ev->Get()->Issues));
             return;
         }
 
         AccumulatedSize += ev->Get()->SavedSize;
-        YDB_LOG_DEBUG("[ScriptExecutions] Result part successfully saved, saver",
+        YDB_LOG_DEBUG("[ScriptExecutions] Result part successfully saved",
             {"logPrefix", LogPrefix()},
             {"accumulatedSize", AccumulatedSize},
-            {"actor", ev->Sender});
+            {"saverId", ev->Sender});
 
         StartSaveResultQuery();
     }
@@ -3392,7 +3392,7 @@ private:
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
-        YDB_LOG_DEBUG("[ScriptExecutions] Reply",
+        YDB_LOG_DEBUG("[ScriptExecutions] Sending save result reply",
             {"logPrefix", LogPrefix()},
             {"status", status},
             {"issues", issues.ToOneLineString()});
@@ -3561,12 +3561,12 @@ private:
     }
 
     void FetchScriptResults() {
-        YDB_LOG_DEBUG("[ScriptExecutions] Fetch results with saved",
+        YDB_LOG_DEBUG("[ScriptExecutions] Fetching script results",
             {"logPrefix", LogPrefix()},
             {"resultSetIndex", ResultSetIndex},
             {"offset", Offset},
-            {"limit", RowsLimit},
-            {"rows", NumberOfSavedRows});
+            {"rowsLimit", RowsLimit},
+            {"savedRowCount", NumberOfSavedRows});
 
         constexpr char sql[] = R"(
             -- TGetScriptExecutionResultQuery::FetchScriptResults
@@ -3629,17 +3629,17 @@ private:
             const i64 rowSize = serializedRow->size();
             if (SizeLimit && ResultSet.rows_size()) {
                 if (const auto newSize = ResultSetSize + rowSize + AdditionalRowSize; newSize > SizeLimit) {
-                    YDB_LOG_DEBUG("[ScriptExecutions] Finish by new result",
+                    YDB_LOG_DEBUG("[ScriptExecutions] Stopping fetch because size limit would be exceeded",
                         {"logPrefix", LogPrefix()},
                         {"sizeLimit", SizeLimit},
-                        {"size", newSize});
+                        {"newSize", newSize});
                     CancelFetchQuery();
                     return;
                 }
             }
 
             if (RowsLimit && ResultSet.rows_size() >= RowsLimit) {
-                YDB_LOG_DEBUG("[ScriptExecutions] Finish by",
+                YDB_LOG_DEBUG("[ScriptExecutions] Stopping fetch because rows limit reached",
                     {"logPrefix", LogPrefix()},
                     {"rowsLimit", RowsLimit});
                 CancelFetchQuery();
@@ -3660,7 +3660,7 @@ private:
         }
 
         if (TInstant::Now() + TDuration::Seconds(5) + GetAverageTime() >= Deadline) {
-            YDB_LOG_DEBUG("[ScriptExecutions] Finish by operation",
+            YDB_LOG_DEBUG("[ScriptExecutions] Stopping fetch because deadline is approaching",
                 {"logPrefix", LogPrefix()},
                 {"deadline", Deadline});
             CancelFetchQuery();
@@ -3671,7 +3671,7 @@ private:
         if (status == Ydb::StatusIds::SUCCESS) {
             YDB_LOG_DEBUG("[ScriptExecutions] Successfully fetched rows",
                 {"logPrefix", LogPrefix()},
-                {"#_ResultSet.rows_size", ResultSet.rows_size()});
+                {"rowCount", ResultSet.rows_size()});
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::move(ResultSet), HasMoreResults, std::move(issues)));
         } else {
             Send(Owner, new TEvFetchScriptResultsResponse(status, std::nullopt, true, std::move(issues)));
@@ -3777,10 +3777,10 @@ private:
     }
 
     void SaveExternalEffect() {
-        YDB_LOG_DEBUG("[ScriptExecutions] Save sinks, secret names",
+        YDB_LOG_DEBUG("[ScriptExecutions] Saving external effect sinks and secret names",
             {"logPrefix", LogPrefix()},
-            {"#_Request.Sinks.size", Request.Sinks.size()},
-            {"#_Request.SecretNames.size", Request.SecretNames.size()},
+            {"sinksCount", Request.Sinks.size()},
+            {"secretNamesCount", Request.SecretNames.size()},
             {"customerSuppliedId", Request.CustomerSuppliedId});
 
         constexpr char sql[] = R"(
@@ -4148,15 +4148,15 @@ private:
         }
 
         const auto operationTtl = std::min(OperationTtl.MicroSeconds(), NYql::NUdf::MAX_TIMESTAMP - 1);
-        YDB_LOG_DEBUG("[ScriptExecutions] Do finalization with status exec finalization status (applicate retry lease",
+        YDB_LOG_DEBUG("[ScriptExecutions] Running script execution finalization phase one",
             {"logPrefix", LogPrefix()},
-            {"#_Request.OperationStatus", Request.OperationStatus},
-            {"status", Ydb::Query::ExecStatus_Name(Request.ExecStatus)},
-            {"effect", Response->ApplicateScriptExternalEffectRequired},
-            {"#_)", Request.FinalizationStatus},
+            {"operationStatus", Request.OperationStatus},
+            {"executionStatus", Ydb::Query::ExecStatus_Name(Request.ExecStatus)},
+            {"applicateExternalEffect", Response->ApplicateScriptExternalEffectRequired},
+            {"finalizationStatus", Request.FinalizationStatus},
             {"issues", Request.Issues.ToOneLineString()},
-            {"deadline", retryDeadline},
-            {"state", leaseState},
+            {"retryDeadline", retryDeadline},
+            {"leaseState", leaseState},
             {"operationTtl", TDuration::MicroSeconds(operationTtl)});
 
         auto params = CreateParams();
@@ -4219,7 +4219,7 @@ private:
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         if (!Response->FinalStatusAlreadySaved) {
-            YDB_LOG_DEBUG("[ScriptExecutions] Finish script execution operation",
+            YDB_LOG_DEBUG("[ScriptExecutions] Finished saving script execution operation status",
                 {"logPrefix", LogPrefix()},
                 {"status", Ydb::StatusIds::StatusCode_Name(Request.OperationStatus)},
                 {"issues", Request.Issues.ToOneLineString()});
@@ -4255,9 +4255,9 @@ public:
 
 private:
     void OnRunQuery() override {
-        YDB_LOG_DEBUG("[ScriptExecutions] Start",
+        YDB_LOG_DEBUG("[ScriptExecutions] Starting script finalization finisher",
             {"logPrefix", LogPrefix()},
-            {"#_num_0", (OperationStatus ? " with status " + Ydb::StatusIds::StatusCode_Name(*OperationStatus) : "")},
+            {"operationStatus", (OperationStatus ? Ydb::StatusIds::StatusCode_Name(*OperationStatus) : "<null>")},
             {"issues", OperationIssues.ToOneLineString()});
 
         constexpr char sql[] = R"(
@@ -4406,13 +4406,13 @@ private:
         sql << leaseInfo.Sql;
         retryDeadline += leaseInfo.Backoff;
 
-        YDB_LOG_DEBUG("[ScriptExecutions] Do finalization with status exec retry lease",
+        YDB_LOG_DEBUG("[ScriptExecutions] Running script execution finalization phase two",
             {"logPrefix", LogPrefix()},
-            {"#_*OperationStatus", *OperationStatus},
-            {"status", Ydb::Query::ExecStatus_Name(ExecutionStatus)},
+            {"operationStatus", Ydb::StatusIds::StatusCode_Name(*OperationStatus)},
+            {"executionStatus", Ydb::Query::ExecStatus_Name(ExecutionStatus)},
             {"issues", OperationIssues.ToOneLineString()},
-            {"deadline", retryDeadline},
-            {"state", static_cast<i32>(leaseInfo.NewLeaseState)});
+            {"retryDeadline", retryDeadline},
+            {"leaseState", static_cast<i32>(leaseInfo.NewLeaseState)});
 
         auto params = CreateParams();
         params
@@ -4477,7 +4477,7 @@ private:
     void OnRunQuery() override {
         const auto& artifacts = CompressScriptArtifacts(QueryAst, QueryPlan, Compressor);
         if (artifacts.Issues) {
-            YDB_LOG_NOTICE("[ScriptExecutions] Compress script artifacts finished with",
+            YDB_LOG_NOTICE("[ScriptExecutions] Compressing script artifacts finished with issues",
                 {"logPrefix", LogPrefix()},
                 {"issues", artifacts.Issues.ToOneLineString()});
         }
@@ -4624,19 +4624,19 @@ private:
 
             std::optional<TString> executionId = result.ColumnParser("execution_id").GetOptionalUtf8();
             if (!executionId) {
-                YDB_LOG_ERROR("[ScriptExecutions] Execution id field is null for script execution lease in database",
+                YDB_LOG_ERROR("[ScriptExecutions] Execution id field is null for script execution lease",
                     {"logPrefix", LogPrefix()},
-                    {"#_*database", *database});
+                    {"database", *database});
                 continue;
             }
 
             Leases.emplace_back(TEvListExpiredLeasesResponse::TLeaseInfo{std::move(*database), std::move(*executionId)});
         }
 
-        YDB_LOG_DEBUG("[ScriptExecutions] Found expired leases (fetched rows",
+        YDB_LOG_DEBUG("[ScriptExecutions] Found expired script execution leases",
             {"logPrefix", LogPrefix()},
-            {"#_Leases.size", Leases.size()},
-            {"rowsCount", rowsCount});
+            {"leasesCount", Leases.size()},
+            {"fetchedRowCount", rowsCount});
         Finish();
     }
 
@@ -4658,9 +4658,9 @@ public:
 
     void Bootstrap() {
         const auto& listerId = Register(new TListExpiredLeasesQueryActor());
-        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap. Started",
+        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap: starting TListExpiredLeasesQueryActor",
             {"logPrefix", LogPrefix()},
-            {"TListExpiredLeasesQueryActor", listerId});
+            {"listerId", listerId});
 
         Become(&TThis::StateFunc);
     }
@@ -4674,14 +4674,14 @@ private:
     void Handle(TEvListExpiredLeasesResponse::TPtr& ev) {
         const auto& leases = ev->Get()->Leases;
         ExpiredLeasesCount = leases.size();
-        YDB_LOG_DEBUG("[ScriptExecutions] Got list expired leases response found expired leases",
+        YDB_LOG_DEBUG("[ScriptExecutions] Received list of expired leases",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
+            {"sender", ev->Sender},
             {"expiredLeasesCount", ExpiredLeasesCount});
 
         for (const auto& lease : leases) {
             const auto& checkerId = Register(new TFinalizeScriptLeaseActor(SelfId(), lease.Database, lease.ExecutionId, QueryServiceConfig, Counters, {.Cookie = CookieId++}));
-            YDB_LOG_DEBUG("[ScriptExecutions] start TFinalizeScriptLeaseActor",
+            YDB_LOG_DEBUG("[ScriptExecutions] Starting TFinalizeScriptLeaseActor",
                 {"logPrefix", LogPrefix()},
                 {"database", lease.Database},
                 {"executionId", lease.ExecutionId},
@@ -4692,7 +4692,7 @@ private:
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            YDB_LOG_WARN("[ScriptExecutions] List expired leases failed with status",
+            YDB_LOG_WARN("[ScriptExecutions] Failed to list expired leases",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
@@ -4716,8 +4716,8 @@ private:
             const auto& issues = ev->Get()->Issues;
             YDB_LOG_WARN("[ScriptExecutions] Lease check failed",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Cookie", ev->Cookie},
-                {"#_ev->Sender", ev->Sender},
+                {"cookie", ev->Cookie},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()},
                 {"operationsToCheck", OperationsToCheck});
@@ -4727,8 +4727,8 @@ private:
         } else {
             YDB_LOG_DEBUG("[ScriptExecutions] Lease check successfully completed",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Cookie", ev->Cookie},
-                {"#_ev->Sender", ev->Sender},
+                {"cookie", ev->Cookie},
+                {"sender", ev->Sender},
                 {"operationsToCheck", OperationsToCheck});
         }
 
@@ -4740,7 +4740,7 @@ private:
             return;
         }
 
-        YDB_LOG_DEBUG("[ScriptExecutions] Finish",
+        YDB_LOG_DEBUG("[ScriptExecutions] Finished refreshing script execution leases",
             {"logPrefix", LogPrefix()},
             {"success", Success},
             {"issues", Issues.ToOneLineString()});

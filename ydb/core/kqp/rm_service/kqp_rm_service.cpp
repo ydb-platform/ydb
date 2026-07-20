@@ -755,7 +755,7 @@ private:
         if (AppData()->TenantName.empty() || !SelfDataCenterId) {
             YDB_LOG_INFO("Cannot start publishing usage for kqp_proxy",
                 {"tenants", AppData()->TenantName},
-                {"#_num_0", SelfDataCenterId.value_or("empty")});
+                {"selfDataCenterId", SelfDataCenterId.value_or("empty")});
             return;
         }
         PublishResourceUsage("kqp_proxy");
@@ -763,8 +763,8 @@ private:
 
     void HandleWork(TEvResourceBroker::TEvConfigResponse::TPtr& ev) {
         if (!ev->Get()->QueueConfig) {
-            YDB_LOG_ERROR("Not configured!",
-                {"#_NLocalDb::KqpResourceManagerQueue", NLocalDb::KqpResourceManagerQueue});
+            YDB_LOG_ERROR("Resource broker queue is not configured",
+                {"queueName", NLocalDb::KqpResourceManagerQueue});
             return;
         }
         auto& queueConfig = *ev->Get()->QueueConfig;
@@ -980,9 +980,9 @@ private:
             PublishResourcesScheduledAt = *WbState.LastPublishTime + publishInterval;
 
             Schedule(*PublishResourcesScheduledAt - now, new TEvPrivate::TEvPublishResources);
-            YDB_LOG_DEBUG("Schedule publish at after",
-                {"#_*PublishResourcesScheduledAt", *PublishResourcesScheduledAt},
-                {"#_(*PublishResourcesScheduledAt - now)", (*PublishResourcesScheduledAt - now)});
+            YDB_LOG_DEBUG("Scheduled resource usage publish",
+                {"publishAt", *PublishResourcesScheduledAt},
+                {"delay", (*PublishResourcesScheduledAt - now)});
             return;
         }
 
@@ -1029,9 +1029,9 @@ private:
             }
         }
 
-        YDB_LOG_INFO("Send to publish resource usage",
+        YDB_LOG_INFO("Sending resource usage to publish",
             {"reason", reason},
-            {"#_num_0", (WarmupInProgress ? " (warmup: zero resources)" : "")},
+            {"warmupInProgress", WarmupInProgress},
             {"payload", payload.ShortDebugString()});
         WbState.LastPublishTime = now;
         if (ResourceManager->ResourceInfoExchanger) {

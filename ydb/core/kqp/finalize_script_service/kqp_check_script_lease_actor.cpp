@@ -32,12 +32,12 @@ public:
     {}
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("Bootstrap",
+        YDB_LOG_DEBUG("Script execution lease check actor bootstrapped",
             {"logPrefix", LogPrefix()});
         Become(&TScriptExecutionLeaseCheckActor::MainState);
 
         const auto& creatorId = Register(CreateScriptExecutionsTablesCreator(AppData()->FeatureFlags.GetEnableSecureScriptExecutions()));
-        YDB_LOG_DEBUG("Start script executions tables",
+        YDB_LOG_DEBUG("Starting script execution tables creation",
             {"logPrefix", LogPrefix()},
             {"creator", creatorId});
     }
@@ -59,14 +59,14 @@ public:
                 break;
             case EWakeup::RefreshScriptExecutions: {
                 const auto& checkerId = Register(CreateRefreshScriptExecutionLeasesActor(SelfId(), QueryServiceConfig, Counters));
-                YDB_LOG_DEBUG("Start lease",
+                YDB_LOG_DEBUG("Starting script execution lease refresh",
                     {"logPrefix", LogPrefix()},
                     {"checker", checkerId});
                 break;
             }
             case EWakeup::CreateTables: {
                 const auto& creatorId = Register(CreateScriptExecutionsTablesCreator(AppData()->FeatureFlags.GetEnableSecureScriptExecutions()));
-                YDB_LOG_DEBUG("Start script executions tables",
+                YDB_LOG_DEBUG("Starting script execution tables creation",
                     {"logPrefix", LogPrefix()},
                     {"creator", creatorId});
                 break;
@@ -99,15 +99,15 @@ public:
         const auto expiredLeasesCount = ev->Get()->ExpiredLeasesCount;
 
         if (!ev->Get()->Success) {
-            YDB_LOG_ERROR("Refresh failed, found expired",
+            YDB_LOG_ERROR("Script execution lease refresh failed because expired leases were found",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"leases", expiredLeasesCount},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
         } else {
             YDB_LOG_DEBUG("Refresh successfully completed, found expired",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"leases", expiredLeasesCount});
         }
     }
@@ -129,10 +129,10 @@ public:
 
 private:
     void RefreshNodesInfo() {
-        YDB_LOG_DEBUG("Do RefreshNodesInfo next refresh after",
+        YDB_LOG_DEBUG("Scheduled next RefreshNodesInfo",
             {"logPrefix", LogPrefix()},
-            {"#_(WaitRefreshNodes", WaitRefreshNodes},
-            {"REFRESHNODESPERIOD", REFRESH_NODES_PERIOD});
+            {"waitRefreshNodes", WaitRefreshNodes},
+            {"refreshNodesPeriod", REFRESH_NODES_PERIOD});
         Schedule(REFRESH_NODES_PERIOD, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RefreshNodesInfo)));
 
         if (!WaitRefreshNodes) {
@@ -142,9 +142,9 @@ private:
     }
 
     void ScheduleRefreshScriptExecutions() {
-        YDB_LOG_DEBUG("Do ScheduleRefreshScriptExecutions next refresh after",
+        YDB_LOG_DEBUG("Scheduled next script execution refresh",
             {"logPrefix", LogPrefix()},
-            {"#_(WaitRefreshScriptExecutions", WaitRefreshScriptExecutions},
+            {"waitRefreshScriptExecutions", WaitRefreshScriptExecutions},
             {"refreshLeasePeriod", RefreshLeasePeriod});
         Schedule(RefreshLeasePeriod, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
 
@@ -161,7 +161,7 @@ private:
             // to reduce the number of tli
             const auto leaseCheckTime = RefreshLeasePeriod * RandomNumber<double>();
             Schedule(leaseCheckTime, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RefreshScriptExecutions)));
-            YDB_LOG_DEBUG("Schedule lease check after",
+            YDB_LOG_DEBUG("Scheduled script execution lease check",
                 {"logPrefix", LogPrefix()},
                 {"leaseCheckTime", leaseCheckTime});
         }

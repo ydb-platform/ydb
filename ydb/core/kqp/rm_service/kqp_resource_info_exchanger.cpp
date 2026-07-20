@@ -160,8 +160,8 @@ private:
 
         if (BoardState.Subscriber) {
             YDB_LOG_INFO("Kill previous info exchanger subscriber for at reason: tenant updated",
-                {"#_BoardState.Path", BoardState.Path},
-                {"#_BoardState.Subscriber", BoardState.Subscriber});
+                {"boardPath", BoardState.Path},
+                {"subscriber", BoardState.Subscriber});
             Send(BoardState.Subscriber, new TEvents::TEvPoison);
         }
         BoardState.Subscriber = TActorId();
@@ -177,8 +177,8 @@ private:
     void CreatePublisher() {
         if (BoardState.Publisher) {
             YDB_LOG_INFO("Kill previous info exchanger publisher for at reason: tenant updated",
-                {"#_BoardState.Path", BoardState.Path},
-                {"#_BoardState.Publisher", BoardState.Publisher});
+                {"boardPath", BoardState.Path},
+                {"publisher", BoardState.Publisher});
             Send(BoardState.Publisher, new TEvents::TEvPoison);
         }
         BoardState.Publisher = TActorId();
@@ -434,8 +434,8 @@ private:
         BoardState.Path = MakeKqpInfoExchangerBoardPath(tenant);
 
         if (auto *domain = AppData()->DomainsInfo->GetDomain(); domain->Name != ExtractDomain(tenant)) {
-            YDB_LOG_ERROR("Can not find default state storage group for database",
-                {"#_BoardState.Tenant", BoardState.Tenant});
+            YDB_LOG_ERROR("Cannot find default state storage group for database",
+                {"tenant", BoardState.Tenant});
             return;
         }
 

@@ -7,7 +7,7 @@
 namespace NKikimr::NKqp::NScanPrivate {
 
 TShardState::TPtr TInFlightShards::Put(TShardState&& state) {
-    YDB_LOG_DEBUG("",
+    YDB_LOG_DEBUG("Added shard to in-flight scans",
         {"event", "put_inflight"},
         {"tabletId", state.TabletId},
         {"state", state.State},
@@ -43,7 +43,7 @@ std::vector<std::unique_ptr<TComputeTaskData>> TShardScannerInfo::OnReceiveData(
     } else {
         result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(TabletId, data, std::move(data.Rows))));
     }
-    YDB_LOG_DEBUG("",
+    YDB_LOG_DEBUG("Received scan data chunks from shard scanner",
         {"event", "receive_data"},
         {"actorId", ActorId},
         {"countChunks", result.size()});

@@ -1175,8 +1175,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     const auto externalEntry = resolveEntityInsideDataSource ? std::optional<NavigateEntryResult>{} : externalEntryItem;
     const ui64 expectedSchemaVersion = GetExpectedVersion(entityName);
 
-    YDB_LOG_DEBUG_CTX(*ActorSystem, "Load table metadata from cache by path, request",
-        {"#_GetDebugString(entityName)", GetDebugString(entityName)});
+    YDB_LOG_DEBUG_CTX(*ActorSystem, "Loading table metadata from cache",
+        {"entityName", GetDebugString(entityName)});
 
     auto navigate = MakeHolder<TNavigate>();
     navigate->ResultSet.emplace_back(entry);

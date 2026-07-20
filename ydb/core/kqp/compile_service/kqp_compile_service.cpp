@@ -304,8 +304,8 @@ private:
 
     void Handle(TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
         auto snapshot = QueryCache->GetSnapshot();
-        YDB_LOG_DEBUG("Got query compile cache request, snapshot has entries",
-            {"#_snapshot.size", snapshot.size()});
+        YDB_LOG_DEBUG("Got query compile cache request",
+            {"snapshotSize", snapshot.size()});
         const auto& tenant = ev->Get()->Record.GetTenantName();
         auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
 
@@ -433,18 +433,18 @@ private:
     void PerformRequest(TEvKqp::TEvCompileRequest::TPtr& ev, const TActorContext& ctx) {
         auto& request = *ev->Get();
 
-        YDB_LOG_DEBUG_CTX(ctx, "Perform request",
-            {"#_TraceId.SpanIdPtr", ev->TraceId.GetSpanIdPtr()});
+        YDB_LOG_DEBUG_CTX(ctx, "Performing compile request",
+            {"spanIdPtr", ev->TraceId.GetSpanIdPtr()});
 
         NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, std::move(ev->TraceId), "CompileService");
 
-        YDB_LOG_DEBUG_CTX(ctx, "Received compile request queryText",
+        YDB_LOG_DEBUG_CTX(ctx, "Received compile request",
             {"sender", ev->Sender},
             {"queryUid", (request.Uid ? *request.Uid : "<empty>")},
-            {"#_num_0", (request.Query ? EscapeC(request.Query->Text) : "<empty>")},
+            {"queryText", (request.Query ? EscapeC(request.Query->Text) : "<empty>")},
             {"keepInCache", request.KeepInCache},
             {"split", request.Split},
-            {"#_*request.UserRequestContext", *request.UserRequestContext});
+            {"userRequestContext", *request.UserRequestContext});
 
         auto userSid = request.UserToken->GetUserSID();
         auto dbCounters = request.DbCounters;

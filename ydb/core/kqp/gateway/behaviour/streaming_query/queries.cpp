@@ -353,18 +353,18 @@ protected:
     bool HandleResult(TEvPtr& ev, const TString& message) {
         const auto status = ev->Get()->Status;
         if (status == Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_DEBUG("[StreamingQueries] success",
+            YDB_LOG_DEBUG("[StreamingQueries] Operation succeeded",
                 {"logPrefix", LogPrefix()},
                 {"message", message},
-                {"#_ev->Sender", ev->Sender});
+                {"sender", ev->Sender});
             return false;
         }
 
         const auto& issues = ev->Get()->Issues;
-        YDB_LOG_WARN("[StreamingQueries] failed",
+        YDB_LOG_WARN("[StreamingQueries] Operation failed",
             {"logPrefix", LogPrefix()},
             {"message", message},
-            {"#_ev->Sender", ev->Sender},
+            {"sender", ev->Sender},
             {"status", status},
             {"issues", issues.ToOneLineString()});
 
@@ -374,7 +374,7 @@ protected:
 
     void Finish(Ydb::StatusIds::StatusCode status) {
         if (BeforeFinish(status)) {
-            YDB_LOG_DEBUG("[StreamingQueries] Do action before finish with status",
+            YDB_LOG_DEBUG("[StreamingQueries] Deferring finish to run action before completion",
                 {"logPrefix", LogPrefix()},
                 {"status", status});
             return;
@@ -384,7 +384,7 @@ protected:
             YDB_LOG_DEBUG("[StreamingQueries] Successfully finished",
                 {"logPrefix", LogPrefix()});
         } else {
-            YDB_LOG_WARN("[StreamingQueries] Failed with",
+            YDB_LOG_WARN("[StreamingQueries] Operation failed with errors",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"issues", Issues.ToOneLineString()});
@@ -437,7 +437,7 @@ public:
     {}
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("[StreamingQueries] Bootstrap",
+        YDB_LOG_DEBUG("[StreamingQueries] Bootstrapping scheme actor",
             {"logPrefix", LogPrefix()},
             {"database", Database});
         StartRequest();
@@ -479,10 +479,10 @@ protected:
         }
 
         if (const auto delay = RetryState->GetNextRetryDelay(longDelay)) {
-            YDB_LOG_WARN("[StreamingQueries] Schedule retry",
+            YDB_LOG_WARN("[StreamingQueries] Scheduling retry after scheme error",
                 {"logPrefix", LogPrefix()},
                 {"error", issues.ToOneLineString()},
-                {"#_*delay", *delay});
+                {"retryDelay", *delay});
             TBase::Issues.AddIssues(std::move(issues));
             TBase::Schedule(*delay, new TEvents::TEvWakeup());
             return true;
@@ -530,7 +530,7 @@ public:
         }
 
         const auto& result = results[0];
-        YDB_LOG_DEBUG("[StreamingQueries] Got scheme cache",
+        YDB_LOG_DEBUG("[StreamingQueries] Received scheme cache response",
             {"logPrefix", LogPrefix()},
             {"response", result.Status});
 
@@ -580,7 +580,7 @@ public:
 
 protected:
     void StartRequest() final {
-        YDB_LOG_DEBUG("[StreamingQueries] Describe streaming query",
+        YDB_LOG_DEBUG("[StreamingQueries] Describing streaming query in scheme cache",
             {"logPrefix", LogPrefix()},
             {"database", Database});
 
@@ -641,9 +641,9 @@ public:
         TxId = response.GetTxId();
         SchemeShardTabletId = response.GetSchemeShardTabletId();
 
-        YDB_LOG_DEBUG("[StreamingQueries] Got propose transaction response",
+        YDB_LOG_DEBUG("[StreamingQueries] Received propose transaction response",
             {"logPrefix", LogPrefix()},
-            {"#_NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType())", NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType())},
+            {"operationType", NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType())},
             {"status", status},
             {"schemeShardStatus", NKikimrScheme::EStatus_Name(ssStatus)},
             {"txId", TxId},
@@ -680,7 +680,7 @@ public:
             case NTxProxy::TResultStatus::ProxyNotReady:
             case NTxProxy::TResultStatus::ProxyShardTryLater:
             case NTxProxy::TResultStatus::ProxyShardNotAvailable: {
-                YDB_LOG_WARN("[StreamingQueries] Retry scheme transaction",
+                YDB_LOG_WARN("[StreamingQueries] Retrying scheme transaction after proxy shard error",
                     {"logPrefix", LogPrefix()},
                     {"error", status},
                     {"tabletId", SchemeShardTabletId},
@@ -724,7 +724,7 @@ public:
                 switch (static_cast<NKikimrScheme::EStatus>(ssStatus)) {
                     case NKikimrScheme::StatusMultipleModifications: {
                         // All operations are expected to be retriable in case of scheme shard temporary unavailable
-                        YDB_LOG_WARN("[StreamingQueries] Retry scheme transaction, previous tx execution is not finished, failed",
+                        YDB_LOG_WARN("[StreamingQueries] Retrying scheme transaction because previous execution has not finished",
                             {"logPrefix", LogPrefix()},
                             {"tabletId", SchemeShardTabletId},
                             {"txId", TxId});
@@ -826,9 +826,9 @@ public:
 
 protected:
     void StartRequest() final {
-        YDB_LOG_DEBUG("[StreamingQueries] Start scheme transaction",
+        YDB_LOG_DEBUG("[StreamingQueries] Starting scheme transaction",
             {"logPrefix", LogPrefix()},
-            {"#_NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType())", NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType())},
+            {"operationType", NKikimrSchemeOp::EOperationType_Name(SchemeTx.GetOperationType())},
             {"database", Database});
 
         auto event = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
@@ -858,7 +858,7 @@ private:
         Y_VALIDATE(TxId, "Can not subscribe on completion without tx id");
         NTabletPipe::SendData(SelfId(), SchemePipeActorId, new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(TxId));
 
-        YDB_LOG_DEBUG("[StreamingQueries] Subscribe on scheme on scheme pipe",
+        YDB_LOG_DEBUG("[StreamingQueries] Subscribing to scheme transaction completion on scheme pipe",
             {"logPrefix", LogPrefix()},
             {"tx", TxId},
             {"shard", SchemeShardTabletId},
@@ -1101,7 +1101,7 @@ public:
 
         PreviousOperationStartedAt = NProtoInterop::CastFromProto(State.GetOperationStartedAt());
         PreviousOperationName = State.GetOperationName();
-        YDB_LOG_DEBUG("[StreamingQueries] Streaming query under lock from started at with operation name",
+        YDB_LOG_DEBUG("[StreamingQueries] Streaming query is locked by a previous operation",
             {"logPrefix", LogPrefix()},
             {"previousOperationOwner", PreviousOperationOwner},
             {"previousOperationStartedAt", PreviousOperationStartedAt},
@@ -1111,7 +1111,7 @@ public:
             if (Settings.OperationStartedAt - PreviousOperationStartedAt <= LOCK_TIMEOUT) {
                 FinishUnderOperation();
             } else {
-                YDB_LOG_INFO("[StreamingQueries] Streaming query lock expired, start check",
+                YDB_LOG_INFO("[StreamingQueries] Streaming query lock expired, starting owner check",
                     {"logPrefix", LogPrefix()},
                     {"previousOperationOwner", PreviousOperationOwner});
                 CheckLockOwner = true;
@@ -1122,7 +1122,7 @@ public:
         }
 
         if (PreviousOperationOwner != *Settings.PreviousOperationOwner) {
-            YDB_LOG_INFO("[StreamingQueries] Streaming query was locked by during lock check",
+            YDB_LOG_INFO("[StreamingQueries] Streaming query was locked by another actor during lock check",
                 {"logPrefix", LogPrefix()},
                 {"previousOperationOwner", PreviousOperationOwner});
             FinishUnderOperation();
@@ -1209,8 +1209,11 @@ public:
     {}
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("[StreamingQueries] Bootstrap",
-            {"logPrefix", LogPrefix()});
+        YDB_LOG_DEBUG("[StreamingQueries] Bootstrapping lock streaming query table actor",
+            {"logPrefix", LogPrefix()},
+            {"databaseId", DatabaseId},
+            {"queryPath", QueryPath},
+            {"operationName", Settings.OperationName});
         StartLockStreamingQueryRequestActor();
 
         Become(&TLockStreamingQueryTableActor::StateFunc);
@@ -1254,9 +1257,9 @@ public:
             SubscribedOnSession = Info.PreviousOwner.NodeId();
         }
 
-        YDB_LOG_DEBUG("[StreamingQueries] Start check alive",
+        YDB_LOG_DEBUG("[StreamingQueries] Starting check-alive request to previous owner",
             {"logPrefix", LogPrefix()},
-            {"#_Info.PreviousOwner", Info.PreviousOwner});
+            {"previousOwner", Info.PreviousOwner});
         Send(Info.PreviousOwner, new TEvPrivate::TEvCheckAliveRequest(), CheckAliveFlags);
         Schedule(CHECK_ALIVE_REQUEST_SOFT_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveSoftTimeout)));
         Schedule(CHECK_ALIVE_REQUEST_HARD_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveHardTimeout)));
@@ -1266,11 +1269,11 @@ public:
         if (WaitLock) {
             YDB_LOG_WARN("[StreamingQueries] Streaming query owner was verified after started lock",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender});
+                {"sender", ev->Sender});
         } else {
             YDB_LOG_INFO("[StreamingQueries] Previous query owner is alive",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender});
+                {"sender", ev->Sender});
             FatalError(Ydb::StatusIds::ABORTED, {NYql::TIssue(TStringBuilder() << "Streaming query already under operation " << Info.PreviousOperationName << " started at " << Info.PreviousOperationStartedAt << ", try repeat request later")});
         }
     }
@@ -1283,9 +1286,9 @@ public:
                     YDB_LOG_NOTICE("[StreamingQueries] Skipped retry check alive, already waiting query lock",
                         {"logPrefix", LogPrefix()});
                 } else {
-                    YDB_LOG_DEBUG("[StreamingQueries] Retry check alive request",
+                    YDB_LOG_DEBUG("[StreamingQueries] Retrying check-alive request",
                         {"logPrefix", LogPrefix()},
-                        {"#_Info.PreviousOwner", Info.PreviousOwner});
+                        {"previousOwner", Info.PreviousOwner});
                     Send(Info.PreviousOwner, new TEvPrivate::TEvCheckAliveRequest(), CheckAliveFlags);
                     Schedule(CHECK_ALIVE_REQUEST_SOFT_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveSoftTimeout)));
                 }
@@ -1294,14 +1297,14 @@ public:
             case EWakeup::CheckAliveSoftTimeout: {
                 YDB_LOG_WARN("[StreamingQueries] Deliver streaming query owner check alive request timed out, retry check alive",
                     {"logPrefix", LogPrefix()},
-                    {"#_Info.PreviousOwner", Info.PreviousOwner});
+                    {"previousOwner", Info.PreviousOwner});
                 RetryCheckAlive(/* longDelay */ false);
                 break;
             }
             case EWakeup::CheckAliveHardTimeout: {
                 YDB_LOG_WARN("[StreamingQueries] Deliver streaming query owner check alive request timed out, start lock",
                     {"logPrefix", LogPrefix()},
-                    {"#_Info.PreviousOwner", Info.PreviousOwner});
+                    {"previousOwner", Info.PreviousOwner});
                 StartLockStreamingQueryRequestActor(Info.PreviousOwner);
                 break;
             }
@@ -1313,12 +1316,12 @@ public:
         if (reason == TEvents::TEvUndelivered::ReasonActorUnknown) {
             YDB_LOG_WARN("[StreamingQueries] Streaming query operation owner not found, start lock",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender});
+                {"sender", ev->Sender});
             StartLockStreamingQueryRequestActor(Info.PreviousOwner);
         } else {
-            YDB_LOG_WARN("[StreamingQueries] Got delivery problem to node with owner unavailable",
+            YDB_LOG_WARN("[StreamingQueries] Failed to deliver check-alive request to the query owner node",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"reason", reason});
             RetryCheckAlive(/* longDelay */ true);
         }
@@ -1327,7 +1330,7 @@ public:
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         YDB_LOG_WARN("[StreamingQueries] Node with streaming query operation owner was disconnected, retry check alive",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->NodeId", ev->Get()->NodeId});
+            {"nodeId", ev->Get()->NodeId});
         RetryCheckAlive(/* longDelay */ true);
     }
 
@@ -1381,15 +1384,15 @@ private:
         }
 
         if (const auto delay = CheckAliveRetryState->GetNextRetryDelay(longDelay)) {
-            YDB_LOG_DEBUG("[StreamingQueries] Schedule retry check alive",
+            YDB_LOG_DEBUG("[StreamingQueries] Scheduling check-alive retry",
                 {"logPrefix", LogPrefix()},
-                {"#_*delay", *delay});
+                {"retryDelay", *delay});
             Schedule(*delay, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RetryCheckAlive)));
             WaitRetryCheckAlive = true;
         } else {
             YDB_LOG_WARN("[StreamingQueries] Retry limit exceeded for streaming query operation owner check alive, start lock",
                 {"logPrefix", LogPrefix()},
-                {"MAXCHECKALIVERETRIES", MAX_CHECK_ALIVE_RETRIES});
+                {"maxCheckAliveRetries", MAX_CHECK_ALIVE_RETRIES});
             StartLockStreamingQueryRequestActor(Info.PreviousOwner);
         }
     }
@@ -1437,7 +1440,7 @@ public:
             }
 
             if (OperationOwner != currentOperationOwner) {
-                YDB_LOG_ERROR("[StreamingQueries] Streaming query was locked by during operation (expected",
+                YDB_LOG_ERROR("[StreamingQueries] Streaming query lock owner changed during operation",
                     {"logPrefix", LogPrefix()},
                     {"currentOperationOwner", currentOperationOwner},
                     {"owner", OperationOwner});
@@ -1522,7 +1525,7 @@ public:
     void OnRunQuery() final {
         YDB_LOG_DEBUG("[StreamingQueries] Updating streaming query state",
             {"logPrefix", LogPrefix()},
-            {"#_LogQueryState(State)", LogQueryState(State)});
+            {"queryState", LogQueryState(State)});
         SetQueryResultHandler(&TUpdateStreamingQueryStateRequestActor::OnGetQueryInfo, "Get query info");
         ReadQueryInfo(TTxControl::BeginTx());
     }
@@ -1537,7 +1540,7 @@ public:
         const auto previousOwner = State.GetOperationActorId();
         const auto currentOwner = result.GetResult().GetOperationActorId();
         if (currentOwner != previousOwner) {
-            YDB_LOG_ERROR("[StreamingQueries] Streaming query was locked by during operation (expected",
+            YDB_LOG_ERROR("[StreamingQueries] Streaming query lock owner changed during operation",
                 {"logPrefix", LogPrefix()},
                 {"currentOwner", currentOwner},
                 {"owner", previousOwner});
@@ -1580,8 +1583,9 @@ public:
     {}
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("[StreamingQueries] Bootstrap",
-            {"logPrefix", LogPrefix()});
+        YDB_LOG_DEBUG("[StreamingQueries] Bootstrapping cleanup streaming query state table actor",
+            {"logPrefix", LogPrefix()},
+            {"queryPath", QueryPath});
         Become(&TCleanupStreamingQueryStateTableActor::StateFunc);
         ClearStreamingQueryExecutions();
     }
@@ -1607,9 +1611,9 @@ public:
         }
 
         const auto entryExists = ev->Get()->ExecutionEntryExists;
-        YDB_LOG_DEBUG("[StreamingQueries] Cancel streaming query execution finished, entry execution",
+        YDB_LOG_DEBUG("[StreamingQueries] Cancel streaming query execution finished",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
+            {"sender", ev->Sender},
             {"exists", entryExists},
             {"id", executionId});
 
@@ -1630,10 +1634,10 @@ public:
         }
 
         --OperationsToForget;
-        YDB_LOG_DEBUG("[StreamingQueries] Forget streaming query execution finished, execution",
+        YDB_LOG_DEBUG("[StreamingQueries] Forget streaming query execution finished",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Cookie", ev->Cookie},
-            {"#_ev->Sender", ev->Sender},
+            {"cookie", ev->Cookie},
+            {"sender", ev->Sender},
             {"id", executionId},
             {"remains", OperationsToForget});
 
@@ -1679,7 +1683,7 @@ private:
         if (State.PreviousExecutionIdsSize() > 0) {
             YDB_LOG_DEBUG("[StreamingQueries] Cleanup previous executions",
                 {"logPrefix", LogPrefix()},
-                {"#_State.PreviousExecutionIdsSize", State.PreviousExecutionIdsSize()});
+                {"previousExecutionIdsCount", State.PreviousExecutionIdsSize()});
 
             for (const auto& executionId : State.GetPreviousExecutionIds()) {
                 SendToKqpProxy(std::make_unique<TEvForgetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA, TEvForgetScriptExecutionOperation::TSettings{
@@ -1730,7 +1734,7 @@ public:
     {}
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("[StreamingQueries] Bootstrap. SS last query start new",
+        YDB_LOG_DEBUG("[StreamingQueries] Bootstrap: starting a new streaming query execution",
             {"logPrefix", LogPrefix()},
             {"textRevision", Settings.QueryTextRevision},
             {"executionRevision", State.GetQueryTextRevision()},
@@ -1774,9 +1778,9 @@ public:
         }
 
         PreviousGeneration = ev->Get()->Generation;
-        YDB_LOG_DEBUG("[StreamingQueries] Load previous query execution state finished, has saved",
+        YDB_LOG_DEBUG("[StreamingQueries] Finished loading previous query execution state",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
+            {"sender", ev->Sender},
             {"generation", PreviousGeneration},
             {"state", PreviousPhysicalGraph.has_value()});
 
@@ -1793,10 +1797,10 @@ public:
         }
 
         --OperationsToForget;
-        YDB_LOG_DEBUG("[StreamingQueries] Forget streaming query execution finished, execution",
+        YDB_LOG_DEBUG("[StreamingQueries] Forget streaming query execution finished",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Cookie", ev->Cookie},
-            {"#_ev->Sender", ev->Sender},
+            {"cookie", ev->Cookie},
+            {"sender", ev->Sender},
             {"id", executionId},
             {"remains", OperationsToForget});
 
@@ -1828,7 +1832,7 @@ public:
         }
 
         RequestStarted = true;
-        YDB_LOG_DEBUG("[StreamingQueries] Script execution wait for saving query state",
+        YDB_LOG_DEBUG("[StreamingQueries] Script execution started, waiting for query state to be saved",
             {"logPrefix", LogPrefix()},
             {"created", ev->Get()->ExecutionId});
 
@@ -1837,7 +1841,7 @@ public:
 
     void HandleStartQuery(TEvents::TEvWakeup::TPtr&) {
         const auto& executionId = State.GetCurrentExecutionId();
-        YDB_LOG_DEBUG("[StreamingQueries] Get streaming query execution",
+        YDB_LOG_DEBUG("[StreamingQueries] Fetching streaming query execution",
             {"logPrefix", LogPrefix()},
             {"executionId", executionId});
         SendToKqpProxy(std::make_unique<TEvGetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA, /* failOnNotFound */ true));
@@ -1845,7 +1849,7 @@ public:
 
     void HandleStartQuery(TEvGetScriptExecutionOperationResponse::TPtr& ev) {
         const auto& info = *ev->Get();
-        YDB_LOG_DEBUG("[StreamingQueries] Got script execution info, state",
+        YDB_LOG_DEBUG("[StreamingQueries] Received script execution info",
             {"logPrefix", LogPrefix()},
             {"saved", info.StateSaved},
             {"ready", info.Ready});
@@ -1942,7 +1946,7 @@ private:
 
         if (State.PreviousExecutionIdsSize() > MAX_QUERY_EXECUTIONS) {
             const auto toCleanup = State.PreviousExecutionIdsSize() - MAX_QUERY_EXECUTIONS;
-            YDB_LOG_DEBUG("[StreamingQueries] Cleanup previous executions (max",
+            YDB_LOG_DEBUG("[StreamingQueries] Cleaning up previous executions that exceed the limit",
                 {"logPrefix", LogPrefix()},
                 {"toCleanup", toCleanup},
                 {"executions", MAX_QUERY_EXECUTIONS});
@@ -2017,7 +2021,7 @@ private:
         request.SetQuery(State.GetQueryText());
         request.SetTimeoutMs(TDuration::Max().MilliSeconds());
 
-        YDB_LOG_DEBUG("[StreamingQueries] Send start streaming query request, execution",
+        YDB_LOG_DEBUG("[StreamingQueries] Sending start streaming query request",
             {"logPrefix", LogPrefix()},
             {"id", State.GetCurrentExecutionId()});
         SendToKqpProxy(std::move(ev));
@@ -2040,9 +2044,9 @@ private:
 
         const auto delay = GetOperationRetryState->GetNextRetryDelay();
         Y_VALIDATE(delay, "Retries unexpectedly finished");
-        YDB_LOG_DEBUG("[StreamingQueries] Schedule get script execution operation",
+        YDB_LOG_DEBUG("[StreamingQueries] Scheduling get script execution operation",
             {"logPrefix", LogPrefix()},
-            {"#_*delay", *delay});
+            {"retryDelay", *delay});
         Schedule(*delay, new TEvents::TEvWakeup());
     }
 
@@ -2107,9 +2111,9 @@ public:
     {}
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("[StreamingQueries] Bootstrap Has in SS initial",
+        YDB_LOG_DEBUG("[StreamingQueries] Bootstrap: syncing streaming query with scheme shard",
             {"logPrefix", LogPrefix()},
-            {"SS", ExistsInSS},
+            {"existsInSchemeShard", ExistsInSS},
             {"info", (Settings.SchemeInfo ? Settings.SchemeInfo->DebugString() : "null")},
             {"status", NKikimrKqp::TStreamingQueryState::EStatus_Name(State.GetStatus())});
 
@@ -2175,9 +2179,9 @@ public:
         }
 
         const auto entryExists = ev->Get()->ExecutionEntryExists;
-        YDB_LOG_DEBUG("[StreamingQueries] Cancel streaming query execution finished, execution entry",
+        YDB_LOG_DEBUG("[StreamingQueries] Cancel streaming query execution finished",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
+            {"sender", ev->Sender},
             {"id", executionId},
             {"exists", entryExists});
 
@@ -2413,7 +2417,7 @@ public:
     {}
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("[StreamingQueries] Bootstrap",
+        YDB_LOG_DEBUG("[StreamingQueries] Bootstrapping request handler",
             {"logPrefix", LogPrefix()});
 
         TBase::Become(&TDerived::StateFunc);
@@ -2437,7 +2441,7 @@ public:
             if (const auto& securityObject = *SchemeInfo->SecurityObject; !securityObject.CheckAccess(Access, *Context.GetUserToken())) {
                 YDB_LOG_WARN("[StreamingQueries] Access denied",
                     {"logPrefix", LogPrefix()},
-                    {"#_Context.GetUserToken()->GetUserSID", Context.GetUserToken()->GetUserSID()},
+                    {"userSid", Context.GetUserToken()->GetUserSID()},
                     {"access", Access});
 
                 if (!securityObject.CheckAccess(NACLib::DescribeSchema, *Context.GetUserToken())) {
@@ -2467,7 +2471,7 @@ public:
         QueryState = info.State;
         YDB_LOG_DEBUG("[StreamingQueries] Lock streaming query success",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
+            {"sender", ev->Sender},
             {"isLockCreated", IsLockCreated},
             {"queryExists", info.QueryExists},
             {"queryState", LogQueryState(QueryState)});
@@ -2486,9 +2490,9 @@ public:
     }
 
     void Handle(TEvPrivate::TEvCheckAliveRequest::TPtr& ev) {
-        YDB_LOG_NOTICE("[StreamingQueries] Got check alive request",
+        YDB_LOG_NOTICE("[StreamingQueries] Received check-alive request",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender});
+            {"sender", ev->Sender});
         TBase::Send(ev->Sender, new TEvPrivate::TEvCheckAliveResponse());
     }
 
@@ -2643,10 +2647,10 @@ public:
             TBase::SchemeInfo = std::nullopt;
         }
 
-        YDB_LOG_DEBUG("[StreamingQueries] Sync query with scheme shard success query exists",
+        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard succeeded",
             {"logPrefix", LogPrefix()},
             {"queryState", LogQueryState(TBase::QueryState)},
-            {"SS", TBase::SchemeInfo.has_value()});
+            {"existsInSchemeShard", TBase::SchemeInfo.has_value()});
 
         TBase::Become(&TDerived::StateFunc);
         OnQuerySynced();
@@ -2720,7 +2724,7 @@ public:
             SchemeInfo = std::nullopt;
         }
 
-        YDB_LOG_DEBUG("[StreamingQueries] Sync query with scheme shard success",
+        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard succeeded",
             {"logPrefix", LogPrefix()},
             {"state", LogQueryState(QueryState)});
         Finish(Ydb::StatusIds::SUCCESS);
@@ -2872,7 +2876,7 @@ public:
             SchemeInfo = std::nullopt;
         }
 
-        YDB_LOG_DEBUG("[StreamingQueries] Sync query with scheme shard success",
+        YDB_LOG_DEBUG("[StreamingQueries] Sync with scheme shard succeeded",
             {"logPrefix", LogPrefix()},
             {"state", LogQueryState(QueryState)});
         Finish(Ydb::StatusIds::SUCCESS);

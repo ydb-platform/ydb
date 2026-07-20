@@ -109,12 +109,12 @@ public:
                     sb << "CA " << shardId.first << ", ";
                 }
             }
-            YDB_LOG_DEBUG("",
+            YDB_LOG_DEBUG("Waiting for compute actors to finish",
                 {"marker", "KQPDATA"},
                 {"actorId", SelfId()},
                 {"txId", TxId},
                 {"ctx", *GetUserRequestContext()},
-                {"sb", sb},
+                {"details", sb},
                 {"traceId", TraceId()});
         }
         return false;
@@ -635,12 +635,12 @@ private:
                     }
 
                     if (error) {
-                        YDB_LOG_ERROR("",
+                        YDB_LOG_ERROR("Rejected operation on async index table",
                             {"marker", "KQPDATA"},
                             {"actorId", SelfId()},
                             {"txId", TxId},
                             {"ctx", *GetUserRequestContext()},
-                            {"#_*error", *error},
+                            {"error", *error},
                             {"traceId", TraceId()});
                         ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                             YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, *error));
@@ -651,7 +651,7 @@ private:
                 if ((stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage))) {
                     auto error = TStringBuilder()
                         << "Data manipulation queries with column-oriented tables are supported only by API QueryService.";
-                    YDB_LOG_ERROR("",
+                    YDB_LOG_ERROR("DML on column-oriented table is not supported via this API",
                         {"marker", "KQPDATA"},
                         {"actorId", SelfId()},
                         {"txId", TxId},
@@ -908,7 +908,7 @@ private:
             {"ctx", *GetUserRequestContext()},
             {"status", msg->Status},
             {"step", msg->Snapshot.Step},
-            {"#_dup_txId", msg->Snapshot.TxId},
+            {"snapshotTxId", msg->Snapshot.TxId},
             {"traceId", TraceId()});
 
         if (msg->Status != Ydb::StatusIds::SUCCESS) {

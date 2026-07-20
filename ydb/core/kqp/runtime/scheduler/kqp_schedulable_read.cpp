@@ -27,8 +27,8 @@ TSchedulableRead::TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query)
     AvailableQuotaMs = MaxQuotaMs;
     LastRefill = TMonotonic::Now();
 
-    YDB_LOG_TRACE("TSchedulableRead",
-        {"#_uintptr_t(this)", uintptr_t(this)},
+    YDB_LOG_TRACE("Created schedulable read with quota limit",
+        {"schedulableReadPtr", uintptr_t(this)},
         {"maxQuotaMs", MaxQuotaMs});
 
     YQL_ENSURE(MaxQuotaMs <= 1000);
@@ -38,8 +38,8 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
     // TODO: support update of the pool's read quota on AddOrUpdatePool().
     auto expectedQuotaMs = std::min(expectedQuota.MilliSeconds(), MaxQuotaMs);
 
-    YDB_LOG_TRACE("TSchedulableRead",
-        {"#_uintptr_t(this)", uintptr_t(this)},
+    YDB_LOG_TRACE("Trying to consume read quota",
+        {"schedulableReadPtr", uintptr_t(this)},
         {"expectedQuotaMs", expectedQuotaMs});
 
     // Refill quota
@@ -49,8 +49,8 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
         LastRefill = now;
     }
 
-    YDB_LOG_TRACE("TSchedulableRead",
-        {"#_uintptr_t(this)", uintptr_t(this)},
+    YDB_LOG_TRACE("Refilled read quota",
+        {"schedulableReadPtr", uintptr_t(this)},
         {"availableQuotaMs", AvailableQuotaMs});
 
     if (AvailableQuotaMs <= 0 || !TryIncreaseUsage()) {
@@ -61,8 +61,8 @@ bool TSchedulableRead::TryConsumeQuota(TDuration expectedQuota) {
     AvailableQuotaMs -= expectedQuotaMs;
     ReservedQuotaMs = expectedQuotaMs;
 
-    YDB_LOG_TRACE("TSchedulableRead",
-        {"#_uintptr_t(this)", uintptr_t(this)},
+    YDB_LOG_TRACE("Reserved read quota",
+        {"schedulableReadPtr", uintptr_t(this)},
         {"reservedQuotaMs", ReservedQuotaMs});
 
     return true;
@@ -77,11 +77,11 @@ void TSchedulableRead::ReturnQuota(NHPTimer::STime elapsedCycles) {
     AvailableQuotaMs = std::min<i64>(MaxQuotaMs, AvailableQuotaMs + ReservedQuotaMs - ms);
     ReservedQuotaMs = 0;
 
-    YDB_LOG_TRACE("TSchedulableRead",
-        {"#_uintptr_t(this)", uintptr_t(this)},
+    YDB_LOG_TRACE("Returned unused read quota",
+        {"schedulableReadPtr", uintptr_t(this)},
         {"returnedQuotaMs", ms});
-    YDB_LOG_TRACE("TSchedulableRead",
-        {"#_uintptr_t(this)", uintptr_t(this)},
+    YDB_LOG_TRACE("Updated available read quota after return",
+        {"schedulableReadPtr", uintptr_t(this)},
         {"availableQuotaMs", AvailableQuotaMs});
 
     DecreaseUsage(TDuration::MilliSeconds(ms), READ_DEFAULT);

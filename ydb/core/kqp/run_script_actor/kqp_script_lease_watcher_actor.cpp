@@ -81,14 +81,14 @@ private:
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Lease update failed execution entry",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()},
                 {"exists", executionEntryExists});
         } else {
             YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Lease updated by current execution entry",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"deadline", currentDeadline},
                 {"exists", executionEntryExists});
         }

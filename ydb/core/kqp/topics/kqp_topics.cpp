@@ -726,10 +726,10 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
                 TTopicPartition key{path, partition.GetPartitionId()};
 
                 if (auto p = Operations_.find(key); p != Operations_.end()) {
-                    YDB_LOG_DEBUG("(topic, partition, tablet)",
-                        {"#_key.Topic_", key.Topic_},
-                        {"#_partition.GetPartitionId", partition.GetPartitionId()},
-                        {"#_partition.GetTabletId", partition.GetTabletId()});
+                    YDB_LOG_DEBUG("Resolved topic partition tablet mapping",
+                        {"topic", key.Topic_},
+                        {"partitionId", partition.GetPartitionId()},
+                        {"tabletId", partition.GetTabletId()});
 
                     p->second.SetTabletId(partition.GetTabletId());
                 }

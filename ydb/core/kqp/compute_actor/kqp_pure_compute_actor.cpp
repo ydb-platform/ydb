@@ -49,7 +49,7 @@ void TKqpComputeActor::DoBootstrap() {
     TLogFunc logger;
     if (IsDebugLogEnabled(actorSystem)) {
         logger = [actorSystem, txId = this->GetTxId(), taskId = GetTask().GetId()] (const TString& message) {
-            YDB_LOG_DEBUG_CTX(*actorSystem, "",
+            YDB_LOG_DEBUG_CTX(*actorSystem, "Task runner debug message",
                 {"txId", txId},
                 {"task", taskId},
                 {"message", message});
@@ -162,8 +162,8 @@ void TKqpComputeActor::DoBootstrap() {
 
 STFUNC(TKqpComputeActor::StateFunc) {
     YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "CA StateFunc",
-        {"#_this->LogPrefix", this->LogPrefix},
-        {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+        {"logPrefix", this->LogPrefix},
+        {"eventType", ev->GetTypeRewrite()});
     try {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);
@@ -206,9 +206,9 @@ void TKqpComputeActor::PollSources(ui64 prevFreeSpace) {
         return;
     }
 
-    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Poll sources, free",
-        {"#_this->LogPrefix", this->LogPrefix},
-        {"space", freeSpace});
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Polling sources with available free space",
+        {"logPrefix", this->LogPrefix},
+        {"freeSpace", freeSpace});
     Send(SysViewActorId, new TEvKqpCompute::TEvScanDataAck(freeSpace));
 }
 
@@ -257,8 +257,8 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev) 
 
     Y_DEBUG_ABORT_UNLESS(SysViewActorId == ActorIdFromProto(msg.GetScanActorId()));
 
-    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Got sysview scan initial event, scan scanId: 0",
-        {"#_this->LogPrefix", this->LogPrefix},
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Received sysview scan initial event",
+        {"logPrefix", this->LogPrefix},
         {"actor", SysViewActorId});
     Send(ev->Sender, new TEvKqpCompute::TEvScanDataAck(GetMemoryLimits().ChannelBufferSize));
     return;
@@ -293,16 +293,16 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
         }
     }
 
-    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Got sysview scandata",
-        {"#_this->LogPrefix", this->LogPrefix},
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Received sysview scan data",
+        {"logPrefix", this->LogPrefix},
         {"rows", rowsCount},
         {"bytes", bytes},
         {"finished", msg.Finished},
         {"from", SysViewActorId});
 
     if (msg.Finished) {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Finishing rows buffer",
-            {"#_this->LogPrefix", this->LogPrefix});
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Finishing scan rows buffer",
+            {"logPrefix", this->LogPrefix});
         ScanData->Finish();
     }
 
@@ -317,8 +317,8 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
     }
 
     if (const auto freeSpace = CalculateFreeSpace(); freeSpace > 0) {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Send scan data ack",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Sending scan data ack",
+            {"logPrefix", this->LogPrefix},
             {"freeSpace", freeSpace});
 
         Send(SysViewActorId, new TEvKqpCompute::TEvScanDataAck(freeSpace));

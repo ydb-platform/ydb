@@ -49,8 +49,8 @@ TKqpScanComputeActor::~TKqpScanComputeActor() {
 void TKqpScanComputeActor::ProcessRlNoResourceAndDie() {
     const NYql::TIssue issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED,
         "Throughput limit exceeded for query");
-    YDB_LOG_ERROR("Throughput limit exceeded stream will be terminated",
-        {"#_this->LogPrefix", this->LogPrefix});
+    YDB_LOG_ERROR("Throughput limit exceeded, stream will be terminated",
+        {"logPrefix", this->LogPrefix});
 
     State = NDqProto::COMPUTE_STATE_FAILURE;
     ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::OVERLOADED, TIssues({ issue }));
@@ -85,8 +85,8 @@ void TKqpScanComputeActor::AcquireRateQuota() {
         rlFullPath, 0, RL_MAX_BATCH_DELAY,
         std::move(onSendAllowed), std::move(onSendTimeout), TActivationContext::AsActorContext());
 
-    YDB_LOG_DEBUG("Launch rate limiter",
-        {"#_this->LogPrefix", this->LogPrefix},
+    YDB_LOG_DEBUG("Launching rate limiter",
+        {"logPrefix", this->LogPrefix},
         {"actor", rlActor});
 }
 
@@ -161,7 +161,7 @@ TMaybe<google::protobuf::Any> TKqpScanComputeActor::ExtraData() {
 }
 
 void TKqpScanComputeActor::HandleEvWakeup(EEvWakeupTag tag) {
-    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Handling wakeup event",
         {"event", "HandleEvWakeup"},
         {"selfId", SelfId()});
     switch (tag) {
@@ -181,8 +181,8 @@ void TKqpScanComputeActor::HandleEvWakeup(EEvWakeupTag tag) {
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr& ev) {
-    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
-        {"TEvTerminateFromFetcher", ev->Sender},
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Received TEvTerminateFromFetcher",
+        {"sender", ev->Sender},
         {"selfId", SelfId()});
     TBase::InternalError(ev->Get()->GetStatusCode(), ev->Get()->GetIssues());
     State = ev->Get()->GetState();
@@ -191,8 +191,8 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
     ScanDataInFlight = false;
     ++SendDataReceived;
-    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
-        {"TEvSendData", ev->Sender},
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Received TEvSendData",
+        {"sender", ev->Sender},
         {"selfId", SelfId()});
     auto& msg = *ev->Get();
 
@@ -219,8 +219,8 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvRegisterFetcher::TPtr& ev) {
-    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
-        {"TEvRegisterFetcher", ev->Sender});
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Received TEvRegisterFetcher",
+        {"sender", ev->Sender});
     Y_ABORT_UNLESS(Fetchers.emplace(ev->Sender).second);
     Send(ev->Sender, new TEvScanExchange::TEvAckData(CalculateFreeSpace()));
     ++AcksSent;
@@ -228,8 +228,8 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvRegisterFetcher::TPtr& ev)
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvFetcherFinished::TPtr& ev) {
-    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "",
-        {"TEvFetcherFinished", ev->Sender});
+    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Received TEvFetcherFinished",
+        {"sender", ev->Sender});
     Y_ABORT_UNLESS(Fetchers.erase(ev->Sender) == 1);
     if (Fetchers.size() == 0) {
         ScanData->Finish();
@@ -252,22 +252,22 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
         return;
     }
     const ui64 freeSpace = CalculateFreeSpace();
-    YDB_LOG_DEBUG("",
-        {"#_this->LogPrefix", this->LogPrefix},
-        {"#_POLL_SOURCES:START", Fetchers.size()},
-        {"#_;fs", freeSpace});
+    YDB_LOG_DEBUG("Polling scan sources",
+        {"logPrefix", this->LogPrefix},
+        {"fetchersCount", Fetchers.size()},
+        {"freeSpace", freeSpace});
     for (auto&& i : Fetchers) {
         Send(i, new TEvScanExchange::TEvAckData(freeSpace));
     }
     ++AcksSent;
     ScanDataInFlight = true;
-    YDB_LOG_DEBUG("POLL_SOURCES:FINISH",
-        {"#_this->LogPrefix", this->LogPrefix});
+    YDB_LOG_DEBUG("Finished polling scan sources",
+        {"logPrefix", this->LogPrefix});
 }
 
 void TKqpScanComputeActor::DoBootstrap() {
-    YDB_LOG_DEBUG("EVLOGKQP START",
-        {"#_this->LogPrefix", this->LogPrefix});
+    YDB_LOG_DEBUG("Starting KQP scan compute actor bootstrap",
+        {"logPrefix", this->LogPrefix});
     NDq::TDqTaskRunnerContext execCtx;
     execCtx.FuncRegistry = TBase::FunctionRegistry;
     execCtx.ComputeCtx = &ComputeCtx;
@@ -301,7 +301,7 @@ void TKqpScanComputeActor::DoBootstrap() {
     NDq::TLogFunc logger;
     if (IsDebugLogEnabled(actorSystem, NKikimrServices::KQP_TASKS_RUNNER)) {
         logger = [actorSystem, txId = TxId, taskId = GetTask().GetId()](const TString& message) {
-            YDB_LOG_DEBUG_CTX_COMP(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "",
+            YDB_LOG_DEBUG_CTX_COMP(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "Task runner debug message",
                 {"txId", txId},
                 {"task", taskId},
                 {"message", message});

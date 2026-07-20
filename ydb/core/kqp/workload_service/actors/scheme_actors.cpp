@@ -58,7 +58,7 @@ public:
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             YDB_LOG_ERROR("[WorkloadService] Failed to fetch pool info",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Get()->Status", ev->Get()->Status},
+                {"status", ev->Get()->Status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
             NYql::TIssues issues = GroupIssues(ev->Get()->Issues, TStringBuilder() << "Failed to resolve pool id " << Event->Get()->PoolId);
             Reply(ev->Get()->Status, std::move(issues));
@@ -92,7 +92,7 @@ public:
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             YDB_LOG_ERROR("[WorkloadService] Failed to create default pool",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Get()->Status", ev->Get()->Status},
+                {"status", ev->Get()->Status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
             Reply(ev->Get()->Status, GroupIssues(ev->Get()->Issues, TStringBuilder() << "Failed to create default pool in database " << Event->Get()->DatabaseId));
             return;

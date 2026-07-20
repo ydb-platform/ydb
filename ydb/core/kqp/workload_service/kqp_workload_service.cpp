@@ -213,7 +213,7 @@ public:
         if (GetOrCreateDatabaseState(databaseId)->PendingSessionIds.contains(sessionId)) {
             YDB_LOG_DEBUG("[WorkloadService] Finished request with worker actor wait for place request",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Sender", ev->Sender},
+                {"sender", ev->Sender},
                 {"databaseId", databaseId},
                 {"poolId", poolId},
                 {"sessionId", ev->Get()->SessionId});
@@ -229,7 +229,7 @@ public:
 
         YDB_LOG_DEBUG("[WorkloadService] Finished request with worker actor",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Sender", ev->Sender},
+            {"sender", ev->Sender},
             {"databaseId", databaseId},
             {"poolId", poolId},
             {"sessionId", ev->Get()->SessionId});
@@ -557,7 +557,7 @@ private:
         TablesCreationStatus = ev->Get()->Success ? ETablesCreationStatus::Finished : ETablesCreationStatus::NotStarted;
 
         if (ev->Get()->Success) {
-            YDB_LOG_DEBUG("[WorkloadService] Succefully created tables, send response to handlers",
+            YDB_LOG_DEBUG("[WorkloadService] Successfully created workload service tables",
                 {"logPrefix", LogPrefix()});
             OnTabelsCreated(true);
             return;
@@ -575,13 +575,13 @@ private:
         if (!success) {
             YDB_LOG_ERROR("[WorkloadService] Failed to fetch cpu load",
                 {"logPrefix", LogPrefix()},
-                {"#_ev->Get()->Status", ev->Get()->Status},
+                {"status", ev->Get()->Status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
         } else {
-            YDB_LOG_TRACE("[WorkloadService] Succesfully fetched cpu %, cpu",
+            YDB_LOG_TRACE("[WorkloadService] Successfully fetched CPU load",
                 {"logPrefix", LogPrefix()},
-                {"load", 100.0 * ev->Get()->InstantLoad},
-                {"number", ev->Get()->CpuNumber});
+                {"loadPercent", 100.0 * ev->Get()->InstantLoad},
+                {"cpuNumber", ev->Get()->CpuNumber});
         }
 
         CpuQuotaManager->CpuLoadRequestRunning = false;
@@ -736,13 +736,13 @@ private:
             YDB_LOG_TRACE("[WorkloadService] Reply unsupported",
                 {"logPrefix", LogPrefix()},
                 {"replyActorId", replyActorId},
-                {"#_issues.ToOneLineString", issues.ToOneLineString()});
+                {"issues", issues.ToOneLineString()});
         } else {
             YDB_LOG_WARN("[WorkloadService] Reply continue error",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"replyActorId", replyActorId},
-                {"#_issues.ToOneLineString", issues.ToOneLineString()});
+                {"issues", issues.ToOneLineString()});
         }
         Send(replyActorId, new TEvContinueRequest(status, {}, {}, std::move(issues)));
     }

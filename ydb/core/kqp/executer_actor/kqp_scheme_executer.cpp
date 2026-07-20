@@ -280,7 +280,7 @@ public:
             const auto errText = TStringBuilder()
                 << "Cannot resolve working dir."
                 << " path# " << JoinPath(dirPath);
-            YDB_LOG_DEBUG("",
+            YDB_LOG_DEBUG("Cannot resolve working dir for CTAS move table",
                 {"marker", "KQPSCHEME"},
                 {"actorId", SelfId()},
                 {"txId", TxId},
@@ -993,7 +993,7 @@ public:
             }
 
             TString error(builder);
-            YDB_LOG_ERROR("",
+            YDB_LOG_ERROR("Unable to navigate scheme paths",
                 {"marker", "KQPSCHEME"},
                 {"actorId", SelfId()},
                 {"txId", TxId},
@@ -1411,12 +1411,12 @@ private:
     }
 
     void InternalError(const NYql::TIssues& issues) {
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("Internal error during scheme operation",
             {"marker", "KQPSCHEME"},
             {"actorId", SelfId()},
             {"txId", TxId},
             {"ctx", *GetUserRequestContext()},
-            {"#_issues.ToOneLineString", issues.ToOneLineString()});
+            {"issues", issues.ToOneLineString()});
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED,
             "Internal error while executing scheme operation.");
 

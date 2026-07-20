@@ -394,12 +394,12 @@ protected:
                        << "(total " << pair.second.size() << ") " << Endl;
                 }
             }
-            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Shard distribution on nodes after resolve",
                 {"marker", "KQPEX"},
                 {"actorId", SelfId()},
                 {"txId", TxId},
                 {"ctx", *GetUserRequestContext()},
-                {"sb", sb},
+                {"details", sb},
                 {"traceId", TraceId()});
         }
 
@@ -1180,12 +1180,12 @@ protected:
                     sb << "CA " << ca.first << ", ";
                 }
             }
-            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "",
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Waiting for pending compute tasks and actors",
                 {"marker", "KQPEX"},
                 {"actorId", SelfId()},
                 {"txId", TxId},
                 {"ctx", *GetUserRequestContext()},
-                {"sb", sb},
+                {"details", sb},
                 {"traceId", TraceId()});
         }
 
@@ -1633,12 +1633,12 @@ protected:
     }
 
     void InternalError(const NYql::TIssues& issues) {
-        YDB_LOG_ERROR_COMP(NKikimrServices::KQP_EXECUTER, "",
+        YDB_LOG_ERROR_COMP(NKikimrServices::KQP_EXECUTER, "Internal error during transaction execution",
             {"marker", "KQPEX"},
             {"actorId", SelfId()},
             {"txId", TxId},
             {"ctx", *GetUserRequestContext()},
-            {"#_issues.ToOneLineString", issues.ToOneLineString()},
+            {"issues", issues.ToOneLineString()},
             {"traceId", TraceId()});
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         for (const NYql::TIssue& i : issues) {
@@ -1652,12 +1652,12 @@ protected:
     }
 
     void ReplyUnavailable(const TString& message) {
-        YDB_LOG_ERROR_COMP(NKikimrServices::KQP_EXECUTER, "",
+        YDB_LOG_ERROR_COMP(NKikimrServices::KQP_EXECUTER, "Replying unavailable to client",
             {"marker", "KQPEX"},
             {"actorId", SelfId()},
             {"txId", TxId},
             {"ctx", *GetUserRequestContext()},
-            {"UNAVAILABLE", message},
+            {"message", message},
             {"traceId", TraceId()});
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);
         issue.AddSubIssue(new NYql::TIssue(message));
@@ -1845,7 +1845,7 @@ protected:
                     if (Stats->CollectStatsByLongTasks) {
                         const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
                         if (!txPlansWithStats.empty()) {
-                            YDB_LOG_INFO_COMP(NKikimrServices::KQP_EXECUTER, "Full",
+                            YDB_LOG_INFO_COMP(NKikimrServices::KQP_EXECUTER, "Collected full query stats for long task",
                                 {"marker", "KQPEX"},
                                 {"actorId", SelfId()},
                                 {"txId", TxId},

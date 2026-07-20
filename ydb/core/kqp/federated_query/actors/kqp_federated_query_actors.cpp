@@ -198,11 +198,11 @@ private:
                 .Database(state->Database)
                 .SslCredentials(NYdb::TSslCredentials(state->Ssl, state->CaCert))
                 .AuthToken(state->Token);
-            YDB_LOG_DEBUG_CTX(*actorSystem, "DescribeResourceId: DescribeTable",
+            YDB_LOG_DEBUG_CTX(*actorSystem, "DescribeResourceId: describing table",
                 {"selfId", selfId},
-                {"#_state->Database", state->Database},
-                {"#_state->Endpoint", state->Endpoint},
-                {"#_num_0", (state->Ssl ? " (Ssl)" : "")});
+                {"database", state->Database},
+                {"endpoint", state->Endpoint},
+                {"sslEnabled", state->Ssl});
             NYdb::NTable::TTableClient tableClient(*Driver, settings);
             tableClient.GetSession().Subscribe([actorSystem, selfId, state](const NYdb::NTable::TAsyncCreateSessionResult& future) mutable {
                 try {

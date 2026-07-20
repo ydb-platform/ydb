@@ -65,9 +65,9 @@ public:
             int i = 0;
             for (auto& [_, entry] : event->InfoEntries) {
                 Y_PROTOBUF_SUPPRESS_NODISCARD resources[i].ParseFromString(entry.Payload);
-                YDB_LOG_DEBUG("WhiteBoard",
-                    {"i", i},
-                    {"#_]", resources[i].ShortDebugString()});
+                YDB_LOG_DEBUG("WhiteBoard resource entry",
+                    {"index", i},
+                    {"resource", resources[i].ShortDebugString()});
                 i++;
             }
         } else {

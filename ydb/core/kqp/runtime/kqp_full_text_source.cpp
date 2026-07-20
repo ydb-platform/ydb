@@ -2127,10 +2127,10 @@ public:
             }
         }
 
-        YDB_LOG_DEBUG("Sending ack for read seqno",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_DEBUG("Sending read ack for sequence number",
+            {"logPrefix", this->LogPrefix},
             {"readId", readId},
-            {"#_readInfo.LastSeqNo", readInfo.LastSeqNo});
+            {"lastSeqNo", readInfo.LastSeqNo});
 
         bool newPipe = PipesCreated.insert(shardId).second;
         TlsActivationContext->Send(new NActors::IEventHandle(
@@ -2149,11 +2149,11 @@ public:
         auto readId = request->Record.GetReadId();
         const bool needToCreatePipe = PipesCreated.insert(shardId).second;
 
-        YDB_LOG_DEBUG("Send EvRead (full text source) to readId",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_DEBUG("Sending EvRead request from full text source",
+            {"logPrefix", this->LogPrefix},
             {"shardId", shardId},
-            {"#_record.GetReadId", record.GetReadId()},
-            {"#_snapshot=(txid", record.GetSnapshot().GetTxId()},
+            {"readId", record.GetReadId()},
+            {"snapshotTxId", record.GetSnapshot().GetTxId()},
             {"step", record.GetSnapshot().GetStep()},
             {"lockTxId", record.GetLockTxId()},
             {"lockNodeId", record.GetLockNodeId()});
@@ -2851,12 +2851,12 @@ private:
                 }
             }
             if (IsNgram && bestTokenLimit < Words.size()) {
-                YDB_LOG_INFO("Selecting balanced ngrams out of vs",
-                    {"#_this->LogPrefix", this->LogPrefix},
+                YDB_LOG_INFO("Selecting balanced ngrams from token frequency list",
+                    {"logPrefix", this->LogPrefix},
                     {"bestTokenLimit", bestTokenLimit},
-                    {"#_Words.size", Words.size()},
-                    {"#_(imbalance", Words[byFreq[0]]->Frequency},
-                    {"#_Words[byFreq[bestTokenLimit]]->Frequency", Words[byFreq[bestTokenLimit]]->Frequency});
+                    {"wordCount", Words.size()},
+                    {"maxFrequency", Words[byFreq[0]]->Frequency},
+                    {"cutoffFrequency", Words[byFreq[bestTokenLimit]]->Frequency});
                 TVector<TWordStatePtr> newWords;
                 for (size_t i = 0; i < bestTokenLimit; i++) {
                     newWords.emplace_back(std::move(Words[byFreq[i]]));
@@ -2864,12 +2864,12 @@ private:
                 }
                 std::swap(Words, newWords);
             } else if (MainTableReader->GetWithRelevance() && bestTokenLimit < Words.size() && defaultOperator == EDefaultOperator::And) {
-                YDB_LOG_INFO("Selecting balanced tokens out of vs",
-                    {"#_this->LogPrefix", this->LogPrefix},
+                YDB_LOG_INFO("Selecting balanced tokens from token frequency list",
+                    {"logPrefix", this->LogPrefix},
                     {"bestTokenLimit", bestTokenLimit},
-                    {"#_Words.size", Words.size()},
-                    {"#_(imbalance", Words[byFreq[0]]->Frequency},
-                    {"#_Words[byFreq[bestTokenLimit]]->Frequency", Words[byFreq[bestTokenLimit]]->Frequency});
+                    {"wordCount", Words.size()},
+                    {"maxFrequency", Words[byFreq[0]]->Frequency},
+                    {"cutoffFrequency", Words[byFreq[bestTokenLimit]]->Frequency});
 
                 needL2Layer = true;
                 TVector<TWordStatePtr> newWords;
@@ -3317,8 +3317,8 @@ public:
     // Handle broken pipe to a datashard tablet.
     // Resets pipe tracking and schedules a retry for all reads on that shard.
     void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        YDB_LOG_ERROR("TEvDeliveryProblem was received",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_ERROR("Received TEvDeliveryProblem from datashard",
+            {"logPrefix", this->LogPrefix},
             {"tablet", ev->Get()->TabletId});
 
         ui64 shardId = ev->Get()->TabletId;
@@ -3334,15 +3334,15 @@ public:
     //   - If relevance mode: read stats + dict tables, then proceed to StartWordReads.
     //   - If plain mode: go directly to StartWordReads.
     void HandleResolve(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        YDB_LOG_DEBUG("TEvResolveKeySetResult was received for table",
-            {"#_this->LogPrefix", this->LogPrefix});
+        YDB_LOG_DEBUG("Received TEvResolveKeySetResult",
+            {"logPrefix", this->LogPrefix});
         ResolveInProgress = false;
 
         if (ev->Get()->Request->ErrorCount > 0) {
             for(const auto& entry : ev->Get()->Request->ResultSet) {
-                YDB_LOG_ERROR("Table error",
-                    {"#_this->LogPrefix", this->LogPrefix},
-                    {"#_entry.KeyDescription->TableId", entry.KeyDescription->TableId},
+                YDB_LOG_ERROR("Table resolve error",
+                    {"logPrefix", this->LogPrefix},
+                    {"tableId", entry.KeyDescription->TableId},
                     {"status", entry.Status});
             }
 
@@ -3681,8 +3681,8 @@ public:
         L1MergedDocuments.insert(L1MergedDocuments.end(), l1matched.begin(), l1matched.end());
 
         std::vector<TDocInfoPtr> matches = L2MergeAlgo->FindMatches();
-        YDB_LOG_DEBUG("L2Merge",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_DEBUG("Running L2 merge step",
+            {"logPrefix", this->LogPrefix},
             {"done", L2MergeAlgo->Done()});
         MergeL2MatchFrequencies(matches);
         FetchDocumentDetails(matches);
@@ -3864,14 +3864,14 @@ public:
         NYql::IssuesFromMessage(record.GetStatus().GetIssues(), shardIssues);
         const TString tablePath = GetReadTablePath(static_cast<EReadKind>(readInfo.ReadKind));
 
-        YDB_LOG_WARN("Read result error, Issues=[",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_WARN("Read result returned an error",
+            {"logPrefix", this->LogPrefix},
             {"readId", readId},
             {"shardId", shardId},
             {"readKind", ReadKindName(static_cast<EReadKind>(readInfo.ReadKind))},
             {"table", tablePath},
             {"status", Ydb::StatusIds::StatusCode_Name(statusCode)},
-            {"#_shardIssues.ToOneLineString", shardIssues.ToOneLineString()});
+            {"issues", shardIssues.ToOneLineString()});
 
         switch (statusCode) {
             case Ydb::StatusIds::OVERLOADED: {
@@ -3925,8 +3925,8 @@ public:
             borkenTxlocks << lock.ShortDebugString();
         }
 
-        YDB_LOG_DEBUG("Recv TEvReadResult (full text source)",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_DEBUG("Received TEvReadResult from full text source",
+            {"logPrefix", this->LogPrefix},
             {"cookie", readInfo.Cookie},
             {"readKind", (ui32)readInfo.ReadKind},
             {"shardId", readInfo.ShardId},

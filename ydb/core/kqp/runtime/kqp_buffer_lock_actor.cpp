@@ -70,8 +70,8 @@ public:
     }
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("Start buffer lock actor",
-            {"#_this->LogPrefix", this->LogPrefix});
+        YDB_LOG_DEBUG("Starting buffer lock actor",
+            {"logPrefix", this->LogPrefix});
 
         Settings.Counters->StreamLookupActorsCount->Inc();
         Become(&TKqpBufferLockActor::StateFunc);
@@ -81,7 +81,7 @@ public:
 
     void PassAway() final {
         Settings.Counters->StreamLookupActorsCount->Dec();
-        
+
         if (!LockSendTime.empty()) {
             TInstant now = AppData()->TimeProvider->Now();
             TDuration maxInFlightTime = TDuration::Zero();
@@ -254,8 +254,8 @@ public:
         Settings.Counters->SentLocks->Inc();
         auto& record = request->Record;
 
-        YDB_LOG_DEBUG("Start locking of",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_DEBUG("Starting row lock request",
+            {"logPrefix", this->LogPrefix},
             {"table", Settings.TablePath},
             {"requestId", record.GetRequestId()},
             {"shardId", shardId});
@@ -288,7 +288,7 @@ public:
                 .ShardId = shardId,
                 .Blocked = false,
             }).second);
-        
+
         LockSendTime[requestId] = AppData()->TimeProvider->Now();
     }
 
@@ -297,8 +297,8 @@ public:
 
         auto requestIt = LockIdToState.find(record.GetRequestId());
         if (requestIt == LockIdToState.end() || requestIt->second.Blocked) {
-            YDB_LOG_DEBUG("Drop lock with because it's already completed or blocked",
-                {"#_this->LogPrefix", this->LogPrefix},
+            YDB_LOG_DEBUG("Dropping lock request because it is already completed or blocked",
+                {"logPrefix", this->LogPrefix},
                 {"requestId", record.GetRequestId()});
             return;
         }
@@ -315,15 +315,15 @@ public:
         AFL_ENSURE(lockState.Worker);
         AFL_ENSURE(lockState.LocksInflight > 0);
 
-        YDB_LOG_DEBUG("Recv TEvLockRowsResult (buffer lock) from Table",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_DEBUG("Received TEvLockRowsResult for buffer lock",
+            {"logPrefix", this->LogPrefix},
             {"shardID", shardId},
-            {"#_Settings.TablePath", Settings.TablePath},
+            {"tablePath", Settings.TablePath},
             {"requestId", record.GetRequestId()},
             {"status", NKikimrDataEvents::TEvLockRowsResult::EStatus_Name(record.GetStatus())});
 
         ui64 requestId = record.GetRequestId();
-        
+
         if (auto it = LockSendTime.find(requestId); it != LockSendTime.end()) {
             Settings.Counters->LockLatencyHistogram->Collect((AppData()->TimeProvider->Now() - it->second).MilliSeconds());
             LockSendTime.erase(it);
@@ -339,8 +339,8 @@ public:
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS:
                 break;
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN: {
-                YDB_LOG_DEBUG("STATUS_LOCKS_BROKEN",
-                    {"#_this->LogPrefix", this->LogPrefix},
+                YDB_LOG_DEBUG("Received STATUS_LOCKS_BROKEN from datashard",
+                    {"logPrefix", this->LogPrefix},
                     {"shard", shardId});
                 BrokenLocksCount += record.GetLocks().size();
                 Settings.TxManager->SetError(shardId);
@@ -350,8 +350,8 @@ public:
                 return;
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_OVERLOADED: {
-                YDB_LOG_DEBUG("STATUS_OVERLOADED",
-                    {"#_this->LogPrefix", this->LogPrefix},
+                YDB_LOG_DEBUG("Received STATUS_OVERLOADED from datashard",
+                    {"logPrefix", this->LogPrefix},
                     {"shard", shardId});
                 if (!RetryLockRequest(record.GetRequestId(), false)) {
                     return RuntimeError(
@@ -363,8 +363,8 @@ public:
                 return;
             }
             case NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK: {
-                YDB_LOG_DEBUG("STATUS_DEADLOCK",
-                    {"#_this->LogPrefix", this->LogPrefix},
+                YDB_LOG_DEBUG("Received STATUS_DEADLOCK from datashard",
+                    {"logPrefix", this->LogPrefix},
                     {"shard", shardId});
                 return RuntimeError(
                     NYql::NDqProto::StatusIds::ABORTED,
@@ -437,8 +437,8 @@ public:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        YDB_LOG_DEBUG("TEvDeliveryProblem was received",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_DEBUG("Received TEvDeliveryProblem from datashard",
+            {"logPrefix", this->LogPrefix},
             {"tablet", ev->Get()->TabletId});
         ShardToState.at(ev->Get()->TabletId).HasPipe = false;
 
@@ -468,7 +468,7 @@ public:
         auto requestIt = LockIdToState.find(failedRequestId);
         if (requestIt == LockIdToState.end()) {
             YDB_LOG_DEBUG("Received retry request for already finished/non-existing request",
-                {"#_this->LogPrefix", this->LogPrefix},
+                {"logPrefix", this->LogPrefix},
                 {"requestId", failedRequestId});
             return;
         }
@@ -481,8 +481,8 @@ public:
     bool RetryLockRequest(const ui64 failedRequestId, bool allowInstantRetry) {
         auto& failedRequest = LockIdToState.at(failedRequestId);
         auto& lockState = CookieToLockState.at(failedRequest.LockCookie);
-        YDB_LOG_DEBUG("Retry locking of",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_DEBUG("Retrying row lock request",
+            {"logPrefix", this->LogPrefix},
             {"table", Settings.TablePath},
             {"failedRequestId", failedRequestId},
             {"shardId", failedRequest.ShardId});

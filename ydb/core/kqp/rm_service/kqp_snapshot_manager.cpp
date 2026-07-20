@@ -148,9 +148,9 @@ private:
         if (status == EStatus::ExecComplete && msg->Record.GetStatusCode() == NKikimrIssues::TStatusIds::SUCCESS) {
             Snapshot = IKqpGateway::TKqpSnapshot(msg->Record.GetStep(), msg->Record.GetTxId());
 
-            YDB_LOG_DEBUG("KqpSnapshotManager: snapshot created in cleanup state. Send discard",
-                {"#_Snapshot.Step", Snapshot.Step},
-                {"#_Snapshot.TxId", Snapshot.TxId});
+            YDB_LOG_DEBUG("Snapshot manager created snapshot in cleanup state and will discard it",
+                {"snapshotStep", Snapshot.Step},
+                {"snapshotTxId", Snapshot.TxId});
 
             SendDiscard();
         }
@@ -177,9 +177,9 @@ private:
         if (status == EStatus::ExecComplete && msg->Record.GetStatusCode() == NKikimrIssues::TStatusIds::SUCCESS) {
             Snapshot = IKqpGateway::TKqpSnapshot(msg->Record.GetStep(), msg->Record.GetTxId());
 
-            YDB_LOG_DEBUG("KqpSnapshotManager: snapshot created",
-                {"#_Snapshot.Step", Snapshot.Step},
-                {"#_Snapshot.TxId", Snapshot.TxId});
+            YDB_LOG_DEBUG("Snapshot manager created snapshot",
+                {"snapshotStep", Snapshot.Step},
+                {"snapshotTxId", Snapshot.TxId});
 
             Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
                 Snapshot, TSnapshotHandle(), NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}, std::move(Orbit)),

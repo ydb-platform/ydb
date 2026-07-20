@@ -440,11 +440,11 @@ private:
                 return true;
         }
 
-        YDB_LOG_NOTICE("Legacy YQL request query",
+        YDB_LOG_NOTICE("Received legacy YQL request",
             {"logPrefix", LogPrefix()},
             {"action", (ui32)queryRequest->GetAction()},
             {"type", (ui32)queryRequest->GetType()},
-            {"#_queryRequest->GetQuery().substr(0, 1000)", queryRequest->GetQuery().substr(0, 1000)});
+            {"queryPreview", queryRequest->GetQuery().substr(0, 1000)});
 
         return false;
     }
@@ -871,7 +871,7 @@ private:
     bool ReplyProcessError(const TActorId& sender, ui64 proxyRequestId,
         Ydb::StatusIds::StatusCode ydbStatus, const TString& message)
     {
-        YDB_LOG_WARN("",
+        YDB_LOG_WARN("Replying with process error",
             {"logPrefix", LogPrefix()},
             {"message", message});
         auto response = std::make_unique<TEvKqp::TEvQueryResponse>();

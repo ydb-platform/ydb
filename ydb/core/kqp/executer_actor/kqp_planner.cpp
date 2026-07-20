@@ -36,11 +36,11 @@ template <class TCollection>
 std::unique_ptr<TEvKqp::TEvAbortExecution> CheckTaskSize(ui64 TxId, const TIntrusivePtr<TUserRequestContext>& UserRequestContext, const TCollection& tasks) {
     for (const auto& task : tasks) {
         if (ui32 size = task.ByteSize(); size > GetMaxTaskSize()) {
-            YDB_LOG_ERROR("Abort execution. Task size is too >",
+            YDB_LOG_ERROR("Abort execution: task size exceeds limit",
                 {"txId", TxId},
                 {"ctx", *UserRequestContext},
-                {"#_task.GetId", task.GetId()},
-                {"big", size},
+                {"taskId", task.GetId()},
+                {"taskSize", size},
                 {"maxTaskSize", GetMaxTaskSize()});
             return std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::LIMIT_EXCEEDED,
                 TStringBuilder() << "Datashard program size limit exceeded (" << size << " > " << GetMaxTaskSize() << ")");
@@ -455,13 +455,13 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
     auto ctx = TlsActivationContext->AsActorContext();
     if (ctx.LoggerSettings() && ctx.LoggerSettings()->Satisfies(NActors::NLog::PRI_DEBUG, NKikimrServices::KQP_EXECUTER)) {
-        planner->SetLogFunc([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { YDB_LOG_DEBUG("",
+        planner->SetLogFunc([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { YDB_LOG_DEBUG("Planner debug message",
                                                                                                           {"txId", TxId},
                                                                                                           {"ctx", *UserRequestContext},
                                                                                                           {"msg", msg}); });
     }
 
-    LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { YDB_LOG_DEBUG("",
+    LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { YDB_LOG_DEBUG("Memory statistics before task planning",
                                                                                                       {"txId", TxId},
                                                                                                       {"ctx", *UserRequestContext},
                                                                                                       {"msg", msg}); });
@@ -499,7 +499,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
     }
 
     if (plan.empty()) {
-        LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { YDB_LOG_ERROR("",
+        LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { YDB_LOG_ERROR("Memory statistics after failed task planning",
                                                                                                           {"txId", TxId},
                                                                                                           {"ctx", *UserRequestContext},
                                                                                                           {"msg", msg}); });
@@ -623,17 +623,17 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
 
     const auto scanTasksCount = TasksGraph.GetTasks().size() - UnassignedTasks.size();
 
-    YDB_LOG_DEBUG("Total scan tasks on nodes MayRunTasksLocally snapshot",
+    YDB_LOG_DEBUG("Task placement snapshot after planning",
         {"txId", TxId},
         {"ctx", *UserRequestContext},
         {"tasks", TasksGraph.GetTasks().size()},
         {"readOnly", true},
         {"scanTasksCount", scanTasksCount},
-        {"#_TasksPerNode.size", TasksPerNode.size()},
+        {"tasksPerNodeCount", TasksPerNode.size()},
         {"localComputeTasks", TasksGraph.GetMeta().LocalComputeTasks},
-        {"#_TasksGraph.GetMeta().MayRunTasksLocally", TasksGraph.GetMeta().MayRunTasksLocally},
-        {"#_GetSnapshot().TxId", GetSnapshot().TxId},
-        {"#_GetSnapshot().Step", GetSnapshot().Step});
+        {"mayRunTasksLocally", TasksGraph.GetMeta().MayRunTasksLocally},
+        {"snapshotTxId", GetSnapshot().TxId},
+        {"snapshotStep", GetSnapshot().Step});
 
     PrepareCheckpoints();
 
@@ -713,10 +713,10 @@ void TKqpPlanner::PrepareCheckpoints() {
             break;
         }
     }
-    YDB_LOG_DEBUG("PrepareCheckpoints: has streaming",
+    YDB_LOG_DEBUG("PrepareCheckpoints: checked streaming ingress",
         {"txId", TxId},
         {"ctx", *UserRequestContext},
-        {"ingress", hasStreamingIngress});
+        {"hasStreamingIngress", hasStreamingIngress});
     if (!hasStreamingIngress) {
         CheckpointCoordinatorId = TActorId{};
         return;
@@ -908,11 +908,11 @@ void TKqpPlanner::PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui6
 void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& task, THashMap<TActorId, THashSet<ui64>>& updates) {
     YQL_ENSURE(task.ComputeActorId);
 
-    YDB_LOG_DEBUG("Collect channels updates for at actor",
+    YDB_LOG_DEBUG("Collecting channel updates for compute actor",
         {"txId", TxId},
         {"ctx", *UserRequestContext},
-        {"task", task.Id},
-        {"#_task.ComputeActorId", task.ComputeActorId});
+        {"taskId", task.Id},
+        {"computeActorId", task.ComputeActorId});
 
     auto& selfUpdates = updates[task.ComputeActorId];
 
@@ -928,13 +928,13 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
                 selfUpdates.emplace(channelId);
             }
 
-            YDB_LOG_DEBUG("Input src at actor",
+            YDB_LOG_DEBUG("Collecting input channel update for compute actor",
                 {"txId", TxId},
                 {"ctx", *UserRequestContext},
-                {"task", task.Id},
+                {"taskId", task.Id},
                 {"channelId", channelId},
-                {"#_dup_task", channel.SrcTask},
-                {"#_srcTask.ComputeActorId", srcTask.ComputeActorId});
+                {"srcTaskId", channel.SrcTask},
+                {"srcComputeActorId", srcTask.ComputeActorId});
         }
     }
 
@@ -952,13 +952,13 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
                     updates[dstTask.ComputeActorId].emplace(channelId);
                 }
 
-                YDB_LOG_DEBUG("Output dst at actor",
+                YDB_LOG_DEBUG("Collecting output channel update for compute actor",
                     {"txId", TxId},
                     {"ctx", *UserRequestContext},
-                    {"task", task.Id},
+                    {"taskId", task.Id},
                     {"channelId", channelId},
-                    {"#_dup_task", channel.DstTask},
-                    {"#_dstTask.ComputeActorId", dstTask.ComputeActorId});
+                    {"dstTaskId", channel.DstTask},
+                    {"dstComputeActorId", dstTask.ComputeActorId});
             }
         }
     }
@@ -972,10 +972,10 @@ void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
     auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         if (!dqTask.ComputeActorId) {
-            YDB_LOG_WARN("Skip sending TEvReadyState to checkpoint coordinator task has no ComputeActorId (node disconnected / task not started)",
+            YDB_LOG_WARN("Skip sending TEvReadyState to checkpoint coordinator: task has no compute actor id (node disconnected or task not started)",
                 {"txId", TxId},
                 {"ctx", *UserRequestContext},
-                {"#_dqTask.Id", dqTask.Id});
+                {"taskId", dqTask.Id});
             return;
         }
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);

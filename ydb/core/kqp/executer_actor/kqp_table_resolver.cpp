@@ -42,9 +42,9 @@ private:
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleResolveNames);
             hFunc(TEvents::TEvPoison, HandleResolveNames);
             default: {
-                YDB_LOG_CRIT("ResolveKeysState: unexpected event",
+                YDB_LOG_CRIT("ResolveNamesState: unexpected event",
                     {"txId", TxId},
-                    {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                    {"eventType", ev->GetTypeRewrite()});
                 GotUnexpectedEvent = ev->GetTypeRewrite();
             }
         }
@@ -58,7 +58,7 @@ private:
             default: {
                 YDB_LOG_CRIT("ResolveKeysState: unexpected event",
                     {"txId", TxId},
-                    {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+                    {"eventType", ev->GetTypeRewrite()});
                 GotUnexpectedEvent = ev->GetTypeRewrite();
             }
         }
@@ -505,11 +505,11 @@ private:
 
 private:
     void UnexpectedEvent(const TString& state, ui32 eventType) {
-        YDB_LOG_CRIT("TKqpTableResolver, unexpected",
+        YDB_LOG_CRIT("TKqpTableResolver received unexpected event",
             {"txId", TxId},
-            {"event", eventType},
+            {"eventType", eventType},
             {"state", state},
-            {"self", SelfId()});
+            {"selfId", SelfId()});
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, std::move(issue));
     }

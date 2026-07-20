@@ -104,7 +104,7 @@ public:
             memoryLimits.ChannelBufferSize = std::max<ui32>(estimation.ChannelBufferMemoryLimit / std::max<ui32>(1, inputChannelsCount), MinChannelBufferSize.load());
             memoryLimits.OutputChunkMaxSize = args.OutputChunkMaxSize;
             memoryLimits.ChunkSizeLimit = ChannelChunkSizeLimit.load();
-            YDB_LOG_DEBUG("",
+            YDB_LOG_DEBUG("Computed compute actor channel memory limits",
                 {"event", "channel_info"},
                 {"chSize", estimation.ChannelBufferMemoryLimit},
                 {"chCount", estimation.ChannelBuffersCount},
@@ -137,7 +137,7 @@ public:
 
         runtimeSettings.TerminateHandler = [state=args.State, txId=args.TxId, executerId=args.ExecuterId, taskId=args.Task->GetId()]
             (bool success, const NYql::TIssues& issues) {
-                YDB_LOG_DEBUG("",
+                YDB_LOG_DEBUG("Compute actor terminated",
                     {"problem", "finish_compute_actor"},
                     {"txId", txId},
                     {"taskId", taskId},

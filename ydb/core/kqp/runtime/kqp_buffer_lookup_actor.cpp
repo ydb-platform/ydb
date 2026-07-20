@@ -77,8 +77,8 @@ public:
     }
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("Start buffer lookup actor",
-            {"#_this->LogPrefix", this->LogPrefix});
+        YDB_LOG_DEBUG("Starting buffer lookup actor",
+            {"logPrefix", this->LogPrefix});
 
         Settings.Counters->StreamLookupActorsCount->Inc();
         Become(&TKqpBufferLookupActor::StateFunc);
@@ -328,8 +328,8 @@ public:
 
         auto& worker = CookieToLookupState.at(cookie).Worker;
 
-        YDB_LOG_DEBUG("Start reading of",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_DEBUG("Starting table read for buffer lookup",
+            {"logPrefix", this->LogPrefix},
             {"table", worker->GetTablePath()},
             {"readId", record.GetReadId()},
             {"shardId", shardId});
@@ -364,12 +364,12 @@ public:
         record.SetMaxBytes(defaultSettings.GetMaxBytes());
         record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
 
-        YDB_LOG_DEBUG("Send EvRead (buffer lookup) to readId",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_DEBUG("Sending EvRead request for buffer lookup",
+            {"logPrefix", this->LogPrefix},
             {"shardId", shardId},
-            {"#_record.GetReadId", record.GetReadId()},
+            {"readId", record.GetReadId()},
             {"tablePath", worker->GetTablePath()},
-            {"#_snapshot=(txid", record.GetSnapshot().GetTxId()},
+            {"snapshotTxId", record.GetSnapshot().GetTxId()},
             {"step", record.GetSnapshot().GetStep()},
             {"lockTxId", record.GetLockTxId()},
             {"lockNodeId", record.GetLockNodeId()});
@@ -411,8 +411,8 @@ public:
 
         auto readIt = ReadIdToState.find(record.GetReadId());
         if (readIt == ReadIdToState.end() || readIt->second.Blocked) {
-            YDB_LOG_DEBUG("Drop read with because it's already completed or blocked",
-                {"#_this->LogPrefix", this->LogPrefix},
+            YDB_LOG_DEBUG("Dropping read because it is already completed or blocked",
+                {"logPrefix", this->LogPrefix},
                 {"readId", record.GetReadId()});
             return;
         }
@@ -439,12 +439,12 @@ public:
             borkenTxLocks << lock.ShortDebugString();
         }
 
-        YDB_LOG_DEBUG("Recv TEvReadResult (buffer lookup) from Table (current",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_DEBUG("Received TEvReadResult for buffer lookup",
+            {"logPrefix", this->LogPrefix},
             {"shardID", shardId},
-            {"#_lookupState.Worker->GetTablePath", lookupState.Worker->GetTablePath()},
-            {"#_,_ReadId", record.GetReadId()},
-            {"#_(current_ReadId", ReadId},
+            {"tablePath", lookupState.Worker->GetTablePath()},
+            {"readId", record.GetReadId()},
+            {"currentReadId", ReadId},
             {"seqNo", record.GetSeqNo()},
             {"status", Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())},
             {"finished", record.GetFinished()},
@@ -494,10 +494,10 @@ public:
                     getIssues());
             }
             case Ydb::StatusIds::OVERLOADED: {
-                YDB_LOG_DEBUG("OVERLOADED was received",
-                    {"#_this->LogPrefix", this->LogPrefix},
+                YDB_LOG_DEBUG("Received OVERLOADED status from datashard",
+                    {"logPrefix", this->LogPrefix},
                     {"tablet", shardId},
-                    {"#_getIssues().ToOneLineString", getIssues().ToOneLineString()});
+                    {"issues", getIssues().ToOneLineString()});
                 const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
                     ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
                     : std::nullopt;
@@ -512,10 +512,10 @@ public:
                 return;
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
-                YDB_LOG_DEBUG("INTERNAL_ERROR was received",
-                    {"#_this->LogPrefix", this->LogPrefix},
+                YDB_LOG_DEBUG("Received INTERNAL_ERROR status from datashard",
+                    {"logPrefix", this->LogPrefix},
                     {"tablet", shardId},
-                    {"#_getIssues().ToOneLineString", getIssues().ToOneLineString()});
+                    {"issues", getIssues().ToOneLineString()});
                 if (!RetryTableRead(record.GetReadId(), true)) {
                     return RuntimeError(
                         NYql::NDqProto::StatusIds::INTERNAL_ERROR,
@@ -578,8 +578,8 @@ public:
                 LookupActorSpan.GetTraceId());
 
             shardState.HasPipe = true;
-            YDB_LOG_DEBUG("TEvReadAck was sent",
-                {"#_this->LogPrefix", this->LogPrefix},
+            YDB_LOG_DEBUG("Sent TEvReadAck to datashard",
+                {"logPrefix", this->LogPrefix},
                 {"shard", shardId});
         }
 
@@ -601,8 +601,8 @@ public:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        YDB_LOG_DEBUG("TEvDeliveryProblem was received",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_DEBUG("Received TEvDeliveryProblem from datashard",
+            {"logPrefix", this->LogPrefix},
             {"tablet", ev->Get()->TabletId});
         ShardToState.at(ev->Get()->TabletId).HasPipe = false;
 
@@ -633,7 +633,7 @@ public:
         auto readIt = ReadIdToState.find(failedReadId);
         if (readIt == ReadIdToState.end()) {
             YDB_LOG_DEBUG("Received retry request for already finished/non-existing read",
-                {"#_this->LogPrefix", this->LogPrefix},
+                {"logPrefix", this->LogPrefix},
                 {"readId", failedReadId});
             return;
         }
@@ -649,8 +649,8 @@ public:
     bool RetryTableRead(const ui64 failedReadId, bool allowInstantRetry, std::optional<TDuration> throttleDelay = std::nullopt) {
         auto& failedRead = ReadIdToState.at(failedReadId);
         auto& lookupState = CookieToLookupState.at(failedRead.LookupCookie);
-        YDB_LOG_DEBUG("Retry reading of",
-            {"#_this->LogPrefix", this->LogPrefix},
+        YDB_LOG_DEBUG("Retrying table read for buffer lookup",
+            {"logPrefix", this->LogPrefix},
             {"table", lookupState.Worker->GetTablePath()},
             {"failedReadId", failedReadId},
             {"shardId", failedRead.ShardId});

@@ -2481,7 +2481,7 @@ public:
             YDB_LOG_DEBUG("Forwarded TEvExecuterProgress",
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
-                {"#_QueryState->RequestActorId", QueryState->RequestActorId},
+                {"requestActorId", QueryState->RequestActorId},
                 {"traceId", TraceId()});
             Send(QueryState->RequestActorId, ev->Release().Release(), 0, QueryState->ProxyRequestId);
         }
@@ -2831,7 +2831,7 @@ public:
         YDB_LOG_DEBUG("Forwarded TEvStreamData",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
-            {"#_QueryState->RequestActorId", QueryState->RequestActorId},
+            {"requestActorId", QueryState->RequestActorId},
             {"traceId", TraceId()});
 
         QueryState->QueryData->AddBuiltResultIndex(ev->Get()->Record.GetQueryResultIndex());
@@ -2886,7 +2886,7 @@ public:
                 {"traceId", TraceId()});
             return;
         } else {
-            YDB_LOG_WARN("",
+            YDB_LOG_WARN("Buffer actor reported error",
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
                 {"logMsg", logMsg},
@@ -2934,7 +2934,7 @@ public:
                 {"traceId", TraceId()});
             return;
         } else {
-            YDB_LOG_WARN("",
+            YDB_LOG_WARN("Buffer actor reported error, forwarding to executer",
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
                 {"logMsg", logMsg},

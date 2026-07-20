@@ -2448,6 +2448,24 @@ TVector<NJson::TJsonValue> RemoveRedundantNodes(NJson::TJsonValue& plan, const T
     return {plan};
 }
 
+void CopySimplifiedConnectionFields(const NJson::TJsonValue& from, NJson::TJsonValue& to) {
+    static const TVector<TString> fields = {
+        "Blocks",
+        "HashFunc",
+        "KeyColumns",
+        "Parallel",
+        "SortBy",
+        "SortColumns",
+    };
+
+    const auto& fromMap = from.GetMapSafe();
+    for (const auto& field : fields) {
+        if (auto it = fromMap.find(field); it != fromMap.end()) {
+            to[field] = it->second;
+        }
+    }
+}
+
 class TQueryPlanReconstructor {
 public:
     TQueryPlanReconstructor(
@@ -2463,7 +2481,7 @@ public:
     NJson::TJsonValue Reconstruct(
         const NJson::TJsonValue& plan
     ) {
-        auto reconstructed = ReconstructImpl(plan, 0, 0, false);
+        auto reconstructed = ReconstructImpl(plan, 0, 0, false, nullptr);
         return reconstructed;
     }
 
@@ -2472,15 +2490,20 @@ private:
         const NJson::TJsonValue& plan,
         int operatorIndex,
         int parentTaskCount,
-        bool fromBroadcast
+        bool fromBroadcast,
+        const NJson::TJsonValue* inheritedTableStats
     ) {
         int currentNodeId = NodeIDCounter++;
 
         int taskCount = parentTaskCount;
+        const NJson::TJsonValue* ownTableStats = nullptr;
         if (plan.GetMapSafe().contains("Stats")) {
             const auto& stats = plan.GetMapSafe().at("Stats").GetMapSafe();
             if (stats.contains("Tasks")) {
                 taskCount = stats.at("Tasks").GetIntegerSafe();
+            }
+            if (stats.contains("Table")) {
+                ownTableStats = &stats.at("Table");
             }
         }
 
@@ -2535,7 +2558,7 @@ private:
             lookupPlan["Operators"] = std::move(lookupOps);
 
 	        if (plan.GetMapSafe().contains("Plans")) {
-                newPlans.AppendValue(ReconstructImpl(plan.GetMapSafe().at("Plans").GetArraySafe()[0], 0, taskCount, false));
+                newPlans.AppendValue(ReconstructImpl(plan.GetMapSafe().at("Plans").GetArraySafe()[0], 0, taskCount, false, inheritedTableStats));
             }
 
             newPlans.AppendValue(std::move(lookupPlan));
@@ -2549,21 +2572,16 @@ private:
             NJson::TJsonValue planInputs;
 
             result["Node Type"] = plan.GetMapSafe().at("Node Type").GetStringSafe();
-
-            if (plan.GetMapSafe().at("Node Type") == "HashShuffle") {
-                    TStringBuilder stringBuilder;
-                    stringBuilder << "HashShuffle (" <<
-                        "KeyColumns: " << plan.GetMapSafe().at("KeyColumns") << ", " <<
-                        "HashFunc: "   << plan.GetMapSafe().at("HashFunc")
-                    << ")";
-
-                result["Node Type"] = stringBuilder;
+            if (result.GetMapSafe().contains("PlanNodeType")
+                && result.GetMapSafe().at("PlanNodeType") == "Connection")
+            {
+                CopySimplifiedConnectionFields(plan, result);
             }
 
             if (plan.GetMapSafe().contains("CTE Name")) {
                 auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
                 if (Precomputes.contains(precompute)) {
-                    planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false));
+                    planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false, nullptr));
                 }
             }
 
@@ -2601,10 +2619,10 @@ private:
                 if (!p.GetMapSafe().contains("Operators") && p.GetMapSafe().contains("CTE Name")) {
                     auto precompute = p.GetMapSafe().at("CTE Name").GetStringSafe();
                     if (Precomputes.contains(precompute)) {
-                        planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false));
+                        planInputs.AppendValue(ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false, nullptr));
                     }
                 } else if (p.GetMapSafe().at("Node Type").GetStringSafe().find("Precompute") == TString::npos) {
-                    planInputs.AppendValue(ReconstructImpl(p, 0, taskCount, fromBroadcast));
+                    planInputs.AppendValue(ReconstructImpl(p, 0, taskCount, fromBroadcast, inheritedTableStats));
                 }
             }
             result["Plans"] = planInputs;
@@ -2618,7 +2636,7 @@ private:
                 return result;
             }
 
-            return ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false);
+            return ReconstructImpl(Precomputes.at(precompute), 0, taskCount, false, nullptr);
         }
 
         auto ops = plan.GetMapSafe().at("Operators").GetArraySafe();
@@ -2641,7 +2659,7 @@ private:
                 processedExternalOperators.insert(inputPlanKey);
 
                 auto inputPlan = PlanIndex.at(inputPlanKey);
-                planInputs.push_back( ReconstructImpl(inputPlan, 0, taskCount, inputPlan.GetMapSafe().at("Node Type").GetStringSafe() == "Broadcast") );
+                planInputs.push_back( ReconstructImpl(inputPlan, 0, taskCount, inputPlan.GetMapSafe().at("Node Type").GetStringSafe() == "Broadcast", ownTableStats) );
             } else if (opInput.GetMapSafe().contains("InternalOperatorId")) {
                 auto inputPlanId = opInput.GetMapSafe().at("InternalOperatorId").GetIntegerSafe();
 
@@ -2650,7 +2668,7 @@ private:
                 }
                 processedInternalOperators.insert(inputPlanId);
 
-                planInputs.push_back( ReconstructImpl(plan, inputPlanId, taskCount, false) );
+                planInputs.push_back( ReconstructImpl(plan, inputPlanId, taskCount, false, inheritedTableStats) );
             }
         }
 
@@ -2683,17 +2701,44 @@ private:
             }
 
             if (Precomputes.contains(maybePrecompute) && planInputs.empty()) {
-                planInputs.push_back(ReconstructImpl(Precomputes.at(maybePrecompute), 0, taskCount, false));
+                planInputs.push_back(ReconstructImpl(Precomputes.at(maybePrecompute), 0, taskCount, false, nullptr));
             }
         }
 
         result["Node Type"] = opName;
 
+        auto operatorSize = false;
+        auto operatorRows = false;
+        const auto applyTableStats = [&](const NJson::TJsonValue& tableStats) {
+            TString tablePath;
+            if (op.GetMapSafe().contains("Path")) {
+                tablePath = op.GetMapSafe().at("Path").GetStringSafe();
+            } else if (op.GetMapSafe().contains("Table")) {
+                tablePath = op.GetMapSafe().at("Table").GetStringSafe();
+            }
+            if (tablePath) {
+                for (auto& opStat : tableStats.GetArraySafe()) {
+                    if (opStat.IsMap()) {
+                        auto& opMap = opStat.GetMapSafe();
+                        if (opMap.contains("Path") && opMap.at("Path").GetStringSafe() == tablePath) {
+                            if (opMap.contains("ReadRows")) {
+                                op["A-Rows"] = opMap.at("ReadRows").GetMapSafe().at("Sum").GetDouble();
+                                operatorRows = true;
+                            }
+                            if (opMap.contains("ReadBytes")) {
+                                op["A-Size"] = opMap.at("ReadBytes").GetMapSafe().at("Sum").GetDouble();
+                                operatorSize = true;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        };
+
         if (plan.GetMapSafe().contains("Stats")) {
             const auto& stats = plan.GetMapSafe().at("Stats").GetMapSafe();
 
-            auto operatorSize = false;
-            auto operatorRows = false;
             TString opType;
             TString opId = "0";
 
@@ -2742,31 +2787,8 @@ private:
                 }
             }
 
-            if (opName == "TableFullScan" && stats.contains("Table")) {
-                TString tablePath;
-                if (op.GetMapSafe().contains("Path")) {
-                    tablePath = op.GetMapSafe().at("Path").GetStringSafe();
-                } else if (op.GetMapSafe().contains("Table")) {
-                    tablePath = op.GetMapSafe().at("Table").GetStringSafe();
-                }
-                if (tablePath) {
-                    for (auto& opStat : stats.at("Table").GetArraySafe()) {
-                        if (opStat.IsMap()) {
-                            auto& opMap = opStat.GetMapSafe();
-                            if (opMap.contains("Path") && opMap.at("Path").GetStringSafe() == tablePath) {
-                                if (opMap.contains("ReadRows")) {
-                                    op["A-Rows"] = opMap.at("ReadRows").GetMapSafe().at("Sum").GetDouble();
-                                    operatorRows = true;
-                                }
-                                if (opMap.contains("ReadBytes")) {
-                                    op["A-Size"] = opMap.at("ReadBytes").GetMapSafe().at("Sum").GetDouble();
-                                    operatorRows = true;
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
+            if (opName == "TableFullScan" && ownTableStats) {
+                applyTableStats(*ownTableStats);
             }
 
             if (opType && stats.contains("Operator")) {
@@ -2824,6 +2846,10 @@ private:
                     op["A-SelfCpu"] = opCpuTime / 1000.0;
                 }
             }
+        }
+
+        if (opName == "TableFullScan" && !ownTableStats && inheritedTableStats) {
+            applyTableStats(*inheritedTableStats);
         }
 
         // erase some redundant info from the table scan

@@ -185,6 +185,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     bool ReadOnly = false;
 
+    bool SortFreeChunksHDD = true;
+
     // used for tests only
     std::optional<ui64> NonceRandNum;
 
@@ -192,12 +194,16 @@ struct TPDiskConfig : public TThrRefBase {
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
     {}
 
-    TPDiskConfig(TString path, ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
+    TPDiskConfig(TString path, ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory,
+            const NKikimrConfig::TFeatureFlags* featureFlags = nullptr)
         : Path(path)
         , PDiskGuid(pDiskGuid)
         , PDiskId(pdiskId)
         , PDiskCategory(pDiskCategory)
     {
+        if (featureFlags) {
+            FeatureFlags = *featureFlags;
+        }
         Initialize();
     }
 
@@ -458,6 +464,10 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasSeparateHugePriorities()) {
             SeparateHugePriorities = cfg->GetSeparateHugePriorities();
+        }
+
+        if (cfg->HasSortFreeChunksHDD()) {
+            SortFreeChunksHDD = cfg->GetSortFreeChunksHDD();
         }
     }
 

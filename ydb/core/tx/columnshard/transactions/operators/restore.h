@@ -13,6 +13,7 @@ private:
 
     std::shared_ptr<NOlap::NImport::TImportTask> ImportTask;
     bool TaskExists = false;
+    bool AlreadyCompleted = false;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddTask;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxRemove;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAbort;

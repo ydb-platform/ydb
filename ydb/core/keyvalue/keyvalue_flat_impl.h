@@ -3,6 +3,7 @@
 #include "keyvalue.h"
 
 #include "keyvalue_collector.h"
+#include "keyvalue_copy_blob.h"
 #include "keyvalue_scheme_flat.h"
 #include "keyvalue_simple_db.h"
 #include "keyvalue_simple_db_flat.h"
@@ -364,9 +365,66 @@ protected:
     KV_SIMPLE_TX(RegisterInitialGCCompletion);
     KV_SIMPLE_TX(CompleteGC);
 
+    struct TTxAdvanceMoveData : public NTabletFlatExecutor::ITransaction {
+        TKeyValueFlat* Self;
+        TVector<TLogoBlobID> TrashBeingCommitted;
+        std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> Result;
+
+        explicit TTxAdvanceMoveData(TKeyValueFlat* keyValueFlat)
+            : Self(keyValueFlat)
+        {}
+
+        bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TTxAdvanceMoveData Execute",
+                {"keyValue", txc.Tablet});
+
+            TSimpleDbFlat db(txc.DB, TrashBeingCommitted);
+            Result = Self->State.AdvanceMoveData(db, ctx);
+            return true;
+        }
+
+        void Complete(const TActorContext& ctx) override {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TTxAdvanceMoveData Complete",
+                {"keyValue", Self->TabletID()});
+            ctx.Send(Self->Tablet(), Result.release());
+        }
+    };
+
+    struct TTxBlobCopied : public NTabletFlatExecutor::ITransaction {
+        TKeyValueFlat* Self;
+        TVector<TLogoBlobID> TrashBeingCommitted;
+        TLogoBlobID BlobId;
+        TLogoBlobID NewBlobId;
+        std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> Result;
+
+        TTxBlobCopied(TKeyValueFlat* keyValueFlat, const TLogoBlobID& blobId, const TLogoBlobID& newBlobId)
+            : Self(keyValueFlat)
+            , BlobId(blobId)
+            , NewBlobId(newBlobId)
+        {}
+
+        bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TTxBlobCopied Execute",
+                {"keyValue", txc.Tablet},
+                {"blobId", BlobId.ToString()},
+                {"newBlobId", NewBlobId.ToString()});
+
+            TSimpleDbFlat db(txc.DB, TrashBeingCommitted);
+            Result = Self->State.BlobCopied(BlobId, NewBlobId, db, ctx);
+            return true;
+        }
+
+        void Complete(const TActorContext& ctx) override {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TTxBlobCopied Complete",
+                {"keyValue", Self->TabletID()});
+            ctx.Send(Self->Tablet(), Result.release());
+        }
+    };
+
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
     TActorId CollectorActorId;
+    TDeque<TEvTablet::TEvMoveData::TPtr> MoveDataRequestsQueue;
 
     void OnDetach(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "OnDetach",
@@ -491,7 +549,8 @@ protected:
             {"ev", event});
 
         CheckYellowChannels(ev->Get()->Stat);
-        State.OnRequestComplete(event.RequestUid, event.Generation, event.Step, ctx, Info(), event.Status, event.Stat);
+        State.OnRequestComplete(event.RequestUid, event.Generation, event.Step, ctx, Info(), event.Status, event.Stat,
+            event.AcquiredChannels);
         State.DropRefCountsOnError(event.RefCountsIncr, true, ctx);
         if (!event.RefCountsIncr.empty()) {
             Execute(new TTxDropRefCountsOnError(std::move(event.RefCountsIncr), this), ctx);
@@ -594,6 +653,59 @@ protected:
         Executor()->StartVacuum(ev->Get()->Generation);
     }
 
+    void Handle(TEvTablet::TEvMoveData::TPtr &ev) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "Handle TEvMoveData",
+            {"keyValue", TabletID()},
+            {"ev", ev->Get()->ToString()});
+
+        if (State.IsMoveDataInProgress()) {
+            MoveDataRequestsQueue.push_back(ev);
+            return;
+        }
+        // TODO: fill group list from event
+        TSet<ui32> moveDataGroups;
+        State.StartMoveData(std::move(moveDataGroups), ev->Sender);
+        Execute(new TTxAdvanceMoveData(this));
+    }
+
+    void Handle(TEvKeyValue::TEvAdvanceMoveDataResult::TPtr &ev) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "Handle TEvAdvanceMoveDataResult",
+            {"keyValue", TabletID()});
+
+        switch (ev->Get()->Result) {
+            case TEvKeyValue::TEvAdvanceMoveDataResult::EResult::COPY_BLOB: {
+                auto blobId = ev->Get()->BlobId;
+                 // TODO: use correct request uid
+                auto newBlobId = State.AllocateLogoBlobId(blobId.BlobSize(), blobId.Channel(), 0);
+                RegisterWithSameMailbox(CreateKeyValueCopyBlobActor(SelfId(), Info(), blobId, newBlobId));
+                break;
+            }
+            case TEvKeyValue::TEvAdvanceMoveDataResult::EResult::YIELD:
+            case TEvKeyValue::TEvAdvanceMoveDataResult::EResult::REPEAT:
+                Execute(new TTxAdvanceMoveData(this));
+                break;
+
+            case TEvKeyValue::TEvAdvanceMoveDataResult::EResult::FINISH:
+                if (!MoveDataRequestsQueue.empty()) {
+                    auto ev = MoveDataRequestsQueue.front();
+                    // TODO: fill group list from event
+                    TSet<ui32> moveDataGroups;
+                    State.StartMoveData(std::move(moveDataGroups), ev->Sender);
+                    MoveDataRequestsQueue.pop_front();
+
+                    Execute(new TTxAdvanceMoveData(this));
+                }
+                break;
+        }
+    }
+
+    void Handle(TEvKeyValue::TEvBlobCopied::TPtr &ev) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "Handle TEvBlobCopied",
+            {"keyValue", TabletID()});
+
+        Execute(new TTxBlobCopied(this, ev->Get()->BlobId, ev->Get()->NewBlobId));
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
@@ -612,6 +724,7 @@ public:
             >());
         State.SetupTabletCounters(counters);
         State.Clear();
+        State.SetTabletInfo(info);
     }
 
     virtual void HandleDie(const TActorContext &ctx)
@@ -671,6 +784,11 @@ public:
 
             hFunc(TEvKeyValue::TEvVacuumRequest, Handle);
             hFunc(TEvKeyValue::TEvForceTabletVacuum, Handle);
+
+            //hFunc(TEvTablet::TEvMoveData, Handle);
+            hFunc(TEvKeyValue::TEvAdvanceMoveDataResult, Handle);
+            hFunc(TEvKeyValue::TEvBlobCopied, Handle);
+
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "StateWork unexpected event",
@@ -697,6 +815,7 @@ public:
 
     void InitSchemeComplete() {
         Become(&TThis::StateWork);
+        State.SetTabletInfo(Info());
         State.OnStateWork();
         UpdateTabletYellow();
         while (!InitialEventsQueue.empty()) {

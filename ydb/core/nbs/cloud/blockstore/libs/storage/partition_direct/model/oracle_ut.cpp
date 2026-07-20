@@ -2,13 +2,13 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/map.h>
 #include <util/generic/size_literals.h>
-
-#include <map>
-#include <vector>
+#include <util/generic/vector.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -20,6 +20,9 @@ struct THostStateControllerMock: public IHostStateController
 {
     TMap<THostIndex, EHostState> States;
     ui64 HostPBufferUsedSize = 1_MB;
+
+    // Records every host index passed to QueryAddHost, in call order.
+    TVector<THostIndex> AddHostQueries;
 
     THostStateControllerMock() = default;
 
@@ -38,6 +41,11 @@ struct THostStateControllerMock: public IHostStateController
         Y_UNUSED(hostIndex);
 
         return HostPBufferUsedSize;
+    }
+
+    void QueryAddHost(THostIndex hostIndex) override
+    {
+        AddHostQueries.push_back(hostIndex);
     }
 };
 
@@ -540,6 +548,318 @@ Y_UNIT_TEST_SUITE(TOracle)
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::MilliSeconds(300),
             oracle.GetWriteHedgingDelay(THostMask::MakeOne(0), true));
+    }
+
+    Y_UNIT_TEST(GetFlushRequestCooldownReturnsZeroWithoutErrors)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+
+        // No errors recorded on any host -> no cooldown.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::Zero(),
+            oracle.GetFlushRequestCooldown(THostMask::MakeAll(5)));
+    }
+
+    Y_UNIT_TEST(GetFlushRequestCooldownScalesWithConsecutiveErrors)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+        const auto now = TInstant::Now();
+
+        // Each consecutive error adds a 10ms penalty on host 0.
+        for (size_t errorCount = 1; errorCount <= 3; ++errorCount) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                TDuration::MilliSeconds(10 * errorCount),
+                oracle.GetFlushRequestCooldown(THostMask::MakeOne(0)));
+        }
+
+        // A single success resets the consecutive error count back to zero.
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestSucceeded(
+            0,
+            EOperation::WriteToPBuffer,
+            now,
+            TDuration());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::Zero(),
+            oracle.GetFlushRequestCooldown(THostMask::MakeOne(0)));
+    }
+
+    Y_UNIT_TEST(GetFlushRequestCooldownReturnsMaxAcrossHosts)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+        const auto now = TInstant::Now();
+
+        // Host 1: two consecutive errors -> 20ms.
+        for (size_t i = 0; i < 2; ++i) {
+            oracle.OnRequestStarted(1, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(1, EOperation::WriteToPBuffer, now);
+        }
+
+        // Host 3: four consecutive errors -> 40ms.
+        for (size_t i = 0; i < 4; ++i) {
+            oracle.OnRequestStarted(3, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(3, EOperation::WriteToPBuffer, now);
+        }
+
+        // A mask covering both hosts must return the maximum cooldown.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(40),
+            oracle.GetFlushRequestCooldown(
+                THostMask::MakeOne(1).Include(THostMask::MakeOne(3))));
+
+        // A mask restricted to the less-penalized host returns its own value.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::MilliSeconds(20),
+            oracle.GetFlushRequestCooldown(THostMask::MakeOne(1)));
+
+        // A mask covering only error-free hosts returns zero.
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDuration::Zero(),
+            oracle.GetFlushRequestCooldown(
+                THostMask::MakeOne(0).Include(THostMask::MakeOne(4))));
+    }
+
+    Y_UNIT_TEST(GetFlushRequestCooldownIsClampedToMaxReconnectDelay)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto storageConfig = std::make_shared<TStorageConfig>(rawConfig);
+
+        TOracle oracle(storageConfig, nullptr);
+        const auto now = TInstant::Now();
+
+        // The cooldown grows by 10ms per consecutive error and is capped at
+        // MaxReconnectDelay (10s). 10s / 10ms == 1000 errors reach the cap
+        // exactly; any additional error must not exceed it.
+        const auto maxReconnectDelay = TDuration::Seconds(10);
+        for (size_t i = 0; i < 1000; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+        }
+
+        // Exactly at the cap.
+        UNIT_ASSERT_VALUES_EQUAL(
+            maxReconnectDelay,
+            oracle.GetFlushRequestCooldown(THostMask::MakeOne(0)));
+
+        // Far beyond the cap - still clamped.
+        for (size_t i = 0; i < 500; ++i) {
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            maxReconnectDelay,
+            oracle.GetFlushRequestCooldown(THostMask::MakeOne(0)));
+    }
+
+    Y_UNIT_TEST(ThinkDoesNotQueryAddHostWhenAllHostsOnline)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto config = std::make_shared<TStorageConfig>(rawConfig);
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+
+        // With the default set of DirectBlockGroupHostCount online hosts, the
+        // alive count equals the required count, so no new host is requested.
+        oracle.Think(TInstant::Now());
+        UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.AddHostQueries.size());
+    }
+
+    Y_UNIT_TEST(ThinkDoesNotQueryAddHostForTemporaryOfflineHost)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto& oracleConfig = *rawConfig.MutableOracleConfig();
+        oracleConfig.SetMaxDurationBeforeGoingTemporaryOffline(2000);
+        oracleConfig.SetMaxDurationBeforeGoingOffline(4000);
+        oracleConfig.SetMinErrorsCountBeforeGoingOffline(1);
+
+        auto config = std::make_shared<TStorageConfig>(rawConfig);
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+        auto now = TInstant::Now();
+
+        // Push host 0 into the TemporaryOffline state.
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+
+        now += TDuration::Seconds(3);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::TemporaryOffline,
+            hostStateController.States[0]);
+
+        // A TemporaryOffline host is still considered alive, so the alive
+        // count is unchanged and no new host is requested.
+        UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.AddHostQueries.size());
+    }
+
+    Y_UNIT_TEST(ThinkQueriesAddHostWhenHostGoesOffline)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto& oracleConfig = *rawConfig.MutableOracleConfig();
+        oracleConfig.SetMaxDurationBeforeGoingTemporaryOffline(2000);
+        oracleConfig.SetMaxDurationBeforeGoingOffline(4000);
+        oracleConfig.SetMinErrorsCountBeforeGoingOffline(1);
+
+        auto config = std::make_shared<TStorageConfig>(rawConfig);
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+        auto now = TInstant::Now();
+
+        // Generate a single error on host 0.
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+
+        // Still TemporaryOffline three seconds later - no add-host request.
+        now += TDuration::Seconds(3);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::TemporaryOffline,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(0, hostStateController.AddHostQueries.size());
+
+        // Six seconds later host 0 goes Offline, dropping the alive count
+        // below DirectBlockGroupHostCount. The oracle must request a new host
+        // with the next free index (equal to the current host count).
+        now += TDuration::Seconds(3);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::Offline,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            hostStateController.AddHostQueries[0]);
+    }
+
+    Y_UNIT_TEST(ThinkKeepsQueryingAddHostWhileHostRemainsOffline)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto& oracleConfig = *rawConfig.MutableOracleConfig();
+        oracleConfig.SetMaxDurationBeforeGoingTemporaryOffline(2000);
+        oracleConfig.SetMaxDurationBeforeGoingOffline(4000);
+        oracleConfig.SetMinErrorsCountBeforeGoingOffline(1);
+
+        auto config = std::make_shared<TStorageConfig>(rawConfig);
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+        auto now = TInstant::Now();
+
+        // Drive host 0 to Offline.
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+        now += TDuration::Seconds(6);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::Offline,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries.size());
+
+        // As long as no new host is actually added, the alive count stays
+        // below the required count and every Think re-issues the request with
+        // the same next-free index.
+        now += TDuration::Seconds(1);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(2, hostStateController.AddHostQueries.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            hostStateController.AddHostQueries[1]);
+    }
+
+    Y_UNIT_TEST(ThinkStopsQueryingAddHostAfterNewHostIsAdded)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto& oracleConfig = *rawConfig.MutableOracleConfig();
+        oracleConfig.SetMaxDurationBeforeGoingTemporaryOffline(2000);
+        oracleConfig.SetMaxDurationBeforeGoingOffline(4000);
+        oracleConfig.SetMinErrorsCountBeforeGoingOffline(1);
+
+        auto config = std::make_shared<TStorageConfig>(rawConfig);
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+        auto now = TInstant::Now();
+
+        // Drive host 0 to Offline so a new host is requested.
+        oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+        oracle.OnRequestFailed(0, EOperation::WriteToPBuffer, now);
+        now += TDuration::Seconds(6);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries.size());
+
+        // Satisfy the request: add the newly-requested host. It comes up
+        // Online, restoring the alive count to DirectBlockGroupHostCount.
+        oracle.AddHostIfNeeded(hostStateController.AddHostQueries.back());
+
+        // No further add-host requests are issued.
+        now += TDuration::Seconds(1);
+        oracle.Think(now);
+        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries.size());
+    }
+
+    Y_UNIT_TEST(AddHostIfNeededGrowsHostCount)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto config = std::make_shared<TStorageConfig>(rawConfig);
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+        const auto now = TInstant::Now();
+
+        // Initially there are DirectBlockGroupHostCount hosts.
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            oracle.BuildHostStats(now).size());
+
+        // Requesting a host with a higher index grows the internal storage so
+        // that index becomes valid. Index 6 requires 7 hosts total.
+        oracle.AddHostIfNeeded(6);
+        UNIT_ASSERT_VALUES_EQUAL(7u, oracle.BuildHostStats(now).size());
+
+        // The freshly added hosts start in the Online state.
+        const auto stats = oracle.BuildHostStats(now);
+        for (size_t i = DirectBlockGroupHostCount; i < stats.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(EHostState::Online, stats[i].State);
+        }
+    }
+
+    Y_UNIT_TEST(AddHostIfNeededIsNoOpForExistingIndex)
+    {
+        NProto::TStorageServiceConfig rawConfig;
+        auto config = std::make_shared<TStorageConfig>(rawConfig);
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+        const auto now = TInstant::Now();
+
+        // An index that already exists must not change the host count.
+        oracle.AddHostIfNeeded(DirectBlockGroupHostCount - 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            oracle.BuildHostStats(now).size());
+
+        // Calling it again with the same index is idempotent.
+        oracle.AddHostIfNeeded(0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            oracle.BuildHostStats(now).size());
     }
 }
 

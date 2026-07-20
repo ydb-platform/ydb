@@ -86,11 +86,12 @@ public:
     TString OperationId;
     TQContext QPlayerContext;
 
-    THashSet<TString> SqlFlags;
+    NSQLTranslation::TExtendedSqlFlags SqlFlags;
     ui16 SyntaxVersion = 1;
     bool AnsiLexer = false;
     bool TestAntlr4 = false;
     bool AssumeYdbOnClusterWithSlash = false;
+    bool AutoUseYqlLibs = false;
     bool TestSqlFormat = false;
     bool TestLexers = false;
     bool TestComplete = false;

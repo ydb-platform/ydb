@@ -1425,11 +1425,10 @@ public:
                 }
             }
 
-            const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
             res.Server = execCtx->YtServer_;
             res.Path = NYT::AddPathPrefix(out.Path, NYT::TConfig::Get()->Prefix);
             res.RefName = out.Path;
-            res.CodecSpec = execCtx->GetOutSpec(false, nativeTypeCompat);
+            res.CodecSpec = execCtx->GetOutSpec(false);
             res.TableAttrs = NYT::NodeToYsonString(attrs);
 
             res.SetSuccess();
@@ -2421,9 +2420,9 @@ private:
             NYT::MergeNodes(yqlAttrs, dstAttrs);
         }
         NYT::TNode& rowSpecNode = yqlAttrs[YqlRowSpecAttribute];
-        const auto nativeYtTypeCompatibility = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
+        const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(cluster, *execCtx->Options_.Config());
         const bool rowSpecCompactForm = execCtx->Options_.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
-        rowSpec->FillAttrNode(rowSpecNode, nativeYtTypeCompatibility, rowSpecCompactForm);
+        rowSpec->FillAttrNode(rowSpecNode, rowSpecCompactForm);
 
         const auto multiSet = execCtx->Options_.Config()->_UseMultisetAttributes.Get().GetOrElse(DEFAULT_USE_MULTISET_ATTRS);
 
@@ -2904,26 +2903,34 @@ private:
                     .AddAttribute(TString{YqlRowSpecAttribute})
                 );
             for (auto& idx: idxs) {
-                batchRes.push_back(batchGet->Get(tables[idx.first].Table() + "&/@", getOpts).Apply([idx, &attributes](const TFuture<NYT::TNode>& f) {
-                    try {
-                        NYT::TNode attrs = f.GetValue();
-                        if (GetTypeFromAttributes(attrs, false) == "link") {
-                            // override some attributes by the link ones
-                            if (attrs.HasKey(QB2Premapper)) {
-                                attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
+                auto tablePath = tables[idx.first].Table();
+                batchRes.push_back(batchGet->Get(tablePath + "&/@", getOpts).Apply(
+                    [idx, tablePath, &attributes] (const TFuture<NYT::TNode>& f) {
+                        try {
+                            NYT::TNode attrs = f.GetValue();
+                            if (GetTypeFromAttributes(attrs, false) == "link") {
+                                // override some attributes by the link ones
+                                if (attrs.HasKey(QB2Premapper)) {
+                                    attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
+                                }
+                                if (attrs.HasKey(YqlRowSpecAttribute)) {
+                                    attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
+                                }
                             }
-                            if (attrs.HasKey(YqlRowSpecAttribute)) {
-                                attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
+                        } catch (const TErrorResponse& e) {
+                            if (e.IsAccessDenied()) {
+                                YQL_LOG_CTX_THROW TErrorException(TIssuesIds::YT_ACCESS_DENIED)
+                                    << "Access denied while fetching additional attributes for symbolic link " << tablePath << ".\n"
+                                    << "Make sure read access to the parent directory is granted; full error: " << e.GetError().GetYsonText();
                             }
+                            // Yt returns NoSuchTransaction as inner issue for ResolveError
+                            if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
+                                throw;
+                            }
+                            // Just ignore. Original table path may be deleted at this time
                         }
-                    } catch (const TErrorResponse& e) {
-                        // Yt returns NoSuchTransaction as inner issue for ResolveError
-                        if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
-                            throw;
-                        }
-                        // Just ignore. Original table path may be deleted at this time
                     }
-                }));
+                ));
             }
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();
@@ -3212,9 +3219,10 @@ private:
         const TMaybe<NYql::TColumnOrder>& columns = Nothing())
     {
         const auto sequenceItemType = GetSequenceItemType(node.Pos(), node.GetTypeAnn(), false, ctx);
+        const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(execCtx->Cluster_, *execCtx->Options_.Config());
 
         auto rowSpecInfo = MakeIntrusive<TYqlRowSpecInfo>();
-        rowSpecInfo->SetType(sequenceItemType->Cast<TStructExprType>(), execCtx->Options_.Config()->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+        rowSpecInfo->SetType(sequenceItemType->Cast<TStructExprType>(), nativeYtTypeCompatibility);
         if (columns) {
             rowSpecInfo->SetColumnOrder(columns);
         }
@@ -3222,7 +3230,7 @@ private:
         NYT::TNode tableSpec = NYT::TNode::CreateMap();
         rowSpecInfo->FillCodecNode(tableSpec[YqlRowSpecAttribute]);
 
-        auto resultYTType = NodeToYsonString(RowSpecToYTSchema(tableSpec[YqlRowSpecAttribute], execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY)).ToNode());
+        auto resultYTType = NodeToYsonString(RowSpecToYTSchema(tableSpec[YqlRowSpecAttribute], nativeYtTypeCompatibility).ToNode());
         auto resultRowSpec = NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(tableSpec));
         return {resultYTType, resultRowSpec};
     }
@@ -3366,8 +3374,7 @@ private:
         if (useSkiff) {
             specs.SetUseSkiff(execCtx->Options_.OptLLVM(), testRun ? TMkqlIOSpecs::ESystemField(0) : TMkqlIOSpecs::ESystemField::RangeIndex | TMkqlIOSpecs::ESystemField::RowIndex);
         }
-        const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-        specs.Init(codecCtx, execCtx->GetInputSpec(!useSkiff, nativeTypeCompat, false), tables, columns);
+        specs.Init(codecCtx, execCtx->GetInputSpec(!useSkiff, false), tables, columns);
 
         auto run = [&] (IExecuteResOrPull& pullData)  {
             TMkqlIOCache specsCache(specs, holderFactory);
@@ -4340,21 +4347,19 @@ private:
             NYT::TNode mapSpec = intermediateMeta;
             mapSpec.AsMap().erase(YqlSysColumnPrefix);
 
-            const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-
             NYT::TNode mapOutSpec = NYT::TNode::CreateMap();
             mapOutSpec[YqlIOSpecTables] = NYT::TNode::CreateList();
             mapOutSpec[YqlIOSpecTables].Add(mapSpec);
             TString mapOutSpecStr;
             if (mapDirectOutputs) {
-                mapOutSpecStr = execCtx->GetOutSpec(0, mapDirectOutputs, mapOutSpec, !reduceUseSkiff, nativeTypeCompat);
+                mapOutSpecStr = execCtx->GetOutSpec(0, mapDirectOutputs, mapOutSpec, !reduceUseSkiff);
             } else {
                 mapOutSpecStr = NYT::NodeToYsonString(mapOutSpec);
             }
 
             auto mapJob = MakeIntrusive<TYqlUserJob>();
             mapJob->SetInputType(mapInputType);
-            mapJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff || forceYsonInputFormat, nativeTypeCompat, false));
+            mapJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff || forceYsonInputFormat, false));
             mapJob->SetOutSpec(mapOutSpecStr);
             if (!groups.empty() && groups.back() != 0) {
                 mapJob->SetInputGroups(groups);
@@ -4368,7 +4373,7 @@ private:
             auto reduceJob = MakeIntrusive<TYqlUserJob>();
             reduceJob->SetInputType(reduceInputType);
             reduceJob->SetInputSpec(NYT::NodeToYsonString(NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(intermediateMeta))));
-            reduceJob->SetOutSpec(execCtx->GetOutSpec(mapDirectOutputs, execCtx->OutTables_.size(), {}, !reduceUseSkiff, nativeTypeCompat));
+            reduceJob->SetOutSpec(execCtx->GetOutSpec(mapDirectOutputs, execCtx->OutTables_.size(), {}, !reduceUseSkiff));
 
             mapReduceOpSpec.ReduceBy(ToYTSortColumns(reduceBy));
             if (!sortBy.empty()) {
@@ -4556,9 +4561,8 @@ private:
 
             const bool useSkiff = execCtx->Options_.Config()->UseSkiff.Get(execCtx->Cluster_).GetOrElse(DEFAULT_USE_SKIFF);
 
-            const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-            reduceJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff, nativeTypeCompat, !useIntermediateStreams));
-            reduceJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
+            reduceJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff, !useIntermediateStreams));
+            reduceJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff));
 
             mapReduceOpSpec.ReduceBy(ToYTSortColumns(reduceBy));
             if (!sortBy.empty()) {
@@ -4653,8 +4657,7 @@ private:
         auto reduceBy = NYql::GetSettingAsColumnPairList(mapReduce.Settings().Ref(), EYtSettingType::ReduceBy);
         auto sortBy = NYql::GetSettingAsColumnPairList(mapReduce.Settings().Ref(), EYtSettingType::SortBy);
 
-        const bool useNativeTypes = execCtx->Options_.Config()->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES);
-        const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
+        const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(execCtx->Cluster_, *execCtx->Options_.Config());
         const auto useIntermediateStreams = execCtx->Options_.Config()->UseIntermediateStreams.Get().GetOrElse(DEFAULT_USE_INTERMEDIATE_STREAMS);
         const bool mapBlockInput = NYql::HasSetting(mapReduce.Settings().Ref(), EYtSettingType::BlockInputApplied);
 
@@ -4666,12 +4669,10 @@ private:
         TString mapInputType;
         size_t mapDirectOutputs = 0;
         if (!mapReduce.Mapper().Maybe<TCoVoid>()) {
-            auto createRowSpec = [](const TTypeAnnotationNode* itemType, bool useNativeTypes, ui64 nativeTypeCompat) -> NYT::TNode {
+            auto createRowSpec = [](const TTypeAnnotationNode* itemType, ui64 nativeYtTypeCompatibility) -> NYT::TNode {
                 auto spec = NYT::TNode::CreateMap();
                 spec[RowSpecAttrType] = NCommon::TypeToYsonNode(itemType);
-                spec[RowSpecAttrNativeYtTypeFlags] = useNativeTypes
-                    ? (GetNativeYtTypeFlags(*itemType->Cast<TStructExprType>()) & nativeTypeCompat)
-                    : 0ul;
+                spec[RowSpecAttrNativeYtTypeFlags] = GetNativeYtTypeFlags(*itemType->Cast<TStructExprType>()) & nativeYtTypeCompatibility;
                 return spec;
             };
 
@@ -4690,7 +4691,7 @@ private:
                     intermediateStreams = NYT::TNode::CreateList();
                     bool front = true;
                     for (auto itemType: items) {
-                        auto ytSchema = RowSpecToYTSchema(createRowSpec(itemType, useNativeTypes, nativeTypeCompat), nativeTypeCompat);
+                        auto ytSchema = RowSpecToYTSchema(createRowSpec(itemType, nativeYtTypeCompatibility), nativeYtTypeCompatibility);
                         if (front) {
                             ytSchema.SortBy(ToYTSortColumns(sortBy.empty() ? reduceBy : sortBy));
                             front = false;
@@ -4703,7 +4704,7 @@ private:
             } else {
                 if (useIntermediateStreams) {
                     intermediateStreams = NYT::TNode::CreateList();
-                    auto ytSchema = RowSpecToYTSchema(createRowSpec(mapResultItem, useNativeTypes, nativeTypeCompat), nativeTypeCompat);
+                    auto ytSchema = RowSpecToYTSchema(createRowSpec(mapResultItem, nativeYtTypeCompatibility), nativeYtTypeCompatibility);
                     ytSchema.SortBy(ToYTSortColumns(sortBy.empty() ? reduceBy : sortBy));
                     intermediateStreams.Add(
                         NYT::TNode::CreateMap()("schema", ytSchema.ToNode())
@@ -4712,9 +4713,9 @@ private:
             }
 
             intermediateMeta = NYT::TNode::CreateMap();
-            intermediateMeta[YqlRowSpecAttribute] = createRowSpec(mapResultItem, useNativeTypes, nativeTypeCompat);
-            if (useNativeTypes && !useIntermediateStreams) {
-                intermediateSchema = RowSpecToYTSchema(intermediateMeta[YqlRowSpecAttribute], nativeTypeCompat).ToNode();
+            intermediateMeta[YqlRowSpecAttribute] = createRowSpec(mapResultItem, nativeYtTypeCompatibility);
+            if (nativeYtTypeCompatibility && !useIntermediateStreams) {
+                intermediateSchema = RowSpecToYTSchema(intermediateMeta[YqlRowSpecAttribute], nativeYtTypeCompatibility).ToNode();
             }
             if (NYql::HasSetting(mapReduce.Settings().Ref(), EYtSettingType::KeySwitch)) {
                 intermediateMeta[YqlSysColumnPrefix].Add("keyswitch");
@@ -4728,14 +4729,14 @@ private:
             mapLambda = builder.BuildLambdaWithIO(*MkqlCompiler_, mapReduce.Mapper().Cast<TCoLambda>(), ctx);
             mapInputType = NCommon::WriteTypeToYson(GetSequenceItemType(mapReduce.Input().Size() == 1U ?
                 TExprBase(mapReduce.Input().Item(0)) : TExprBase(mapReduce.Mapper().Cast<TCoLambda>().Args().Arg(0)), true));
-        } else if (useNativeTypes && !useIntermediateStreams) {
+        } else if (nativeYtTypeCompatibility && !useIntermediateStreams) {
             YQL_ENSURE(mapReduce.Input().Size() == 1);
             const TTypeAnnotationNode* itemType = GetSequenceItemType(mapReduce.Input().Item(0), false);
             if (auto flags = GetNativeYtTypeFlags(*itemType->Cast<TStructExprType>())) {
                 auto rowSpec = NYT::TNode::CreateMap();
                 rowSpec[RowSpecAttrType] = NCommon::TypeToYsonNode(itemType);
-                rowSpec[RowSpecAttrNativeYtTypeFlags] = (flags & nativeTypeCompat);
-                intermediateSchema = RowSpecToYTSchema(rowSpec, nativeTypeCompat).ToNode();
+                rowSpec[RowSpecAttrNativeYtTypeFlags] = (flags & nativeYtTypeCompatibility);
+                intermediateSchema = RowSpecToYTSchema(rowSpec, nativeYtTypeCompatibility).ToNode();
             }
         }
         TString reduceLambda;
@@ -4915,7 +4916,6 @@ private:
                 }
 
                 if (!hasLayerPaths && transform.CanExecuteInternally() && !testRun) {
-                    const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
                     execCtx->SetNodeExecProgress("Waiting for concurrency limit");
                     execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
                     TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
@@ -4928,7 +4928,7 @@ private:
                         );
                     }
 
-                    ExecSafeFill(outYPaths, root, execCtx->GetOutSpec(!useSkiff, nativeTypeCompat), execCtx, entry, builder, alloc, tmpFiles->TmpDir.GetPath() + '/');
+                    ExecSafeFill(outYPaths, root, execCtx->GetOutSpec(!useSkiff), execCtx, entry, builder, alloc, tmpFiles->TmpDir.GetPath() + '/');
                     return MakeFuture();
                 }
 
@@ -4948,9 +4948,7 @@ private:
             job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
             job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
             job->SetLangVer(execCtx->Options_.LangVer());
-
-            const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-            job->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
+            job->SetOutSpec(execCtx->GetOutSpec(!useSkiff));
             job->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
             job->SetUseSkiff(useSkiff, 0);
 

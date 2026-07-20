@@ -12,7 +12,7 @@ class Closable(ABC):
 
 
 class ByteSource(Closable):
-    last_message: bytes = None
+    last_message: bytes | None = None
 
     @abstractmethod
     def read_leb128(self) -> int:
@@ -31,7 +31,7 @@ class ByteSource(Closable):
         pass
 
     @abstractmethod
-    def read_str_col(self, num_rows: int, encoding: str, nullable: bool = False, null_obj: Any = None):
+    def read_str_col(self, num_rows: int, encoding: str | None, nullable: bool = False, null_obj: Any = None):
         pass
 
     @abstractmethod

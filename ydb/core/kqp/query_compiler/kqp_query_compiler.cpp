@@ -561,7 +561,8 @@ std::vector<std::string> GetResultColumnNames(const NKikimr::NMiniKQL::TType* re
 
 template <class T>
 void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResultType,
-    const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyOpReadOlapRanges& readProto, TExprContext &ctx)
+    const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyOpReadOlapRanges& readProto, TExprContext &ctx,
+    TTypeAnnotationContext& typesCtx)
 {
     if (NYql::HasSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames)) {
         auto groupByKeys = NYql::GetSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames);
@@ -573,7 +574,7 @@ void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResul
         }
     }
     auto resultColNames = GetResultColumnNames(miniKqlResultType);
-    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx);
+    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx, typesCtx);
 }
 
 THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& secretNames) {
@@ -1034,7 +1035,7 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx);
+                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
                     tableOp.SetEstimatedRows(stats->Nrows);
@@ -1052,7 +1053,7 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx);
+                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
                 if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
@@ -2056,6 +2057,12 @@ private:
                 for (const auto& col: indexDescription.KeyColumns) {
                     lookupColumnsSet.insert(col);
                 }
+                // In rowid mode the doc_id is the synthetic __ydb_row_id column, which for UPSERT/UPDATE
+                // must be read back from the existing row (it is not part of the user-supplied columns).
+                const auto* ftDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDescription.SpecializedIndexDescription);
+                if (ftDesc && ftDesc->GetUseRowIdAsDocId()) {
+                    lookupColumnsSet.insert(NKikimr::NTableIndex::NFulltext::RowIdColumn);
+                }
             }
         }
 
@@ -2193,6 +2200,12 @@ private:
 
         // FIXME: Do not pass index column descriptions at all, pass index settings + main column descriptions
         // main table key + index key
+        // In rowid mode the doc_id is the synthetic __ydb_row_id (Uint64) column, not the main-table PK,
+        // so a non-integer/composite PK is supported. Feed __ydb_row_id as the doc_id column (position 1
+        // in the projection input) instead of the PK columns below.
+        const auto* ftDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDescription.SpecializedIndexDescription);
+        const bool useRowId = ftDesc && ftDesc->GetUseRowIdAsDocId();
+
         THashSet<TStringBuf> indexColumnsSet;
         for (const auto& columnName : indexDescription.KeyColumns) {
             if (updateColumnSet.contains(columnName)) {
@@ -2204,7 +2217,10 @@ private:
             }
             indexColumnsSet.emplace(columnName);
         }
-        for (const auto& columnName : tableMeta->KeyColumnNames) {
+        const TVector<TStringBuf> docIdColumns = useRowId
+            ? TVector<TStringBuf>{NKikimr::NTableIndex::NFulltext::RowIdColumn}
+            : TVector<TStringBuf>(tableMeta->KeyColumnNames.begin(), tableMeta->KeyColumnNames.end());
+        for (const auto& columnName : docIdColumns) {
             YQL_ENSURE(!indexColumnsSet.contains(columnName));
             if (updateColumnSet.contains(columnName)) {
                 const auto columnMeta = tableMeta->Columns.FindPtr(columnName);

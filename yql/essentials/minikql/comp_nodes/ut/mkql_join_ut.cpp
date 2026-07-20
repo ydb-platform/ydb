@@ -20,7 +20,7 @@ Y_UNIT_TEST_LLVM(Inner) {
                                                            });
 
     const auto outputType = pb.NewFlowType(pb.NewMultiType({optionalType, optionalType}));
-    const auto pgmReturn = pb.Collect(pb.CommonJoinCore(pb.ToFlow(list), EJoinKind::Inner, {0U, 0U}, {1U, 1U}, {}, {2U}, 0ULL, std::nullopt, EAnyJoinSettings::None, 3U, outputType));
+    const auto pgmReturn = pb.Collect(pb.CommonJoinCore(pb.ToFlow(list, {}), EJoinKind::Inner, {0U, 0U}, {1U, 1U}, {}, {2U}, 0ULL, std::nullopt, EAnyJoinSettings::None, 3U, outputType));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<TMaybe<i32>, TMaybe<i32>>>{
@@ -45,7 +45,7 @@ Y_UNIT_TEST_LLVM(InnerOrderLeftFirst) {
                                                            });
 
     const auto outputType = pb.NewFlowType(pb.NewMultiType({optionalType, optionalType}));
-    const auto pgmReturn = pb.Collect(pb.CommonJoinCore(pb.ToFlow(list), EJoinKind::Inner, {0U, 0U}, {1U, 1U}, {}, {2U}, 0ULL, {0U}, EAnyJoinSettings::None, 3U, outputType));
+    const auto pgmReturn = pb.Collect(pb.CommonJoinCore(pb.ToFlow(list, {}), EJoinKind::Inner, {0U, 0U}, {1U, 1U}, {}, {2U}, 0ULL, {0U}, EAnyJoinSettings::None, 3U, outputType));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<TMaybe<i32>, TMaybe<i32>>>{
@@ -70,7 +70,7 @@ Y_UNIT_TEST_LLVM(InnerOrderRightFirst) {
                                                            });
 
     const auto outputType = pb.NewFlowType(pb.NewMultiType({optionalType, optionalType}));
-    const auto pgmReturn = pb.Collect(pb.CommonJoinCore(pb.ToFlow(list), EJoinKind::Inner, {0U, 0U}, {1U, 1U}, {}, {2U}, 0ULL, {1U}, EAnyJoinSettings::None, 3U, outputType));
+    const auto pgmReturn = pb.Collect(pb.CommonJoinCore(pb.ToFlow(list, {}), EJoinKind::Inner, {0U, 0U}, {1U, 1U}, {}, {2U}, 0ULL, {1U}, EAnyJoinSettings::None, 3U, outputType));
 
     const auto graph = setup.BuildGraph(pgmReturn);
     AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<TMaybe<i32>, TMaybe<i32>>>{
@@ -97,7 +97,7 @@ Y_UNIT_TEST_LLVM(Inner) {
                                                            });
 
     const auto outputType = pb.NewFlowType(pb.NewMultiType({optionalType, optionalType}));
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.CommonJoinCore(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.CommonJoinCore(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                   [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U), pb.Nth(item, 3U)}; }),
                                                                      EJoinKind::Inner, {0U, 0U}, {1U, 1U}, {}, {2U}, 0ULL, std::nullopt, EAnyJoinSettings::None, 3U, outputType),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
@@ -125,7 +125,7 @@ Y_UNIT_TEST_LLVM(InnerOrderLeftFirst) {
                                                            });
 
     const auto outputType = pb.NewFlowType(pb.NewMultiType({optionalType, optionalType}));
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.CommonJoinCore(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.CommonJoinCore(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                   [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U), pb.Nth(item, 3U)}; }),
                                                                      EJoinKind::Inner, {0U, 0U}, {1U, 1U}, {}, {2U}, 0ULL, {0U}, EAnyJoinSettings::None, 3U, outputType),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
@@ -153,7 +153,7 @@ Y_UNIT_TEST_LLVM(InnerOrderRightFirst) {
                                                            });
 
     const auto outputType = pb.NewFlowType(pb.NewMultiType({optionalType, optionalType}));
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.CommonJoinCore(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.CommonJoinCore(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                   [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U), pb.Nth(item, 3U)}; }),
                                                                      EJoinKind::Inner, {0U, 0U}, {1U, 1U}, {}, {2U}, 0ULL, {1U}, EAnyJoinSettings::None, 3U, outputType),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
@@ -184,7 +184,7 @@ Y_UNIT_TEST_LLVM(ExclusionOrderLeftFirstAny) {
 
     const auto landmine = NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{"ACHTUNG MINEN!"});
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.CommonJoinCore(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.CommonJoinCore(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                   [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.NewOptional(pb.Unwrap(pb.Nth(item, 2U), landmine, __FILE__, __LINE__, 0)), pb.Nth(item, 3U)}; }),
                                                                      EJoinKind::Exclusion, {1U, 0U}, {2U, 1U}, {0U}, {0U}, 0ULL, {0U}, EAnyJoinSettings::Right, 3U, outputType),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
@@ -212,7 +212,7 @@ Y_UNIT_TEST_LLVM(ExclusionOrderRightFirstAny) {
 
     const auto landmine = NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{"ACHTUNG MINEN!"});
 
-    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.CommonJoinCore(pb.ExpandMap(pb.ToFlow(list),
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.CommonJoinCore(pb.ExpandMap(pb.ToFlow(list, {}),
                                                                                   [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.NewOptional(pb.Unwrap(pb.Nth(item, 1U), landmine, __FILE__, __LINE__, 0)), pb.Nth(item, 2U), pb.Nth(item, 3U)}; }),
                                                                      EJoinKind::Exclusion, {1U, 0U}, {2U, 1U}, {0U}, {0U}, 0ULL, {1U}, EAnyJoinSettings::Left, 3U, outputType),
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));

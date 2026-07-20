@@ -14,6 +14,14 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
 
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr TDuration MinReconnectDelay = TDuration::MilliSeconds(20);
+constexpr TDuration MaxReconnectDelay = TDuration::Seconds(10);
+constexpr TDuration FlushRequestCooldownPenalty = TDuration::MilliSeconds(10);
+
+////////////////////////////////////////////////////////////////////////////////
+
 TDuration GetFromConfig(ui64 milliseconds, TDuration defaultValue)
 {
     return milliseconds ? TDuration::MilliSeconds(milliseconds) : defaultValue;
@@ -40,6 +48,24 @@ EHostState HealthToState(EHostHealth health)
         case EHostHealth::Offline:
             return EHostState::Offline;
     }
+}
+
+size_t GetAliveHostCount(const TVector<THostState>& hostStates)
+{
+    // We assume that hosts that are temporarily suffering or have recently lost
+    // their connection are still alive and do not need to be replaced.
+    return CountIf(
+        hostStates,
+        [&](const THostState& hostState)
+        {
+            switch (hostState.State) {
+                case EHostState::Online:
+                case EHostState::TemporaryOffline:
+                    return true;
+                case EHostState::Offline:
+                    return false;
+            }
+        });
 }
 
 }   // namespace
@@ -111,6 +137,22 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TOracleHostStat::TOracleHostStat(
+    THostIndex index,
+    const THostState& state,
+    EHostHealth health,
+    const THostStat& hostStat,
+    TInstant now)
+    : Index(index)
+    , State(state.State)
+    , Health(health)
+    , InflightByOperation(hostStat.GetInflightByOperation())
+    , Errors(hostStat.GetErrorsInfo(now))
+    , PBufferUsedSize(state.PBufferUsedSize)
+{}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TOracle::TOracle(
     TStorageConfigPtr storageConfig,
     IHostStateController* hostStateController)
@@ -128,6 +170,9 @@ TOracle::TOracle(
     , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
     , HostStatistics(DirectBlockGroupHostCount)
     , HostStates(DirectBlockGroupHostCount)
+    , HostsReconnectDelays(
+          DirectBlockGroupHostCount,
+          TBackoffDelayProvider(MinReconnectDelay, MaxReconnectDelay))
     , TimePredictors(
           OperationCount,
           TTimePredictor(
@@ -146,14 +191,12 @@ void TOracle::Think(TInstant now)
 {
     const TOracleConfig config(StorageConfig);
 
-    for (THostIndex hostIndex = 0; hostIndex < HostStates.size(); ++hostIndex) {
-        HostStates[hostIndex].PBufferUsedSize =
-            HostStateController->GetHostPBufferUsedSize(hostIndex);
-    }
-
     TVector<EHostHealth> newHostsHealths(HostsHealths);
 
     for (size_t i = 0; i < HostStatistics.size(); ++i) {
+        HostStates[i].PBufferUsedSize =
+            HostStateController->GetHostPBufferUsedSize(i);
+
         auto errorsInfo = HostStatistics[i].GetErrorsInfo(now);
 
         const bool hasSufferingSymptom =
@@ -166,7 +209,7 @@ void TOracle::Think(TInstant now)
                   config.GetMaxDurationBeforeGoingTemporaryOffline()) ||
              (errorsInfo.ConsecutiveErrorCount >=
               config.GetErrorsCountForGoingOffline()) ||
-             (HostStateController->GetHostPBufferUsedSize(i) >=
+             (HostStates[i].PBufferUsedSize >=
               config.GetErrorsTotalSizeForGoingOffline()));
         const bool hasOfflineSymptom =
             hasTemporaryOfflineSymptom &&
@@ -195,6 +238,13 @@ void TOracle::Think(TInstant now)
             }
         }
     }
+
+    if (GetAliveHostCount(HostStates) < DirectBlockGroupHostCount &&
+        GetHostCount() < MaxHostCount)
+    {
+        const THostIndex newHostIndex = GetHostCount();
+        HostStateController->QueryAddHost(newHostIndex);
+    }
 }
 
 void TOracle::OnRequestStarted(
@@ -222,6 +272,22 @@ void TOracle::OnRequestFailed(
     TInstant now)
 {
     HostStatistics[hostIndex].OnError(now, operation);
+}
+
+void TOracle::OnDDiskDisconnected(THostIndex hostIndex, TInstant now)
+{
+    Y_UNUSED(hostIndex, now);
+}
+
+void TOracle::OnDDiskConnected(THostIndex hostIndex, TInstant now)
+{
+    Y_UNUSED(now);
+    HostsReconnectDelays[hostIndex].Reset();
+}
+
+TDuration TOracle::GetDDiskReconnectDelay(THostIndex hostIndex)
+{
+    return HostsReconnectDelays[hostIndex].GetDelayAndIncrease();
 }
 
 void TOracle::OnRequestCancelled(
@@ -294,6 +360,11 @@ TDuration TOracle::GetReadRequestTimeout() const
     return DefaultReadRequestTimeout;
 }
 
+EWriteMode TOracle::GetWriteMode() const
+{
+    return DefaultWriteMode;
+}
+
 TDuration TOracle::GetWriteHedgingDelay(THostMask hosts, bool indirect) const
 {
     TDuration result = GetTimePredictor(
@@ -313,6 +384,25 @@ TDuration TOracle::GetIndirectWriteReplyTimeout() const
     return DefaultIndirectWriteReplyTimeout;
 }
 
+TDuration TOracle::GetFlushRequestCooldown(THostMask hosts) const
+{
+    auto cooldown = [&](THostIndex host) -> TDuration
+    {
+        const size_t errorCount =
+            HostStatistics[host].GetConsecutiveErrorCount();
+        if (!errorCount) {
+            return TDuration::Zero();
+        }
+        return errorCount * FlushRequestCooldownPenalty;
+    };
+
+    TDuration result;
+    for (auto host: hosts) {
+        result = Max(result, cooldown(host));
+    }
+    return Min(result, MaxReconnectDelay);
+}
+
 TDuration TOracle::GetFlushRequestTimeout() const
 {
     return DefaultFlushRequestTimeout;
@@ -321,11 +411,6 @@ TDuration TOracle::GetFlushRequestTimeout() const
 TDuration TOracle::GetEraseRequestTimeout() const
 {
     return DefaultEraseRequestTimeout;
-}
-
-EWriteMode TOracle::GetWriteMode() const
-{
-    return DefaultWriteMode;
 }
 
 const THostStat& TOracle::GetHostStatistics(THostIndex hostIndex) const
@@ -352,6 +437,40 @@ TString TOracle::Dump() const
     return sb;
 }
 
+void TOracle::AddHostIfNeeded(THostIndex hostIndex)
+{
+    size_t currentHostCount = HostStatistics.size();
+    const size_t newHostCount = hostIndex + 1;
+
+    Y_ABORT_UNLESS(currentHostCount == HostStates.size());
+    Y_ABORT_UNLESS(currentHostCount == HostsHealths.size());
+    Y_ABORT_UNLESS(currentHostCount == HostsReconnectDelays.size());
+
+    while (currentHostCount < newHostCount) {
+        HostStatistics.emplace_back();
+        HostStates.emplace_back();
+        HostsHealths.push_back(EHostHealth::Online);
+        HostsReconnectDelays.emplace_back(MinReconnectDelay, MaxReconnectDelay);
+
+        currentHostCount = HostStatistics.size();
+    }
+}
+
+TVector<TOracleHostStat> TOracle::BuildHostStats(TInstant now) const
+{
+    TVector<TOracleHostStat> stats;
+    stats.reserve(HostStatistics.size());
+    for (THostIndex hostIndex = 0; hostIndex < GetHostCount(); ++hostIndex) {
+        stats.emplace_back(
+            hostIndex,
+            HostStates[hostIndex],
+            HostsHealths[hostIndex],
+            HostStatistics[hostIndex],
+            now);
+    }
+    return stats;
+}
+
 TTimePredictor& TOracle::AccessTimePredictor(EOperation operation)
 {
     return TimePredictors[static_cast<size_t>(operation)];
@@ -360,6 +479,11 @@ TTimePredictor& TOracle::AccessTimePredictor(EOperation operation)
 const TTimePredictor& TOracle::GetTimePredictor(EOperation operation) const
 {
     return TimePredictors[static_cast<size_t>(operation)];
+}
+
+size_t TOracle::GetHostCount() const
+{
+    return HostStatistics.size();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

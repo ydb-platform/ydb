@@ -11,12 +11,12 @@
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_fmr_sorting_block_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
+#include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_key_hash_block_iterator.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_sorted_writer.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/tvm/impl/yql_yt_fmr_tvm_impl.h>
-#include <yt/yql/providers/yt/fmr/utils/hasher/yql_yt_binary_yson_hasher.h>
 #include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_yson_tds_block_iterator.h>
 #include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_yson_yt_block_iterator.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
@@ -29,125 +29,6 @@
 namespace NYql::NFmr {
 
 namespace {
-
-// Encodes a ui64 as a base-128 varint and appends to buf.
-void WriteVarint64(TBuffer& buf, ui64 value) {
-    do {
-        ui8 byte = value & 0x7F;
-        value >>= 7;
-        if (value != 0) {
-            byte |= 0x80;
-        }
-        buf.Append(static_cast<char>(byte));
-    } while (value != 0);
-}
-
-// Encodes a non-negative i32 length using zigzag+varint32 (as binary YSON uses for strings).
-void WriteStringLengthVarint(TBuffer& buf, i32 length) {
-    ui32 encoded = NYson::ZigZagEncode32(length);
-    do {
-        ui8 byte = encoded & 0x7F;
-        encoded >>= 7;
-        if (encoded != 0) {
-            byte |= 0x80;
-        }
-        buf.Append(static_cast<char>(byte));
-    } while (encoded != 0);
-}
-
-// Build binary YSON: { _yql_key_hash=<hash>; <original_map_contents> }
-// originalRowBytes must start with '{' (BeginMapSymbol).
-TBuffer BuildRowWithKeyHash(TStringBuf originalRowBytes, ui64 hash) {
-    using namespace NYson::NDetail;
-    Y_ENSURE(!originalRowBytes.empty() && originalRowBytes[0] == BeginMapSymbol,
-             "Expected binary YSON map row starting with '{'");
-
-    TBuffer row;
-    row.Append(BeginMapSymbol);
-
-    // Key: \x01 + zigzag_varint32(14) + "_yql_key_hash" + '='
-    row.Append(StringMarker);
-    WriteStringLengthVarint(row, static_cast<i32>(YqlKeyHashColumn.size()));
-    row.Append(YqlKeyHashColumn.data(), YqlKeyHashColumn.size());
-    row.Append(KeyValueSeparatorSymbol);
-    // Value: \x06 + varint64(hash)
-    row.Append(Uint64Marker);
-    WriteVarint64(row, hash);
-
-    // Append original map content after the opening '{'.
-    TStringBuf rest = originalRowBytes.substr(1);
-    if (!rest.empty() && rest[0] != EndMapSymbol) {
-        row.Append(ListItemSeparatorSymbol);
-    }
-    row.Append(rest.data(), rest.size());
-
-    return row;
-}
-
-// Wraps an IBlockIterator and inserts the computed _yql_key_hash column into each row.
-// The inner iterator must track only the reduce key columns (no _yql_key_hash).
-// This iterator presents rows with the full sort columns [_yql_key_hash, ...reduceBy].
-class TKeyHashAddingBlockIterator final: public IBlockIterator {
-public:
-    TKeyHashAddingBlockIterator(
-        IBlockIterator::TPtr inner,
-        std::vector<TString> fullSortColumns,
-        std::vector<ESortOrder> sortOrders
-    )
-        : Inner_(std::move(inner))
-        , FullSortColumns_(std::move(fullSortColumns))
-        , SortOrders_(std::move(sortOrders))
-    {
-        Y_ENSURE(!FullSortColumns_.empty() && FullSortColumns_[0] == TString(YqlKeyHashColumn),
-                 "_yql_key_hash must be the first sort column");
-        NumReduceKeyColumns_ = FullSortColumns_.size() - 1;
-    }
-
-    bool NextBlock(TIndexedBlock& out) final {
-        TIndexedBlock raw;
-        if (!Inner_->NextBlock(raw)) {
-            return false;
-        }
-        if (raw.Rows.empty()) {
-            out = std::move(raw);
-            return true;
-        }
-
-        TBuffer newData;
-        newData.Reserve(raw.Data.size() + raw.Rows.size() * 20);
-
-        for (size_t rowIdx = 0; rowIdx < raw.Rows.size(); ++rowIdx) {
-            const TRowIndexMarkup& markup = raw.Rows[rowIdx];
-            const TColumnOffsetRange& rowRange = markup.back();
-            TStringBuf rowBytes(raw.Data.data() + rowRange.StartOffset,
-                                rowRange.EndOffset - rowRange.StartOffset);
-
-            ui64 hash = HashKeyColumns(raw.Data, markup, NumReduceKeyColumns_);
-            TBuffer newRow = BuildRowWithKeyHash(rowBytes, hash);
-
-            newData.Append(newRow.Data(), newRow.Size());
-            newData.Append(NYson::NDetail::ListItemSeparatorSymbol);
-        }
-
-        out.Data = TString(newData.Data(), newData.Size());
-        TParserFragmentListIndex parser(out.Data, FullSortColumns_);
-        parser.Parse();
-        out.Rows = parser.GetRows();
-
-        return true;
-    }
-
-    std::vector<ESortOrder> GetSortOrder() final {
-        return SortOrders_;
-    }
-
-private:
-    IBlockIterator::TPtr Inner_;
-    std::vector<TString> FullSortColumns_;
-    std::vector<ESortOrder> SortOrders_;
-    size_t NumReduceKeyColumns_ = 0;
-};
-
 } // namespace
 
 class TFmrJob: public IFmrJob {
@@ -420,13 +301,13 @@ public:
     virtual std::variant<TFmrError, TStatistics> Map(
         const TMapTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
-        std::shared_ptr<std::atomic<bool>> /* cancelFlag */,
+        std::shared_ptr<std::atomic<bool>> cancelFlag,
         const TMaybe<TString>& jobEnvironmentDir,
         const std::vector<TFileInfo>& jobFiles,
         const std::vector<TYtResourceInfo>& jobYtResources,
         const std::vector<TFmrResourceTaskInfo>& jobFmrResources
     ) override {
-        auto mapJobFunc = [&, this] () {
+        auto mapJobFunc = [&, this, cancelFlag] () {
             TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
             TFmrUserJob mapJob;
             // deserialize map job and fill params
@@ -437,7 +318,7 @@ public:
             if (DirectTableDataService_) {
                 mapJob.SetDirectTableDataService(DirectTableDataService_);
             }
-            return JobLauncher_->LaunchJob(mapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+            return JobLauncher_->LaunchJob(mapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources, cancelFlag);
         };
         return HandleFmrJob(mapJobFunc, ETaskType::Map);
     }
@@ -507,13 +388,13 @@ public:
     std::variant<TFmrError, TStatistics> Reduce(
         const TReduceTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
-        std::shared_ptr<std::atomic<bool>> /* cancelFlag */,
+        std::shared_ptr<std::atomic<bool>> cancelFlag,
         const TMaybe<TString>& jobEnvironmentDir,
         const std::vector<TFileInfo>& jobFiles,
         const std::vector<TYtResourceInfo>& jobYtResources,
         const std::vector<TFmrResourceTaskInfo>& jobFmrResources
     ) override {
-        auto reduceFunc = [&, this] () {
+        auto reduceFunc = [&, this, cancelFlag] () {
             TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
             TFmrUserJob reduceJob;
             // deserialize reduce job and fill params
@@ -524,20 +405,20 @@ public:
             if (DirectTableDataService_) {
                 reduceJob.SetDirectTableDataService(DirectTableDataService_);
             }
-            return JobLauncher_->LaunchJob(reduceJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+            return JobLauncher_->LaunchJob(reduceJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources, cancelFlag);
         };
         return HandleFmrJob(reduceFunc, ETaskType::Reduce);
     }
 
     std::variant<TFmrError, TStatistics> Fill(
         const TFillTaskParams& params,
-        std::shared_ptr<std::atomic<bool>> /* cancelFlag */,
+        std::shared_ptr<std::atomic<bool>> cancelFlag,
         const TMaybe<TString>& jobEnvironmentDir,
         const std::vector<TFileInfo>& jobFiles,
         const std::vector<TYtResourceInfo>& jobYtResources,
         const std::vector<TFmrResourceTaskInfo>& jobFmrResources
     ) override {
-        auto fillJobFunc = [&, this] () {
+        auto fillJobFunc = [&, this, cancelFlag] () {
             TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
             TFmrUserJob fillJob;
             TStringStream serializedJobStateStream(params.SerializedFillJobState);
@@ -547,7 +428,7 @@ public:
             if (DirectTableDataService_) {
                 fillJob.SetDirectTableDataService(DirectTableDataService_);
             }
-            return JobLauncher_->LaunchJob(fillJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+            return JobLauncher_->LaunchJob(fillJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources, cancelFlag);
         };
         return HandleFmrJob(fillJobFunc, ETaskType::Fill);
     }
@@ -578,13 +459,18 @@ public:
                 TMaybe<TMutex> mutex = TMutex();
                 std::vector<IBlockIterator::TPtr> blockIterators;
 
-                // The full sort columns are [_yql_key_hash, ...reduceBy].
-                // Inner iterators track only the reduce key columns; TKeyHashAddingBlockIterator
-                // computes _yql_key_hash from those columns and inserts it into the binary YSON.
+                // The full sort columns are [_yql_key_hash, ...reduceBy, ...extra tiebreaker
+                // columns] (e.g. "_yql_sort" for joins). Inner iterators track only the reduce key
+                // columns; TKeyHashAddingBlockIterator computes _yql_key_hash from those columns
+                // (not the tiebreaker columns, which vary within a group) and inserts it into the
+                // binary YSON.
                 Y_ENSURE(sortColumns.Columns[0] == TString(YqlKeyHashColumn),
                          "First sort column must be _yql_key_hash in MapReduceMap identity path");
-                std::vector<TString> reduceKeyColumns(sortColumns.Columns.begin() + 1, sortColumns.Columns.end());
-                std::vector<ESortOrder> reduceKeySortOrders(sortColumns.SortOrders.begin() + 1, sortColumns.SortOrders.end());
+                const size_t numReduceKeyColumns = params.ReduceOperationSpec.ReduceBy.Columns.size();
+                Y_ENSURE(numReduceKeyColumns + 1 <= sortColumns.Columns.size(),
+                         "reduceBy columns must fit within the sort columns after _yql_key_hash");
+                std::vector<TString> reduceKeyColumns(sortColumns.Columns.begin() + 1, sortColumns.Columns.begin() + 1 + numReduceKeyColumns);
+                std::vector<ESortOrder> reduceKeySortOrders(sortColumns.SortOrders.begin() + 1, sortColumns.SortOrders.begin() + 1 + numReduceKeyColumns);
 
                 for (const auto& inputRef : params.Input.Inputs) {
                     IBlockIterator::TPtr inner;
@@ -605,7 +491,7 @@ public:
                         );
                     }
                     blockIterators.emplace_back(MakeIntrusive<TKeyHashAddingBlockIterator>(
-                        std::move(inner), sortColumns.Columns, sortColumns.SortOrders
+                        std::move(inner), sortColumns.Columns, sortColumns.SortOrders, numReduceKeyColumns
                     ));
                 }
                 auto& parseRecordSettings = Settings_.ParseRecordSettings;
@@ -617,10 +503,11 @@ public:
             return HandleFmrJob(identityJobFunc, ETaskType::MapReduceMap);
         }
 
-        // Explicit mapper: two-phase approach.
-        // TMkqlWriterImpl uses block-encoded YSON that TFmrTableDataServiceSortedWriter's
-        // row-level parser cannot interpret. So we write the mapper output to an unsorted
-        // temp partition first, then sort it via TFmrSortingBlockReader (same as LocalSort).
+        // Explicit mapper: single-phase approach.
+        // The mapper writes into an in-memory blob queue (TQueueWriteTableDataService) instead
+        // of TDS. After the mapper finishes, DoFmrJob() feeds the blobs through
+        // TKeyHashAddingBlockIterator and TFmrSortingBlockReader directly into the final
+        // sorted TDS partition — no intermediate TDS write/read.
         auto mapReduceMapJobFunc = [&, this, cancelFlag] () -> TStatistics {
             const auto& sortColumns = params.Output.SortingColumns;
             YQL_ENSURE(!sortColumns.Columns.empty(), "MapReduceMap sort columns must be set");
@@ -630,14 +517,6 @@ public:
             TStringStream serializedJobStateStream(params.SerializedMapJobState);
             mapReduceMapJob.Load(serializedJobStateStream);
 
-            // Phase 1: run the mapper into a temp unsorted partition.
-            const TString tempPartId = params.Output.PartId + "_tmp";
-            TFmrTableOutputRef unsortedOutput;
-            unsortedOutput.TableId = params.Output.TableId;
-            unsortedOutput.PartId = tempPartId;
-            unsortedOutput.SerializedColumnGroups = params.Output.SerializedColumnGroups;
-            // SortingColumns intentionally empty → TFmrTableDataServiceWriter (not sorted)
-
             mapReduceMapJob.SetSettings(userJobSettings);
             if (VanillaInfo_.Defined()) {
                 mapReduceMapJob.SetVanillaInfo(*VanillaInfo_);
@@ -646,10 +525,18 @@ public:
                 mapReduceMapJob.SetTableDataServiceDiscovery(Discovery_);
             }
             mapReduceMapJob.SetTaskInputTables(params.Input);
-            mapReduceMapJob.SetTaskFmrOutputTables({unsortedOutput});
+            // Index 0 = intermediate shuffle-bound table, 1..K = direct map-bypass outputs,
+            // matching the mapper's Variant<Tuple<T0..TK>> tag order.
+            std::vector<TFmrTableOutputRef> mapOutputTables{params.Output};
+            mapOutputTables.insert(mapOutputTables.end(), params.DirectOutputs.begin(), params.DirectOutputs.end());
+            mapReduceMapJob.SetTaskFmrOutputTables(mapOutputTables);
+            // Needed so DoFmrJob() can tell reduceBy (hash) columns apart from any trailing
+            // tiebreaker columns in Output.SortingColumns (e.g. "_yql_sort" for joins).
+            mapReduceMapJob.SetReduceOperationSpec(params.ReduceOperationSpec);
             mapReduceMapJob.SetClusterConnections(clusterConnections);
             mapReduceMapJob.SetYtJobService(YtJobService_);
             mapReduceMapJob.SetFmrJobType(EFmrJobType::Map);
+            mapReduceMapJob.SetIsMapReduceMap(true);
             if (TvmSettings_) {
                 mapReduceMapJob.SetTvmSettings(*TvmSettings_);
             }
@@ -658,69 +545,13 @@ public:
             }
             YQL_CLOG(INFO, FastMapReduce) << "MapReduceMap explicit mapper: calling LaunchJob"
                 << " numInputs=" << params.Input.Inputs.size()
-                << " outputTableId=" << unsortedOutput.TableId
-                << " outputPartId=" << unsortedOutput.PartId
-                << " sortingColumnsSize=" << unsortedOutput.SortingColumns.Columns.size();
-            auto mapResult = JobLauncher_->LaunchJob(mapReduceMapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+                << " outputTableId=" << params.Output.TableId
+                << " outputPartId=" << params.Output.PartId;
+            auto mapResult = JobLauncher_->LaunchJob(mapReduceMapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources, cancelFlag);
             if (auto* err = std::get_if<TFmrError>(&mapResult)) {
-                ythrow yexception() << "MapReduceMap phase 1 (mapper) failed: " << err->ErrorMessage;
+                ythrow yexception() << "MapReduceMap (mapper) failed: " << err->ErrorMessage;
             }
-            const auto& mapStats = std::get<TStatistics>(mapResult);
-            YQL_CLOG(INFO, FastMapReduce) << "MapReduceMap explicit mapper: phase 1 done"
-                << " tempPartId=" << tempPartId
-                << " outputTables=" << mapStats.OutputTables.size();
-            for (const auto& [ref, stats] : mapStats.OutputTables) {
-                YQL_CLOG(INFO, FastMapReduce) << "  table=" << ref.TableId << " partId=" << ref.PartId
-                    << " chunks=" << stats.PartIdChunkStats.size();
-            }
-
-            // Phase 2: sort the temp partition into the final sorted partition.
-            auto writerSettings = Settings_.FmrWriterSettings;
-            auto sortedWriter = MakeIntrusive<TFmrTableDataServiceSortedWriter>(
-                params.Output.TableId, params.Output.PartId,
-                TableDataService_, params.Output.SerializedColumnGroups,
-                writerSettings, sortColumns
-            );
-            TMaybe<TMutex> mutex = TMutex();
-
-            // Read all chunks of the temp partition using the exact count from phase 1 stats.
-            auto tempStatsIt = mapStats.OutputTables.find(unsortedOutput);
-            Y_ENSURE(tempStatsIt != mapStats.OutputTables.end(),
-                "Phase 1 stats missing for temp partition " << tempPartId);
-            ui64 tempChunkCount = tempStatsIt->second.PartIdChunkStats.size();
-            TFmrTableInputRef tempInputRef;
-            tempInputRef.TableId = unsortedOutput.TableId;
-            tempInputRef.TableRanges = {{tempPartId, 0, tempChunkCount}};
-
-            // sortColumns = [_yql_key_hash, ...reduceBy]. The mapper output does not contain
-            // _yql_key_hash, so read using only the reduce-key columns and inject the hash
-            // via TKeyHashAddingBlockIterator — same as the identity mapper path.
-            Y_ENSURE(!sortColumns.Columns.empty() && sortColumns.Columns[0] == TString(YqlKeyHashColumn),
-                "First sort column must be _yql_key_hash in MapReduceMap explicit mapper Phase 2");
-            std::vector<TString> reduceKeyColumns(sortColumns.Columns.begin() + 1, sortColumns.Columns.end());
-            std::vector<ESortOrder> reduceKeySortOrders(sortColumns.SortOrders.begin() + 1, sortColumns.SortOrders.end());
-
-            std::vector<IBlockIterator::TPtr> blockIterators;
-            blockIterators.emplace_back(MakeIntrusive<TKeyHashAddingBlockIterator>(
-                MakeIntrusive<TTableDataServiceBlockIterator>(
-                    tempInputRef.TableId, tempInputRef.TableRanges, TableDataService_,
-                    reduceKeyColumns, reduceKeySortOrders,
-                    tempInputRef.Columns, tempInputRef.SerializedColumnGroups,
-                    Nothing(), Nothing(), Nothing(), Nothing(),
-                    Settings_.FmrReaderSettings.ReadAheadChunks
-                ),
-                sortColumns.Columns, sortColumns.SortOrders
-            ));
-
-            auto& parseRecordSettings = Settings_.ParseRecordSettings;
-            NYT::TRawTableReaderPtr sortingReader = MakeIntrusive<TFmrSortingBlockReader>(blockIterators);
-            ParseRecords(sortingReader, sortedWriter, parseRecordSettings.LocalSortBlockCount, parseRecordSettings.LocalSortBlockSize, cancelFlag, mutex);
-            sortedWriter->Flush();
-
-            // Best-effort cleanup of the temp partition.
-            TableDataService_->RegisterDeletion({tempPartId}).GetValueSync();
-
-            return TStatistics({{params.Output, sortedWriter->GetStats()}});
+            return std::get<TStatistics>(mapResult);
         };
         return HandleFmrJob(mapReduceMapJobFunc, ETaskType::MapReduceMap);
     }
@@ -1006,7 +837,13 @@ void FillMapReduceMapFmrJob(
     mapReduceMapJob.SetTaskInputTables(params.Input);
     // SortingColumns were chosen by the coordinator (identity → [_yql_key_hash, ...reduceBy],
     // real mapper → [...reduceBy]). Use them as-is; TFmrUserJob picks the right writer.
-    mapReduceMapJob.SetTaskFmrOutputTables({params.Output});
+    // Index 0 = intermediate shuffle-bound table, 1..K = direct map-bypass outputs.
+    std::vector<TFmrTableOutputRef> mapOutputTables{params.Output};
+    mapOutputTables.insert(mapOutputTables.end(), params.DirectOutputs.begin(), params.DirectOutputs.end());
+    mapReduceMapJob.SetTaskFmrOutputTables(mapOutputTables);
+    // Needed so DoFmrJob() can tell reduceBy (hash) columns apart from any trailing
+    // tiebreaker columns in Output.SortingColumns (e.g. "_yql_sort" for joins).
+    mapReduceMapJob.SetReduceOperationSpec(params.ReduceOperationSpec);
     mapReduceMapJob.SetClusterConnections(clusterConnections);
     mapReduceMapJob.SetYtJobService(jobService);
     mapReduceMapJob.SetFmrJobType(EFmrJobType::Map);
@@ -1044,6 +881,7 @@ TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task) {
     auto& fmrUserJobSettings = resultSettings.FmrUserJobSettings;
     fmrUserJobSettings.QueueSizeLimit = jobProcessSettings["queue_size_limit"].AsInt64();
     fmrUserJobSettings.ThreadPoolSize = jobProcessSettings["num_threads"].AsInt64();
+    fmrUserJobSettings.WriterSettings = resultSettings.FmrWriterSettings;
 
     resultSettings.YtWriterSettings.MaxRowWeight = jobIoSettings["yt_table_writer"]["max_row_weight"].AsInt64();
 

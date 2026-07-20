@@ -32,6 +32,28 @@ void TSolomonRegistryDynamicConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TSolomonExporterDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("thread_pool_size", &TThis::ThreadPoolSize)
+        .Default();
+    registrar.Parameter("thread_pool_polling_period", &TThis::ThreadPoolPollingPeriod)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TSolomonExporterConfigPtr TSolomonExporterConfig::ApplyDynamic(
+    const TSolomonExporterDynamicConfigPtr& dynamicConfig) const
+{
+    auto result = CloneYsonStruct(MakeStrong(this));
+    NYTree::UpdateYsonStructField(result->ThreadPoolSize, dynamicConfig->ThreadPoolSize);
+    NYTree::UpdateYsonStructField(result->ThreadPoolPollingPeriod, dynamicConfig->ThreadPoolPollingPeriod);
+    result->Postprocess();
+    return result;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TShardConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("filter", &TThis::Filter)
@@ -48,6 +70,9 @@ void TShardConfig::Register(TRegistrar registrar)
 
 void TSolomonExporterConfig::Register(TRegistrar registrar)
 {
+    registrar.Parameter("enable", &TThis::Enable)
+        .Default(true);
+
     registrar.Parameter("grid_step", &TThis::GridStep)
         .Default(TDuration::Seconds(5));
 

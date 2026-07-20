@@ -17,6 +17,7 @@
 
 #include <util/generic/scope.h>
 #include <util/string/join.h>
+#include <util/string/strip.h>
 
 #include <library/cpp/protobuf/util/simple_reflection.h>
 
@@ -109,8 +110,6 @@ TNodePtr BuildViewSelect(const TRule_select_stmt& selectStatement, TContext& con
 } // namespace
 
 namespace NSQLTranslationV1 {
-
-using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
 
 using namespace NSQLv1Generated;
 
@@ -784,6 +783,28 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
         indexes.back().DataColumns.emplace_back(IdEx(block.GetRule_an_id_schema3(), *this));
         for (const auto& inner : block.GetBlock4()) {
             indexes.back().DataColumns.emplace_back(IdEx(inner.GetRule_an_id_schema2(), *this));
+        }
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::CreateTableStatistics(const TRule_table_statistics& node, TVector<TStatisticsDescription>& statistics) {
+    statistics.emplace_back(IdEx(node.GetRule_an_id2(), *this));
+    auto& stat = statistics.back();
+
+    // ON (columns)
+    stat.Columns.emplace_back(IdEx(node.GetRule_an_id_schema5(), *this));
+    for (const auto& block : node.GetBlock6()) {
+        stat.Columns.emplace_back(IdEx(block.GetRule_an_id_schema2(), *this));
+    }
+
+    // WITH (types) — optional; omission means "all supported statistic types"
+    if (node.HasBlock8()) {
+        const auto& withTypes = node.GetBlock8().GetRule_with_statistics_types1();
+        stat.Types.emplace_back(IdEx(withTypes.GetRule_an_id_or_type3(), *this));
+        for (const auto& block : withTypes.GetBlock4()) {
+            stat.Types.emplace_back(IdEx(block.GetRule_an_id_or_type2(), *this));
         }
     }
 
@@ -1711,6 +1732,7 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
     TMaybe<TCompression> compression;
     bool nullable = true;
     TMaybe<TVector<TEncoding>> columnEncoding;
+    TMaybe<TGeneratedColumn> generated;
 
     const auto& optionsList = node.GetRule_column_option_list3();
 
@@ -1720,9 +1742,10 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
         DefaultValue,
         Compression,
         Encoding,
+        Generated,
     };
 
-    TVector<TRule_column_option> columnOptions(Reserve(static_cast<size_t>(EOption::Encoding) + 1));
+    TVector<TRule_column_option> columnOptions(Reserve(static_cast<size_t>(EOption::Generated) + 1));
 
     {
         switch (optionsList.Alt_case()) {
@@ -1853,6 +1876,57 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
 
                     break;
                 }
+                case TRule_column_option::kAltColumnOption6: { // generated_always
+                    const auto& opt = rule.GetAlt_column_option6().GetRule_generated_always1();
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::Generated) != usedOptions.end()) {
+                        TPosition pos = ctx.Context().TokenPosition(opt.GetToken2());
+                        ctx.Context().Error(pos) << "'GENERATED ALWAYS AS' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::Generated);
+
+                    {
+                        TColumnRefScope scope(ctx.Context(), EColumnRefState::Allow);
+                        TSqlExpression expr(ctx);
+                        if (!Unwrap(expr.Build(opt.GetRule_expr4()))) {
+                            return {};
+                        }
+                    }
+
+                    TStringBuilder contextPrefix;
+                    if (!BuildContextRecreationQuery(ctx.Context(), contextPrefix)) {
+                        return {};
+                    }
+
+                    const auto& lparen = opt.GetToken3();
+                    const auto& rparen = opt.GetToken5();
+                    auto begin = GetQueryPosition(ctx.Context().Query, lparen);
+                    auto end = GetQueryPosition(ctx.Context().Query, rparen);
+
+                    if (begin == std::string::npos || end == std::string::npos) {
+                        TPosition pos = ctx.Context().TokenPosition(opt.GetToken2());
+                        ctx.Context().Error(pos) << "Failed to extract GENERATED ALWAYS AS expression text";
+                        return {};
+                    }
+
+                    begin += lparen.value().size();
+                    TString exprBody = StripString(ctx.Context().Query.substr(begin, end - begin));
+
+                    bool generatedStored = false;
+                    if (opt.HasBlock6()) {
+                        const auto tokenId = opt.GetBlock6().GetToken1().GetId();
+                        generatedStored = IS_TOKEN(tokenId, STORED);
+                    }
+
+                    generated = TGeneratedColumn{
+                        .ContextPrefix = std::move(contextPrefix),
+                        .ExprBody = std::move(exprBody),
+                        .Stored = generatedStored,
+                    };
+
+                    break;
+                }
                 case TRule_column_option::ALT_NOT_SET:
                     YQL_ENSURE(false, "Unreachable");
             }
@@ -1865,6 +1939,7 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TSqlTransl
         .Compression = std::move(compression),
         .Nullable = nullable,
         .ColumnEncoding = std::move(columnEncoding),
+        .Generated = std::move(generated),
     };
 }
 
@@ -1879,7 +1954,7 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         return {};
     }
 
-    auto&& [defaultExpr, families, compression, nullable, columnEncoding] = columnOptions.GetRef();
+    auto&& [defaultExpr, families, compression, nullable, columnEncoding, generated] = columnOptions.GetRef();
 
     if (!type) {
         type = TypeNodeOrBind(node.GetRule_type_name_or_bind2());
@@ -1899,6 +1974,7 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         .Nullable = nullable,
         .Serial = serial,
         .ColumnEncoding = columnEncoding,
+        .Generated = generated,
     };
 }
 
@@ -2036,6 +2112,17 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
                 Ctx_.Error() << "Several column families for a single column are not yet supported";
                 return false;
             }
+            if (columnSchema->Generated) {
+                const TString& service = Ctx_.Scoped->CurrService;
+                if (service != KikimrProviderName && service != YdbProviderName) {
+                    Ctx_.Error(columnSchema->Pos) << "GENERATED ALWAYS AS columns are supported only for the ydb provider";
+                    return false;
+                }
+                if (params.TableType != ETableType::Table) {
+                    Ctx_.Error(columnSchema->Pos) << "GENERATED ALWAYS AS columns are supported only for CREATE TABLE and ALTER TABLE";
+                    return false;
+                }
+            }
             params.Columns.push_back(*columnSchema);
             break;
         }
@@ -2154,6 +2241,14 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             const TPosition pos(Context().Pos());
 
             params.Columns.push_back({.Pos = pos, .Name = name, .Nullable = true});
+            break;
+        }
+        case TRule_create_table_entry::kAltCreateTableEntry7: {
+            // table_statistics
+            auto& table_statistics = node.GetAlt_create_table_entry7().GetRule_table_statistics1();
+            if (!CreateTableStatistics(table_statistics, params.Statistics)) {
+                return false;
+            }
             break;
         }
         case NSQLv1Generated::TRule_create_table_entry::ALT_NOT_SET:

@@ -4,6 +4,8 @@
 #include "hive_log.h"
 #include "node_info.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -55,7 +57,10 @@ protected:
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
-        BLOG_I("Drain " << SelfId() << " finished with " << Movements << " movements made");
+        YDB_LOG_INFO("Drain finished",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", SelfId()},
+            {"movements", Movements});
         for (auto [nodeId, downBefore] : DownBefore) {
             TNodeInfo* nodeInfo = Hive->FindNode(nodeId);
             if (nodeInfo != nullptr) {
@@ -84,20 +89,28 @@ protected:
                     tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                     ++KickInFlight;
                     ++Movements;
-                    BLOG_D("Drain " << SelfId() << " moving tablet "
-                                << tablet->ToString()
-                                << " from node " << tablet->Node->Id
-                                << " to node " << node->Id);
+                    YDB_LOG_DEBUG("Drain moving tablet",
+                        {"logPrefix", GetLogPrefix()},
+                        {"selfId", SelfId()},
+                        {"tablet", tablet->ToString()},
+                        {"sourceNodeId", tablet->Node->Id},
+                        {"targetNodeId", node->Id});
                     Hive->TabletCounters->Cumulative()[NHive::COUNTER_DRAIN_EXECUTED].Increment(1);
                     Hive->RecordTabletMove(THive::TTabletMoveInfo(TInstant::Now(), *tablet, tablet->Node->Id, node->Id));
                     Hive->Execute(Hive->CreateRestartTablet(tabletId, node->Id));
                 } else {
                     if (std::holds_alternative<THive::TNoNodeFound>(result) || std::holds_alternative<THive::TNotEnoughResources>(result)) {
                         Hive->TabletCounters->Cumulative()[NHive::COUNTER_DRAIN_FAILED].Increment(1);
-                        BLOG_D("Drain " << SelfId() << " could not move tablet " << tablet->ToString()
-                               << " from node " << tablet->Node->Id);
+                        YDB_LOG_DEBUG("Drain could not find target node for tablet",
+                            {"logPrefix", GetLogPrefix()},
+                            {"selfId", SelfId()},
+                            {"tablet", tablet->ToString()},
+                            {"sourceNodeId", tablet->Node->Id});
                     } else if (std::holds_alternative<THive::TTooManyTabletsStarting>(result)){
-                        BLOG_D("Drain " << SelfId() << " could not move tablet " << tablet->ToString() << " and will try again later");
+                        YDB_LOG_DEBUG("Drain postponed tablet move due to too many tablets starting",
+                            {"logPrefix", GetLogPrefix()},
+                            {"selfId", SelfId()},
+                            {"tablet", tablet->ToString()});
                         Hive->WaitToMoveTablets(SelfId());
                         return;
                     }
@@ -120,27 +133,44 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& ev) {
-        BLOG_D("Drain " << SelfId() << " received " << ev->Get()->Status << " for tablet " << ev->Get()->TabletId);
+        YDB_LOG_DEBUG("Drain received TEvRestartComplete for tablet",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", SelfId()},
+            {"status", ev->Get()->Status},
+            {"tabletId", ev->Get()->TabletId});
         --KickInFlight;
         KickNextTablet();
     }
 
     void Handle(TEvHive::TEvDrainNodeResult::TPtr& ev) {
-        BLOG_D("Drain " << SelfId() << " received status from domain hive " << ev->Get()->Record.ShortDebugString());
-        BLOG_I("Drain " << SelfId() << " continued for " << Target << " with " << Tablets.size() << " tablets");
+        YDB_LOG_DEBUG("Drain received status from domain hive",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", SelfId()},
+            {"ev", ev->Get()->Record.ShortDebugString()});
+        YDB_LOG_INFO("Drain continued after domain hive response",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", SelfId()},
+            {"target", Target},
+            {"tabletsCount", Tablets.size()});
         DomainDrainCompleted(ev->Get()->Record.GetMovements());
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK && DomainHiveId != 0) {
-            BLOG_W("Drain " << SelfId() << " pipe to hive " << DomainHiveId << " failed to connect");
+            YDB_LOG_WARN("Drain pipe to hive failed to connect",
+                {"logPrefix", GetLogPrefix()},
+                {"selfId", SelfId()},
+                {"domainHiveId", DomainHiveId});
             DomainDrainCompleted();
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         if (ev->Get()->ClientId == DomainHivePipeClient) {
-            BLOG_W("Drain " << SelfId() << " pipe to hive " << DomainHiveId << " destroyed - retrying");
+            YDB_LOG_WARN("Drain pipe to hive destroyed - retrying",
+                {"logPrefix", GetLogPrefix()},
+                {"selfId", SelfId()},
+                {"domainHiveId", DomainHiveId});
             if (DomainHivePipeClient) {
                 NTabletPipe::CloseClient(SelfId(), DomainHivePipeClient);
             }
@@ -163,7 +193,11 @@ protected:
         event->Record.SetDrainInFlight(Settings.DrainInFlight);
         event->Record.SetSeqNo(SeqNo);
         NTabletPipe::SendData(SelfId(), DomainHivePipeClient, event.Release());
-        BLOG_I("Drain " << SelfId() << " forwarded for node " << nodeId << " to hive " << DomainHiveId);
+        YDB_LOG_INFO("Drain forwarded for node to domain hive",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", SelfId()},
+            {"nodeId", nodeId},
+            {"domainHiveId", DomainHiveId});
     }
 
 
@@ -206,8 +240,8 @@ public:
             TNodeInfo* nodeInfo = Hive->FindNode(nodeId);
             SeqNo = nodeInfo->DrainSeqNo;
 
-            if (nodeInfo->ServicedDomains.size() == 1) {
-                TDomainInfo* domainInfo = Hive->FindDomain(nodeInfo->ServicedDomains.front());
+            if (auto domainKey = nodeInfo->GetServicedDomain()) {
+                TDomainInfo* domainInfo = Hive->FindDomain(domainKey);
                 if (domainInfo != nullptr) {
                     if (domainInfo->HiveId != 0 && domainInfo->HiveId != Hive->TabletID()) {
                         DomainHiveId = domainInfo->HiveId;
@@ -220,7 +254,11 @@ public:
         }
 
         Become(&THiveDrain::StateWork, TDuration::MilliSeconds(TIMEOUT), new TEvents::TEvWakeup());
-        BLOG_I("Drain " << SelfId() << " started for " << Target << " with " << Tablets.size() << " tablets");
+        YDB_LOG_INFO("Drain started",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", SelfId()},
+            {"target", Target},
+            {"tabletsCount", Tablets.size()});
         KickNextTablet();
     }
 
@@ -257,7 +295,9 @@ THiveDrain* THive::StartHiveDrain(TDrainTarget target, TDrainSettings settings) 
         RegisterWithSameMailbox(balancer);
         return balancer;
     } else {
-        BLOG_W("It's not possible to start drain on " << target << ", it is already busy");
+        YDB_LOG_WARN("Cannot start drain: target is already busy",
+            {"logPrefix", GetLogPrefix()},
+            {"target", target});
         return nullptr;
     }
 }

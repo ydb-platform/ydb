@@ -35,7 +35,7 @@ public:
             TPqGatewayServices pqServices(
                 Driver,
                 nullptr,
-                nullptr,
+                CredentialsFactory,
                 std::make_shared<TPqGatewayConfig>(),
                 nullptr
             );
@@ -51,7 +51,7 @@ public:
                 {},
                 {params},
                 Driver,
-                nullptr,
+                CredentialsFactory,
                 actor.SelfId(),
                 actor.GetHolderFactory(),
                 actor.TypeEnv,

@@ -61,7 +61,7 @@ bool PropagateForbidden(const TIntrusivePtr<IOperator>& op, const TInfoUnitConst
 class TLogicalNameConstraints {
 public:
     explicit TLogicalNameConstraints(TOpRoot& root)
-        : Traversal(root.PostOrder()) {
+        : Traversal(root.SnapshotTraversal()) {
     }
 
     void Run() {

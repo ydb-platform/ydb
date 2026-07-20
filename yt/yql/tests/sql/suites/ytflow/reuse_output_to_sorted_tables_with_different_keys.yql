@@ -1,0 +1,16 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+$result_stream = select string_field as key, int64_field as value from Input;
+
+insert into OutputKey
+select * from $result_stream;
+
+insert into OutputValue
+select * from $result_stream;

@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
@@ -45,22 +46,19 @@ TPartitionActor::TPartitionActor(
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "%s TPartitionActor: initialization started",
+        "%s initialization started",
         LogTitle.GetWithTime().c_str());
 }
 
 TPartitionActor::~TPartitionActor() = default;
 
-void TPartitionActor::PassAway()
+void TPartitionActor::OnDetach(const TActorContext& ctx)
 {
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "TPartitionActor: before detach");
-}
-
-void TPartitionActor::OnDetach(const TActorContext& ctx)
-{
+        "%s OnDetach",
+        LogTitle.GetWithTime().c_str());
     Die(ctx);
 }
 
@@ -69,6 +67,13 @@ void TPartitionActor::OnTabletDead(
     const TActorContext& ctx)
 {
     Y_UNUSED(ev);
+
+    LOG_INFO(
+        NActors::TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "%s OnTabletDead",
+        LogTitle.GetWithTime().c_str());
+
     Die(ctx);
 }
 
@@ -174,9 +179,10 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
     auto executors =
         nbsService->ExecutorPool.GetExecutors(DirectBlockGroupsCount);
 
-    for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
+    for (ui32 dbgIndex = 0; dbgIndex < DirectBlockGroupsCount; dbgIndex++) {
         const auto& conn =
-            directBlockGroupsConnections.GetDirectBlockGroupConnections(i);
+            directBlockGroupsConnections.GetDirectBlockGroupConnections(
+                dbgIndex);
         TVector<NBsController::TDDiskId> ddiskIds;
         for (const auto& connection: conn.GetConnections()) {
             ddiskIds.push_back(
@@ -191,15 +197,18 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
             nbsService->StorageConfig,
-            executors[i],
+            executors[dbgIndex],
             VolumeConfig.GetDiskId(),
             TabletID(),
             Executor()->Generation(),   // generation
-            i,                          // direct block group index
+            dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
             std::make_unique<NTransport::TICStorageTransport>(
-                TActivationContext::ActorSystem()));
+                TActivationContext::ActorSystem(),
+                NTransport::CreateTransportActor(
+                    VolumeConfig.GetDiskId(),
+                    dbgIndex)));
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }
@@ -268,6 +277,8 @@ void TPartitionActor::Start(
         vChunkConfigsByIndex[cfg.GetVChunkIndex()] = cfg;
     }
 
+    DirectBlockGroupsConnections = directBlockGroupsConnections;
+
     const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
     FastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
@@ -309,6 +320,22 @@ void TPartitionActor::HandleFastPathServiceReady(
         NKikimrServices::NBS_PARTITION,
         "%s All DBGs reached initial locked quorum, opening endpoint",
         LogTitle.GetWithTime().c_str());
+
+    // Re-send the BSC request for an add-host in flight at the last restart
+    // (no live add can be in flight this early). BSController is idempotent.
+    if (AddHostInFlight.has_value()) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Replaying in-flight AddHost dbgId=%lu newHostIndex=%s",
+            LogTitle.GetWithTime().c_str(),
+            AddHostInFlight->DirectBlockGroupId,
+            PrintHostIndex(AddHostInFlight->NewHostIndex).c_str());
+        SendAllocateDDiskForAddHost(
+            ctx,
+            AddHostInFlight->DirectBlockGroupId,
+            AddHostInFlight->NewHostIndex);
+    }
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
 
@@ -411,18 +438,47 @@ void TPartitionActor::HandleFastPathServiceStopped(
         LogTitle.GetWithTime().c_str());
 }
 
-void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
-    const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+void TPartitionActor::HandlePoisonByBlockedGeneration(
+    const TEvPartitionDirectPrivate::TEvPoison::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
     const auto* msg = ev->Get();
 
+    LOG_CRIT(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s SUICIDE by BLOCKED generation. Reason: %s",
+        LogTitle.GetWithTime().c_str(),
+        msg->Reason.c_str());
+
+    ctx.Send(Tablet(), std::make_unique<TEvents::TEvPoisonPill>().release());
+}
+
+void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
+    const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "%s HandleControllerAllocateDDiskBlockGroupResult record is: %s",
         LogTitle.GetWithTime().c_str(),
-        msg->Record.DebugString().data());
+        ev->Get()->Record.DebugString().data());
+
+    // The first allocation response sets up the group; any later one is the
+    // result of an add-host request.
+    if (DDiskBlockGroupAllocated) {
+        HandleAddHostAllocationResult(ev, ctx);
+    } else {
+        HandleInitialAllocationResult(ev, ctx);
+    }
+}
+
+void TPartitionActor::HandleInitialAllocationResult(
+    const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const auto* msg = ev->Get();
 
     if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
         Y_ABORT_UNLESS(
@@ -442,7 +498,7 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
             }
         }
 
-        DdiskBlockGroupAllocated = true;
+        DDiskBlockGroupAllocated = true;
         ExecuteTx(ctx, CreateTx<TStorePartitionIds>(std::move(ids)));
     } else {
         LOG_ERROR(
@@ -483,7 +539,7 @@ void TPartitionActor::HandleUpdateVolumeConfig(
         LogTitle.GetWithTime().c_str(),
         msg->Record.GetVolumeConfig().GetVersion());
 
-    if (DdiskBlockGroupAllocated) {
+    if (DDiskBlockGroupAllocated) {
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
@@ -531,12 +587,12 @@ void TPartitionActor::HandleUpdateVChunkConfig(
 {
     auto& cfg = ev->Get()->VChunkConfig;
 
-    LOG_DEBUG_S(
+    LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        LogTitle.GetWithTime().c_str()
-            << " Handle UpdateVChunkConfig, vChunkIndex: "
-            << cfg.GetVChunkIndex());
+        "%s Handle UpdateVChunkConfig %s",
+        LogTitle.GetWithTime().c_str(),
+        cfg.DebugPrint().c_str());
 
     ExecuteTx(ctx, CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
 }
@@ -570,6 +626,7 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceReady,
             HandleFastPathServiceReady);
+        HFunc(TEvPartitionDirectPrivate::TEvAddHostToDBG, HandleAddHostToDBG);
 
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceShutdown,
@@ -579,15 +636,21 @@ STFUNC(TPartitionActor::StateWork)
             TEvPartitionDirectPrivate::TEvFastPathServiceStopped,
             HandleFastPathServiceStopped);
 
+        HFunc(
+            TEvPartitionDirectPrivate::TEvPoison,
+            HandlePoisonByBlockedGeneration);
+
         HFunc(NMon::TEvRemoteHttpInfo, HandleHttpInfo);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_DEBUG_S(
+                LOG_ERROR(
                     TActivationContext::AsActorContext(),
                     NKikimrServices::NBS_PARTITION,
-                    "Unhandled event type: " << ev->GetTypeRewrite()
-                                             << " event: " << ev->ToString());
+                    "%s Unhandled event type: %u event %s ",
+                    LogTitle.GetWithTime().c_str(),
+                    ev->GetTypeRewrite(),
+                    ev->ToString().c_str());
             }
             break;
     }

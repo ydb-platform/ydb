@@ -4,18 +4,30 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
+#include <util/generic/vector.h>
+
 namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TPartitionDirectServiceMock: public IPartitionDirectService
 {
+    struct TAddHostRequest
+    {
+        size_t DirectBlockGroupId = 0;
+        size_t NewHostIndex = 0;
+    };
+
     explicit TPartitionDirectServiceMock(bool dropScheduledCallbacks = false)
         : DropScheduledCallbacks(dropScheduledCallbacks)
     {}
 
     TVolumeConfigPtr VolumeConfig;
     bool DropScheduledCallbacks = false;
+    TVector<TAddHostRequest> AddHostRequests;
+    ui64 LsnGenerator = 0;
+    size_t BlockedGenerationCount = 0;
+    TString LastBlockedReason;
 
     [[nodiscard]] TVolumeConfigPtr GetVolumeConfig() const override
     {
@@ -46,11 +58,22 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         Y_UNUSED(cfg);
     }
 
-    ui64 LsnGenerator = 0;
+    void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override
+    {
+        AddHostRequests.push_back(TAddHostRequest{
+            .DirectBlockGroupId = directBlockGroupId,
+            .NewHostIndex = newHostIndex});
+    }
 
     ui64 GenerateLsn() override
     {
         return ++LsnGenerator;
+    }
+
+    void StopTablet(const TString& reason) override
+    {
+        ++BlockedGenerationCount;
+        LastBlockedReason = reason;
     }
 };
 

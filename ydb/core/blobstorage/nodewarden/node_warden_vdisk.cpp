@@ -39,7 +39,7 @@ namespace NKikimr::NStorage {
         if (vdisk.RuntimeData) {
             vdiskRunning = true;
             vdisk.TIntrusiveListItem<TVDiskRecord, TGroupRelationTag>::Unlink();
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdisk.GetVDiskServiceId(), {}, nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdisk.RuntimeData->ActorId, {}, nullptr, 0));
             vdisk.RuntimeData.reset();
         }
 
@@ -269,6 +269,26 @@ namespace NKikimr::NStorage {
                         pbufferFormat.PreallocateFreeSpaceThresholdPercent = newValue;
                     }
                 }
+                if (Cfg->PBufferConfig->HasDeallocateFreeSpaceThresholdPercent()) {
+                    auto newValue = Cfg->PBufferConfig->GetDeallocateFreeSpaceThresholdPercent();
+                    if (newValue > 100) {
+                        YDB_LOG_ERROR("DeallocateFreeSpaceThresholdPercent value should be less or equal to 100",
+                            {"marker", "NW37"},
+                            {"DeallocateFreeSpaceThresholdPercent", newValue});
+                    } else {
+                        pbufferFormat.DeallocateFreeSpaceThresholdPercent = newValue;
+                    }
+                }
+                if (Cfg->PBufferConfig->HasDeallocateThresholdSeconds()) {
+                    auto newValue = Cfg->PBufferConfig->GetDeallocateThresholdSeconds();
+                    if (newValue > 600) {
+                        YDB_LOG_ERROR("DeallocateThresholdSeconds value should be less or equal to 600",
+                            {"marker", "NW38"},
+                            {"DeallocateThresholdSeconds", newValue});
+                    } else {
+                        pbufferFormat.DeallocateThresholdSeconds = newValue;
+                    }
+                }
             }
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
                 std::move(ddiskConfig), AppData()->Counters));
@@ -410,6 +430,8 @@ namespace NKikimr::NStorage {
 
         vdisk.RuntimeData.emplace(TVDiskRecord::TRuntimeData{
             .GroupInfo = groupInfo,
+            .ActorId = actorId,
+            .ServiceId = vdiskServiceId,
             .OrderNumber = groupInfo->GetOrderNumber(TVDiskIdShort(vdiskId)),
             .DonorMode = donorMode,
             .ReadOnly = readOnly,
@@ -581,7 +603,7 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(newInfo->GroupID == currentInfo->GroupID);
 
         const ui32 orderNumber = vdisk.RuntimeData->OrderNumber;
-        const TActorId vdiskServiceId = vdisk.GetVDiskServiceId();
+        const TActorId vdiskServiceId = vdisk.RuntimeData->ServiceId;
 
         if (newInfo->GetActorId(orderNumber) != vdiskServiceId) {
             // this disk is in donor mode, we don't care about generation change; donor modes are operated by BSC solely

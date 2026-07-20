@@ -97,4 +97,10 @@ NThreading::TFuture<TOperationsList<NTable::TAnalyzeOperation>> TOperationClient
     return List<NTable::TAnalyzeOperation>("analyze", pageSize, pageToken);
 }
 
+template NThreading::TFuture<NTable::TSetNotNullOperation> TOperationClient::Get(const TOperation::TOperationId& id);
+template <>
+NThreading::TFuture<TOperationsList<NTable::TSetNotNullOperation>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
+    return List<NTable::TSetNotNullOperation>("setnotnull", pageSize, pageToken);
+}
+
 } // namespace NYdb::NOperation

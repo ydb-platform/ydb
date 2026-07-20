@@ -2853,6 +2853,32 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         WaitForTabletIsUp(runtime, tabletId, 0, &pipeConfig);
     }
 
+    Y_UNIT_TEST(TestNodeDisconnectedButAlive) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        TActorId sender = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, tabletType, BINDED_CHANNELS));
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        pipeConfig.ForceLocal = true;
+
+        WaitForTabletIsUp(runtime, tabletId, 0, &pipeConfig);
+
+        // Simulating a case where IC between hive and node breaks
+        // Hive has nowhere to start the tablet anyway, so it must not kill it
+        TBlockEvents<TEvLocal::TEvPing> blockReconnect(runtime);
+        runtime.SendToPipe(hiveTablet, sender, new TEvInterconnect::TEvNodeDisconnected(runtime.GetNodeId(0)));
+        runtime.WaitFor("process disconnect", [&] { return !blockReconnect.empty(); });
+        MakeSureTabletIsUp(runtime, tabletId, 0, &pipeConfig);
+    }
+
     Y_UNIT_TEST(TestLocalReplacement) {
         TTestBasicRuntime runtime(2, false);
         Setup(runtime, true);
@@ -4355,10 +4381,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         runtime.LocationCallback = GetLocation;
 
-        Setup(runtime, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetDataCenterChangeReactionPeriod(0);
+        });
         //const int nodeBase = runtime.GetNodeId(0);
         CreateLocal(runtime, 0);
         CreateLocal(runtime, 1);
+        SendKillLocal(runtime, 2);
+        SendKillLocal(runtime, 3);
+        SendKillLocal(runtime, 4);
+        SendKillLocal(runtime, 5);
         TActorId senderA = runtime.AllocateEdgeActor();
         const ui64 hiveTablet = MakeDefaultHiveID();
         const ui64 testerTablet = MakeTabletID(false, 1);
@@ -5815,7 +5847,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
             NKikimrHive::TTabletMetrics* cpu = metrics->Record.AddTabletMetrics();
             cpu->SetTabletID(tabletId);
-            cpu->MutableResourceUsage()->SetCPU(500'000);
+            cpu->MutableResourceUsage()->SetCPU(1'500'000);
 
             runtime.SendToPipe(hiveTablet, senderA, metrics.Release());
         }
@@ -7848,7 +7880,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         SendKillLocal(runtime, 0);
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvStopTablet);
+            options.FinalEvents.emplace_back(TEvents::TEvPoisonPill::EventType);
             runtime.DispatchEvents(options);
         }
         CreateLocal(runtime, 0);
@@ -7873,7 +7905,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         SendKillLocal(runtime, 1);
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvStopTablet);
+            options.FinalEvents.emplace_back(TEvents::TEvPoisonPill::EventType);
             runtime.DispatchEvents(options);
         }
         CreateLocalForTenant(runtime, 1, "/dc-1/tenant1");
@@ -7952,11 +7984,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // restart to kick tablet
         SendKillLocal(runtime, 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvStopTablet);
-            runtime.DispatchEvents(options);
-        }
+        MakeSureTabletIsDown(runtime, dummyTabletId, 0);
         CreateLocal(runtime, 0);
 
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
@@ -7977,11 +8005,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         // restart to kick tablet
         SendKillLocal(runtime, 1);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvStopTablet);
-            runtime.DispatchEvents(options);
-        }
+        MakeSureTabletIsDown(runtime, dummyTabletId, 0);
         CreateLocalForTenant(runtime, 1, "/dc-1/tenant1");
 
         MakeSureTabletIsUp(runtime, dummyTabletId, 0);
@@ -8771,7 +8795,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             runtime.DispatchEvents(options);
         }
 
-        ui32 nodeIdx = 0;
+        ui32 nodeIdx = 1;
         ui32 nodeId = runtime.GetNodeId(nodeIdx);
         runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvSetDown(nodeId));
         TAutoPtr<IEventHandle> handle;
@@ -8786,6 +8810,20 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             runtime.DispatchEvents(options);
         }
         UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, hiveTablet, NHive::COUNTER_NODES_DOWN), 0);
+
+        {
+            runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvSetDown(nodeId));
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvSetDownReply>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::ERROR);
+        }
+
+        {
+            runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvSetDown(nodeId, false));
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvSetDownReply>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::OK);
+        }
     }
 
     Y_UNIT_TEST(TestLockedTabletsMustNotRestart) {
@@ -9260,7 +9298,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
             NKikimrHive::TTabletMetrics* cpu = metrics->Record.AddTabletMetrics();
             cpu->SetTabletID(tabletId);
-            cpu->MutableResourceUsage()->SetCPU(2'000'000);
+            cpu->MutableResourceUsage()->SetCPU(6'000'000);
 
             runtime.SendToPipe(hiveTablet, senderA, metrics.Release());
         }
@@ -9500,6 +9538,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
         }
         {
+            auto observer = runtime.AddObserver<TEvTablet::TEvMoveData>([group] (auto&& ev) {
+                const auto& groups = ev->Get()->Record.GetGroups();
+                UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(groups[0], group);
+            });
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TEvTablet::EvMoveData);
             runtime.DispatchEvents(options);
@@ -9693,6 +9736,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLockedTabletVolatileStateDependsOnMetricsFlag) {
+        return;  // https://github.com/ydb-platform/ydb/issues/46172
         for (bool lockedTabletsSendMetrics : {false, true}) {
             const ui64 hiveTablet = MakeDefaultHiveID();
             const ui64 testerTablet = MakeTabletID(false, 1);

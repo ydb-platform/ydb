@@ -135,6 +135,14 @@ public:
         return Record.GetRequest().HasKafkaApiOperations();
     }
 
+    bool HasDeferredPublication() const {
+        return Record.GetRequest().HasDeferredPublication();
+    }
+
+    const ::NKikimrKqp::TTopicDeferredPublicationRequest& GetDeferredPublication() const {
+        return Record.GetRequest().GetDeferredPublication();
+    }
+
     bool GetKeepSession() const {
         return RequestCtx ? QuerySettings.KeepSession : Record.GetRequest().GetKeepSession();
     }
@@ -265,6 +273,14 @@ public:
         }
 
         return Record.GetRequest().GetClientAddress();
+    }
+
+    TString GetApplicationName() const {
+        if (RequestCtx) {
+            return "";  // gRPC path carries app name via the session, not the query request
+        }
+
+        return Record.GetRequest().GetApplicationName();
     }
 
     const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& GetYdbParameters() const {

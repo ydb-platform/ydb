@@ -112,8 +112,7 @@ void TGenericDescribeTableTransformer::FillCredentials(NConnector::NApi::TDescri
     // It's crucial to reuse providers because their construction implies synchronous IO.
     auto providersIt = State_->CredentialProviders.find(clusterConfig.name());
     if (providersIt == State_->CredentialProviders.end()) {
-        auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(
-            State_->CredentialsFactory, structuredTokenJSON, false);
+        auto credentialsProviderFactory = State_->CredentialsFactory->Create(structuredTokenJSON, false);
 
         providersIt =
             State_->CredentialProviders

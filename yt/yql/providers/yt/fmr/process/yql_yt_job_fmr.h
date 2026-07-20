@@ -112,6 +112,29 @@ public:
         IsMapReduceReducer_ = value;
     }
 
+    void SetIsMapReduceMap(bool value) {
+        IsMapReduceMap_ = value;
+    }
+
+    // Whether this Reduce job's input is sorted by [_yql_key_hash, ...ReduceOperationSpec's
+    // SortBy] (a MapReduce operation's reduce stage) or by SortBy alone with no hash column at
+    // all (a plain Reduce operation reading real YT-sorted input) - see
+    // TReduceTaskParams::SortByHasKeyHashPrefix, which this is set from.
+    void SetSortByHasKeyHashPrefix(bool value) {
+        SortByHasKeyHashPrefix_ = value;
+    }
+
+    // Set by the gateway (from execCtx->InputTables_, before this job's state is serialized to
+    // workers) whenever the ORIGINAL OPERATION has more than one distinct input position (e.g. a
+    // JOIN's mapper reading the same or different tables via multiple sections). This must be a
+    // job-level decision, not inferred per task: once an input table is large enough to be split
+    // into byte-range partitions, any individual task ends up touching only one of the operation's
+    // input positions, so a per-task diversity check would wrongly conclude marking is unnecessary
+    // even though the mapper globally expects Variant-tagged rows.
+    void SetForceTableIndexMarking(bool value) {
+        ForceTableIndexMarking_ = value;
+    }
+
     void Save(IOutputStream& s) const override;
     void Load(IInputStream& s) override;
 
@@ -131,12 +154,24 @@ protected:
     }
 
 private:
-    void FillQueueFromSingleInputTable(ui64 tableIndex);
+    void FillQueueFromSingleInputTable(ui64 tableIndex, bool needsTableIndexMarking);
     void FillQueueFromInputTablesUnordered();
     void FillQueueFromInputTablesOrdered();
     void FillQueueFromReduceInput();
 
-    void InitializeFmrUserJob();
+    // Per-reader original input positions (TYtTableRef::TableIndex / TFmrTableRef::TableIndex) for a
+    // physical task-table-ref, in the same order GetTableInputStreams returns readers for it (one
+    // TYtTableTaskRef can bundle rows from several original input tables). This is what TableName()
+    // resolution and the table_index stream markers must use, since it's unique per original input
+    // position (unlike the operation's InputGroups/Group, which several distinct tables can share).
+    std::vector<ui32> GetTableIndicesForInput(const TTaskTableRef& tableRef) const;
+    // Whether to embed table_index markers in the raw stream so the reader can tell which original
+    // input position each row came from. Driven entirely by ForceTableIndexMarking_ (a job-level
+    // flag set by the gateway) rather than this task's own InputTables_ diversity — see
+    // SetForceTableIndexMarking for why a per-task check is unsound.
+    bool NeedsTableIndexMarking() const;
+
+    void InitializeFmrUserJob(TVector<TString>* mapperBlobs = nullptr);
 
     TStatistics GetStatistics(const TFmrUserJobOptions& options);
 
@@ -152,6 +187,9 @@ private:
     TMaybe<TVanillaInfo> VanillaInfo_ = Nothing();
     TMaybe<TReduceOperationSpec> ReduceOperationSpec_;
     bool IsMapReduceReducer_ = false;
+    bool IsMapReduceMap_ = false;
+    bool SortByHasKeyHashPrefix_ = false;
+    bool ForceTableIndexMarking_ = false;
     // End of serializable part
 
     // Non-serialized: set only for in-process execution via SetTableDataServiceDiscovery.

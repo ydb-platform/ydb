@@ -3,6 +3,7 @@
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 
+#include <util/generic/utility.h>
 #include <util/random/random.h>
 
 using namespace NYdb::NConsoleClient;
@@ -45,12 +46,16 @@ void TCommandWorkloadTransferTopicToTableInit::TScenario::CreateReadOnlyTable(co
 
     ExecSchemeQuery(query);
 
-    for (int i = 0; i < 10; ++i) {
-        UpsertRandomKeyBlock();
+    // Seed the read-only table in blocks of at most 100'000 rows.
+    constexpr ui64 BLOCK_SIZE = 100'000;
+    for (ui64 remaining = InitialRowCount; remaining > 0; ) {
+        const ui64 block = Min(remaining, BLOCK_SIZE);
+        UpsertRandomKeyBlock(block);
+        remaining -= block;
     }
 }
 
-void TCommandWorkloadTransferTopicToTableInit::TScenario::UpsertRandomKeyBlock()
+void TCommandWorkloadTransferTopicToTableInit::TScenario::UpsertRandomKeyBlock(ui64 rowCount)
 {
     TString query = R"(
         DECLARE $rows AS List<Struct<
@@ -64,7 +69,7 @@ void TCommandWorkloadTransferTopicToTableInit::TScenario::UpsertRandomKeyBlock()
 
     auto& rows = builder.AddParam("$rows");
     rows.BeginList();
-    for (int i = 0; i < 100'000; ++i) {
+    for (ui64 i = 0; i < rowCount; ++i) {
         rows.AddListItem()
             .BeginStruct()
             .AddMember("id").Uint64(RandomNumber<ui64>())
@@ -109,6 +114,10 @@ void TCommandWorkloadTransferTopicToTableInit::Config(TConfig& config)
     config.Opts->AddLongOption("table-partitions", "Number of partitons in table.")
         .DefaultValue(128)
         .StoreResult(&Scenario.TablePartitionCount);
+    config.Opts->AddLongOption("initial-rows", "Number of rows preloaded into the read-only table.")
+        .DefaultValue(1'000'000)
+        .Hidden()
+        .StoreResult(&Scenario.InitialRowCount);
 }
 
 void TCommandWorkloadTransferTopicToTableInit::Parse(TConfig& config)

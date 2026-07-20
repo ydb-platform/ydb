@@ -192,9 +192,16 @@ struct TBackup {
     }
 
     static bool NeedToBill(const TPathId& pathId, TOperationContext& context) {
-        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto table = context.SS->Tables.at(pathId);
-        return table->BackupSettings.GetNeedToBill();
+        const TPath path = TPath::Init(pathId, context.SS);
+        if (path->IsColumnTable()) {
+            Y_ABORT_UNLESS(context.SS->ColumnTables.contains(pathId));
+            auto table = context.SS->ColumnTables.at(pathId);
+            return table->BackupSettings.GetNeedToBill();
+        } else {
+            Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
+            auto table = context.SS->Tables.at(pathId);
+            return table->BackupSettings.GetNeedToBill();
+        }
     }
 };
 

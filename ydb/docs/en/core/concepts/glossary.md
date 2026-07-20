@@ -780,7 +780,7 @@ Distributed storage stores immutable data, with each immutable data block identi
 * `Generation` is the generation of the tablet in which the data block was written.
 * `Channel` is the [channel](#channel) of the tablet on which the LogoBlob is written.
 * `Step` is an incremental counter, usually within the tablet generation.
-* `Cookie` is a unique identifier of the data block within a single `Step`. The cookie is typically used when writing multiple data blocks to a single `Step`.
+* `Cookie` is a unique identifier of the data block within a single `Step`. The Cookie is typically used when writing multiple data blocks to a single `Step`.
 * `BlobSize` is the size of the LogoBlob.
 * `PartID` is the identifier of the data block part. It is important when the original LogoBlob is split into parts using [error correction coding](#erasure-coding), and the parts are written to the corresponding [VDisk](#vdisk) and [storage groups](#storage-group).
 

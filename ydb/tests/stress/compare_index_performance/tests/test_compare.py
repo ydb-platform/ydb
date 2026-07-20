@@ -217,7 +217,18 @@ class TestCompareIndexPerformance:
         self.current_tsc = _parse_table_service_config(
             yatest.common.get_param('compare_current_table_service_config', default=''))
 
-        self.workload = yatest.common.get_param('compare_workload', default='all')
+        self.workload = yatest.common.get_param('compare_workload', default='vector')
+
+        # Dataset source: 'generate' (default) or 's3'
+        self.dataset_source = yatest.common.get_param('compare_dataset_source', default='generate')
+        # S3 import params (used when dataset_source == 's3')
+        self.s3_endpoint = yatest.common.get_param('compare_s3_endpoint', default='')
+        self.s3_bucket = yatest.common.get_param('compare_s3_bucket', default='')
+        self.s3_source = yatest.common.get_param('compare_s3_source', default='')
+        self.s3_destination = yatest.common.get_param('compare_s3_destination', default='')
+        # Optional S3 queries table (when dataset_source == 's3' and queries pre-computed)
+        self.s3_query_source = yatest.common.get_param('compare_s3_query_source', default='')
+        self.s3_query_destination = yatest.common.get_param('compare_s3_query_destination', default='')
 
         # Flamegraph collection (off by default). When on, each workload run is
         # profiled with `perf` and a CPU flamegraph SVG is produced per side per
@@ -536,56 +547,96 @@ class TestCompareIndexPerformance:
 
     # --- tests ---
     def test_vector(self):
-        if self.workload not in ("all", "vector"):
+        if self.workload != "vector":
             pytest.skip(f"compare_workload={self.workload} excludes vector")
 
         baseline_ydbd = self._baseline_ydbd()
         current_ydbd = self._current_ydbd()
-        data_dir = yatest.common.output_path("vector_data")
 
         main_values = []
         current_values = []
-        # First iteration: baseline runs in generate mode (creates + dumps the
-        # query table). Subsequent baseline runs and all current runs use load
-        # mode, reusing the dumped query table.
-        for i in range(1, self.iterations + 1):
-            print(f"=== Vector iteration {i}/{self.iterations} ===")
 
-            baseline_mode = "generate" if i == 1 else "load"
+        vector_index_args = []
+        if self.vector_clusters is not None:
+            vector_index_args += ["--clusters", self.vector_clusters]
+        if self.vector_levels is not None:
+            vector_index_args += ["--levels", self.vector_levels]
 
-            vector_index_args = []
-            if self.vector_clusters is not None:
-                vector_index_args += ["--clusters", self.vector_clusters]
-            if self.vector_levels is not None:
-                vector_index_args += ["--levels", self.vector_levels]
+        if self.dataset_source == "s3":
+            # S3 mode: import the same fixed dataset from S3 on every iteration
+            # instead of generating random data.
+            s3_args = [
+                "--s3-endpoint", self.s3_endpoint,
+                "--s3-bucket", self.s3_bucket,
+                "--s3-source", self.s3_source,
+                "--s3-destination", self.s3_destination,
+            ]
+            if self.s3_query_source:
+                s3_args += ["--s3-query-source", self.s3_query_source]
+                if self.s3_query_destination:
+                    s3_args += ["--s3-query-destination", self.s3_query_destination]
+            for i in range(1, self.iterations + 1):
+                print(f"=== Vector iteration {i}/{self.iterations} (dataset_source=s3) ===")
 
-            def baseline_workload(endpoint, out, err, mode=baseline_mode):
-                self._exec_workload("YDB_VECTOR_WORKLOAD_PATH", endpoint, out, err, [
-                    "--mode", mode, "--data-dir", data_dir,
-                    "--targets", self.targets, "--warmup", self.warmup,
-                    "--rows", self.rows, "--threads", self.threads,
-                ] + vector_index_args)
+                def s3_baseline_workload(endpoint, out, err):
+                    self._exec_workload("YDB_VECTOR_WORKLOAD_PATH", endpoint, out, err, [
+                        "--mode", "s3",
+                        "--targets", self.targets, "--warmup", self.warmup,
+                        "--rows", self.rows, "--threads", self.threads,
+                    ] + vector_index_args + s3_args)
 
-            def current_workload(endpoint, out, err):
-                self._exec_workload("YDB_VECTOR_WORKLOAD_PATH", endpoint, out, err, [
-                    "--mode", "load", "--data-dir", data_dir,
-                    "--targets", self.targets, "--warmup", self.warmup,
-                    "--rows", self.rows, "--threads", self.threads,
-                ] + vector_index_args)
+                def s3_current_workload(endpoint, out, err):
+                    self._exec_workload("YDB_VECTOR_WORKLOAD_PATH", endpoint, out, err, [
+                        "--mode", "s3",
+                        "--targets", self.targets, "--warmup", self.warmup,
+                        "--rows", self.rows, "--threads", self.threads,
+                    ] + vector_index_args + s3_args)
 
-            collect_value(main_values, self._run_one(
-                self.ref, baseline_ydbd, self.baseline_flags, self.baseline_tsc,
-                baseline_workload, f"vector_main_{i}.log", f"vector_main_{i}.svg"))
-            collect_value(current_values, self._run_one(
-                "current", current_ydbd, self.current_flags, self.current_tsc,
-                current_workload, f"vector_current_{i}.log", f"vector_current_{i}.svg"))
-            if self.flamegraph:
-                self._flamegraph_diff("vector", i)
+                collect_value(main_values, self._run_one(
+                    self.ref, baseline_ydbd, self.baseline_flags, self.baseline_tsc,
+                    s3_baseline_workload, f"vector_main_{i}.log", f"vector_main_{i}.svg"))
+                collect_value(current_values, self._run_one(
+                    "current", current_ydbd, self.current_flags, self.current_tsc,
+                    s3_current_workload, f"vector_current_{i}.log", f"vector_current_{i}.svg"))
+                if self.flamegraph:
+                    self._flamegraph_diff("vector", i)
+        else:
+            # Generate mode (default): first iteration generates data + dumps query table,
+            # subsequent iterations reuse the dumped query table.
+            data_dir = yatest.common.output_path("vector_data")
+
+            for i in range(1, self.iterations + 1):
+                print(f"=== Vector iteration {i}/{self.iterations} (dataset_source=generate) ===")
+
+                baseline_mode = "generate" if i == 1 else "load"
+
+                def baseline_workload(endpoint, out, err, mode=baseline_mode):
+                    self._exec_workload("YDB_VECTOR_WORKLOAD_PATH", endpoint, out, err, [
+                        "--mode", mode, "--data-dir", data_dir,
+                        "--targets", self.targets, "--warmup", self.warmup,
+                        "--rows", self.rows, "--threads", self.threads,
+                    ] + vector_index_args)
+
+                def current_workload(endpoint, out, err):
+                    self._exec_workload("YDB_VECTOR_WORKLOAD_PATH", endpoint, out, err, [
+                        "--mode", "load", "--data-dir", data_dir,
+                        "--targets", self.targets, "--warmup", self.warmup,
+                        "--rows", self.rows, "--threads", self.threads,
+                    ] + vector_index_args)
+
+                collect_value(main_values, self._run_one(
+                    self.ref, baseline_ydbd, self.baseline_flags, self.baseline_tsc,
+                    baseline_workload, f"vector_main_{i}.log", f"vector_main_{i}.svg"))
+                collect_value(current_values, self._run_one(
+                    "current", current_ydbd, self.current_flags, self.current_tsc,
+                    current_workload, f"vector_current_{i}.log", f"vector_current_{i}.svg"))
+                if self.flamegraph:
+                    self._flamegraph_diff("vector", i)
 
         self._report("vector", "vector select", self._summarize(main_values, current_values))
 
     def test_fulltext(self):
-        if self.workload not in ("all", "fulltext"):
+        if self.workload != "fulltext":
             pytest.skip(f"compare_workload={self.workload} excludes fulltext")
 
         baseline_ydbd = self._baseline_ydbd()

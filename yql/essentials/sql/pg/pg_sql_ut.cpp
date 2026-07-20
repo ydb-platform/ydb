@@ -1,5 +1,7 @@
 #include "ut/util.h"
 
+#include <yql/essentials/core/langver/feature.gen.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
@@ -1138,7 +1140,7 @@ Y_UNIT_TEST(WarningAsError) {
     )sql";
 
     TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    settings.LangVer = NYql::NFeature::PgPragmaWarning.MinLangVer;
     auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
@@ -1155,7 +1157,7 @@ Y_UNIT_TEST(WarningDisable) {
     )sql";
 
     TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    settings.LangVer = NYql::NFeature::PgPragmaWarning.MinLangVer;
     auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(res.Root);
     UNIT_ASSERT_EQUAL(res.Issues.Size(), 0);
@@ -1168,7 +1170,7 @@ Y_UNIT_TEST(WarningDefault) {
     )sql";
 
     TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    settings.LangVer = NYql::NFeature::PgPragmaWarning.MinLangVer;
     auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
@@ -1184,7 +1186,7 @@ Y_UNIT_TEST(WarningInvalidAction) {
     )sql";
 
     TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    settings.LangVer = NYql::NFeature::PgPragmaWarning.MinLangVer;
     auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
@@ -1200,7 +1202,7 @@ Y_UNIT_TEST(WarningInvalidPattern) {
     )sql";
 
     TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    settings.LangVer = NYql::NFeature::PgPragmaWarning.MinLangVer;
     auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
@@ -1216,7 +1218,7 @@ Y_UNIT_TEST(WarningMissingArguments) {
     )sql";
 
     TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    settings.LangVer = NYql::NFeature::PgPragmaWarning.MinLangVer;
     auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
@@ -1232,7 +1234,7 @@ Y_UNIT_TEST(WarningTooManyArguments) {
     )sql";
 
     TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    settings.LangVer = NYql::NFeature::PgPragmaWarning.MinLangVer;
     auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
@@ -1249,7 +1251,7 @@ Y_UNIT_TEST(WarningSpecificCode) {
     )sql";
 
     TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    settings.LangVer = NYql::NFeature::PgPragmaWarning.MinLangVer;
     auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
@@ -1266,7 +1268,7 @@ Y_UNIT_TEST(WarningSpecificCodeDisable) {
     )sql";
 
     TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    settings.LangVer = NYql::NFeature::PgPragmaWarning.MinLangVer;
     auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(res.Root);
     UNIT_ASSERT_EQUAL(res.Issues.Size(), 0);
@@ -1278,7 +1280,7 @@ Y_UNIT_TEST(WarningNonStringAction) {
     )sql";
 
     TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    settings.LangVer = NYql::NFeature::PgPragmaWarning.MinLangVer;
     auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
@@ -1294,7 +1296,7 @@ Y_UNIT_TEST(WarningNonStringPattern) {
     )sql";
 
     TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    settings.LangVer = NYql::NFeature::PgPragmaWarning.MinLangVer;
     auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
@@ -1312,7 +1314,7 @@ Y_UNIT_TEST(WarningMultipleRules) {
     )sql";
 
     TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    settings.LangVer = NYql::NFeature::PgPragmaWarning.MinLangVer;
     auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);
@@ -1328,7 +1330,7 @@ Y_UNIT_TEST(WarningNoArguments) {
     )sql";
 
     TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 01);
+    settings.LangVer = NYql::NFeature::PgPragmaWarning.MinLangVer;
     auto res = SqlToYqlWithMode(query, NSQLTranslation::ESqlMode::QUERY, 10, {}, EDebugOutput::None, /*ansiLexer=*/false, settings);
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT(res.Issues.Size() > 0);

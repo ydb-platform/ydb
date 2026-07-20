@@ -2,12 +2,14 @@
 #include "type_ann_expr.h"
 #include "type_ann_impl.h"
 #include "type_ann_types.h"
+
 #include "yql/essentials/core/yql_opt_utils.h"
+#include "yql/essentials/core/langver/feature.gen.h"
 
 
 namespace NYql::NTypeAnnImpl {
     bool CheckLinearLangver(TPositionHandle pos, TLangVersion langver, TExprContext& ctx) {
-        if (!IsAvailableLangVersion(MakeLangVersion(2025, 4), langver)) {
+        if (!IsAvailableLangVersion(NFeature::LinearTypes.MinLangVer, langver)) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), "Linear types are not available before version 2025.04"));
             return false;
         }
@@ -2572,4 +2574,3 @@ namespace NYql::NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 } // namespace NYql::NTypeAnnImpl
-

@@ -66,6 +66,7 @@ static TClientOptions GetRootClientOptions(const TDriverConfigPtr& config)
 {
     auto result = TClientOptions::Root();
     result.MultiproxyTargetCluster = config->MultiproxyTargetCluster;
+    result.AbandonMasterTransactionsOnFailedCommit = config->AbandonMasterTransactionsOnFailedCommit;
     return result;
 }
 
@@ -482,6 +483,7 @@ public:
             ? std::make_optional(New<NAuth::TServiceTicketFixedAuth>(*request.ServiceTicket))
             : std::nullopt;
         options.MultiproxyTargetCluster = Config_->MultiproxyTargetCluster;
+        options.AbandonMasterTransactionsOnFailedCommit = Config_->AbandonMasterTransactionsOnFailedCommit;
 
         auto client = ClientCache_->Get(identity, options);
 

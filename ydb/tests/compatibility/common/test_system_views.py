@@ -6,6 +6,8 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 
+pg_sysviews = {'pg_tables', 'tables', 'pg_class'}
+
 
 class TestSystemViewsRegistry(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope='function')
@@ -20,6 +22,9 @@ class TestSystemViewsRegistry(RestartToAnotherVersionFixture):
         with ydb.SessionPool(self.driver, size=1) as pool:
             with pool.checkout() as session:
                 for sysview in self.driver.scheme_client.list_directory('/Root/.sys').children:
+                    if sysview.name in pg_sysviews:
+                        continue
+
                     sysview_descr = dict()
 
                     response = session.describe_table(f'/Root/.sys/{sysview.name}')

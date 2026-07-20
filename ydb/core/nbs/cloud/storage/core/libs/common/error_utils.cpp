@@ -16,6 +16,11 @@ NProto::TError TranslateError(
     {
         return MakeError(E_CANCELLED, errorReason);
     }
+    if (errorResponse == NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED) {
+        return MakeError(
+            E_REJECTED,
+            TString(TabletGenerationBlockedErrorMessage));
+    }
 
     switch (flags) {
         case ETranslateFlags::None: {

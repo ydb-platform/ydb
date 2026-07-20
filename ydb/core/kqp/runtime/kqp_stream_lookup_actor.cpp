@@ -58,6 +58,7 @@ TKqpStreamLockSettings BuildStreamLockSettings(
     lockSettings.Database = database;
     lockSettings.Snapshot.SetStep(settings.GetSnapshot().GetStep());
     lockSettings.Snapshot.SetTxId(settings.GetSnapshot().GetTxId());
+    lockSettings.SkipAbsent = true; // For UPDATE/DELETE WHERE and SELECT FOR UPDATE
     lockSettings.QuerySpanId = querySpanId;
     return lockSettings;
 }
@@ -1094,16 +1095,21 @@ private:
 
         bool hasModifiedRows = false;
         bool hasUnmodifiedRows = false;
+        bool hasSkippedRows = false;
         {
             TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard = BindAllocator();
             StreamLockWorker->ProcessRowsByLockResult(requestId,
-                [&](NUdf::TUnboxedValue row, bool modified) {
-                    if (modified) {
+                [&](NUdf::TUnboxedValue row, bool locked, bool modified) {
+                    if (locked && modified) {
                         StreamLookupWorker->AddInputRow(std::move(row));
                         hasModifiedRows = true;
-                    } else {
+                    } else if (locked) {
                         UnmodifiedOutputRows.emplace_back(std::move(row));
                         hasUnmodifiedRows = true;
+                    } else {
+                        // skipped absent row
+                        AFL_ENSURE(!modified);
+                        hasSkippedRows = true;
                     }
                 });
         }
@@ -1113,7 +1119,7 @@ private:
         }
         DrainPendingLocks();
 
-        if (hasUnmodifiedRows) {
+        if (hasUnmodifiedRows || hasSkippedRows) {
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         }
     }

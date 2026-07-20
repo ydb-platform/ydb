@@ -44,32 +44,32 @@ void AddPqTopicSink(TKqpPhyQuery& phy, const TString& topicPath) {
 // build-and-check one-liners (mirrors kqp_has_full_scan_matcher_ut.cpp style).
 
 // Runs the matcher against a phyQuery holding one tx-level table entry.
-// Predicate + path both vary so predicate-behaviour tests can exercise regex
+// Predicate + path both vary so predicate-behaviour tests can exercise glob
 // semantics and canonicalization in isolation.
 const auto MatchesTxTable = [](const TString& pattern, const TString& path) {
     TKqpPhyQuery phy;
     AddTxTable(phy, path);
-    return NWorkload::MatchesPath(TRegexPredicate::Compile(pattern), {}, phy);
+    return NWorkload::MatchesPath(TRegexPredicate::FromGlob(pattern), {}, phy);
 };
 
-// Runs the matcher with pattern `/Root/t.*` against the given queryTables list.
+// Runs the matcher with pattern `/Root/t*` against the given queryTables list.
 const auto MatchesQueryTables = [](const TVector<TString>& queryTables) {
     TKqpPhyQuery phy;
-    return NWorkload::MatchesPath(TRegexPredicate::Compile("/Root/t.*"), queryTables, phy);
+    return NWorkload::MatchesPath(TRegexPredicate::FromGlob("/Root/t*"), queryTables, phy);
 };
 
 // Runs the matcher with pattern `/Root/db/target` against a phyQuery built by `build`.
 const auto MatchesTx = [](auto build) {
     TKqpPhyQuery phy;
     build(phy);
-    return NWorkload::MatchesPath(TRegexPredicate::Compile("/Root/db/target"), {}, phy);
+    return NWorkload::MatchesPath(TRegexPredicate::FromGlob("/Root/db/target"), {}, phy);
 };
 
 // Runs the matcher with pattern `/Root/db/topic` against a phyQuery built by `build`.
 const auto MatchesTopics = [](auto build) {
     TKqpPhyQuery phy;
     build(phy);
-    return NWorkload::MatchesPath(TRegexPredicate::Compile("/Root/db/topic"), {}, phy);
+    return NWorkload::MatchesPath(TRegexPredicate::FromGlob("/Root/db/topic"), {}, phy);
 };
 
 }  // anonymous namespace
@@ -87,8 +87,8 @@ Y_UNIT_TEST_SUITE(TPathMatcherPredicate) {
         UNIT_ASSERT(!MatchesTxTable("/Root/critical", "/Root/other"));
     }
 
-    Y_UNIT_TEST(RegexPatternMatches) {
-        UNIT_ASSERT(MatchesTxTable("/Root/db/archive.*", "/Root/db/archive_2024"));
+    Y_UNIT_TEST(GlobPatternMatches) {
+        UNIT_ASSERT(MatchesTxTable("/Root/db/archive*", "/Root/db/archive_2024"));
     }
 
     Y_UNIT_TEST(CanonizesPathWithoutLeadingSlash) {

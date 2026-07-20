@@ -705,7 +705,6 @@ public:
 private:
     const TConnectionPtr Connection_;
     const TClientOptions ClientOptions_;
-    const NRpc::TDynamicChannelPoolPtr ChannelPool_;
     const NRpc::IChannelPtr RetryingChannel_;
 
     TLazyIntrusivePtr<NTabletClient::ITableMountCache> TableMountCache_;

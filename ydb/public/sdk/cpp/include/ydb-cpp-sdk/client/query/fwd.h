@@ -9,6 +9,7 @@ struct TExecuteQuerySettings;
 struct TBeginTxSettings;
 struct TCommitTxSettings;
 struct TRollbackTxSettings;
+struct TDeleteSessionSettings;
 struct TExecuteScriptSettings;
 struct TFetchScriptResultsSettings;
 struct TTxOnlineSettings;

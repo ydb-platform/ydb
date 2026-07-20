@@ -14,14 +14,14 @@ doc = r"""# Decorators for Humans
 |---|---|
 |E-mail | michele.simionato@gmail.com|
 |Version| $VERSION ($DATE)|
-|Supports| Python 3.5, 3.6, 3.7, 3.8, 3.9, 3.10|
-|Download page| http://pypi.python.org/pypi/decorator/$VERSION|
+|Supports| Python 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, 3.14|
+|Download page| https://pypi.org/project/decorator/$VERSION|
 |Installation| ``pip install decorator``|
 |License | BSD license|
 
 ## Introduction
 
-The ``decorator`` module is over ten years old, but still alive and
+The ``decorator`` module is over twenty years old, but still alive and
 kicking. It is used by several frameworks (IPython, scipy, authkit,
 pylons, pycuda, sugar, ...) and has been stable for a *long* time. It
 is your best option if you want to preserve the signature of decorated
@@ -855,7 +855,7 @@ write code like the following:
 ```python
 import time
 import logging
-from asyncio import get_event_loop, sleep, wait
+from asyncio import run, sleep, wait
 from decorator import decorator
 
 @decorator
@@ -874,7 +874,7 @@ async def make_task(n):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     tasks = [make_task(3), make_task(2), make_task(1)]
-    get_event_loop().run_until_complete(wait(tasks))
+    run(wait(tasks))
 ```
 
 and you will get an output like this:
@@ -903,7 +903,7 @@ into regular functions, such as the following:
 @decorator
 def coro_to_func(coro, *args, **kw):
     "Convert a coroutine into a function"
-     return get_event_loop().run_until_complete(coro(*args, **kw))
+     return run(coro(*args, **kw))
 ```
 
 Notice the difference: the caller in ``log_start_stop`` was a coroutine
@@ -1171,7 +1171,7 @@ with ``functools.singledispatch``, the assertion will break: ``g`` will return
 will insert the ``Container`` class right before ``S``.
 
 Notice that here I am not making any bold claim such as "the standard
-library algorithm is wrong and my algorithm is right" or viceversa. It
+library algorithm is wrong and my algorithm is right" or vice versa. It
 just point out that there are some subtle differences. The only way to
 understand what is really happening here is to scratch your head by
 looking at the implementations. I will just notice that
@@ -1342,7 +1342,7 @@ penalty in your specific use case is to measure it.
 
 ## LICENSE (2-clause BSD)
 
-Copyright (c) 2005-2020, Michele Simionato
+Copyright (c) 2005-2025, Michele Simionato
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without

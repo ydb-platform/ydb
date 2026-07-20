@@ -11,6 +11,8 @@ struct TFeature {
     TString Description;
     TLangVersion MinLangVer = UnknownLangVersion;
     TLangVersion MaxLangVer = UnknownLangVersion;
+
+    TFeature Finish() &&;
 };
 
 bool IsAvailableOn(

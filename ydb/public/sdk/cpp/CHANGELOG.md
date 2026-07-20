@@ -1,3 +1,7 @@
+* Added `TQueryClient::DeleteSession` to explicitly delete a query session by session id.
+
+* Driver now supports async credentials initialisation: the first request is delayed until they are ready.
+
 * Added a flag to support deferred session creation(when client timeout exceeded, the session is created in the backgroud)
 
 * Added a distributed lock primitive based on the coordination service, which implements basic_lockable concept.

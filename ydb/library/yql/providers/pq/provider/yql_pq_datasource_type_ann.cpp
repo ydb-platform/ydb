@@ -3,6 +3,7 @@
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -14,14 +15,29 @@
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/core/yql_type_helpers.h>
 
 #include <yql/essentials/utils/log/log.h>
+
+#include <util/generic/hash_set.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
 namespace {
+
+constexpr TStringBuf WatermarkColumnPrefix = "__ydb_watermark_";
+
+TString GetWatermarkColumnName(const TMetaFieldDescriptor& descriptor) {
+    return TStringBuilder() << WatermarkColumnPrefix << descriptor.Key;
+}
+
+bool HasWatermarkColumnPrefix(const TStructExprType& structType) {
+    return AnyOf(structType.GetItems(), [](const TItemExprType* item) {
+        return item->GetName().StartsWith(WatermarkColumnPrefix);
+    });
+}
 
 const TTypeAnnotationNode* BuildPqMetaFieldExprType(const TMetaFieldDescriptor& descriptor, TExprContext& ctx) {
     switch (descriptor.Type) {
@@ -85,6 +101,8 @@ public:
         AddHandler({TDqPqTopicSource::CallableName()}, Hndl(&TSelf::HandleDqTopicSource));
         AddHandler({TCoSystemMetadata::CallableName()}, Hndl(&TSelf::HandleMetadata));
         AddHandler({TDqPqFederatedCluster::CallableName()}, Hndl(&TSelf::HandleFederatedCluster));
+        AddHandler({TPqParsingWrap::CallableName()}, Hndl(&TSelf::HandlePqParsingWrap));
+        AddHandler({TDqPqPhyParsingWrap::CallableName()}, Hndl(&TSelf::HandleDqPqPhyParsingWrap));
     }
 
     TStatus HandleFederatedCluster(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -676,6 +694,154 @@ public:
         }
 
         input->SetTypeAnn(BuildPqMetaFieldExprType(*descriptor, ctx));
+        return TStatus::Ok;
+    }
+
+    TStatus HandlePqParsingWrap(const TExprNode::TPtr& input, TExprContext& ctx) {
+        return HandleParsingWrap(input, /* allowOptionalInput */ true, /* requireMetadataColumns */ false, ctx);
+    }
+
+    TStatus HandleDqPqPhyParsingWrap(const TExprNode::TPtr& input, TExprContext& ctx) {
+        return HandleParsingWrap(input, /* allowOptionalInput */ false, /* requireMetadataColumns */ true, ctx);
+    }
+
+    TStatus HandleParsingWrap(
+        const TExprNode::TPtr& input,
+        bool allowOptionalInput,
+        bool requireMetadataColumns,
+        TExprContext& ctx)
+    {
+        if (!EnsureArgsCount(*input, 3, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto source = input->Child(TPqParsingWrap::idx_Input);
+        auto& lambda = input->ChildRef(TPqParsingWrap::idx_Lambda);
+        const auto metadataColumns = input->Child(TPqParsingWrap::idx_MetadataColumns);
+
+        if (!EnsureSeqType(*source, ctx)) {
+            return TStatus::Error;
+        }
+        const auto inputType = source->GetTypeAnn();
+        const auto& inputItemType = GetSeqItemType(*inputType);
+
+        bool isInputItemOptional = false;
+        const TTypeAnnotationNode* inputPayloadType = &inputItemType;
+        if (inputPayloadType->GetKind() == ETypeAnnotationKind::Optional) {
+            if (!allowOptionalInput) {
+                ctx.AddError(TIssue(ctx.GetPosition(source->Pos()), TStringBuilder()
+                    << "Expected struct input for " << input->Content()
+                    << ", but got: " << inputItemType));
+                return TStatus::Error;
+            }
+
+            isInputItemOptional = true;
+            inputPayloadType = inputPayloadType->Cast<TOptionalExprType>()->GetItemType();
+        }
+
+        if (inputPayloadType->GetKind() != ETypeAnnotationKind::Struct) {
+            ctx.AddError(TIssue(ctx.GetPosition(source->Pos()), TStringBuilder()
+                << "Expected struct input for " << input->Content()
+                << ", but got: " << inputItemType));
+            return TStatus::Error;
+        }
+        const auto* inputStructType = inputPayloadType->Cast<TStructExprType>();
+
+        if (!EnsureTupleOfAtoms(*metadataColumns, ctx)) {
+            return TStatus::Error;
+        }
+
+        THashSet<TString> metadataColumnNames;
+        metadataColumnNames.reserve(metadataColumns->ChildrenSize());
+        TVector<TMetaFieldDescriptor> metadataDescriptors;
+        metadataDescriptors.reserve(metadataColumns->ChildrenSize());
+        for (const auto& metadataColumn : metadataColumns->Children()) {
+            const TString metadataColumnName(metadataColumn->Content());
+            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
+                metadataColumnName,
+                State_->EnableUserAttributesInTopicQuery);
+            if (!descriptor) {
+                ctx.AddError(TIssue(ctx.GetPosition(metadataColumn->Pos()), TStringBuilder()
+                    << "Pq Meta Field Descriptor was not found"));
+                return TStatus::Error;
+            }
+            if (requireMetadataColumns && !inputStructType->FindItem(metadataColumnName)) {
+                ctx.AddError(TIssue(ctx.GetPosition(metadataColumn->Pos()), TStringBuilder()
+                    << "Required PQ metadata column " << metadataColumnName
+                    << " is missing from " << input->Content() << " input"));
+                return TStatus::Error;
+            }
+            if (metadataColumnNames.insert(metadataColumnName).second) {
+                metadataDescriptors.push_back(*descriptor);
+            }
+        }
+
+        const auto* lambdaInputItemType = inputStructType;
+        const TTypeAnnotationNode* lambdaInputPayloadType = lambdaInputItemType;
+        if (isInputItemOptional) {
+            lambdaInputPayloadType = ctx.MakeType<TOptionalExprType>(lambdaInputPayloadType);
+        }
+        const auto lambdaInputType = MakeSequenceType(inputType->GetKind(), *lambdaInputPayloadType, ctx);
+
+        const auto status = ConvertToLambda(lambda, ctx, 1, 1);
+        if (status != TStatus::Ok) {
+            return status;
+        }
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {lambdaInputType}, ctx)) {
+            return TStatus::Error;
+        }
+        if (!lambda->GetTypeAnn()) {
+            return TStatus::Repeat;
+        }
+
+        if (!EnsureSeqType(*lambda, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto& lambdaItemType = GetSeqItemType(*lambda->GetTypeAnn());
+        bool isLambdaItemOptional = false;
+        const TTypeAnnotationNode* lambdaPayloadType = &lambdaItemType;
+        if (lambdaPayloadType->GetKind() == ETypeAnnotationKind::Optional) {
+            isLambdaItemOptional = true;
+            lambdaPayloadType = lambdaPayloadType->Cast<TOptionalExprType>()->GetItemType();
+        }
+
+        if (lambdaPayloadType->GetKind() != ETypeAnnotationKind::Struct) {
+            ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
+                << "Expected struct output for " << input->Content()
+                << ", but got: " << lambdaItemType));
+            return TStatus::Error;
+        }
+
+        const auto* outputStructType = lambdaPayloadType->Cast<TStructExprType>();
+        if (HasWatermarkColumnPrefix(*outputStructType)) {
+            ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), TStringBuilder()
+                << "Column prefix " << WatermarkColumnPrefix << " is reserved for internal WATERMARK columns"));
+            return TStatus::Error;
+        }
+
+        TVector<const TItemExprType*> outputItems = outputStructType->GetItems();
+        THashSet<TString> outputItemNames;
+        outputItemNames.reserve(outputItems.size() + metadataDescriptors.size());
+        for (const auto* item : outputItems) {
+            outputItemNames.insert(TString(item->GetName()));
+        }
+        for (const auto& descriptor : metadataDescriptors) {
+            const auto watermarkColumnName = GetWatermarkColumnName(descriptor);
+            if (!outputItemNames.insert(watermarkColumnName).second) {
+                continue;
+            }
+
+            outputItems.push_back(ctx.MakeType<TItemExprType>(
+                watermarkColumnName,
+                BuildPqMetaFieldExprType(descriptor, ctx)));
+        }
+        const auto* outputItemType = ctx.MakeType<TStructExprType>(outputItems);
+        const TTypeAnnotationNode* outputPayloadType = outputItemType;
+        if (isLambdaItemOptional) {
+            outputPayloadType = ctx.MakeType<TOptionalExprType>(outputPayloadType);
+        }
+        input->SetTypeAnn(MakeSequenceType(lambda->GetTypeAnn()->GetKind(), *outputPayloadType, ctx));
         return TStatus::Ok;
     }
 

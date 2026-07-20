@@ -1040,6 +1040,214 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
         WaitForSuccess(ydb, settings.GroupSIDs({firstSID, secondSID}));
     }
 
+    // Helper: return how many classifiers with the given name exist in the sys view.
+    ui64 CountClassifiers(TIntrusivePtr<IYdbSetup> ydb, const TString& name = {}) {
+        TString query;
+        if (name) {
+            query = TStringBuilder() << R"(SELECT * FROM `.sys/resource_pool_classifiers` WHERE Name = ")" << name << R"(")";
+        } else {
+            query = TString(R"(SELECT * FROM `.sys/resource_pool_classifiers`)");
+        }
+        auto result = ydb->ExecuteQuery(query, TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+        TSampleQueries::CheckSuccess(result);
+        NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+        ui64 count = 0;
+        while (resultSet.TryNextRow()) ++count;
+        return count;
+    }
+
+    Y_UNIT_TEST(TestClassifierPointingToNonExistentPool) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER classifier_to_nowhere WITH (
+                RESOURCE_POOL="non_existent_pool",
+                MEMBER_NAME="test@user"
+            );
+        )", NYdb::EStatus::GENERIC_ERROR, "Resource pool 'non_existent_pool' not found");
+
+        UNIT_ASSERT_VALUES_EQUAL_C(CountClassifiers(ydb, "classifier_to_nowhere"), 0u,
+            "Classifier must not be created when resource pool does not exist");
+    }
+
+    Y_UNIT_TEST(TestAlterClassifierToNonExistentPool) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        const TString& poolId = "my_pool";
+        const TString& classifierId = "my_classifier";
+
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL )" << poolId << R"( WITH (CONCURRENT_QUERY_LIMIT=1);
+            CREATE RESOURCE POOL CLASSIFIER )" << classifierId << R"( WITH (
+                RESOURCE_POOL=")" << poolId << R"(",
+                MEMBER_NAME="test@user"
+            );
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(CountClassifiers(ydb, classifierId), 1u);
+
+        // Attempt to ALTER the classifier to reference a non-existent pool
+        const TString& ghostPoolId = "ghost_pool";
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            ALTER RESOURCE POOL CLASSIFIER )" << classifierId << R"( SET (
+                RESOURCE_POOL=")" << ghostPoolId << R"("
+            );
+        )", NYdb::EStatus::GENERIC_ERROR, TStringBuilder() << "Resource pool '" << ghostPoolId << "' not found");
+
+        // Classifier must still point to the original pool
+        {
+            auto result = ydb->ExecuteQuery(TStringBuilder() << R"(
+                SELECT ResourcePool FROM `.sys/resource_pool_classifiers` WHERE Name = ")" << classifierId << R"("
+            )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+            TSampleQueries::CheckSuccess(result);
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Classifier must still exist after failed ALTER");
+            UNIT_ASSERT_VALUES_EQUAL_C(*resultSet.ColumnParser("ResourcePool").GetOptionalUtf8(), poolId,
+                "Classifier must still reference the original pool");
+        }
+    }
+
+    Y_UNIT_TEST(TestDropClassifierWhenPoolIsDeleted) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        const TString& poolId = "drop_test_pool";
+        const TString& classifierId = "drop_test_classifier";
+
+        // Create a valid pool and classifier pointing to it
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL )" << poolId << R"( WITH (CONCURRENT_QUERY_LIMIT=1);
+            CREATE RESOURCE POOL CLASSIFIER )" << classifierId << R"( WITH (
+                RESOURCE_POOL=")" << poolId << R"(",
+                MEMBER_NAME="test@user"
+            );
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(CountClassifiers(ydb, classifierId), 1u);
+
+        // Drop the pool the classifier references
+        ydb->ExecuteSchemeQuery(TStringBuilder() << "DROP RESOURCE POOL " << poolId << ";");
+
+        // DROP of the classifier must succeed even though the pool is gone:
+        // pool existence validation is skipped for Drop operations
+        ydb->ExecuteSchemeQuery(TStringBuilder() << "DROP RESOURCE POOL CLASSIFIER " << classifierId << ";");
+
+        UNIT_ASSERT_VALUES_EQUAL_C(CountClassifiers(ydb, classifierId), 0u,
+            "Classifier must be absent after successful DROP");
+    }
+
+    Y_UNIT_TEST(TestCreateClassifierPointingToDefaultPool) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        const TString& classifierId = "default_pool_classifier";
+
+        // Creating a classifier pointing to the default pool must succeed.
+        // The default pool is always considered valid and skips existence validation.
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER )" << classifierId << R"( WITH (
+                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"(",
+                MEMBER_NAME="test@user"
+            );
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL_C(CountClassifiers(ydb, classifierId), 1u,
+            "Classifier pointing to the default pool must be created successfully");
+    }
+
+    Y_UNIT_TEST(TestAlterClassifierNonPoolAttributeWhenPoolDeleted) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        const TString& poolId = "attr_test_pool";
+        const TString& classifierId = "attr_test_classifier";
+
+        // Create a valid pool and classifier pointing to it with explicit RANK
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL )" << poolId << R"( WITH (CONCURRENT_QUERY_LIMIT=1);
+            CREATE RESOURCE POOL CLASSIFIER )" << classifierId << R"( WITH (
+                RESOURCE_POOL=")" << poolId << R"(",
+                MEMBER_NAME="test@user",
+                RANK=10
+            );
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(CountClassifiers(ydb, classifierId), 1u);
+
+        // Drop the pool that the classifier references
+        ydb->ExecuteSchemeQuery(TStringBuilder() << "DROP RESOURCE POOL " << poolId << ";");
+
+        // Altering a non-pool attribute (RANK) must still fail because the
+        // preparation actor validates all referenced pools for any ALTER operation.
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            ALTER RESOURCE POOL CLASSIFIER )" << classifierId << R"( SET (RANK=20);
+        )", NYdb::EStatus::GENERIC_ERROR, TStringBuilder() << "Resource pool '" << poolId << "' not found");
+
+        // Classifier must be unchanged — RANK must still be 10
+        {
+            auto result = ydb->ExecuteQuery(TStringBuilder() << R"(
+                SELECT Rank FROM `.sys/resource_pool_classifiers` WHERE Name = ")" << classifierId << R"("
+            )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+            TSampleQueries::CheckSuccess(result);
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Classifier must still exist after failed ALTER");
+            UNIT_ASSERT_VALUES_EQUAL_C(*resultSet.ColumnParser("Rank").GetOptionalInt64(), (i64)10,
+                "Rank must be unchanged after failed ALTER");
+        }
+    }
+
+    Y_UNIT_TEST(TestCreateMultipleClassifiersToSameNonExistentPool) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        const TString& ghostPoolId = "ghost_pool";
+
+        // Both classifiers reference the same non-existent pool.
+        // The first CREATE fails immediately and the batch is aborted,
+        // so the second CREATE never executes.
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER classifier_a WITH (
+                RESOURCE_POOL=")" << ghostPoolId << R"(",
+                MEMBER_NAME="alice@user"
+            );
+            CREATE RESOURCE POOL CLASSIFIER classifier_b WITH (
+                RESOURCE_POOL=")" << ghostPoolId << R"(",
+                MEMBER_NAME="bob@user"
+            );
+        )", NYdb::EStatus::GENERIC_ERROR, TStringBuilder() << "Resource pool '" << ghostPoolId << "' not found");
+
+        // Neither classifier must appear in the metadata
+        UNIT_ASSERT_VALUES_EQUAL_C(CountClassifiers(ydb, "classifier_a"), 0u,
+            "classifier_a must not be created when the resource pool does not exist");
+        UNIT_ASSERT_VALUES_EQUAL_C(CountClassifiers(ydb, "classifier_b"), 0u,
+            "classifier_b must not be created when the resource pool does not exist");
+    }
+
+    Y_UNIT_TEST(TestCreateMultipleClassifiersOneWithNonExistentPool) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        const TString& validPoolId = "valid_pool";
+        const TString& ghostPoolId = "ghost_pool";
+
+        // First two statements succeed and are committed.
+        // The third statement fails because "ghost_pool" doesn't exist,
+        // causing the overall batch to return GENERIC_ERROR.
+        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL )" << validPoolId << R"( WITH (CONCURRENT_QUERY_LIMIT=1);
+            CREATE RESOURCE POOL CLASSIFIER classifier_valid WITH (
+                RESOURCE_POOL=")" << validPoolId << R"(",
+                MEMBER_NAME="alice@user"
+            );
+            CREATE RESOURCE POOL CLASSIFIER classifier_invalid WITH (
+                RESOURCE_POOL=")" << ghostPoolId << R"(",
+                MEMBER_NAME="bob@user"
+            );
+        )", NYdb::EStatus::GENERIC_ERROR, TStringBuilder() << "Resource pool '" << ghostPoolId << "' not found");
+
+        // The valid classifier was committed before the batch error
+        UNIT_ASSERT_VALUES_EQUAL_C(CountClassifiers(ydb, "classifier_valid"), 1u,
+            "classifier_valid should have been committed before the batch error");
+        // The invalid classifier must not appear
+        UNIT_ASSERT_VALUES_EQUAL_C(CountClassifiers(ydb, "classifier_invalid"), 0u,
+            "classifier_invalid must not be created when the resource pool does not exist");
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(ResourcePoolClassifiersSysView) {

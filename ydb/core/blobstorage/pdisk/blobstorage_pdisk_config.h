@@ -185,6 +185,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     bool ReadOnly = false;
 
+    bool SortFreeChunksHDD = true;
+
     // used for tests only
     std::optional<ui64> NonceRandNum;
 
@@ -462,6 +464,10 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasSeparateHugePriorities()) {
             SeparateHugePriorities = cfg->GetSeparateHugePriorities();
+        }
+
+        if (cfg->HasSortFreeChunksHDD()) {
+            SortFreeChunksHDD = cfg->GetSortFreeChunksHDD();
         }
     }
 

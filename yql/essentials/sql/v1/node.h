@@ -791,12 +791,19 @@ struct TEncoding {
     TMap<TString, TNodePtr> Entries;
 };
 
+struct TGeneratedColumn {
+    TString ContextPrefix;
+    TString ExprBody;
+    bool Stored = false;
+};
+
 struct TColumnOptions {
     TNodePtr DefaultExpr;
     TVector<TIdentifier> Families;
     TMaybe<TCompression> Compression;
     bool Nullable = true;
     TMaybe<TVector<TEncoding>> ColumnEncoding;
+    TMaybe<TGeneratedColumn> Generated;
 };
 
 struct TColumnSchema {
@@ -821,6 +828,7 @@ struct TColumnSchema {
     bool Nullable = false;
     bool Serial = false;
     TMaybe<TVector<TEncoding>> ColumnEncoding;
+    TMaybe<TGeneratedColumn> Generated;
 };
 
 struct TColumns: public TSimpleRefCount<TColumns> {

@@ -802,6 +802,12 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             }
             Cerr << "CLEANED: " << bsCollector.GetChannelSize(2) << "/" << purposeSize << Endl;
 
+            // Internal TTL commits one plan step ahead of the current
+            // readable snapshot. 
+            // So we need to advance time again to let the readable snapshot cross the removal snapshot before reading.
+            runtime.AdvanceCurrentTime(TDuration::Minutes(6));
+            runtime.SimulateSleep(TDuration::Seconds(1));
+
             TVector<THashMap<TString, NYdb::TValue>> result;
             lHelper.StartScanRequest("SELECT MIN(timestamp) as b, COUNT(*) as c FROM `/Root/olapStore/olapTable`", true, &result);
             UNIT_ASSERT(result.size() == 1);

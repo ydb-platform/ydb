@@ -8,7 +8,7 @@ from base64 import b64encode
 from collections.abc import Callable, Generator, Sequence
 from importlib import import_module
 from importlib.metadata import version as dist_version
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, cast
 from urllib.parse import urlencode
 
 from urllib3 import Timeout
@@ -43,7 +43,7 @@ from clickhouse_connect.driver.httputil import (
     get_response_data,
 )
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.query import QueryContext, QueryResult, TzSource, returns_empty_string_on_empty_body
+from clickhouse_connect.driver.query import QueryContext, QueryResult, TzMode, TzSource, returns_empty_string_on_empty_body
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.transform import NativeTransform
 
@@ -57,7 +57,7 @@ _REMOTE_CLOSE_ERRORS = (ConnectionResetError, BrokenPipeError)
 
 
 class HttpClient(Client):
-    params = {}
+    params: dict[str, str] = {}
     valid_transport_settings = {
         "database",
         "buffer_size",
@@ -84,7 +84,7 @@ class HttpClient(Client):
         port: int,
         username: str,
         password: str,
-        database: str,
+        database: str | None,
         access_token: str | None = None,
         token_provider: Callable[[], str] | None = None,
         compress: bool | str = True,
@@ -141,7 +141,7 @@ class HttpClient(Client):
                 self.headers["X-ClickHouse-SSL-Certificate-Auth"] = "on"
 
             if not self.http and (server_host_name or ca_cert or client_cert or not verify or https_proxy):
-                options = {"verify": verify}
+                options: dict[str, Any] = {"verify": verify}
                 dict_add(options, "ca_cert", ca_cert)
                 dict_add(options, "client_cert", client_cert)
                 dict_add(options, "client_cert_key", client_cert_key)
@@ -167,7 +167,7 @@ class HttpClient(Client):
         elif (not client_cert or tls_mode in ("strict", "proxy")) and username:
             self.headers["Authorization"] = "Basic " + b64encode(f"{username}:{password}".encode()).decode()
 
-        self._reported_libs = set()
+        self._reported_libs: set[str] = set()
         self.headers["User-Agent"] = common.build_client_name(client_name)
         if headers:
             self.headers.update(headers)
@@ -184,7 +184,7 @@ class HttpClient(Client):
         self._send_progress = None
         self._send_comp_setting = False
         self._progress_interval = None
-        self._active_session = None
+        self._active_session: str | None = None
         self._rename_response_column = rename_response_column
 
         # allow to override the global autogenerate_session_id setting via the constructor params
@@ -220,7 +220,7 @@ class HttpClient(Client):
             query_retries=query_retries,
             server_host_name=server_host_name,
             tz_source=tz_source,
-            tz_mode=tz_mode,
+            tz_mode=cast(TzMode | None, tz_mode),
             show_clickhouse_errors=show_clickhouse_errors,
             autoconnect=True,
         )
@@ -265,16 +265,17 @@ class HttpClient(Client):
         return final_query + fmt
 
     def _query_with_context(self, context: QueryContext) -> QueryResult:
-        headers = {}
-        params = {}
+        headers: dict[str, Any] = {}
+        params: dict[str, str] = {}
         if self.database:
             params["database"] = self.database
         if self.protocol_version:
-            params["client_protocol_version"] = self.protocol_version
+            params["client_protocol_version"] = str(self.protocol_version)
             context.block_info = True
         params.update(self._validate_settings(context.settings))
         context.rename_response_column = self._rename_response_column
         use_form = use_form_encoding(context.final_query, context.bind_params, self.form_encode_query_params)
+        fields: dict[str, Any] | None = None
         if not context.is_insert and columns_only_re.search(context.uncommented_query):
             # Mirror normal query behavior for form encoding and external data
             fmt_json_query = f"{context.final_query}\n FORMAT JSON"
@@ -309,7 +310,7 @@ class HttpClient(Client):
                         logger.debug("Failed to rename col '%s'. Skipping rename. Error: %s", name, e)
                 names.append(name)
                 types.append(registry.get_from_name(col["type"]))
-            return QueryResult([], None, tuple(names), tuple(types))
+            return QueryResult([], None, tuple(names), tuple(types))  # type: ignore[arg-type]
 
         if self.compression:
             headers["Accept-Encoding"] = self.compression
@@ -347,10 +348,12 @@ class HttpClient(Client):
         )
         exception_tag = response.headers.get(ex_tag_header)
         byte_source = RespBuffCls(ResponseSource(response, exception_tag=exception_tag))
-        context.set_response_tz(self._check_tz_change(response.headers.get("X-ClickHouse-Timezone")))
+        response_tz = self._check_tz_change(response.headers.get("X-ClickHouse-Timezone"))
+        if response_tz is not None:
+            context.set_response_tz(response_tz)
         query_result = self._transform.parse_response(byte_source, context)
         query_result.summary = self._summary(response)
-        return query_result
+        return cast(QueryResult, query_result)
 
     def data_insert(self, context: InsertContext) -> QuerySummary:
         """
@@ -371,7 +374,7 @@ class HttpClient(Client):
         headers = {"Content-Type": "application/octet-stream"}
         if context.compression is None:
             context.compression = self.write_compression
-        if context.compression:
+        if isinstance(context.compression, str):
             headers["Content-Encoding"] = context.compression
         block_gen = self._transform.build_insert(context)
 
@@ -401,9 +404,9 @@ class HttpClient(Client):
 
     def raw_insert(
         self,
-        table: str = None,
+        table: str | None = None,
         column_names: Sequence[str] | None = None,
-        insert_block: str | bytes | Generator[bytes, None, None] | BinaryIO = None,
+        insert_block: str | bytes | Generator[bytes, None, None] | BinaryIO | None = None,
         settings: dict | None = None,
         fmt: str | None = None,
         compression: str | None = None,
@@ -421,9 +424,11 @@ class HttpClient(Client):
             query = f"INSERT INTO {table}{cols} FORMAT {fmt if fmt else self._write_format}"
             if not compression and isinstance(insert_block, str):
                 insert_block = query + "\n" + insert_block
-            elif not compression and isinstance(insert_block, (bytes, bytearray, BinaryIO)):
+            elif not compression and isinstance(insert_block, (bytes, bytearray)):
                 insert_block = (query + "\n").encode() + insert_block
             else:
+                # Generators, file-like objects, and compressed data: send the
+                # INSERT query as a URL param and stream the body as-is.
                 params["query"] = query
         if self.database:
             params["database"] = self.database
@@ -448,7 +453,7 @@ class HttpClient(Client):
         self,
         cmd: str,
         parameters: Sequence | dict[str, Any] | None = None,
-        data: str | bytes = None,
+        data: str | bytes | None = None,
         settings: dict | None = None,
         use_database: bool = True,
         external_data: ExternalData | None = None,
@@ -457,9 +462,9 @@ class HttpClient(Client):
         """
         See BaseClient doc_string for this method
         """
-        cmd, params = bind_query(cmd, parameters, self.server_tz)
-        headers = {}
-        payload = None
+        bound_cmd, params = bind_query(cmd, parameters, self.server_tz)
+        headers: dict[str, Any] = {}
+        payload: str | bytes | None = None
         fields = None
         if external_data:
             if data:
@@ -472,12 +477,14 @@ class HttpClient(Client):
         elif isinstance(data, bytes):
             headers["Content-Type"] = "application/octet-stream"
             payload = data
-        if payload is None and not cmd:
+        if payload is None and not bound_cmd:
             raise ProgrammingError("Command sent without query or recognized data") from None
         if payload or fields:
-            params["query"] = cmd
+            if isinstance(bound_cmd, bytes):
+                raise ProgrammingError("Binary parameter bind cannot be combined with command data or external data") from None
+            params["query"] = bound_cmd
         else:
-            payload = cmd
+            payload = bound_cmd
         if use_database and self.database:
             params["database"] = self.database
         params.update(self._validate_settings(settings or {}))
@@ -495,7 +502,7 @@ class HttpClient(Client):
                 return result
             except UnicodeDecodeError:
                 return str(response.data)
-        if returns_empty_string_on_empty_body(cmd):
+        if returns_empty_string_on_empty_body(bound_cmd):
             return ""
         return QuerySummary(self._summary(response))
 
@@ -546,7 +553,7 @@ class HttpClient(Client):
         stream: bool = False,
         server_wait: bool = True,
         fields: dict[str, tuple] | None = None,
-        error_handler: Callable = None,
+        error_handler: Callable | None = None,
         retry_body: Callable[[], Any] | None = None,
     ) -> HTTPResponse:
         if isinstance(data, str):
@@ -571,7 +578,7 @@ class HttpClient(Client):
             final_params["query_id"] = str(uuid.uuid4())
 
         url = f"{self.url}?{urlencode(final_params)}"
-        kwargs = {"headers": headers, "timeout": self.timeout, "retries": self.http_retries, "preload_content": not stream}
+        kwargs: dict[str, Any] = {"headers": headers, "timeout": self.timeout, "retries": self.http_retries, "preload_content": not stream}
         if self.server_host_name:
             kwargs["assert_same_host"] = False
             kwargs["headers"].update({"Host": self.server_host_name})
@@ -579,7 +586,7 @@ class HttpClient(Client):
             kwargs["fields"] = fields
         else:
             kwargs["body"] = data
-        check_conn_expiration(self.http)
+        check_conn_expiration(cast(PoolManager, self.http))
         query_session = final_params.get("session_id")
         while True:
             attempts += 1
@@ -593,7 +600,7 @@ class HttpClient(Client):
                 # throw an error instead, but in most cases this more helpful error will be thrown first
                 self._active_session = query_session
             try:
-                response = self.http.request(method, url, **kwargs)
+                response: HTTPResponse = cast(HTTPResponse, cast(PoolManager, self.http).request(method, url, **kwargs))
             except HTTPError as ex:
                 # Always allow at least one retry on a clean connection error so a single stale
                 # keep-alive socket doesn't surface to the caller, and additionally honor the
@@ -639,7 +646,7 @@ class HttpClient(Client):
                     kwargs["body"] = retry_body()
                 response.close()
                 logger.debug("Refreshing access token after authentication failure")
-            elif error_handler:
+            elif error_handler is not None:
                 error_handler(response)
             else:
                 self._error_handler(response)
@@ -649,7 +656,7 @@ class HttpClient(Client):
         query: str,
         parameters: Sequence | dict[str, Any] | None = None,
         settings: dict[str, Any] | None = None,
-        fmt: str = None,
+        fmt: str | None = None,
         use_database: bool = True,
         external_data: ExternalData | None = None,
         transport_settings: dict[str, str] | None = None,
@@ -665,7 +672,7 @@ class HttpClient(Client):
         query: str,
         parameters: Sequence | dict[str, Any] | None = None,
         settings: dict[str, Any] | None = None,
-        fmt: str = None,
+        fmt: str | None = None,
         use_database: bool = True,
         external_data: ExternalData | None = None,
         transport_settings: dict[str, str] | None = None,
@@ -689,7 +696,7 @@ class HttpClient(Client):
         query: str,
         parameters: Sequence | dict[str, Any] | None,
         settings: dict[str, Any] | None,
-        fmt: str,
+        fmt: str | None,
         use_database: bool,
         external_data: ExternalData | None,
     ):
@@ -699,22 +706,24 @@ class HttpClient(Client):
         params = self._validate_settings(settings or {})
         if use_database and self.database:
             params["database"] = self.database
-        fields = {}
+        form_fields: dict[str, Any] = {}
+        fields: dict[str, Any] | None = form_fields
         use_form = use_form_encoding(final_query, bind_params, self.form_encode_query_params)
         # Setup query body
         if external_data and not use_form and isinstance(final_query, bytes):
             raise ProgrammingError("Binary query cannot be placed in URL when using External Data; enable form encoding.")
         # Setup additional query parameters and body
+        body: str | bytes = b""
         if use_form:
-            body = b""
-            fields["query"] = final_query
-            fields.update(bind_params)
+            form_fields["query"] = final_query
+            form_fields.update(bind_params)
             if external_data:
                 params.update(external_data.query_params)
-                fields.update(external_data.form_data)
+                form_fields.update(external_data.form_data)
         elif external_data:
             params.update(bind_params)
-            body = b""
+            # Guaranteed str: the check above raises if external_data and not use_form and bytes
+            assert isinstance(final_query, str)
             params["query"] = final_query
             params.update(external_data.query_params)
             fields = external_data.form_data
@@ -774,20 +783,20 @@ class HttpClient(Client):
         """
         try:
             headers = dict_copy(self.headers)
-            kwargs = {"headers": headers, "timeout": 3, "preload_content": True}
+            kwargs: dict[str, Any] = {"headers": headers, "timeout": 3, "preload_content": True}
             if self.server_host_name:
                 kwargs["assert_same_host"] = False
                 headers["Host"] = self.server_host_name
-            response = self.http.request("GET", f"{self.url}/ping", **kwargs)
+            response = cast(PoolManager, self.http).request("GET", f"{self.url}/ping", **kwargs)
             return 200 <= response.status < 300
         except HTTPError:
             logger.debug("ping failed", exc_info=True)
             return False
 
     def close_connections(self) -> None:
-        self.http.clear()
+        cast(PoolManager, self.http).clear()
 
     def close(self) -> None:
         if self._owns_pool_manager:
-            self.http.clear()
-            all_managers.pop(self.http, None)
+            cast(PoolManager, self.http).clear()
+            all_managers.pop(cast(PoolManager, self.http), None)

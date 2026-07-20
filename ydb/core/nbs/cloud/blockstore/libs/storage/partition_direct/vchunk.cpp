@@ -1,8 +1,8 @@
 #include "vchunk.h"
 
 #include "flush_request.h"
-#include "range_translate.h"
 #include "read_request_executor.h"
+#include "region_geometry.h"
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
@@ -224,19 +224,22 @@ void TVChunk::SetHostState(THostIndex hostIndex, EHostState state)
     UpdateConfig(std::move(prepare), std::move(apply));
 }
 
-void TVChunk::OnHostAppended(size_t newHostCount)
+void TVChunk::UpdateHostCount(size_t newHostCount)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    // Resize synchronously - the config apply below is async, but the new host
-    // is connected and used before it runs.
-    BlocksDirtyMap.ResizeHosts(newHostCount);
+    if (VChunkConfig.GetHostCount() >= newHostCount) {
+        return;
+    }
 
-    auto prepare = [weakSelf = weak_from_this()]() -> TVChunkConfig
+    auto prepare = [weakSelf = weak_from_this(),
+                    newHostCount]() -> TVChunkConfig
     {
         if (auto self = weakSelf.lock()) {
             TVChunkConfig cfg = self->VChunkConfig;
-            cfg.AppendHost();
+            while (cfg.GetHostCount() < newHostCount) {
+                cfg.AppendHost();
+            }
             return cfg;
         }
         return TVChunkConfig{};
@@ -258,11 +261,16 @@ const TVChunkConfig& TVChunk::GetConfig() const
     return VChunkConfig;
 }
 
+TExecutorPtr TVChunk::GetExecutor() const
+{
+    return Executor;
+}
+
 ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    return BlocksDirtyMap.GetPBufferCounters(hostIndex).CurrentBytesCount;
+    return BlocksDirtyMap.GetPBufferUsedSize(hostIndex);
 }
 
 std::optional<ui64> TVChunk::GetSafeBarrierForErase() const
@@ -296,6 +304,17 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "FlushQueue: " << BlocksDirtyMap.DebugPrintReadyToFlush() << "\n";
     sb << "EraseQueue: " << BlocksDirtyMap.DebugPrintReadyToErase() << "\n";
     return sb;
+}
+
+TVChunkSnapshot TVChunk::BuildMonSnapshot()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return {
+        .VChunkConfig = VChunkConfig,
+        .SafeBarrier = GetSafeBarrierForErase(),
+        .DirtyMapDump = DebugPrintDirtyMap(),
+    };
 }
 
 void TVChunk::OnWriteBlocksResponse(

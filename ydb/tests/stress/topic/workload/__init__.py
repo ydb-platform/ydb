@@ -98,6 +98,14 @@ class YdbTopicWorkload(WorkloadBase):
             topic_name,
         ])
 
+    def _add_data_holder_consumer_to_topic(self, topic_name) -> None:
+        availability_period = int(self.duration) * self.config.AVAILABILITY_PERIOD_NUMERATOR // self.config.AVAILABILITY_PERIOD_DENOMINATOR
+        self._add_consumer_to_topic(
+            topic_name,
+            self.config.DATA_HOLDER_CONSUMER,
+            availability_period
+        )
+
     def _run_workload(self, topic_name, duration, byte_rate, producers, consumers,
                       consumer_threads=None,
                       tx_commit_interval=None, use_tx=True, with_config=True) -> None:
@@ -229,12 +237,7 @@ class YdbTopicWorkload(WorkloadBase):
 
         # Настраиваем тестовый топик
         self._configure_topic_retention(self.workload_topic_name, self.config.RETENTION)
-        availability_period = int(self.duration) * self.config.AVAILABILITY_PERIOD_NUMERATOR // self.config.AVAILABILITY_PERIOD_DENOMINATOR
-        self._add_consumer_to_topic(
-            self.workload_topic_name,
-            self.config.DATA_HOLDER_CONSUMER,
-            availability_period
-        )
+        self._add_data_holder_consumer_to_topic(self.workload_topic_name)
 
         # Запускаем тестовую нагрузку
         self._run_workload(
@@ -262,6 +265,7 @@ class YdbTopicWorkload(WorkloadBase):
 
         # Настраиваем тестовый топик
         self._configure_topic_retention(topic_name, self.config.RETENTION)
+        self._add_data_holder_consumer_to_topic(topic_name)
 
         # Запускаем тестовую нагрузку
         self._run_workload(
@@ -291,6 +295,7 @@ class YdbTopicWorkload(WorkloadBase):
 
         # Настраиваем тестовый топик
         self._configure_topic_retention(topic_name, self.config.RETENTION)
+        self._add_data_holder_consumer_to_topic(topic_name)
 
         # Запускаем тестовую нагрузку без транзакций
         self._run_workload(

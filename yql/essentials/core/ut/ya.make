@@ -6,6 +6,7 @@ SRCS(
     yql_expr_constraint_ut.cpp
     yql_range_frame_collector_bounds_ut.cpp
     yql_expr_optimize_ut.cpp
+    yql_expr_type_annotation_ut.cpp
     yql_library_compiler_ut.cpp
     yql_opt_utils_ut.cpp
     yql_udf_index_ut.cpp

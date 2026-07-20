@@ -8,6 +8,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/http/simple/http_client.h>
 
+#include <exception>
 #include <mutex>
 
 using namespace yandex::cloud::iam::v1;
@@ -136,7 +137,24 @@ public:
     TIamCredentialsProviderFactory(const TIamHost& params): Params_(params) {}
 
     TCredentialsProviderPtr CreateProvider() const final {
+        return NCredentials::NDetail::GetOrCreateCachedProvider(
+            GetClientIdentity(),
+            [this] {
+                return std::make_shared<TIAMCredentialsProvider>(Params_);
+            });
+    }
+
+    // Keep the facility-taking path driver-scoped; only the no-arg path is process-wide cached.
+    TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility>) const final {
         return std::make_shared<TIAMCredentialsProvider>(Params_);
+    }
+
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync() const final {
+        return CreateProviderAsync(std::weak_ptr<ICoreFacility>{});
+    }
+
+    NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility> facility) const final {
+        return CreateProviderInBackground(Params_, std::move(facility));
     }
 
     std::string GetClientIdentity() const final {
@@ -146,6 +164,30 @@ public:
     }
 
 private:
+    static NThreading::TFuture<TCredentialsProviderPtr> CreateProviderInBackground(
+        TIamHost params,
+        std::weak_ptr<ICoreFacility> facility)
+    {
+        auto promise = NThreading::NewPromise<TCredentialsProviderPtr>();
+        auto createProvider = [params = std::move(params), promise]() mutable {
+            try {
+                promise.TrySetValue(std::make_shared<TIAMCredentialsProvider>(params));
+            } catch (...) {
+                promise.TrySetException(std::current_exception());
+            }
+        };
+        try {
+            if (auto core = facility.lock()) {
+                core->PostToResponseQueue(std::move(createProvider));
+            } else {
+                createProvider();
+            }
+        } catch (...) {
+            promise.TrySetException(std::current_exception());
+        }
+        return promise.GetFuture();
+    }
+
     TIamHost Params_;
 };
 

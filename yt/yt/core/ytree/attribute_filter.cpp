@@ -11,6 +11,7 @@
 
 #include <yt/yt/core/yson/async_writer.h>
 #include <yt/yt/core/yson/async_consumer.h>
+#include <yt/yt/core/yson/attribute_consumer.h>
 #include <yt/yt/core/yson/pull_parser.h>
 #include <yt/yt/core/yson/string_filter.h>
 
@@ -358,6 +359,49 @@ void TAttributeFilter::Remove(const std::vector<IAttributeDictionary::TKey>& key
             return false;
         }
     );
+}
+
+void WriteAttributeDictionaryFragment(
+    IAsyncYsonConsumer* consumer,
+    const IAttributeDictionary& attributes,
+    const TAttributeFilter& attributeFilter,
+    bool stable)
+{
+    auto pairs = attributes.ListPairs();
+    if (stable) {
+        std::sort(pairs.begin(), pairs.end(), [] (const auto& lhs, const auto& rhs) {
+            return lhs.first < rhs.first;
+        });
+    }
+
+    TAttributeFilter::TKeyToFilter keyToFilter;
+    if (attributeFilter) {
+        keyToFilter = attributeFilter.Normalize();
+    }
+
+    for (const auto& [key, value] : pairs) {
+        if (!attributeFilter) {
+            consumer->OnKeyedItem(key);
+            consumer->OnRaw(value);
+        } else if (auto it = keyToFilter.find(key); it != keyToFilter.end()) {
+            const auto& pathFilter = it->second;
+            TAttributeValueConsumer valueConsumer(consumer, key);
+            auto filteringConsumer = TAttributeFilter::CreateFilteringConsumer(&valueConsumer, pathFilter);
+            filteringConsumer->GetConsumer()->OnRaw(value);
+            filteringConsumer->Finish();
+        }
+    }
+}
+
+void WriteAttributeDictionary(
+    IAsyncYsonConsumer* consumer,
+    const IAttributeDictionary& attributes,
+    const TAttributeFilter& attributeFilter,
+    bool stable)
+{
+    TAttributeFragmentConsumer attributesConsumer(consumer);
+    WriteAttributeDictionaryFragment(&attributesConsumer, attributes, attributeFilter, stable);
+    attributesConsumer.Finish();
 }
 
 std::unique_ptr<TAttributeFilter::IFilteringConsumer> TAttributeFilter::CreateFilteringConsumer(

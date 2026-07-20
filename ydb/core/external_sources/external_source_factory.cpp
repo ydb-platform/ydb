@@ -132,7 +132,7 @@ IExternalSource::TPtr BuildIcebergSource(const std::vector<TRegExMatch>& hostnam
 IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns,
                                                          NActors::TActorSystem* actorSystem,
                                                          size_t pathsLimit,
-                                                         std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
+                                                         std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> credentialsFactory,
                                                          bool enableInfer,
                                                          bool allowLocalFiles,
                                                          bool allExternalDataSourcesAreAvailable,

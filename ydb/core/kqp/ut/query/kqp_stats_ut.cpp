@@ -381,6 +381,59 @@ Y_UNIT_TEST(RequestUnitForExecute) {
     }
 }
 
+Y_UNIT_TEST(LegacySimplifiedPlanTableFullScanActualStats) {
+    NKikimrConfig::TAppConfig app;
+    app.MutableTableServiceConfig()->SetEnableNewRBO(false);
+
+    TKikimrRunner kikimr{TKikimrSettings(app)};
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    const auto execute = [&](const TString& query) {
+        auto result = session.ExecuteDataQuery(
+            query,
+            TTxControl::BeginTx().CommitTx(),
+            settings
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+        return plan.GetMapSafe().at("SimplifiedPlan");
+    };
+
+    const auto fullScanPlan = execute(R"(
+        SELECT Key, Value1 FROM `/Root/TwoShard`;
+    )");
+    const auto fullScan = FindPlanNodeByKv(fullScanPlan, "Name", "TableFullScan");
+    UNIT_ASSERT_C(fullScan.IsDefined(), fullScanPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Rows"), fullScanPlan);
+    UNIT_ASSERT_VALUES_EQUAL_C(fullScan.GetMapSafe().at("A-Rows").GetDoubleSafe(), 6, fullScanPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().contains("A-Size"), fullScanPlan);
+    UNIT_ASSERT_C(fullScan.GetMapSafe().at("A-Size").GetDoubleSafe() > 0, fullScanPlan);
+
+    const auto limitedPlan = execute(R"(
+        SELECT Key, Value1 FROM `/Root/TwoShard` LIMIT 3;
+    )");
+    const auto limitNode = FindPlanNodeByKv(limitedPlan, "Node Type", "Limit");
+    UNIT_ASSERT_C(limitNode.IsDefined(), limitedPlan);
+
+    const auto limit = FindPlanNodeByKv(limitNode, "Name", "Limit");
+    UNIT_ASSERT_C(limit.IsDefined(), limitedPlan);
+    UNIT_ASSERT_C(limit.GetMapSafe().contains("A-Rows"), limitedPlan);
+    UNIT_ASSERT_VALUES_EQUAL_C(limit.GetMapSafe().at("A-Rows").GetDoubleSafe(), 3, limitedPlan);
+
+    const auto limitedScan = FindPlanNodeByKv(limitNode, "Name", "TableFullScan");
+    UNIT_ASSERT_C(limitedScan.IsDefined(), limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().contains("A-Rows"), limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().at("A-Rows").GetDoubleSafe() > 0, limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().contains("A-Size"), limitedPlan);
+    UNIT_ASSERT_C(limitedScan.GetMapSafe().at("A-Size").GetDoubleSafe() > 0, limitedPlan);
+}
+
 Y_UNIT_TEST(StatsProfile) {
     auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();

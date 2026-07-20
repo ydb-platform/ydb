@@ -138,10 +138,6 @@ public:
     [[nodiscard]] TDuration GetDDiskReconnectDelay(
         THostIndex hostIndex) override;
 
-    void OnHostAdded();
-
-    [[nodiscard]] size_t GetHostCount() const;
-
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
         EOperation operation) const override;
@@ -168,12 +164,16 @@ public:
         THostIndex hostIndex) const override;
     [[nodiscard]] TString Dump() const override;
 
+    // If necessary, adds hosts to make the hostIndex valid.
+    void AddHostIfNeeded(THostIndex hostIndex);
+
     [[nodiscard]] TVector<TOracleHostStat> BuildHostStats(TInstant now) const;
 
 private:
     [[nodiscard]] TTimePredictor& AccessTimePredictor(EOperation operation);
     [[nodiscard]] const TTimePredictor& GetTimePredictor(
         EOperation operation) const;
+    [[nodiscard]] size_t GetHostCount() const;
 
     const TStorageConfigPtr StorageConfig;
     const TOracleConfigPtr OracleConfig;

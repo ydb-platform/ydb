@@ -2,6 +2,8 @@
 
 PY3_LIBRARY()
 
+SUBSCRIBER(g:python-contrib)
+
 VERSION(5.2.0)
 
 LICENSE(LGPL-2.1-or-later)

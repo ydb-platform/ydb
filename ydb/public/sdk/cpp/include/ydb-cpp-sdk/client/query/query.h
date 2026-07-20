@@ -122,6 +122,9 @@ struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
 struct TBeginTxSettings : public TRequestSettings<TBeginTxSettings> {};
 struct TCommitTxSettings : public TRequestSettings<TCommitTxSettings> {};
 struct TRollbackTxSettings : public TRequestSettings<TRollbackTxSettings> {};
+struct TDeleteSessionSettings : public TRequestSettings<TDeleteSessionSettings> {
+    FLUENT_SETTING_OPTIONAL(TRetryOperationSettings, RetrySettings);
+};
 
 
 

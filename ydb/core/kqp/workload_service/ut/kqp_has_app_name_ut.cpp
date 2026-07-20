@@ -32,21 +32,7 @@ Y_UNIT_TEST_SUITE(TQueryClassifierHasAppName) {
         UNIT_ASSERT_VALUES_EQUAL(GetPoolId(tc.RunPreClassify()), "pool_target");
     }
 
-    Y_UNIT_TEST(ShouldMatchAppNameRegexSuffix) {
-        TClassifyTestCase tc;
-        tc.ClassifierHasAppName = "ydb-.*";
-        tc.ContextAppName = "ydb-ui";
-        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(tc.RunPreClassify()), "pool_target");
-    }
-
-    Y_UNIT_TEST(ShouldMatchAppNameAlternation) {
-        TClassifyTestCase tc;
-        tc.ClassifierHasAppName = "ydb-ui|ydb-cli";
-        tc.ContextAppName = "ydb-cli";
-        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(tc.RunPreClassify()), "pool_target");
-    }
-
-    Y_UNIT_TEST(ShouldRejectLiteralBeyondAnchor) {
+    Y_UNIT_TEST(ShouldRequireExactMatch) {
         TClassifyTestCase tc;
         tc.ClassifierHasAppName = "ydb-ui";
         tc.ContextAppName = "ydb-ui-prod";
@@ -77,41 +63,6 @@ Y_UNIT_TEST_SUITE(HasAppNameDdl) {
 
         auto noMatchSettings = TQueryRunnerSettings().PoolId("").UserSID(userSID).ApplicationName("other_app");
         WaitForClassifierSuccess(ydb, noMatchSettings);
-    }
-
-    Y_UNIT_TEST(TestHasAppNameRegexClassifier) {
-        auto ydb = TYdbSetupSettings().Create();
-
-        const TString& poolId = "regex_pool";
-        const TString& userSID = "test@user";
-        ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            GRANT ALL ON `/)" << ydb->GetSettings().DomainName_ << R"(` TO `)" << userSID << R"(`;
-            CREATE RESOURCE POOL )" << poolId << R"( WITH (
-                CONCURRENT_QUERY_LIMIT=0
-            );
-            CREATE RESOURCE POOL CLASSIFIER regex_classifier WITH (
-                RESOURCE_POOL=")" << poolId << R"(",
-                HAS_APP_NAME="my_app.*"
-            );
-        )");
-
-        auto matchSettings = TQueryRunnerSettings().PoolId("").UserSID(userSID).ApplicationName("my_app_v2");
-        WaitForClassifierFail(ydb, matchSettings, poolId);
-
-        auto noMatchSettings = TQueryRunnerSettings().PoolId("").UserSID(userSID).ApplicationName("other_app");
-        WaitForClassifierSuccess(ydb, noMatchSettings);
-    }
-
-    Y_UNIT_TEST(TestHasAppNameInvalidRegex) {
-        auto ydb = TYdbSetupSettings().Create();
-
-        auto result = ydb->ExecuteQuery(TStringBuilder() << R"(
-            CREATE RESOURCE POOL CLASSIFIER bad_regex_classifier WITH (
-                RESOURCE_POOL=")" << NResourcePool::DEFAULT_POOL_ID << R"(",
-                HAS_APP_NAME="[invalid"
-            );
-        )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
-        UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
     }
 
     Y_UNIT_TEST(TestAlterHasAppName) {

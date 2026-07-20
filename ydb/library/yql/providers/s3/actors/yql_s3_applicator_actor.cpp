@@ -219,10 +219,10 @@ public:
         std::optional<ui32> restartNumber,
         bool commit,
         const THashMap<TString, TString>& secureParams,
-        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
         const NYql::NDqProto::TExternalEffect& externalEffect)
     : ParentId(parentId)
-    , Gateway(gateway) 
+    , Gateway(gateway)
     , QueryId(queryId)
     , KeyPrefix(jobId ? jobId + "_" : "")
     , KeySubPrefix(restartNumber ? ToString(*restartNumber) + "_" : "")
@@ -641,7 +641,7 @@ private:
     const TString KeySubPrefix; // run_id ## _
     const bool Commit;
     const THashMap<TString, TString> SecureParams;
-    ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     NYql::NDqProto::TExternalEffect ExternalEffect;
     NActors::TActorSystem* const ActorSystem;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
@@ -666,7 +666,7 @@ THolder<NActors::IActor> MakeS3ApplicatorActor(
     std::optional<ui32> restartNumber,
     bool commit,
     const THashMap<TString, TString>& secureParams,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const NYql::NDqProto::TExternalEffect& externalEffect) {
 
     return MakeHolder<TS3ApplicatorActor>(

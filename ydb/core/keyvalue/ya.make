@@ -6,6 +6,8 @@ SRCS(
     keyvalue_collect_operation.h
     keyvalue_collector.cpp
     keyvalue_collector.h
+    keyvalue_copy_blob.cpp
+    keyvalue_copy_blob.h
     keyvalue_const.h
     keyvalue.cpp
     keyvalue_data.cpp
@@ -32,6 +34,7 @@ SRCS(
     keyvalue_state.cpp
     keyvalue_state.h
     keyvalue_state_collect.cpp
+    keyvalue_state_move_data.cpp
     keyvalue_storage_read_request.cpp
     keyvalue_storage_request.cpp
     keyvalue_storage_request.h

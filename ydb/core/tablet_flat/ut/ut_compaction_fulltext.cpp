@@ -256,7 +256,8 @@ namespace {
         TVector<TFtRow> rows;
 
         NTest::TWrapPart wrap(eggs);
-        wrap.Make(new NTest::TTestEnv);
+        NTest::TTestEnv env;
+        wrap.Make(&env);
 
         auto ready = wrap.Seek(TArrayRef<const TCell>(), ESeek::Lower);
         while (ready == EReady::Data) {
@@ -374,11 +375,11 @@ Y_UNIT_TEST_SUITE(TFulltextCompaction) {
         auto seg3 = MakeSegment({2, 4, 50});
         auto part = NTest::TPartCook(lay, { false, 4096 })
             // non-mergeable erase
-            .Ver({101, 1}).AddOpN(ERowOp::Erase, TString("hello"), UINT64_MAX-3, 20_u64)
-            .Ver({100, 1}).AddN(TString("hello"), UINT64_MAX-2, 15_u64, true, seg1)
+            .Ver({101, 1}).AddOpN(ERowOp::Erase, TString("hello"), Max<ui64>()-3, 20_u64)
+            .Ver({100, 1}).AddN(TString("hello"), Max<ui64>()-2, 15_u64, true, seg1)
             // non-mergeable delete
-            .Ver({101, 1}).AddN(TString("hello"), UINT64_MAX-1, 20_u64, false, seg2)
-            .Ver({100, 1}).AddN(TString("hello"), UINT64_MAX, 50_u64, true, seg3)
+            .Ver({101, 1}).AddN(TString("hello"), Max<ui64>()-1, 20_u64, false, seg2)
+            .Ver({100, 1}).AddN(TString("hello"), Max<ui64>(), 50_u64, true, seg3)
             .Finish();
 
         auto result = TFulltextCompaction(false).Do(part, {100, 1});
@@ -389,14 +390,14 @@ Y_UNIT_TEST_SUITE(TFulltextCompaction) {
         // non-mergeable erase preserved
         UNIT_ASSERT_VALUES_EQUAL(rows[0].Token, "hello");
         UNIT_ASSERT_VALUES_EQUAL(rows[0].RowOp, ERowOp::Erase);
-        UNIT_ASSERT_VALUES_EQUAL(rows[0].Gen, UINT64_MAX-3);
+        UNIT_ASSERT_VALUES_EQUAL(rows[0].Gen, Max<ui64>()-3);
         UNIT_ASSERT_VALUES_EQUAL(rows[0].MaxId, 20);
         UNIT_ASSERT(rows[0].DocIds.empty());
 
         // mergeable rows merged into a single insert
         UNIT_ASSERT_VALUES_EQUAL(rows[1].Token, "hello");
         UNIT_ASSERT_VALUES_EQUAL(rows[1].RowOp, ERowOp::Upsert);
-        UNIT_ASSERT_VALUES_EQUAL(rows[1].Gen, UINT64_MAX-2);
+        UNIT_ASSERT_VALUES_EQUAL(rows[1].Gen, Max<ui64>()-2);
         UNIT_ASSERT_VALUES_EQUAL(rows[1].MaxId, 50);
         UNIT_ASSERT_VALUES_EQUAL(rows[1].Added, true);
         UNIT_ASSERT(rows[1].DocIds == (TVector<ui64>{1, 2, 4, 5, 15, 50}));
@@ -404,7 +405,7 @@ Y_UNIT_TEST_SUITE(TFulltextCompaction) {
         // non-mergeable delete preserved
         UNIT_ASSERT_VALUES_EQUAL(rows[2].Token, "hello");
         UNIT_ASSERT_VALUES_EQUAL(rows[2].RowOp, ERowOp::Upsert);
-        UNIT_ASSERT_VALUES_EQUAL(rows[2].Gen, UINT64_MAX-1);
+        UNIT_ASSERT_VALUES_EQUAL(rows[2].Gen, Max<ui64>()-1);
         UNIT_ASSERT_VALUES_EQUAL(rows[2].MaxId, 20);
         UNIT_ASSERT_VALUES_EQUAL(rows[2].Added, false);
         UNIT_ASSERT(rows[2].DocIds == (TVector<ui64>{10, 11, 20}));
@@ -418,10 +419,10 @@ Y_UNIT_TEST_SUITE(TFulltextCompaction) {
         auto seg3 = MakeSegment({2, 4, 50});
         auto seg4 = MakeSegment({21, 30});
         auto part = NTest::TPartCook(lay, { false, 4096 })
-            .Ver({100, 1}).AddN(TString("hello"), UINT64_MAX-3, 15_u64, false, seg1)
-            .Ver({101, 1}).AddN(TString("hello"), UINT64_MAX-2, 20_u64, true, seg2)
-            .Ver({100, 1}).AddN(TString("hello"), UINT64_MAX-1, 50_u64, true, seg3)
-            .Ver({100, 1}).AddN(TString("hello"), UINT64_MAX, 30_u64, true, seg4)
+            .Ver({100, 1}).AddN(TString("hello"), Max<ui64>()-3, 15_u64, false, seg1)
+            .Ver({101, 1}).AddN(TString("hello"), Max<ui64>()-2, 20_u64, true, seg2)
+            .Ver({100, 1}).AddN(TString("hello"), Max<ui64>()-1, 50_u64, true, seg3)
+            .Ver({100, 1}).AddN(TString("hello"), Max<ui64>(), 30_u64, true, seg4)
             .Finish();
 
         auto result = TFulltextCompaction(false).Do(part, {100, 1});
@@ -432,7 +433,7 @@ Y_UNIT_TEST_SUITE(TFulltextCompaction) {
         // deletes first
         UNIT_ASSERT_VALUES_EQUAL(rows[0].Token, "hello");
         UNIT_ASSERT_VALUES_EQUAL(rows[0].RowOp, ERowOp::Upsert);
-        UNIT_ASSERT_VALUES_EQUAL(rows[0].Gen, UINT64_MAX-3);
+        UNIT_ASSERT_VALUES_EQUAL(rows[0].Gen, Max<ui64>()-3);
         UNIT_ASSERT_VALUES_EQUAL(rows[0].MaxId, 15);
         UNIT_ASSERT_VALUES_EQUAL(rows[0].Added, false);
         UNIT_ASSERT(rows[0].DocIds == (TVector<ui64>{1, 5, 15}));
@@ -440,7 +441,7 @@ Y_UNIT_TEST_SUITE(TFulltextCompaction) {
         // preserved row
         UNIT_ASSERT_VALUES_EQUAL(rows[1].Token, "hello");
         UNIT_ASSERT_VALUES_EQUAL(rows[1].RowOp, ERowOp::Upsert);
-        UNIT_ASSERT_VALUES_EQUAL(rows[1].Gen, UINT64_MAX-2);
+        UNIT_ASSERT_VALUES_EQUAL(rows[1].Gen, Max<ui64>()-2);
         UNIT_ASSERT_VALUES_EQUAL(rows[1].MaxId, 20);
         UNIT_ASSERT_VALUES_EQUAL(rows[1].Added, true);
         UNIT_ASSERT(rows[1].DocIds == (TVector<ui64>{10, 11, 20}));
@@ -448,7 +449,7 @@ Y_UNIT_TEST_SUITE(TFulltextCompaction) {
         // merged additions
         UNIT_ASSERT_VALUES_EQUAL(rows[2].Token, "hello");
         UNIT_ASSERT_VALUES_EQUAL(rows[2].RowOp, ERowOp::Upsert);
-        UNIT_ASSERT_VALUES_EQUAL(rows[2].Gen, UINT64_MAX-1);
+        UNIT_ASSERT_VALUES_EQUAL(rows[2].Gen, Max<ui64>()-1);
         UNIT_ASSERT_VALUES_EQUAL(rows[2].MaxId, 50);
         UNIT_ASSERT_VALUES_EQUAL(rows[2].Added, true);
         UNIT_ASSERT(rows[2].DocIds == (TVector<ui64>{2, 4, 21, 30, 50}));
@@ -461,10 +462,10 @@ Y_UNIT_TEST_SUITE(TFulltextCompaction) {
         auto seg2 = MakeSegment({10, 11, 20});
         auto seg3 = MakeSegment({2, 4, 50});
         auto part = NTest::TPartCook(lay, { false, 4096 })
-            .Ver({100, 1}).AddN(TString("hello"), UINT64_MAX-2, 15_u64, true, seg1)
-            .Ver({100, 1}).AddN(TString("hello"), UINT64_MAX-1, 20_u64, true, seg2)
+            .Ver({100, 1}).AddN(TString("hello"), Max<ui64>()-2, 15_u64, true, seg1)
+            .Ver({100, 1}).AddN(TString("hello"), Max<ui64>()-1, 20_u64, true, seg2)
             // non-mergeable manual table modification
-            .Ver({101, 1}).AddN(TString("hello"), UINT64_MAX, 50_u64, true, seg3)
+            .Ver({101, 1}).AddN(TString("hello"), Max<ui64>(), 50_u64, true, seg3)
             .Finish();
 
         auto result = TFulltextCompaction(false).Do(part, {100, 1});
@@ -475,21 +476,21 @@ Y_UNIT_TEST_SUITE(TFulltextCompaction) {
 
         UNIT_ASSERT_VALUES_EQUAL(rows[0].Token, "hello");
         UNIT_ASSERT_VALUES_EQUAL(rows[0].RowOp, ERowOp::Upsert);
-        UNIT_ASSERT_VALUES_EQUAL(rows[0].Gen, UINT64_MAX-2);
+        UNIT_ASSERT_VALUES_EQUAL(rows[0].Gen, Max<ui64>()-2);
         UNIT_ASSERT_VALUES_EQUAL(rows[0].MaxId, 15);
         UNIT_ASSERT_VALUES_EQUAL(rows[0].Added, true);
         UNIT_ASSERT(rows[0].DocIds == (TVector<ui64>{1, 5, 15}));
 
         UNIT_ASSERT_VALUES_EQUAL(rows[1].Token, "hello");
         UNIT_ASSERT_VALUES_EQUAL(rows[1].RowOp, ERowOp::Upsert);
-        UNIT_ASSERT_VALUES_EQUAL(rows[1].Gen, UINT64_MAX-1);
+        UNIT_ASSERT_VALUES_EQUAL(rows[1].Gen, Max<ui64>()-1);
         UNIT_ASSERT_VALUES_EQUAL(rows[1].MaxId, 20);
         UNIT_ASSERT_VALUES_EQUAL(rows[1].Added, true);
         UNIT_ASSERT(rows[1].DocIds == (TVector<ui64>{10, 11, 20}));
 
         UNIT_ASSERT_VALUES_EQUAL(rows[2].Token, "hello");
         UNIT_ASSERT_VALUES_EQUAL(rows[2].RowOp, ERowOp::Upsert);
-        UNIT_ASSERT_VALUES_EQUAL(rows[2].Gen, UINT64_MAX);
+        UNIT_ASSERT_VALUES_EQUAL(rows[2].Gen, Max<ui64>());
         UNIT_ASSERT_VALUES_EQUAL(rows[2].MaxId, 50);
         UNIT_ASSERT_VALUES_EQUAL(rows[2].Added, true);
         UNIT_ASSERT(rows[2].DocIds == (TVector<ui64>{2, 4, 50}));
@@ -501,10 +502,10 @@ Y_UNIT_TEST_SUITE(TFulltextCompaction) {
         auto seg1 = MakeSegment({1, 5, 15});
         auto seg2 = MakeSegment({2, 4, 50});
         auto part = NTest::TPartCook(lay, { false, 4096 })
-            .Ver({100, 1}).AddN(TString("hello"), UINT64_MAX-2, 15_u64, true, seg1)
+            .Ver({100, 1}).AddN(TString("hello"), Max<ui64>()-2, 15_u64, true, seg1)
             // mergeable manual table modification but with an erase
-            .Ver({100, 1}).AddOpN(ERowOp::Erase, TString("hello"), UINT64_MAX, 20_u64)
-            .Ver({100, 1}).AddN(TString("hello"), UINT64_MAX, 50_u64, true, seg2)
+            .Ver({100, 1}).AddOpN(ERowOp::Erase, TString("hello"), Max<ui64>(), 20_u64)
+            .Ver({100, 1}).AddN(TString("hello"), Max<ui64>(), 50_u64, true, seg2)
             .Finish();
 
         auto result = TFulltextCompaction(false).Do(part, {100, 1});
@@ -515,20 +516,20 @@ Y_UNIT_TEST_SUITE(TFulltextCompaction) {
 
         UNIT_ASSERT_VALUES_EQUAL(rows[0].Token, "hello");
         UNIT_ASSERT_VALUES_EQUAL(rows[0].RowOp, ERowOp::Upsert);
-        UNIT_ASSERT_VALUES_EQUAL(rows[0].Gen, UINT64_MAX-2);
+        UNIT_ASSERT_VALUES_EQUAL(rows[0].Gen, Max<ui64>()-2);
         UNIT_ASSERT_VALUES_EQUAL(rows[0].MaxId, 15);
         UNIT_ASSERT_VALUES_EQUAL(rows[0].Added, true);
         UNIT_ASSERT(rows[0].DocIds == (TVector<ui64>{1, 5, 15}));
 
         UNIT_ASSERT_VALUES_EQUAL(rows[1].Token, "hello");
         UNIT_ASSERT_VALUES_EQUAL(rows[1].RowOp, ERowOp::Erase);
-        UNIT_ASSERT_VALUES_EQUAL(rows[1].Gen, UINT64_MAX);
+        UNIT_ASSERT_VALUES_EQUAL(rows[1].Gen, Max<ui64>());
         UNIT_ASSERT_VALUES_EQUAL(rows[1].MaxId, 20);
         UNIT_ASSERT(rows[1].DocIds.empty());
 
         UNIT_ASSERT_VALUES_EQUAL(rows[2].Token, "hello");
         UNIT_ASSERT_VALUES_EQUAL(rows[2].RowOp, ERowOp::Upsert);
-        UNIT_ASSERT_VALUES_EQUAL(rows[2].Gen, UINT64_MAX);
+        UNIT_ASSERT_VALUES_EQUAL(rows[2].Gen, Max<ui64>());
         UNIT_ASSERT_VALUES_EQUAL(rows[2].MaxId, 50);
         UNIT_ASSERT_VALUES_EQUAL(rows[2].Added, true);
         UNIT_ASSERT(rows[2].DocIds == (TVector<ui64>{2, 4, 50}));
@@ -547,7 +548,7 @@ Y_UNIT_TEST_SUITE(TFulltextCompaction) {
             .Ver({50, 1}).AddN(TString("hello"), 20_u64, 50_u64, false, segRemoved1)
             .Ver({80, 1}).AddN(TString("hello"), 40_u64, 150_u64, false, segRemoved2)
             // Assume the user is a bad guy and inserted a segment with gen=max manually
-            .Ver({60, 1}).AddN(TString("hello"), UINT64_MAX, 200_u64, true, segAdded2)
+            .Ver({60, 1}).AddN(TString("hello"), Max<ui64>(), 200_u64, true, segAdded2)
             .Finish();
 
         auto result = TFulltextCompaction(false /* non-final */).Do(part, {100, 1});
@@ -582,7 +583,7 @@ Y_UNIT_TEST_SUITE(TFulltextCompaction) {
             .Ver({50, 1}).AddN(TString("hello"), 20_u64, 50_u64, false, segRemoved1)
             .Ver({60, 1}).AddN(TString("hello"), 30_u64, 200_u64, true, segAdded2)
             .Ver({80, 1}).AddN(TString("hello"), 40_u64, 150_u64, false, segRemoved2)
-            .Ver({90, 1}).AddOpN(ERowOp::Erase, TString("hello"), UINT64_MAX, 20_u64)
+            .Ver({90, 1}).AddOpN(ERowOp::Erase, TString("hello"), Max<ui64>(), 20_u64)
             .Finish();
 
         auto result = TFulltextCompaction(true /* final */).Do(part, {100, 1});

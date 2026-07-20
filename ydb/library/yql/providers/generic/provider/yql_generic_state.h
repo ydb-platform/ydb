@@ -98,7 +98,7 @@ namespace NYql {
             TTypeAnnotationContext* types,
             const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
             const std::shared_ptr<IDatabaseAsyncResolver>& databaseResolver,
-            const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+            const IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
             const NConnector::IClient::TPtr& genericClient,
             const TGenericGatewayConfig& gatewayConfig)
             : Types(types)
@@ -130,7 +130,7 @@ namespace NYql {
         // It's important to cache credentials providers, because they make IO
         // (synchronous call via Token Accessor client) during the construction.
         std::unordered_map<TString, NYdb::TCredentialsProviderPtr> CredentialProviders;
-        ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+        IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
 
         NConnector::IClient::TPtr GenericClient;
 

@@ -116,6 +116,7 @@ namespace {
         auto cDirectIORead = cDirectIO->GetSubgroup("operation", "Read");
 
         auto cPersistentBuffer = counters->GetSubgroup("subsystem", "persistent_buffer");
+        auto cChecksums = counters->GetSubgroup("subsystem", "checksums");
 
 #define COUNTER(GROUP, NAME, DERIV) .NAME = c##GROUP->GetCounter(#NAME, DERIV),
 #define HISTOGRAM(GROUP, NAME, BUCKETS) .NAME = c##GROUP->GetHistogram(#NAME, NMonitoring::ExplicitHistogram(BUCKETS)),
@@ -189,6 +190,10 @@ namespace {
                 COUNTER(PersistentBuffer, PendingEventsQueueSize, false)
                 COUNTER(PersistentBuffer, InMemoryCacheSize, false)
                 HISTOGRAM(PersistentBuffer, WriteBatchSize, WriteBatchSizeBounds)
+            },
+            .Checksums = {
+                COUNTER(Checksums, WritesWithoutChecksums, true)
+                COUNTER(Checksums, ChecksumMismatch, true)
             },
         };
 
@@ -408,6 +413,9 @@ namespace {
         }
 #endif
         CountersBase->RemoveSubgroupChain(CountersChain);
+        if (!IsPersistentBufferActor) {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvents::TEvGone());
+        }
         TActorBootstrapped::PassAway();
     }
 

@@ -1,7 +1,7 @@
 import asyncio
 import threading
 from collections import deque
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from clickhouse_connect.driver.exceptions import ProgrammingError
 
@@ -9,7 +9,8 @@ __all__ = ["AsyncSyncQueue", "Empty", "Full", "EOF_SENTINEL"]
 
 T = TypeVar("T")
 
-EOF_SENTINEL = object()
+# Typed Any so it can stand in for a queued T value on EOF without a cast in every reader.
+EOF_SENTINEL: Any = object()
 
 
 class AsyncSyncQueue(Generic[T]):
@@ -73,7 +74,8 @@ class AsyncSyncQueue(Generic[T]):
         while waiter_queue:
             fut = waiter_queue.popleft()
             if not fut.done():
-                self._loop.call_soon_threadsafe(self._safe_set_result, fut)
+                # _bind_loop() runs before any Future is created, so _loop is always set here
+                self._loop.call_soon_threadsafe(self._safe_set_result, fut)  # type: ignore[union-attr]
                 break
 
     def shutdown(self):
@@ -161,7 +163,8 @@ class _AsyncQueueInterface(Generic[T]):
                 if self._p._shutdown:
                     return EOF_SENTINEL
 
-                fut = self._p._loop.create_future()
+                # _bind_loop() is called at the top of get(), so _loop is always set here
+                fut = self._p._loop.create_future()  # type: ignore[union-attr]
                 self._p._async_getters.append(fut)
 
             try:
@@ -185,7 +188,8 @@ class _AsyncQueueInterface(Generic[T]):
                     self._p._wakeup_async_waiter(self._p._async_getters)
                     return
 
-                fut = self._p._loop.create_future()
+                # _bind_loop() is called at the top of put(), so _loop is always set here
+                fut = self._p._loop.create_future()  # type: ignore[union-attr]
                 self._p._async_putters.append(fut)
 
             try:

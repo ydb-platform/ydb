@@ -303,7 +303,7 @@ private:
 class TDatabaseResolver: public TActor<TDatabaseResolver>
 {
 public:
-    TDatabaseResolver(TActorId httpProxy, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
+    TDatabaseResolver(TActorId httpProxy, NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory)
         : TActor<TDatabaseResolver>(&TDatabaseResolver::State)
         , HttpProxy(httpProxy)
         , CredentialsFactory(credentialsFactory)
@@ -638,7 +638,7 @@ private:
 
                 NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(url);
 
-                auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, databaseAuth.StructuredToken, databaseAuth.AddBearerToToken);
+                auto credentialsProviderFactory = CredentialsFactory->Create(databaseAuth.StructuredToken, databaseAuth.AddBearerToToken);
                 auto token = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
                 if (!token.empty()) {
                     httpRequest->Set("Authorization", token);
@@ -676,12 +676,12 @@ private:
 private:
     TParsers Parsers;
     const TActorId HttpProxy;
-    const ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    const IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     TString TraceId;
     TCache Cache;
 };
 
-NActors::IActor* CreateDatabaseResolver(NActors::TActorId httpProxy, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
+NActors::IActor* CreateDatabaseResolver(NActors::TActorId httpProxy, NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory) {
     return new TDatabaseResolver(httpProxy, credentialsFactory);
 }
 

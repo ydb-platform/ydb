@@ -33,7 +33,7 @@ private:
         auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
         for (ui32 i = 0; i < DataNames->length(); ++i) {
             const auto arrView = DataNames->GetView(i);
-            auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(TStringBuf(arrView.data(), arrView.size())), nullptr, i);
+            auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(TStringBuf(arrView.data(), arrView.size())), nullptr, EValueType::BinaryJson, i);
             AFL_VERIFY(insertResult.IsSuccess())("key_name", TStringBuf(arrView.data(), arrView.size()))
                 ("json_path", ToJsonPath(TStringBuf(arrView.data(), arrView.size())))
                 ("error", insertResult.GetErrorMessage());

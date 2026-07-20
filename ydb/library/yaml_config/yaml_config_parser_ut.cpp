@@ -3,6 +3,7 @@
 #include "yaml_config_helpers.h"
 
 #include <ydb/core/protos/key.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -76,6 +77,71 @@ pdisk_key_config:
         UNIT_ASSERT_VALUES_EQUAL(keys.end() - keys.begin(), 1);
         auto key = keys.at(0);
         UNIT_ASSERT_VALUES_EQUAL("c2FtcGxlLXBpbgo=", key.pin());
+    }
+
+    Y_UNIT_TEST(FeatureFlagsWithTriboolAsBoolKeepsLaterFlags) {
+        // Regression: EnableMvcc (tag 47) is a Tribool enum. A YAML boolean given
+        // to it used to abort the whole FeatureFlags json->proto merge (which walks
+        // fields in tag order), silently dropping every feature flag with a higher
+        // tag, e.g. EnableArrowFormatAtDatashard (tag 49).
+        TString config = R"(
+feature_flags:
+  enable_mvcc: true
+  enable_arrow_format_at_datashard: true
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, false);
+
+        UNIT_ASSERT(cfg.HasFeatureFlags());
+        UNIT_ASSERT_C(cfg.GetFeatureFlags().GetEnableArrowFormatAtDatashard(),
+            "EnableArrowFormatAtDatashard (tag 49) was dropped because a Tribool "
+            "flag given as a YAML bool aborted the FeatureFlags parse");
+    }
+
+    Y_UNIT_TEST(FeatureFlagsWithoutTriboolParseFully) {
+        // Control: without the Tribool-as-bool trigger the same high-tag flag
+        // parses fine, isolating enable_mvcc as the cause.
+        TString config = R"(
+feature_flags:
+  enable_arrow_format_at_datashard: true
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, false);
+
+        UNIT_ASSERT(cfg.HasFeatureFlags());
+        UNIT_ASSERT(cfg.GetFeatureFlags().GetEnableArrowFormatAtDatashard());
+    }
+
+    Y_UNIT_TEST(TriboolFeatureFlagAcceptsYamlBool) {
+        // A Tribool feature flag may be written as a YAML boolean; true maps to
+        // VALUE_TRUE and false maps to VALUE_FALSE.
+        TString configTrue = R"(
+feature_flags:
+  enable_mvcc: true
+)";
+        NKikimrConfig::TAppConfig cfgTrue = Parse(configTrue, false);
+        UNIT_ASSERT(cfgTrue.HasFeatureFlags());
+        UNIT_ASSERT_VALUES_EQUAL((int)cfgTrue.GetFeatureFlags().GetEnableMvcc(),
+            (int)NKikimrConfig::TFeatureFlags::VALUE_TRUE);
+
+        TString configFalse = R"(
+feature_flags:
+  enable_mvcc: false
+)";
+        NKikimrConfig::TAppConfig cfgFalse = Parse(configFalse, false);
+        UNIT_ASSERT(cfgFalse.HasFeatureFlags());
+        UNIT_ASSERT_VALUES_EQUAL((int)cfgFalse.GetFeatureFlags().GetEnableMvcc(),
+            (int)NKikimrConfig::TFeatureFlags::VALUE_FALSE);
+    }
+
+    Y_UNIT_TEST(TriboolFeatureFlagAcceptsEnumName) {
+        // The explicit enum spelling keeps working alongside the boolean form.
+        TString config = R"(
+feature_flags:
+  enable_mvcc: VALUE_FALSE
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, false);
+        UNIT_ASSERT(cfg.HasFeatureFlags());
+        UNIT_ASSERT_VALUES_EQUAL((int)cfg.GetFeatureFlags().GetEnableMvcc(),
+            (int)NKikimrConfig::TFeatureFlags::VALUE_FALSE);
     }
 
     Y_UNIT_TEST(PdiskCategoryFromString) {

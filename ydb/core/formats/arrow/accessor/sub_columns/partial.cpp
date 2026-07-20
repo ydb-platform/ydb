@@ -23,7 +23,8 @@ TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialA
     auto headerStats = Header.GetColumnStats();
     for (ui32 i = 0; i < headerStats.GetDataNamesCount(); ++i) {
         if (PartialColumnsData.HasColumn(i)) {
-            auto insertResult = jsonPathAccessorTrie->Insert(NSubColumns::ToJsonPath(headerStats.GetColumnName(i)), PartialColumnsData.GetAccessorVerified(i));
+            auto insertResult = jsonPathAccessorTrie->Insert(
+                NSubColumns::ToJsonPath(headerStats.GetColumnName(i)), PartialColumnsData.GetAccessorVerified(i), headerStats.GetValueType(i));
             AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
         }
     }
@@ -38,7 +39,9 @@ TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialA
     }
 
     AFL_VERIFY(!Header.GetOtherStats().GetKeyIndexOptional(svPath));
-    return std::make_shared<NSubColumns::TJsonPathAccessor>(std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(arrow::binary(), recordsCount)), TString{});
+    return std::make_shared<NSubColumns::TJsonPathAccessor>(
+        std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(arrow::binary(), recordsCount)), TString{},
+        NSubColumns::EValueType::BinaryJson);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

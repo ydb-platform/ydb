@@ -23,6 +23,7 @@ import ydb.core.protos.grpc_pb2_grpc as kikimr_grpc
 import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
+import ydb.core.protos.whiteboard_disk_states_pb2 as whiteboard_disk_states
 import ydb.core.protos.cms_pb2 as kikimr_cms
 import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc_server
@@ -1239,25 +1240,24 @@ def get_vslots_by_vdisk_ids(base_config, vdisk_ids):
     return res
 
 
+def vdisk_is_ok(vslot):
+    metrics = vslot.VDiskMetrics
+    return metrics.Replicated and metrics.State == whiteboard_disk_states.EVDiskState.OK
+
+
 def filter_healthy_groups(groups, base_config, vslot_map):
-    res = {
-        group.GroupId: len(group.VSlotId)
-        for group in base_config.Group
-        if group.GroupId in groups
-        if all(vslot.Status == 'READY' for vslot in vslots_of_group(group, vslot_map))
-    }
-    check_set = {
-        (*vslot_id, *attrgetter('GroupId', 'FailRealmIdx', 'FailDomainIdx', 'VDiskIdx')(vslot))
-        for vslot_id, vslot in vslot_map.items()
-        if vslot.GroupId in res
-    }
-    for vdisk_id, j in fetch_json_info('vdiskinfo', {node_id for node_id, _, _, _, _, _, _ in check_set}).items():
-        if j.get('Replicated') and j.get('VDiskState') == 'OK':
-            check_item = *vdisk_id, *itemgetter('GroupID', 'Ring', 'Domain', 'VDisk')(j['VDiskId'])
-            if check_item in check_set:
-                check_set.remove(check_item)
-                res[j['VDiskId']['GroupID']] -= 1
-    return {group_id for group_id, count in res.items() if not count}
+    healthy = set()
+    for group in base_config.Group:
+        if group.GroupId not in groups:
+            continue
+        vslots = list(vslots_of_group(group, vslot_map))
+        if not vslots:
+            continue
+        if not all(vslot.Status == 'READY' for vslot in vslots):
+            continue
+        if all(vdisk_is_ok(vslot) for vslot in vslots):
+            healthy.add(group.GroupId)
+    return healthy
 
 
 def add_host_access_options(parser):

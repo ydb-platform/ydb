@@ -15,6 +15,34 @@ TString GetFullName(const TInfoUnit& name) {
     return name.GetFullName();
 }
 
+TVector<TInfoUnit> GetLiveOutputIUs(IOperator& op) {
+    const auto outputIUs = op.GetOutputIUs();
+    const auto& liveOut = GetLiveOut(&op);
+    TVector<TInfoUnit> liveOutputIUs;
+    liveOutputIUs.reserve(outputIUs.size());
+    for (const auto& output : outputIUs) {
+        if (liveOut.contains(output)) {
+            liveOutputIUs.push_back(output);
+        }
+    }
+    return liveOutputIUs;
+}
+
+TVector<TInfoUnit> GetLiveInputIUs(IOperator& op, ui32 childIndex) {
+    Y_ENSURE(childIndex < op.Children.size());
+    const auto outputIUs = op.Children[childIndex]->GetOutputIUs();
+    const auto& liveIn = GetLiveIn(&op, childIndex);
+
+    TVector<TInfoUnit> liveInputIUs;
+    liveInputIUs.reserve(outputIUs.size());
+    for (const auto& output : outputIUs) {
+        if (liveIn.contains(output)) {
+            liveInputIUs.push_back(output);
+        }
+    }
+    return liveInputIUs;
+}
+
 TCoAtomList BuildAtomList(TStringBuf value, TPositionHandle pos, TExprContext& ctx) {
     // clang-format off
     return Build<TCoAtomList>(ctx, pos)

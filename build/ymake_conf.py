@@ -103,14 +103,16 @@ class Platform(object):
         self.is_armv6 = self.arch in ('armv6hf',)
         self.is_armv7 = self.arch in ('armv7', 'armv7a', 'armv7ahf', 'armv7a_neon', 'arm', 'armv7ahf_cortex_a7', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv8 = self.arch in ('armv8', 'armv8a', 'arm64', 'aarch64', 'armv8a_cortex_a35', 'armv8a_cortex_a53')
+        self.is_armv9a = self.arch in ('armv9a', 'armv9a_grace')
         self.is_armv8m = self.arch in ('armv8m_cortex_m33', 'armv8m_cortex_m23')
         self.is_armv7em = self.arch in ('armv7em_cortex_m4', 'armv7em_cortex_m7')
         self.is_arm64 = self.arch in ('arm64',)
-        self.is_arm = self.is_armv6 or self.is_armv7 or self.is_armv8 or self.is_armv8m or self.is_armv7em
+        self.is_arm = self.is_armv6 or self.is_armv7 or self.is_armv8 or self.is_armv9a or self.is_armv8m or self.is_armv7em
         self.is_armv7_neon = self.arch in ('armv7a_neon', 'armv7ahf', 'armv7ahf_cortex_a7', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv6hf = self.arch in ('armv6hf',)
         self.is_armv7hf = self.arch in ('armv7ahf', 'armv7ahf_cortex_a7', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv5te = self.arch in ('armv5te_arm968e_s',)
+        self.is_grace = self.arch in ('armv9a_grace',)
         self.is_arm_aml403 = self.arch == 'arm_aml403'
         self.is_arm64_aml403 = self.arch == 'arm64_aml403'
         self.is_arm_ats3089p = self.arch == 'arm_ats3089p'
@@ -163,7 +165,7 @@ class Platform(object):
             self.is_armv5te or self.is_armv6 or self.is_armv7 or self.is_armv7em or self.is_armv8m or self.is_arm_aml403 or
             self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32 or self.is_arm_ats3089p
         )
-        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64 or self.is_riscv64 or self.is_arm64_aml403
+        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_armv9a or self.is_powerpc or self.is_wasm64 or self.is_riscv64 or self.is_arm64_aml403
 
         assert self.is_32_bit or self.is_64_bit
         assert not (self.is_32_bit and self.is_64_bit)
@@ -174,6 +176,7 @@ class Platform(object):
         self.is_linux = self.os == 'linux' or 'yocto' in self.os
         self.is_linux_x86_64 = self.is_linux and self.is_x86_64
         self.is_linux_armv8 = self.is_linux and self.is_armv8
+        self.is_linux_armv9a = self.is_linux and self.is_armv9a
         self.is_linux_armv7 = self.is_linux and self.is_armv7
         self.is_linux_power8le = self.is_linux and self.is_power8le
         self.is_linux_power9le = self.is_linux and self.is_power9le
@@ -244,6 +247,7 @@ class Platform(object):
             (self.is_armv7, 'ARCH_ARM7'),
             (self.is_armv7_neon, 'ARCH_ARM7_NEON'),
             (self.is_armv8, 'ARCH_ARM64'),
+            (self.is_armv9a, 'ARCH_ARM64'),
             (self.is_armv8m, 'ARCH_ARM8M'),
             (self.is_armv7em, 'ARCH_ARM7EM'),
             (self.is_armv5te, 'ARCH_ARM5TE'),
@@ -251,7 +255,10 @@ class Platform(object):
             (self.is_arm_aml403, 'ARCH_ARM_AML403'),
             (self.is_arm64_aml403, 'ARCH_ARM64_AML403'),
             (self.is_arm_ats3089p, 'ARCH_ARM_ATS3089P'),
-            (self.is_linux_armv8 or self.is_macos_arm64, 'ARCH_AARCH64'),
+            (self.is_linux_armv8, 'ARCH_AARCH64'),
+            (self.is_linux_armv9a, 'ARCH_AARCH64'),
+            (self.is_macos_arm64, 'ARCH_AARCH64'),
+            (self.is_grace, 'ARCH_ARMV9A_GRACE'),
             (self.is_powerpc, 'ARCH_PPC64LE'),
             (self.is_power8le, 'ARCH_POWER8LE'),
             (self.is_power9le, 'ARCH_POWER9LE'),
@@ -528,7 +535,7 @@ def get_target_triple(target):
             (target.is_freebsd and target.is_x86_64, 'x86_64-freebsd-unknown'),
 
             (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
-            (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
+            (target.is_linux and (target.is_armv8 or target.is_armv9a), 'aarch64-linux-gnu'),
             (target.is_linux and target.is_armv6 and target.armv6_float_abi == 'hard', 'armv6-linux-gnueabihf'),
             (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'armv7-linux-gnueabihf'),
             (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'armv7-linux-gnueabi'),
@@ -1344,6 +1351,20 @@ class GnuToolchain(Toolchain):
             target_flags = select(default=[], selectors=[
                 (target.is_linux and target.is_power8le, ['-mcpu=power8', '-mtune=power8', '-maltivec']),
                 (target.is_linux and target.is_power9le, ['-mcpu=power9', '-mtune=power9', '-maltivec']),
+                (
+                    target.is_linux and target.is_grace and (
+                        (self.tc.is_clang and self.tc.version_at_least(16)) or
+                        (self.tc.is_gcc and self.tc.version_at_least(13))
+                    ),
+                    ['-mcpu=neoverse-v2+norng+crypto+sve2-sm4+sve2-aes+sve2-sha3'],
+                ),
+                (
+                    target.is_linux and target.is_grace,
+                    [
+                        '-march=armv9-a+crypto+sve2+sve2-bitperm+bf16+i8mm+fp16fml+sve2-aes+sve2-sha3+sve2-sm4+sha3+sm4+crc+dotprod+lse+rcpc+rdm+nossbs+noras+norng',
+                        '-mtune=neoverse-n2',
+                    ],
+                ),
                 (target.is_linux and target.is_armv8, ['-march=armv8-a']),
                 (target.is_macos, ['-mmacosx-version-min={}'.format(MACOS_VERSION_MIN)]),
                 (target.is_ios and not target.is_iossim, ['-mios-version-min={}'.format(IOS_VERSION_MIN)]),
@@ -1377,7 +1398,7 @@ class GnuToolchain(Toolchain):
                             self.setup_tools(project='build/platform/binutils', var='$BINUTILS_ROOT_RESOURCE_GLOBAL', bin='x86_64-linux-gnu/bin', ldlibs=None)
                     elif target.is_powerpc:
                         self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/x86_64-linux-gnu/powerpc64le-linux-gnu/lib')
-                    elif target.is_armv8:
+                    elif target.is_armv8 or target.is_armv9a:
                         self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/lib/x86_64-linux-gnu')
 
                 if target.is_yocto:
@@ -2589,14 +2610,14 @@ class Cuda(object):
             return False
 
         if host != target:
-            if not (host.is_linux_x86_64 and target.is_linux_armv8):
+            if not (host.is_linux_x86_64 and (target.is_linux_armv8 or target.is_linux_armv9a)):
                 return False
             if not self.cuda_version.from_user:
                 return False
 
         if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.6.2', '12.6.3', '12.8', '12.9', '13.0'):
             return True
-        elif self.cuda_version.value in ('10.2', '11.4.19') and target.is_linux_armv8:
+        elif self.cuda_version.value in ('10.2', '11.4.19') and (target.is_linux_armv8 or target.is_linux_armv9a):
             return True
         else:
             raise ConfigureError('CUDA version {} is not supported in Arcadia'.format(self.cuda_version.value))
@@ -2731,6 +2752,7 @@ class Cuda(object):
         return select((
             (host.is_linux_x86_64 and target.is_linux_x86_64, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
             (host.is_linux_x86_64 and target.is_linux_armv8, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
+            (host.is_linux_x86_64 and target.is_linux_armv9a, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
         ))
 
     def cuda_windows_host_compiler(self):

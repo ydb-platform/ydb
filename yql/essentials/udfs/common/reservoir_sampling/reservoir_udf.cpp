@@ -3,6 +3,7 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
 #include <yql/essentials/public/langver/yql_langver.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 
 #include <util/generic/vector.h>
 #include <util/random/random.h>
@@ -268,7 +269,7 @@ public:
         ui32 flags,
         IFunctionTypeInfoBuilder& builder) const final
     {
-        builder.SetMinLangVer(NYql::MakeLangVersion(2025, 4));
+        builder.SetMinLangVer(NYql::NFeature::RandomValueSampleFunction.MinLangVer);
         try {
             bool typesOnly = (flags & TFlags::TypesOnly);
             builder.UserType(userType);

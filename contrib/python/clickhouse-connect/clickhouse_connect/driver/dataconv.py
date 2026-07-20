@@ -17,11 +17,14 @@ MONTH_DAYS_LEAP = (0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366)
 def read_ipv4_col(source: ByteSource, num_rows: int):
     column = source.read_array("I", num_rows)
     fast_ip_v4 = IPv4Address.__new__
-    new_col = []
+    new_col: list[IPv4Address] = []
     app = new_col.append
     for x in column:
         ipv4 = fast_ip_v4(IPv4Address)
-        ipv4._ip = x
+        # _ip is CPython's private backing int for the address.
+        # It's directly set to bypass IPv4Address.__init__
+        # for speed when bulk-decoding a column
+        ipv4._ip = x  # type: ignore[attr-defined]
         app(ipv4)
     return new_col
 
@@ -103,7 +106,7 @@ def read_uuid_col(source: ByteSource, num_rows: int):
     new_uuid = UUID.__new__
     unsafe = SafeUUID.unsafe
     oset = object.__setattr__
-    column = []
+    column: list[UUID] = []
     app = column.append
     for i in range(num_rows):
         ix = i << 1
@@ -173,7 +176,7 @@ def write_str_col(column: Sequence, nullable: bool, encoding: str | None, dest: 
     return 0
 
 
-def write_native_col(code: str, column: Sequence, dest: bytearray, col_name: object = None) -> int:
+def write_native_col(code: str, column: Sequence, dest: bytearray, col_name: str | None = None) -> int:
     """
     Pure Python fallback for write_native_col.
     Delegates to write_array which uses struct.pack.

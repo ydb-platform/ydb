@@ -55,7 +55,7 @@ bool ConvertGetConfigToFetchConfigResult(
     if (identityCount < configCount) {
         TStringBuilder descr;
         descr << (configCount - identityCount)
-              << " extra 'config' field with no corresponding 'identity' field";
+              << " extra 'config' field(s) with no corresponding 'identity' field(s)";
         error = descr;
         return false;
     }
@@ -122,7 +122,7 @@ bool ConvertGetConfigToFetchConfigResult(
                 // TYPE_NOT_SET is rejected with error by pre-validation above
                 break;
             default:
-                // Any other value comes from a newer Console is skipped with a warning
+                // Any other value that comes from a newer Console is skipped with a warning
                 // so we don't fail on forward-compatible additions
                 ALOG_NOTICE(NKikimrServices::GRPC_SERVER,
                     "Convert Ydb::DynamicConfig::ConfigIdentity to Ydb::Config::FetchConfigResult: "

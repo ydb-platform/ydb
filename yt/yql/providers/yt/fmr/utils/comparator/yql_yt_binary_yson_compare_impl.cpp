@@ -217,12 +217,14 @@ int CompareKeyRowsAcrossYsonBlocks(
     const TRowIndexMarkup& lhsRow,
     TStringBuf rhsBlock,
     const TRowIndexMarkup& rhsRow,
-    const std::vector<ESortOrder>& sortOrders
+    const std::vector<ESortOrder>& sortOrders,
+    ui64 numColumns
 ) {
     Y_ENSURE(lhsRow.size() == rhsRow.size(), "Row sizes mismatch");
     Y_ENSURE(lhsRow.size() - 1 == sortOrders.size(), "SortOrders mismatch");
 
-    for (ui64 colIdx = 0; colIdx < lhsRow.size() - 1; ++colIdx) {
+    const ui64 columnsToCompare = Min<ui64>(numColumns, lhsRow.size() - 1);
+    for (ui64 colIdx = 0; colIdx < columnsToCompare; ++colIdx) {
         const auto& lhsRange = lhsRow[colIdx];
         const auto& rhsRange = rhsRow[colIdx];
 

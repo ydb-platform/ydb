@@ -131,6 +131,23 @@ NBinaryJson::TBinaryJson ArrayElementToBinaryJson(const arrow::Array& array, con
     }
 }
 
+TJsonValueView ArrayElementToJsonValueView(const arrow::Array& array, const i64 index, const EValueType valueType) {
+    switch (valueType) {
+        case EValueType::String: {
+            const auto view = static_cast<const arrow::BinaryArray&>(array).GetView(index);
+            return TJsonValueView::OfString(TStringBuf(view.data(), view.size()));
+        }
+        case EValueType::Double:
+            return TJsonValueView::OfNumber(static_cast<const arrow::DoubleArray&>(array).Value(index));
+        case EValueType::Bool:
+            return TJsonValueView::OfBool(static_cast<const arrow::BooleanArray&>(array).Value(index));
+        case EValueType::BinaryJson: {
+            const auto view = static_cast<const arrow::BinaryArray&>(array).GetView(index);
+            return TJsonValueView::OfBinaryJson(TStringBuf(view.data(), view.size()));
+        }
+    }
+}
+
 ui32 ArrayElementSize(const arrow::Array& array, const i64 index, const EValueType valueType) {
     switch (valueType) {
         case EValueType::BinaryJson:

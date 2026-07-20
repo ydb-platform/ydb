@@ -99,4 +99,5 @@ message TPDiskConfig {
     optional bool SeparateHugePriorities = 2007;
     optional bool UseBytesFlightControl = 2008;
     optional uint32 IoPieceSizeBytes = 2009;
+    optional bool SortFreeChunksHDD = 2010;
 };

@@ -2778,6 +2778,17 @@ bool TSqlQuery::AlterTableAddColumn(const TRule_alter_table_add_column& node, TA
         Ctx_.Error() << "Several column families for a single column are not yet supported";
         return false;
     }
+    if (columnSchema->Generated) {
+        const TString& service = Ctx_.Scoped->CurrService;
+        if (service != KikimrProviderName && service != YdbProviderName) {
+            Ctx_.Error(columnSchema->Pos) << "GENERATED ALWAYS AS columns are supported only for the ydb provider";
+            return false;
+        }
+        if (params.TableType != ETableType::Table) {
+            Ctx_.Error(columnSchema->Pos) << "GENERATED ALWAYS AS columns are supported only for CREATE TABLE and ALTER TABLE";
+            return false;
+        }
+    }
     params.AddColumns.push_back(*columnSchema);
     return true;
 }
@@ -5017,6 +5028,11 @@ bool BuildColumnFeatures(std::map<TString, TDeferredAtom>& result, const TRule_c
 
     const auto options = ColumnOptions(columnSchema, translation);
     if (!options) {
+        return false;
+    }
+
+    if (options->Generated) {
+        translation.Context().Error(pos) << "GENERATED ALWAYS AS columns are supported only for CREATE TABLE and ALTER TABLE";
         return false;
     }
 

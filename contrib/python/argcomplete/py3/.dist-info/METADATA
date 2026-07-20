@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: argcomplete
-Version: 3.6.3
+Version: 3.7.0
 Summary: Bash tab completion for argparse
 Project-URL: Homepage, https://github.com/kislyuk/argcomplete
 Project-URL: Documentation, https://kislyuk.github.io/argcomplete
@@ -22,12 +22,12 @@ Classifier: Operating System :: MacOS :: MacOS X
 Classifier: Operating System :: POSIX
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Software Development

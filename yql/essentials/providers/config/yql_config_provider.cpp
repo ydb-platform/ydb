@@ -1022,6 +1022,17 @@ private:
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|auto|force', but got: " << args[0]));
                 return false;
             }
+        } else if (name == "DecimalCommonTypeConversionMode") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
+                return false;
+            }
+
+            auto arg = TString{args[0]};
+            if (!TryFromString(arg, Types_.DecimalConversionMode)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `without_common_type_fixup|with_common_type_fixup', but got: " << args[0]));
+                return false;
+            }
         } else if (name == "OptimizerFlags") {
             for (auto& arg : args) {
                 if (arg.empty()) {

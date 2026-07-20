@@ -7,6 +7,12 @@ int CompareKeyRows(const TFmrTableKeysBoundary& lhs, const TFmrTableKeysBoundary
     return CompareKeyRowsAcrossYsonBlocks(lhs.Row, lhs.Markup, rhs.Row, rhs.Markup, lhs.SortOrders);
 }
 
+int CompareKeyRowPrefix(const TFmrTableKeysBoundary& lhs, const TFmrTableKeysBoundary& rhs, ui64 numColumns) {
+    Y_ENSURE(lhs.SortOrders.size() == rhs.SortOrders.size(), "SortOrders mismatch in TFmrTableKeysBoundary prefix comparison");
+    Y_ENSURE(numColumns <= lhs.SortOrders.size(), "prefix length exceeds key columns");
+    return CompareKeyRowsAcrossYsonBlocks(lhs.Row, lhs.Markup, rhs.Row, rhs.Markup, lhs.SortOrders, numColumns);
+}
+
 void TSortingColumns::Save(IOutputStream* buffer) const {
     ::SaveMany(
         buffer,

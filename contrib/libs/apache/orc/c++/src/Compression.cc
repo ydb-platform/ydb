@@ -419,6 +419,9 @@ namespace orc {
     MemoryPool& pool;
     std::unique_ptr<SeekableInputStream> input;
 
+    // the configured compression block size, used to validate chunk lengths
+    size_t blockSize;
+
     // uncompressed output
     DataBuffer<char> outputDataBuffer;
 
@@ -460,6 +463,7 @@ namespace orc {
                                            ReaderMetrics* metrics)
       : pool(pool),
         input(std::move(inStream)),
+        blockSize(bufferSize),
         outputDataBuffer(pool, bufferSize),
         state(DECOMPRESS_HEADER),
         outputBufferStart(nullptr),
@@ -518,6 +522,12 @@ namespace orc {
         state = DECOMPRESS_START;
       }
       remainingLength = header >> 1;
+      if (state == DECOMPRESS_START && remainingLength > blockSize) {
+        std::ostringstream ss;
+        ss << "Buffer size too small. size = " << blockSize << " needed = " << remainingLength
+           << " in " << getName();
+        throw ParseError(ss.str());
+      }
     } else {
       remainingLength = 0;
     }

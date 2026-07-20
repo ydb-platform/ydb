@@ -15,11 +15,10 @@ class ChSqlaType:
     subclasses will inherit from TypeEngine.
     """
 
-    ch_type: ClickHouseType = None
+    ch_type: ClickHouseType | None = None
     generic_type: None
-    _ch_type_cls = None
-    _instance = None
-    _instance_cache: dict[TypeDef, "ChSqlaType"] = None
+    _ch_type_cls: type[ClickHouseType] | None = None
+    _instance_cache: dict[TypeDef, "ChSqlaType"] | None = None
 
     def __init_subclass__(cls):
         """
@@ -44,7 +43,7 @@ class ChSqlaType:
         :param type_def: -- TypeDef tuple that defines arguments for this instance
         :return: Shared instance of a configured ChSqlaType
         """
-        return cls._instance_cache.setdefault(type_def, cls(type_def=type_def))
+        return cls._instance_cache.setdefault(type_def, cls(type_def=type_def))  # type: ignore[union-attr]
 
     def __init__(self, type_def: TypeDef = EMPTY_TYPE_DEF):
         """
@@ -55,7 +54,7 @@ class ChSqlaType:
         parse_name function
         """
         self.type_def = type_def
-        self.ch_type = self._ch_type_cls.build(type_def)
+        self.ch_type = self._ch_type_cls.build(type_def)  # type: ignore[union-attr]
 
     @property
     def name(self):
@@ -124,7 +123,7 @@ class CaseInsensitiveDict(dict):
 
 
 sqla_type_map: dict[str, type[ChSqlaType]] = CaseInsensitiveDict()
-schema_types = []
+schema_types: list[str] = []
 
 
 def sqla_type_from_name(name: str) -> ChSqlaType:

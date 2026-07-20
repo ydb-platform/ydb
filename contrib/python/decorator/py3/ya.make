@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(5.1.1)
+VERSION(5.3.1)
 
 LICENSE(BSD-3-Clause)
 
@@ -10,13 +10,15 @@ NO_LINT()
 
 PY_SRCS(
     TOP_LEVEL
-    decorator.py
+    decorator/__init__.py
+    decorator/__init__.pyi
 )
 
 RESOURCE_FILES(
     PREFIX contrib/python/decorator/py3/
     .dist-info/METADATA
     .dist-info/top_level.txt
+    decorator/py.typed
 )
 
 END()

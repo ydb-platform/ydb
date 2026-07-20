@@ -706,6 +706,28 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         });
     }
 
+    CUSTOM_UNIT_TEST(TestStopAggregatorRemovesReportedStats) {
+        TTestActorSystem runtime(1);
+        runtime.Start();
+
+        TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(
+            new TNodeWardenConfig(static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
+        const TActorId nodeWarden = runtime.Register(CreateBSNodeWarden(nodeWardenConfig.Release()), 1);
+
+        runtime.WrapInActorContext(nodeWarden, [](IActor* wardenActor) {
+            auto& warden = *dynamic_cast<NStorage::TNodeWarden*>(wardenActor);
+            const TActorId vdiskServiceId = MakeBlobStorageVDiskID(1, 2, 3);
+
+            warden.RunningVDiskServiceIds.insert(vdiskServiceId);
+            warden.PerAggregatorInfo.emplace(vdiskServiceId, NStorage::TNodeWarden::TAggregatorInfo{42, {}});
+
+            warden.StopAggregator(vdiskServiceId);
+
+            UNIT_ASSERT(!warden.RunningVDiskServiceIds.contains(vdiskServiceId));
+            UNIT_ASSERT(!warden.PerAggregatorInfo.contains(vdiskServiceId));
+        });
+    }
+
     CUSTOM_UNIT_TEST(TestSendToInvalidGroupId) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, "", nullptr);
@@ -1384,6 +1406,163 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         CheckVDiskStateUpdate(runtime, fakeWhiteboard, groupId, 1, 0u);
         block.Stop().Unblock();
         CheckVDiskStateUpdate(runtime, fakeWhiteboard, groupId, 2, 2u);
+    }
+
+    class TSilentPDiskActor : public TActorBootstrapped<TSilentPDiskActor> {
+    public:
+        void Bootstrap() {
+            Become(&TThis::StateFunc);
+        }
+
+        STFUNC(StateFunc) {
+            if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
+                PassAway();
+            }
+        }
+    };
+
+    class TSilentPDiskServiceFactory : public IPDiskServiceFactory {
+    public:
+        void Create(const TActorContext& ctx, ui32 pdiskId, const TIntrusivePtr<TPDiskConfig>&,
+                const NPDisk::TMainKey&, ui32 poolId, ui32 nodeId) override {
+            const TActorId actorId = ctx.Register(new TSilentPDiskActor, TMailboxType::HTSwap, poolId);
+            ctx.ActorSystem()->RegisterLocalService(MakeBlobStoragePDiskID(nodeId, pdiskId), actorId);
+        }
+    };
+
+    struct TDDiskLifecycleTestSetup {
+        static constexpr ui32 NodeId = 1;
+        static constexpr ui32 PDiskId = 1;
+        static constexpr ui32 VDiskSlotId = 1;
+
+        TTestActorSystem Runtime;
+        const ui32 GroupId;
+        const TVDiskID VDiskId;
+        const TActorId DDiskServiceId;
+        TActorId NodeWardenId;
+
+        TDDiskLifecycleTestSetup()
+            : Runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>())
+            , GroupId(TGroupID(EGroupConfigurationType::Dynamic, 1, 1).GetRaw())
+            , VDiskId(GroupId, 1, 0, 0, 0)
+            , DDiskServiceId(MakeBlobStorageDDiskId(NodeId, PDiskId, VDiskSlotId))
+        {
+            Runtime.Start();
+
+            auto& appData = *Runtime.GetNode(NodeId)->AppData;
+            appData.DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", 1).Release());
+            appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig();
+            appData.DynamicNameserviceConfig->MaxStaticNodeId = NodeId;
+
+            TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(
+                new TNodeWardenConfig(new TSilentPDiskServiceFactory));
+            nodeWardenConfig->DDiskConfig.emplace();
+            nodeWardenConfig->DDiskConfig->SetForcePDiskFallback(true);
+
+            auto* serviceSet = nodeWardenConfig->BlobStorageConfig.MutableServiceSet();
+            auto* pdisk = serviceSet->AddPDisks();
+            pdisk->SetNodeID(NodeId);
+            pdisk->SetPDiskID(PDiskId);
+            pdisk->SetPath("silent-pdisk");
+            pdisk->SetPDiskGuid(12345);
+            pdisk->SetPDiskCategory(TPDiskCategory(NPDisk::DEVICE_TYPE_NVME, 0).GetRaw());
+
+            auto* group = serviceSet->AddGroups();
+            FillGroup(group, VDiskId.GroupGeneration);
+
+            FillDDisk(serviceSet->AddVDisks());
+
+            NodeWardenId = Runtime.Register(CreateBSNodeWarden(nodeWardenConfig.Release()), NodeId);
+            Runtime.RegisterService(MakeBlobStorageNodeWardenID(NodeId), NodeWardenId);
+            UNIT_ASSERT(Runtime.WrapInActorContext(NodeWardenId, [](IActor* actor) {
+                dynamic_cast<NStorage::TNodeWarden*>(actor)->Bootstrap();
+            }));
+            UNIT_ASSERT(LookupDDiskActor());
+        }
+
+        ~TDDiskLifecycleTestSetup() {
+            Runtime.Stop();
+        }
+
+        void FillGroup(NKikimrBlobStorage::TGroupInfo* group, ui32 generation) const {
+            group->SetGroupID(GroupId);
+            group->SetGroupGeneration(generation);
+            group->SetErasureSpecies(TBlobStorageGroupType::ErasureNone);
+            group->SetStoragePoolName("ddisk-pool");
+            group->SetDDisk(true);
+            auto* location = group->AddRings()->AddFailDomains()->AddVDiskLocations();
+            FillLocation(location);
+        }
+
+        void FillLocation(NKikimrBlobStorage::TVDiskLocation* location) const {
+            location->SetNodeID(NodeId);
+            location->SetPDiskID(PDiskId);
+            location->SetVDiskSlotID(VDiskSlotId);
+            location->SetPDiskGuid(12345);
+        }
+
+        void FillDDisk(NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk* vdisk) const {
+            VDiskIDFromVDiskID(VDiskId, vdisk->MutableVDiskID());
+            FillLocation(vdisk->MutableVDiskLocation());
+            vdisk->SetStoragePoolName("ddisk-pool");
+        }
+
+        TActorId LookupDDiskActor() {
+            return Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(DDiskServiceId);
+        }
+
+        bool IsActorAlive(const TActorId& actorId) {
+            return Runtime.WrapInActorContext(actorId, [](IActor*) {});
+        }
+
+        template<typename TPredicate>
+        void DispatchUntil(TPredicate&& predicate, TStringBuf description) {
+            ui32 eventsProcessed = 0;
+            Runtime.Sim([&] {
+                return !predicate() && ++eventsProcessed <= 200;
+            });
+            UNIT_ASSERT_C(predicate(), description);
+        }
+
+        void DeleteDDisk() {
+            UNIT_ASSERT(Runtime.WrapInActorContext(NodeWardenId, [&](IActor* actor) {
+                NKikimrBlobStorage::TNodeWardenServiceSet serviceSet;
+                auto* vdisk = serviceSet.AddVDisks();
+                FillDDisk(vdisk);
+                vdisk->SetEntityStatus(NKikimrBlobStorage::DESTROY);
+                dynamic_cast<NStorage::TNodeWarden*>(actor)->ApplyServiceSet(
+                    serviceSet, true, false, false, "test");
+            }));
+        }
+
+        void RestartDDisk() {
+            Runtime.Send(new IEventHandle(NodeWardenId, {}, new TEvBlobStorage::TEvAskRestartVDisk(PDiskId, VDiskId)),
+                NodeId);
+        }
+
+    };
+
+    Y_UNIT_TEST(TestDDiskDeleteStopsRunningActor) {
+        TDDiskLifecycleTestSetup setup;
+        const TActorId actorId = setup.LookupDDiskActor();
+
+        setup.DeleteDDisk();
+        setup.DispatchUntil([&] { return !setup.IsActorAlive(actorId); },
+            "DDisk actor must stop after its VDisk is deleted");
+    }
+
+    Y_UNIT_TEST(TestDDiskGoneAllowsRestart) {
+        TDDiskLifecycleTestSetup setup;
+        const TActorId previousActorId = setup.LookupDDiskActor();
+
+        setup.RestartDDisk();
+        setup.DispatchUntil([&] {
+            const TActorId currentActorId = setup.LookupDDiskActor();
+            return currentActorId && currentActorId != previousActorId;
+        }, "NodeWarden must restart DDisk after receiving TEvGone");
+
+        UNIT_ASSERT(!setup.IsActorAlive(previousActorId));
+        UNIT_ASSERT(setup.IsActorAlive(setup.LookupDDiskActor()));
     }
 
     struct TStaticGroupProxyTestSetup {

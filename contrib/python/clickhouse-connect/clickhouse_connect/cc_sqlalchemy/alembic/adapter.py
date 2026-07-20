@@ -5,6 +5,7 @@ from alembic.operations import Operations, ops
 from alembic.runtime.migration import MigrationContext
 from alembic.util import DispatchPriority, PriorityDispatchResult
 
+from clickhouse_connect.cc_sqlalchemy.alembic.impl import ClickHouseImpl
 from clickhouse_connect.cc_sqlalchemy.datatypes.base import ChSqlaType
 from clickhouse_connect.cc_sqlalchemy.sql.ddlcompiler import ClickHouseDDLHelper
 
@@ -57,6 +58,12 @@ def clickhouse_writer(context: MigrationContext, revision, directives):
             _add_common_imports(directive)
 
 
+def _is_clickhouse_autogen(autogen_context: AutogenContext) -> bool:
+    """True only when the active migration context targets the ClickHouse dialect."""
+    migration_context = getattr(autogen_context, "migration_context", None)
+    return isinstance(getattr(migration_context, "impl", None), ClickHouseImpl)
+
+
 def render_clickhouse_column(column, autogen_context: AutogenContext) -> str:
     rendered = render._user_defined_render("column", column, autogen_context)
     if rendered is not False:
@@ -98,8 +105,19 @@ def render_clickhouse_column(column, autogen_context: AutogenContext) -> str:
     )
 
 
+# Alembic renderers have no dialect qualifier, so replace=True overrides rendering
+# process-wide. Capture each built-in renderer before replacing it and delegate to it for
+# non-ClickHouse dialects so autogenerate stays correct for other databases (#832). Held on
+# the module so importlib.reload does not re-capture one of our own renderers and recurse.
+_DEFAULT_RENDERERS = globals().get("_DEFAULT_RENDERERS") or {
+    op: render.renderers.dispatch(op) for op in (ops.CreateTableOp, ops.AddColumnOp, ops.DropTableOp)
+}
+
+
 @render.renderers.dispatch_for(ops.CreateTableOp, replace=True)
 def render_create_table(autogen_context: AutogenContext, op: ops.CreateTableOp) -> str:
+    if not _is_clickhouse_autogen(autogen_context):
+        return _DEFAULT_RENDERERS[ops.CreateTableOp](autogen_context, op)
     table = op.to_table()
 
     args = [column for column in [render_clickhouse_column(column, autogen_context) for column in table.columns] if column] + sorted(
@@ -138,6 +156,8 @@ def render_create_table(autogen_context: AutogenContext, op: ops.CreateTableOp) 
 
 @render.renderers.dispatch_for(ops.AddColumnOp, replace=True)
 def render_add_column(autogen_context: AutogenContext, op: ops.AddColumnOp) -> str:
+    if not _is_clickhouse_autogen(autogen_context):
+        return _DEFAULT_RENDERERS[ops.AddColumnOp](autogen_context, op)
     schema, table_name, column, if_not_exists = op.schema, op.table_name, op.column, op.if_not_exists
     prefix = render._alembic_autogenerate_prefix(autogen_context)
     rendered_column = render_clickhouse_column(column, autogen_context)
@@ -155,6 +175,8 @@ def render_add_column(autogen_context: AutogenContext, op: ops.AddColumnOp) -> s
 
 @render.renderers.dispatch_for(ops.DropTableOp, replace=True)
 def render_drop_table(autogen_context: AutogenContext, op: ops.DropTableOp) -> str:
+    if not _is_clickhouse_autogen(autogen_context):
+        return _DEFAULT_RENDERERS[ops.DropTableOp](autogen_context, op)
     prefix = render._alembic_autogenerate_prefix(autogen_context)
     rendered = f"{prefix}drop_table({render._ident(op.table_name)!r}"
     arguments = []

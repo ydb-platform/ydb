@@ -390,7 +390,8 @@ void TDirectBlockGroupMock::OnAddHostResult(
         std::move(pbufferId));
 }
 
-NThreading::TFuture<TDbgSnapshot> TDirectBlockGroupMock::BuildMonSnapshot()
+NThreading::TFuture<TDbgSnapshot>
+TDirectBlockGroupMock::BuildMonSnapshot() const
 {
     return NThreading::MakeFuture(TDbgSnapshot{});
 }

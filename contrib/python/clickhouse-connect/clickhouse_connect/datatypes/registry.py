@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef, type_map
 from clickhouse_connect.driver.exceptions import InternalError
@@ -18,7 +19,8 @@ def parse_name(name: str) -> tuple[str, str, TypeDef]:
     """
     base = name
     wrappers = []
-    keys = tuple()
+    keys: tuple[Any, ...] = ()
+    values: tuple[Any, ...] = ()
     if base.startswith("LowCardinality"):
         wrappers.append("LowCardinality")
         base = base[15:-1]

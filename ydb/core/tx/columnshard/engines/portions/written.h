@@ -131,6 +131,8 @@ public:
             return *snapshotDefault;
         }
     }
+
+    bool MayGetForScanAt(const TSnapshot& snapshot) const override;
 };
 
 /// Ensure that TWrittenPortionInfo can be effectively assigned by moving the value.

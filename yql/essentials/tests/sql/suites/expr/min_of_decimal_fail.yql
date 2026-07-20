@@ -1,0 +1,4 @@
+PRAGMA config.flags("DecimalCommonTypeConversionMode", "with_common_type_fixup");
+
+/* custom error: Cannot infer common type for Decimal(34,16) and Decimal(33,18): common precision is 36, that is greater than 35 */
+select min_of(cast(1 as Decimal(34, 16)), cast(2 as Decimal(33, 18)))

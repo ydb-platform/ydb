@@ -1,0 +1,27 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+$lambda = ($row) -> {
+    $output_row_type = Struct<"key":Optional<String>, "value":Optional<Int64>>;
+    $variant_type = Variant<$output_row_type, $output_row_type>;
+
+    return If(
+        $row.int64_field < 10,
+        Variant(<|"key":$row.string_field, "value":$row.int64_field|>, "0", $variant_type),
+        Variant(<|"key":$row.string_field, "value":$row.int64_field|>, "1", $variant_type)
+    );
+};
+
+$sorted_by_key, $sorted_by_value = process Input using $lambda(TableRow());
+
+insert into OutputKey
+select * from $sorted_by_key;
+
+insert into OutputValue
+select * from $sorted_by_value;

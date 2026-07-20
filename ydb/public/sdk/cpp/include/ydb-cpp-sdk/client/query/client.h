@@ -131,6 +131,8 @@ public:
 
     TAsyncCreateSessionResult GetSession(const TCreateSessionSettings& settings = TCreateSessionSettings());
 
+    TAsyncStatus DeleteSession(const std::string& sessionId, const TDeleteSessionSettings& settings = TDeleteSessionSettings());
+
     //! Returns number of active sessions given via session pool
     int64_t GetActiveSessionCount() const;
 

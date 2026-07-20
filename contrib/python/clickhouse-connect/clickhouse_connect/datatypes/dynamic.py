@@ -156,7 +156,7 @@ class Variant(ClickHouseType):
         v_count = len(self.element_types)
         if v_count == 0:
             return 1
-        sub_samples = [[] for _ in range(v_count)]
+        sub_samples: list[list[Any]] = [[] for _ in range(v_count)]
         for v in sample:
             if v is None:
                 continue
@@ -197,7 +197,7 @@ def read_variant_column(
     # Now we have to walk through each of the discriminators again to assign the correct value from
     # the sub-column to the final result column
     sub_indexes = [0] * v_count
-    col = []
+    col: list[Any] = []
     app_col = col.append
     for disc in discriminators:
         if disc == 255:
@@ -230,7 +230,9 @@ def read_dynamic_prefix(_, source: ByteSource, ctx: QueryContext) -> DynamicStat
 
 class Dynamic(ClickHouseType):
     python_type = object
-    read_column_prefix = read_dynamic_prefix
+
+    def read_column_prefix(self, source: ByteSource, ctx: QueryContext) -> DynamicState:
+        return read_dynamic_prefix(self, source, ctx)
 
     @property
     def insert_name(self):
@@ -272,7 +274,7 @@ def write_json(ch_type: ClickHouseType, column: Sequence, dest: bytearray, ctx: 
 
     first = first_value(column, ch_type.nullable)
     write_col = column
-    encoding = ctx.encoding or ch_type.encoding
+    encoding: str | None = ctx.encoding or ch_type.encoding
     if not isinstance(first, str) and ch_type.write_format(ctx) != "string":
         to_json = any_to_json
         if ch_type.nullable:
@@ -576,7 +578,7 @@ class JSON(ClickHouseType):
         shared_columns = SHARED_DATA_TYPE.read_column_data(source, num_rows, ctx, read_state.shared_state)  # noqa: F821 (undefined-name)
         col = []
         for row_num in range(num_rows):
-            top = {}
+            top: dict[str, Any] = {}
             for ix, field in enumerate(self.typed_paths):
                 _nest_value(top, field, typed_columns[ix][row_num])
             for ix, field in enumerate(read_state.dynamic_paths):

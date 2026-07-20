@@ -3,6 +3,8 @@
 #include "schema.h"
 #include "backends.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRAPH
+
 namespace NKikimr {
 namespace NGraph {
 
@@ -15,7 +17,8 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_STARTUP; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("TTxStartup::Execute");
+        YDB_LOG_DEBUG("TTxStartup::Execute",
+            {"logPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         {
             auto row = db.Table<Schema::State>().Key(TString("backend")).Select();
@@ -45,7 +48,8 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("TTxStartup::Complete");
+        YDB_LOG_DEBUG("TTxStartup::Complete",
+            {"logPrefix", GetLogPrefix()});
         Self->OnReadyToWork();
     }
 };

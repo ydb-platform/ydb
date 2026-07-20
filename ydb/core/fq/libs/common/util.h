@@ -5,7 +5,9 @@
 
 #include <google/protobuf/repeated_field.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <library/cpp/iterator/mapped.h>
@@ -97,4 +99,15 @@ TMaybe<NYql::TIssues> GetIssuesFromYdbStatus(const TExecutable& executable, cons
     }
 }
 
+NYql::TIssues TruncateIssues(const NYql::TIssues& issues, ui32 maxLevels = 50, ui32 keepTailLevels = 3);
+
+template <typename TIssueMessage>
+void TruncateIssues(google::protobuf::RepeatedPtrField<TIssueMessage>* issuesProto, ui32 maxLevels = 50, ui32 keepTailLevels = 3) {
+    NYql::TIssues issues;
+    NYql::IssuesFromMessage(*issuesProto, issues);
+    NYql::IssuesToMessage(TruncateIssues(issues, maxLevels, keepTailLevels), issuesProto);
+}
+
+bool CheckNestingDepth(const google::protobuf::Message& message, ui32 maxDepth);
+NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<Ydb::Column>& columns, ui32 maxNestingDepth = 90);
 }  // namespace NFq

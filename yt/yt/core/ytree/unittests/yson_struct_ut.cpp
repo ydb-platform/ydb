@@ -3427,7 +3427,7 @@ TEST(TYsonStructTest, PolymorphicYsonStruct)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Base);
+    EXPECT_EQ(poly.GetType(), EMyPolyType::Base);
 
     auto basePtr = poly.TryGetConcrete<TPolyBase>();
     EXPECT_TRUE(basePtr.operator bool());
@@ -3442,7 +3442,7 @@ TEST(TYsonStructTest, PolymorphicYsonStruct)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Drv1);
+    EXPECT_EQ(poly.GetType(), EMyPolyType::Drv1);
 
     auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
     EXPECT_TRUE(drv1Ptr.operator bool());
@@ -3467,7 +3467,7 @@ TEST(TYsonStructTest, PolymorphicYsonStruct)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Drv2);
+    EXPECT_EQ(poly.GetType(), EMyPolyType::Drv2);
 
     auto drv2Ptr = poly.TryGetConcrete<TPolyDerived2>();
     EXPECT_TRUE(drv2Ptr.operator bool());
@@ -3590,7 +3590,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructCustomDiscriminator)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyCustomDiscriminatorType::Drv1);
+    EXPECT_EQ(poly.GetType(), EMyPolyCustomDiscriminatorType::Drv1);
 
     auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
     EXPECT_TRUE(drv1Ptr.operator bool());
@@ -3600,7 +3600,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructCustomDiscriminator)
     // Check serialization.
     auto serialized = ConvertToYsonString(poly);
     auto deserialized = ConvertTo<TMyPolyCustomDiscriminator>(serialized);
-    EXPECT_EQ(deserialized.GetCurrentType(), EMyPolyCustomDiscriminatorType::Drv1);
+    EXPECT_EQ(deserialized.GetType(), EMyPolyCustomDiscriminatorType::Drv1);
 
     auto deserializedDrv1Ptr = deserialized.TryGetConcrete<TPolyDerived1>();
     EXPECT_TRUE(deserializedDrv1Ptr.operator bool());
@@ -3630,7 +3630,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructSaveLoad)
     auto serialized = ConvertToYsonString(poly);
     auto deserialized = ConvertTo<TMyPoly>(serialized);
 
-    EXPECT_EQ(deserialized.GetCurrentType(), EMyPolyType::Drv2);
+    EXPECT_EQ(deserialized.GetType(), EMyPolyType::Drv2);
 
     drv = poly.TryGetConcrete<TPolyDerived2>();
 
@@ -3651,7 +3651,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructMergeIfPossible)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Drv1);
+    EXPECT_EQ(poly.GetType(), EMyPolyType::Drv1);
 
     auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
     EXPECT_TRUE(drv1Ptr.operator bool());
@@ -3666,7 +3666,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructMergeIfPossible)
         .EndMap();
 
     poly.Load(node->AsMap(), /*postprocess*/false, /*setDefaults*/false);
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyType::Drv1);
+    EXPECT_EQ(poly.GetType(), EMyPolyType::Drv1);
 
     drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
     EXPECT_TRUE(drv1Ptr.operator bool());
@@ -3690,7 +3690,7 @@ TEST(TYsonStructTest, PolymorphicYsonWithoutBaseMapping)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyWithoutBaseMappingType::Drv1);
+    EXPECT_EQ(poly.GetType(), EMyPolyWithoutBaseMappingType::Drv1);
 
     auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
     EXPECT_TRUE(drv1Ptr.operator bool());
@@ -3705,7 +3705,7 @@ TEST(TYsonStructTest, PolymorphicYsonWithoutBaseMapping)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyWithoutBaseMappingType::Drv2);
+    EXPECT_EQ(poly.GetType(), EMyPolyWithoutBaseMappingType::Drv2);
 
     auto drv2Ptr = poly.TryGetConcrete<TPolyDerived2>();
     EXPECT_TRUE(drv2Ptr.operator bool());
@@ -3727,7 +3727,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefaultWithoutBaseMapping)
         .EndMap();
 
     Deserialize(poly, empty->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultWithoutBaseMappingType::Drv1);
+    EXPECT_EQ(poly.GetType(), EMyPolyDefaultWithoutBaseMappingType::Drv1);
 
     auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
     EXPECT_TRUE(drv1Ptr.operator bool());
@@ -3741,7 +3741,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefaultWithoutBaseMapping)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultWithoutBaseMappingType::Drv1);
+    EXPECT_EQ(poly.GetType(), EMyPolyDefaultWithoutBaseMappingType::Drv1);
 
     drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
     EXPECT_TRUE(drv1Ptr.operator bool());
@@ -3758,7 +3758,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefaultWithoutBaseMapping)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultWithoutBaseMappingType::Drv2);
+    EXPECT_EQ(poly.GetType(), EMyPolyDefaultWithoutBaseMappingType::Drv2);
 }
 
 DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(MyPolyDefault, Drv1, TPolyBase,
@@ -3776,7 +3776,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefault)
         .EndMap();
 
     Deserialize(poly, empty->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultType::Drv1);
+    EXPECT_EQ(poly.GetType(), EMyPolyDefaultType::Drv1);
 
     auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
     EXPECT_TRUE(drv1Ptr.operator bool());
@@ -3790,7 +3790,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefault)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultType::Drv1);
+    EXPECT_EQ(poly.GetType(), EMyPolyDefaultType::Drv1);
 
     drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
     EXPECT_TRUE(drv1Ptr.operator bool());
@@ -3807,7 +3807,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefault)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultType::Drv2);
+    EXPECT_EQ(poly.GetType(), EMyPolyDefaultType::Drv2);
 
     ///////////////
 
@@ -3818,7 +3818,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefault)
     .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultType::Drv1);
+    EXPECT_EQ(poly.GetType(), EMyPolyDefaultType::Drv1);
 }
 
 DEFINE_ENUM(EMyPolyDefaultEnum,
@@ -3843,7 +3843,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefaultEnum)
 
     Deserialize(poly, empty->AsMap());
 
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Base);
+    EXPECT_EQ(poly.GetType(), EMyPolyDefaultEnum::Base);
     auto basePtr = poly.TryGetConcrete<TPolyBase>();
     EXPECT_TRUE(basePtr.operator bool());
 
@@ -3856,7 +3856,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefaultEnum)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Base);
+    EXPECT_EQ(poly.GetType(), EMyPolyDefaultEnum::Base);
 
     basePtr = poly.TryGetConcrete<TPolyBase>();
     EXPECT_TRUE(basePtr.operator bool());
@@ -3872,7 +3872,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefaultEnum)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Drv1);
+    EXPECT_EQ(poly.GetType(), EMyPolyDefaultEnum::Drv1);
 
     ///////////////
 
@@ -3883,7 +3883,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefaultEnum)
     .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Base);
+    EXPECT_EQ(poly.GetType(), EMyPolyDefaultEnum::Base);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3905,7 +3905,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefaultEnumWithoutBaseMapping)
 
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Drv1);
+    EXPECT_EQ(poly.GetType(), EMyPolyDefaultEnum::Drv1);
 
     auto drv1Ptr = poly.TryGetConcrete<TPolyDerived1>();
     EXPECT_TRUE(drv1Ptr.operator bool());
@@ -3922,7 +3922,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefaultEnumWithoutBaseMapping)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Drv2);
+    EXPECT_EQ(poly.GetType(), EMyPolyDefaultEnum::Drv2);
 
     auto drv2Ptr = poly.TryGetConcrete<TPolyDerived2>();
     EXPECT_TRUE(drv2Ptr.operator bool());
@@ -3938,7 +3938,7 @@ TEST(TYsonStructTest, PolymorphicYsonStructDefaultEnumWithoutBaseMapping)
         .EndMap();
 
     Deserialize(poly, node->AsMap());
-    EXPECT_EQ(poly.GetCurrentType(), EMyPolyDefaultEnum::Drv1);
+    EXPECT_EQ(poly.GetType(), EMyPolyDefaultEnum::Drv1);
 }
 
 struct TPolyHolder
@@ -3982,7 +3982,7 @@ TEST(TYsonStructTest, TestPolymorphicYsonStructAsField)
 
     Deserialize(holder, node->AsMap());
 
-    EXPECT_EQ(holder.PolyField.GetCurrentType(), EMyPolyType::Drv2);
+    EXPECT_EQ(holder.PolyField.GetType(), EMyPolyType::Drv2);
     auto drv = holder.PolyField.TryGetConcrete<TPolyDerived2>();
 
     EXPECT_TRUE(drv);

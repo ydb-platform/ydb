@@ -6,6 +6,8 @@
 
 #include <library/cpp/yt/logging/plain_text_formatter/formatter.h>
 
+#include <library/cpp/yt/yson_string/string.h>
+
 namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -20,25 +22,35 @@ struct ILogFormatter
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TLogFormatterBaseOptions
+{
+    bool EnableSourceLocation = false;
+};
+
 class TLogFormatterBase
     : public ILogFormatter
 {
 protected:
-    TLogFormatterBase(bool enableSourceLocation);
+    explicit TLogFormatterBase(TLogFormatterBaseOptions options);
 
     bool IsSourceLocationEnabled() const;
 
 private:
-    const bool EnableSourceLocation_;
+    const TLogFormatterBaseOptions Options_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TPlainTextLogFormatterOptions
+{
+    bool EnableSourceLocation = false;
+};
 
 class TPlainTextLogFormatter
     : public TLogFormatterBase
 {
 public:
-    explicit TPlainTextLogFormatter(bool enableSourceLocation = false);
+    explicit TPlainTextLogFormatter(TPlainTextLogFormatterOptions options = {});
 
     i64 WriteFormatted(IOutputStream* outputStream, const TLogEvent& event) override;
     void WriteLogReopenSeparator(IOutputStream* outputStream) override;
@@ -50,29 +62,30 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TStructuredLogFormatterOptions
+{
+    ELogFormat Format = ELogFormat::Json;
+    //! Fields injected into every event as |key -> raw YSON value|.
+    THashMap<std::string, NYson::TYsonString> CommonFields;
+    bool EnableSourceLocation = false;
+    bool EnableSystemFields = true;
+    bool EnableHostField = false;
+    bool EnableNativeTags = false;
+    NJson::TJsonFormatConfigPtr JsonFormat;
+    NYson::EYsonFormat YsonFormat = NYson::EYsonFormat::Text;
+};
+
 class TStructuredLogFormatter
     : public TLogFormatterBase
 {
 public:
-    TStructuredLogFormatter(
-        ELogFormat format,
-        THashMap<std::string, NYTree::INodePtr> commonFields,
-        bool enableSourceLocation = false,
-        bool enableSystemFields = true,
-        bool enableHostField = false,
-        NJson::TJsonFormatConfigPtr jsonFormat = nullptr,
-        NYson::EYsonFormat ysonFormat = NYson::EYsonFormat::Text);
+    explicit TStructuredLogFormatter(TStructuredLogFormatterOptions options);
 
     i64 WriteFormatted(IOutputStream* outputStream, const TLogEvent& event) override;
     void WriteLogReopenSeparator(IOutputStream* outputStream) override;
 
 private:
-    const ELogFormat Format_;
-    const THashMap<std::string, NYTree::INodePtr> CommonFields_;
-    const bool EnableSystemFields_;
-    const bool EnableHostField_;
-    const NJson::TJsonFormatConfigPtr JsonFormat_;
-    const NYson::EYsonFormat YsonFormat_;
+    const TStructuredLogFormatterOptions Options_;
 
     TCachingDateFormatter CachingDateFormatter_;
 };

@@ -5,7 +5,7 @@
 
 namespace NYql {
 
-TS3Credentials::TS3Credentials(ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson, bool addBearerToToken)
+TS3Credentials::TS3Credentials(IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const TString& structuredTokenJson, bool addBearerToToken)
     : StructuredTokenJson(structuredTokenJson)
 {
     if (NYql::IsStructuredTokenJson(structuredTokenJson)) {
@@ -24,7 +24,7 @@ TS3Credentials::TS3Credentials(ISecuredServiceAccountCredentialsFactory::TPtr fa
         }
     }
 
-    auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(factory, structuredTokenJson, addBearerToToken);
+    auto providerFactory = credentialsFactory->Create(structuredTokenJson, addBearerToToken);
     CredentialsProvider = providerFactory->CreateProvider();  // Heavy operation, BLOCKs thread until TA reply
 }
 
@@ -65,8 +65,8 @@ TString TS3Credentials::TAuthInfo::GetToken() const {
     return Token;
 }
 
-TS3Credentials::TAuthInfo GetAuthInfo(ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson) {
-    const TS3Credentials credentials(factory, structuredTokenJson);
+TS3Credentials::TAuthInfo GetAuthInfo(IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const TString& structuredTokenJson) {
+    const TS3Credentials credentials(credentialsFactory, structuredTokenJson);
     return credentials.GetAuthInfo();
 }
 

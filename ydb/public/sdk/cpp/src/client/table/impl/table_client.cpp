@@ -1118,8 +1118,7 @@ TAsyncStatus TTableClient::TImpl::Close(const TKqpSessionCommon* sessionImpl, co
 }
 
 TAsyncStatus TTableClient::TImpl::CloseInternal(const TKqpSessionCommon* sessionImpl) {
-    static const auto internalCloseSessionSettings = TCloseSessionSettings()
-            .ClientTimeout(TDuration::Seconds(2));
+    const auto internalCloseSessionSettings = TCloseSessionSettings().ClientTimeout(TDuration::Seconds(2));
 
     auto driver = Connections_;
     return Close(sessionImpl, internalCloseSessionSettings)

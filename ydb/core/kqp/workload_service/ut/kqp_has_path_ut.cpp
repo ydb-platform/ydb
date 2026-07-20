@@ -45,9 +45,9 @@ Y_UNIT_TEST_SUITE(TQueryClassifierHasPath) {
         UNIT_ASSERT_VALUES_EQUAL(GetPostPoolId(result), "default");
     }
 
-    Y_UNIT_TEST(ShouldMatchRegexPattern) {
+    Y_UNIT_TEST(ShouldMatchGlobPattern) {
         TClassifyTestCase tc;
-        tc.ClassifierHasPath = "/Root/testdb/archive/.*";
+        tc.ClassifierHasPath = "/Root/testdb/archive/*";
         auto result = tc.RunPostClassifyForPath("/Root/testdb/archive/orders_2024");
         UNIT_ASSERT_VALUES_EQUAL(GetPostPoolId(result), "pool_target");
     }

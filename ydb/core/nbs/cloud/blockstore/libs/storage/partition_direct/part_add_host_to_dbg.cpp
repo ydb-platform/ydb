@@ -1,7 +1,8 @@
 #include "fast_path_service.h"
 #include "part_database.h"
 #include "partition_direct_actor.h"
-#include "partition_direct_events_private.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
@@ -17,119 +18,9 @@ using namespace NKikimr::NTabletFlatExecutor;
 using TDirectBlockGroupsConnections =
     ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
 
-////////////////////////////////////////////////////////////////////////////////
-
-bool TPartitionActor::PrepareAddHostToDBG(
-    const TActorContext& ctx,
-    TTransactionContext& tx,
-    TTxPartition::TAddHostToDBG& args)
-{
-    Y_UNUSED(ctx);
-    Y_UNUSED(tx);
-    Y_UNUSED(args);
-
-    return true;
-}
-
-void TPartitionActor::ExecuteAddHostToDBG(
-    const TActorContext& ctx,
-    TTransactionContext& tx,
-    TTxPartition::TAddHostToDBG& args)
-{
-    Y_UNUSED(ctx);
-
-    TPartitionDatabase db(tx.DB);
-    // Store the connection and clear the intent in one tx, so they commit
-    // together: recovery never sees a half-applied add.
-    db.StoreDirectBlockGroupsConnections(args.DirectBlockGroupsConnections);
-    db.ClearAddHostInProgress();
-}
-
-void TPartitionActor::CompleteAddHostToDBG(
-    const TActorContext& ctx,
-    TTxPartition::TAddHostToDBG& args)
-{
-    const size_t dbgId = args.DirectBlockGroupId;
-
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s AddHost persisted dbgId=%lu newHostIndex=%s",
-        LogTitle.GetWithTime().c_str(),
-        dbgId,
-        PrintHostIndex(args.NewHostIndex).c_str());
-
-    Y_ABORT_UNLESS(FastPathService);
-
-    const auto& directBlockGroups = FastPathService->GetDirectBlockGroups();
-    Y_ABORT_UNLESS(dbgId < directBlockGroups.size());
-
-    // The new connection was persisted at NewHostIndex; read its DDisk/PBuffer
-    // back out to hand to the DBG.
-    const auto& newConnection =
-        args.DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId)
-            .GetConnections(args.NewHostIndex);
-
-    auto dbgPtr = directBlockGroups[dbgId];
-    auto executor = dbgPtr->GetExecutor();
-    executor->ExecuteSimple(
-        [dbgPtr,
-         newHostIndex = args.NewHostIndex,
-         newDDiskId = newConnection.GetDDiskId(),
-         newPBufferId = newConnection.GetPersistentBufferDDiskId()]() mutable
-        {
-            dbgPtr->OnAddHostResult(
-                {},
-                newHostIndex,
-                std::move(newDDiskId),
-                std::move(newPBufferId));
-        });
-
-    AddHostInFlight.reset();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-bool TPartitionActor::PrepareStartAddHost(
-    const TActorContext& ctx,
-    TTransactionContext& tx,
-    TTxPartition::TStartAddHost& args)
-{
-    Y_UNUSED(ctx);
-    Y_UNUSED(tx);
-    Y_UNUSED(args);
-
-    return true;
-}
-
-void TPartitionActor::ExecuteStartAddHost(
-    const TActorContext& ctx,
-    TTransactionContext& tx,
-    TTxPartition::TStartAddHost& args)
-{
-    Y_UNUSED(ctx);
-
-    TPartitionDatabase db(tx.DB);
-
-    TTxPartition::TAddHostInProgress proto;
-    proto.SetDirectBlockGroupId(static_cast<ui32>(args.DirectBlockGroupId));
-    proto.SetNewHostIndex(static_cast<ui32>(args.NewHostIndex));
-    db.StoreAddHostInProgress(proto);
-}
-
-void TPartitionActor::CompleteStartAddHost(
-    const TActorContext& ctx,
-    TTxPartition::TStartAddHost& args)
-{
-    SendAllocateDDiskForAddHost(
-        ctx,
-        args.DirectBlockGroupId,
-        args.NewHostIndex);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 namespace {
+
+////////////////////////////////////////////////////////////////////////////////
 
 // Validates a BSController add-host allocation response and, on success,
 // appends the newly granted DDisk/PBuffer to `result` (a copy of `current`).
@@ -216,6 +107,116 @@ NProto::TError AddConnection(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool TPartitionActor::PrepareStartAddHost(
+    const TActorContext& ctx,
+    TTransactionContext& tx,
+    TTxPartition::TStartAddHost& args)
+{
+    Y_UNUSED(ctx);
+    Y_UNUSED(tx);
+    Y_UNUSED(args);
+
+    return true;
+}
+
+void TPartitionActor::ExecuteStartAddHost(
+    const TActorContext& ctx,
+    TTransactionContext& tx,
+    TTxPartition::TStartAddHost& args)
+{
+    Y_UNUSED(ctx);
+
+    TPartitionDatabase db(tx.DB);
+
+    TTxPartition::TAddHostInProgress proto;
+    proto.SetDirectBlockGroupId(args.DirectBlockGroupId);
+    proto.SetNewHostIndex(args.NewHostIndex);
+    db.StoreAddHostInProgress(proto);
+}
+
+void TPartitionActor::CompleteStartAddHost(
+    const TActorContext& ctx,
+    TTxPartition::TStartAddHost& args)
+{
+    SendAllocateDDiskForAddHost(
+        ctx,
+        args.DirectBlockGroupId,
+        args.NewHostIndex);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool TPartitionActor::PrepareAddHostToDBG(
+    const TActorContext& ctx,
+    TTransactionContext& tx,
+    TTxPartition::TAddHostToDBG& args)
+{
+    Y_UNUSED(ctx);
+    Y_UNUSED(tx);
+    Y_UNUSED(args);
+
+    return true;
+}
+
+void TPartitionActor::ExecuteAddHostToDBG(
+    const TActorContext& ctx,
+    TTransactionContext& tx,
+    TTxPartition::TAddHostToDBG& args)
+{
+    Y_UNUSED(ctx);
+
+    TPartitionDatabase db(tx.DB);
+    // Store the connection and clear the intent in one tx, so they commit
+    // together: recovery never sees a half-applied add.
+    db.StoreDirectBlockGroupsConnections(args.DirectBlockGroupsConnections);
+    db.ClearAddHostInProgress();
+}
+
+void TPartitionActor::CompleteAddHostToDBG(
+    const TActorContext& ctx,
+    TTxPartition::TAddHostToDBG& args)
+{
+    const size_t dbgId = args.DirectBlockGroupId;
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s AddHost persisted dbgId=%lu newHostIndex=%s",
+        LogTitle.GetWithTime().c_str(),
+        dbgId,
+        PrintHostIndex(args.NewHostIndex).c_str());
+
+    Y_ABORT_UNLESS(FastPathService);
+
+    const auto& directBlockGroups = FastPathService->GetDirectBlockGroups();
+    Y_ABORT_UNLESS(dbgId < directBlockGroups.size());
+
+    // The new connection was persisted at NewHostIndex; read its DDisk/PBuffer
+    // back out to hand to the DBG.
+    const auto& newConnection =
+        args.DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId)
+            .GetConnections(args.NewHostIndex);
+
+    auto dbgPtr = directBlockGroups[dbgId];
+    auto executor = dbgPtr->GetExecutor();
+    executor->ExecuteSimple(
+        [dbgPtr,
+         newHostIndex = args.NewHostIndex,
+         newDDiskId = newConnection.GetDDiskId(),
+         newPBufferId = newConnection.GetPersistentBufferDDiskId()]() mutable
+        {
+            dbgPtr->OnAddHostResult(
+                {},
+                newHostIndex,
+                std::move(newDDiskId),
+                std::move(newPBufferId));
+        });
+
+    AddHostInFlight.reset();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TPartitionActor::HandleAddHostAllocationResult(
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -268,6 +269,100 @@ void TPartitionActor::HandleAddHostAllocationResult(
         CreateTx<TAddHostToDBG>(std::move(updated), dbgId, newHostIndex));
 }
 
+void TPartitionActor::HandleAddHostToDBG(
+    const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_ABORT_UNLESS(FastPathService);
+
+    const auto* msg = ev->Get();
+    const size_t dbgId = msg->DirectBlockGroupId;
+    THostIndex newHostIndex = msg->NewHostIndex;
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Handle AddHost %s to dbgId=%lu",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostIndex(newHostIndex).c_str(),
+        dbgId);
+
+    // The request always carries a DBG's own index so an out-of-range dbgId is
+    // a bug, not a bad request.
+    const size_t dbgCount =
+        DirectBlockGroupsConnections.DirectBlockGroupConnectionsSize();
+    Y_ABORT_UNLESS(
+        dbgId < dbgCount,
+        "AddHost for out-of-range dbgId=%lu (have %lu DBGs)",
+        dbgId,
+        dbgCount);
+
+    if (newHostIndex == 0) {
+        // When a request comes from mon-page, need to find the newHostIndex.
+        const auto& dbgConn =
+            DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);
+        newHostIndex = static_cast<ui32>(dbgConn.GetConnections().size());
+    }
+
+    if (!ValidateAddHostToDBGRequest(ctx, dbgId, newHostIndex)) {
+        return;
+    }
+
+    // Persist the intent before the BSController request (sent from the tx's
+    // completion). A crash after the DDisk is allocated but before the
+    // connection is persisted then leaves a durable intent, replayed on
+    // restart.
+    AddHostInFlight = TAddHostInFlight{
+        .DirectBlockGroupId = dbgId,
+        .NewHostIndex = newHostIndex,
+    };
+
+    ExecuteTx(ctx, CreateTx<TStartAddHost>(dbgId, newHostIndex));
+}
+
+bool TPartitionActor::ValidateAddHostToDBGRequest(
+    const TActorContext& ctx,
+    size_t dbgId,
+    THostIndex newHostIndex)
+{
+    if (AddHostInFlight.has_value()) {
+        RejectAddHost(ctx, dbgId, "Another AddHost is already in progress");
+        return false;
+    }
+
+    // Authoritative AddHost gate: reads the persisted connection count under
+    // the single-in-flight guard above, so it cannot overshoot MaxHostCount or
+    // race a concurrent add. The DBG's own DDiskConnections lags, so it cannot
+    // gate.
+    const auto& dbgConn =
+        DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);
+    const size_t currentSize = dbgConn.GetConnections().size();
+
+    if (currentSize >= MaxHostCount) {
+        RejectAddHost(
+            ctx,
+            dbgId,
+            TStringBuilder() << "MaxHostCount=" << MaxHostCount << " reached");
+        return false;
+    }
+    if (currentSize == 0) {
+        RejectAddHost(ctx, dbgId, "AddHost on an empty DBG is not supported");
+        return false;
+    }
+
+    if (newHostIndex != currentSize) {
+        RejectAddHost(
+            ctx,
+            dbgId,
+            TStringBuilder()
+                << "AddHost " << PrintHostIndex(newHostIndex)
+                << " must append at the end. Current size=" << currentSize);
+        return false;
+    }
+
+    return true;
+}
+
 void TPartitionActor::RejectAddHost(
     const NActors::TActorContext& ctx,
     size_t dbgId,
@@ -296,46 +391,40 @@ void TPartitionActor::RejectAddHost(
                             { dbgPtr->OnAddHostResult(error, 0, {}, {}); });
 }
 
-bool TPartitionActor::ValidateAddHostToDBGRequest(
+void TPartitionActor::SendAllocateDDiskForAddHost(
     const TActorContext& ctx,
-    size_t dbgId)
+    size_t dbgId,
+    THostIndex newHostIndex)
 {
-    // The request always carries a DBG's own index (QueryAddHost ->
-    // RequestAddHost), so an out-of-range dbgId is a bug, not a bad request.
-    const auto dbgCount = static_cast<size_t>(
-        DirectBlockGroupsConnections.DirectBlockGroupConnectionsSize());
-    Y_ABORT_UNLESS(
-        dbgId < dbgCount,
-        "AddHost for out-of-range dbgId=%lu (have %lu DBGs)",
-        dbgId,
-        dbgCount);
+    Y_ABORT_UNLESS(AddHostInFlight.has_value());
 
-    if (AddHostInFlight.has_value()) {
-        RejectAddHost(ctx, dbgId, "Another AddHost is already in progress");
-        return false;
-    }
+    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
+    const ui64 regionCount =
+        CalcRegionCount(blockCount, VolumeConfig.GetBlockSize());
 
-    // Authoritative AddHost gate: reads the persisted connection count under
-    // the single-in-flight guard above, so it cannot overshoot MaxHostCount or
-    // race a concurrent add. The DBG's own DDiskConnections lags, so it cannot
-    // gate.
-    const auto& dbgConn =
-        DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);
-    const auto currentSize = static_cast<ui32>(dbgConn.GetConnections().size());
+    const auto pipe = ctx.Register(
+        NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
+    AddHostInFlight->BSPipeClient = pipe;
 
-    if (currentSize >= MaxHostCount) {
-        RejectAddHost(
-            ctx,
-            dbgId,
-            TStringBuilder() << "MaxHostCount=" << MaxHostCount << " reached");
-        return false;
-    }
-    if (currentSize == 0) {
-        RejectAddHost(ctx, dbgId, "AddHost on an empty DBG is not supported");
-        return false;
-    }
+    // Idempotent: NumDDisks=N+1 is the desired final state, not "add one"; a
+    // re-sent request returns the same DDisk from BSController's persisted
+    // allocation, so a retry (e.g. after a restart) is safe.
+    const ui32 numDDisks = newHostIndex + 1;
+    auto request = std::make_unique<
+        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+    request->Record.SetDDiskPoolName(StorageConfig->GetDDiskPoolName());
+    request->Record.SetPersistentBufferDDiskPoolName(
+        StorageConfig->GetPersistentBufferDDiskPoolName());
+    request->Record.SetTabletId(TabletID());
 
-    return true;
+    auto* op = request->Record.AddDirectBlockGroupOperations();
+    op->SetDirectBlockGroupId(dbgId);
+    auto* define = op->MutableDefineDirectBlockGroup();
+    define->SetNumDDisks(numDDisks);
+    define->SetNumChunksPerDDisk(regionCount);
+    define->SetNumPersistentBuffers(numDDisks);
+
+    NTabletPipe::SendData(ctx, pipe, request.release(), dbgId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

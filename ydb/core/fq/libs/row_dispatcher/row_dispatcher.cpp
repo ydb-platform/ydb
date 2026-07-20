@@ -358,7 +358,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TMaybe<TActorId> CoordinatorActorId;
     ui64 CoordinatorGeneration = 0;
     TSet<TActorId> CoordinatorChangedSubscribers;
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     const TString LogPrefix;
     ui64 NextEventQueueId = 0;
@@ -450,7 +450,7 @@ public:
     explicit TRowDispatcher(
         const TRowDispatcherSettings& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
         const TString& tenant,
         const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -535,7 +535,7 @@ public:
 TRowDispatcher::TRowDispatcher(
     const TRowDispatcherSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -946,10 +946,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 CompileServiceActorId,
                 partitionId,
                 Driver,
-                CreateCredentialsProviderFactoryForStructuredToken(
-                    CredentialsFactory,
-                    ev->Get()->Record.GetToken(),
-                    source.GetAddBearerToToken()),
+                CredentialsFactory->Create(ev->Get()->Record.GetToken(), source.GetAddBearerToToken()),
                 Counters,
                 CountersRoot,
                 PqGateway,
@@ -1366,7 +1363,7 @@ void TRowDispatcher::UpdateCpuTime() {
 std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const TRowDispatcherSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,

@@ -13559,7 +13559,7 @@ Y_UNIT_TEST(ReadsNamedNodeExpresionSubquery) {
 
 Y_UNIT_TEST(ReadsProjectionFromSubquery) {
     NSQLTranslation::TTranslationSettings s;
-    s.LangVer = NYql::MakeLangVersion(2025, 4);
+    s.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         SELECT (SELECT a FROM plato.x) FROM (SELECT * FROM plato.y);
@@ -16189,5 +16189,416 @@ Y_UNIT_TEST(OptionalNull) {
 }
 
 } // Y_UNIT_TEST_SUITE(NullAsTypeName)
+
+Y_UNIT_TEST_SUITE(GeneratedColumns) {
+
+Y_UNIT_TEST(CreateTableGeneratedVirtualByDefault) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                gen Int32 AS (5),
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"5" 'virtual)))#");
+    UNIT_ASSERT(!program.Contains("stored"));
+    UNIT_ASSERT(!program.Contains(R"#((Int32 '"5"))#"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedExplicitVirtual) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                gen Int32 AS (5) VIRTUAL,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"5" 'virtual)))#");
+    UNIT_ASSERT(!program.Contains("stored"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedStored) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                gen Int32 AS (5) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"5" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedAlwaysKeyword) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                gen Int32 GENERATED ALWAYS AS (5) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"5" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedWithoutAlways) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                id Uint32,
+                Col2 Uint32,
+                Col3 Uint32,
+                Col1 Uint32 AS (2 + 3),
+                PRIMARY KEY (id)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"2 + 3" 'virtual)))#");
+    UNIT_ASSERT(!program.Contains("stored"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedDeterministicExpr) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                gen Int32 AS (1 + 2) VIRTUAL,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"1 + 2" 'virtual)))#");
+    UNIT_ASSERT(!program.Contains("stored"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedNonDeterministicExpr) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                gen Uint64 AS (RandomNumber(1)) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"RandomNumber(1)" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedReferencesColumns) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                a Int32,
+                b Int32,
+                gen Int32 GENERATED ALWAYS AS (a + b) STORED,
+                PRIMARY KEY (a)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"a + b" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+}
+
+Y_UNIT_TEST(CreateTableMultipleGeneratedColumns) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                x Int32 AS (1) VIRTUAL,
+                y Int32 AS (2) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"1" 'virtual)))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"2" 'stored)))#");
+}
+
+Y_UNIT_TEST(AlterTableAddGeneratedVirtualColumn) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tbl ADD COLUMN gen Int32 AS (5);
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, "addColumns");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"5" 'virtual)))#");
+    UNIT_ASSERT(!program.Contains("stored"));
+}
+
+Y_UNIT_TEST(AlterTableAddGeneratedStoredColumn) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tbl ADD COLUMN gen Int32 GENERATED ALWAYS AS (a + b) STORED;
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, "addColumns");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"a + b" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+    UNIT_ASSERT(!program.Contains("(Member row"));
+}
+
+Y_UNIT_TEST(AlterTableAddGeneratedColumnWithNamedLambda) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            $f = ($x) -> ($x * 2);
+            ALTER TABLE tbl ADD COLUMN gen Int32 GENERATED ALWAYS AS ($f(a)) STORED;
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, "addColumns");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n$f = ($x) -> ($x * 2);\n" '"$f(a)" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedColumnWithNamedNodeRef) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            $factor = 10;
+            CREATE TABLE tbl (
+                key Uint32,
+                num Int32,
+                gen Int32 GENERATED ALWAYS AS (num * $factor) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n$factor = 10;\n" '"num * $factor" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+    UNIT_ASSERT(!program.Contains("Read"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedColumnWithSubqueryNamedNodeRef) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            $ids = (SELECT id FROM other);
+            CREATE TABLE tbl (
+                key Uint32,
+                num Int32,
+                gen Bool GENERATED ALWAYS AS (num IN $ids) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n$ids = (SELECT id FROM other);\n" '"num IN $ids" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+    UNIT_ASSERT(!program.Contains("Read"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedColumnWithInlineSubquery) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                num Int32,
+                gen Bool GENERATED ALWAYS AS (num IN (SELECT id FROM other)) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"num IN (SELECT id FROM other)" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+    UNIT_ASSERT(!program.Contains("Read"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedColumnWithScalarSubquery) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                num Int32,
+                gen Int32 GENERATED ALWAYS AS ((SELECT MAX(id) FROM other)) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"(SELECT MAX(id) FROM other)" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+    UNIT_ASSERT(!program.Contains("Read"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedWithPragma) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            PRAGMA FlexibleTypes;
+            CREATE TABLE tbl (
+                key Uint32,
+                num Int32,
+                gen Int32 GENERATED ALWAYS AS (num / 2) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\nPRAGMA FlexibleTypes;\n" '"num / 2" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedNestedPath) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE `a/b/tbl` (
+                key Uint32,
+                num Int32,
+                gen Int32 GENERATED ALWAYS AS (num / 2) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"num / 2" 'stored)))#");
+}
+
+Y_UNIT_TEST(AlterTableAddGeneratedColumnNestedPath) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE `a/b/tbl` ADD COLUMN gen Int32 GENERATED ALWAYS AS (a + b) STORED;
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"a + b" 'stored)))#");
+}
+
+Y_UNIT_TEST(CreateTableStoreGeneratedColumnFails) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLESTORE tbl (
+                key Uint32 NOT NULL,
+                gen Int32 AS (5) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "GENERATED ALWAYS AS columns are supported only for CREATE TABLE and ALTER TABLE");
+}
+
+Y_UNIT_TEST(CreateExternalTableGeneratedColumnFails) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE EXTERNAL TABLE tbl (
+                a Int32,
+                gen Int32 AS (a) STORED
+            ) WITH (
+                DATA_SOURCE="/Root/mydatasource",
+                LOCATION="/folder1/*"
+            );
+        )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "GENERATED ALWAYS AS columns are supported only for CREATE TABLE and ALTER TABLE");
+}
+
+Y_UNIT_TEST(AlterExternalTableAddGeneratedColumnFails) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER EXTERNAL TABLE tbl ADD COLUMN gen Int32 AS (5) STORED;
+        )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "GENERATED ALWAYS AS columns are supported only for CREATE TABLE and ALTER TABLE");
+}
+
+Y_UNIT_TEST(AlterTableStoreAddGeneratedColumnFails) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLESTORE tbl ADD COLUMN gen Int32 AS (5) STORED;
+        )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "GENERATED ALWAYS AS columns are supported only for CREATE TABLE and ALTER TABLE");
+}
+
+Y_UNIT_TEST(CreateTableGeneratedColumnNonYdbProviderFails) {
+    auto res = SqlToYql(R"sql(
+            USE plato;
+            CREATE TABLE tbl (
+                a Int32,
+                gen Int32 AS (a) STORED,
+                PRIMARY KEY (a)
+            );
+        )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "GENERATED ALWAYS AS columns are supported only for the ydb provider");
+}
+
+Y_UNIT_TEST(CreateTableGeneratedColumnNonYdbProviderVirtualFails) {
+    auto res = SqlToYql(R"sql(
+            USE plato;
+            CREATE TABLE tbl (
+                key Uint32,
+                gen Int32 GENERATED ALWAYS AS (5),
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "GENERATED ALWAYS AS columns are supported only for the ydb provider");
+}
+
+Y_UNIT_TEST(AlterTableAddGeneratedColumnNonYdbProviderFails) {
+    auto res = SqlToYql(R"sql(
+            USE plato;
+            ALTER TABLE tbl ADD COLUMN gen Int32 AS (5) STORED;
+        )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "ALTER TABLE is not supported for yt provider");
+}
+
+Y_UNIT_TEST(CreateTableGeneratedStringFunction) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                id Int32,
+                name String,
+                upper_name String GENERATED ALWAYS AS (String::AsciiToUpper(name)) STORED,
+                PRIMARY KEY (id)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"String::AsciiToUpper(name)" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+}
+
+} // Y_UNIT_TEST_SUITE(GeneratedColumns)
 
 // NOLINTEND(misc-definitions-in-headers)

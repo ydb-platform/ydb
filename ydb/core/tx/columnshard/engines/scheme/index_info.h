@@ -127,6 +127,8 @@ private:
 
         if (column.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
             arrowType = arrow::fixed_size_binary(16);
+        } else if (column.PType.GetTypeId() == NScheme::NTypeIds::Interval) {
+            arrowType = arrow::int64();
         } else {
             auto result = NArrow::GetArrowType(column.PType);
             AFL_VERIFY(result.ok());

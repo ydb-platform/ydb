@@ -230,6 +230,10 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
                 return nullptr;
             }
             resultColumns.emplace_back(out);
+        } else if (fArr->type()->id() == arrow::Int64Type::type_id && originalType->id() == arrow::DurationType::type_id) { 
+            auto newData = fArr->data()->Copy();
+            newData->type = originalType;
+            resultColumns.emplace_back(arrow::MakeArray(newData));
         } else {
             Y_ABORT_UNLESS(false);
         }

@@ -367,7 +367,7 @@ public:
         const TYPath& path,
         const TUnlockOptions& options) override;
 
-    void Commit() override;
+    void Commit(const TCommitTransactionOptions& options = {}) override;
 
     void Abort() override;
 

@@ -120,11 +120,7 @@ static int test_connect(struct io_uring *ring,
 
 	memcpy(&local_sa, serv_addr, sizeof(local_sa));
 
-	ret = io_uring_submit_and_wait(ring, 1);
-	if (ret != 1) {
-		fprintf(stderr, "submit=%d\n", ret);
-		return T_EXIT_FAIL;
-	}
+	io_uring_submit_and_wait(ring, 1);
 
 	/* check for reuse at the same time */
 	memset(&local_sa, 0xff, sizeof(local_sa));

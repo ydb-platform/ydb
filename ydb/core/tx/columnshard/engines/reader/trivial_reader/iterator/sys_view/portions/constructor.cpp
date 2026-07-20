@@ -22,7 +22,7 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
             if (reqSnapshot < portionInfo->RecordSnapshotMin()) {
                 continue;
             }
-            if (portionInfo->IsRemovedFor(reqSnapshot)) {
+            if (!portionInfo->MayGetForScanAt(reqSnapshot)) {
                 continue;
             }
             portionsAll.emplace_back(portionInfo);

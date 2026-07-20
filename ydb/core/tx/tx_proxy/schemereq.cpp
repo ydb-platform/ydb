@@ -1613,14 +1613,14 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 if (requestIt->RequireAnyOfAccess.empty()) {
                     errString = MakeAccessDeniedError(ctx, entry.Path, access);
                 } else {
-                    TStringBuilder accessDescription = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
-                        << "with access ";
+                    TStringBuilder accessDescription;
                     for (size_t i = 0; i < requestIt->RequireAnyOfAccess.size(); ++i) {
                         if (i) {
                             accessDescription << " or ";
                         }
                         accessDescription << NACLib::AccessRightsToString(requestIt->RequireAnyOfAccess[i]);
                     }
+                    errString = TStringBuilder() << MakeAccessDeniedError(ctx, entry.Path, "with any of access rights ") << accessDescription;
                 }
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);

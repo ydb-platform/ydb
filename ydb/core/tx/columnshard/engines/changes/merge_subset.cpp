@@ -81,8 +81,7 @@ ui64 TWritePortionsToMerge::GetColumnMaxChunkMemory() const {
 }
 
 TWritePortionsToMerge::TWritePortionsToMerge(std::vector<TWritePortionInfoWithBlobsResult>&& portions,
-    const std::shared_ptr<TGranuleMeta>& granuleMeta,
-    const std::shared_ptr<const NGranule::NPortionsIndex::TPortionsIndex::TPortions>& portionsIndexSnapshot)
+    const std::shared_ptr<TGranuleMeta>& granuleMeta, const NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot& portionsIndexSnapshot)
     : TBase(granuleMeta, portionsIndexSnapshot)
     , WritePortions(std::move(portions))
 {

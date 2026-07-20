@@ -17,7 +17,7 @@ private:
 protected:
     std::vector<TPortionInfo::TConstPtr> SwitchedPortions;   // Portions that would be replaced by new ones
     std::shared_ptr<TGranuleMeta> GranuleMeta;
-    std::shared_ptr<const NGranule::NPortionsIndex::TPortionsIndex::TPortions> PortionsIndexSnapshot;
+    NGranule::NPortionsIndex::TPortionsIndex::TPortionsSnapshot PortionsIndexSnapshot;
 
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
 
@@ -57,10 +57,6 @@ protected:
 public:
     const std::shared_ptr<TGranuleMeta>& GetGranuleMeta() const {
         return GranuleMeta;
-    }
-
-    const std::shared_ptr<const NGranule::NPortionsIndex::TPortionsIndex::TPortions>& GetPortionsIndexSnapshot() const {
-        return PortionsIndexSnapshot;
     }
 
     TCompactColumnEngineChanges(

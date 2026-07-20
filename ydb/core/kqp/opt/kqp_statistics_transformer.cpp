@@ -156,9 +156,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
 }
 
 // Vector index search returns at most TopK rows of the main table.
-void InferStatisticsForReadTableVectorIndex(const TExprNode::TPtr& input, TTypeAnnotationContext* /*typeCtx*/,
-    const NOpt::TKqpOptimizeContext& /*kqpCtx*/, TKqpStatsStore* kqpStats) {
-
+void InferStatisticsForReadTableVectorIndex(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats) {
     auto read = TExprBase(input).Cast<TKqlReadTableVectorIndex>();
     auto inputStats = kqpStats->GetStats(read.Table().Raw());
     if (!inputStats) {
@@ -171,7 +169,7 @@ void InferStatisticsForReadTableVectorIndex(const TExprNode::TPtr& input, TTypeA
     }
     int nAttrs = read.Columns().Size();
     double sizePerRow = inputStats->ByteSize / (inputStats->Nrows == 0 ? 1 : inputStats->Nrows);
-    double byteSize = nRows * sizePerRow * (nAttrs / (double)(inputStats->Ncols == 0 ? 1 : inputStats->Ncols));
+    double byteSize = nRows * sizePerRow * (nAttrs / static_cast<double>(inputStats->Ncols == 0 ? 1 : inputStats->Ncols));
 
     auto stats = std::make_shared<TOptimizerStatistics>(
         EStatisticsType::BaseTable,
@@ -1486,7 +1484,7 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
         InferStatisticsForReadTable(input, TypeCtx, KqpCtx, KqpStats);
     }
     else if(TKqlReadTableVectorIndex::Match(input.Get())){
-        InferStatisticsForReadTableVectorIndex(input, TypeCtx, KqpCtx, KqpStats);
+        InferStatisticsForReadTableVectorIndex(input, KqpStats);
     }
     else if(TKqlStreamLookupIndex::Match(input.Get())){
         InferStatisticsForIndexLookup(input, TypeCtx, KqpStats);

@@ -1128,11 +1128,8 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
         settings->SetTopK((ui32)ExtractPhyValue(stageInfo, vectorSearch.GetTopK(),
             TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod((ui32)0)).Get<ui64>());
     }
-    settings->SetIsDesc(vectorSearch.GetIsDesc());
     settings->SetLevelTop(vectorSearch.GetLevelTop());
     settings->SetVectorColumnIndex(vectorSearch.GetVectorColumnIndex());
-    settings->SetInputType(vectorSearch.GetInputType());
-    settings->SetOutputType(vectorSearch.GetOutputType());
     settings->SetHasPrefix(vectorSearch.GetHasPrefix());
 
     YQL_ENSURE(stageInfo.Meta.IndexMetas.size() == 2);
@@ -1819,7 +1816,6 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
             transformProto->MutableSettings()->PackFrom(*input.Meta.VectorResolveSettings);
         } else if (input.Meta.VectorSearchSettings) {
             enableMetering = true;
-            YQL_ENSURE(input.Meta.VectorSearchSettings);
 
             // Unlike the write-path VectorResolve, the read path is not guaranteed an
             // MVCC snapshot (e.g. multi-phase data queries that compute the target

@@ -410,9 +410,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     void DoTestOrderByCosine(ui32 indexLevels, int flags, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
-        // Run the same scenario through both the legacy StreamLookup lowering and the new specialized
-        // vector search actor (TableServiceConfig.EnableVectorSearchActor, off by default), so both
-        // read paths are verified identically against the same brute-force ground truth.
+        // Run the same scenario through both the legacy StreamLookup lowering and the specialized
+        // vector search actor (TableServiceConfig.EnableVectorSearchActor), so both read paths are
+        // verified identically against the same brute-force ground truth.
         for (bool enableVectorSearchActor : {false, true}) {
             Cerr << "DoTestOrderByCosine: indexLevels=" << indexLevels << " flags=" << flags
                  << " enableVectorSearchActor=" << enableVectorSearchActor << Endl;

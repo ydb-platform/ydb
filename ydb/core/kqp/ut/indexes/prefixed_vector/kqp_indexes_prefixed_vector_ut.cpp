@@ -403,10 +403,10 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
     }
 
     void DoTestOrderByCosine(ui32 indexLevels, int flags, bool enableVectorSearchActor) {
-        // The same scenario is run through both the legacy StreamLookup lowering and the new specialized
-        // vector search actor (TableServiceConfig.EnableVectorSearchActor, off by default), selected via
-        // enableVectorSearchActor, so both read paths are verified identically against the same brute-force
-        // ground truth.
+        // The same scenario is run through both the legacy StreamLookup lowering and the specialized
+        // vector search actor (TableServiceConfig.EnableVectorSearchActor), selected via
+        // enableVectorSearchActor, so both read paths are verified identically against the same
+        // brute-force ground truth.
         Cerr << "DoTestOrderByCosine: indexLevels=" << indexLevels << " flags=" << flags
              << " enableVectorSearchActor=" << enableVectorSearchActor << Endl;
 

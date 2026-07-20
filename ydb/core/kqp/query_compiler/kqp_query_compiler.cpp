@@ -3112,9 +3112,8 @@ private:
             proto.SetVectorColumnIndex(vectorColumnIndex);
 
             // Search parameters. TopK (LIMIT) may be a literal or a query parameter;
-            // resolve it to an actual value at execution time (see BuildVectorSearchChannels).
+            // a parameter is resolved to an actual value at execution time.
             SetVectorTopKLimit(proto.MutableTopK(), vectorSearch.TopK().Ptr());
-            proto.SetIsDesc(vectorSearch.IsDesc().Value() == "true");
 
             // Prefixed index: the transform input carries the per-group root __ydb_parent.
             if (vectorSearch.HasPrefix().IsValid()) {

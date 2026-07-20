@@ -12,7 +12,12 @@ This section provides troubleshooting information for common spilling issues in 
 ## See Also
 
 - [Spilling Configuration](../../reference/configuration/table_service_config.md)
+<<<<<<< HEAD
 - [Spilling Concept](../../concepts/spilling.md)
 - [Memory Controller Configuration](../../reference/configuration/index.md#memory-controller)
+=======
+- [Spilling Concept](../../concepts/query_execution/spilling.md)
+- [Memory Controller Configuration](../../reference/configuration/memory_controller_config.md)
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
 - [{{ ydb-short-name }} Monitoring](../../devops/observability/monitoring.md)
 - [Performance Diagnostics](../performance/index.md)

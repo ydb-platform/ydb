@@ -183,9 +183,66 @@ if err != nil {
 }
 ```
 
+<<<<<<< HEAD
 {% include [scan_query.md](../_includes/steps/08_scan_query.md) %}
 
 To execute scan queries, use the `table.Session.StreamExecuteScanQuery()` method.
+=======
+You can extract row data (`query.Row`) using the following methods:
+
+* `query.Row.ScanStruct` — scans row data into a struct based on struct field tags that match column names.
+* `query.Row.ScanNamed` — scans data into variables using explicitly defined column-variable pairs.
+* `query.Row.Scan` — scans data directly by column order into the provided variables.
+
+{% list tabs %}
+
+- ScanStruct
+
+  ```go
+  var info struct {
+   SeriesID    string    `sql:"series_id"`
+   Title       string    `sql:"title"`
+   ReleaseDate time.Time `sql:"release_date"`
+  }
+  err = row.ScanStruct(&info)
+  if err != nil {
+    // handle query execution error
+  }
+  ```
+
+- ScanNamed
+
+  ```go
+  var seriesID, title string
+  var releaseDate time.Time
+  err = row.ScanNamed(query.Named("series_id", &seriesID), query.Named("title", &title), query.Named("release_date", &releaseDate))
+  if err != nil {
+    // handle query execution error
+  }
+  ```
+
+- Scan
+
+  ```go
+  var seriesID, title string
+  var releaseDate time.Time
+  err = row.Scan(&seriesID, &title, &releaseDate)
+  if err != nil {
+    // handle query execution error
+  }
+  ```
+  
+ {% endlist %}
+
+{% note warning %}
+
+If the expected query result is very large, avoid loading all data into memory using helper methods like `query.Client.Query` or `query.Client.QueryResultSet`. These methods return fully materialized results, storing all rows from the server in local client memory. Large result sets can cause an [OOM](https://en.wikipedia.org/wiki/Out_of_memory) problem.
+
+Instead, use the `query.TxActor.Query` or `query.TxActor.QueryResultSet` methods on a transaction or session. These methods return iterators over results without fully materializing them upfront. The `query.Session` object is accessible via the `query.Client.Do` method, which handles automatic retries. Keep in mind that the read operation can be interrupted at any time, restarting the entire query process. Therefore, the user function passed to `Do` may run multiple times.
+
+{% endnote %}
+
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
 
 ```go
 var (

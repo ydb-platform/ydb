@@ -11,7 +11,7 @@
 
 3. **Query optimization**
    * Retrieve only necessary columns
-   * Use appropriate [indexes](../concepts/secondary_indexes.md)
+   * Use appropriate [indexes](../concepts/query_execution/secondary_indexes.md)
    * Formulate filter conditions effectively
 
 {% include [olap-links](_includes/olap-links.md) %}

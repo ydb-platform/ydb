@@ -96,10 +96,13 @@ while (await reader.ReadAsync())
 }
 ```
 
+<<<<<<< HEAD
 {% include [scan_query.md](steps/08_scan_query.md) %}
 
 For sequential row reading from another query:
 
+=======
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
 ```c#
 await using var command = new YdbCommand(
     "SELECT title FROM seasons ORDER BY series_id, season_id;", connection);

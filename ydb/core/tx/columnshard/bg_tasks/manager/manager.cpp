@@ -7,6 +7,8 @@
 #include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_remove.h>
 #include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_save_state.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NBackground {
 
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TSessionsManager::TxApplyControl(const TSessionControlContainer& control) {
@@ -85,8 +87,11 @@ bool TSessionsManager::LoadIdempotency(NTabletFlatExecutor::TTransactionContext&
         TConclusionStatus status = session->DeserializeFromLocalDatabase(std::move(records.front()));
         records.pop_front();
         if (status.IsFail()) {
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "skip_invalid_background_session")("class_name", className)(
-                "identifier", identifier)("problem", status.GetErrorMessage());
+            YDB_LOG_CRIT("",
+                {"event", "skip_invalid_background_session"},
+                {"className", className},
+                {"identifier", identifier},
+                {"problem", status.GetErrorMessage()});
             continue;
         }
         storage->AddSession(session).Validate("on load from local database");
@@ -107,6 +112,15 @@ ISessionLogic::TStatus TSessionsManager::GetStatus(const TString& className, con
     auto session = Storage->GetSession(className, identifier);
     AFL_VERIFY(session);
     return session->GetStatus();
+}
+
+bool TSessionsManager::IsSessionComplete(const TString& className, const TString& identifier) const {
+    auto session = Storage->GetSession(className, identifier);
+    if (!session) {
+        return true;
+    }
+    const auto& logic = session->GetLogicContainer();
+    return logic->IsFinished() || logic->IsReadyForRemoveOnFinished();
 }
 
 }   // namespace NKikimr::NOlap::NBackground

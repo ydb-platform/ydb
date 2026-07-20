@@ -350,7 +350,10 @@ private:
             LOG_D("Successfully fetched pool: " << poolId << ", DatabaseId: " << databaseId);
             poolHandler = GetOrCreatePoolState(databaseId, poolId, ev->Get()->PoolConfig)->PoolHandler;
         } else {
-            LOG_W("Failed to fetch pool: " << poolId << ", DatabaseId: " << databaseId << ", status: " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_W("Failed to fetch pool: " << poolId
+                << ", database id: " << databaseId
+                << ", status: " << ev->Get()->Status
+                << ", issues: " << ev->Get()->Issues.ToOneLineString());
         }
 
         GetOrCreateDatabaseState(databaseId)->UpdatePoolInfo(ev, poolHandler);
@@ -463,7 +466,7 @@ private:
         if (ev->Get()->Success) {
             LOG_D("Cleanup completed, tables exists: " << ev->Get()->TablesExists);
         } else {
-            LOG_C("Failed to cleanup tables, issues: " << ev->Get()->Issues.ToOneLineString());
+            LOG_D("Failed to cleanup tables, issues: " << ev->Get()->Issues.ToOneLineString());
         }
 
         TablesCreationStatus = ETablesCreationStatus::NotStarted;
@@ -718,10 +721,6 @@ private:
 };
 
 }  // anonymous namespace
-
-bool IsWorkloadServiceRequired(const NResourcePool::TPoolSettings& config) {
-    return config.ConcurrentQueryLimit != -1 || config.DatabaseLoadCpuThreshold >= 0.0 || config.QueryCancelAfter;
-}
 
 }  // namespace NWorkload
 

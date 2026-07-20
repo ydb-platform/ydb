@@ -59,8 +59,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
     TVector<TExprBase> effects;
     effects.emplace_back(tableDelete);
 
-    const bool isSink = NeedSinks(table, kqpCtx);
-    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
+    const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
 
     for (const auto& [tableNode, indexDesc] : indexes) {
         if (useStreamIndex
@@ -94,10 +93,11 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
 
         switch (indexDesc->Type) {
             case TIndexDescription::EType::GlobalAsync:
+                YQL_ENSURE(false, "Async indexes are not updated directly");
             case TIndexDescription::EType::GlobalFulltextCompact:
             case TIndexDescription::EType::GlobalFulltextCompactRelevance:
             case TIndexDescription::EType::GlobalJsonCompact:
-                AFL_ENSURE(false);
+                YQL_ENSURE(false, "Compact fulltext index update requires EnableIndexStreamWrite");
             case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalSyncUnique: {
                 // deleteIndexKeys are already correct
@@ -187,7 +187,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, del.Table().Path());
     const auto& pk = table.Metadata->KeyColumnNames;
 
-    const auto indexes = BuildAffectedIndexTables(table, del.Pos(), ctx);
+    const auto indexes = BuildAffectedIndexTables(table, del.Pos(), ctx, kqpCtx);
     YQL_ENSURE(indexes);
 
     auto idxNeedsKqpEffect = [](const std::pair<TExprNode::TPtr, const TIndexDescription*>& x) {
@@ -213,9 +213,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     };
     const bool needsKqpEffect = std::any_of(indexes.begin(), indexes.end(), idxNeedsKqpEffect);
 
-    const bool isSink = NeedSinks(table, kqpCtx);
-
-    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
+    const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
 
     // Skip lookup means that the input already has all required columns and we only need to project them
     auto settings = TKqpDeleteRowsIndexSettings::Parse(del);

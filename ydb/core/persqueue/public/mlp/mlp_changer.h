@@ -8,6 +8,11 @@
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/util/backoff.h>
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
+#include <type_traits>
+
+
 #define Service TBase::Service
 #define LogBuilder TBase::LogBuilder
 
@@ -43,7 +48,8 @@ public:
 private:
 
     void DoDescribe() {
-        LOG_D("Start describe");
+        YDB_LOG_DEBUG_COMP(Service, "Start describe",
+            {"logPrefix", NPQ_LOG_PREFIX});
         TBase::Become(&TThis::DescribeState);
 
         NDescriber::TDescribeSettings settings = {
@@ -54,7 +60,8 @@ private:
     }
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-        LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+        YDB_LOG_DEBUG_COMP(Service, "Handle NDescriber::TEvDescribeTopicsResponse",
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         ChildActorId = {};
 
@@ -88,7 +95,8 @@ private:
     }
 
     void DoChanges() {
-        LOG_D("Start DoChanges");
+        YDB_LOG_DEBUG_COMP(Service, "Start DoChanges",
+            {"logPrefix", NPQ_LOG_PREFIX});
         TBase::Become(&TThis::ChangesState);
 
         for (const TMessageId& messageId: Settings.Messages) {
@@ -116,31 +124,44 @@ private:
     }
 
     void Handle(typename TResponse::TPtr& ev) {
-        LOG_D("Handle response " << ev->Get()->Record.ShortDebugString());
+        YDB_LOG_DEBUG_COMP(Service, "Handle response",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"ev", ev->Get()->Record.ShortDebugString()});
         auto partitionId = ev->Cookie;
 
         auto it = PendingPartitions.find(partitionId);
         if (it == PendingPartitions.end()) {
-            LOG_D("Received response fron unexpected partition " << partitionId);
+            YDB_LOG_DEBUG_COMP(Service, "Received response fron unexpected partition",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"partitionId", partitionId});
             return;
         }
 
         auto& partitionInfo = it->second;
+        const auto& record = ev->Get()->Record;
 
         partitionInfo.Success = true;
+        partitionInfo.HasOffsetResults = record.OffsetResultsSize() > 0;
+        for (const auto& [offset, status] : record.GetOffsetResults()) {
+            partitionInfo.OffsetResults.emplace(offset, static_cast<EOperationResult>(static_cast<ui8>(status)));
+        }
 
         --PendingRequests;
         ReplyIfPossible();
     }
 
     void Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
-        LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
+        YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvMLPErrorResponse",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"ev", ev->Get()->Record.ShortDebugString()});
 
         auto partitionId = ev->Cookie;
 
         auto it = PendingPartitions.find(partitionId);
         if (it == PendingPartitions.end()) {
-            LOG_D("Received response from unexpected partition " << partitionId);
+            YDB_LOG_DEBUG_COMP(Service, "Received response from unexpected partition",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"partitionId", partitionId});
             return;
         }
 
@@ -154,11 +175,15 @@ private:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        LOG_D("Handle TEvPipeCache::TEvDeliveryProblem " << ev->Get()->TabletId);
+        YDB_LOG_DEBUG_COMP(Service, "Handle TEvPipeCache::TEvDeliveryProblem",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"TabletId", ev->Get()->TabletId});
 
         auto it = Pipes.find(ev->Get()->TabletId);
         if (it == Pipes.end()) {
-            LOG_D("Received pipe error for unexpected tablet " << ev->Get()->TabletId);
+            YDB_LOG_DEBUG_COMP(Service, "Received pipe error for unexpected tablet",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"TabletId", ev->Get()->TabletId});
             return;
         }
 
@@ -205,9 +230,23 @@ private:
         }
 
         auto response = std::make_unique<TEvChangeResponse>();
+        if (TopicInfo) {
+            response->BalancerTabletId = TopicInfo->Description.GetBalancerTabletID();
+        }
         for (auto& [partitionId, partitionInfo]: PendingPartitions) {
             for (auto offset : partitionInfo.Offsets) {
-                response->Messages.emplace_back(TMessageId(partitionId, offset), partitionInfo.Success);
+                EOperationResult status = EOperationResult::Failed;
+                if (partitionInfo.Error) {
+                    status = EOperationResult::Failed;
+                } else if (!partitionInfo.HasOffsetResults) {
+                    // Backward compatibility: old tablets don't populate offset results.
+                    // Can be removed in 27-1.
+                    status = partitionInfo.Success ? EOperationResult::Success : EOperationResult::Failed;
+                } else if (const auto statusIt = partitionInfo.OffsetResults.find(offset);
+                           statusIt != partitionInfo.OffsetResults.end()) {
+                    status = statusIt->second;
+                }
+                response->Messages.emplace_back(TMessageId(partitionId, offset), status);
             }
         }
 
@@ -217,7 +256,9 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        LOG_I("Reply error " << Ydb::StatusIds::StatusCode_Name(errorCode));
+        YDB_LOG_INFO_COMP(Service, "Reply error",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)});
         TBase::Send(ParentId, new TEvChangeResponse(errorCode, std::move(errorMessage)));
         PassAway();
     }
@@ -233,19 +274,21 @@ private:
     struct TRequestInfo {
         bool Error = false;
         bool Success = false;
+        bool HasOffsetResults = false;
         ui64 TabletId = 0;
         std::vector<ui64> Offsets;
+        absl::flat_hash_map<ui64, EOperationResult> OffsetResults;
     };
 
     // partitionId -> request info
-    std::unordered_map<ui32, TRequestInfo> PendingPartitions;
+    absl::flat_hash_map<ui32, TRequestInfo> PendingPartitions;
 
     struct TPipeInfo {
         ui64 Cookie = 0;
         bool Subscribed = false;
     };
     // tabletId -> cookie
-    std::unordered_map<ui64, TPipeInfo> Pipes;
+    absl::flat_hash_map<ui64, TPipeInfo> Pipes;
 
     size_t PendingRequests = 0;
 };

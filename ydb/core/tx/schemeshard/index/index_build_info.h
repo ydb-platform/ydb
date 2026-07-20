@@ -111,6 +111,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         FulltextIndexStats = 200,
         FulltextIndexDictionary = 201,
         FulltextIndexBorders = 202,
+        // Compact rowid-mode prepass: build the transient "row-id source" table (main re-keyed by the
+        // dense seq) that the posting scan then reads so doc ids arrive ascending and densely packed.
+        FulltextRowIdSrc = 203,
     };
 
     struct TColumnBuildInfo {
@@ -348,6 +351,8 @@ public:
     THashSet<TShardIdx> InProgressShards;
     std::vector<TShardIdx> DoneShards;
     ui32 MaxInProgressShards = 32;
+
+    THashSet<TTxId> DependencyTxIds; // volatile set of concurrent tx(s)
 
     TMeteringStats Processed = TMeteringStatsHelper::ZeroValue();
     TMeteringStats Billed = TMeteringStatsHelper::ZeroValue();
@@ -822,6 +827,16 @@ public:
             IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact);
     }
 
+    // A compact fulltext build that uses __ydb_row_id as the doc id: it runs a prepass building the
+    // transient row-id source table, then the posting scan reads that (__ydb_row_id-ordered) table.
+    bool IsBuildFulltextCompactRowId() const {
+        if (!IsBuildFulltextCompact()) {
+            return false;
+        }
+        const auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+        return desc && desc->GetUseRowIdAsDocId();
+    }
+
     bool IsBuildIndex() const {
         return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex() || IsBuildFulltextIndex();
     }
@@ -1002,13 +1017,28 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     constexpr static ui32 MaxInProgressValidationShards = 10;
 
     bool ValidationFailed = false;  // true if any shard found NULL values
+    bool IsCancelled = false;
+    TString CancellationReason;
 
     bool IsDone() const override {
         return OperationState == EOperationState::Done;
     }
 
+    bool IsCloseToCompletion() const {
+        return OperationState == EOperationState::Done
+            || OperationState == EOperationState::Unlocking
+            || OperationState == EOperationState::Finishing;
+    }
+
     bool IsSetColumnConstraint() const override {
         return true;
+    }
+
+    void MarkAsCancelled(TString&& reason) {
+        if (!IsCancelled) {
+            IsCancelled = true;
+            CancellationReason = std::move(reason);
+        }
     }
 };
 

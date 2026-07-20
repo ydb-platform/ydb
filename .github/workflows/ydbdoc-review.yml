@@ -97,9 +97,9 @@ jobs:
               owner,
               repo,
               issue_number: translationPr.number,
-              labels: ['rebuild_docs', 'ok-to-test'],
+              labels: ['ok-to-test'],
             });
 
             core.info(
-              `Added rebuild_docs and ok-to-test to translation PR #${translationPr.number}`
+              `Added ok-to-test to translation PR #${translationPr.number}`
             );

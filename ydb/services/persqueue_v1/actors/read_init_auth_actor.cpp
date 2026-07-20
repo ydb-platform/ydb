@@ -6,6 +6,8 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/public/utils.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
+
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -38,7 +40,9 @@ TReadInitAndAuthActor::~TReadInitAndAuthActor() = default;
 
 
 void TReadInitAndAuthActor::Bootstrap(const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " auth for : " << ClientId);
+    YDB_LOG_DEBUG_CTX(ctx, "Auth",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"clientId", ClientId});
     Become(&TThis::StateFunc);
     DoCheckACL = AppData(ctx)->PQConfig.GetCheckACL() && Token;
     DescribeTopics(ctx, true);
@@ -65,16 +69,19 @@ void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
             holder.DiscoveryConverter->RestorePrimaryPath();
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " auth is DEAD");
+    YDB_LOG_DEBUG_CTX(ctx, "Auth is DEAD",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX});
 
     TActorBootstrapped<TReadInitAndAuthActor>::Die(ctx);
 }
 
 bool TReadInitAndAuthActor::OnUnhandledException(const std::exception& exc) {
     auto ctx = *NActors::TlsActivationContext;
-    LOG_CRIT_S(ctx, NKikimrServices::PQ_READ_PROXY,
-        TStringBuilder() << PQ_LOG_PREFIX << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-            << TBackTrace::FromCurrentException().PrintToString());
+    YDB_LOG_CRIT_CTX(ctx, "Unhandled exception",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {"typeName", TypeName(exc)},
+        {"exception", exc.what()},
+        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 
     CloseSession("Internal error", PersQueue::ErrorCode::ErrorCode::ERROR, ctx.AsActorContext());
 
@@ -96,7 +103,8 @@ void TReadInitAndAuthActor::SendCacheNavigateRequest(const TActorContext& ctx, c
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
     schemeCacheRequest->ResultSet.emplace_back(entry);
     schemeCacheRequest->DatabaseName = AppData(ctx)->PQConfig.GetDatabase();
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Send client acl request");
+    YDB_LOG_DEBUG_CTX(ctx, "Send client acl request",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX});
     ctx.Send(NewSchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.Release()));
 }
 
@@ -139,7 +147,8 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
 
 
 void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Handle describe topics response");
+    YDB_LOG_DEBUG_CTX(ctx, "Handle describe topics response",
+        {"PQLOGPREFIX", PQ_LOG_PREFIX});
 
     bool reDescribe = false;
     auto i = 0u;

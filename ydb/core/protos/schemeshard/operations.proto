@@ -220,6 +220,9 @@ enum EOperationType {
     // Full Backup (trackable aggregator over BackupBackupCollection's CCT)
     ESchemeOpCreateFullBackupOp = 137;
 
+    // TestShardSet
+    ESchemeOpCreateTestShardSet = 138;
+    ESchemeOpDropTestShardSet = 139;
 
     // Some entries are grouped by semantics, so are out of order
 }

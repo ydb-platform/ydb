@@ -123,8 +123,8 @@ int TCommandConfigFetch::Run(TConfig& config) {
         // some database is set by mistake
         config.Database.clear();
     }
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NConfig::TConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NConfig::TConfigClient(driver);
 
     NYdb::NConfig::TFetchConfigResult result(TStatus(EStatus::CLIENT_CALL_UNIMPLEMENTED, {}), {}, {});
 
@@ -147,7 +147,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
             return EXIT_FAILURE;
         }
 
-        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
         auto result = client.GetConfig().GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
@@ -278,11 +278,11 @@ TCommandConfigReplace::TCommandConfigReplace(
 
 void TCommandConfigReplace::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration")
+    config.Opts->AddLongOption('f', "filename", "Path to the file containing configuration")
         .Required().RequiredArgument("[config.yaml]").StoreResult(&Filename);
-    config.Opts->AddLongOption("ignore-local-validation", "Ignore local config applicability checks")
+    config.Opts->AddLongOption("ignore-local-validation", "Ignore local config validation checks")
         .StoreTrue(&IgnoreCheck);
-    config.Opts->AddLongOption("dry-run", "Check config applicability")
+    config.Opts->AddLongOption("dry-run", "Validate the config without applying changes")
         .StoreTrue(&DryRun);
     config.Opts->AddLongOption("allow-unknown-fields", "Allow fields not present in config")
         .StoreTrue(&AllowUnknownFields);
@@ -312,8 +312,8 @@ void TCommandConfigReplace::Parse(TConfig& config) {
 }
 
 int TCommandConfigReplace::Run(TConfig& config) {
-    std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NConfig::TConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NConfig::TConfigClient(driver);
 
     NYdb::NConfig::TReplaceConfigSettings settings;
 
@@ -338,7 +338,7 @@ int TCommandConfigReplace::Run(TConfig& config) {
     if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::UNSUPPORTED) {
         Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
 
-        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
 
         status = [&]() {
             if (Force) {
@@ -438,8 +438,8 @@ TString ConfigHash(const NFyaml::TNodeRef& config) {
 }
 
 int TCommandConfigResolve::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
 
     if (NodeId) {
         auto result = client.GetNodeLabels(NodeId).GetValueSync();
@@ -646,11 +646,11 @@ TCommandConfigVolatileAdd::TCommandConfigVolatileAdd()
 
 void TCommandConfigVolatileAdd::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption('f', "filename", "filename to set")
+    config.Opts->AddLongOption('f', "filename", "Path to the file containing configuration")
         .Required().RequiredArgument("[config.yaml]").StoreResult(&Filename);
-    config.Opts->AddLongOption("ignore-local-validation", "Ignore local config applicability checks")
+    config.Opts->AddLongOption("ignore-local-validation", "Ignore local config validation checks")
         .StoreTrue(&IgnoreCheck);
-    config.Opts->AddLongOption("dry-run", "Check config applicability")
+    config.Opts->AddLongOption("dry-run", "Validate the config without applying changes")
         .StoreTrue(&DryRun);
     config.SetFreeArgsNum(0);
 
@@ -665,8 +665,8 @@ void TCommandConfigVolatileAdd::Parse(TConfig& config) {
 }
 
 int TCommandConfigVolatileAdd::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
 
     const auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
 
@@ -740,8 +740,8 @@ void TCommandConfigVolatileDrop::Parse(TConfig& config) {
 }
 
 int TCommandConfigVolatileDrop::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
 
     if (!Dir.empty()) {
         auto dir = TFsPath(Dir);
@@ -820,8 +820,8 @@ void TCommandConfigVolatileFetch::Parse(TConfig& config) {
 }
 
 int TCommandConfigVolatileFetch::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
     auto result = client.GetConfig().GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
@@ -867,8 +867,8 @@ void TCommandGenerateDynamicConfig::Config(TConfig& config) {
 }
 
 int TCommandGenerateDynamicConfig::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
 
     auto result = client.FetchStartupConfig().GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
@@ -906,8 +906,8 @@ void TCommandVersionDynamicConfig::Parse(TConfig& config) {
 }
 
 int TCommandVersionDynamicConfig::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
     auto result = client.GetConfigurationVersion(ListNodes).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     auto sortNodes = [&](const auto& list) {

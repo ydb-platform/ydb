@@ -44,6 +44,13 @@ namespace orc {
       "1.6.0", "1.6.1", "1.6.2", "1.6.3",  "1.6.4",  "1.6.5", "1.6.6",
       "1.6.7", "1.6.8", "1.6.9", "1.6.10", "1.6.11", "1.7.0"};
 
+  // Portable unsigned addition overflow check. Returns true on overflow.
+  // Relies on defined wrap-around behavior of unsigned integer arithmetic.
+  static inline bool addOverflow(uint64_t a, uint64_t b, uint64_t* result) {
+    *result = a + b;
+    return *result < a;
+  }
+
   ReaderMetrics* getDefaultReaderMetrics() {
     static ReaderMetrics internal;
     return &internal;
@@ -60,7 +67,15 @@ namespace orc {
 
   uint64_t getCompressionBlockSize(const proto::PostScript& ps) {
     if (ps.has_compression_block_size()) {
-      return ps.compression_block_size();
+      uint64_t size = ps.compression_block_size();
+      // The compressed chunk header stores the length in 23 bits, so the
+      // writer rejects sizes of 2^23 or more; zero is never valid.
+      if (size == 0 || size >= (1 << 23)) {
+        std::stringstream msg;
+        msg << "Invalid compression block size: " << size;
+        throw ParseError(msg.str());
+      }
+      return size;
     } else {
       return 256 * 1024;
     }
@@ -524,13 +539,13 @@ namespace orc {
 
         if (pbStream.kind() == proto::Stream_Kind_ROW_INDEX) {
           proto::RowIndex rowIndex;
-          if (!rowIndex.ParseFromZeroCopyStream(inStream.get())) {
+          if (!parseProtobufFromStream(&rowIndex, inStream.get())) {
             throw ParseError("Failed to parse the row index");
           }
           rowIndexes_[colId] = rowIndex;
         } else if (!skipBloomFilters_) {  // Stream_Kind_BLOOM_FILTER_UTF8
           proto::BloomFilterIndex pbBFIndex;
-          if (!pbBFIndex.ParseFromZeroCopyStream(inStream.get())) {
+          if (!parseProtobufFromStream(&pbBFIndex, inStream.get())) {
             throw ParseError("Failed to parse bloom filter index");
           }
           BloomFilterIndex bfIndex;
@@ -611,7 +626,7 @@ namespace orc {
                                   *contents.pool, contents.readerMetrics);
 
     proto::StripeFooter result;
-    if (!result.ParseFromZeroCopyStream(pbStream.get())) {
+    if (!parseProtobufFromStream(&result, pbStream.get())) {
       throw ParseError(std::string("bad StripeFooter from ") + pbStream->getName());
     }
     // Verify StripeFooter in case it's corrupt
@@ -807,7 +822,7 @@ namespace orc {
                                contents_->blockSize, *(contents_->pool), contents_->readerMetrics);
 
         proto::RowIndex rowIndex;
-        if (!rowIndex.ParseFromZeroCopyStream(pbStream.get())) {
+        if (!parseProtobufFromStream(&rowIndex, pbStream.get())) {
           throw ParseError("Failed to parse RowIndex from stripe footer");
         }
         int num_entries = rowIndex.entry_size();
@@ -884,14 +899,20 @@ namespace orc {
   void ReaderImpl::readMetadata() const {
     uint64_t metadataSize = contents_->postscript->metadata_length();
     uint64_t footerLength = contents_->postscript->footer_length();
-    if (fileLength_ < metadataSize + footerLength + postscriptLength_ + 1) {
+
+    // Check for overflow in length calculations
+    uint64_t totalTail;
+    if (addOverflow(footerLength, metadataSize, &totalTail) ||
+        addOverflow(totalTail, postscriptLength_, &totalTail) ||
+        addOverflow(totalTail, 1ULL, &totalTail) || totalTail > fileLength_) {
       std::stringstream msg;
       msg << "Invalid Metadata length: fileLength=" << fileLength_
           << ", metadataLength=" << metadataSize << ", footerLength=" << footerLength
           << ", postscriptLength=" << postscriptLength_;
       throw ParseError(msg.str());
     }
-    uint64_t metadataStart = fileLength_ - metadataSize - footerLength - postscriptLength_ - 1;
+
+    uint64_t metadataStart = fileLength_ - totalTail;
     if (metadataSize != 0) {
       std::unique_ptr<SeekableInputStream> pbStream = createDecompressor(
           contents_->compression,
@@ -899,7 +920,7 @@ namespace orc {
                                                     metadataSize, *contents_->pool),
           contents_->blockSize, *contents_->pool, contents_->readerMetrics);
       contents_->metadata.reset(new proto::Metadata());
-      if (!contents_->metadata->ParseFromZeroCopyStream(pbStream.get())) {
+      if (!parseProtobufFromStream(contents_->metadata.get(), pbStream.get())) {
         throw ParseError("Failed to parse the metadata");
       }
     }
@@ -1226,16 +1247,23 @@ namespace orc {
     do {
       currentStripeInfo_ = footer_->stripes(static_cast<int>(currentStripe_));
       uint64_t fileLength = contents_->stream->getLength();
-      if (currentStripeInfo_.offset() + currentStripeInfo_.index_length() +
-              currentStripeInfo_.data_length() + currentStripeInfo_.footer_length() >=
-          fileLength) {
+
+      uint64_t stripeOffset = currentStripeInfo_.offset();
+      uint64_t indexLength = currentStripeInfo_.index_length();
+      uint64_t dataLength = currentStripeInfo_.data_length();
+      uint64_t footerLength = currentStripeInfo_.footer_length();
+
+      // Check for overflow and bounds validity
+      uint64_t stripeTotalLength;
+      if (addOverflow(indexLength, dataLength, &stripeTotalLength) ||
+          addOverflow(stripeTotalLength, footerLength, &stripeTotalLength) ||
+          addOverflow(stripeOffset, stripeTotalLength, &stripeTotalLength) ||
+          stripeTotalLength >= fileLength) {
         std::stringstream msg;
         msg << "Malformed StripeInformation at stripe index " << currentStripe_
-            << ": fileLength=" << fileLength
-            << ", StripeInfo=(offset=" << currentStripeInfo_.offset()
-            << ", indexLength=" << currentStripeInfo_.index_length()
-            << ", dataLength=" << currentStripeInfo_.data_length()
-            << ", footerLength=" << currentStripeInfo_.footer_length() << ")";
+            << ": fileLength=" << fileLength << ", StripeInfo=(offset=" << stripeOffset
+            << ", indexLength=" << indexLength << ", dataLength=" << dataLength
+            << ", footerLength=" << footerLength << ")";
         throw ParseError(msg.str());
       }
       rowsInCurrentStripe_ = currentStripeInfo_.number_of_rows();
@@ -1592,7 +1620,7 @@ namespace orc {
         getCompressionBlockSize(ps), memoryPool, readerMetrics);
 
     auto footer = std::make_unique<proto::Footer>();
-    if (!footer->ParseFromZeroCopyStream(pbStream.get())) {
+    if (!parseProtobufFromStream(footer.get(), pbStream.get())) {
       throw ParseError("Failed to parse the footer from " + stream->getName());
     }
 
@@ -1618,6 +1646,7 @@ namespace orc {
       }
       contents->postscript = std::make_unique<proto::PostScript>(tail.postscript());
       contents->footer = std::make_unique<proto::Footer>(tail.footer());
+      checkProtoTypes(*contents->footer);
       fileLength = tail.file_length();
       postscriptLength = tail.postscript_length();
     } else {
@@ -1635,10 +1664,14 @@ namespace orc {
       postscriptLength = buffer->data()[readSize - 1] & 0xff;
       contents->postscript = readPostscript(stream.get(), buffer.get(), postscriptLength);
       uint64_t footerSize = contents->postscript->footer_length();
-      uint64_t tailSize = 1 + postscriptLength + footerSize;
-      if (tailSize >= fileLength) {
+
+      // Check for overflow before calculating tailSize
+      uint64_t tailSize;
+      if (addOverflow(1ULL, postscriptLength, &tailSize) ||
+          addOverflow(tailSize, footerSize, &tailSize) || tailSize >= fileLength) {
         std::stringstream msg;
-        msg << "Invalid ORC tailSize=" << tailSize << ", fileLength=" << fileLength;
+        msg << "Invalid tail size: footerSize=" << footerSize
+            << ", postscriptLength=" << postscriptLength << ", fileLength=" << fileLength;
         throw ParseError(msg.str());
       }
       uint64_t footerOffset;
@@ -1688,7 +1721,7 @@ namespace orc {
                                contents_->blockSize, *(contents_->pool), contents_->readerMetrics);
 
         proto::BloomFilterIndex pbBFIndex;
-        if (!pbBFIndex.ParseFromZeroCopyStream(pbStream.get())) {
+        if (!parseProtobufFromStream(&pbBFIndex, pbStream.get())) {
           throw ParseError("Failed to parse BloomFilterIndex");
         }
 
@@ -1745,7 +1778,7 @@ namespace orc {
                                contents_->blockSize, *(contents_->pool), contents_->readerMetrics);
 
         proto::RowIndex pbRowIndex;
-        if (!pbRowIndex.ParseFromZeroCopyStream(pbStream.get())) {
+        if (!parseProtobufFromStream(&pbRowIndex, pbStream.get())) {
           std::stringstream errMsgBuffer;
           errMsgBuffer << "Failed to parse RowIndex at column " << column << " in stripe "
                        << stripeIndex;
@@ -1770,8 +1803,8 @@ namespace orc {
     contents_->evictCache(boundary);
   }
 
-  void ReaderImpl::preBuffer(const std::vector<uint32_t>& stripes,
-                             const std::list<uint64_t>& includeTypes) {
+  std::vector<std::pair<uint64_t, uint64_t>> ReaderImpl::preBufferRange(
+      const std::vector<uint32_t>& stripes, const std::list<uint64_t>& includeTypes) {
     std::vector<uint32_t> newStripes;
     for (auto stripe : stripes) {
       if (stripe < static_cast<uint32_t>(footer_->stripes_size())) newStripes.push_back(stripe);
@@ -1783,7 +1816,7 @@ namespace orc {
     }
 
     if (newStripes.empty() || newIncludeTypes.empty()) {
-      return;
+      return {};
     }
 
     orc::RowReaderOptions rowReaderOptions;
@@ -1792,12 +1825,33 @@ namespace orc {
     std::vector<bool> selectedColumns;
     columnSelector.updateSelected(selectedColumns, rowReaderOptions);
 
+    std::vector<std::pair<uint64_t, uint64_t>> ranges;
+
     for (auto stripe : newStripes) {
       const auto& stripeInfo = footer_->stripes(stripe);
       proto::StripeFooter stripeFooter = getStripeFooter(stripeInfo, *contents_);
-      auto ranges = extractReadRangesForStripe(stripe, stripeInfo, stripeFooter, selectedColumns);
-      contents_->cacheRanges(std::move(ranges));
+      auto stripeRanges =
+          extractReadRangesForStripe(stripe, stripeInfo, stripeFooter, selectedColumns);
+      for (const auto& range : stripeRanges) {
+        ranges.emplace_back(range.offset, range.length);
+      }
     }
+    return ranges;
+  }
+
+  void ReaderImpl::preBuffer(const std::vector<uint32_t>& stripes,
+                             const std::list<uint64_t>& includeTypes) {
+    auto ranges = preBufferRange(stripes, includeTypes);
+    if (ranges.empty()) {
+      return;
+    }
+
+    std::vector<ReadRange> readRanges;
+    readRanges.reserve(ranges.size());
+    for (const auto& range : ranges) {
+      readRanges.emplace_back(range.first, range.second);
+    }
+    contents_->cacheRanges(std::move(readRanges));
   }
 
   RowReader::~RowReader() {

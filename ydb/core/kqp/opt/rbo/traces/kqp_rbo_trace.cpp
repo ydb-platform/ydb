@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <optional>
 #include <sstream>
-#include <tuple>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
@@ -116,6 +115,7 @@ std::string FormatStatisticsType(EStatisticsType type) {
         case NKikimr::NKqp::BaseTable: return "BaseTable";
         case NKikimr::NKqp::FilteredFactTable: return "FilteredFactTable";
         case NKikimr::NKqp::ManyManyJoin: return "ManyManyJoin";
+        case NKikimr::NKqp::Constant: return "Constant";
         default: return "Unknown";
     }
 }
@@ -358,51 +358,38 @@ std::vector<std::pair<std::string, std::string>> BuildAliasRows(const TPlanAlias
     return rows;
 }
 
-struct TForbiddenOutEntry {
-    std::string Label;
+struct TForbiddenEntry {
     std::vector<std::string> Columns;
+    bool AllExcept = false;
 };
 
-std::vector<TForbiddenOutEntry> BuildForbiddenOutEntries(const IOperator& op, const TPlanProps& props) {
-    std::vector<std::tuple<std::string, IOperator*, ui32>> parents;
-    parents.reserve(op.Parents.size());
-    for (const auto& [parent, childIdx] : op.Parents) {
-        parents.emplace_back(
-            ToStdString(TStringBuilder() << parent->GetExplainName() << " child " << childIdx),
-            parent,
-            childIdx);
-    }
-    std::sort(parents.begin(), parents.end(), [](const auto& lhs, const auto& rhs) {
-        return std::get<0>(lhs) < std::get<0>(rhs);
-    });
-
-    std::vector<TForbiddenOutEntry> entries;
-    for (const auto& [label, parent, childIdx] : parents) {
-        const auto& forbidden = props.NameConstraints.GetForbiddenOut(parent, childIdx, const_cast<IOperator*>(&op));
-        if (forbidden.empty()) {
-            continue;
-        }
-        entries.push_back({label, MakeInfoUnitItems(SortInfoUnitSet(forbidden))});
-    }
-    return entries;
+TForbiddenEntry MakeForbiddenEntry(const TInfoUnitConstraintSet& forbidden) {
+    return {
+        MakeInfoUnitItems(SortInfoUnitSet(forbidden.GetUnits())),
+        forbidden.IsAllExcept()
+    };
 }
 
-std::vector<std::string> BuildForbiddenOutSummaryItems(const std::vector<TForbiddenOutEntry>& entries) {
-    std::vector<std::string> items;
-    items.reserve(entries.size());
-    for (const auto& entry : entries) {
-        items.push_back(entry.Label + ": " + FormatCountedSummary(entry.Columns));
+std::optional<TForbiddenEntry> BuildForbiddenEntry(const IOperator& op) {
+    if (!op.Props.Analysis.NameConstraints) {
+        return std::nullopt;
     }
-    return items;
+
+    const auto& forbidden = op.Props.Analysis.NameConstraints->GetForbidden();
+    if (forbidden.Empty()) {
+        return std::nullopt;
+    }
+    return MakeForbiddenEntry(forbidden);
 }
 
-std::vector<optimizer_trace::Widget> BuildForbiddenOutWidgets(const std::vector<TForbiddenOutEntry>& entries) {
-    std::vector<optimizer_trace::Widget> widgets;
-    widgets.reserve(entries.size());
-    for (const auto& entry : entries) {
-        widgets.push_back(optimizer_trace::Widget::list(entry.Label, entry.Columns).monospaceListText());
-    }
-    return widgets;
+std::string BuildForbiddenSummaryItem(const TForbiddenEntry& entry) {
+    const auto prefix = entry.AllExcept ? "all except " : "";
+    return prefix + FormatCountedSummary(entry.Columns);
+}
+
+optimizer_trace::Widget BuildForbiddenWidget(const TForbiddenEntry& entry) {
+    const auto title = entry.AllExcept ? "Forbidden (all except)" : "Forbidden";
+    return optimizer_trace::Widget::list(title, entry.Columns).monospaceListText();
 }
 
 std::vector<std::string> FindDuplicateOutputColumns(const TVector<TInfoUnit>& outputIUs) {
@@ -479,12 +466,12 @@ std::vector<TStageEdge> CollectStageEdges(const TStageGraph& graph) {
 }
 
 std::string FormatConnectionLabel(const TConnection& connection) {
-    return ToStdString(connection.GetExplainName());
+    return ToStdString(connection.Type) + " connection";
 }
 
 std::string FormatConnectionDetails(const TConnection& connection) {
     std::vector<std::string> details = {
-        "type=" + ToStdString(connection.GetExplainName()),
+        "type=" + ToStdString(connection.Type),
         "outputIndex=" + std::to_string(connection.GetOutputIndex())
     };
 
@@ -886,9 +873,8 @@ optimizer_trace::Node BuildPlanNode(
         }
     }
 
-    const auto liveOutIt = planProps.LiveOut.find(op.get());
-    if (liveOutIt != planProps.LiveOut.end()) {
-        AddInfoUnitField(node, "LiveOut", "Live out", SortInfoUnitSet(liveOutIt->second));
+    if (op->Props.Analysis.LiveOut) {
+        AddInfoUnitField(node, "LiveOut", "Live out", SortInfoUnitSet(*op->Props.Analysis.LiveOut));
     }
 
     const auto usedIUs = SortInfoUnits(UniqueInfoUnits(op->GetUsedIUs(planProps)));
@@ -896,19 +882,18 @@ optimizer_trace::Node BuildPlanNode(
         AddInfoUnitField(node, "UsedIUs", "Used IUs", usedIUs, op.Get());
     }
 
-    const auto aliasIt = planProps.Aliases.AliasesAtOutput.find(op.get());
-    if (aliasIt != planProps.Aliases.AliasesAtOutput.end()) {
-        const auto rows = BuildAliasRows(aliasIt->second);
+    if (op->Props.Analysis.Aliases) {
+        const auto rows = BuildAliasRows(*op->Props.Analysis.Aliases);
         if (!rows.empty()) {
             node.field("Aliases", FormatPairSummary(rows))
                 .detail(BuildColumnTable("Aliases at output", rows));
         }
     }
 
-    const auto forbiddenEntries = BuildForbiddenOutEntries(*op, planProps);
-    if (!forbiddenEntries.empty()) {
-        node.field("ForbiddenOut", FormatCountedSummary(BuildForbiddenOutSummaryItems(forbiddenEntries), 3))
-            .details(BuildForbiddenOutWidgets(forbiddenEntries));
+    const auto forbiddenEntry = BuildForbiddenEntry(*op);
+    if (forbiddenEntry) {
+        node.field("Forbidden", BuildForbiddenSummaryItem(*forbiddenEntry))
+            .detail(BuildForbiddenWidget(*forbiddenEntry));
     }
 
     const auto duplicateOutputColumns = FindDuplicateOutputColumns(outputIUs);
@@ -997,7 +982,7 @@ void DefineHtmlTraceFields(optimizer_trace::Trace& trace) {
         {"LiveOut", "Live out"},
         {"UsedIUs", "Used IUs"},
         {"Aliases", "Aliases"},
-        {"ForbiddenOut", "Forbidden out"},
+        {"Forbidden", "Forbidden"},
         {"OutputConflicts", "Conflicts"},
         {"ERows", "Rows"},
         {"EBytes", "Bytes"},

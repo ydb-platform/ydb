@@ -1,0 +1,15 @@
+$tupleVariantType = Variant<Int32, String>;
+
+$data = [
+    <|intValue: 1, strValue: '0'|>,
+    <|intValue: 42, strValue: '1'|>,
+    <|intValue: 7, strValue: 'hello'|>,
+    <|intValue: 99, strValue: 'world'|>,
+];
+
+SELECT
+    Variant(intValue, '0', $tupleVariantType) AS intAlternative,
+    Variant(strValue, '1', $tupleVariantType) AS strAlternative
+FROM
+    as_table($data)
+;

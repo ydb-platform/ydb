@@ -37,6 +37,24 @@ TEST(TTwoLevelFairShareThreadPoolTest, Configure)
     EXPECT_EQ(N, counter->load());
 }
 
+TEST(TTwoLevelFairShareThreadPoolTest, CurrentInvoker)
+{
+    auto threadPool = CreateTwoLevelFairShareThreadPool(1, "Test");
+    auto invoker = threadPool->GetInvoker("pool", "bucket");
+
+    auto future = BIND([&] {
+        EXPECT_EQ(invoker.Get(), GetCurrentInvoker());
+        // The bucket must remain the current invoker across a context switch.
+        Yield();
+        EXPECT_EQ(invoker.Get(), GetCurrentInvoker());
+    })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitUntilSet(future);
+    threadPool->Shutdown();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

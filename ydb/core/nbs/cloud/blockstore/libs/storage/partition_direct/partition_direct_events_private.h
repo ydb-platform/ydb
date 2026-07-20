@@ -33,6 +33,8 @@ struct TEvPartitionDirectPrivate
 
         EvFastPathServiceShutdown,
         EvFastPathServiceStopped,
+        EvPoisonByBlockedGeneration,
+        EvAddHostToDBG,
 
         EvEnd,
     };
@@ -67,6 +69,30 @@ struct TEvPartitionDirectPrivate
         : public NActors::
               TEventLocal<TEvFastPathServiceStopped, EvFastPathServiceStopped>
     {
+    };
+
+    // DDisk replied BLOCKED: the current tablet generation is stale, so the
+    // tablet must suicide. Carries diagnostics coordinates and a reason string.
+    struct TEvPoison
+        : public NActors::TEventLocal<TEvPoison, EvPoisonByBlockedGeneration>
+    {
+        const TString Reason;
+
+        explicit TEvPoison(TString reason)
+            : Reason(std::move(reason))
+        {}
+    };
+
+    struct TEvAddHostToDBG
+        : public NActors::TEventLocal<TEvAddHostToDBG, EvAddHostToDBG>
+    {
+        size_t DirectBlockGroupId;
+        size_t NewHostIndex;
+
+        TEvAddHostToDBG(size_t dbgId, size_t newHostIndex)
+            : DirectBlockGroupId(dbgId)
+            , NewHostIndex(newHostIndex)
+        {}
     };
 };
 

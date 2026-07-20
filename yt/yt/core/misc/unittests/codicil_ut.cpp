@@ -51,6 +51,22 @@ TEST(TCodicilTest, CodicilGuardedInvoker)
     actionQueue->Shutdown();
 }
 
+TEST(TCodicilTest, CodicilGuardedInvokerCurrentInvoker)
+{
+    auto actionQueue = New<TActionQueue>("ActionQueue");
+    auto invoker = CreateCodicilGuardedInvoker(actionQueue->GetInvoker(), "codicil");
+    WaitFor(BIND([&] {
+        EXPECT_EQ(invoker.Get(), GetCurrentInvoker());
+        // The invoker must remain current across a context switch.
+        Yield();
+        EXPECT_EQ(invoker.Get(), GetCurrentInvoker());
+    })
+        .AsyncVia(invoker)
+        .Run())
+        .ThrowOnError();
+    actionQueue->Shutdown();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

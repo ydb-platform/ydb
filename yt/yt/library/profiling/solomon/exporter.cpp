@@ -141,6 +141,12 @@ void TSolomonExporter::Register(TStringBuf prefix, const NYT::NHttp::IRequestPat
 
 void TSolomonExporter::Start()
 {
+    if (!Config_->Enable) {
+        YT_LOG_INFO("Solomon exporter is disabled, disabling registry and skipping sensor collection");
+        Registry_->Disable();
+        return;
+    }
+
     CollectorFuture_ = BIND([this, this_ = MakeStrong(this)] {
         try {
             DoCollect();
@@ -158,6 +164,13 @@ void TSolomonExporter::Stop()
     ControlQueue_->Shutdown();
     OffloadThreadPool_->Shutdown();
     EncodingOffloadThreadPool_->Shutdown();
+}
+
+void TSolomonExporter::Reconfigure(const TSolomonExporterDynamicConfigPtr& dynamicConfig)
+{
+    auto config = Config_->ApplyDynamic(dynamicConfig);
+    OffloadThreadPool_->SetThreadCount(config->ThreadPoolSize);
+    OffloadThreadPool_->SetPollingPeriod(config->ThreadPoolPollingPeriod);
 }
 
 void TSolomonExporter::TransferSensors()
@@ -289,7 +302,7 @@ void TSolomonExporter::HandleIndex(TStringBuf prefix, const IRequestPtr& req, co
 
     if (req->GetUrl().Path != prefix && req->GetUrl().Path != prefixWithSlash) {
         rsp->SetStatus(EStatusCode::NotFound);
-        WaitFor(rsp->WriteBody(TSharedRef::FromString("Not found")))
+        WaitFor(rsp->WriteBody(TSharedRef::FromString(std::string("Not found"))))
             .ThrowOnError();
         return;
     }

@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     SimpleUdf::NamedArgs(0) AS named_args0,
     SimpleUdf::NamedArgs(1, 101 AS D, 13 AS C) AS named_args1,

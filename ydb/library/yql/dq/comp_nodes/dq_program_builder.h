@@ -37,8 +37,10 @@ class TDqProgramBuilder : public TProgramBuilder {
     TRuntimeNode DqWatermarkGenerator(
         TRuntimeNode input,
         const TUnaryLambda& watermarkExtractor,
-        const TUnaryLambda& partitionIdExtractor,
-        TArrayRef<std::string_view> watermarkSettings
+        const TUnaryLambda& partitionKeyExtractor,
+        const TUnaryLambda& writeTimeExtractor,
+        TConstArrayRef<std::pair<std::string, std::string>> watermarkSettings,
+        TRuntimeNode partitionKeys
     );
 
   protected:

@@ -307,7 +307,7 @@ bool TSqlSelect::FlattenByArg(const TString& sourceLabel, TVector<TNodePtr>& fla
                 ids.push_back(BuildColumn(column->GetPos()));
                 ids.push_back(*sourcePtr);
                 ids.push_back(*columnNamePtr);
-                auto node = BuildAccess(column->GetPos(), ids, false);
+                auto node = BuildAccess(column->GetPos(), ids, /*isLookup=*/false);
                 node->SetLabel(column->GetLabel());
                 flattenByExprs.emplace_back(std::move(node));
             }
@@ -347,7 +347,7 @@ bool TSqlSelect::FlattenByArg(const TString& sourceLabel, TVector<TNodePtr>& fla
 }
 
 TSourcePtr TSqlSelect::FlattenSource(const TRule_flatten_source& node) {
-    auto source = NamedSingleSource(node.GetRule_named_single_source1(), true);
+    auto source = NamedSingleSource(node.GetRule_named_single_source1(), /*unorderedSubquery=*/true);
     if (!source) {
         return nullptr;
     }
@@ -630,11 +630,28 @@ TSourcePtr TSqlSelect::HintedSingleSource(
     }
 
     TNodePtr watermarkLambda;
-    if (auto it = hints.find("watermark"); it != hints.end() && !ret->IsTableSource()) {
-        auto& exprs = it->second;
-        YQL_ENSURE(exprs.size() == 1);
-        watermarkLambda = std::move(exprs[0]);
-        hints.erase(it);
+    TTableHints watermarkHints;
+    if (!ret->IsTableSource()) {
+        for (auto it = hints.begin(); it != hints.end();) {
+            auto& [name, value] = *it;
+            auto normalizedName = name;
+            auto normalizeError = NormalizeName(Ctx_.Pos(), normalizedName);
+            if (!normalizeError.Empty()) {
+                YQL_ENSURE(value.empty() || value.front());
+                const auto pos = value ? value.front()->GetPos() : Ctx_.Pos();
+                Ctx_.Error(pos) << normalizeError->GetMessage();
+                return nullptr;
+            } else if (normalizedName == "watermark") {
+                YQL_ENSURE(value.size() == 1);
+                watermarkLambda = std::move(value[0]);
+                it = hints.erase(it);
+            } else if (normalizedName.StartsWith("watermark")) {
+                watermarkHints.emplace(normalizedName, std::move(value));
+                it = hints.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 
     if (hints || contextHints) {
@@ -649,7 +666,12 @@ TSourcePtr TSqlSelect::HintedSingleSource(
 
     if (watermarkLambda) {
         auto pos = watermarkLambda->GetPos();
-        ret = BuildWatermarkSource(std::move(pos), std::move(ret), std::move(watermarkLambda));
+        auto watermarkSettings = BuildInputOptions(pos, watermarkHints);
+        if (!watermarkSettings) {
+            watermarkSettings = BuildList(pos);
+        }
+        watermarkSettings = BuildQuote(pos, watermarkSettings);
+        ret = BuildWatermarkSource(std::move(pos), std::move(ret), std::move(watermarkLambda), std::move(watermarkSettings));
     }
 
     return ret;
@@ -878,7 +900,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     const bool processStream = node.HasBlock2();
 
     if (!hasUsing) {
-        return BuildProcess(startPos, std::move(source), nullptr, false, {}, false, processStream, settings, {});
+        return BuildProcess(startPos, std::move(source), nullptr, /*withExtFunction=*/false, {}, /*listCall=*/false, processStream, settings, {});
     }
 
     const auto& block5 = node.GetBlock5();
@@ -973,14 +995,14 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
         selectPos = startPos;
     }
 
-    TSourcePtr source(NamedSingleSource(node.GetRule_named_single_source2(), true));
+    TSourcePtr source(NamedSingleSource(node.GetRule_named_single_source2(), /*unorderedSubquery=*/true));
     if (!source) {
         return {};
     }
     if (!node.GetBlock3().empty()) {
         TVector<TSourcePtr> sources(1, source);
         for (auto& s : node.GetBlock3()) {
-            sources.push_back(NamedSingleSource(s.GetRule_named_single_source2(), true));
+            sources.push_back(NamedSingleSource(s.GetRule_named_single_source2(), /*unorderedSubquery=*/true));
             if (!sources.back()) {
                 return nullptr;
             }
@@ -1290,7 +1312,7 @@ TSourcePtr TSqlSelect::CombineCore(const TRule_combine_core& node, const TWriteS
 
     Token(node.GetToken1());
 
-    TSourcePtr leftSource(NamedSingleSource(node.GetRule_named_single_source2(), true));
+    TSourcePtr leftSource(NamedSingleSource(node.GetRule_named_single_source2(), /*unorderedSubquery=*/true));
     if (!leftSource) {
         return {};
     }
@@ -1302,7 +1324,7 @@ TSourcePtr TSqlSelect::CombineCore(const TRule_combine_core& node, const TWriteS
 
     Token(node.GetToken4());
 
-    TSourcePtr rightSource(NamedSingleSource(node.GetRule_named_single_source5(), true));
+    TSourcePtr rightSource(NamedSingleSource(node.GetRule_named_single_source5(), /*unorderedSubquery=*/true));
     if (!rightSource) {
         return {};
     }

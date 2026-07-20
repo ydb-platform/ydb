@@ -22,7 +22,7 @@ namespace NYql::NDq {
             std::optional<ui32> restartNumber,
             bool commit,
             const THashMap<TString, TString>& secureParams,
-            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+            IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
             const NYql::NDqProto::TExternalEffect& externalEffect) override {
 
             return MakeS3ApplicatorActor(
@@ -32,7 +32,7 @@ namespace NYql::NDq {
 
         void RegisterS3WriteActorFactory(
             TDqAsyncIoFactory& factory,
-            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+            IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
             IHTTPGateway::TPtr gateway,
             const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy) override {
 
@@ -59,7 +59,7 @@ namespace NYql::NDq {
 
         void RegisterS3ReadActorFactory(
             TDqAsyncIoFactory& factory,
-            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+            IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
             IHTTPGateway::TPtr gateway,
             const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
             const TS3ReadActorFactoryConfig& cfg,

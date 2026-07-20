@@ -16,6 +16,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
+#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/schemeshard/olap/bg_tasks/events/global.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -66,6 +67,8 @@ class TListOperationsRPC
             return "[ListFullBackups]";
         case TOperationId::ANALYZE:
             return "[ListAnalyze]";
+        case TOperationId::SET_NOT_NULL:
+            return "[ListSetNotNull]";
         default:
             return "[Untagged]";
         }
@@ -91,6 +94,8 @@ class TListOperationsRPC
             return new TEvForcedCompaction::TEvListRequest(GetDatabaseName(), request.page_size(), request.page_token());
         case TOperationId::FULL_BACKUP:
             return new TEvBackup::TEvListFullBackupsRequest(GetDatabaseName(), request.page_size(), request.page_token());
+        case TOperationId::SET_NOT_NULL:
+            return new TEvSetColumnConstraint::TEvListRequest(GetDatabaseName(), request.page_size(), request.page_token());
         default:
             Y_ABORT("unreachable");
         }
@@ -226,7 +231,9 @@ class TListOperationsRPC
             if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
                 SendAnalyzeListToSa(entry.DomainInfo->Params.GetStatisticsAggregator());
             } else {
-                Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
+                Reply(StatusIds::UNSUPPORTED, TIssuesIds::GENERIC_RESOLVE_ERROR,
+                    TStringBuilder() << "No statistics aggregator found for the database "
+                        << GetDatabaseName() << "; ANALYZE long-running operations are not available");
             }
             return;
         }
@@ -366,6 +373,26 @@ class TListOperationsRPC
         Reply(response);
     }
 
+    void Handle(TEvSetColumnConstraint::TEvListResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvSetColumnConstraint::TEvListResponse"
+            << ": record# " << record.ShortDebugString());
+
+        TResponse response;
+
+        response.set_status(record.GetStatus());
+        if (record.GetIssues().size()) {
+            response.mutable_issues()->CopyFrom(record.GetIssues());
+        }
+        for (const auto& entry : record.GetEntries()) {
+            auto operation = response.add_operations();
+            ::NKikimr::NGRpcService::ToOperation(entry, operation);
+        }
+        response.set_next_page_token(record.GetNextPageToken());
+        Reply(response);
+    }
+
 public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
@@ -381,6 +408,7 @@ public:
         case TOperationId::RESTORE:
         case TOperationId::COMPACTION:
         case TOperationId::FULL_BACKUP:
+        case TOperationId::SET_NOT_NULL:
             break;
         case TOperationId::SCRIPT_EXECUTION:
             SendListScriptExecutions();
@@ -422,6 +450,7 @@ public:
             hFunc(NSchemeShard::NBackground::TEvListResponse, Handle);
             hFunc(TEvIndexBuilder::TEvListResponse, Handle);
             hFunc(TEvForcedCompaction::TEvListResponse, Handle);
+            hFunc(TEvSetColumnConstraint::TEvListResponse, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperationsResponse, Handle);
             hFunc(TEvBackup::TEvListIncrementalBackupsResponse, Handle);
             hFunc(TEvBackup::TEvListBackupCollectionRestoresResponse, Handle);

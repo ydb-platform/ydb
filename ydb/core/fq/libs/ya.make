@@ -7,6 +7,7 @@ RECURSE(
     cloud_audit
     common
     compute
+    credentials
     config
     control_plane_config
     control_plane_proxy

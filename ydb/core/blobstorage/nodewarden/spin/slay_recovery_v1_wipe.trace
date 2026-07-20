@@ -1,81 +1,88 @@
-[Environment] direct DESTROY
+pan: ltl formula safety_freed_vslot_has_no_live_init
+[Environment] WIPE generation=1
+[BSC] persist WIPE generation=1
+[NodeWarden] apply ServiceSet(WIPE) generation=1
+[NodeWarden] IssueSlay roundToken=1 generation=1 pdiskEpoch=1 nwEpoch=1
+[PDisk actor] accept Slay round=1 into InputQueue epoch=1
+[PDisk worker] take kind=SLAY first=1 epoch=1
+[PDisk worker] commit owner removal roundToken=1 generation=1
+[PDisk completion] deliver result=SLAY_OK round=1 to nwEpoch=1
+[VDisk] consume Poison epoch=1 and stop actor
+[NodeWarden] complete action=ACTION_WIPE from result=SLAY_OK roundToken=1
+[VDisk] start epoch=2 generation=1; allocate InitOwnerRound
+[BSC] accept WIPED generation=1; keep VSlotId allocated
+[Environment] superseding DESTROY generation=2
 [BSC] persist DELETE generation=2
 [NodeWarden] apply ServiceSet(DESTROY) generation=2
 [NodeWarden] IssueSlay roundToken=1 generation=2 pdiskEpoch=1 nwEpoch=1
-[Environment] BSC-originated PDisk restart
 [PDisk actor] accept Slay round=1 into InputQueue epoch=1
-[BSC] authorize controller-initiated PDisk restart
-[NodeWarden] send authorized restart through PDisk actor FIFO
-[PDisk actor] enter observable RESTARTING epoch=1
-[PDisk restart] worker stopped; drain old incarnation
-[PDisk restart] abort InputQueue kind=SLAY first=1 epoch=1
-[PDisk restart] old incarnation fully drained
-[PDisk actor] create epoch=2 in STARTING; callback pending
-[NodeWarden] PDisk restarted at epoch=2
-[ERROR] deleted VDisk is absent from LocalVDisks; no replay
-pan:1: assertion violated (( !(nw_slay_inflight)||(nw_last_issue_pdisk_epoch==pdisk_epoch))||nw_current_result_available) (at depth 176)
-spin: trail ends after 176 steps
-#processes 20:
-176:	proc 0 (safety_freed_vslot_has_no_owner)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:3 (state  6) (invalid end state)
-		(!((!(!(bsc_vslot_allocated))||!(pdisk_owner_present))))
+[PDisk worker] take kind=SLAY first=1 epoch=1
+[PDisk worker] owner absent; prepare ALREADY roundToken=1
+[PDisk completion] deliver result=SLAY_ALREADY round=1 to nwEpoch=1
+[NodeWarden] complete action=ACTION_DESTROY from result=SLAY_ALREADY roundToken=1
+pan:1: assertion violated  !(init_cut_active) (at depth 217)
+spin: trail ends after 217 steps
+#processes 19:
+217:	proc 0 (safety_freed_vslot_has_no_live_init)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:12 (state  6) (invalid end state)
+		(!((!(!(bsc_vslot_allocated))||!(init_cut_active))))
 		(1)
-176:	proc 1 (:init:)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:1636 (state 20)
+217:	proc 1 (:init:)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:1720 (state 19)
 		-end-
-176:	proc 2 (BSC)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:465 (state 123)
-		(((bsc_actor_state==ACTOR_UP)&&(len(bsc_mailbox)>0)))
-176:	proc 3 (NodeWarden)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:697 (state 313) (invalid end state)
-		(trace_input_queue_loss)
-		(!(trace_input_queue_loss))
-176:	proc 4 (VDisk)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:813 (state 80)
+217:	proc 2 (BSC)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:599 (state 115) (invalid end state)
+		((target_epoch!=bsc_epoch))
+		(((bsc_mood==MOOD_DELETE)&&bsc_delete_pending))
+		else
+217:	proc 3 (NodeWarden)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:634 (state 836)
+		(((nw_actor_state==ACTOR_UP)&&(len(nw_mailbox)>0)))
+217:	proc 4 (VDisk)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:883 (state 80)
 		vdisk_mailbox?message,target_vdisk_epoch
 		(((((((vdisk_state==VDISK_STOPPED)&&vdisk_start_requested)&&nw_local_vdisk)&&!(nw_slay_inflight))&&!(nw_pdisk_restart_inflight))&&!(init_cut_active)))
 		(((((((vdisk_state==VDISK_STOPPED)&&vdisk_start_requested)&&nw_local_vdisk)&&!(nw_slay_inflight))&&!(nw_pdisk_restart_inflight))&&init_cut_active))
 		((((((vdisk_state==VDISK_STARTING)&&init_cut_active)&&!(init_sent))&&(init_vdisk_epoch==vdisk_epoch))&&nfull(pdisk_actor_mailbox)))
-176:	proc 5 (RetryTimer)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:895 (state  2)
-		-end-
-176:	proc 6 (OldDirectSlayTimer)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:907 (state 14)
-		(((len(old_direct_slay_timer)>0)&&nfull(pdisk_actor_mailbox)))
-176:	proc 7 (PDiskActor)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:938 (state 129)
+217:	proc 5 (RetryTimer)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:971 (state 17)
+		((issue_timer_armed&&nfull(nw_mailbox)))
+		((notready_timer_armed&&nfull(nw_mailbox)))
+217:	proc 6 (PDiskActor)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:1006 (state 129)
 		((((pdisk_state==PDISK_RUNNING)&&pdisk_actor_mailbox?[SLAY,_,_,eval(pdisk_epoch),_])&&nfull(pdisk_input_queue)))
 		(((((pdisk_state==PDISK_RUNNING)||(pdisk_state==PDISK_STARTING))&&pdisk_actor_mailbox?[YARD_INIT,_,_,eval(pdisk_epoch),_])&&nfull(pdisk_input_queue)))
 		(((pdisk_state==PDISK_RUNNING)&&pdisk_actor_mailbox?[REQUEST_PDISK_RESTART,_,_,eval(pdisk_epoch),_]))
 		((((pdisk_state==PDISK_STARTING)&&pdisk_actor_mailbox?[SLAY,_,_,eval(pdisk_epoch),_])&&nfull(nw_mailbox)))
 		(((pdisk_state==PDISK_RESTARTING)&&(len(pdisk_actor_mailbox)>0)))
 		((((((pdisk_state!=PDISK_RESTARTING)&&(len(pdisk_actor_mailbox)>0))&&!(pdisk_actor_mailbox?[SLAY,_,_,eval(pdisk_epoch),_]))&&!(pdisk_actor_mailbox?[YARD_INIT,_,_,eval(pdisk_epoch),_]))&&!(pdisk_actor_mailbox?[REQUEST_PDISK_RESTART,_,_,eval(pdisk_epoch),_])))
-176:	proc 8 (PDiskStopper)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:1059 (state 146)
+217:	proc 7 (PDiskStopper)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:1127 (state 145)
 		((((pdisk_state==PDISK_RESTARTING)&&(pdisk_restart_phase==RESTART_DRAINING))&&pdisk_yard_init_pending))
 		((((pdisk_state==PDISK_RESTARTING)&&(pdisk_restart_phase==RESTART_DRAINING))&&(len(pdisk_input_queue)>0)))
 		((((pdisk_state==PDISK_RESTARTING)&&(pdisk_restart_phase==RESTART_DRAINING))&&(pdisk_exec_phase!=EXEC_EMPTY)))
 		((((pdisk_state==PDISK_RESTARTING)&&(pdisk_restart_phase==RESTART_DRAINING))&&(len(pdisk_completion_queue)>0)))
-176:	proc 9 (PDiskRestarter)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:1149 (state 39)
+217:	proc 8 (PDiskRestarter)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:1217 (state 39)
 		(((pdisk_state==PDISK_RESTARTING)&&(pdisk_restart_phase==RESTART_STOPPING)))
 		((((((((pdisk_state==PDISK_RESTARTING)&&(pdisk_restart_phase==RESTART_DRAINING))&&(len(pdisk_actor_mailbox)==0))&&(len(pdisk_input_queue)==0))&&(pdisk_exec_phase==EXEC_EMPTY))&&!(pdisk_yard_init_pending))&&(len(pdisk_completion_queue)==0)))
 		(((pdisk_state==PDISK_RESTARTING)&&(pdisk_restart_phase==RESTART_CREATING)))
-176:	proc 10 (PDiskCallbackOutbox)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:1188 (state  9)
+217:	proc 9 (PDiskCallbackOutbox)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:1256 (state  9)
 		((pdisk_callback_pending&&(pdisk_callback_target_nw_epoch!=nw_epoch)))
 		((((pdisk_callback_pending&&(pdisk_callback_target_nw_epoch==nw_epoch))&&(nw_actor_state==ACTOR_UP))&&nfull(nw_mailbox)))
-176:	proc 11 (PDiskWorker)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:1216 (state 60)
+217:	proc 10 (PDiskWorker)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:1284 (state 60)
 		((((pdisk_state==PDISK_RUNNING)&&(pdisk_exec_phase==EXEC_EMPTY))&&(len(pdisk_input_queue)>0)))
 		(((((pdisk_state==PDISK_RUNNING)&&(pdisk_exec_phase==EXEC_ACCEPTED))&&(pdisk_exec_kind==YARD_INIT))&&!(pdisk_yard_init_pending)))
 		((((pdisk_state==PDISK_RUNNING)&&(pdisk_exec_phase==EXEC_ACCEPTED))&&(pdisk_exec_kind==SLAY)))
 		((((pdisk_state==PDISK_RUNNING)&&(pdisk_exec_phase==EXEC_RESULT_READY))&&nfull(pdisk_completion_queue)))
-176:	proc 12 (PDiskYardInit)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:1315 (state 42)
+217:	proc 11 (PDiskYardInit)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:1383 (state 42)
 		((((pdisk_state==PDISK_RUNNING)&&pdisk_yard_init_pending)&&!(vdisk_init_result_pending)))
 		((((pdisk_state==PDISK_RUNNING)&&pdisk_yard_init_pending)&&vdisk_init_result_pending))
-176:	proc 13 (VDiskInitResultOutbox)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:1348 (state  5)
+217:	proc 12 (VDiskInitResultOutbox)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:1416 (state  5)
 		((vdisk_init_result_pending&&nfull(vdisk_mailbox)))
-176:	proc 14 (PDiskCompletion)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:1372 (state 30)
+217:	proc 13 (PDiskCompletion)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:1440 (state 30)
 		(((((pdisk_state==PDISK_RUNNING)&&nw_slay_inflight)&&pdisk_completion_queue?[_,eval(nw_round),_,eval(pdisk_epoch),eval(nw_epoch)])&&nfull(nw_mailbox)))
 		((((pdisk_state==PDISK_RUNNING)&&(len(pdisk_completion_queue)>0))&&!((nw_slay_inflight&&pdisk_completion_queue?[_,eval(nw_round),_,eval(pdisk_epoch),eval(nw_epoch)]))))
-176:	proc 15 (PDiskStarter)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:1408 (state  5)
+217:	proc 14 (PDiskStarter)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:1476 (state  5)
 		((pdisk_state==PDISK_STARTING))
-176:	proc 16 (OperationEnvironment)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:1460 (state  6)
+217:	proc 15 (OperationEnvironment)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:1528 (state 10)
 		-end-
-176:	proc 17 (PDiskRestartEnvironment)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:1509 (state  7)
+217:	proc 16 (PDiskRestartEnvironment)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:1577 (state  3)
 		-end-
-176:	proc 18 (BSCReconnectOutbox)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:1584 (state  5)
+217:	proc 17 (BSCReconnectOutbox)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:1669 (state  5)
 		((((bsc_reconnect_pending&&(bsc_actor_state==ACTOR_UP))&&(nw_actor_state==ACTOR_UP))&&nfull(nw_mailbox)))
-176:	proc 19 (RegisterNodeOutbox)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v0.pml:1595 (state  8)
+217:	proc 18 (RegisterNodeOutbox)  /Users/kruall/git/ydb/ydb/core/blobstorage/nodewarden/spin/slay_recovery_v1.pml:1680 (state  8)
 		((nw_register_pending&&(nw_register_source_epoch!=nw_epoch)))
 		(((((nw_register_pending&&(nw_register_source_epoch==nw_epoch))&&(nw_actor_state==ACTOR_UP))&&(bsc_actor_state==ACTOR_UP))&&nfull(bsc_mailbox)))
 global vars:
@@ -128,13 +135,12 @@ global vars:
 	mtype  RESULT_RACE:	1
 	chan bsc_mailbox (=1):	len 0:
 	chan nw_mailbox (=2):	len 0:
-	chan vdisk_mailbox (=3):	len 1:	 [POISON1,],
+	chan vdisk_mailbox (=3):	len 1:	 [POISON2,],
 	chan pdisk_actor_mailbox (=4):	len 0:
 	chan pdisk_input_queue (=5):	len 0:
 	chan pdisk_completion_queue (=6):	len 0:
-	chan old_direct_slay_timer (=7):	len 0:
 	byte   round_refs[0]:	0
-	byte   round_refs[1]:	1
+	byte   round_refs[1]:	0
 	byte   round_refs[2]:	0
 	byte   round_refs[3]:	0
 	byte   round_refs[4]:	0
@@ -163,7 +169,7 @@ global vars:
 	byte   round_refs[27]:	0
 	byte   round_refs[28]:	0
 	bit    round_after_owner[0]:	0
-	bit    round_after_owner[1]:	1
+	bit    round_after_owner[1]:	0
 	bit    round_after_owner[2]:	0
 	bit    round_after_owner[3]:	0
 	bit    round_after_owner[4]:	0
@@ -227,70 +233,80 @@ global vars:
 	bit    bsc_wipe_pending:	0
 	bit    bsc_delete_pending:	1
 	bit    bsc_vslot_allocated:	1
+	bit    bsc_wipe_completed:	1
 	bit    bsc_reconnect_pending:	0
-	bit    bsc_processing_event:	0
+	bit    bsc_processing_event:	1
 	mtype  bsc_actor_state:	18
 	bit    nw_register_pending:	0
 	byte   nw_register_source_epoch:	0
 	byte   nw_register_target_bsc_epoch:	0
 	byte   nw_epoch:	1
 	byte   nw_known_bsc_epoch:	1
-	bit    nw_processing_event:	1
+	bit    nw_processing_event:	0
 	mtype  nw_actor_state:	18
 	bit    nw_local_vdisk:	0
 	byte   nw_current_generation:	2
-	bit    nw_slay_inflight:	1
-	byte   nw_round:	1
+	bit    nw_slay_inflight:	0
+	byte   nw_slay_generation:	0
+	mtype  nw_slay_action:	23
+	byte   nw_round:	0
 	byte   nw_last_issue_pdisk_epoch:	1
 	bit    nw_pdisk_restart_inflight:	0
-	mtype  vdisk_state:	17
-	byte   vdisk_epoch:	1
+	mtype  vdisk_state:	16
+	byte   vdisk_epoch:	2
 	bit    vdisk_poison_queued:	1
 	bit    vdisk_start_requested:	0
 	bit    vdisk_init_result_pending:	0
 	byte   vdisk_init_result_epoch:	0
-	bit    init_cut_active:	0
+	bit    init_cut_active:	1
 	bit    init_sent:	0
-	byte   init_generation:	0
-	byte   init_vdisk_epoch:	0
+	byte   init_generation:	1
+	byte   init_vdisk_epoch:	2
 	byte   init_target_pdisk_epoch:	0
+	bit    issue_timer_armed:	0
+	byte   issue_timer_round:	0
+	byte   issue_timer_nw_epoch:	0
+	byte   issue_timer_generation:	0
+	bit    notready_timer_armed:	0
+	byte   notready_timer_round:	0
+	byte   notready_timer_nw_epoch:	0
+	byte   notready_timer_generation:	0
 	bit    nw_current_result_available:	0
 	bit    nw_current_attempt_outstanding:	0
-	bit    trace_input_queue_loss:	1
-	mtype  pdisk_state:	12
-	mtype  pdisk_restart_phase:	9
-	byte   pdisk_epoch:	2
-	byte   pdisk_restart_reply_nw_epoch:	1
-	bit    pdisk_owner_present:	1
+	mtype  pdisk_state:	14
+	mtype  pdisk_restart_phase:	11
+	byte   pdisk_epoch:	1
+	byte   pdisk_restart_reply_nw_epoch:	0
+	bit    pdisk_owner_present:	0
 	bit    pdisk_callback_pending:	0
-	byte   pdisk_callback_epoch:	2
-	byte   pdisk_callback_target_nw_epoch:	1
+	byte   pdisk_callback_epoch:	0
+	byte   pdisk_callback_target_nw_epoch:	0
 	bit    pdisk_yard_init_pending:	0
 	byte   pdisk_yard_init_vdisk_epoch:	0
 	byte   pdisk_yard_init_epoch:	0
 	mtype  pdisk_exec_phase:	8
 	mtype  pdisk_exec_kind:	32
-	byte   pdisk_exec_round:	0
-	byte   pdisk_exec_generation:	0
-	byte   pdisk_exec_epoch:	0
-	byte   pdisk_exec_nw_epoch:	0
+	byte   pdisk_exec_round:	1
+	byte   pdisk_exec_generation:	2
+	byte   pdisk_exec_epoch:	1
+	byte   pdisk_exec_nw_epoch:	1
 	mtype  pdisk_exec_result:	5
 local vars proc 2 (BSC):
-	mtype  message:	39
-	byte   generation:	0
-	byte   source_epoch:	0
-	byte   target_epoch:	0
+	mtype  message:	42
+	byte   generation:	2
+	byte   source_epoch:	1
+	byte   target_epoch:	1
 local vars proc 3 (NodeWarden):
-	mtype  message:	36
-	byte   first:	2
-	byte   second:	1
-	byte   third:	0
-	byte   fourth:	0
-	mtype  completed_action:	0
-	byte   completed_generation:	0
+	mtype  message:	30
+	byte   first:	1
+	byte   second:	2
+	byte   third:	1
+	byte   fourth:	1
+	mtype  completed_action:	21
+	byte   completed_generation:	2
 	byte   old_round:	0
-	byte   fresh_round:	0
-	byte   target_pdisk_epoch:	0
+	byte   fresh_round:	1
+	byte   target_pdisk_epoch:	1
 	bit    issued_while_restarting:	0
 	byte   old_round:	0
 	byte   fresh_round:	1
@@ -302,49 +318,55 @@ local vars proc 3 (NodeWarden):
 	bit    issued_while_restarting:	0
 	byte   old_round:	0
 	byte   fresh_round:	0
+	byte   target_pdisk_epoch:	0
+	bit    issued_while_restarting:	0
+	byte   old_round:	0
+	byte   fresh_round:	0
+	byte   target_pdisk_epoch:	0
+	bit    issued_while_restarting:	0
 local vars proc 4 (VDisk):
-	mtype  message:	0
-	byte   target_vdisk_epoch:	0
-	byte   cut_index:	0
-local vars proc 6 (OldDirectSlayTimer):
+	mtype  message:	35
+	byte   target_vdisk_epoch:	1
+	byte   cut_index:	29
+local vars proc 5 (RetryTimer):
 	byte   round:	0
+	byte   target_epoch:	0
 	byte   generation:	0
-	byte   sender_nw_epoch:	0
-local vars proc 7 (PDiskActor):
+local vars proc 6 (PDiskActor):
 	mtype  message:	0
-	byte   first:	0
-	byte   second:	0
+	byte   first:	1
+	byte   second:	2
 	byte   target_pdisk_epoch:	1
 	byte   target_nw_epoch:	1
 	byte   cut_index:	0
-local vars proc 8 (PDiskStopper):
-	mtype  kind:	32
+local vars proc 7 (PDiskStopper):
+	mtype  kind:	0
 	mtype  result:	0
+	byte   round:	0
+	byte   generation:	0
+	byte   epoch:	0
+	byte   target_nw_epoch:	0
+	byte   cut_index:	0
+local vars proc 8 (PDiskRestarter):
+	byte   round_index:	0
+local vars proc 9 (PDiskCallbackOutbox):
+local vars proc 10 (PDiskWorker):
+	mtype  kind:	32
 	byte   round:	1
 	byte   generation:	2
 	byte   epoch:	1
 	byte   target_nw_epoch:	1
-	byte   cut_index:	0
-local vars proc 9 (PDiskRestarter):
-	byte   round_index:	29
-local vars proc 10 (PDiskCallbackOutbox):
-local vars proc 11 (PDiskWorker):
-	mtype  kind:	0
-	byte   round:	0
-	byte   generation:	0
-	byte   epoch:	0
-	byte   target_nw_epoch:	0
-local vars proc 12 (PDiskYardInit):
+local vars proc 11 (PDiskYardInit):
 	byte   target_vdisk_epoch:	0
 	byte   cut_index:	0
-local vars proc 13 (VDiskInitResultOutbox):
-local vars proc 14 (PDiskCompletion):
-	mtype  result:	0
-	byte   round:	0
-	byte   generation:	0
-	byte   epoch:	0
-	byte   target_nw_epoch:	0
-local vars proc 15 (PDiskStarter):
-local vars proc 17 (PDiskRestartEnvironment):
-local vars proc 18 (BSCReconnectOutbox):
-local vars proc 19 (RegisterNodeOutbox):
+local vars proc 12 (VDiskInitResultOutbox):
+local vars proc 13 (PDiskCompletion):
+	mtype  result:	30
+	byte   round:	1
+	byte   generation:	2
+	byte   epoch:	1
+	byte   target_nw_epoch:	1
+local vars proc 14 (PDiskStarter):
+local vars proc 16 (PDiskRestartEnvironment):
+local vars proc 17 (BSCReconnectOutbox):
+local vars proc 18 (RegisterNodeOutbox):

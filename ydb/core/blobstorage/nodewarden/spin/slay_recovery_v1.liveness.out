@@ -1,6 +1,4 @@
-Depth=     219 States=    1e+06 Transitions= 2.88e+06 Memory=   156.681	t=     0.77 R=   1e+06
-Depth=     238 States=    2e+06 Transitions= 5.94e+06 Memory=   182.169	t=     1.81 R=   1e+06
-Depth=     238 States=    3e+06 Transitions= 9.14e+06 Memory=   206.290	t=     2.69 R=   1e+06
+pan: ltl formula live_delete_eventually_frees_vslot
 
 (Spin Version 6.5.2 -- 6 December 2019)
 	+ Partial Order Reduction
@@ -9,50 +7,23 @@ Full statespace search for:
 	never claim         	+ (live_delete_eventually_frees_vslot)
 	assertion violations	+ (if within scope of claim)
 	acceptance   cycles 	+ (fairness enabled)
-	invalid end states	- (disabled by -E flag)
+	invalid end states	- (disabled by never claim)
 
-State-vector 164 byte, depth reached 238, errors: 0
-   730875 states, stored (3.65644e+06 visited)
-  7523533 states, matched
- 11179975 transitions (= visited+matched)
-  5111229 atomic steps
-hash conflicts:     91437 (resolved)
+State-vector 532 byte, depth reached 604, errors: 0
+     1853 states, stored (14875 visited)
+    15942 states, matched
+    30817 transitions (= visited+matched)
+   149858 atomic steps
+hash conflicts:         0 (resolved)
 
 Stats on memory usage (in Megabytes):
-  133.827	equivalent memory usage for states (stored*(State-vector + overhead))
-   89.419	actual memory usage for states (compression: 66.82%)
-	state-vector as stored = 100 byte + 28 byte overhead
+    0.990	equivalent memory usage for states (stored*(State-vector + overhead))
+    1.078	actual memory usage for states
   128.000	memory used for hash table (-w24)
-    5.341	memory used for DFS stack (-m100000)
-  222.696	total actual memory usage
+    0.107	memory used for DFS stack (-m2000)
+  129.181	total actual memory usage
 
 
-unreached in proctype BSC
-	slay_recovery_v1.pml:132, state 27, "printf('[BSC] resync ServiceSet(WIPE) after restart\n')"
-	slay_recovery_v1.pml:133, state 28, "bsc_to_nw!SERVICE_SET_WIPE,bsc_vdisk_id"
-	slay_recovery_v1.pml:152, state 44, "printf('[BSC] ignore WIPED vdisk=%d while VSlot is deleting\n',report_id)"
-	slay_recovery_v1.pml:184, state 78, "-end-"
-	(4 of 78 states)
-unreached in proctype NodeWarden
-	slay_recovery_v1.pml:207, state 21, "(1)"
-	slay_recovery_v1.pml:206, state 22, "((nw_slay_action==ACTION_WIPE))"
-	slay_recovery_v1.pml:206, state 22, "else"
-	slay_recovery_v1.pml:290, state 105, "(1)"
-	slay_recovery_v1.pml:318, state 136, "-end-"
-	(4 of 136 states)
-unreached in proctype VDisk
-	slay_recovery_v1.pml:325, state 7, "-end-"
-	(1 of 7 states)
-unreached in proctype PDisk
-	slay_recovery_v1.pml:369, state 37, "-end-"
-	(1 of 37 states)
-unreached in proctype ScenarioDriver
-	(0 of 45 states)
-unreached in init
-	(0 of 7 states)
-unreached in claim live_delete_eventually_frees_vslot
-	_spin_nvr.tmp:10, state 13, "-end-"
-	(1 of 13 states)
 
-pan: elapsed time 3.26 seconds
-pan: rate   1121608 states/second
+pan: elapsed time 0.04 seconds
+pan: rate    371875 states/second

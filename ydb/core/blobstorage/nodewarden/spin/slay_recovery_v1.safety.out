@@ -1,58 +1,62 @@
+pan: ltl formula safety_freed_vslot_has_no_owner
+Depth=      10 States=       11 Transitions=       11 Memory=   128.293
+Depth=      20 States=       21 Transitions=       21 Memory=   128.293
+Depth=      30 States=       31 Transitions=       31 Memory=   128.293
+Depth=      40 States=       41 Transitions=       41 Memory=   128.293
+Depth=      50 States=       53 Transitions=       53 Memory=   128.293
+Depth=      60 States=      200 Transitions=      232 Memory=   128.391
+Depth=      70 States=      491 Transitions=      577 Memory=   128.488
+Depth=      80 States=      822 Transitions=      956 Memory=   128.684
+Depth=      90 States= 1.24e+03 Transitions= 1.41e+03 Memory=   128.879
+Depth=     100 States= 1.65e+03 Transitions= 1.86e+03 Memory=   129.074
+Depth=     110 States= 2.02e+03 Transitions= 2.27e+03 Memory=   129.270
+Depth=     120 States= 2.32e+03 Transitions= 2.57e+03 Memory=   129.367
+Depth=     130 States= 2.62e+03 Transitions= 2.87e+03 Memory=   129.465
+Depth=     140 States= 2.92e+03 Transitions= 3.17e+03 Memory=   129.660
+Depth=     150 States= 3.22e+03 Transitions= 3.47e+03 Memory=   129.758
+Depth=     160 States= 3.52e+03 Transitions= 3.77e+03 Memory=   129.953
+Depth=     170 States= 3.85e+03 Transitions= 4.11e+03 Memory=   130.051
+Depth=     180 States= 4.38e+03 Transitions= 4.68e+03 Memory=   130.344
+Depth=     190 States= 4.93e+03 Transitions= 5.27e+03 Memory=   130.539
+Depth=     200 States= 5.46e+03 Transitions= 5.88e+03 Memory=   130.832	t=     0.02 R=   3e+05
+Depth=     210 States= 5.91e+03 Transitions= 6.42e+03 Memory=   131.027	t=     0.02 R=   3e+05
+Depth=     220 States= 6.34e+03 Transitions= 6.92e+03 Memory=   131.223	t=     0.02 R=   3e+05
+Depth=     230 States= 6.71e+03 Transitions= 7.29e+03 Memory=   131.418	t=     0.02 R=   3e+05
+Depth=     240 States= 7.07e+03 Transitions= 7.69e+03 Memory=   131.516	t=     0.02 R=   4e+05
+Depth=     250 States=  7.5e+03 Transitions=  8.2e+03 Memory=   131.711	t=     0.02 R=   4e+05
+Depth=     260 States= 7.89e+03 Transitions= 8.62e+03 Memory=   131.906	t=     0.02 R=   4e+05
+Depth=     270 States= 8.25e+03 Transitions=    9e+03 Memory=   132.102	t=     0.02 R=   4e+05
+Depth=     280 States= 8.58e+03 Transitions= 9.37e+03 Memory=   132.199	t=     0.02 R=   4e+05
+Depth=     290 States= 9.02e+03 Transitions= 9.89e+03 Memory=   132.492	t=     0.02 R=   5e+05
+Depth=     300 States=  9.3e+03 Transitions= 1.02e+04 Memory=   132.590	t=     0.02 R=   5e+05
+Depth=     310 States= 9.43e+03 Transitions= 1.03e+04 Memory=   132.590	t=     0.02 R=   5e+05
 
 (Spin Version 6.5.2 -- 6 December 2019)
+	+ Breadth-First Search
 	+ Partial Order Reduction
 
 Full statespace search for:
-	never claim         	- (not selected)
-	assertion violations	+
+	never claim         	+ (safety_freed_vslot_has_no_owner)
+	assertion violations	+ (if within scope of claim)
 	cycle checks       	- (disabled by -DSAFETY)
-	invalid end states	- (disabled by -E flag)
+	invalid end states	- (disabled by never claim)
 
-State-vector 148 byte, depth reached 143, errors: 0
-   384577 states, stored
-   521860 states, matched
-   906437 transitions (= stored+matched)
-   397265 atomic steps
-hash conflicts:      2651 (resolved)
+State-vector 516 byte, depth reached 316, errors: 0
+     9445 states, stored
+	     947 nominal states (stored-atomic)
+      928 states, matched
+    10373 transitions (= stored+matched)
+     8498 atomic steps
+hash conflicts:         0 (resolved)
 
 Stats on memory usage (in Megabytes):
-   64.550	equivalent memory usage for states (stored*(State-vector + overhead))
-   44.220	actual memory usage for states (compression: 68.51%)
-	state-vector as stored = 93 byte + 28 byte overhead
+    4.900	equivalent memory usage for states (stored*(State-vector + overhead))
+    4.696	actual memory usage for states (compression: 95.83%)
+	state-vector as stored = 493 byte + 28 byte overhead
   128.000	memory used for hash table (-w24)
-    5.341	memory used for DFS stack (-m100000)
-  177.481	total actual memory usage
+  132.688	total actual memory usage
 
 
-unreached in proctype BSC
-	slay_recovery_v1.pml:132, state 27, "printf('[BSC] resync ServiceSet(WIPE) after restart\n')"
-	slay_recovery_v1.pml:133, state 28, "bsc_to_nw!SERVICE_SET_WIPE,bsc_vdisk_id"
-	slay_recovery_v1.pml:152, state 44, "printf('[BSC] ignore WIPED vdisk=%d while VSlot is deleting\n',report_id)"
-	slay_recovery_v1.pml:184, state 78, "-end-"
-	(4 of 78 states)
-unreached in proctype NodeWarden
-	slay_recovery_v1.pml:207, state 21, "(1)"
-	slay_recovery_v1.pml:206, state 22, "((nw_slay_action==ACTION_WIPE))"
-	slay_recovery_v1.pml:206, state 22, "else"
-	slay_recovery_v1.pml:290, state 105, "(1)"
-	slay_recovery_v1.pml:318, state 136, "-end-"
-	(4 of 136 states)
-unreached in proctype VDisk
-	slay_recovery_v1.pml:325, state 7, "-end-"
-	(1 of 7 states)
-unreached in proctype PDisk
-	slay_recovery_v1.pml:369, state 37, "-end-"
-	(1 of 37 states)
-unreached in proctype ScenarioDriver
-	(0 of 45 states)
-unreached in init
-	(0 of 7 states)
-unreached in claim live_delete_eventually_frees_vslot
-	_spin_nvr.tmp:3, state 5, "((!(!(bsc_delete_pending))&&!(!(bsc_vslot_allocated))))"
-	_spin_nvr.tmp:3, state 5, "(1)"
-	_spin_nvr.tmp:8, state 10, "(!(!(bsc_vslot_allocated)))"
-	_spin_nvr.tmp:10, state 13, "-end-"
-	(3 of 13 states)
 
-pan: elapsed time 0.28 seconds
-pan: rate 1373489.3 states/second
+pan: elapsed time 0.02 seconds
+pan: rate    472250 states/second

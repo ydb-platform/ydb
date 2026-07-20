@@ -38,6 +38,9 @@ private:
     YDB_READONLY(TAtomicCounter, ActualizationRefreshTieringCount, 0);
     YDB_READONLY(TAtomicCounter, ShardingFiltersCount, 0);
 
+    YDB_READONLY(TAtomicCounter, ScanFinishedSuccess, 0);
+    YDB_READONLY(TAtomicCounter, ScanFinishedExternalAbort, 0);
+
     YDB_READONLY(TAtomicCounter, RequestTracingSnapshotsSave, 0);
     YDB_READONLY(TAtomicCounter, RequestTracingSnapshotsRemove, 0);
 
@@ -53,6 +56,8 @@ protected:
     virtual void OnSelectShardingFilter() override {
         ShardingFiltersCount.Inc();
     }
+
+    virtual void DoOnScanFinished(const ui32 statusFinish) override;
 
     virtual void AddPortionForActualizer(const i32 portionsCount) override {
         NeedActualizationCount.Add(portionsCount);

@@ -252,6 +252,8 @@ message TKqpTransaction {
         optional uint32 OptionalSorting = 16;
         // When true, column shards report progress watermarks for Top-N early abort
         optional bool CollectProgressWatermarks = 17;
+        // PK column names in key order (used with CollectProgressWatermarks)
+        repeated string KeyColumnNames = 18;
     }
 
     optional EKqpTransactionType Type = 1;

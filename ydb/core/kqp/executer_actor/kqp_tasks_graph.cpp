@@ -351,6 +351,7 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
             *protoTaskMeta.AddKeyColumnTypeInfos() = columnType.TypeInfo ?
                 *columnType.TypeInfo :
                 NKikimrProto::TTypeInfo();
+            protoTaskMeta.AddKeyColumnNames(keyColumnName);
         }
 
         for (bool skipNullKey : stageInfo.Meta.SkipNullKeys) {

@@ -1,6 +1,7 @@
 #include "kqp_scan_fetcher_actor.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/formats/arrow/converter.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/size_calcer.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
@@ -65,6 +66,10 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     if (CollectProgressWatermarks) {
         SortDescending = Meta.GetOptionalSorting() == (ui32)NYql::ERequestSorting::DESC;
         BestKeys = std::multiset<TOwnedCellVec, TKeyLess>(TKeyLess{&KeyColumnTypes});
+        KeyColumnNames.reserve(Meta.KeyColumnNamesSize());
+        for (const auto& name : Meta.GetKeyColumnNames()) {
+            KeyColumnNames.push_back(name);
+        }
     }
 }
 
@@ -546,6 +551,15 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
         ProcessProgressWatermarks(state->TabletId, msg);
     }
 
+    // Abort dominated shards *before* OnReceiveData/DoAck. Progress-only messages ack
+    // immediately; if we abort after that ack, the shard often Finish(Success) before Abort arrives.
+    if (CollectProgressWatermarks && !msg.Finished) {
+        const bool selfAborted = TryAbortDominatedShards(state->TabletId);
+        if (selfAborted) {
+            return;
+        }
+    }
+
     state->LastKey = std::move(msg.LastKey);
     state->LastCursorProto = std::move(msg.LastCursorProto);
     const ui64 rowsCount = msg.GetRowsCount();
@@ -579,9 +593,11 @@ void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData
         Stats.CompleteShard(state);
         ShardWatermarks.erase(state->TabletId);
         InFlightShards.StopScanner(state->TabletId);
+        // Top-N may become complete on the finishing batch; abort dominated peers.
+        if (CollectProgressWatermarks) {
+            TryAbortDominatedShards(std::nullopt);
+        }
         StartTableScan();
-    } else if (CollectProgressWatermarks) {
-        TryAbortDominatedShards();
     }
 }
 
@@ -716,38 +732,103 @@ void TKqpScanFetcherActor::CheckFinish() {
     }
 }
 
-void TKqpScanFetcherActor::ProcessProgressWatermarks(ui64 tabletId, const TEvKqpCompute::TEvScanData& msg) {
-    const TOwnedCellVec& watermark = !msg.ProgressWatermark.empty() ? msg.ProgressWatermark : msg.LastKey;
-    if (!watermark.empty()) {
-        if (watermark.size() != KeyColumnTypes.size()) {
-            AFL_WARN(NKikimrServices::KQP_COMPUTE)("event", "watermark_size_mismatch")("tablet_id", tabletId)(
-                "watermark_size", watermark.size())("key_size", KeyColumnTypes.size());
+void TKqpScanFetcherActor::InsertBestKey(TOwnedCellVec key) {
+    BestKeys.insert(std::move(key));
+    if (BestKeys.size() > Meta.GetItemsLimit()) {
+        if (SortDescending) {
+            BestKeys.erase(BestKeys.begin());
         } else {
-            ShardWatermarks[tabletId] = watermark;
-        }
-    }
-
-    const ui64 rowsCount = msg.GetRowsCount();
-    if (rowsCount == 0 || watermark.empty() || watermark.size() != KeyColumnTypes.size()) {
-        return;
-    }
-
-    // Conservative: treat each row in a sorted batch as having the batch-worst key
-    for (ui64 i = 0; i < rowsCount; ++i) {
-        BestKeys.insert(watermark);
-        if (BestKeys.size() > Meta.GetItemsLimit()) {
-            if (SortDescending) {
-                BestKeys.erase(BestKeys.begin());
-            } else {
-                BestKeys.erase(std::prev(BestKeys.end()));
-            }
+            BestKeys.erase(std::prev(BestKeys.end()));
         }
     }
 }
 
-void TKqpScanFetcherActor::TryAbortDominatedShards() {
-    if (BestKeys.size() < Meta.GetItemsLimit()) {
+void TKqpScanFetcherActor::AddBestKeysFromArrow(const std::shared_ptr<arrow::Table>& table) {
+    if (!table || KeyColumnNames.empty() || KeyColumnNames.size() != KeyColumnTypes.size() || table->num_rows() == 0) {
         return;
+    }
+
+    size_t presentPrefix = 0;
+    for (; presentPrefix < KeyColumnNames.size(); ++presentPrefix) {
+        if (table->schema()->GetFieldIndex(KeyColumnNames[presentPrefix]) < 0) {
+            break;
+        }
+    }
+    if (presentPrefix == 0) {
+        return;
+    }
+
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> keySchema;
+    keySchema.reserve(presentPrefix);
+    for (size_t i = 0; i < presentPrefix; ++i) {
+        keySchema.emplace_back(KeyColumnNames[i], KeyColumnTypes[i]);
+    }
+
+    const size_t padCount = KeyColumnNames.size() - presentPrefix;
+    struct TWriter: public NArrow::IRowWriter {
+        TKqpScanFetcherActor* Self = nullptr;
+        size_t PadCount = 0;
+        void AddRow(const TConstArrayRef<TCell>& cells) override {
+            if (PadCount == 0) {
+                Self->InsertBestKey(TOwnedCellVec::Make(cells));
+                return;
+            }
+            // Missing PK suffix: pad with empty cells (underrates quality for DESC Top-N → safer abort).
+            TVector<TCell> padded;
+            padded.reserve(cells.size() + PadCount);
+            padded.insert(padded.end(), cells.begin(), cells.end());
+            for (size_t i = 0; i < PadCount; ++i) {
+                padded.emplace_back();
+            }
+            Self->InsertBestKey(TOwnedCellVec::Make(padded));
+        }
+    } writer;
+    writer.Self = this;
+    writer.PadCount = padCount;
+
+    auto batch = NArrow::ToBatch(table);
+    if (!batch) {
+        return;
+    }
+    NArrow::TArrowToYdbConverter converter(keySchema, writer, false, false);
+    TString err;
+    if (!converter.Process(*batch, err)) {
+        AFL_WARN(NKikimrServices::KQP_COMPUTE)("event", "best_keys_from_arrow_failed")("error", err);
+    }
+}
+
+void TKqpScanFetcherActor::ProcessProgressWatermarks(ui64 tabletId, const TEvKqpCompute::TEvScanData& msg) {
+    // Shard scan progress (portion finish) — domination only.
+    if (!msg.ProgressWatermark.empty()) {
+        if (msg.ProgressWatermark.size() != KeyColumnTypes.size()) {
+            AFL_WARN(NKikimrServices::KQP_COMPUTE)("event", "watermark_size_mismatch")("tablet_id", tabletId)(
+                "watermark_size", msg.ProgressWatermark.size())("key_size", KeyColumnTypes.size());
+        } else {
+            ShardWatermarks[tabletId] = msg.ProgressWatermark;
+        }
+    }
+
+    const ui64 rowsCount = msg.GetRowsCount();
+    if (rowsCount == 0) {
+        return;
+    }
+
+    // BestKeys from actual result rows. Prefer Arrow extraction; fall back to LastKey when the
+    // column shard set it to the last result row boundary (not a portion-finish bound).
+    const size_t bestKeysBefore = BestKeys.size();
+    if (msg.ArrowBatch) {
+        AddBestKeysFromArrow(msg.ArrowBatch);
+    }
+    if (BestKeys.size() == bestKeysBefore && !msg.LastKey.empty() && msg.LastKey.size() == KeyColumnTypes.size()) {
+        for (ui64 i = 0; i < rowsCount; ++i) {
+            InsertBestKey(msg.LastKey);
+        }
+    }
+}
+
+bool TKqpScanFetcherActor::TryAbortDominatedShards(const std::optional<ui64> currentTabletId) {
+    if (BestKeys.size() < Meta.GetItemsLimit()) {
+        return false;
     }
     const TOwnedCellVec& boundary = SortDescending ? *BestKeys.begin() : *BestKeys.rbegin();
 
@@ -770,16 +851,21 @@ void TKqpScanFetcherActor::TryAbortDominatedShards() {
         }
     });
 
+    bool selfAborted = false;
     for (ui64 tabletId : toAbort) {
         CA_LOG_D("Abort shard " << tabletId << " dominated by top-N watermark boundary");
         Stats.CompleteShard(InFlightShards.GetShardStateVerified(tabletId));
         ShardWatermarks.erase(tabletId);
         InFlightShards.StopScanner(tabletId);
+        if (currentTabletId && tabletId == *currentTabletId) {
+            selfAborted = true;
+        }
     }
     if (!toAbort.empty()) {
+        // Do not CheckFinish here: HandleExecute(TEvScanData) always calls it after ProcessScanData.
         StartTableScan();
-        CheckFinish();
     }
+    return selfAborted;
 }
 
 void TKqpScanFetcherActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr&) {

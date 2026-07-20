@@ -98,6 +98,8 @@ private:
     NKqp::TScanStatistics GetScanStats();
 
     TOwnedCellVec ConvertLastKey(const std::shared_ptr<arrow::RecordBatch>& lastReadKey);
+    // Last result row PK (padded) for Top-N BestKeys; last row is sort-worst in ASC/DESC batches.
+    TOwnedCellVec ExtractResultBoundaryKey(const std::shared_ptr<arrow::Table>& batch) const;
 
     class TScanStatsOwner: public NKqp::TEvKqpCompute::IShardScanStats {
     private:

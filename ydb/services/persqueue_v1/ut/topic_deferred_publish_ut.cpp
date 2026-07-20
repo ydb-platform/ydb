@@ -210,13 +210,14 @@ TMaybe<TString> ParseLegacyReadPayload(const TString& raw) {
 TMaybe<TString> TryReadFirstTopicMessage(
     NPersQueue::TTestServer& server,
     const TString& topicShortName,
-    TDuration timeout = TDuration::Seconds(30))
+    TDuration timeout = TDuration::Seconds(30),
+    ui32 partitionId = 0)
 {
     const TString topic = "rt3.dc1--" + topicShortName;
     const TInstant deadline = TInstant::Now() + timeout;
     while (TInstant::Now() < deadline) {
         THolder<NMsgBusProxy::TBusPersQueue> request = TRequestReadPQ{
-            topic, 0, 0, 100, "user", 0}.GetRequest();
+            topic, partitionId, 0, 100, "user", 0}.GetRequest();
         request.Get()->Record.SetTicket("root@builtin");
 
         const auto response = server.AnnoyingClient->CallPersQueueGRPC(request->Record);
@@ -707,8 +708,59 @@ std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> MakeTopicServiceStub(
     return Ydb::Topic::V1::TopicService::NewStub(channel);
 }
 
+TString MakeLegacyStreamWriteTopicPath(const TString& topicShortName) {
+    return "/Root/PQ/rt3.dc1--" + topicShortName;
+}
+
+void AssertPartitionsOnSameTablet(
+    NPersQueue::TTestServer& server,
+    const TString& topicShortName,
+    const TVector<ui32>& partitionIds)
+{
+    UNIT_ASSERT(!partitionIds.empty());
+
+    const auto response = server.AnnoyingClient->Ls(MakeLegacyStreamWriteTopicPath(topicShortName));
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSchemeStatus(), NKikimrScheme::StatusSuccess);
+
+    THashMap<ui32, ui64> tabletByPartition;
+    for (const auto& partition : response->Record.GetPathDescription().GetPersQueueGroup().GetPartitions()) {
+        tabletByPartition[partition.GetPartitionId()] = partition.GetTabletId();
+    }
+
+    UNIT_ASSERT(tabletByPartition.contains(partitionIds.front()));
+    const ui64 expectedTabletId = tabletByPartition.at(partitionIds.front());
+    for (const ui32 partitionId : partitionIds) {
+        UNIT_ASSERT(tabletByPartition.contains(partitionId));
+        UNIT_ASSERT_VALUES_EQUAL(tabletByPartition.at(partitionId), expectedTabletId);
+    }
+}
+
 void CreateLegacyStreamWriteTopic(NPersQueue::TTestServer& server, const TString& topicShortName, ui32 partitions = 2) {
-    server.AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--" + topicShortName, partitions);
+    const TString fullName = "rt3.dc1--" + topicShortName;
+    auto pqClient = NYdb::NPersQueue::TPersQueueClient(*server.AnnoyingClient->GetDriver());
+    auto settings = NYdb::NPersQueue::TCreateTopicSettings()
+        .PartitionsCount(partitions)
+        .PartitionsPerTablet(Max(partitions, 2u));
+    settings.ReadRules({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName("user")});
+
+    TString path = fullName;
+    if (!path.StartsWith("/Root")) {
+        path = TStringBuilder() << "/Root/PQ/" << fullName;
+    }
+
+    auto result = pqClient.CreateTopic(path, settings);
+    result.Wait();
+    UNIT_ASSERT_C(result.GetValue().IsSuccess(), result.GetValue().GetIssues().ToString());
+    server.AnnoyingClient->AddTopic(fullName);
+
+    if (partitions >= 2) {
+        TVector<ui32> partitionIds(Reserve(partitions));
+        for (ui32 partitionId = 0; partitionId < partitions; ++partitionId) {
+            partitionIds.push_back(partitionId);
+        }
+        AssertPartitionsOnSameTablet(server, topicShortName, partitionIds);
+    }
 }
 
 void AssertStreamWriteSuccess(const Ydb::Topic::StreamWriteMessage::FromServer& response) {

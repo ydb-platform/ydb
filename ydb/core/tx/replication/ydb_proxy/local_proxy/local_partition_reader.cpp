@@ -55,8 +55,12 @@ protected:
         PassAway();
     }
 
-    TString MakeLogPrefix() override {
-        return TStringBuilder() << "Reader[" << SelfId() << ":/" << Database << TopicPath <<" ] ";
+    NActors::NStructuredLog::TStructuredMessage MakeLogPrefix() override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "LocalTopicPartitionReaderActor"},
+            {"selfId", SelfId()},
+            {"database", Database},
+            {"topicPath", TopicPath});
     }
 
     static std::unique_ptr<TEvYdbProxy::TEvTopicReaderGone> MakeError(NYdb::EStatus status, const TString& error) {
@@ -66,6 +70,8 @@ protected:
     }
 
     STATEFN(OnInitEvent) override {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "OnInitEvent"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvReadTopicRequest, HandleInit);
             hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
@@ -83,14 +89,12 @@ private:
 
     void HandleInit(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
         YDB_LOG_TRACE("Handle on init",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
         RequestsQueue.emplace_back(ev->Sender, ev->Cookie, GetSkipCommit(ev));
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
     }
 
@@ -102,7 +106,6 @@ private:
 
     void HandleOnInitOffset(TEvPersQueue::TEvResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         auto& record = ev->Get()->Record;
@@ -146,6 +149,8 @@ private:
     }
 
     STATEFN(StateInitOffset) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateInitOffset"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPersQueue::TEvResponse, HandleOnInitOffset);
             hFunc(TEvents::TEvWakeup, HandleOnInitOffset);
@@ -168,7 +173,6 @@ private:
 
     void Handle(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         HandleInit(ev);
@@ -215,6 +219,8 @@ private:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvReadTopicRequest, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
@@ -238,7 +244,6 @@ private:
 
     void HandleOnWaitData(TEvPersQueue::TEvResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
@@ -329,6 +334,8 @@ private:
     }
 
     STATEFN(StateWaitData) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateWaitData"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPersQueue::TEvResponse, HandleOnWaitData);
 
@@ -353,7 +360,6 @@ private:
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
     auto args = std::move(ev->Get()->GetArgs());

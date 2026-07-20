@@ -44,8 +44,13 @@ protected:
         PassAway();
     }
 
-    TString MakeLogPrefix() override {
-        return TStringBuilder() << "Committer[" << SelfId() << ":/" << Database << TopicPath <<" ] ";
+    NActors::NStructuredLog::TStructuredMessage MakeLogPrefix() override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "LocalTopicPartitionCommitActor"},
+            {"selfId", SelfId()},
+            {"database", Database},
+            {"topicPath", TopicPath},
+        );
     }
 
     static std::unique_ptr<TEvYdbProxy::TEvCommitOffsetResponse> MakeResponse(NYdb::EStatus status, const TString& error) {
@@ -63,8 +68,7 @@ protected:
 
 private:
     void DoCommitOffset() {
-        YDB_LOG_TRACE("DoCommit",
-            {"logPrefix", LogPrefix});
+        YDB_LOG_TRACE("DoCommit");
 
         NTabletPipe::SendData(SelfId(), PartitionPipeClient, MakeCommitRequest().release());
         Become(&TLocalTopicPartitionCommitActor::StateCommitOffset);
@@ -72,7 +76,6 @@ private:
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         YDB_LOG_TRACE("Handle",
-            {"logPrefix", LogPrefix},
             {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
@@ -100,6 +103,8 @@ private:
     }
 
     STATEFN(StateCommitOffset) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateCommitOffset"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPersQueue::TEvResponse, Handle);
 
@@ -119,7 +124,6 @@ private:
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
     YDB_LOG_TRACE("Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     auto [topicName, partitionId, consumerName, offset, settings] = std::move(ev->Get()->GetArgs());

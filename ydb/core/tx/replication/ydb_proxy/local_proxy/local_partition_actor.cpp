@@ -19,6 +19,7 @@ TBaseLocalTopicPartitionActor::TBaseLocalTopicPartitionActor(
 
 void TBaseLocalTopicPartitionActor::Bootstrap() {
     LogPrefix = MakeLogPrefix();
+    YDB_LOG_CREATE_CONTEXT(LogPrefix);
     DoDescribe(TopicPath);
 }
 
@@ -37,7 +38,6 @@ TString TBaseLocalTopicPartitionActor::MakeAbsolutePath(TString path) const {
 void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
     auto path = MakeAbsolutePath(topicPath);
     YDB_LOG_DEBUG("Describe topic",
-        {"logPrefix", LogPrefix},
         {"path", path});
 
     auto request = MakeHolder<TNavigate>();
@@ -50,7 +50,6 @@ void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
 
 void TBaseLocalTopicPartitionActor::Handle(TEvNavigateResult::TPtr& ev) {
     YDB_LOG_TRACE("Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     auto& result = ev->Get()->Request;
@@ -114,6 +113,8 @@ TSchemeCacheHelpers::TCheckFailFunc TBaseLocalTopicPartitionActor::LeaveOnError(
 }
 
 STATEFN(TBaseLocalTopicPartitionActor::StateDescribe) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix,
+        {"actorState", "StateDescribe"});
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvNavigateResult, Handle);
         hFunc(TEvents::TEvWakeup, HandleOnDescribe);
@@ -126,7 +127,6 @@ STATEFN(TBaseLocalTopicPartitionActor::StateDescribe) {
 
 void TBaseLocalTopicPartitionActor::DoCreatePipe() {
     YDB_LOG_TRACE("Create pipe",
-        {"logPrefix", LogPrefix},
         {"partitionTabletId", PartitionTabletId});
 
     Attempt = 0;
@@ -142,7 +142,6 @@ void TBaseLocalTopicPartitionActor::CreatePipe() {
 
 void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
     YDB_LOG_TRACE("Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
 
     auto& msg = *ev->Get();
@@ -153,20 +152,20 @@ void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TP
         return CreatePipe();
     }
 
-    YDB_LOG_TRACE("Pipe has been connected",
-        {"logPrefix", LogPrefix});
+    YDB_LOG_TRACE("Pipe has been connected");
 
     OnDescribeFinished();
 }
 
 void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
     YDB_LOG_TRACE("Handle",
-        {"logPrefix", LogPrefix},
         {"ev", ev->Get()->ToString()});
     OnError("Pipe destroyed");
 }
 
 STATEFN(TBaseLocalTopicPartitionActor::StateCreatePipe) {
+    YDB_LOG_CREATE_CONTEXT(LogPrefix,
+        {"actorState", "StateCreatePipe"});
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvTabletPipe::TEvClientConnected, Handle);
         hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);

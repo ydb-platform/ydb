@@ -42,22 +42,30 @@ TSplittedColumns TDictStats::SplitByVolume(const TSettings& settings, const ui32
         columnsBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(settings, recordsCount), i.GetValueType());
     }
     for (auto&& i : otherStats) {
-        othersBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(settings, recordsCount), i.GetValueType());
+        // The Others store always holds/reads BinaryJson, so its stats must record value_type BinaryJson -
+        // recording the logical type (e.g. String) would mis-type a key later promoted back to a separated column.
+        othersBuilder.Add(i.GetKeyName(), i.GetRecordsCount(), i.GetDataSize(), i.GetAccessorType(settings, recordsCount),
+            EValueType::BinaryJson);
     }
     return TSplittedColumns(columnsBuilder.Finish(), othersBuilder.Finish());
 }
 
-TDictStats TDictStats::Merge(const std::vector<const TDictStats*>& stats, const TSettings& settings, const ui32 recordsCount) {
+TDictStats TDictStats::Merge(const std::vector<const TDictStats*>& columnsStats, const std::vector<const TDictStats*>& othersStats,
+    const TSettings& settings, const ui32 recordsCount) {
     std::map<std::string_view, TRTStats> resultMap;
-    for (auto&& i : stats) {
-        for (ui32 idx = 0; idx < i->GetColumnsCount(); ++idx) {
-            auto it = resultMap.find(i->GetColumnName(idx));
-            if (it == resultMap.end()) {
-                it = resultMap.emplace(i->GetColumnName(idx), TRTStats(i->GetColumnName(idx))).first;
+    const auto fold = [&resultMap](const std::vector<const TDictStats*>& group, const bool sourceIsOthers) {
+        for (auto&& i : group) {
+            for (ui32 idx = 0; idx < i->GetColumnsCount(); ++idx) {
+                auto it = resultMap.find(i->GetColumnName(idx));
+                if (it == resultMap.end()) {
+                    it = resultMap.emplace(i->GetColumnName(idx), TRTStats(i->GetColumnName(idx))).first;
+                }
+                it->second.Add(*i, idx, sourceIsOthers);
             }
-            it->second.Add(*i, idx);
         }
-    }
+    };
+    fold(columnsStats, false);
+    fold(othersStats, true);
     auto builder = MakeBuilder();
     for (auto&& i : resultMap) {
         builder.Add(i.second.GetKeyName(), i.second.GetRecordsCount(), i.second.GetDataSize(),

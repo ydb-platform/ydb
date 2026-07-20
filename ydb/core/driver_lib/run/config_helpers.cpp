@@ -92,8 +92,11 @@ void AddExecutorPool(
             if (poolConfig.GetType() == TExecutorConfig::NUMA) {
                 Y_ABORT_UNLESS(placementGroup);
                 Y_ABORT_UNLESS(!poolConfig.HasAffinity(), "NUMA executor must not define Affinity");
-                basic.Threads = placementGroup->Cpus.CpuCount() / 2;
-                Y_ABORT_UNLESS(basic.Threads, "NUMA executor placement group %" PRIu32 " has no CPUs", placementGroup->Id);
+                Y_ABORT_UNLESS(placementGroup->Cpus.CpuCount(), "NUMA executor placement group %" PRIu32 " has no CPUs", placementGroup->Id);
+                basic.Threads = poolConfig.HasPlacementGroupThreads()
+                    ? poolConfig.GetPlacementGroupThreads()
+                    : placementGroup->Cpus.CpuCount();
+                Y_ABORT_UNLESS(basic.Threads, "NUMA executor placement group %" PRIu32 " has zero threads", placementGroup->Id);
                 basic.Affinity = placementGroup->Cpus;
                 basic.MinThreadCount = basic.Threads;
                 basic.MaxThreadCount = basic.Threads;

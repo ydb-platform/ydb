@@ -191,6 +191,11 @@ TMapBuilder ActorSystemConfigBuilder() {
           .Optional()
           .Min(1);
         })
+        .Int64("placement_group_threads", [](auto& placementGroupThreads){
+          placementGroupThreads
+          .Optional()
+          .Min(1);
+        })
         .Int64("max_threads", [](auto& maxThreads){
           maxThreads
           .Optional()
@@ -212,6 +217,7 @@ TMapBuilder ActorSystemConfigBuilder() {
           const bool isNuma = node["type"].Enum().Value() == "NUMA";
           const bool hasThreads = node["threads"].Exists();
           const bool hasPlacementGroups = node["placement_groups"].Exists();
+          const bool hasPlacementGroupThreads = node["placement_group_threads"].Exists();
 
           if (isNuma) {
             executorContext.Expect(!hasThreads,
@@ -223,6 +229,8 @@ TMapBuilder ActorSystemConfigBuilder() {
               "non-NUMA executor must define threads");
             executorContext.Expect(!hasPlacementGroups,
               "placement_groups can only be defined for NUMA executor");
+            executorContext.Expect(!hasPlacementGroupThreads,
+              "placement_group_threads can only be defined for NUMA executor");
           }
         });
       });

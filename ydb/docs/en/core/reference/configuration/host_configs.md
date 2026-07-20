@@ -21,7 +21,7 @@ The `host_config_id` attribute specifies a numeric configuration ID. The `drive`
 - `path`: Path to the mounted block device, for example, `/dev/disk/by-partlabel/ydb_disk_ssd_01`
 - `type`: Type of the device's physical media: `ssd`, `nvme`, or `rot` (rotational - HDD)
 
-Additionally, an optional `disk_scope` attribute can be specified — a label of the device's failure zone within a node, see [Configuring DiskScope](#disk-scope).
+Additionally, an optional `disk_scope` attribute can be specified — a label for calculating fail domains for some reduced configurations, see [Configuring disk_scope](#disk-scope).
 
 ## Examples
 
@@ -55,7 +55,7 @@ host_configs:
     type: SSD
 ```
 
-## Configuring DiskScope {#disk-scope}
+## Configuring disk_scope {#disk-scope}
 
 `disk_scope` is an optional string attribute of a disk that defines a finer-grained failure zone within a single node. It is taken into account when calculating [fail domains](../../concepts/glossary.md#fail-domain) during the selection of disks for placing [VDisks](../../concepts/glossary.md#vdisk) of [storage groups](../../concepts/glossary.md#storage-group).
 

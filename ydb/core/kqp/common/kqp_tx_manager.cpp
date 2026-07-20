@@ -303,7 +303,7 @@ public:
     }
 
     bool IsSingleShard() const override {
-        return GetShardsCount() == 1;
+        return GetParticipatingShardsCount() == 1;
     }
 
     bool HasOlapTable() const override {
@@ -311,7 +311,7 @@ public:
     }
 
     bool IsEmpty() const override {
-        return GetShardsCount() == 0;
+        return GetParticipatingShardsCount() == 0;
     }
 
     bool HasLocks() const override {
@@ -462,6 +462,9 @@ public:
         THashSet<ui64> receivingColumnShardsSet;
 
         for (auto& [shardId, shardInfo] : ShardsInfo) {
+            if (!ParticipatesInCommit(shardInfo)) {
+                continue;
+            }
             if ((shardInfo.Flags & EAction::WRITE)) {
                 ReceivingShards.insert(shardId);
                 if (shardInfo.IsOlap) {
@@ -514,7 +517,7 @@ public:
             ReceivingShards.insert(*ArbiterColumnShard);
         }
 
-        ShardsToWait = ShardsIds;
+        ShardsToWait = GetParticipatingShards();
 
         MinStep = std::numeric_limits<ui64>::min();
         MaxStep = std::numeric_limits<ui64>::max();
@@ -567,13 +570,17 @@ public:
         State = ETransactionState::EXECUTING;
 
         for (auto& [_, shardInfo] : ShardsInfo) {
+            if (!ParticipatesInCommit(shardInfo)) {
+                AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
+                continue;
+            }
             AFL_ENSURE(shardInfo.State == EShardState::PREPARED
                 || (shardInfo.State == EShardState::PROCESSING
                     && IsSingleShard()));
             shardInfo.State = EShardState::EXECUTING;
         }
 
-        ShardsToWait = ShardsIds;
+        ShardsToWait = GetParticipatingShards();
 
         AFL_ENSURE(ReceivingShards.empty() || !CanUseImmediateCommit());
     }
@@ -586,9 +593,19 @@ public:
         result.Coordinator = Coordinator;
 
         for (auto& [shardId, shardInfo] : ShardsInfo) {
+            if (!ParticipatesInCommit(shardInfo)) {
+                AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
+                continue;
+            }
+
+            const ui32 affectedFlags = (shardInfo.Flags != 0)
+                ? shardInfo.Flags
+                : static_cast<ui32>(EAction::READ);
+            AFL_ENSURE(affectedFlags != 0);
+
             result.ShardsInfo.push_back(TCommitShardInfo{
                 .ShardId = shardId,
-                .AffectedFlags = shardInfo.Flags,
+                .AffectedFlags = affectedFlags,
             });
 
             AFL_ENSURE(shardInfo.State == EShardState::EXECUTING);
@@ -665,6 +682,31 @@ private:
         if (querySpanId != 0 && shardInfo.BreakerQuerySpanIdsSet.emplace(querySpanId).second) {
             shardInfo.BreakerQuerySpanIds.push_back(querySpanId);
         }
+    }
+
+    static bool ParticipatesInCommit(const TShardInfo& shardInfo) {
+        // Only shards with reads/writes/locks.
+        return shardInfo.Flags != 0 || !shardInfo.Locks.empty();
+    }
+
+    THashSet<ui64> GetParticipatingShards() const {
+        THashSet<ui64> result;
+        for (const auto& [shardId, shardInfo] : ShardsInfo) {
+            if (ParticipatesInCommit(shardInfo)) {
+                result.insert(shardId);
+            }
+        }
+        return result;
+    }
+
+    ui64 GetParticipatingShardsCount() const {
+        ui64 count = 0;
+        for (const auto& [_, shardInfo] : ShardsInfo) {
+            if (ParticipatesInCommit(shardInfo)) {
+                ++count;
+            }
+        }
+        return count;
     }
 
     void MakeLocksIssue(const TShardInfo& shardInfo) {

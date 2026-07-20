@@ -37,7 +37,8 @@ namespace NWriter {
                 Blocks[group].Reset(
                     new TBlocks(this, Groups[group].Channel, Groups[group].Cache, Groups[group].CacheMode, Groups[group].MaxBlobSize, conf.StickyFlatIndex));
             }
-            Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, regular, Groups[0].MaxBlobSize, conf.StickyFlatIndex));
+            // Outer Blob Collection
+            Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, regular, Groups[0].MaxBlobSize, conf.StickyFlatIndex, true));
 
             Growth = new NTable::TScreen::TCook;
         }
@@ -62,20 +63,25 @@ namespace NWriter {
         }
 
     private:
-        TPageId Write(TSharedData page, EPage type, ui32 group) override
+        TPageOffset Write(TSharedData page, EPage type, ui32 group) override
         {
             return Blocks.at(group)->Write(std::move(page), type);
         }
 
         TPageId WriteOuter(TSharedData page) override
         {
-            return
-                Blocks.back()->Write(std::move(page), EPage::Opaque);
+            Blocks.back()->Write(std::move(page), EPage::Opaque);
+            return Blocks.back()->GetWrittenPageId(Groups.size());
         }
 
         void WriteInplace(TPageId page, TArrayRef<const char> body) override
         {
             Blocks[0]->WriteInplace(page, body);
+        }
+
+        ui32 GetWrittenPageId(ui32 group) const noexcept override
+        {
+            return Blocks[group]->GetWrittenPageId(group);
         }
 
         NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) override

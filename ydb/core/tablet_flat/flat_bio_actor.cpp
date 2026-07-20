@@ -54,9 +54,8 @@ void TBlockIO::Inbox(TEventHandlePtr &eh)
         Y_ENSURE(Pages, "Got TFetch request without pages list");
         PagesToBlobsConverter = new TPagesToBlobsConverter(*PageCollection, Pages);
         BlockStates.reserve(Pages.size());
-        for (auto page: Pages) {
-            ui64 size = PageCollection->Page(page).Size;
-            BlockStates.emplace_back(size);
+        for (auto& page: Pages) {
+            BlockStates.emplace_back(page.Size);
         }
 
         Dispatch();
@@ -165,18 +164,17 @@ void TBlockIO::Handle(ui32 base, TArrayRef<TLoaded> items)
     if (--Pending > 0)
         return;
 
-    size_t index = 0;
-    for (auto pageId : Pages) {
-        auto& state = BlockStates.at(index++);
+    for (auto index : xrange(Pages.size())) {
+        auto& state = BlockStates.at(index);
         Y_ENSURE(state.Offset == state.Data.size());
-        if (PageCollection->Verify(pageId, state.Data)) {
+        if (PageCollection->Verify(Pages[index], state.Data)) {
             continue;
         } else if (auto logl = Logger->Log(ELnLev::Crit)) {
-            const auto bnd = PageCollection->Bounds(pageId);
+            const auto bnd = PageCollection->Bounds(Pages[index]);
 
             logl
                 << "NBlockIO pageCollection " << PageCollection->Label() << " verify failed"
-                << ", page " << pageId << " " << state.Data.size() << "b"
+                << ", page " << Pages[index].Offset << " " << state.Data.size() << "b"
                 << " spans over {";
 
             for (auto one: xrange(bnd.Lo.Blob, bnd.Up.Blob + 1)) {
@@ -205,13 +203,12 @@ void TBlockIO::Terminate(EStatus code)
 
     auto *ev = new TEvData(code, PageCollection, RequestCookie);
 
-    ev->Pages.resize(Pages.size());
+    ev->Pages.reserve(Pages.size());
     for (auto index : xrange(Pages.size())) {
-        auto& page = ev->Pages[index];
-        page.PageId = Pages[index];
-        if (code == NKikimrProto::OK) {
-            page.Data = std::move(BlockStates.at(index++).Data);
-        }
+        auto data = (code == NKikimrProto::OK)
+            ? std::move(BlockStates.at(index).Data)
+            : TSharedData{};
+        ev->Pages.emplace_back(Pages[index], std::move(data));
     }
 
     if (StatActorId)

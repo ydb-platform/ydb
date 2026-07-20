@@ -86,9 +86,13 @@ namespace {
             return { array.at(page).size(), ui32(EPage::Undef) };
         }
 
-        NPageCollection::TBorder Bounds(ui32) const override
+        NPageCollection::TBorder Bounds(ui32 page) const override
         {
-            Y_TABLET_ERROR("Unexpected Bounds(...) call");
+            return { Page(page).Size, { page, 0 }, { page, ui32(Page(page).Size) } };
+        }
+
+        NPageCollection::TBorder Bounds(TPageLocation location) const override {
+            return Bounds(location.Offset.AsPageIndex());
         }
 
         NPageCollection::TGlobId Glob(ui32) const override
@@ -101,9 +105,18 @@ namespace {
             Y_TABLET_ERROR("Unexpected Verify(...) call");
         }
 
+        bool Verify(TPageLocation location, TArrayRef<const char> data) const override {
+            return data.size() == location.Size;
+        }
+
         size_t BackingSize() const noexcept override
         {
             return Part->Store->PageCollectionBytes(Room);
+        }
+
+        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override
+        {
+            return NTable::NPage::TPageLocation::FromPageIndex(pageId, Page(pageId).Size, NTable::NPage::EPage::Undef, Part->Store->GetPageChecksum(Room, pageId));
         }
 
     private:
@@ -155,10 +168,11 @@ namespace {
                 UNIT_ASSERT_C(fetch.Pages, "TLoader wants a fetch, but there are no pages");
                 result.Pages += fetch.Pages.size();
 
-                for (auto pageId : fetch.Pages) {
+                for (auto& location : fetch.Pages) {
+                    auto pageId = location.GetPageIndex();
                     auto* page = part->Store->GetPage(0, pageId);
                     UNIT_ASSERT_C(page, "TLoader wants a missing page " << pageId);
-                    env.Save({ pageId, NSharedCache::TSharedPageRef::MakePrivate(*page) });
+                    env.Save({ location, NSharedCache::TSharedPageRef::MakePrivate(*page) });
                 }
             } else {
                 UNIT_ASSERT_C(false, "TKeysLoader was stalled");

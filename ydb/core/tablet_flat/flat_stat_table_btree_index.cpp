@@ -29,7 +29,7 @@ ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* 
     ui64 prevDataSize = 0;
 
     for (ui32 height = 0; height < meta.LevelCount; height++) {
-        auto page = env->TryGetPage(part, pageId, {});
+        auto page = env->TryGetPage(part, part->GetPageLocation(pageId, {}), {});
         if (!page) {
             ready = false;
             return prevDataSize;
@@ -75,7 +75,7 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
     TCells key1{ key1Cells, 3 };
 
     for (ui32 height = 0; height < meta.LevelCount; height++) {
-        auto page = env->TryGetPage(part, pageId, {});
+        auto page = env->TryGetPage(part, part->GetPageLocation(pageId, {}), {});
         if (!page) {
             ready = false;
             return prevDataSize;

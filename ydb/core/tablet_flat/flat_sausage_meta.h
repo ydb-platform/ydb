@@ -41,6 +41,9 @@ namespace NPageCollection {
         ui64 GetPageSize(ui32 pageId) const;
         TStringBuf GetPageInplaceData(ui32 pageId) const;
 
+        TBorder Bounds(NTable::NPage::TPageLocation location) const;
+        TPageLocation GetLocation(ui32 pageId) const;
+
     public:
         const TSharedData Raw;  /* Page collection serialized meta blob */
         const ui32 Group = TLargeGlobId::InvalidGroup;

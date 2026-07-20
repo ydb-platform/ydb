@@ -541,7 +541,7 @@ private:
     bool TryLoadNode(const TNodeState& parent, const auto& addNode) {
         Y_ENSURE(parent.Level);
 
-        auto page = Env->TryGetPage(parent.Part, parent.PageId, {});
+        auto page = Env->TryGetPage(parent.Part, parent.Part->GetPageLocation(parent.PageId, {}), {});
         if (!page) {
             return false;
         }

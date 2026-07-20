@@ -67,7 +67,7 @@ namespace {
 
                 Out << Endl;
 
-                DataPage(part, index->GetPageId());
+                DataPage(part, index->GetLocation());
             }
         }
     }
@@ -108,7 +108,7 @@ namespace {
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
         auto indexPageId = part.IndexPages.GetFlat({});
-        auto indexPage = Env->TryGetPage(&part, indexPageId, {});
+        auto indexPage = Env->TryGetPage(&part, part.GetPageLocation(indexPageId, {}), {});
 
         if (!indexPage) {
             Out
@@ -144,7 +144,7 @@ namespace {
                 << " | " << (Printf(Out, " %4u", record->GetPageId()), " ")
                 << (Printf(Out, " %6lu", record->GetRowId()), " ");
 
-            if (auto *page = Env->TryGetPage(&part, record->GetPageId(), {})) {
+            if (auto *page = Env->TryGetPage(&part, part.GetPageLocation(record->GetPageId(), {}), {})) {
                 Printf(Out, " %6zub  ", page->size());
             } else {
                 Out << "~none~  ";
@@ -186,15 +186,16 @@ namespace {
         }
     }
 
-    void TDump::DataPage(const TPart &part, ui32 page)
+    void TDump::DataPage(const TPart &part, TPageLocation location)
     {
         TVector<TCell> key(Reserve(part.Scheme->Groups[0].KeyTypes.size()));
 
         // TODO: need to join with other column groups
-        auto data = NPage::TDataPage(Env->TryGetPage(&part, page, {}));
+        auto data = NPage::TDataPage(Env->TryGetPage(&part, location, {}));
 
         if (data) {
             auto label = data.Label();
+            auto page = location.Offset;
             Out
                 << " + Rows{" << page << "} Label{" << page << (ui16)label.Type
                 << " rev " << label.Format << ", " << label.Size << "b}"
@@ -202,7 +203,7 @@ namespace {
                 << Endl;
 
         } else {
-            Out << " | " << page << " NOT_LOADED" << Endl;
+            Out << " | " << location.Offset << " NOT_LOADED" << Endl;
 
             return;
         }
@@ -313,7 +314,7 @@ namespace {
             }
         };
 
-        auto page = Env->TryGetPage(&part, meta.GetPageId(), {});
+        auto page = Env->TryGetPage(&part, part.GetPageLocation(meta.GetPageId(), {}), {});
         if (!page) {
             Out << intend << " | -- the rest of the index pages aren't loaded" << Endl;
             return;

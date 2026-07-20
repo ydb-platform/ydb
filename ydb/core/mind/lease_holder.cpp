@@ -2,6 +2,7 @@
 #include "node_broker.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
@@ -60,6 +61,9 @@ public:
         }
 
         EnableLongLease = AppData()->FeatureFlags.GetEnableNodeBrokerLongLease();
+
+        auto counters = GetServiceCounters(AppData(ctx)->Counters, "utils")->GetSubgroup("component", "lease_holder");
+        PingErrorsCounter = counters->GetCounter("PingErrors", true);
 
         const ui32 featureFlagsItem = NKikimrConsole::TConfigItem::FeatureFlagsItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
@@ -139,6 +143,7 @@ private:
     {
         NTabletPipe::CloseClient(ctx, NodeBrokerPipe);
         NodeBrokerPipe = TActorId();
+        PingErrorsCounter->Inc();
 
         Ping(ctx);
     }
@@ -181,8 +186,14 @@ private:
         // Node is either already expired or its ID is banned.
         Y_ABORT_UNLESS(rec.GetNodeId() == ctx.SelfID.NodeId());
         if (rec.GetStatus().GetCode() != NKikimrNodeBroker::TStatus::OK) {
+<<<<<<< HEAD
             LOG_ERROR(ctx, NKikimrServices::NODE_BROKER, "Cannot extend lease: %s",
                       rec.GetStatus().GetReason().data());
+=======
+            YDB_LOG_ERROR_CTX(ctx, "TLeaseHolder::Handle TEvNodeBroker::TEvExtendLeaseResponse: cannot extend lease",
+                {"reason", rec.GetStatus().GetReason().data()});
+            PingErrorsCounter->Inc();
+>>>>>>> b92b4bf768c (Fix bugs when onlyAliveDynamicNodes is false in DynamicNameserver (#46323))
             return;
         }
 
@@ -232,7 +243,7 @@ private:
                     << "Epoch end: " << ToString(EpochEnd) << Endl
                     << "Next epoch end: " << ToString(NextEpochEnd) << Endl
                     << "Next ping at: " << ToString(NextPing) << Endl
-                    << "Enable long lease: " << EnableLongLease << Endl
+                    << "EnableNodeBrokerLongLease: " << (EnableLongLease ? "true" : "false") << Endl
                     << "Expire: " << ToString(Expire) << Endl
                     << "ExpireV2: " << ToString(ExpireV2) << Endl;
             }
@@ -287,6 +298,7 @@ private:
     TInstant Expire;
     TInstant ExpireV2;
     NActors::TSchedulerCookieHolder ExpireCookieHolder;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PingErrorsCounter;
 };
 
 IActor *CreateLeaseHolder(TInstant expire)

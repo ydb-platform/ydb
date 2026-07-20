@@ -6,7 +6,9 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/gateway/behaviour/resource_pool_classifier
     ydb/core/kqp/ut/common
+    ydb/services/metadata
 )
 
 YQL_LAST_ABI_VERSION()

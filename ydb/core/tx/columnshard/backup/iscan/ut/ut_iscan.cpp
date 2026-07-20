@@ -93,9 +93,10 @@ class TGrabActor: public TActorBootstrapped<TGrabActor> {
     std::unique_ptr<NTable::IScan> Exporter;
 
 public:
-    TRuntimePtr Runtime;
+    // Non-owning pointer to the actor runtime
+    TTestActorRuntime* Runtime;
 
-    TGrabActor(TRuntimePtr runtime)
+    TGrabActor(TTestActorRuntime* runtime)
         : Runtime(runtime)
     {
     }
@@ -193,7 +194,7 @@ Y_UNIT_TEST_SUITE(IScan) {
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
 
-        auto grabActor = new TGrabActor(runtime);
+        auto grabActor = new TGrabActor(runtime.get());
         runtime->Register(grabActor);
 
         while (true) {

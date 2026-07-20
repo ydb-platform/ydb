@@ -1636,13 +1636,13 @@ FROM `{table_name}`"""
                     i.Key AS Key,
                     i.Value || "-" || j.Value AS Value
                 FROM $in AS i
-                LEFT JOIN {join_table} AS j ON i.Key = j.Key
+                LEFT JOIN `{join_table}` AS j ON i.Key = j.Key
             """
 
             expected_data1 = [f"in1-value-p-row-value-j1-value-p-column:1", f"in1-value-p-row-value-j2-value-p-column:2"]
             expected_data2 = [f"in2-value-p-row-value-j1-value-p-column:1", f"in2-value-p-row-value-j2-value-p-column:2"]
 
-        query_name = f"test_precompute_and_other_ops_join_table_{local_topics!s:.1}_{additional_operator}"
+        query_name = f"test_precompute_and_other_ops_query_{local_topics!s:.1}_{additional_operator}"
         kikimr.ydb_client.query(f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -1724,10 +1724,10 @@ FROM `{table_name}`"""
 
     @link_test_case("#46139")
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_alter_query_wth_precompute(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
-        inp, out, endpoint = self.get_io_names(kikimr, f"test_alter_query_wth_precompute_{local_topics!s:.1}", local_topics, entity_name)
+    def test_alter_query_with_precompute(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_alter_query_with_precompute_{local_topics!s:.1}", local_topics, entity_name)
 
-        precompute_table = f"test_alter_query_wth_precompute_table_{local_topics!s:.1}"
+        precompute_table = f"test_alter_query_with_precompute_table_{local_topics!s:.1}"
         kikimr.ydb_client.query(f"""
             CREATE TABLE `{precompute_table}` (
                 Key Int32 NOT NULL,
@@ -1742,7 +1742,7 @@ FROM `{table_name}`"""
                 (1, "value-p-row");
         """)
 
-        query_name = f"test_alter_query_wth_precompute_query_{local_topics!s:.1}"
+        query_name = f"test_alter_query_with_precompute_query_{local_topics!s:.1}"
         kikimr.ydb_client.query(f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN

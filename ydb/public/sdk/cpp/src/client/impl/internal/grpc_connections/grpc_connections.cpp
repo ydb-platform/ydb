@@ -313,8 +313,16 @@ std::string CreateSDKBuildInfo() {
     return std::string("ydb-cpp-sdk/") + GetSdkSemver();
 }
 
-std::string BuildFullBuildInfo(const IConnectionsParams& params) {
+std::string BuildFullBuildInfo(const IConnectionsParams& params, bool includeObservability) {
     auto result = CreateSDKBuildInfo();
+    if (includeObservability && params.GetTraceProvider()) {
+        result += " ydb-sdk-tracing/";
+        result += NObservability::kTracingChainVersion;
+    }
+    if (includeObservability && params.GetExternalMetricRegistry()) {
+        result += " ydb-sdk-metrics/";
+        result += NObservability::kMetricsChainVersion;
+    }
     auto extra = params.GetBuildInfoExtra();
     if (!extra.empty()) {
         result += ';';
@@ -470,7 +478,8 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
 #endif
     , MetricRegistry_(params->GetExternalMetricRegistry())
     , TraceProvider_(params->GetTraceProvider())
-    , BuildInfo_(BuildFullBuildInfo(*params))
+    , BuildInfoWithoutObservability_(BuildFullBuildInfo(*params, false))
+    , BuildInfo_(BuildFullBuildInfo(*params, true))
     , NetworkThreadsNum_(params->GetNetworkThreadsNum())
     , UsePerChannelTcpConnection_(params->GetUsePerChannelTcpConnection())
     , GRpcClientLow_(NetworkThreadsNum_)
@@ -727,6 +736,7 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
 
     TRpcRequestSettings rpcSettings;
     rpcSettings.Deadline = TDeadline::AfterDuration(GET_ENDPOINTS_TIMEOUT);
+    rpcSettings.IncludeObservabilityInBuildInfo = true;
 
     RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse>(
         std::move(request),
@@ -892,7 +902,9 @@ TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestS
 
     static const std::string clientPid = GetClientPIDHeaderValue();
 
-    meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, BuildInfo_});
+    meta.Aux.push_back({
+        YDB_SDK_BUILD_INFO_HEADER,
+        requestSettings.IncludeObservabilityInBuildInfo ? BuildInfo_ : BuildInfoWithoutObservability_});
     meta.Aux.push_back({YDB_CLIENT_PID, clientPid});
     meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end());
 

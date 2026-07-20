@@ -981,6 +981,7 @@ private:
 
     IDiscoveryMutatorApi::TMutatorCb DiscoveryMutatorCb;
 
+    const std::string BuildInfoWithoutObservability_;
     const std::string BuildInfo_;
 
     const std::size_t NetworkThreadsNum_;

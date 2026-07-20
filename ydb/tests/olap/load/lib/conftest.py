@@ -721,7 +721,7 @@ class LoadSuiteBase:
             }
         """
         if cls.__nodes_state is None:
-            return []
+            return {}
         all_hosts = {node.host for node in cls.__nodes_state.values()}
         return cls.__get_verify_fails(all_hosts, start_time, end_time)
 

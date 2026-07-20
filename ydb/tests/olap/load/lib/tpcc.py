@@ -139,7 +139,7 @@ class TpccSuiteBase(LoadSuiteBase):
         measure_start_time = stats.get('tpcc_json', {}).get('summary', {}).get('measure_start_ts', result.start_time)
         allure_table_strings = {
             'time_warmup': time_interval_str(result.start_time, measure_start_time),
-            'time_measure': time_interval_str(measure_start_time, time())
+            'time_measure': time_interval_str(measure_start_time, end_time)
         }
         self.process_query_result(result, 'test', True, allure_table_strings=allure_table_strings, node_errors=node_errors, verify_errors=verify_errors)
         if result.success and 'tpcc_json' in stats:

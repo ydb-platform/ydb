@@ -51,7 +51,7 @@ def ydb_cluster_configuration():
     return conf
 
 
-def test_remove_storage_group(ydb_cluster, ydb_root, ydb_safe_test_name, ydb_client, robust_retries, ydb_configurator):
+def test_remove_storage_group(ydb_cluster, ydb_root, ydb_safe_test_name, ydb_client):
     database = os.path.join(ydb_root, ydb_safe_test_name)
 
     ydb_cluster.create_database(
@@ -78,8 +78,9 @@ def test_remove_storage_group(ydb_cluster, ydb_root, ydb_safe_test_name, ydb_cli
         storage_units_to_remove={'hdd': 2},
     )
 
+    ydb_cluster.restart_slots()
+
     def get_storage_units():
-        ydb_cluster.restart_slots()
         status = ydb_cluster.get_database_status(database)
         units = sum([unit.count for unit in status.allocated_resources.storage_units])
         return units
@@ -95,3 +96,4 @@ def test_remove_storage_group(ydb_cluster, ydb_root, ydb_safe_test_name, ydb_cli
     assert_that(status.state, equal_to(cms_pb.GetDatabaseStatusResult.RUNNING))
 
     ydb_cluster.unregister_and_stop_slots(database_nodes)
+    ydb_cluster.remove_database(database)

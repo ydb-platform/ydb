@@ -15,8 +15,8 @@ namespace NPageCollection {
     struct TLoadedPage {
         TLoadedPage() = default;
 
-        TLoadedPage(TPageId page, TSharedData data)
-            : PageId(page)
+        TLoadedPage(TPageLocation location, TSharedData data)
+            : Location(location)
             , Data(std::move(data))
         {
 
@@ -24,10 +24,10 @@ namespace NPageCollection {
 
         explicit operator bool() const noexcept
         {
-            return Data && PageId != Max<TPageId>();
+            return Data && bool(Location);
         }
 
-        TPageId PageId = Max<TPageId>();
+        TPageLocation Location;
         TSharedData Data;
     };
 

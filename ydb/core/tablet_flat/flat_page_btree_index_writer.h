@@ -448,7 +448,7 @@ namespace NKikimr::NTable::NPage {
 
         void DoFlush(ui32 levelIndex, IPageWriter &pager, bool last) {
             Writer.EnsureEmpty();
-            
+
             if (last) {
                 // Note: for now we build last nodes from all remaining level's keys
                 // we may to try splitting them more evenly later
@@ -472,13 +472,13 @@ namespace NKikimr::NTable::NPage {
 
             auto page = Writer.Finish();
             IndexSize += page.size();
-            auto pageId = pager.Write(std::move(page), EPage::BTreeIndex, 0);
+            pager.Write(std::move(page), EPage::BTreeIndex, 0);
 
             if (levelIndex + 1 == Levels.size()) {
                 Levels.emplace_back();
                 Y_ENSURE(Levels.size() < Max<ui32>(), "Levels size is out of bounds");
             }
-            lastChild.PageId_ = pageId;
+            lastChild.PageId_ = pager.GetWrittenPageId(0);
             Levels[levelIndex + 1].PushChild(lastChild);
             if (!last) {
                 Levels[levelIndex + 1].PushKey(Levels[levelIndex].PopKey());

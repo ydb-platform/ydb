@@ -220,7 +220,7 @@ namespace NTest {
             return Back().WriteOuter(blob);
         }
 
-        TPageId Write(TSharedData page, EPage type, ui32 group) override
+        TPageOffset Write(TSharedData page, EPage type, ui32 group) override
         {
             return Back().Write(page, type, group);
         }
@@ -228,6 +228,11 @@ namespace NTest {
         void WriteInplace(TPageId page, TArrayRef<const char> body) override
         {
             Back().WriteInplace(page, body);
+        }
+
+        ui32 GetWrittenPageId(ui32 group) const noexcept override
+        {
+            return Store->GetWrittenPageId(group);
         }
 
         NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) override

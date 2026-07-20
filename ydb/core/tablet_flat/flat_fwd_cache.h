@@ -12,14 +12,17 @@ namespace NKikimr {
 namespace NTable {
 namespace NFwd {
 
+    using TPageOffset = NPage::TPageOffset;
+    using IPageCollection = NPageCollection::IPageCollection;
+
     template<size_t Capacity>
     class TLoadedPagesCircularBuffer {
     public:
-        const TSharedData* Get(TPageId pageId) const
+        const TSharedData* Get(TPageOffset offset) const
         {
-            if (pageId < FirstUnseenPageId) {
+            if (!FirstUnseenOffset.IsMax() && offset <= FirstUnseenOffset) {
                 for (const auto& page : LoadedPages) {
-                    if (page.PageId == pageId) {
+                    if (page.Location.Offset == offset) {
                         return &page.Data;
                     }
                 }
@@ -36,14 +39,16 @@ namespace NFwd {
         {
             Y_ENSURE(page, "Cannot push invalid page to trace cache");
 
-            Offset = (Offset + 1) % Capacity;
+            Position = (Position + 1) % Capacity;
 
-            const ui64 releasedDataSize = LoadedPages[Offset].Data.size();
+            const ui64 releasedDataSize = LoadedPages[Position].Data.size();
             DataSize = DataSize - releasedDataSize + page.Size;
 
-            LoadedPages[Offset].Data = page.Release();
-            LoadedPages[Offset].PageId = page.PageId;
-            FirstUnseenPageId = Max(FirstUnseenPageId, page.PageId + 1);
+            LoadedPages[Position].Data = page.Release();
+            LoadedPages[Position].Location.Offset = page.Offset;
+            LoadedPages[Position].Location.Size = page.Size;
+            LoadedPages[Position].Location.Crc32 = page.Crc32;
+            FirstUnseenOffset = FirstUnseenOffset.IsMax() ? page.Offset : Max(FirstUnseenOffset, page.Offset);
 
             return releasedDataSize;
         }
@@ -54,9 +59,9 @@ namespace NFwd {
 
     private:
         std::array<NPageCollection::TLoadedPage, Capacity> LoadedPages;
-        ui32 Offset = 0;
+        ui32 Position = 0;
         ui64 DataSize = 0;
-        TPageId FirstUnseenPageId = 0;
+        TPageOffset FirstUnseenOffset;
     };
 
     class TIndexPageLocator {
@@ -68,39 +73,39 @@ namespace NFwd {
         };
 
     public:
-        void Add(TPageId pageId, TGroupId groupId, ui32 level) {
-            Y_ENSURE(Map.emplace(pageId, TIndexPageLocation{groupId, level}).second, "All index pages should be unique");
+        void Add(TPageOffset offset, TGroupId groupId, ui32 level) {
+            Y_ENSURE(Map.emplace(offset, TIndexPageLocation{groupId, level}).second, "All index pages should be unique");
         }
 
-        ui32 GetLevel(TPageId pageId) const {
-            auto ptr = Map.FindPtr(pageId);
+        ui32 GetLevel(TPageOffset offset) const {
+            auto ptr = Map.FindPtr(offset);
             Y_ENSURE(ptr, "Unknown page");
             return ptr->Level;
         }
 
-        TGroupId GetGroup(TPageId pageId) {
-            auto ptr = Map.FindPtr(pageId);
+        TGroupId GetGroup(TPageOffset offset) {
+            auto ptr = Map.FindPtr(offset);
             Y_ENSURE(ptr, "Unknown page");
             return ptr->GroupId;
         }
 
-        const TMap<TPageId, TIndexPageLocation>& GetMap() {
+        const TMap<TPageOffset, TIndexPageLocation>& GetMap() {
             return Map;
         }
 
     private:
-        TMap<TPageId, TIndexPageLocation> Map;
+        TMap<TPageOffset, TIndexPageLocation> Map;
     };
 
     class TFlatIndexCache : public IPageLoadingLogic {
     public:
         using TGroupId = NPage::TGroupId;
 
-        TFlatIndexCache(const TPart* part, TIndexPageLocator& indexPageLocator, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices = nullptr)
-            : Part(part)
-            , GroupId(groupId)
-            , IndexPage(Part->IndexPages.GetFlat(groupId), Part->GetPageSize(Part->IndexPages.GetFlat(groupId), {}), 0, Max<TPageId>())
-        { 
+        TFlatIndexCache(const TPart* part, TIndexPageLocator& indexPageLocator, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices, TIntrusiveConstPtr<IPageCollection> groupPageCollection, TIntrusiveConstPtr<IPageCollection> indexPageCollection)
+            : GroupId(groupId)
+            , GroupPageCollection(std::move(groupPageCollection))
+            , IndexPage(GetRootLocation(part, groupId, indexPageCollection.Get()), 0, Max<TPageId>())
+        {
             if (slices && !slices->empty()) {
                 BeginRowId = slices->front().BeginRowId();
                 EndRowId = slices->back().EndRowId();
@@ -109,45 +114,45 @@ namespace NFwd {
                 EndRowId = Max<TRowId>();
             }
 
-            indexPageLocator.Add(IndexPage.PageId, GroupId, 0);
+            indexPageLocator.Add(IndexPage.Offset, GroupId, 0);
         }
 
         ~TFlatIndexCache()
         {
         }
 
-        TResult Get(IPageLoadingQueue *head, TPageId pageId, EPage type, ui64 lower) override
+        TResult Get(IPageLoadingQueue *head, TPageOffset offset, EPage type, ui64 lower) override
         {
             if (type == EPage::FlatIndex) {
-                Y_ENSURE(pageId == IndexPage.PageId);
+                Y_ENSURE(offset == IndexPage.Offset);
 
                 // Note: doesn't affect read ahead limits, only stats
                 if (IndexPage.Fetch == EFetch::None) {
-                    Stat.Fetch += head->AddToQueue(pageId, EPage::FlatIndex);
+                    Stat.Fetch += head->AddToQueue(IndexPage.Offset, EPage::FlatIndex, IndexPage.Size, IndexPage.Crc32);
                     IndexPage.Fetch = EFetch::Wait;
                 }
-                return {IndexPage.Touch(pageId, Stat), false, true};
+                return {IndexPage.Touch(offset, Stat), false, true};
             }
 
             Y_ENSURE(type == EPage::DataPage);
 
-            if (auto *page = Trace.Get(pageId)) {
+            if (auto *page = Trace.Get(offset)) {
                 return {page, false, true};
             }
 
-            DropPagesBefore(pageId);
+            DropPagesBefore(offset);
             ShrinkPages();
 
             bool grow = OnHold + OnFetch <= lower;
 
             if (PagesBeginOffset == Pages.size()) { // isn't processed yet
-                AdvanceNextPage(pageId);
+                AdvanceNextPage(offset);
                 RequestNextPage(head);
             }
 
             grow &= Iter && Iter->GetRowId() < EndRowId;
 
-            return {Pages.at(PagesBeginOffset).Touch(pageId, Stat), grow, true};
+            return {Pages.at(PagesBeginOffset).Touch(offset, Stat), grow, true};
         }
 
         void Forward(IPageLoadingQueue *head, ui64 upper) override
@@ -160,10 +165,10 @@ namespace NFwd {
         void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage type) override
         {
             Stat.Saved += page.Data.size();
-            
+
             if (type == EPage::FlatIndex) {
                 // Note: doesn't affect read ahead limits, only stats
-                Y_ENSURE(page.PageId == IndexPage.PageId);
+                Y_ENSURE(page.Location.Offset == IndexPage.Offset);
                 Index.emplace(page.Data);
                 Iter = Index->LookupRow(BeginRowId);
                 IndexPage.Settle(page, std::move(sharedPageRef));
@@ -172,9 +177,9 @@ namespace NFwd {
 
             Y_ENSURE(type == EPage::DataPage);
 
-            auto it = std::lower_bound(Pages.begin(), Pages.end(), page.PageId);
-            Y_ENSURE(it != Pages.end() && it->PageId == page.PageId, "Got page that hasn't been requested for load");
-            
+            auto it = std::lower_bound(Pages.begin(), Pages.end(), page.Location.Offset);
+            Y_ENSURE(it != Pages.end() && it->Offset == page.Location.Offset, "Got page that hasn't been requested for load");
+
             Y_ENSURE(page.Data.size() <= OnFetch, "Forward cache ahead counters is out of sync");
             OnFetch -= page.Data.size();
             OnHold += it->Settle(page, std::move(sharedPageRef)); // settle of a dropped page returns 0 and releases its data
@@ -183,12 +188,19 @@ namespace NFwd {
         }
 
     private:
-        void DropPagesBefore(TPageId pageId)
+        static TPageLocation GetRootLocation(const TPart* part, TGroupId groupId, const IPageCollection* indexPageCollection) {
+            auto flatPageId = part->IndexPages.GetFlat(groupId);
+            if (flatPageId == Max<TPageId>())
+                return TPageLocation::Max();
+            return indexPageCollection->GetLocation(flatPageId);
+        }
+
+        void DropPagesBefore(TPageOffset offset)
         {
             while (PagesBeginOffset < Pages.size()) {
                 auto &page = Pages.at(PagesBeginOffset);
 
-                if (page.PageId >= pageId) {
+                if (page.Offset >= offset) {
                     break;
                 }
 
@@ -215,39 +227,47 @@ namespace NFwd {
             }
         }
 
-        void AdvanceNextPage(TPageId pageId)
+        TPageOffset DataPageOffset(TPageId pageId) const {
+            return GroupPageCollection->GetLocation(pageId).Offset;
+        }
+
+        void AdvanceNextPage(TPageOffset offset)
         {
             Y_ENSURE(Iter);
-            Y_ENSURE(Iter->GetPageId() <= pageId);
-            while (Iter && Iter->GetPageId() < pageId) {
+            auto iterOffset = DataPageOffset(Iter->GetPageId());
+            Y_ENSURE(iterOffset <= offset);
+            while (Iter) {
+                if (iterOffset >= offset) break;
                 Iter++;
+                if (Iter) iterOffset = DataPageOffset(Iter->GetPageId());
             }
 
             Y_ENSURE(Iter);
-            Y_ENSURE(Iter->GetPageId() == pageId);
+            Y_ENSURE(iterOffset == offset);
         }
 
         void RequestNextPage(IPageLoadingQueue *head)
         {
             Y_ENSURE(Iter);
 
-            auto size = head->AddToQueue(Iter->GetPageId(), EPage::DataPage);
+            auto loc = GroupPageCollection->GetLocation(Iter->GetPageId());
+            head->AddToQueue(loc.Offset, EPage::DataPage, loc.Size, loc.Crc32);
 
-            Stat.Fetch += size;
-            OnFetch += size;
+            Stat.Fetch += loc.Size;
+            OnFetch += loc.Size;
 
-            Y_ENSURE(!Pages || Pages.back().PageId < Iter->GetPageId());
-            Pages.emplace_back(Iter->GetPageId(), size, 0, Max<TPageId>());
+            Y_ENSURE(!Pages || Pages.back().Offset < loc.Offset);
+            Pages.emplace_back(loc.Offset, loc.Size, 0, Max<TPageId>(), loc.Crc32);
             Pages.back().Fetch = EFetch::Wait;
 
             Iter++;
         }
 
     private:
-        const TPart* Part;
         const TGroupId GroupId;
+        TIntrusiveConstPtr<IPageCollection> GroupPageCollection;
         TRowId BeginRowId, EndRowId;
-        
+
         TPage IndexPage;
         std::optional<NPage::TFlatIndex> Index;
         NPage::TFlatIndex::TIter Iter;
@@ -262,11 +282,13 @@ namespace NFwd {
 
     class TBTreeIndexCache : public IPageLoadingLogic {
         struct TNodeState {
-            TPageId PageId;
+            TPageOffset Offset;
+            ui64 PageSize;
             ui64 EndDataSize;
+            ui32 Crc32 = 0;
 
             bool operator < (const TNodeState& another) const {
-                return PageId < another.PageId;
+                return Offset < another.Offset;
             }
         };
 
@@ -279,15 +301,26 @@ namespace NFwd {
             TDeque<TPageEx> Pages;
             ui32 PagesBeginOffset = 0, PagesPendingOffset = 0;
             TDeque<TNodeState> Queue;
-            TPageId BeginPageId = Max<TPageId>(), EndPageId = 0;
+            TPageOffset BeginOffset = TPageOffset::Max();
+            TPageOffset EndOffset = TPageOffset::Min();
         };
 
     public:
         using TGroupId = NPage::TGroupId;
 
-        TBTreeIndexCache(const TPart* part, TIndexPageLocator& indexPageLocator, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices = nullptr)
-            : Part(part)
+        static TPageLocation GetRootLocation(const NPage::TBtreeIndexMeta& meta,
+            const IPageCollection* indexPageCollection, const IPageCollection* groupPageCollection)
+        {
+            return meta.LevelCount
+                ? indexPageCollection->GetLocation(meta.PageId_)
+                : groupPageCollection->GetLocation(meta.PageId_);
+        }
+
+        TBTreeIndexCache(const TPart* part, TIndexPageLocator& indexPageLocator, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices, TIntrusiveConstPtr<IPageCollection> groupPageCollection, TIntrusiveConstPtr<IPageCollection> indexPageCollection)
+            : Meta(part->IndexPages.GetBTree(groupId))
             , GroupId(groupId)
+            , GroupPageCollection(std::move(groupPageCollection))
+            , IndexPageCollection(std::move(indexPageCollection))
             , IndexPageLocator(indexPageLocator)
         {
             if (slices && !slices->empty()) {
@@ -298,13 +331,13 @@ namespace NFwd {
                 EndRowId = Max<TRowId>();
             }
 
-            auto& meta = Part->IndexPages.GetBTree(groupId);
-            Levels.resize(meta.LevelCount + 1);
-            Levels[0].Queue.push_back({meta.GetPageId(), meta.GetDataSize()});
-            Levels[0].BeginPageId = meta.GetPageId();
-            Levels[0].EndPageId = meta.GetPageId() + 1;
-            if (meta.LevelCount) {
-                IndexPageLocator.Add(meta.GetPageId(), GroupId, 0);
+            auto rootLoc = GetRootLocation(Meta, IndexPageCollection.Get(), GroupPageCollection.Get());
+            Levels.resize(Meta.LevelCount + 1);
+            Levels[0].Queue.push_back({rootLoc.Offset, rootLoc.Size, Meta.GetDataSize(), rootLoc.Crc32});
+            Levels[0].BeginOffset = rootLoc.Offset;
+            Levels[0].EndOffset = rootLoc.Offset;
+            if (Meta.LevelCount) {
+                IndexPageLocator.Add(rootLoc.Offset, GroupId, 0);
             }
         }
 
@@ -312,31 +345,31 @@ namespace NFwd {
         {
         }
 
-        TResult Get(IPageLoadingQueue *head, TPageId pageId, EPage type, ui64 lower) override
+        TResult Get(IPageLoadingQueue *head, TPageOffset offset, EPage type, ui64 lower) override
         {
-            auto levelId = GetLevel(pageId, type);
+            auto levelId = GetLevel(offset, type);
             auto& level = Levels[levelId];
 
-            if (auto *page = level.Trace.Get(pageId)) {
+            if (auto *page = level.Trace.Get(offset)) {
                 return {page, false, true};
             }
 
-            Y_ENSURE(level.BeginPageId <= pageId && pageId < level.EndPageId, "Requested page " << pageId << " is out of loaded slice "
-                << BeginRowId << " " << EndRowId << " " << level.BeginPageId << " " << level.EndPageId << " with index " << Part->IndexPages.GetBTree(GroupId).ToString());
+            Y_ENSURE(level.BeginOffset <= offset && offset <= level.EndOffset, "Requested page " << offset << " is out of loaded slice "
+                << BeginRowId << " " << EndRowId << " " << level.BeginOffset << " " << level.EndOffset << " with index " << Meta.ToString());
 
-            DropPagesBefore(level, pageId);
+            DropPagesBefore(level, offset);
             ShrinkPages(level);
 
             bool grow = GetDataSize(level) <= lower;
 
             if (level.PagesBeginOffset == level.Pages.size()) { // isn't processed yet
-                AdvanceNextPage(level, pageId);
+                AdvanceNextPage(level, offset);
                 RequestNextPage(level, head);
             }
 
             grow &= !level.Queue.empty();
 
-            return {level.Pages.at(level.PagesBeginOffset).Touch(pageId, Stat), grow, true};
+            return {level.Pages.at(level.PagesBeginOffset).Touch(offset, Stat), grow, true};
         }
 
         void Forward(IPageLoadingQueue *head, ui64 upper) override
@@ -355,25 +388,27 @@ namespace NFwd {
         void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage type) override
         {
             Stat.Saved += page.Data.size();
-              
-            auto levelId = GetLevel(page.PageId, type);
+
+            auto levelId = GetLevel(page.Location.Offset, type);
             auto& level = Levels[levelId];
 
             auto it = level.Pages.begin() + level.PagesPendingOffset;
             Y_ENSURE(it != level.Pages.end(), "No pending pages");
-            Y_ENSURE(it->PageId <= page.PageId, "Got page that hasn't been requested for load");
-            if (it->PageId < page.PageId) {
-                it = std::lower_bound(it, level.Pages.end(), page.PageId);
+            Y_ENSURE(it->Offset <= page.Location.Offset, "Got page that hasn't been requested for load");
+            if (it->Offset < page.Location.Offset) {
+                it = std::lower_bound(it, level.Pages.end(), page.Location.Offset);
             }
-            Y_ENSURE(it != level.Pages.end() && it->PageId == page.PageId, "Got page that hasn't been requested for load");
+            Y_ENSURE(it != level.Pages.end() && it->Offset == page.Location.Offset, "Got page that hasn't been requested for load");
 
             if (levelId + 2 < Levels.size()) { // next level is index
                 NPage::TBtreeIndexNode node(page.Data);
                 for (auto pos : xrange(node.GetChildrenCount())) {
-                    IndexPageLocator.Add(node.GetShortChild(pos).GetPageId(), GroupId, levelId + 1);
+                    auto& child = node.GetShortChild(pos);
+                    auto childOffset = IndexPageCollection->GetLocation(child.GetPageId()).Offset;
+                    IndexPageLocator.Add(childOffset, GroupId, levelId + 1);
                 }
             }
-            
+
             it->Settle(page, std::move(sharedPageRef)); // settle of a dropped page releases its data
 
             AdvancePending(levelId);
@@ -381,10 +416,16 @@ namespace NFwd {
         }
 
     private:
-        ui32 GetLevel(TPageId pageId, EPage type) {
+        const IPageCollection* PageCollectionForLevel(ui32 levelId) const noexcept {
+            return (&Levels[levelId] == &Levels.back())
+                ? GroupPageCollection.Get()
+                : IndexPageCollection.Get();
+        }
+
+        ui32 GetLevel(TPageOffset offset, EPage type) {
             switch (type) {
                 case EPage::BTreeIndex:
-                    return IndexPageLocator.GetLevel(pageId);
+                    return IndexPageLocator.GetLevel(offset);
                 case EPage::DataPage:
                     return Levels.size() - 1;
                 default:
@@ -392,12 +433,12 @@ namespace NFwd {
             }
         }
 
-        void DropPagesBefore(TLevel& level, TPageId pageId)
+        void DropPagesBefore(TLevel& level, TPageOffset offset)
         {
             while (level.PagesBeginOffset < level.Pages.size()) {
                 auto &page = level.Pages.at(level.PagesBeginOffset);
 
-                if (page.PageId >= pageId) {
+                if (page.Offset >= offset) {
                     break;
                 }
 
@@ -430,18 +471,17 @@ namespace NFwd {
 
                 if (levelId + 1 < Levels.size() && page) {
                     NPage::TBtreeIndexNode node(page.Data);
+                    auto& nextLevel = Levels[levelId + 1];
                     for (auto pos : xrange(node.GetChildrenCount())) {
                         auto& child = node.GetShortChild(pos);
                         if (child.GetRowCount() <= BeginRowId) {
                             continue;
                         }
-                        auto& nextLevel = Levels[levelId + 1];
-                        Y_ENSURE(!nextLevel.Queue || nextLevel.Queue.back().PageId < child.GetPageId());
-                        nextLevel.Queue.push_back({child.GetPageId(), child.GetDataSize()});
-                        if (nextLevel.BeginPageId == Max<TPageId>()) {
-                            nextLevel.BeginPageId = child.GetPageId();
-                        }
-                        nextLevel.EndPageId = child.GetPageId() + 1;
+                        auto childLoc = PageCollectionForLevel(levelId + 1)->GetLocation(child.GetPageId());
+                        Y_ENSURE(!nextLevel.Queue || nextLevel.Queue.back().Offset < childLoc.Offset);
+                        nextLevel.Queue.push_back({childLoc.Offset, childLoc.Size, child.GetDataSize(), childLoc.Crc32});
+                        nextLevel.BeginOffset = Min(nextLevel.BeginOffset, childLoc.Offset);
+                        nextLevel.EndOffset = Max(nextLevel.EndOffset, childLoc.Offset);
                         if (child.GetRowCount() >= EndRowId) {
                             break;
                         }
@@ -480,52 +520,54 @@ namespace NFwd {
             }
         }
 
-        void AdvanceNextPage(TLevel& level, TPageId pageId)
+        void AdvanceNextPage(TLevel& level, TPageOffset offset)
         {
             auto& queue = level.Queue;
 
             Y_ENSURE(!queue.empty());
-            Y_ENSURE(queue.front().PageId <= pageId);
-            while (!queue.empty() && queue.front().PageId < pageId) {
+            Y_ENSURE(queue.front().Offset <= offset);
+            while (!queue.empty() && queue.front().Offset < offset) {
                 queue.pop_front();
             }
 
             Y_ENSURE(!queue.empty());
-            Y_ENSURE(queue.front().PageId == pageId);
+            Y_ENSURE(queue.front().Offset == offset);
         }
 
         void RequestNextPage(TLevel& level, IPageLoadingQueue *head)
         {
             Y_ENSURE(!level.Queue.empty());
-            auto pageId = level.Queue.front().PageId;
+            auto& front = level.Queue.front();
 
             auto type = &level == &Levels.back() ? EPage::DataPage : EPage::BTreeIndex;
-            auto size = head->AddToQueue(pageId, type);
+            head->AddToQueue(front.Offset, type, front.PageSize, front.Crc32);
 
-            Stat.Fetch += size;
+            Stat.Fetch += front.PageSize;
 
-            Y_ENSURE(!level.Pages || level.Pages.back().PageId < pageId);
-            level.Pages.push_back({TPage(pageId, size, 0, Max<TPageId>()), level.Queue.front().EndDataSize});
+            Y_ENSURE(!level.Pages || level.Pages.back().Offset < front.Offset);
+            level.Pages.push_back({TPage(front.Offset, front.PageSize, 0, Max<TPageId>(), front.Crc32), front.EndDataSize});
             level.Pages.back().Fetch = EFetch::Wait;
 
             level.Queue.pop_front();
         }
 
     private:
-        const TPart* Part;
+        const NPage::TBtreeIndexMeta& Meta;
         const TGroupId GroupId;
+        TIntrusiveConstPtr<IPageCollection> GroupPageCollection;
+        TIntrusiveConstPtr<IPageCollection> IndexPageCollection;
         TRowId BeginRowId, EndRowId;
 
         TIndexPageLocator& IndexPageLocator;
-        
+
         TVector<TLevel> Levels;
     };
 
-    inline THolder<IPageLoadingLogic> CreateCache(const TPart* part, TIndexPageLocator& indexPageLocator, NPage::TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices = nullptr) {
+    inline THolder<IPageLoadingLogic> CreateCache(const TPart* part, TIndexPageLocator& indexPageLocator, NPage::TGroupId groupId, const TIntrusiveConstPtr<TSlices>& slices, TIntrusiveConstPtr<IPageCollection> groupPageCollection, TIntrusiveConstPtr<IPageCollection> indexPageCollection) {
         if (groupId.Index < (groupId.IsHistoric() ? part->IndexPages.BTreeHistoric : part->IndexPages.BTreeGroups).size()) {
-            return MakeHolder<TBTreeIndexCache>(part, indexPageLocator, groupId, slices);
+            return MakeHolder<TBTreeIndexCache>(part, indexPageLocator, groupId, slices, std::move(groupPageCollection), std::move(indexPageCollection));
         } else {
-            return MakeHolder<TFlatIndexCache>(part, indexPageLocator, groupId, slices);
+            return MakeHolder<TFlatIndexCache>(part, indexPageLocator, groupId, slices, std::move(groupPageCollection), std::move(indexPageCollection));
         }
     }
 }

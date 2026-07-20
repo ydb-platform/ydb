@@ -1,14 +1,20 @@
 #include <ydb/core/tablet_flat/flat_sausage_align.h>
 #include <ydb/core/tablet_flat/flat_sausage_meta.h>
 #include <ydb/core/tablet_flat/flat_sausage_writer.h>
+#include <ydb/core/tablet_flat/flat_sausage_packet.h>
 #include <ydb/core/tablet_flat/flat_sausage_flow.h>
 #include <ydb/core/tablet_flat/flat_sausage_solid.h>
 #include <ydb/core/tablet_flat/flat_sausage_chop.h>
 #include <ydb/core/tablet_flat/flat_sausage_grind.h>
+#include <ydb/core/tablet_flat/flat_page_blobs.h>
+#include <ydb/core/tablet_flat/flat_part_iface.h>
+#include <ydb/core/tablet_flat/flat_page_other.h>
 #include <ydb/core/tablet_flat/util_fmt_desc.h>
 
+#include <library/cpp/digest/crc32c/crc32c.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
+#include <util/generic/hash.h>
 #include <array>
 
 namespace NKikimr {
@@ -25,6 +31,11 @@ namespace {
             const auto size = Glob(page).Logo.BlobSize();
 
             return { size, { page, 0 }, { page, size } };
+        }
+
+        inline TBorder Bounds(NTable::NPage::TPageLocation location) const noexcept
+        {
+            return Bounds(location.Offset.AsPageIndex());
         }
 
         inline TGlobId Glob(ui32 at) const noexcept
@@ -156,21 +167,21 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
     {
         const TMeta meta(MakeMeta(), 0);
 
-        auto grow = [&meta](const TVector<ui32> pages) {
+        auto grow = [&meta](TVector<TPageLocation> pages) {
             TGlow flow(meta, pages);
             flow.Grow(Max<ui64>());
             return std::move(flow.Queue);
         };
 
         { /*_ { 1 } lies away of the bounds of one blob */
-            const auto ln = grow({ 1 });
+            const auto ln = grow({ meta.GetLocation(1) });
 
             UNIT_ASSERT(ln.size() == 1);
             UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0, 30, 0, 50 }));
         }
 
         { /*_ { 0, 6 } snaps to the start of the single blob */
-            const auto ln = grow({ 0, 6 });
+            const auto ln = grow({ meta.GetLocation(0), meta.GetLocation(6) });
 
             UNIT_ASSERT(ln.size() == 2);
             UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0, 50, 0, 0 }));
@@ -178,7 +189,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         }
 
         { /*_ { 3, 8 } snaps to the end of the single blob */
-            const auto ln = grow({ 3, 8 });
+            const auto ln = grow({ meta.GetLocation(3), meta.GetLocation(8) });
 
             UNIT_ASSERT(ln.size() == 2);
             UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0, 60, 1,  60 }));
@@ -186,7 +197,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         }
 
         { /*_ { 2 } spans over the bounds of the two blobs */
-            const auto ln = grow({ 2 });
+            const auto ln = grow({ meta.GetLocation(2) });
 
 
             UNIT_ASSERT(ln.size() == 2);
@@ -195,7 +206,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         }
 
         { /*_ { 4, 5 } each occupies entire single blob */
-            const auto ln = grow({ 4, 5 });
+            const auto ln = grow({ meta.GetLocation(4), meta.GetLocation(5) });
 
             UNIT_ASSERT(ln.size() == 2);
             UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0, 40, 2, 0 }));
@@ -203,7 +214,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         }
 
         { /*_ { 7 } spans over a serveral subsequent blobs */
-            const auto ln = grow({ 7 });
+            const auto ln = grow({ meta.GetLocation(7) });
 
             UNIT_ASSERT(ln.size() == 3);
             UNIT_ASSERT((ln[0] == TGlow::TReadPortion{ 0,  70, 4, 70 }));
@@ -215,9 +226,13 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
     Y_UNIT_TEST(Grow)
     {
         const TMeta meta(MakeMeta(), 0);
-        const std::array<ui32, 9> nums = {{ 0, 1, 2, 3, 4, 5, 6, 7, 8 }};
+        TVector<TPageLocation> pages = {
+            meta.GetLocation(0), meta.GetLocation(1), meta.GetLocation(2),
+            meta.GetLocation(3), meta.GetLocation(4), meta.GetLocation(5),
+            meta.GetLocation(6), meta.GetLocation(7), meta.GetLocation(8),
+        };
 
-        TGlow flow(meta, nums);
+        TGlow flow(meta, pages);
 
         auto grow = [&flow](ui64 bytes) {
             ui64 used = 0;
@@ -260,8 +275,8 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         };
 
         { /*_ Take the only blob page in middle */
-            const ui32 slice1[] = { 3 };
-            const ui32 slice2[] = { 4 };
+            const TPageLocation slice1[] = { TPageLocation::FromPageIndex(3, globs[3].Logo.BlobSize()) };
+            const TPageLocation slice2[] = { TPageLocation::FromPageIndex(4, globs[4].Logo.BlobSize()) };
             auto one = TPagesToBlobsConverter<TMyPageCollection>(myPageCollection, slice1).Grow(7500);
             auto two = TPagesToBlobsConverter<TMyPageCollection>(myPageCollection, slice2).Grow(7500);
 
@@ -270,7 +285,14 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         }
 
         { /*_ Read all pages in blobs page collection */
-            const ui32 slice[] = { 0, 1, 2, 3, 4, 5 };
+            const TPageLocation slice[] = {
+                TPageLocation::FromPageIndex(0, globs[0].Logo.BlobSize()),
+                TPageLocation::FromPageIndex(1, globs[1].Logo.BlobSize()),
+                TPageLocation::FromPageIndex(2, globs[2].Logo.BlobSize()),
+                TPageLocation::FromPageIndex(3, globs[3].Logo.BlobSize()),
+                TPageLocation::FromPageIndex(4, globs[4].Logo.BlobSize()),
+                TPageLocation::FromPageIndex(5, globs[5].Logo.BlobSize()),
+            };
             TPagesToBlobsConverter<TMyPageCollection> flow(myPageCollection, slice);
 
             auto one = flow.Grow(7500);
@@ -288,7 +310,14 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         }
 
         { /*_ Read with limits on each package */
-            const ui32 slice[] = { 0, 1, 2, 3, 4, 5 };
+            const TPageLocation slice[] = {
+                TPageLocation::FromPageIndex(0, globs[0].Logo.BlobSize()),
+                TPageLocation::FromPageIndex(1, globs[1].Logo.BlobSize()),
+                TPageLocation::FromPageIndex(2, globs[2].Logo.BlobSize()),
+                TPageLocation::FromPageIndex(3, globs[3].Logo.BlobSize()),
+                TPageLocation::FromPageIndex(4, globs[4].Logo.BlobSize()),
+                TPageLocation::FromPageIndex(5, globs[5].Logo.BlobSize()),
+            };
             TPagesToBlobsConverter<TMyPageCollection> flow(myPageCollection, slice);
 
             auto one = flow.Grow(40);
@@ -408,6 +437,286 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
             auto glob = cookieAllocator.Do(3, 77);
 
             UNIT_ASSERT(glob == TGlobId(TLogoBlobID(1, 2, 6, 3, 77, 11), 999));
+        }
+    }
+
+    Y_UNIT_TEST(TPageLocation_Basics)
+    {
+        using NTable::NPage::TPageLocation;
+        using NTable::NPage::TPageOffset;
+
+        // Default construction yields Max
+        TPageLocation def;
+        UNIT_ASSERT(!def);
+        UNIT_ASSERT(def.Offset == TPageOffset::Max());
+
+        // Parameterized construction
+        auto loc = TPageLocation::FromByteOffset(42, 1024);
+        UNIT_ASSERT(bool(loc));
+        UNIT_ASSERT(loc.Offset == TPageOffset::FromByteOffset(42));
+        UNIT_ASSERT(loc.Size == 1024);
+
+        // Equality (compares offset, verifies size)
+        auto same = TPageLocation::FromByteOffset(42, 1024);
+        auto diff = TPageLocation::FromByteOffset(99, 1024);
+        UNIT_ASSERT(loc == same);
+        UNIT_ASSERT(loc != diff);
+
+        // Max factory
+        auto maxed = TPageLocation::Max();
+        UNIT_ASSERT(!maxed);
+        UNIT_ASSERT(maxed.Offset.IsMax());
+    }
+
+    Y_UNIT_TEST(GetLocation)
+    {
+        const TMeta meta(MakeMeta(), 0);
+        // Pages: { 50, 30, 80, 60, 40, 60, 70, 380, 10 }
+        //
+        // Expected offsets:
+        //   0:   0,  1:  50,  2:  80,  3: 160,  4: 220,
+        //   5: 260,  6: 320,  7: 390,  8: 770
+
+        const std::pair<ui64, ui32> expected[9] = {
+            {   0, 50 },
+            {  50, 30 },
+            {  80, 80 },
+            { 160, 60 },
+            { 220, 40 },
+            { 260, 60 },
+            { 320, 70 },
+            { 390, 380 },
+            { 770, 10 },
+        };
+
+        for (ui32 i = 0; i < 9; i++) {
+            auto loc = meta.GetLocation(i);
+            UNIT_ASSERT(loc);
+            UNIT_ASSERT_VALUES_EQUAL(loc.GetByteOffset(), expected[i].first);
+            UNIT_ASSERT_VALUES_EQUAL(loc.Size,   expected[i].second);
+        }
+    }
+
+    Y_UNIT_TEST(Bounds_via_Location)
+    {
+        const TMeta meta(MakeMeta(), 0);
+
+        for (ui32 i = 0; i < 9; i++) {
+            auto loc = meta.GetLocation(i);
+
+            // Bounds(TPageLocation) must match Bounds(ui32)
+            auto boundsViaId   = meta.Bounds(i);
+            auto boundsViaLoc  = meta.Bounds(loc);
+
+            UNIT_ASSERT(boundsViaLoc.Lo.Blob == boundsViaId.Lo.Blob);
+            UNIT_ASSERT(boundsViaLoc.Lo.Skip == boundsViaId.Lo.Skip);
+            UNIT_ASSERT(boundsViaLoc.Up.Blob == boundsViaId.Up.Blob);
+            UNIT_ASSERT(boundsViaLoc.Up.Skip == boundsViaId.Up.Skip);
+            UNIT_ASSERT(boundsViaLoc.Bytes == boundsViaId.Bytes);
+        }
+    }
+
+    Y_UNIT_TEST(Verify_via_Location)
+    {
+        auto metaBlob = MakeMeta();
+        TLargeGlobId largeGlobId(0, TLogoBlobID(10, 20, 30, 1, metaBlob.size(), 0), metaBlob.size());
+        const TPageCollection pageCollection(largeGlobId, metaBlob);
+        const TMeta meta(metaBlob, 0);
+
+        for (ui32 i = 0; i < 9; i++) {
+            auto loc = meta.GetLocation(i);
+
+            // Correct data: verify through IPageCollection::Verify
+            TString data(loc.Size, '9');
+            UNIT_ASSERT(pageCollection.Verify(loc, TArrayRef<const char>(data.data(), data.size())));
+
+            // Wrong size → false
+            TString wrongSize(loc.Size + 1, '9');
+            UNIT_ASSERT(!pageCollection.Verify(loc, TArrayRef<const char>(wrongSize.data(), wrongSize.size())));
+
+            // Wrong data → false
+            if (loc.Size > 0) {
+                TString wrongData(loc.Size, 'X');
+                UNIT_ASSERT(!pageCollection.Verify(loc, TArrayRef<const char>(wrongData.data(), wrongData.size())));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TPageCollection_GetLocation)
+    {
+        auto metaBlob = MakeMeta();
+        // Build a TLargeGlobId with Bytes matching the blob size
+        TLargeGlobId largeGlobId(0, TLogoBlobID(10, 20, 30, 1, metaBlob.size(), 0), metaBlob.size());
+        TPageCollection pageCollection(largeGlobId, metaBlob);
+
+        UNIT_ASSERT_VALUES_EQUAL(pageCollection.Total(), 9);
+
+        // TPageCollection::GetLocation must delegate to TMeta::GetLocation
+        TMeta rawMeta(MakeMeta(), 0);
+        for (ui32 i = 0; i < 9; i++) {
+            auto viaPC = pageCollection.GetLocation(i);
+            auto viaRaw = rawMeta.GetLocation(i);
+            UNIT_ASSERT(viaPC == viaRaw);
+            UNIT_ASSERT_VALUES_EQUAL(viaPC.Offset, viaRaw.Offset);
+            UNIT_ASSERT_VALUES_EQUAL(viaPC.Size,   viaRaw.Size);
+        }
+    }
+
+    Y_UNIT_TEST(TExtBlobs_GetLocation)
+    {
+        // Build 5 globs with varying sizes
+        const std::array<NPageCollection::TGlobId, 5> globs = {{
+            { TLogoBlobID(1, 2, 3,  1, 100, 0), 7 },
+            { TLogoBlobID(1, 2, 3,  7,  50, 1), 7 },
+            { TLogoBlobID(1, 2, 3, 13, 200, 2), 7 },
+            { TLogoBlobID(1, 2, 3, 33,  80, 3), 4 },
+            { TLogoBlobID(1, 2, 3, 57, 120, 4), 7 },
+        }};
+
+        NTable::NPage::TExtBlobsWriter writer;
+        for (auto &g : globs) {
+            writer.Put(g);
+        }
+
+        auto blob = writer.Make();
+        NTable::NPage::TExtBlobs extBlobs(blob, TLogoBlobID(1, 2, 3, 1, blob.size(), 0));
+
+        // For independently addressed blobs, Offset equals pageId (index in Array)
+        //   0:   0,  1:   1,  2:   2,  3:   3,  4:   4
+        const ui64 expectedIndex[5] = { 0, 1, 2, 3, 4 };
+        const ui32 expectedSize[5]   = { 100, 50, 200, 80, 120 };
+
+        UNIT_ASSERT_VALUES_EQUAL(extBlobs.Total(), 5);
+
+        for (ui32 i = 0; i < 5; i++) {
+            auto loc = extBlobs.GetLocation(i);
+            UNIT_ASSERT(bool(loc));
+            UNIT_ASSERT_VALUES_EQUAL(loc.GetPageIndex(), expectedIndex[i]);
+            UNIT_ASSERT_VALUES_EQUAL(loc.Size,   expectedSize[i]);
+        }
+    }
+
+    Y_UNIT_TEST(IPageCollection_GetLocation_Polymorphic)
+    {
+        // Verify pure virtual dispatch works for both TPageCollection and TExtBlobs
+
+        // --- TPageCollection via IPageCollection& ---
+        auto metaBlob = MakeMeta();
+        TLargeGlobId largeGlobId(0, TLogoBlobID(10, 20, 30, 1, metaBlob.size(), 0), metaBlob.size());
+        TPageCollection pageCollection(largeGlobId, metaBlob);
+
+        const IPageCollection& pcRef = pageCollection;
+        TMeta rawMeta(MakeMeta(), 0);
+        for (ui32 i = 0; i < 9; i++) {
+            auto loc = pcRef.GetLocation(i);
+            auto expected = rawMeta.GetLocation(i);
+            UNIT_ASSERT(loc == expected);
+        }
+
+        // --- TExtBlobs via IPageCollection& ---
+        const std::array<NPageCollection::TGlobId, 3> globs = {{
+            { TLogoBlobID(1, 2, 3,  1, 60, 0), 7 },
+            { TLogoBlobID(1, 2, 3,  7, 40, 1), 7 },
+            { TLogoBlobID(1, 2, 3, 13, 90, 2), 7 },
+        }};
+
+        NTable::NPage::TExtBlobsWriter writer;
+        for (auto &g : globs) writer.Put(g);
+        auto blob = writer.Make();
+        NTable::NPage::TExtBlobs extBlobs(blob, TLogoBlobID(1, 2, 3, 1, blob.size(), 0));
+
+        const IPageCollection& ebRef = extBlobs;
+        for (ui32 i = 0; i < 3; i++) {
+            auto loc = ebRef.GetLocation(i);
+            UNIT_ASSERT(bool(loc));
+            // For independently addressed blobs, Offset equals pageId (index in Array)
+            UNIT_ASSERT_VALUES_EQUAL(loc.GetPageIndex(), i);
+            UNIT_ASSERT_VALUES_EQUAL(loc.Size, globs[i].Bytes());
+        }
+    }
+
+    Y_UNIT_TEST(ByteOffset_TryGetPage)
+    {
+        using NTable::IPages;
+        using NTable::NPage::TPageLocation;
+        using NTable::NPage::TPageOffset;
+        using NTable::ELargeObj;
+
+        // A minimal IPages mock that stores data keyed by byte-offset TPageOffset
+        // — no page-index conversion, no CRC32 check (delegated to Verify)
+        struct TByteOffsetStore : public IPages {
+            THashMap<TPageOffset, TSharedData> Map;
+
+            void Add(TPageLocation loc, TSharedData data)
+            {
+                Map[loc.Offset] = std::move(data);
+            }
+
+            const TSharedData* TryGetPage(const TPart*, TPageLocation location, TGroupId) override
+            {
+                auto it = Map.find(location.Offset);
+                return it != Map.end() ? &it->second : nullptr;
+            }
+
+            TResult Locate(const TMemTable*, ui64, ui32) override
+            {
+                return {false, nullptr};
+            }
+
+            TResult Locate(const TPart*, ui64, ELargeObj) override
+            {
+                return {false, nullptr};
+            }
+        };
+
+        const TMeta meta(MakeMeta(), 0);
+
+        // Build TPageCollection — production path for IPageCollection::Verify
+        auto metaBlob = MakeMeta();
+        TLargeGlobId largeGlobId(0, TLogoBlobID(10, 20, 30, 1, metaBlob.size(), 0), metaBlob.size());
+        const TPageCollection pageCollection(largeGlobId, metaBlob);
+
+        TByteOffsetStore store;
+
+        // Phase 1: fill with same '9'-filled data as MakeMeta — CRC32 matches TMeta
+        for (ui32 i = 0; i < 9; i++) {
+            auto loc = meta.GetLocation(i);
+            UNIT_ASSERT(loc.Offset.IsByteOffset());   // real byte offset, not page index
+            UNIT_ASSERT(loc.Crc32 != 0);              // real CRC32 from TMeta
+
+            TString data(loc.Size, '9');              // same fill as MakeMeta()
+            // Confirm our data produces the same CRC32 as what TMeta recorded
+            UNIT_ASSERT_VALUES_EQUAL(Crc32c(data.data(), data.size()), loc.Crc32);
+
+            store.Add(loc, TSharedData::Copy(data.data(), data.size()));
+        }
+
+        // Phase 2: retrieve each page and verify CRC32 via IPageCollection::Verify
+        // — the same production path as flat_bio_actor.cpp
+        for (ui32 i = 0; i < 9; i++) {
+            auto loc = meta.GetLocation(i);
+            const TSharedData* page = store.TryGetPage(nullptr, loc, {});
+            UNIT_ASSERT(page);
+            UNIT_ASSERT_VALUES_EQUAL(page->size(), loc.Size);
+            UNIT_ASSERT(pageCollection.Verify(loc,
+                TArrayRef<const char>(page->data(), page->size())));
+        }
+
+        // Phase 3: unknown byte-offset location → nullptr
+        auto badLoc = TPageLocation::FromByteOffset(999999, 10);
+        UNIT_ASSERT(!store.TryGetPage(nullptr, badLoc, {}));
+
+        // Phase 4: corrupt data at a known offset — TryGetPage returns it,
+        // but IPageCollection::Verify rejects it (CRC32 mismatch)
+        auto loc0 = meta.GetLocation(0);
+        TString badData(loc0.Size, 'X');               // different content → different CRC32
+        UNIT_ASSERT(Crc32c(badData.data(), badData.size()) != loc0.Crc32);
+        store.Add(loc0, TSharedData::Copy(badData.data(), badData.size()));
+        {
+            const TSharedData* page = store.TryGetPage(nullptr, loc0, {});
+            UNIT_ASSERT(page);                          // lookup succeeds (no CRC32 inside TryGetPage)
+            UNIT_ASSERT(!pageCollection.Verify(loc0,    // but Verify catches the mismatch
+                TArrayRef<const char>(page->data(), page->size())));
         }
     }
 }

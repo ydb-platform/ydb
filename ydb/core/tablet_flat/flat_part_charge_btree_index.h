@@ -752,7 +752,7 @@ private:
         ui64 result = 0;
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            auto page = Env->TryGetPage(Part, pageId, {});
+            auto page = Env->TryGetPage(Part, Part->GetPageLocation(pageId, {}), {});
             if (!page) {
                 return result;
             }
@@ -772,7 +772,7 @@ private:
         ui64 result = meta.GetDataSize();
 
         for (ui32 height = 0; height < meta.LevelCount; height++) {
-            auto page = Env->TryGetPage(Part, pageId, {});
+            auto page = Env->TryGetPage(Part, Part->GetPageLocation(pageId, {}), {});
             if (!page) {
                 return result;
             }
@@ -787,15 +787,15 @@ private:
 
 private:
     const TSharedData* TryGetDataPage(TPageId pageId, TGroupId groupId) const {
-        return Env->TryGetPage(Part, pageId, groupId);
+        return Env->TryGetPage(Part, Part->GetPageLocation(pageId, groupId), groupId);
     };
 
     bool HasDataPage(TPageId pageId, TGroupId groupId) const {
-        return bool(Env->TryGetPage(Part, pageId, groupId));
+        return bool(Env->TryGetPage(Part, Part->GetPageLocation(pageId, groupId), groupId));
     }
 
     bool TryLoadNode(const TChildState& child, TVector<TNodeState>& level) const {
-        auto page = Env->TryGetPage(Part, child.PageId, {});
+        auto page = Env->TryGetPage(Part, Part->GetPageLocation(child.PageId, {}), {});
         if (!page) {
             return false;
         }

@@ -28,7 +28,7 @@ namespace NTable {
 
         struct TFetch : TMoveOnly {
             TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
-            TVector<TPageId> Pages;
+            TVector<TPageLocation> Pages;
 
             explicit operator bool() const {
                 return bool(Pages);
@@ -57,19 +57,19 @@ namespace NTable {
                 Part = part;
             }
 
-            const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
+            const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override
             {
                 Y_ENSURE(part == Part, "Unsupported part");
                 Y_ENSURE(groupId.IsMain(), "Unsupported column group");
 
-                auto savedPage = SavedPages.find(pageId);
-                
+                auto savedPage = SavedPages.find(location.Offset);
+
                 if (savedPage == SavedPages.end()) {
-                    if (auto cachedPage = PageCollection->FindPage(pageId); cachedPage) {
+                    if (auto cachedPage = PageCollection->FindPage(location.Offset); cachedPage) {
                         if (auto sharedPageRef = cachedPage->SharedBody; sharedPageRef && sharedPageRef.Use()) {
                             // Save page in case it's evicted on the next iteration
-                            AddSavedPage(pageId, std::move(sharedPageRef));
-                            savedPage = SavedPages.find(pageId);
+                            AddSavedPage(location.Offset, std::move(sharedPageRef));
+                            savedPage = SavedPages.find(location.Offset);
                         }
                     }
                 }
@@ -77,7 +77,7 @@ namespace NTable {
                 if (savedPage != SavedPages.end()) {
                     return &savedPage->second;
                 } else {
-                    NeedPages.insert(pageId);
+                    NeedPages.insert(location);
                     return nullptr;
                 }
             }
@@ -90,7 +90,7 @@ namespace NTable {
             TFetch GetFetch()
             {
                 if (NeedPages) {
-                    TVector<TPageId> pages(NeedPages.begin(), NeedPages.end());
+                    TVector<TPageLocation> pages(NeedPages.begin(), NeedPages.end());
                     std::sort(pages.begin(), pages.end());
                     return {
                         .PageCollection = PageCollection->PageCollection,
@@ -103,32 +103,32 @@ namespace NTable {
 
             void Save(NSharedCache::TEvResult::TLoaded&& loaded)
             {
-                auto pageType = PageCollection->GetPageType(loaded.PageId);
+                EPage pageType = loaded.Location.Type;
 
-                auto needed = NeedPages.erase(loaded.PageId);
-                Y_ENSURE(needed, "Got uknown " << pageType << " page " << loaded.PageId);
-                
+                auto needed = NeedPages.erase(loaded.Location);
+                Y_ENSURE(needed, "Got unknown " << (ui16)pageType << " page at " << loaded.Location.Offset);
+
                 bool sticky = NeedIn(pageType) || pageType == EPage::FlatIndex;
-                AddSavedPage(loaded.PageId, loaded.Page);
+                AddSavedPage(loaded.Location.Offset, loaded.Page);
                 if (sticky) {
-                    PageCollection->AddStickyPage(loaded.PageId, std::move(loaded.Page));
+                    PageCollection->AddStickyPage(loaded.Location, std::move(loaded.Page));
                 } else {
-                    PageCollection->AddPage(loaded.PageId, std::move(loaded.Page));
+                    PageCollection->AddPage(loaded.Location, std::move(loaded.Page));
                 }
             }
 
         private:
-            void AddSavedPage(TPageId pageId, NSharedCache::TSharedPageRef page)
+            void AddSavedPage(TPageOffset offset, NSharedCache::TSharedPageRef page)
             {
-                SavedPages[pageId] = NSharedCache::TPinnedPageRef(page).GetData();
+                SavedPages[offset] = NSharedCache::TPinnedPageRef(page).GetData();
                 SavedPagesRefs.emplace_back(std::move(page));
             }
 
             const TPart* Part = nullptr;
             TIntrusivePtr<TPageCollection> PageCollection;
-            THashMap<TPageId, TSharedData> SavedPages;
+            THashMap<TPageOffset, TSharedData> SavedPages;
             TVector<NSharedCache::TSharedPageRef> SavedPagesRefs;
-            THashSet<TPageId> NeedPages;
+            THashSet<TPageLocation, NPage::TPageLocationByOffsetHash> NeedPages;
         };
 
         struct TRunOptions {
@@ -142,13 +142,27 @@ namespace NTable {
         };
 
         TLoader(TPartComponents ou)
-            : TLoader(TPartStore::Construct(std::move(ou.PageCollectionComponents)),
-                    std::move(ou.Legacy),
-                    std::move(ou.Opaque),
-                    /* no deltas */ { },
-                    ou.Epoch)
+            : Legacy(std::move(ou.Legacy))
+            , Opaque(std::move(ou.Opaque))
+            , Epoch(ou.Epoch)
         {
+            auto components = std::move(ou.PageCollectionComponents);
 
+            if (components.size() < 1) {
+                Y_TABLET_ERROR("Cannot load TPart from " << components.size() << " page collections");
+            }
+
+            PageCollections.reserve(components.size());
+
+            // Wrap slot 0 immediately — needed for LoaderEnv and scheme parsing in StageParseMeta
+            PageCollections.emplace_back(new TPageCollection(std::move(components[0].PageCollection)));
+            LoaderEnv = MakeHolder<TLoaderEnv>(PageCollections[0]);
+
+            // Store remaining raw components — wrapped in StageParseMeta after we know SmallId/GroupsCount
+            RawComponents.reserve(components.size() - 1);
+            for (ui32 i = 1; i < components.size(); i++) {
+                RawComponents.emplace_back(std::move(components[i]));
+            }
         }
 
         TLoader(TVector<TIntrusivePtr<TPageCollection>> pageCollections, TString legacy, TString opaque,
@@ -273,6 +287,7 @@ namespace NTable {
 
     private:
         TVector<TIntrusivePtr<TPageCollection>> PageCollections;
+        TVector<TPageCollectionComponents> RawComponents;
         const TString Legacy;
         const TString Opaque;
         const TVector<TString> Deltas;

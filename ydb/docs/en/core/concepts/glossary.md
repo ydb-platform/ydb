@@ -20,7 +20,7 @@ Another important characteristic of {{ ydb-short-name }} databases is that they 
 
 ### Node {#node}
 
-{{ ydb-short-name }} **node** is a server process that runs the executable named `ydbd`. Several nodes {{ ydb-short-name }} can run on a single physical server or virtual machine, which is common practice. Thus, in the context of {{ ydb-short-name }}, nodes **not** are synonyms for hosts.
+{{ ydb-short-name }} **node** is a server process that runs the executable named `ydbd`. Several nodes {{ ydb-short-name }} can run on a single physical server or virtual machine, which is common practice. Thus, in the context of {{ ydb-short-name }}, nodes **are not** synonyms for hosts.
 
 Since {{ ydb-short-name }} uses a storage and compute separation approach, `ydbd` has several operating modes that define the node type. The available node types are described below.
 
@@ -68,7 +68,7 @@ A static group may require special attention during major cluster maintenance, s
 
 #### Dynamic group {#dynamic-group}
 
-Regular storage groups that are not [static](#static-group) are called **dynamic groups**. They are called dynamic because they can be created and deleted on the fly during the operation of the [cluster](#cluster).
+Regular storage groups that are not [static](#static-group) are called **dynamic groups** or **dynamic group**. They are called dynamic because they can be created and deleted on the fly during the operation of the [cluster](#cluster).
 
 #### Virtual storage group {#virtual-storage-groups}
 
@@ -114,7 +114,7 @@ The implementation of distributed transactions is covered in a separate article 
 
 ### Sessions
 
-Logical connections to the database that store the context required for executing queries and managing transactions. Sessions are described in more detail in section [{#T}](query_execution/execution_process.md#sessions).
+Logical connections to the database that store the context required for executing queries and managing transactions. Sessions are described in more detail in section [{#T}](query_execution/index.md#sessions).
 
 ### Client-side timeout {#client-timeout}
 
@@ -184,7 +184,7 @@ A guide to choosing primary keys is presented in [{#T}](../dev/primary-key/index
 
 #### Primary index {#primary-index}
 
-**primary index**, **primary key index** — this is the main data structure used to locate rows in a table. It is created based on the selected [primary key](#primary-key) and defines the physical order of rows in the table; thus, each table can have only one primary index. The primary index is unique.
+**primary index**, **primary key index** — is the primary data structure used to locate rows in a table. It is created based on the selected [primary key](#primary-key) and defines the physical order of rows in the table; thus, each table can have only one primary index. The primary index is unique.
 
 #### Secondary index {#secondary-index}
 
@@ -329,7 +329,7 @@ See more details [{#T}](datamodel/backup-collection.md).
 
 ### Coordination node {#coordination-node}
 
-**coordination node** — is a schema object that allows client applications to create semaphores for coordinating their actions. Coordination nodes are used for implementing distributed locks, service discovery, leader election, and other scenarios. More details on [coordination nodes](./datamodel/coordination-node.md).
+**Coordination node** — a schema object that allows client applications to create semaphores for coordinating their actions. Coordination nodes are used for implementing distributed locks, service discovery, leader election, and other scenarios. More details on [coordination nodes](./datamodel/coordination-node.md).
 
 #### Semaphore {#semaphore}
 
@@ -343,7 +343,7 @@ See more details [{#T}](datamodel/backup-collection.md).
 
 ### Resource pool classifier {#resource-pool-classifier}
 
-**resource pool classifier** — an object designed to manage the distribution of queries among [resource pools](#resource-pool). It defines rules by which a resource pool is selected for each query. These classifiers are global for the entire [database](#database) and apply to all queries sent to it. More details on their usage can be found in the article [{#T}](../dev/resource-consumption-management.md).
+**Resource pool classifier** — an object designed to manage the distribution of queries among [resource pools](#resource-pool). It defines rules by which a resource pool is selected for each query. These classifiers are global for the entire [database](#database) and apply to all queries sent to it. More details on their usage can be found in the article [{#T}](../dev/resource-consumption-management.md).
 
 {% endif %}
 
@@ -421,7 +421,7 @@ An access subject can be a [user](#access-user) or a [group](#access-group).
 
 **[access right](../security/authorization.md#right)** — an entity that reflects permission for an [access subject](#access-subject) to perform a specific set of operations in a cluster or database on a particular [access object](#access-object).
 
-### Access right inheritance {#access-right-inheritance}
+### Access rights inheritance {#access-right-inheritance}
 
 **Access rights inheritance** – a mechanism whereby [access rights](#access-right) granted on parent [access objects](#access-object) are inherited by child objects in the hierarchical database structure. This ensures that permissions granted at a higher hierarchy level apply to all lower levels unless they are [explicitly overridden](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance).
 
@@ -598,7 +598,7 @@ All data written to tables of the [local database](#local-database) are initiall
 
 ### Memory controller {#memory-controller}
 
-**memory controller**— is an [actor](#actor) that manages [memory limits](../reference/configuration/memory_controller_config.md) {{ ydb-short-name }}.
+**memory controller**— is a [actor](#actor) that manages [memory limits](../reference/configuration/memory_controller_config.md) {{ ydb-short-name }}.
 
 ### Spilling {#spilling}
 
@@ -799,13 +799,13 @@ Technically, the DS proxy is implemented as an [actor service](#actor-service), 
 
 #### Failure realm {#fail-realm}
 
-**fail realm** is a set of [failure domains](#fail-domain) that can fail simultaneously for a common cause. A correlated failure of two [VDisks](#vdisk) in the same failure realm is more likely than a failure of two VDisks from different failure realms.
+**failure realm** is a set of [failure domains](#fail-domain) that can fail simultaneously for a common cause. A correlated failure of two [VDisks](#vdisk) in the same failure realm is more likely than a failure of two VDisks from different failure realms.
 
 An example of a failure realm is a set of equipment located in a single [data center or availability zone](#regions-az) that can fail entirely due to a natural disaster, a large‑scale power outage, or a similar event.
 
 #### Failure domain {#fail-domain}
 
-**fail domain** is a set of equipment that can fail simultaneously. A correlated failure of two [VDisk](#vdisk) within the same failure domain is more likely than a failure of two VDisk from different failure domains. When the failure domains are different, the probability of simultaneous failure also depends on whether the considered domains belong to the same failure realm or to different ones.
+**failure domain** is a set of equipment that can fail simultaneously. A correlated failure of two [VDisk](#vdisk) within the same failure domain is more likely than a failure of two VDisk from different failure domains. When the failure domains are different, the probability of simultaneous failure also depends on whether the considered domains belong to the same failure realm or to different ones.
 
 An example of a failure domain is a set of disks attached to a single server, because all disks of that server can become unavailable if the server’s power supply or network controller fails. Typically, a common failure domain includes all servers located in the same [server rack](#rack), since power or network issues at the rack level render all equipment in the rack unavailable. Thus, a typical failure domain corresponds to a server rack (if the [cluster](#cluster) is configured with rack‑aware topology) or to an individual server.
 
@@ -858,7 +858,7 @@ For read‑only transactions, similar to “read uncommitted” in other databas
 
 #### Transaction proxies {#transaction-proxy}
 
-**transaction proxy**, or `TX_PROXY` — this is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and result aggregation. When directly orchestrated by other actors (e.g., QP data transactions), it is used for caching and allocating unique [TxID](#txid).
+**transaction proxies**, **transaction proxy**, or `TX_PROXY` — this is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and result aggregation. When directly orchestrated by other actors (e.g., QP data transactions), it is used for caching and allocating unique [TxID](#txid).
 
 #### Transaction flags {#txflags}
 
@@ -866,15 +866,15 @@ For read‑only transactions, similar to “read uncommitted” in other databas
 
 #### Transaction identifier {#txid}
 
-**TxID** — this is a unique identifier assigned to each transaction when it is accepted {{ ydb-short-name }}.
+**Transaction identifier**, **TxID** — this is a unique identifier assigned to each transaction when it is accepted {{ ydb-short-name }}.
 
 #### Transaction order identifier {#transaction-order-id}
 
-**transaction order id** — this is a unique identifier assigned to each transaction during planning. It consists of a [PlanStep](#planstep) and a [Transaction ID](#txid).
+**Transaction order identifier**, **transaction order id** — this is a unique identifier assigned to each transaction during planning. It consists of a [PlanStep](#planstep) and a [Transaction ID](#txid).
 
 #### Plan step {#planstep}
 
-**PlanStep**, **Step** — this is the logical time at which the execution of a set of transactions is scheduled.
+**Plan step**, **PlanStep**, **Step** — this is the logical time at which the execution of a set of transactions is scheduled.
 
 #### Mediator time {#mediator-time}
 
@@ -886,13 +886,13 @@ During the execution of distributed transactions, **mediator time** — this is 
 
 MiniKQL is a low‑level language. End users of the system see only queries in the [YQL](#yql) language, which relies on MiniKQL in its implementation.
 
-#### Query processor {#kqp}
+#### Query Processor {#kqp}
 
 **Query Processor**, **QP**, (formerly **KQP**) is a {{ ydb-short-name }} component responsible for orchestrating the execution of user queries and generating the final response.
 
 ### Global schema {#global-schema}
 
-**global scheme**, **global schema**, or **database schema** is the schema of all data stored in the [database](#database). It consists of [tables](#table) and other entities such as [topics](#topic). Metadata about these entities is called the global schema. The term is used in contrast to **local schema**, which refers to the data schema inside a [tablet](#tablet). Users {{ ydb-short-name }} never see the local schema and work only with the global schema.
+**global scheme**, **global schema**, or **database schema** is the schema of all data stored in the [database](#database). It consists of [tables](#table) and other entities such as [topics](#topic). Metadata about these entities is called the global schema. The term is used in contrast to **local schema**, which refers to the data schema inside a [tablet](#tablet). {{ ydb-short-name }} users never see the local schema and work only with the global schema.
 
 ### KiKiMR {#kikimr}
 

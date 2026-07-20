@@ -22,7 +22,7 @@ Where:
 * `SYNC` — indicates synchronous index updates. This is the only mode available for JSON indexes, and it does not need to be specified explicitly.
 * `<json_column>` — a table column of type `Json` or `JsonDocument`. A JSON index is built on a single column only.
 
-JSON indexes do not support the `COVER` expression — attempting to specify it will result in an error.
+JSON index does not support the `COVER` expression — attempting to specify it will result in an error.
 
 {% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 

@@ -1,4 +1,4 @@
-# Create table
+# CREATE TABLE
 
 {% if feature_bulk_tables %}
 
@@ -86,7 +86,7 @@ If the parameter is not specified, the table will be partitioned by the same col
 
 Read more about partitioning columnar tables in the [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) section.
 
-### Family <column_family> (column group configuration)
+### FAMILY <column_family> (column group configuration)
 
 Definition of a column group with specified parameters. See more in the [{#T}](family.md) section.
 

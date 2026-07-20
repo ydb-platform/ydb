@@ -16,7 +16,7 @@ JSON index is a [global synchronous](../concepts/glossary.md#secondary-index) in
 
 When executing a query, a JSON index may be applied:
 
-- explicitly — via the `<имя_таблицы> VIEW <имя_индекса>` operator
+- explicitly — via the `<table_name> VIEW <index_name>` operator
 - automatically — [optimizer](../concepts/glossary.md#optimizer), if the predicate matches the formal rules.
 
 ## JSON index syntax {#syntax}
@@ -125,7 +125,7 @@ The function `JSON_EXISTS` returns `true` for any non-empty JsonPath result. The
 
 ### JSON_VALUE {#json-value}
 
-Extracting a scalar value with a required `RETURNING <тип>`.
+Extracting a scalar value with a required `RETURNING <type>`.
 
 When comparing a value via `JSON_VALUE` you always need to specify `RETURNING` with the appropriate type. By default, `JSON_VALUE` returns type `Utf8`, which during query execution leads to an incorrect comparison — values of different types are compared as strings:
 
@@ -236,7 +236,7 @@ Ready-to-use scenarios for working with a JSON index:
 * [{#T}](../recipes/json-search/json-index-parameters.md) — parameterized queries and JsonPath variables.
 * [{#T}](../recipes/json-search/json-index-typecheck.md) — field type and path existence check.
 
-## Related material {#see-also}
+## Related materials {#see-also}
 
 - [Functions for working with JSON](../yql/reference/builtins/json.md) — `JSON_EXISTS`, `JSON_VALUE`, `JSON_QUERY`, JsonPath syntax.
 - [Secondary indexes](secondary-indexes.md) — general information about global indexes and `VIEW`.

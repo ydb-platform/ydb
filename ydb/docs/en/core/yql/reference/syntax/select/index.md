@@ -17,7 +17,7 @@ SELECT 2 + 2;
 ```
 
 
-## Select execution procedure {#selectexec}
+## SELECT execution procedure {#selectexec}
 
 The result of the `SELECT` query is computed as follows:
 
@@ -29,8 +29,8 @@ The result of the `SELECT` query is computed as follows:
 
 {% endif %}
 
-* is calculated using [SAMPLE](sample.md) or [TABLESAMPLE](sample.md)
-* The [FLATTEN COLUMNS](flatten.md#flatten-columns) or [](flatten.md) operation is performed. Aliases defined in `FLATTEN BY` become visible after this point.
+* is calculated using [SAMPLE](sample.md) / [TABLESAMPLE](sample.md)
+* The [FLATTEN COLUMNS](flatten.md#flatten-columns) or [FLATTEN BY](flatten.md) operation is performed. Aliases defined in `FLATTEN BY` become visible after this point.
 
 {% if feature_join %}
 
@@ -77,7 +77,7 @@ When `PRAGMA OrderedColumns;` is enabled, the column order is preserved in the q
 
 {% endif %}
 
-* The order of depends on the execution mode of [`UNION ALL`](union.md#union-all).
+* The order of `UNION ALL` depends on the execution mode of [UNION ALL](union.md#union-all).
 * The column order for [AS_TABLE](from_as_table.md) is undefined.
 
 ## Query combination {#combining-queries}
@@ -127,7 +127,7 @@ The following functions are defined for these purposes:
 
 * prefix — directory for locating tables, specified without a trailing slash. It is the only required argument; if it is the only one provided, all tables in that directory are used.
 * min, max — the next two arguments define the inclusive range of names to include tables. The range is inclusive at both ends. If the range is not specified, all tables in the prefix directory are used. Table or directory names located in the directory specified by prefix are compared to the `[min, max]` range lexicographically, not concatenated, so it is important to specify the range without leading slashes.
-* suffix — table name. It is expected without a leading slash. If suffix is not provided, the `[min, max]` arguments define the range of table names. If suffix is provided, the `[min, max]` arguments define the range of folders that contain a table with the name given in the suffix argument.
+* suffix — table name. It is expected without a leading slash. If suffix is not provided, the `[min, max]` arguments define the range of table names. If suffix is provided, the `[min, max]` arguments define the range of directories that contain a table with the name given in the suffix argument.
 
 ``` LIKE(`prefix`, `pattern`, `suffix`, `view`)` и `REGEXP(`prefix`, `pattern`, `suffix`, `view`) ``` — the pattern argument is specified in a format similar to the similarly named binary operators: [LIKE](../expressions.md#like) and [REGEXP](../expressions.md#regexp).
 

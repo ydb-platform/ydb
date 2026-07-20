@@ -719,6 +719,11 @@ public:
         Y_ENSURE(operationInfoPtr);
         auto& operationInfo = *operationInfoPtr->get();
 
+        if (!operationInfo.DependencyTxIds.empty()) {
+            LOG_N("TTxProgressSetColumnConstraint: " << BuildId << ": waiting for dependencies");
+            return true;
+        }
+
         LOG_D("TTxProgressSetColumnConstraint::DoExecute, id# " << BuildId
             << "; OperationState = " << ToString(operationInfo.OperationState)
             << "; IsCancelled = " << operationInfo.IsCancelled);

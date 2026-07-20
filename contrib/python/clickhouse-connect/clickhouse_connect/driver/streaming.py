@@ -33,15 +33,15 @@ class StreamingResponseSource(Closable):
         self.exception_tag = exception_tag
 
         # maxsize=10 means max ~10 socket reads buffered
-        self.queue = AsyncSyncQueue(maxsize=10)
+        self.queue: AsyncSyncQueue[bytes | Exception] = AsyncSyncQueue(maxsize=10)
 
         self._decompressor = None
         self._decompressor_initialized = False
 
         # Multiple accesses to .gen must return the same generator, not create new ones
-        self._gen_cache = None
+        self._gen_cache: Iterator[bytes] | None = None
 
-        self._producer_task = None
+        self._producer_task: asyncio.Task | None = None
         self._producer_started = threading.Event()
         self._producer_error: Exception | None = None
         self._producer_completed = False
@@ -257,7 +257,7 @@ class StreamingInsertSource:
         self.transform = transform
         self.context = context
         self.loop = loop
-        self.queue = AsyncSyncQueue(maxsize=maxsize)
+        self.queue: AsyncSyncQueue[bytes | bytearray | Exception] = AsyncSyncQueue(maxsize=maxsize)
         self._producer_future = None
         self._started = False
 

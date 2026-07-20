@@ -3690,12 +3690,13 @@ private:
 
         auto uploadResourcesFuture = GetUploadResourcesFuture(sessionId, execCtx->Options_.Config(), std::move(filesToUpload), std::move(ytResources), execCtx->Options_.PublicId());
 
-        // SortBy must reflect the actual sort order of the intermediate tables written by the
-        // MapReduceMap stage: [_yql_key_hash, ...original_sort_by]. The n-way sorted merge reader
-        // in the Reduce job uses SortBy to merge input partitions in the correct order.
+        // The spec carries the logical, hash-less ReduceBy and SortBy. The MapReduce stage manager
+        // applies the _yql_key_hash prefix (MakeMapReduceIntermediateSortColumns) where the shuffle
+        // needs it - the intermediate table sort and the Reduce task's SortBy - so downstream job
+        // code still sees [_yql_key_hash, ...] exactly as before.
         TReduceOperationSpec reduceOperationSpec{
             .ReduceBy = GetSortingColumnsFromColumnPairList(reduceBy),
-            .SortBy = MakeMapReduceIntermediateSortColumns(GetSortingColumnsFromColumnPairList(sortBy)),
+            .SortBy = GetSortingColumnsFromColumnPairList(sortBy),
             .ReduceType = EReduceType::SortedReduce
         };
 

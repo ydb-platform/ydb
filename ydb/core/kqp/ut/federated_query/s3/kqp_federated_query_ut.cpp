@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -14,6 +15,7 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/testing/common/network.h>
 
 #include <fmt/format.h>
 
@@ -3831,6 +3833,57 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             auto result = resultFuture.GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST(TestSuccessfulReadAfterPartialFileError) {
+        using NKikimr::NWrappers::NTestHelpers::TS3Mock;
+
+        constexpr TStringBuf bucket = "partial-read-bucket";
+        constexpr TStringBuf object = "test.json";
+        const TString objectPath = TStringBuilder() << "/" << bucket << "/" << object;
+        const auto port = NTesting::GetFreePort();
+
+        THashMap<TString, TString> data{{objectPath, TString(TEST_CONTENT)}};
+        TS3Mock s3Mock(
+            std::move(data),
+            TS3Mock::TSettings(port).WithPartialReadFailure(objectPath));
+        UNIT_ASSERT_C(s3Mock.Start(), s3Mock.GetError());
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+
+        auto result = db.ExecuteQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/partial_read_source` WITH (
+                SOURCE_TYPE = "ObjectStorage",
+                LOCATION = "http://localhost:{port}/{bucket}/",
+                AUTH_METHOD = "NONE"
+            );
+            CREATE EXTERNAL TABLE `/Root/partial_read_table` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE = "/Root/partial_read_source",
+                LOCATION = "{object}",
+                FORMAT = "json_each_row"
+            );)",
+            "port"_a = port,
+            "bucket"_a = bucket,
+            "object"_a = object
+        ), TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+        result = db.ExecuteQuery(R"(
+            SELECT COUNT(*)
+            FROM `/Root/partial_read_table`;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetPartialReadFailureCount(), 1);
+        UNIT_ASSERT_GE(s3Mock.GetPartialReadRequestCount(), 2);
     }
 }
 

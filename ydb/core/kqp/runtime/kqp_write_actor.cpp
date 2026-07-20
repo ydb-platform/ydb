@@ -4522,7 +4522,7 @@ public:
 
     void SendToExternalShards(const bool isImmediateCommit) {
         auto shards = TxManager->GetShards();
-        AFL_ENSURE(!isImmediateCommit || shards.size() == 1);
+        AFL_ENSURE(!isImmediateCommit || CountParticipatingShards() == 1);
 
         // Exclude shards prepared by write actors
         ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {

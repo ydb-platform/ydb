@@ -33,6 +33,7 @@ Scramp supports the following mechanisms:
 * [OpenSSF Scorecard](#openssf-scorecard)
 * [Doing A Release Of Scramp](#doing-a-release-of-scramp)
 * [Release Notes](#release-notes)
+  * [Version 1.4.11, 2026-07-04](#version-1411-2026-07-04)
   * [Version 1.4.10, 2026-06-27](#version-1410-2026-06-27)
   * [Version 1.4.9, 2026-06-19](#version-149-2026-06-19)
   * [Version 1.4.8, 2026-01-06](#version-148-2026-01-06)
@@ -363,6 +364,11 @@ Run `tox` to make sure all tests pass, then update the release notes, then do:
 
 
 ## Release Notes
+
+### Version 1.4.11, 2026-07-04
+
+- Make sure all errors detected by the server get returned to the client as valid errors.
+
 
 ### Version 1.4.10, 2026-06-27
 

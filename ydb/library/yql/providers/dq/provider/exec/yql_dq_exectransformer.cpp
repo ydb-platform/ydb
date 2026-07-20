@@ -1081,9 +1081,6 @@ private:
 
             FlushStatisticsToState();
 
-            YQL_CLOG(INFO, ProviderDq) << "HandleResult: ExecutePlan future dispatched, localRun=" << localRun
-                << " futureReady=" << future.HasValue();
-
             TString skiffType;
             NYT::TNode rowSpec;
             if (fillSettings.Format == IDataProvider::EResultFormat::Skiff) {

@@ -146,10 +146,6 @@ public:
         return Meta.GetRowCount();
     }
 
-    TPageLocation GetLocation() const override {
-        return ResolvePageLocation(Part, GetCurrentNode().Ref, {});
-    }
-
     TRowId GetRowId() const override {
         return GetCurrentNode().BeginRowId;
     }

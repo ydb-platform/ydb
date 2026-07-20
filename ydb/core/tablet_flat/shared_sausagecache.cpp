@@ -884,7 +884,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             page->CacheMode = initialMode;
             AddAlivePage(page);
         } else {
-            Y_ASSERT(page->Size == location.Size && page->Crc32 == location.Crc32 && page->Type == location.Type);
+            Y_ENSURE(page->Size == location.Size && page->Crc32 == location.Crc32 && page->Type == location.Type);
         }
 
         return page;

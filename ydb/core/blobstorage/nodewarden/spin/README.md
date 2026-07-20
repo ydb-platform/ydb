@@ -9,8 +9,6 @@ This directory contains two standalone Promela models for one stable `VSlotId`:
 | `v1`, additional successful profiles | `slay_recovery_v1.pml` | `slay_recovery_v1.deadlock.out`, `slay_recovery_v1_self_restart.safety.out`, `slay_recovery_v1_actor_restarts.*.out` |
 | `v1`, `WIPE -> DESTROY` | `slay_recovery_v1.pml` | `slay_recovery_v1_wipe.trace` — an independent race with a live `YardInit` |
 
-The `v0` and `v1` files do not use a shared `FIXED_IMPLEMENTATION` switch: the version-specific differences are already expanded in each `.pml` file. The remaining macros select only operation and fault profiles.
-
 ## Installation
 
 Ubuntu:

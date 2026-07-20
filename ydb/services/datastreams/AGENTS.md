@@ -16,4 +16,5 @@ Tests: `./ya make --build relwithdebinfo -tA ydb/services/datastreams`
 HTTP integration: `ydb/core/http_proxy/ut/kinesis_ut.cpp`
 
 Style/workflow: [`agents/CODESTYLE.md`](../../agents/CODESTYLE.md) ·
-[`agents/GUIDE.md`](../../agents/GUIDE.md) · [`agents/TESTS.md`](../../agents/TESTS.md)
+[`agents/GUIDE.md`](../../agents/GUIDE.md) ·
+[`agents/GTEST_PREFER.md`](../../agents/GTEST_PREFER.md)

@@ -282,6 +282,9 @@ public:
 
     bool IsTxPrepared() const override {
         for (const auto& [_, shardInfo] : ShardsInfo) {
+            if (!ParticipatesInCommit(shardInfo)) {
+                continue;
+            }
             if (shardInfo.State != EShardState::PREPARED) {
                 return false;
             }
@@ -291,6 +294,9 @@ public:
 
     bool IsTxFinished() const override {
         for (const auto& [_, shardInfo] : ShardsInfo) {
+            if (!ParticipatesInCommit(shardInfo)) {
+                continue;
+            }
             if (shardInfo.State != EShardState::FINISHED) {
                 return false;
             }
@@ -463,6 +469,9 @@ public:
 
         for (auto& [shardId, shardInfo] : ShardsInfo) {
             if (!ParticipatesInCommit(shardInfo)) {
+                // Phantom shard holds no reads/writes/locks and does not take
+                // part in the distributed commit; it stays in PROCESSING.
+                AFL_ENSURE(shardInfo.State == EShardState::PROCESSING);
                 continue;
             }
             if ((shardInfo.Flags & EAction::WRITE)) {

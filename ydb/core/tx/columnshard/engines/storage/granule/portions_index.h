@@ -10,8 +10,11 @@ class TGranuleMeta;
 namespace NKikimr::NOlap::NGranule::NPortionsIndex {
 
 class TPortionsIndex {
+public:
+    using TPortions = THashMap<ui64, std::shared_ptr<TPortionInfo>>;
+
 private:
-    THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
+    TPortions Portions;
     const TGranuleMeta& Owner;
 
 public:
@@ -31,7 +34,11 @@ public:
         AFL_VERIFY(Portions.erase(p->GetPortionId()));
     }
 
-    bool HasOlderIntervals(const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions) const;
+    TPortions GetPortionsSnapshot() const {
+        return Portions;
+    }
+
+    static bool HasOlderIntervals(const TPortions& portions, const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions);
 };
 
 }   // namespace NKikimr::NOlap::NGranule::NPortionsIndex

@@ -3,8 +3,8 @@
 
 namespace NKikimr::NOlap::NGranule::NPortionsIndex {
 
-bool TPortionsIndex::HasOlderIntervals(const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions) const {
-    for (auto&& [_, p] : Portions) {
+bool TPortionsIndex::HasOlderIntervals(const TPortions& portions, const TPortionInfo& inputPortion, const THashSet<ui64>& skipPortions) {
+    for (auto&& [_, p] : portions) {
         if (p->GetPortionId() == inputPortion.GetPortionId()) {
             continue;
         }

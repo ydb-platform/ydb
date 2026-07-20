@@ -59,7 +59,7 @@ host_configs:
 
 `disk_scope` is an optional string attribute of a disk that defines a finer-grained failure zone within a single node. It is taken into account when calculating [fail domains](../../concepts/glossary.md#fail-domain) during the selection of disks for placing [VDisks](../../concepts/glossary.md#vdisk) of [storage groups](../../concepts/glossary.md#storage-group).
 
-A fail domain is determined by the physical location of a disk (data center, rack, server, physical device), so either no two VDisks of the same group can be placed on the same node (if the fail domain corresponds to a server or a server rack), or an unlimited number of VDisks of the same group can be placed on the same node (if the fail domain corresponds to an individual physical device). To limit the number of VDisks of the same group placed on a single node, physical devices can be labeled with the `disk_scope` attribute, and fail domain calculation can be enabled at the `disk_scope` level. This makes it possible to build some fault-tolerant configurations in installations that have fewer servers than the number of fail domains required by the chosen [fault tolerance mode](../../concepts/topology.md).
+A fail domain is determined by the physical location of a disk (data center, rack, server, physical device), so either no two VDisks of the same group can be placed on the same node (if the fail domain corresponds to a server or a server rack), or several VDisks of the same group can be placed on the same node on different disks (if the fail domain corresponds to an individual physical device). In the first case, it is impossible to create a configuration in `block-4-2` mode with fewer than 8 storage nodes, and in the second case the configuration might not stand the failure of a single node. To limit the number of VDisks of the same group placed on a single node, physical devices can be labeled with the `disk_scope` attribute, and fail domain calculation can be enabled at the `disk_scope` level. This makes it possible to build some fault-tolerant configurations in installations that have fewer servers than the number of fail domains required by the chosen [fault tolerance mode](../../concepts/topology.md).
 
 ### Example {#disk-scope-example}
 
@@ -83,10 +83,22 @@ host_configs:
     disk_scope: fail-domain-2
 ```
 
-To calculate fail domains at the `disk_scope` level, add the following line to the yaml config:
+To calculate fail domains at the `disk_scope` level for the static group and other storage groups, specify the corresponding fail domain type in the yaml config (top-level key):
 
 ``` yaml
 fail_domain_type: disk_scope
+```
+
+And in the domain configuration:
+
+```yaml
+domains:
+- domain_name: <domain name>
+  ...
+  storage_pool_kinds:
+  - kind: <type of physical devices used>
+    fail_domain_type: disk_scope
+    ...
 ```
 
 With this configuration, two VDisks of each storage group will be placed on each server, and the maximum tolerated failure in such a configuration is the failure of a single server.

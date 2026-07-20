@@ -33,7 +33,7 @@ Fault-tolerant operation modes of distributed storage require a significant amou
 | `mirror-3-dc` *(3 nodes)*, can stand a failure of a single server, or a failure of a data center | 3 | 3 | Server | Data center | 3 | Doesn't matter |
 | `block-4-2`, can stand a failure of 2 racks | 1.5 | 8 ([10 recommended](*recommended-node-count)) | Rack | Data center | 1 | 8 |
 | `block-4-2` *(reduced)*, can stand a failure of 1 rack | 1.5 | 10 | ½ a rack | Data center | 1 | 5 |
-| `block-4-2` *(reduced)*, can stand a failure of 1 node | 1.5 | 4 | Server | Data center | 1 | Doesn't matter |
+| `block-4-2` *(reduced fault-tolerant)*, can stand a failure of 1 node | 1.5 | 4 | Server | Data center | 1 | Doesn't matter |
 | `none`, no fault tolerance | 1 | 1 | Node | Node | 1 | 1 |
 
 {% note info %}

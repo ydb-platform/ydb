@@ -278,7 +278,7 @@ void TestCreateStreamingQuery(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrG
     UNIT_ASSERT_GE(properties.size(), 3);
     UNIT_ASSERT_VALUES_EQUAL(properties.at("run"), "false");
     UNIT_ASSERT_VALUES_EQUAL(properties.at("__query_text"), "SELECT 42");
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("resource_pool"), NResourcePool::DEFAULT_POOL_ID);
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("resource_pool"), "");
 }
 
 void TestAlterStreamingQuery(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& queryName) {

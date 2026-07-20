@@ -60,9 +60,6 @@ public:
     std::shared_ptr<arrow::DataType> GetArrowType() const override {
         return arrow::binary();
     }
-    bool CanBeDictionaryEncoded() const override {
-        return true;
-    }
     ui32 GetElementSize(const arrow::Array& array, const i64 index) const override {
         return BinaryView(array, index).size();
     }
@@ -110,9 +107,6 @@ public:
     std::shared_ptr<arrow::DataType> GetArrowType() const override {
         return arrow::TypeTraits<TArrow>::type_singleton();
     }
-    bool CanBeDictionaryEncoded() const override {
-        return false;
-    }
     ui32 GetElementSize(const arrow::Array& /*array*/, const i64 /*index*/) const override {
         return sizeof(typename TArrow::c_type);
     }
@@ -132,6 +126,10 @@ using TDoubleCodec = TNativeScalarCodec<arrow::DoubleType, EValueType::Double, E
 using TBoolCodec = TNativeScalarCodec<arrow::BooleanType, EValueType::Bool, ExtractBoolScalar, TJsonValueView::OfBool>;
 
 }   // namespace
+
+bool CanBeDictionaryEncoded(EValueType valueType) {
+    return valueType == EValueType::BinaryJson || valueType == EValueType::String;
+}
 
 std::shared_ptr<const IValueArrowCodec> GetCodecForValueType(const EValueType valueType) {
     static const std::shared_ptr<const IValueArrowCodec> binaryJson = std::make_shared<TBinaryJsonCodec>();

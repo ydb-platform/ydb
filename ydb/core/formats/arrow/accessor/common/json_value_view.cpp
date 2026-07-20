@@ -18,7 +18,7 @@ namespace NKikimr::NArrow::NAccessor {
 
 namespace {
 
-NBinaryJson::TBinaryJson JsonValueToBinaryJson(const NJson::TJsonValue& json) {
+NBinaryJson::TBinaryJson JsonValueToBinaryJsonVerified(const NJson::TJsonValue& json) {
     auto result = NBinaryJson::SerializeToBinaryJson(NJson::WriteJson(&json, false));
     AFL_VERIFY(std::holds_alternative<NBinaryJson::TBinaryJson>(result));
     return std::get<NBinaryJson::TBinaryJson>(std::move(result));
@@ -128,7 +128,7 @@ NBinaryJson::TBinaryJson TJsonValueView::ToBinaryJson() const {
         case EKind::String:
         case EKind::Number:
         case EKind::Bool:
-            return JsonValueToBinaryJson(ToJsonValue());
+            return JsonValueToBinaryJsonVerified(ToJsonValue());
     }
 }
 

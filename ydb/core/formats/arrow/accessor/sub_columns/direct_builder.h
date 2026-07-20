@@ -192,10 +192,8 @@ public:
             if (separateColumns && settings.GetEnableNativeColumnsResolved()) {
                 valueType = DetectValueTypeForArray(i->GetValues());
             }
-            IChunkedArray::EType accessorType = IChunkedArray::EType::Array;
-            if (settings.IsSparsed(presentCount, recordsCount)) {
-                accessorType = IChunkedArray::EType::SparsedArray;
-            } else if (separateColumns && GetCodecForValueType(valueType)->CanBeDictionaryEncoded() &&
+            auto accessorType = settings.IsSparsed(presentCount, recordsCount) ? IChunkedArray::EType::SparsedArray : IChunkedArray::EType::Array;
+            if (separateColumns && CanBeDictionaryEncoded(valueType) &&
                        settings.IsDictionary(presentCount, enumerateValues)) {
                 accessorType = IChunkedArray::EType::Dictionary;
             }

@@ -21,7 +21,6 @@ public:
 
     virtual EValueType GetValueType() const = 0;
     virtual std::shared_ptr<arrow::DataType> GetArrowType() const = 0;
-    virtual bool CanBeDictionaryEncoded() const = 0;
 
     // Read path - wrap the physical element `index` as a logical value view (a native scalar for
     // Double/Bool/String, or a BinaryJson blob for BinaryJson).
@@ -35,6 +34,8 @@ public:
     virtual std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const ui32 reserveItems, const ui32 reserveData) const = 0;
     virtual void AppendFromBinaryJson(arrow::ArrayBuilder& builder, const NBinaryJson::TBinaryJson& blob) const = 0;
 };
+
+bool CanBeDictionaryEncoded(EValueType valueType);
 
 std::shared_ptr<const IValueArrowCodec> GetCodecForValueType(const EValueType valueType);
 

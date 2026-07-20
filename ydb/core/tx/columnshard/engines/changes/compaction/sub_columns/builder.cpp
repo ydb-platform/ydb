@@ -13,7 +13,7 @@ namespace NKikimr::NOlap::NCompaction::NSubColumns {
 
 std::shared_ptr<NArrow::NAccessor::IChunkedArray> TMergedBuilder::MaybeDictionaryEncode(
     const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor, const ui32 filledRecordsCount, const EValueType valueType) const {
-    if (!NArrow::NAccessor::NSubColumns::GetCodecForValueType(valueType)->CanBeDictionaryEncoded()) {
+    if (!NArrow::NAccessor::NSubColumns::CanBeDictionaryEncoded(valueType)) {
         return accessor;
     }
     const auto enumerateNotNull = [&accessor](const auto& consumer) {

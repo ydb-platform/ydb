@@ -10,7 +10,6 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/viewer/viewer.h>
 #include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 #include "json_pipe_req.h"
@@ -219,18 +218,30 @@ Y_UNIT_TEST_SUITE(ViewerSubscriptions) {
     }
 
     // ---------------------------------------------------------------------
-    // Shared integration scaffolding: drive the real /viewer/json/cluster handler
-    // (TJsonCluster) via the HTTP request path and observe which interconnect
-    // proxies receive TEvUnsubscribe when the handler tears down in PassAway.
-    // The mon (NMon::TEvHttpInfo) path is not used because TJsonCluster is
-    // registered as an HTTP-only handler.
+    // Shared integration scaffolding: drive the real /json/cluster handler
+    // (TJsonCluster) via the monitoring (NMon::TEvHttpInfo) request path and
+    // observe which interconnect proxies receive TEvUnsubscribe when the handler
+    // tears down in PassAway.
+    //
+    // The mon path is used (rather than the native NHttp::TEvHttpProxy path)
+    // because the /viewer/cluster dispatch differs across branches: on
+    // stable-26-2 TJsonCluster is registered as a mon handler
+    // (TJsonHandler<TJsonCluster>), while on main it is a native HTTP handler
+    // (THttpHandler<TJsonCluster>). The mon path drives TJsonCluster on both, so
+    // these tests are portable across the backport branches. This mirrors the
+    // existing Viewer::Cluster10000Tablets test in viewer_ut.cpp.
     // ---------------------------------------------------------------------
 
-    NHttp::THttpIncomingRequestPtr MakeGetRequest(const TString& uri) {
-        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
-        return new NHttp::THttpIncomingRequest(
-            TStringBuilder() << "GET " << uri << " HTTP/1.1\r\n\r\n", endpoint, {});
-    }
+    class TMonPage : public NMonitoring::IMonPage {
+    public:
+        TMonPage(const TString& path, const TString& title)
+            : IMonPage(path, title)
+        {
+        }
+
+        void Output(NMonitoring::IMonHttpRequest&) override {
+        }
+    };
 
     Y_UNIT_TEST(PassAwayUnsubscribesWhiteboardFanout) {
         TPortManager tp;
@@ -266,13 +277,18 @@ Y_UNIT_TEST_SUITE(ViewerSubscriptions) {
 
         // offload_merge=false forces the whiteboard fan-out (viewer_cluster.h
         // non-offload branch) which subscribes to every non-disconnected node.
-        auto request = MakeGetRequest("/viewer/json/cluster?tablets=true&offload_merge=false&direct=1");
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("tablets", "true");
+        httpReq.CgiParameters.emplace("offload_merge", "false");
+        httpReq.CgiParameters.emplace("direct", "1");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        NMonitoring::TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/cluster", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
         collector.Armed = true;
         TAutoPtr<IEventHandle> handle;
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender,
-            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
-        runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_C(sawWhiteboardToRemote,
@@ -352,13 +368,17 @@ Y_UNIT_TEST_SUITE(ViewerSubscriptions) {
         runtime.SetObserverFunc(collector.MakeObserver(forceRemoteAndGuard));
 
         // Default offload_merge=true routes the fan-out through MakeViewerRequest.
-        auto request = MakeGetRequest("/viewer/json/cluster?tablets=true&direct=1");
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("tablets", "true");
+        httpReq.CgiParameters.emplace("direct", "1");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        NMonitoring::TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/cluster", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
         collector.Armed = true;
         TAutoPtr<IEventHandle> handle;
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender,
-            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
-        runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_C(sawViewerToRemote,

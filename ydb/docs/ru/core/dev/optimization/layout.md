@@ -21,8 +21,8 @@ SELECT count(*) FROM lineitem
 | `Query - ...` | Структура стадий и [операторов](../../concepts/glossary.md#operator) | [Структура плана](#structure) |
 | `Rows` | Статистика по [операторам](../../concepts/glossary.md#operator) стадии | [Операторная статистика](#operators) |
 | `Tasks` | Число [задач](../../concepts/glossary.md#task) и прогресс выполнения | [Число задач стадии и прогресс их выполнения](#progress) |
-| `Statistics` | Агрегированные метрики по [стадии](../../concepts/glossary.md#processing-stage) | [Метрики по стадиям](#statistics), [Визуализация метрик запроса](metrics.md) |
-| Временная шкала | Те же метрики во времени | [Временные графики](#timeline), [Визуализация метрик запроса](metrics.md) |
+| `Statistics` | Суммарные метрики по [стадии](../../concepts/glossary.md#processing-stage) | [Метрики по стадиям](#statistics), [Визуализация метрик запроса](metrics.md) |
+| Временная шкала | Графики метрик во времени | [Временные графики](#timeline), [Визуализация метрик запроса](metrics.md) |
 
 ## Структура плана {#structure}
 

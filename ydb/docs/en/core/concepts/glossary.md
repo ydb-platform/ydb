@@ -518,7 +518,7 @@ The optional suffix `@<auth-domain>` identifies the source of the access subject
 
 ### Compilation cache {#compile-cache}
 
-**Compilation cache** — a cache of compiled queries on each [node](#node) of the cluster. It is used to avoid recompilation: if the query text is already in the node's cache, no additional compilation is performed. For more details, see the section [Query compilation cache](../dev/system-views.md#compile-cache-queries).
+**Compilation cache** or **compile cache** — a cache of compiled queries on each [node](#node) of the cluster. It is used to avoid recompilation: if the query text is already in the node's cache, no additional compilation is performed. For more details, see the section [Query compilation cache](../dev/system-views.md#compile-cache-queries).
 
 ## Advanced terminology {#advanced-terminology}
 
@@ -859,7 +859,7 @@ As in many other database management systems, queries {{ ydb-short-name }} can p
 
 #### Transaction lock invalidation {#tli}
 
-**Transaction lock invalidation** (Transaction Lock Invalidation, **TLI**) is the normal behavior of {{ ydb-short-name }} when parallel transactions conflict under [optimistic locking](#optimistic-locking). If one transaction (the violator) writes data and thereby breaks the locks of another transaction (the victim), {{ ydb-short-name }} detects this when the victim commits and rolls it back with error `transaction locks invalidated`. For more details on TLI diagnostics, see [{#T}](../troubleshooting/performance/queries/transaction-lock-invalidation.md).
+**Transaction Lock Invalidation** (Transaction Lock Invalidation, **TLI**) is the normal behavior of {{ ydb-short-name }} when parallel transactions conflict under [optimistic locking](#optimistic-locking). If one transaction (the violator) writes data and thereby breaks the locks of another transaction (the victim), {{ ydb-short-name }} detects this when the victim commits and rolls it back with error `transaction locks invalidated`. For more details on TLI diagnostics, see [{#T}](../troubleshooting/performance/queries/transaction-lock-invalidation.md).
 
 #### Preparation phase {#prepare-stage}
 

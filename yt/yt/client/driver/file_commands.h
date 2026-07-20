@@ -18,7 +18,7 @@ class TReadFileCommand
 private:
     NYPath::TRichYPath Path;
     NYTree::INodePtr FileReader;
-    TString Etag;
+    std::string Etag;
 
     void DoExecute(ICommandContextPtr context) override;
     bool HasResponseParameters() const override;

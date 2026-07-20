@@ -9,6 +9,8 @@
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap::NReader::NCommon {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
@@ -111,7 +113,9 @@ TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(const std:
 
 void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
     auto sourcePtr = Source.lock();
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "allocation_impossible")("error", errorMessage);
+    YDB_LOG_WARN("",
+        {"event", "allocation_impossible"},
+        {"error", errorMessage});
     if (sourcePtr) {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourcePtr->AddEvent("fail_malloc"));
         sourcePtr->GetContext()->GetCommonContext()->AbortWithError(
@@ -145,8 +149,7 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<ID
     const TDuration executionDurationMs = TMonotonic::Now() - start;
     ReportTracing(source, step, executionDurationMs, size);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("smalloc"));
-    NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(source->GetContext()->GetProcessMemoryControlId(),
-        source->GetContext()->GetCommonContext()->GetScanId(), source->GetMemoryGroupId(), { allocation }, (ui32)StageIndex);
+    source->GetContext()->SendToGroupedMemoryAllocation(source->GetMemoryGroupId(), { allocation }, (ui32)StageIndex);
     return false;
 }
 

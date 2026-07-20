@@ -537,5 +537,138 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
             }
         });
     }
+
+    Y_UNIT_TEST(CopyMovePreservesMultipleBloomPrefixes) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+
+            {
+                TInactiveZone inactive(activeZone);
+                // Create source table with multiple bloom filter prefixes
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key1"       Type: "Utf8"}
+                    Columns { Name: "key2"       Type: "Uint32"}
+                    Columns { Name: "key3"       Type: "Utf8"}
+                    Columns { Name: "Value"      Type: "Utf8"}
+                    KeyColumnNames: ["key1", "key2", "key3"]
+                    PartitionConfig {
+                        ByKeyFilterPrefixes { PrefixLength: 1 }
+                        ByKeyFilterPrefixes { PrefixLength: 3 FalsePositiveProbability: 0.001 }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Restart SchemeShard to trigger migration to scheme objects
+                TActorId sender = runtime.AllocateEdgeActor();
+                GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+                runtime.SimulateSleep(TDuration::Seconds(5));
+
+                // Verify source table has multiple bloom filter prefixes and scheme objects after migration
+                NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/Table",
+                    {1, 3},
+                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
+            }
+
+            // Perform CopyTable operation with reboots
+            {
+                TInactiveZone inactive(activeZone);
+                TestCopyTable(runtime, ++t.TxId, "/MyRoot", "TableCopy", "/MyRoot/Table");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Verify copied table has all bloom filter prefixes and scheme objects
+                NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/TableCopy",
+                    {1, 3},
+                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
+            }
+
+            // Perform MoveTable operation with reboots
+            {
+                TInactiveZone inactive(activeZone);
+                TestMoveTable(runtime, ++t.TxId, "/MyRoot/TableCopy", "/MyRoot/TableMove");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Verify original copied table no longer exists
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/TableCopy"),
+                                   {NLs::PathNotExist});
+
+                // Verify moved table has all bloom filter prefixes and scheme objects
+                NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/TableMove",
+                    {1, 3},
+                    {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
+            }
+        });
+    }
+
+    Y_UNIT_TEST(MoveTableWithMultiColumnStatistics) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TPathVersion pathVersion;
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                    MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                    {NLs::PathExist});
+            }
+
+            t.TestEnv->ReliablePropose(runtime, MoveTableRequest(++t.TxId, "/MyRoot/Table", "/MyRoot/TableMove", TTestTxConfig::SchemeShard, {pathVersion}),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove", true, true), {
+                    NLs::PathExist,
+                    NLs::CheckMultiColumnStatistics("s1", {"value"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+                });
+            }
+        });
+    }
+
+    Y_UNIT_TEST(MoveColumnTableWithMultiColumnStatistics) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TPathVersion pathVersion;
+            {
+                TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                        Columns { Name: "data" Type: "Utf8" }
+                        KeyColumnNames: "timestamp"
+                    }
+                    MultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                    {NLs::PathExist});
+            }
+
+            t.TestEnv->ReliablePropose(runtime, MoveTableRequest(++t.TxId, "/MyRoot/Table", "/MyRoot/TableMove", TTestTxConfig::SchemeShard, {pathVersion}),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TableMove", true, true), {
+                    NLs::PathExist,
+                    NLs::CheckColumnTableMultiColumnStatistics("s1", {"data"}, {NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH}),
+                });
+            }
+        });
+    }
 }
 

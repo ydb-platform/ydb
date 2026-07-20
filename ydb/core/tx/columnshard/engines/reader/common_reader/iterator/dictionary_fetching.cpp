@@ -1,7 +1,7 @@
 #include "dictionary_fetching.h"
 
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
-#include <ydb/core/formats/arrow/accessor/dictionary/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 

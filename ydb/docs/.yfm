@@ -1,4 +1,6 @@
 allowHTML: true
+llms: 
+  enabled: true
 langs: ['en','ru']
 pdf:
   enabled: true

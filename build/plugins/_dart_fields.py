@@ -725,7 +725,7 @@ class LintConfigs:
 class LintExtraParams:
     KEY = 'LINT-EXTRA-PARAMS'
 
-    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'alice/agents/booking', 'bigrt', 'grut', 'yabs', 'maps', 'yt')
+    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('adfox', 'ads', 'alice/agents/booking', 'bigrt', 'grut', 'yabs', 'maps', 'yt')
     # HACK: YA-3039 Due to the mass usage of PY_NAMESPACE / TOP_LEVEL in these projects
     # it makes it difficult to run ruff checks in build root - it complains
     # about unsorted imports a lot. Let them run in source root instead.
@@ -866,6 +866,22 @@ class Requirements:
     @classmethod
     def from_unit(cls, unit, flat_args, spec_args):
         requirements = get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
+        return serialize_list(requirements)
+
+    @classmethod
+    def from_unit_with_cpu(cls, unit, flat_args, spec_args):
+        requirements = get_values_list(unit, "TEST_REQUIREMENTS_VALUE")
+
+        defaults = {
+            "cpu": "cpu:4",
+            "ram": "ram:16",
+            "ram_disk": "ram_disk:4",
+        }
+
+        for prefix, value in defaults.items():
+            if not any(r and r.startswith(f"{prefix}:") for r in requirements):
+                requirements.append(value)
+
         return serialize_list(requirements)
 
     @classmethod

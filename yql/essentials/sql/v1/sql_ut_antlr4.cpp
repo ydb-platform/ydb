@@ -348,7 +348,7 @@ Y_UNIT_TEST(TopLevelWithCluster) {
     settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
 
     auto res = SqlToYqlWithSettings(R"sql(
-        MATERIALIZE plato.Input ON plato INTO $result;
+        MATERIALIZE plato.Input INTO $result ON plato;
         SELECT * FROM $result;
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
@@ -589,4 +589,126 @@ Y_UNIT_TEST(PreserveSortForTopLevelOnly2) {
     UNIT_ASSERT_VALUES_EQUAL_C(elementStat["Sort"], 0, prog);
 }
 
+Y_UNIT_TEST(SingleHint) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        MATERIALIZE Input INTO $result WITH hint1;
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"hint1"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["hint1"], 1, prog);
+}
+
+Y_UNIT_TEST(MultiHints) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = ::NYql::NFeature::Materialize.MinLangVer;
+
+    auto res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        MATERIALIZE Input INTO $result WITH (hint1, hint2);
+        SELECT * FROM $result;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"hint1"}, {"hint2"}};
+    auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["hint1"], 1, prog);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["hint2"], 1, prog);
+}
+
 } // Y_UNIT_TEST_SUITE(MaterializeStatement)
+
+Y_UNIT_TEST_SUITE(HybridRankFusionLambda) {
+
+// A custom fusion lambda cannot live inside the named-args struct (a lambda is not a struct-field value),
+// so the SQL builder lifts it out into trailing positional children of HybridRank: a "rank"/"score" marker
+// followed by the lambda (the marker comes first because it selects the lambda's argument type). RankLambda
+// fuses per-branch ranks, so the marker is "rank".
+Y_UNIT_TEST(RankLambdaIsLiftedWithRankMarker) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        $t = "x";
+        SELECT key FROM Input
+        ORDER BY HybridRank(
+            FullTextScore(text, "cats"),
+            Knn::CosineDistance(embedding, $t),
+            ($ranks) -> { RETURN 1.0 / (60 + COALESCE($ranks[0], 100000)); } AS RankLambda)
+        LIMIT 4;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"HybridRank"}};
+    const auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["HybridRank"], 1, prog);
+    // The named-args struct is left empty and the lambda becomes a positional child, preceded by its "rank"
+    // marker.
+    UNIT_ASSERT_STRING_CONTAINS(prog, "(AsStruct) '\"rank\" (lambda");
+}
+
+// ScoreLambda fuses the raw per-branch scores, so the marker is "score" (the type checker binds Double).
+Y_UNIT_TEST(ScoreLambdaIsLiftedWithScoreMarker) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        $t = "x";
+        SELECT key FROM Input
+        ORDER BY HybridRank(
+            FullTextScore(text, "cats"),
+            Knn::CosineDistance(embedding, $t),
+            ($scores) -> { RETURN COALESCE($scores[0], 0.0); } AS ScoreLambda)
+        LIMIT 4;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"HybridRank"}};
+    const auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["HybridRank"], 1, prog);
+    UNIT_ASSERT_STRING_CONTAINS(prog, "(AsStruct) '\"score\" (lambda");
+}
+
+// Only the fusion lambda is lifted; other named options stay as members of the (now non-empty) struct.
+Y_UNIT_TEST(FusionLambdaCoexistsWithNamedOptions) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        $t = "x";
+        SELECT key FROM Input
+        ORDER BY HybridRank(
+            FullTextScore(text, "cats"),
+            Knn::CosineDistance(embedding, $t),
+            ("ft_idx", "vec_idx") AS Indexes,
+            ($ranks) -> { RETURN 1.0 / (60 + COALESCE($ranks[0], 100000)); } AS RankLambda)
+        LIMIT 4;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive elementStat = {{"HybridRank"}};
+    const auto prog = VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL_C(elementStat["HybridRank"], 1, prog);
+    // Only the lambda is lifted (marker + lambda follow the struct); the other option stays a struct member.
+    UNIT_ASSERT_STRING_CONTAINS(prog, "'\"rank\" (lambda");
+    UNIT_ASSERT_STRING_CONTAINS(prog, "Indexes");
+}
+
+// RankLambda and ScoreLambda are mutually exclusive; giving both is rejected by the SQL builder.
+Y_UNIT_TEST(RejectsBothFusionLambdas) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        $t = "x";
+        SELECT key FROM Input
+        ORDER BY HybridRank(
+            FullTextScore(text, "cats"),
+            Knn::CosineDistance(embedding, $t),
+            ($ranks)  -> { RETURN 1.0; } AS RankLambda,
+            ($scores) -> { RETURN 2.0; } AS ScoreLambda)
+        LIMIT 4;
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "at most one of RankLambda or ScoreLambda");
+}
+
+} // Y_UNIT_TEST_SUITE(HybridRankFusionLambda)

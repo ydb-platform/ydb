@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/tables/table_queries.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -13,6 +14,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
+#include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NKqp::NWorkload {
 
@@ -641,6 +643,29 @@ public:
         });
     }
 
+    void WaitForClassifierPropagation() const override {
+        const auto nodeIndex = 0;
+        auto* runtime = GetRuntime();
+        const ui32 nodeId = runtime->GetNodeId(nodeIndex);
+        const TActorId edgeActor = runtime->AllocateEdgeActor(nodeIndex);
+
+        runtime->Send(
+            NMetadata::NProvider::MakeServiceId(nodeId),
+            edgeActor,
+            new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()),
+            nodeIndex);
+
+        const auto response = runtime->GrabEdgeEvent<NMetadata::NProvider::TEvRefreshSubscriberData>(
+            edgeActor, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT_C(response, "Timed out waiting for resource pool classifier snapshot refresh");
+
+        runtime->Send(
+            MakeKqpProxyID(nodeId),
+            edgeActor,
+            new NMetadata::NProvider::TEvRefreshSubscriberData(response->Get()->GetSnapshot()),
+            nodeIndex);
+    }
+
     void StopWorkloadService(ui64 nodeIndex = 0) const override {
         GetRuntime()->Send(MakeKqpWorkloadServiceId(GetRuntime()->GetNodeId(nodeIndex)), GetRuntime()->AllocateEdgeActor(), new TEvents::TEvPoison());
         Sleep(TDuration::Seconds(1));
@@ -744,6 +769,9 @@ private:
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request->SetDatabase(settings.Database_ ? settings.Database_ : Settings_.DomainName_);
         request->SetPoolId(*settings.PoolId_);
+        if (!settings.ApplicationName_.empty()) {
+            request->SetApplicationName(settings.ApplicationName_);
+        }
 
         return event;
     }
@@ -877,6 +905,34 @@ void IYdbSetup::WaitFor(TDuration timeout, TString description, std::function<bo
         Sleep(TDuration::Seconds(1));
     }
     UNIT_ASSERT_C(false, "Waiting " << description << " timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout);
+}
+
+//// Classifier helpers
+
+void WaitForClassifierFail(TIntrusivePtr<IYdbSetup> ydb, const TString& query, const TQueryRunnerSettings& settings, const TString& poolId) {
+    ydb->WaitFor(TDuration::Seconds(10), "Resource pool classifier fail", [ydb, query, settings, poolId](TString& errorString) {
+        auto result = ydb->ExecuteQuery(query, settings);
+
+        errorString = result.GetIssues().ToOneLineString();
+        return result.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED && errorString.Contains(TStringBuilder() << "Resource pool " << poolId << " was disabled due to zero concurrent query limit");
+    });
+}
+
+void WaitForClassifierFail(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings, const TString& poolId) {
+    WaitForClassifierFail(ydb, TSampleQueries::TSelect42::Query, settings, poolId);
+}
+
+void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TString& query, const TQueryRunnerSettings& settings) {
+    ydb->WaitFor(TDuration::Seconds(30), "Resource pool classifier success", [ydb, query, settings](TString& errorString) {
+        auto result = ydb->ExecuteQuery(query, settings);
+
+        errorString = result.GetIssues().ToOneLineString();
+        return result.GetStatus() == NYdb::EStatus::SUCCESS;
+    });
+}
+
+void WaitForClassifierSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings) {
+    WaitForClassifierSuccess(ydb, TSampleQueries::TSelect42::Query, settings);
 }
 
 //// TSampleQueriess

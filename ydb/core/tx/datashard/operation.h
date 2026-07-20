@@ -15,7 +15,7 @@
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
 #include <ydb/core/tx/tx_processing.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>

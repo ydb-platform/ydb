@@ -527,7 +527,7 @@ class CompletionFinder(object):
             # (extended to characters other than the colon).
             if last_wordbreak_pos is not None:
                 completions = [c[last_wordbreak_pos + 1 :] for c in completions]
-            special_chars += "();<>|&!`$* \t\n\"'"
+            special_chars += "();<>|&!`$*?[]{} \t\n\"'"
         elif cword_prequote == '"':
             special_chars += '"`$!'
 

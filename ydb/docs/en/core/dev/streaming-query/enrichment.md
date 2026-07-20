@@ -1,8 +1,8 @@
 # Data enrichment
 
-Data enrichment is adding additional information from a reference to events from a stream. For example, an event contains only an identifier, and the reference allows adding a name or other attributes to it. As a reference, you can use data from a [local table](#enrichment-local-table) or from an [S3 object storage](#enrichment-s3).
+Data enrichment is adding additional information from a reference to events in a stream. For example, an event contains only an identifier, and the reference allows adding a name or other attributes to it. You can use data from a [local table](#enrichment-local-table) or from an [S3 object storage](#enrichment-s3) as a reference.
 
-In [streaming queries](../../concepts/streaming-query.md), the reference is connected using the `JOIN` construct. The stream must be on the left, the reference on the right.
+In streaming queries, the reference is connected using the `JOIN` construct. The stream must be on the left, the reference on the right.
 
 {% note warning %}
 
@@ -10,36 +10,18 @@ The reference is fully loaded into memory when the query starts. If the data in 
 
 {% endnote %}
 
-## Preparing a data source for working with topics
+Data enrichment from [local and external topics](../../concepts/query_execution/topics.md#local-external-topics) is possible.
 
-Create an external data source for working with topics. A [secret](../../yql/reference/syntax/create-secret.md) is used to store the token, and the source is created using [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md).
+In the examples below:
 
-
-```yql
--- Секрет с токеном для подключения к YDB
-CREATE SECRET `secrets/ydb_token` WITH (value = "<ydb_token>");
-
--- Источник данных YDB для чтения/записи топиков
-CREATE EXTERNAL DATA SOURCE ydb_source WITH (
-    SOURCE_TYPE = "Ydb",
-    LOCATION = "<ydb_endpoint>",
-    DATABASE_NAME = "<db_name>",
-    AUTH_METHOD = "TOKEN",
-    TOKEN_SECRET_PATH = "secrets/ydb_token"
-);
-```
-
-
-Where:
-
-- `<ydb_endpoint>` — endpoint of {{ ydb-short-name }}, for example `grpcs://<ydb_host>:2135`.
-- `<db_name>` — path to the database {{ ydb-short-name }}, for example `/Root/database`.
+- `ext_source` — a pre-created [external data source](../../concepts/datamodel/external_data_source.md) for topics in another {{ ydb-short-name }} database
+- `input_topic` and `output_topic` — topics in the current or external {{ ydb-short-name }} database
 
 ## Streaming queries for data enrichment
 
 The queries in the examples below read events from the input topic, attach the service name from the reference by `ServiceId` to each event, and write the result to the output topic.
 
-More details about the functions used in the queries:
+For more details on the functions used in the queries:
 
 - [TableRow](../../yql/reference/builtins/basic.md#tablerow)
 - [Yson::From](../../yql/reference/udf/list/yson.md#ysonfrom)
@@ -51,18 +33,18 @@ More details about the functions used in the queries:
 
 In this example, the reference is stored in the [table](../../concepts/datamodel/table.md) `services_dict` in the current database.
 
-Create a [streaming query](../../concepts/streaming-query.md) that performs enrichment:
+Create a streaming query that performs enrichment:
 
 
 ```yql
 CREATE STREAMING QUERY query_with_table_join AS
 DO BEGIN
 
--- Чтение событий из входного топика
+-- Reading events from input topic
 $topic_data = SELECT
     *
 FROM
-    ydb_source.input_topic
+    ext_source.input_topic -- or local topic input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -72,7 +54,7 @@ WITH (
     )
 );
 
--- Присоединение справочника к потоку по ServiceId
+-- Joining reference to stream by ServiceId
 $joined_data = SELECT
     s.Name AS Name,
     t.*
@@ -83,9 +65,9 @@ LEFT JOIN
 ON
     t.ServiceId = s.ServiceId;
 
--- Запись в выходной топик (JSON)
+-- Write to output topic (JSON)
 INSERT INTO
-    ydb_source.output_topic
+    output_topic -- or external topic ext_source.output_topic
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM
@@ -99,11 +81,11 @@ END DO
 
 The reference is stored in S3 and connected via an [external data source](../../concepts/query_execution/federated_query/s3/external_data_source.md).
 
-Create an additional [external data source](../../yql/reference/syntax/create-external-data-source.md) to read the reference from S3:
+Create an additional external data source to read the reference from S3:
 
 
 ```yql
--- Источник данных S3 для чтения справочника
+-- S3 data source for reading reference
 CREATE EXTERNAL DATA SOURCE s3_source WITH (
     SOURCE_TYPE = "ObjectStorage",
     LOCATION = "<s3_endpoint>",
@@ -114,20 +96,20 @@ CREATE EXTERNAL DATA SOURCE s3_source WITH (
 
 Where:
 
-- `<s3_endpoint>` — URL of the S3 storage, for example `https://storage.yandexcloud.net/<bucket>/` for Yandex Cloud.
+- `<s3_endpoint>` — the S3 storage URL, for example `https://storage.yandexcloud.net/<bucket>/` for Yandex Cloud.
 
-Create a [streaming query](../../concepts/streaming-query.md) that performs enrichment:
+Create a streaming query that performs enrichment:
 
 
 ```yql
 CREATE STREAMING QUERY query_with_join AS
 DO BEGIN
 
--- Чтение событий из входного топика
+-- Reading events from input topic
 $topic_data = SELECT
     *
 FROM
-    ydb_source.input_topic
+    input_topic -- or external topic ext_source.input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -137,7 +119,7 @@ WITH (
     )
 );
 
--- Чтение справочника сервисов из S3
+-- Reading service reference from S3
 $s3_data = SELECT
     *
 FROM
@@ -150,7 +132,7 @@ WITH (
     )
 );
 
--- Присоединение справочника к потоку по ServiceId
+-- Joining reference to stream by ServiceId
 $joined_data = SELECT
     s.Name AS Name,
     t.*
@@ -161,9 +143,9 @@ LEFT JOIN
 ON
     t.ServiceId = s.ServiceId;
 
--- Запись результата в выходной топик в формате JSON
+-- Write result to output topic in JSON format
 INSERT INTO
-    ydb_source.output_topic
+    ext_source.output_topic -- or local topic output_topic
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM
@@ -173,4 +155,4 @@ END DO
 ```
 
 
-More details about data formats (`json_each_row`, `csv_with_names`, etc.): [{#T}](streaming-query-formats.md).
+For more details on data formats (`json_each_row`, `csv_with_names`, etc.): [{#T}](streaming-query-formats.md).

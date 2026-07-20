@@ -26,6 +26,7 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/core/kqp/workload_service/kqp_query_classifier.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -53,6 +54,7 @@
 #include <ydb/library/security/util.h>
 
 #include <util/string/printf.h>
+#include <util/generic/overloaded.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -85,13 +87,13 @@ void FillColumnsMeta(const NKqpProto::TKqpPhyQuery& phyQuery, NKikimrKqp::TQuery
     }
 }
 
-bool FillTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const NKqpProto::TKqpSink& sink) {
-    if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink
-        && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>())
+template<typename TSinkProto>
+bool FillTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const TSinkProto& sink) {
+    if (sink.GetTypeCase() == TSinkProto::kInternalSink
+        && sink.GetInternalSink().GetSettings().template Is<NKikimrKqp::TKqpTableSinkSettings>())
     {
         return sink.GetInternalSink().GetSettings().UnpackTo(&settings);
     }
-
     return false;
 }
 
@@ -100,9 +102,13 @@ bool IsBatchQuery(const NKqpProto::TKqpPhyQuery& physicalQuery) {
     for (const auto& tx : physicalQuery.GetTransactions()) {
         for (const auto& stage : tx.GetStages()) {
             for (auto& sink : stage.GetSinks()) {
-                auto isFilledSettings = FillTableSinkSettings(sinkSettings, sink);
-                if (isFilledSettings && sinkSettings.HasIsBatch() && sinkSettings.GetIsBatch()) {
+                if (FillTableSinkSettings(sinkSettings, sink) && sinkSettings.HasIsBatch() && sinkSettings.GetIsBatch()) {
                     return true;
+                }
+            }
+            for (auto& transform : stage.GetOutputTransforms()) {
+                if (FillTableSinkSettings(sinkSettings, transform) && sinkSettings.HasIsBatch() && sinkSettings.GetIsBatch()) {
+                    AFL_ENSURE(false);
                 }
             }
         }
@@ -336,13 +342,10 @@ public:
     }
 
     void PassRequestToResourcePool() {
-        if (QueryState->UserRequestContext->PoolConfig) {
-            STLOG_D("Request placed into pool from cache",
-                (pool_id, QueryState->UserRequestContext->PoolId),
-                (trace_id, TraceId()));
-            CompileQuery();
-            return;
-        }
+        // PoolConfig should not be set when calling PassRequestToResourcePool
+        // If it's set, WLM admission was already done and we shouldn't be here
+        Y_VALIDATE(!QueryState->UserRequestContext->PoolConfig,
+            "Cannot send to workload manager: PoolConfig is already resolved");
 
         Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvPlaceRequestIntoPool(
             QueryState->UserRequestContext->DatabaseId,
@@ -446,7 +449,7 @@ public:
         }
     }
 
-    void HandleClientLost(NGRpcService::TEvClientLost::TPtr&) {
+    void ClientLost() {
         STLOG_D("Got ClientLost event, send AbortExecution to executer",
             (executer_id, ExecuterId),
             (trace_id, TraceId()));
@@ -458,6 +461,10 @@ public:
         } else {
             Cleanup();
         }
+    }
+
+    void HandleClientLost(NGRpcService::TEvClientLost::TPtr&) {
+        ClientLost();
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -571,18 +578,84 @@ public:
 
         QueryState->UpdateTempTablesState(TempTablesState);
 
-        if (QueryState->UserRequestContext->PoolId) {
-            PassRequestToResourcePool();
-        } else {
-            CompileQuery();
+        if (WmPreCompileClassify()) {
+            return;
         }
+
+        CompileQuery();
+    }
+
+    bool WmPreCompileClassify() {
+        auto classifier = QueryState->QueryClassifier;
+
+        if (!classifier) {
+            QueryState->UserRequestContext->PoolId = NResourcePool::DEFAULT_POOL_ID;
+            return false;
+        }
+
+        bool sent = false;
+        const auto result = classifier->PreCompileClassify();
+
+        using TError = std::optional<std::pair<Ydb::StatusIds::StatusCode, TString>>;
+        auto error = std::visit(TOverloaded {
+            [this, &sent](const NWorkload::IQueryClassifier::TResolvedPoolId& s) -> TError {
+                STLOG_D("PreCompile Classify resolved",
+                    (pool_id, s.PoolId),
+                    (skip_admission, s.SkipAdmission),
+                    (trace_id, TraceId()));
+                QueryState->UserRequestContext->PoolId = s.PoolId;
+                if (s.SkipAdmission) {
+                    QueryState->UserRequestContext->PoolConfig = s.PoolConfig;
+                    return std::nullopt;
+                }
+                sent = true;
+                PassRequestToResourcePool();
+                return std::nullopt;
+            },
+            [this](const NWorkload::IQueryClassifier::TReject& r) -> TError {
+                STLOG_N("PreCompile Classify rejected",
+                    (trace_id, TraceId()));
+                return std::make_pair(r.Code, r.Message);
+            },
+            [this](const NWorkload::IQueryClassifier::TBypass&) -> TError {
+                STLOG_D("PreCompile Classify bypass, compiling",
+                    (trace_id, TraceId()));
+                QueryState->UserRequestContext->PoolId = NResourcePool::DEFAULT_POOL_ID;
+                return std::nullopt;
+            },
+            [this](const NWorkload::IQueryClassifier::TPendingCompilation&) -> TError {
+                STLOG_D("PreCompile Classify pending, compiling",
+                    (trace_id, TraceId()));
+                return std::nullopt;
+            },
+        }, result);
+
+        if (error) {
+            ReplyQueryError(error->first, error->second);
+            return true;
+        }
+
+        return sent;
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool) {
-            STLOG_I("Failed to deliver request to workload service",
+            STLOG_W("Failed to deliver request to workload service, bypassing WLM",
                 (trace_id, TraceId()));
-            CompileQuery();
+            ContinueAfterWmAdmission();
+            return;
+        }
+
+        if (ev->Get()->SourceType == NGRpcService::TEvSubscribeGrpcCancel::EventType) {
+            // The remote gRPC request actor we subscribed to for client-cancel
+            // notification is already gone: it raced ahead and died on its own
+            // client-lost before our cross-node subscription arrived. Treat it as
+            // client lost and tear down now, instead of hanging until the query
+            // deadline. See SubscribeRemoteCancel (FlagTrackDelivery).
+            STLOG_D("Grpc cancel subscription undelivered, treat as client lost",
+                (trace_id, TraceId()));
+            ClientLost();
+            return;
         }
     }
 
@@ -594,7 +667,7 @@ public:
             STLOG_T("Failed to place request in resource pool, feature flag is disabled",
                 (trace_id, TraceId()));
             QueryState->UserRequestContext->PoolId.clear();
-            CompileQuery();
+            ContinueAfterWmAdmission();
             return;
         }
 
@@ -620,7 +693,29 @@ public:
         QueryState->UserRequestContext->PoolId = poolId;
         QueryState->UserRequestContext->PoolConfig = ev->Get()->PoolConfig;
 
-        CompileQuery();
+        ContinueAfterWmAdmission();
+    }
+
+    // Precondition: QueryClassifier is set. Reached only as a continuation after
+    // PassRequestToResourcePool(), which requires a classifier — null here is a
+    // caller-side invariant violation, not a runtime edge case to handle.
+    void ContinueAfterWmAdmission() {
+        Y_VALIDATE(QueryState->QueryClassifier, "ContinueAfterWmAdmission called without QueryClassifier");
+
+        auto classifier = QueryState->QueryClassifier;
+        auto state = classifier->GetState();
+
+        if (state == NWorkload::IQueryClassifier::EState::PreCompileDone) {
+            STLOG_D("Pre-compile admission completed, compiling", (trace_id, TraceId()));
+            CompileQuery();
+        } else if (state == NWorkload::IQueryClassifier::EState::PostCompileDone) {
+            STLOG_D("Post-compile admission completed, executing", (trace_id, TraceId()));
+            OnSuccessCompileRequest();
+        } else {
+            Y_VALIDATE(false, TStringBuilder()
+                << "WmQueryClassifier with invalid state after admission: "
+                << static_cast<int>(state));
+        }
     }
 
     bool AreAllTheTopicsAndPartitionsKnown() const {
@@ -676,7 +771,11 @@ public:
             return;
         }
 
-        QueryState->FillTopicOperations();
+        if (QueryState->HasDeferredPublication()) {
+            QueryState->FillDeferredPublicationOperations();
+        } else {
+            QueryState->FillTopicOperations();
+        }
 
         if (!AreAllTheTopicsAndPartitionsKnown()) {
             auto navigate = QueryState->BuildSchemeCacheNavigate();
@@ -690,7 +789,8 @@ public:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
-        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()
+            && !HasDeferredPublicationOperations()) {
             Become(&TKqpSessionActor::ExecuteState);
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
             return;
@@ -899,7 +999,57 @@ public:
         return false;
     }
 
+    bool WmPostCompileClassify() {
+        auto classifier = QueryState->QueryClassifier;
+
+        if (!classifier || classifier->GetState() != NWorkload::IQueryClassifier::EState::WaitCompile) {
+            return false;
+        }
+
+        bool sent = false;
+        const auto result = classifier->PostCompileClassify(*QueryState->PreparedQuery);
+
+        using TError = std::optional<std::pair<Ydb::StatusIds::StatusCode, TString>>;
+        auto error = std::visit(TOverloaded {
+            [this, &sent](const NWorkload::IQueryClassifier::TResolvedPoolId& r) -> TError {
+                STLOG_D("PostCompile Classify resolved",
+                    (pool_id, r.PoolId),
+                    (skip_admission, r.SkipAdmission),
+                    (trace_id, TraceId()));
+                QueryState->UserRequestContext->PoolId = r.PoolId;
+                if (r.SkipAdmission) {
+                    QueryState->UserRequestContext->PoolConfig = r.PoolConfig;
+                    return std::nullopt;
+                }
+                sent = true;
+                PassRequestToResourcePool();
+                return std::nullopt;
+            },
+            [this](const NWorkload::IQueryClassifier::TBypass&) -> TError {
+                STLOG_D("PostCompile Classify bypass",
+                    (trace_id, TraceId()));
+                return std::nullopt;
+            },
+            [this](const NWorkload::IQueryClassifier::TReject& r) -> TError {
+                STLOG_N("PostCompile Classify rejected",
+                    (trace_id, TraceId()));
+                return std::make_pair(r.Code, r.Message);
+            }
+        }, result);
+
+        if (error) {
+            ReplyQueryError(error->first, error->second);
+            return true;
+        }
+
+        return sent;
+    }
+
     void OnSuccessCompileRequest() {
+        if (WmPostCompileClassify()) {
+            co_return;
+        }
+
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
             TVector<IKqpGateway::TPhysicalTxData> txs;
             std::map<TString, TString> secureParams;
@@ -1147,12 +1297,19 @@ public:
         }
 
         QueryState->TxCtx->SetIsolationLevel(settings);
+        QueryState->TxCtx->TxManager->SetIsolationLevel(*QueryState->TxCtx->EffectiveIsolationLevel);
         QueryState->TxCtx->OnBeginQuery(QueryState->GetQuerySpanId(), QueryState->ExtractQueryText());
 
         if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
                 && !Settings.TableService.GetEnableSnapshotIsolationRW()) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
                 << "Writes aren't supported for Snapshot Isolation";
+        }
+
+        if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE
+                && !Settings.TableService.GetEnableStrictSerializableIsolation()) {
+            ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
+                << "Strict Serializable mode is disabled";
         }
 
         if (!Transactions.CreateNew(QueryState->TxId.GetValue(), QueryState->TxCtx)) {
@@ -1193,6 +1350,9 @@ public:
             switch (isolation) {
                 case NKqpProto::ISOLATION_LEVEL_SERIALIZABLE:
                     settings.mutable_serializable_read_write();
+                    break;
+                case NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE:
+                    settings.mutable_strict_serializable_read_write();
                     break;
                 case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
                     settings.mutable_snapshot_read_write();
@@ -1331,6 +1491,7 @@ public:
         QueryState->TxCtx->HasTableRead |= hasOlapRead || hasOltpRead;
 
         if (QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE
+                && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE
                 && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO
                 && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_SCAN
@@ -1534,7 +1695,7 @@ public:
         AFL_ENSURE(txCtx.TxManager);
         const bool broken = !!txCtx.TxManager->GetLockIssue();
 
-        if (!txCtx.DeferredEffects.Empty() && broken) {
+        if ((!txCtx.DeferredEffects.Empty() || txCtx.HasUnflushedEffectsInBuffer) && broken) {
             EmitVictimTliLog(
                 txCtx.TxManager->GetVictimQuerySpanId(),
                 std::nullopt,
@@ -1550,6 +1711,16 @@ public:
                 std::nullopt,
                 txCtx.TxManager->GetBrokenLocksCount());
             ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
+                MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
+            return false;
+        }
+
+        if (txCtx.TxManager->BrokenLocks()) {
+            EmitVictimTliLog(
+                txCtx.TxManager->GetVictimQuerySpanId(),
+                std::nullopt,
+                txCtx.TxManager->GetBrokenLocksCount());
+            ReplyQueryError(Ydb::StatusIds::ABORTED, "transaction locks invalidated",
                 MessageFromIssues(std::vector<TIssue>{*txCtx.TxManager->GetLockIssue()}));
             return false;
         }
@@ -1616,7 +1787,7 @@ public:
             bool hasWrites = tx->GetHasEffects();
             if (!hasWrites) {
                 for (const auto& stage : tx->GetStages()) {
-                    if (stage.SinksSize()) {
+                    if (stage.SinksSize() || stage.OutputTransformsSize()) {
                         hasWrites = true;
                         break;
                     }
@@ -1710,11 +1881,6 @@ public:
     }
 
     void ExecutePartitioned(const TKqpPhyTxHolder::TConstPtr& tx) {
-        if (!Settings.TableService.GetEnableBatchUpdates()) {
-            return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                "BATCH operations are not supported at the current time.");
-        }
-
         if (QueryState->TxCtx->HasOlapTable) {
             return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                 "BATCH operations are not supported for column tables at the current time.");
@@ -1767,7 +1933,8 @@ public:
         }
 
         request.AcquireLocksTxId = txCtx.LockHandle.GetLockId();
-        request.UseImmediateEffects = true;
+        request.FlushEffects = true;
+        txCtx.HasUnflushedEffectsInBuffer = false;
         request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
 
         txCtx.HasImmediateEffects = true;
@@ -1805,11 +1972,6 @@ public:
                 default:
                     break;
             }
-        }
-
-        if (QueryState->GetFormatsSettings().IsArrowFormat() && !AppData()->FeatureFlags.GetEnableArrowResultSetFormat()) {
-            ReplyQueryError(Ydb::StatusIds::BAD_REQUEST, "Arrow result set format is not enabled. Please set EnableArrowResultSetFormat feature flag to true.");
-            return true;
         }
 
         auto& txCtx = *QueryState->TxCtx;
@@ -1913,8 +2075,20 @@ public:
             request.AcquireLocksTxId = txCtx.LockHandle.GetLockId();
 
             if (!txCtx.CanDeferEffects()) {
-                request.UseImmediateEffects = true;
+                request.FlushEffects = true;
+            } else {
+                // When CanDeferEffects() is true, GetCurrentPhyTx() defers all
+                // effect-only txs (ResultsSize() == 0), so the remaining tx
+                // must have results (RETURNING clause).
+                AFL_ENSURE(tx->ResultsSize() > 0);
             }
+        }
+
+        if (request.FlushEffects || commit) {
+            txCtx.HasUnflushedEffectsInBuffer = false;
+        } else if (tx && tx->GetHasEffects()) {
+            // Has unflushed effects in buffer (used for RETURNING)
+            txCtx.HasUnflushedEffectsInBuffer = true;
         }
 
         LWTRACK(KqpSessionPhyQueryProposeTx,
@@ -2092,8 +2266,7 @@ public:
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
-            (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
-                ? GUCSettings : nullptr, TPartitionPrunerConfig{}, std::move(tableIdsForSnapshot), txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
+            nullptr, TPartitionPrunerConfig{}, std::move(tableIdsForSnapshot), txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
             llvmSettings, Settings.QueryService, QueryState ? QueryState->Generation : 0, ChannelService,
             (QueryState && QueryState->PreparedQuery)
                 ? QueryState->PreparedQuery->GetUseKqpTasksGraphV2()
@@ -2685,7 +2858,8 @@ public:
                 if (!NKikimr::IsQueryWithSensitiveInfo(text)) {
                     auto userSID = QueryState->UserToken->GetUserSID();
                     CollectQueryStats(TlsActivationContext->AsActorContext(), stats, queryDuration, text,
-                        userSID, QueryState->ParametersSize, database, type, requestUnits);
+                        userSID, QueryState->ParametersSize, database, type, requestUnits,
+                        QueryState->RequestEv->GetTraceId());
                 }
                 break;
             }
@@ -3577,6 +3751,11 @@ public:
                 hFunc(NWorkload::TEvContinueRequest, HandleNoop);
                 // message from KQP proxy in case of our reply just after kqp proxy timer tick
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
+                // A finished request's client may be lost after we already replied and
+                // returned to ReadyState. There is nothing to cancel anymore, so ignore it
+                // instead of treating it as an internal error (which would needlessly tear
+                // down an otherwise healthy long session). CleanupState ignores it likewise.
+                hFunc(NGRpcService::TEvClientLost, HandleNoop);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
 
@@ -3767,7 +3946,8 @@ private:
 
         QueryState->TxCtx->TopicOperations.CacheSchemeCacheNavigate(response->ResultSet);
 
-        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()
+            && !HasDeferredPublicationOperations()) {
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
             return;
         }
@@ -3798,6 +3978,10 @@ private:
 
     bool HasTopicApiWriteOperations() const {
         return QueryState->TxCtx->TopicOperations.HasWriteId();
+    }
+
+    bool HasDeferredPublicationOperations() const {
+        return QueryState->TxCtx->TopicOperations.HasDeferredPublicationOperations();
     }
 
     ui64 GetTopicWriteId() const {

@@ -12,6 +12,9 @@
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 
+#include <util/generic/guid.h>
+#include <util/system/unaligned_mem.h>
+
 #include <arrow/array/array_base.h>
 #include <arrow/array/concatenate.h>
 #include <arrow/array/util.h>
@@ -529,6 +532,45 @@ public:
 
     void DoAddNotNull(TBlockItem value, size_t count) {
         std::fill(this->DataPtr_ + this->GetCurrLen(), this->DataPtr_ + this->GetCurrLen() + count, value.GetInt128());
+    }
+};
+
+template <bool Nullable>
+class TFixedSizeArrayBuilder<TGUID, Nullable> final: public TFixedSizeArrayBuilderBase<TGUID, Nullable, TFixedSizeArrayBuilder<TGUID, Nullable>> {
+    using TSelf = TFixedSizeArrayBuilder<TGUID, Nullable>;
+    using TBase = TFixedSizeArrayBuilderBase<TGUID, Nullable, TSelf>;
+    using TParams = TArrayBuilderBase::TParams;
+
+public:
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+        : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen, params)
+    {
+    }
+
+    TFixedSizeArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+        : TBase(typeInfoHelper, type, pool, maxLen, params)
+    {
+    }
+
+    void DoAddNotNullFromStringRef(TStringBuf ref) {
+        this->PlaceItem(ReadUnaligned<TGUID>(ref.Data()));
+    }
+
+    void DoAddNotNull(TUnboxedValuePod value) {
+        DoAddNotNullFromStringRef(value.AsStringRef());
+    }
+
+    void DoAddNotNull(TBlockItem value) {
+        DoAddNotNullFromStringRef(value.AsStringRef());
+    }
+
+    void DoAddNotNull(TInputBuffer& input) {
+        this->PlaceItem(input.PopNumber<TGUID>());
+    }
+
+    void DoAddNotNull(TBlockItem value, size_t count) {
+        const TGUID uuid = ReadUnaligned<TGUID>(value.AsStringRef().Data());
+        std::fill(this->DataPtr_ + this->GetCurrLen(), this->DataPtr_ + this->GetCurrLen() + count, uuid);
     }
 };
 
@@ -1380,7 +1422,7 @@ public:
         const ui32 idx = value.GetVariantIndex();
         Y_ENSURE(idx < Children_.size(), "Variant index out of range");
         TypeCodes_->UnsafeAppend(static_cast<i8>(idx));
-        ValueOffsets_->UnsafeAdvance(1);
+        ValueOffsets_->UnsafeAppend(0);
         auto item = value.GetVariantItem();
         Children_[idx]->Add(item);
     }
@@ -1389,7 +1431,7 @@ public:
         const ui32 idx = value.GetVariantIndex();
         Y_ENSURE(idx < Children_.size(), "Variant index out of range");
         TypeCodes_->UnsafeAppend(static_cast<i8>(idx));
-        ValueOffsets_->UnsafeAdvance(1);
+        ValueOffsets_->UnsafeAppend(0);
         Children_[idx]->Add(value.GetVariantItem());
     }
 
@@ -1397,7 +1439,7 @@ public:
         const auto typeCode = static_cast<ui8>(input.PopChar());
         Y_ENSURE(typeCode < Children_.size(), "Variant type code out of range");
         TypeCodes_->UnsafeAppend(static_cast<i8>(typeCode));
-        ValueOffsets_->UnsafeAdvance(1);
+        ValueOffsets_->UnsafeAppend(0);
         Children_[typeCode]->Add(input);
     }
 
@@ -1414,7 +1456,7 @@ public:
         //
         // This is not implemented yet, but we may support it in the near future.
         TypeCodes_->UnsafeAppend(static_cast<i8>(0));
-        ValueOffsets_->UnsafeAdvance(1);
+        ValueOffsets_->UnsafeAppend(0);
         Children_[0]->AddDefault();
     }
 
@@ -1429,7 +1471,7 @@ public:
             i8 typeCode = typeCodes[i];
             const i32 valueOffset = valueOffsets[i];
             TypeCodes_->UnsafeAppend(i8{typeCode});
-            ValueOffsets_->UnsafeAdvance(1);
+            ValueOffsets_->UnsafeAppend(0);
             Children_[typeCode]->AddMany(*array.child_data[typeCode], valueOffset, 1);
             ++added;
         }
@@ -1442,7 +1484,7 @@ public:
             i8 typeCode = typeCodes[i];
             const i32 valueOffset = valueOffsets[i];
             TypeCodes_->UnsafeAppend(i8{typeCode});
-            ValueOffsets_->UnsafeAdvance(1);
+            ValueOffsets_->UnsafeAppend(0);
             Children_[typeCode]->AddMany(*array.child_data[typeCode], valueOffset, 1);
         }
     }
@@ -1455,7 +1497,7 @@ public:
             i8 typeCode = typeCodes[idx];
             const i32 valueOffset = valueOffsets[idx];
             TypeCodes_->UnsafeAppend(i8{typeCode});
-            ValueOffsets_->UnsafeAdvance(1);
+            ValueOffsets_->UnsafeAppend(0);
             Children_[typeCode]->AddMany(*array.child_data[typeCode], valueOffset, 1);
         }
     }

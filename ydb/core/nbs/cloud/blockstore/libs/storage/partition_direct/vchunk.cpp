@@ -1,8 +1,8 @@
 #include "vchunk.h"
 
 #include "flush_request.h"
-#include "range_translate.h"
 #include "read_request_executor.h"
+#include "region_geometry.h"
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
@@ -40,7 +40,10 @@ TVChunk::TVChunk(
     , BlockSize(DefaultBlockSize)
     , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
-    , LogTitle{GetCycleCount(), TLogTitle::TVChunk{.VChunkIndex = vChunkConfig.GetVChunkIndex()}}
+    , LogTitle{GetCycleCount(), TLogTitle::TVChunk{
+        .DBGIndex = vChunkConfig.GetDBGIndex(),
+        .VChunkIndex = vChunkConfig.GetVChunkIndex()
+     }}
     , VChunkConfig(vChunkConfig)
     , BlocksDirtyMap(VChunkConfig, BlockSize, BlocksCount)
     , Counters(std::move(counters))
@@ -221,6 +224,36 @@ void TVChunk::SetHostState(THostIndex hostIndex, EHostState state)
     UpdateConfig(std::move(prepare), std::move(apply));
 }
 
+void TVChunk::UpdateHostCount(size_t newHostCount)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (VChunkConfig.GetHostCount() >= newHostCount) {
+        return;
+    }
+
+    auto prepare = [weakSelf = weak_from_this(),
+                    newHostCount]() -> TVChunkConfig
+    {
+        if (auto self = weakSelf.lock()) {
+            TVChunkConfig cfg = self->VChunkConfig;
+            while (cfg.GetHostCount() < newHostCount) {
+                cfg.AppendHost();
+            }
+            return cfg;
+        }
+        return TVChunkConfig{};
+    };
+    auto apply = [weakSelf = weak_from_this()]()
+    {
+        if (auto self = weakSelf.lock()) {
+            self->ApplyConfig();
+        }
+    };
+
+    UpdateConfig(std::move(prepare), std::move(apply));
+}
+
 const TVChunkConfig& TVChunk::GetConfig() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -228,16 +261,29 @@ const TVChunkConfig& TVChunk::GetConfig() const
     return VChunkConfig;
 }
 
+TExecutorPtr TVChunk::GetExecutor() const
+{
+    return Executor;
+}
+
 ui64 TVChunk::GetPBufferUsedSize(THostIndex hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    return BlocksDirtyMap.GetPBufferCounters(hostIndex).CurrentBytesCount;
+    return BlocksDirtyMap.GetPBufferUsedSize(hostIndex);
 }
 
 std::optional<ui64> TVChunk::GetSafeBarrierForErase() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (!DirtyMapReady.HasValue()) {
+        // Not restored yet: this vchunk's records may still exist only in the
+        // PBuffers and are not inflight, so an empty dirty map does not mean
+        // "no constraint". Report the blocking bound so the tablet-wide
+        // cleanup skips its tick until every vchunk finishes restoring.
+        return 0;
+    }
 
     return BlocksDirtyMap.GetSafeBarrierForErase();
 }
@@ -258,6 +304,17 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "FlushQueue: " << BlocksDirtyMap.DebugPrintReadyToFlush() << "\n";
     sb << "EraseQueue: " << BlocksDirtyMap.DebugPrintReadyToErase() << "\n";
     return sb;
+}
+
+TVChunkSnapshot TVChunk::BuildMonSnapshot()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return {
+        .VChunkConfig = VChunkConfig,
+        .SafeBarrier = GetSafeBarrierForErase(),
+        .DirtyMapDump = DebugPrintDirtyMap(),
+    };
 }
 
 void TVChunk::OnWriteBlocksResponse(
@@ -312,12 +369,10 @@ void TVChunk::OnBelatedWriteBlocksResponse(
         LogTitle.GetWithTime().c_str(),
         bundle->GetVChunkRange().Print().c_str());
 
-    BlocksDirtyMap.UpdateBelatedEraseQueue(
-        completedWrites,
-        bundle->GetLsn(),
-        bundle->GetVChunkRange());
+    BlocksDirtyMap.UpdateBelatedEraseQueue(completedWrites, bundle->GetLsn());
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
+    ScheduleCleaningUp();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -370,6 +425,8 @@ void TVChunk::DoStop()
         return;
     }
 
+    Stopped = true;
+
     for (const auto& [_, copier]: Copiers) {
         copier->Stop();
     }
@@ -386,6 +443,12 @@ void TVChunk::DoReadBlocksLocal(
     std::shared_ptr<NWilson::TSpan> span)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (Stopped) {
+        promise.SetValue(TReadBlocksLocalResponse{
+            .Error = MakeError(E_CANCELLED, "VChunk is stopped")});
+        return;
+    }
 
     WaitForDirtyMapReady();
 
@@ -466,8 +529,7 @@ void TVChunk::DoReadBlocksLocal(
             auto value = UnsafeExtractValue(f);
 
             if (auto self = weakSelf.lock()) {
-                bool ok = !HasError(value.Error);
-                self->Counters.RequestFinished(EVChunkOperation::Read, ok);
+                self->OnReadBlocksResponse(value);
             }
 
             promise.SetValue(
@@ -478,9 +540,23 @@ void TVChunk::DoReadBlocksLocal(
     requestExecutor->Run();
 }
 
+void TVChunk::OnReadBlocksResponse(
+    const IReadRequestExecutor::TResponse& response)
+{
+    bool ok = !HasError(response.Error);
+    Counters.RequestFinished(EVChunkOperation::Read, ok);
+    ScheduleCleaningUp();
+}
+
 void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (Stopped) {
+        bundle->SendFinalReply(TWriteBlocksLocalResponse{
+            .Error = MakeError(E_CANCELLED, "VChunk is stopped")});
+        return;
+    }
 
     WaitForDirtyMapReady();
 
@@ -668,6 +744,7 @@ void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
     }
 
     UpdatePendingCounters();
+    ScheduleCleaningUp();
 }
 
 void TVChunk::OnEraseBelatedResponse(
@@ -683,17 +760,14 @@ void TVChunk::OnEraseBelatedResponse(
     }
 
     UpdatePendingCounters();
+    ScheduleCleaningUp();
 }
 
 void TVChunk::ScheduleCleaningUp()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (CleaningUpScheduled || InflightFlushesCount || InflightWritesCount) {
-        return;
-    }
-
-    if (!BlocksDirtyMap.NeedFlush() && !BlocksDirtyMap.NeedErase()) {
+    if (CleaningUpScheduled) {
         return;
     }
 

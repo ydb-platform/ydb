@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/cbo/cbo_interesting_orderings.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_hints.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
@@ -193,6 +194,22 @@ void InferStatisticsForKqpTable(
     double byteSize = tableData.Metadata->DataSize;
     int nAttrs = tableData.Metadata->Columns.size();
 
+    // Correct for zeros in statistics response:
+    // - If RecordsCount is zero but DataSize is not (sometimes the statistics returns this):
+    //  - Set NRows = DataSize / nAttrs / 10
+    // - If both are still zero - assign them to constants
+    // FIXME: In the second case we should check whether the basic statistics have been collected from the table
+
+    if (nRows == 0 && byteSize != 0) {
+        nRows = byteSize / nAttrs / 10.0;
+    }
+
+    if (nRows == 0 || byteSize == 0) {
+        nRows = 1000.0;
+        byteSize = 100000.0;
+    }
+
+
     auto keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(tableData.Metadata->KeyColumnNames));
     auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, nRows, nAttrs, byteSize, 0.0, keyColumns);
     if (typeCtx->ColumnStatisticsByTableName.contains(path.StringValue())) {
@@ -231,30 +248,12 @@ void InferStatisticsForKqpTable(
     // full path.
     {
         auto optHints = kqpCtx.GetOptimizerHints();
-        THashSet<TString> candidates;
-        if (!alias.empty()) {
-            candidates.insert(alias);
-        }
-        TString pathStr = path.StringValue();
-        candidates.insert(pathStr);
-        if (auto pos = pathStr.rfind('/'); pos != TString::npos && pos + 1 < pathStr.size()) {
-            candidates.insert(pathStr.substr(pos + 1));
-        }
-
-        auto applySingleLabelHint = [&](TCardinalityHints& hints, double& target) {
-            for (auto& h : hints.Hints) {
-                if (h.JoinLabels.size() == 1 && candidates.contains(h.JoinLabels[0])) {
-                    target = h.ApplyHint(target);
-                    break;
-                }
-            }
-        };
-
+        auto candidates = BuildTableHintCandidates(alias, path.StringValue());
         if (optHints.CardinalityHints) {
-            applySingleLabelHint(*optHints.CardinalityHints, stats->Nrows);
+            ApplySingleLabelHint(*optHints.CardinalityHints, candidates, stats->Nrows);
         }
         if (optHints.BytesHints) {
-            applySingleLabelHint(*optHints.BytesHints, stats->ByteSize);
+            ApplySingleLabelHint(*optHints.BytesHints, candidates, stats->ByteSize);
         }
     }
 
@@ -825,7 +824,7 @@ double EstimateRowSize(const TStructExprType& rowType, const TString& format, co
     }
 
     if (result == 0.0) {
-        result = 1000.0;
+        result = 100.0;
     }
 
     if (format != "parquet" && !decoded) {

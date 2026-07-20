@@ -4294,6 +4294,135 @@ Y_UNIT_TEST(AlterTableDropIndexIsCorrect) {
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
 }
 
+Y_UNIT_TEST(CreateTableWithStatisticsIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            b Utf8,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a, b) WITH (COUNT_MIN_SKETCH)
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsName");
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsColumns");
+            UNIT_ASSERT_STRING_CONTAINS(line, "statisticsTypes");
+            UNIT_ASSERT_STRING_CONTAINS(line, "COUNT_MIN_SKETCH");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsOnUnknownColumnFails) {
+    ExpectFailWithError(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            PRIMARY KEY (k),
+            STATISTICS s ON (missing) WITH (COUNT_MIN_SKETCH)
+        );
+    )sql", "<main>:7:30: Error: Undefined column: missing\n");
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsWithoutWithIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            b Utf8,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a, b)
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(CreateTableWithStatisticsEmptyWithFails) {
+    // Empty WITH () is rejected by the grammar: the statistic type list must be non-empty.
+    ExpectFailWithFuzzyError(R"sql(
+        USE ydb;
+        CREATE TABLE table (
+            k Uint64 NOT NULL,
+            a Uint64,
+            PRIMARY KEY (k),
+            STATISTICS s ON (a) WITH ()
+        );
+    )sql", "<main>:7:38: Error: mismatched input");
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a, b) WITH (COUNT_MIN_SKETCH),
+            ADD STATISTICS s2 ON (a) WITH (COUNT_MIN_SKETCH);
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "addStatistics");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsDuplicateFails) {
+    ExpectFailWithError(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a) WITH (COUNT_MIN_SKETCH),
+            ADD STATISTICS s1 ON (b) WITH (COUNT_MIN_SKETCH);
+    )sql", "<main>:5:28: Error: Statistics s1 must be defined once\n");
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsWithoutWithIsSupported) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a, b);
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AlterTableAddStatisticsEmptyWithFails) {
+    // Empty WITH () is rejected by the grammar: the statistic type list must be non-empty.
+    ExpectFailWithFuzzyError(R"sql(
+        USE ydb;
+        ALTER TABLE table
+            ADD STATISTICS s1 ON (a) WITH ();
+    )sql", "<main>:4:43: Error: mismatched input");
+}
+
+Y_UNIT_TEST(AlterTableDropStatisticsIsSupported) {
+    auto res = SqlToYql("USE ydb; ALTER TABLE table DROP STATISTICS s");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropStatistics");
+        }
+    };
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+}
+
+Y_UNIT_TEST(StatisticsKeywordIsNotReserved) {
+    // STATISTICS is a non-reserved keyword and must remain usable as an identifier.
+    UNIT_ASSERT(SqlToYql("SELECT 1 AS statistics;").IsOk());
+    UNIT_ASSERT(SqlToYql("USE ydb; SELECT statistics FROM plato.Input;").IsOk());
+}
+
 Y_UNIT_TEST(CreateTableWithLocalBloomFilterAndDropIndexIsCorrect) {
     const auto result = SqlToYql(R"sql(
         USE ydb;
@@ -5116,6 +5245,26 @@ Y_UNIT_TEST(ShowCreateView) {
 
     UNIT_ASSERT_VALUES_EQUAL(elementStat["Read"], 1);
     UNIT_ASSERT_VALUES_EQUAL(elementStat["showCreateView"], 1);
+}
+
+Y_UNIT_TEST(ShowCreateExternalDataSource) {
+    NYql::TAstParseResult res = SqlToYql(R"(
+            USE plato;
+            SHOW CREATE EXTERNAL DATA SOURCE source;
+        )");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Read") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "showCreateExternalDataSource");
+        }
+    };
+
+    TWordCountHive elementStat = {{"Read"}, {"showCreateExternalDataSource"}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Read"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["showCreateExternalDataSource"], 1);
 }
 
 Y_UNIT_TEST(OptionalAliases) {
@@ -10257,6 +10406,33 @@ Y_UNIT_TEST(CreateTopicConsumer) {
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons2 WITH (important = false, availability_period = Interval('PT9H'))) WITH (supported_codecs = "1,2,3");
         )");
+    TestQuery(R"(
+            CREATE TOPIC topic1 (
+                CONSUMER cons1 WITH (
+                    type = 'shared',
+                    receive_message_wait_time = Interval('PT5S'),
+                    receive_message_delay = Interval('PT7S')
+                )
+            );
+        )");
+}
+
+Y_UNIT_TEST(AlterTopicConsumerReceiveMessageSettings) {
+    TestQuery(R"(
+            ALTER TOPIC topic1
+                ADD CONSUMER cons1 WITH (
+                    type = 'shared',
+                    receive_message_wait_time = Interval('PT5S'),
+                    receive_message_delay = Interval('PT7S')
+                );
+        )");
+    TestQuery(R"(
+            ALTER TOPIC topic1
+                ALTER CONSUMER cons1 SET (
+                    receive_message_wait_time = Interval('PT2S'),
+                    receive_message_delay = Interval('PT3S')
+                );
+        )");
 }
 
 Y_UNIT_TEST(AlterTopicSimple) {
@@ -10302,69 +10478,69 @@ Y_UNIT_TEST(DropTopic) {
 Y_UNIT_TEST(TopicBadRequests) {
     TestQuery(R"(
             CREATE TOPIC topic1();
-        )", false);
+        )", /*expectOk=*/false);
     TestQuery(R"(
             CREATE TOPIC topic1 SET setting1 = value1;
-        )", false);
+        )", /*expectOk=*/false);
     TestQuery(R"(
             ALTER TOPIC topic1 SET setting1 value1;
-        )", false);
+        )", /*expectOk=*/false);
     TestQuery(R"(
             ALTER TOPIC topic1 RESET setting1;
-        )", false);
+        )", /*expectOk=*/false);
 
     TestQuery(R"(
             ALTER TOPIC topic1 DROP CONSUMER consumer4 WITH (k1 = v1);
-        )", false);
+        )", /*expectOk=*/false);
 
     TestQuery(R"(
             CREATE TOPIC topic1 WITH (retention_period = 123);
-        )", false,
+        )", /*expectOk=*/false,
               {"3:58: Error: Literal of Interval type is expected for retention"});
     TestQuery(R"(
             CREATE TOPIC topic1 WITH (metrics_level = "1");
-        )", false,
+        )", /*expectOk=*/false,
               {"3:55: Error: METRICS_LEVEL value should be an integer"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons1 WITH (important = false));
-        )", false,
+        )", /*expectOk=*/false,
               {"3:59: Error: Consumer cons1 defined more than once"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (bad_option = false));
-        )", false,
+        )", /*expectOk=*/false,
               {"3:68: Error: BAD_OPTION: unknown option for consumer"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (important = false, important = true));
-        )", false,
+        )", /*expectOk=*/false,
               {"3:86: Error: IMPORTANT specified multiple times in CONSUMER statement for single consumer"});
     TestQuery(R"(
             ALTER TOPIC topic1 SET (metrics_level = "1");
-        )", false,
+        )", /*expectOk=*/false,
               {"3:53: Error: METRICS_LEVEL value should be an integer"});
     TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER cons1, ALTER CONSUMER cons1 RESET (important);
-        )", false,
+        )", /*expectOk=*/false,
               {"3:80: Error: IMPORTANT reset is not supported"});
     TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER consumer1,
                 ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
                 ALTER CONSUMER consumer3 RESET (supported_codecs);
-        )", false,
+        )", /*expectOk=*/false,
               {"5:49: Error: SUPPORTED_CODECS specified multiple times in ALTER CONSUMER statement for single consumer"});
     TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER consumer1,
                 ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
                 ALTER CONSUMER consumer3 SET (read_from = 2);
-        )", false,
+        )", /*expectOk=*/false,
               {"5:59: Error: READ_FROM specified multiple times in CONSUMER statement for single consumer"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (availability_period = 3600));
-        )", false,
+        )", /*expectOk=*/false,
               {"3:77: Error: Literal of Interval type is expected for AVAILABILITY_PERIOD setting"});
     TestQuery(R"(
             ALTER TOPIC topic1
                 ALTER CONSUMER consumer3 SET (availability_period = false);
-        )", false,
+        )", /*expectOk=*/false,
               {"4:69: Error: Literal of Interval type is expected for AVAILABILITY_PERIOD setting"});
 }
 
@@ -12033,6 +12209,33 @@ Y_UNIT_TEST(ParseProtoseq) {
     UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
 }
 
+Y_UNIT_TEST(ComplexParseWithOptions) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+
+        $input = SELECT Protobuf::Parse(records) AS event FROM Input
+        FLATTEN LIST BY (ChunksSplitters::Protoseq(Data).SplitRecords AS records);
+
+        SELECT * FROM $input
+        WITH (
+            WATERMARK = event.ts - Interval("PT1S"),
+            WATERMARK_GRANULARITY = "PT1S",
+            WATERMARK_IDLE_TIMEOUT = "PT1M"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {
+        "WatermarkGenerator",
+        "watermarkgranularity",
+        "watermarkidletimeout",
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermarkgranularity"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["watermarkidletimeout"], 1);
+}
+
 Y_UNIT_TEST(ExprList) {
     auto res = SqlToYql(R"sql(
         USE plato;
@@ -12869,6 +13072,152 @@ Y_UNIT_TEST(AtUnarySubexpr) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
+Y_UNIT_TEST(AtCoalesce) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT (SELECT 1) ?? 2;
+        SELECT 1 ?? (SELECT 2);
+
+        $x = (SELECT * FROM (VALUES (1)) AS x(a)) ?? '';
+
+        DEFINE SUBQUERY $y($x) AS
+            SELECT 1;
+        END DEFINE;
+
+        SELECT * FROM $y($x);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtBitwise) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) | 1;       SELECT $a;
+        $b = (SELECT 1) & 1;       SELECT $b;
+        $c = (SELECT 1) ^ 1;       SELECT $c;
+        $d = (SELECT 1) << 1;      SELECT $d;
+        $e = (SELECT 1) >> 1;      SELECT $e;
+        $f = 1 | (SELECT 1);       SELECT $f;
+        SELECT (SELECT 1) | 1;
+        SELECT 1 | (SELECT 1);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtComparison) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) = 1;       SELECT $a;
+        $b = (SELECT 1) <> 1;      SELECT $b;
+        $c = (SELECT 1) == 1;      SELECT $c;
+        $d = (SELECT 1) < 1;       SELECT $d;
+        $e = (SELECT 1) >= 1;      SELECT $e;
+        $f = 1 = (SELECT 1);       SELECT $f;
+        SELECT (SELECT 1) = 1;
+        SELECT 1 = (SELECT 1);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtDistinct) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) IS DISTINCT FROM 1;         SELECT $a;
+        $b = (SELECT 1) IS NOT DISTINCT FROM 1;     SELECT $b;
+        $c = 1 IS DISTINCT FROM (SELECT 1);         SELECT $c;
+        SELECT (SELECT 1) IS DISTINCT FROM 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtIn) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) IN (1, 2);     SELECT $a;
+        $b = (SELECT 1) NOT IN (1, 2); SELECT $b;
+        SELECT (SELECT 1) IN (1, 2);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtIsNull) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) IS NULL;       SELECT $a;
+        $b = (SELECT 1) IS NOT NULL;   SELECT $b;
+        SELECT (SELECT 1) IS NULL;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtBetween) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) BETWEEN 0 AND 2;                 SELECT $a;
+        $b = 1 BETWEEN (SELECT 0) AND (SELECT 2);        SELECT $b;
+        $c = (SELECT 1) NOT BETWEEN 0 AND 2;             SELECT $c;
+        $d = (SELECT 1) BETWEEN SYMMETRIC 2 AND 0;       SELECT $d;
+        SELECT (SELECT 1) BETWEEN 0 AND 2;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtLike) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 'a') LIKE 'a';                  SELECT $a;
+        $b = 'a' LIKE (SELECT 'a');                  SELECT $b;
+        $c = (SELECT 'a') REGEXP 'a';                SELECT $c;
+        $d = 'a' REGEXP (SELECT 'a');                SELECT $d;
+        SELECT (SELECT 'a') LIKE 'a';
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtCase) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = CASE (SELECT 1) WHEN 1 THEN 2 ELSE 3 END;              SELECT $a;
+        $b = CASE WHEN (SELECT 1) = 1 THEN (SELECT 2) ELSE (SELECT 3) END;  SELECT $b;
+        SELECT CASE (SELECT 1) WHEN 1 THEN 2 ELSE 3 END;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtNestedOperators) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = ((SELECT 1) | 2) = 3;                   SELECT $a;
+        $b = (SELECT 1) + (SELECT 2) * (SELECT 3);   SELECT $b;
+        $c = NOT ((SELECT 1) = 1);                   SELECT $c;
+        $d = (SELECT 1) ?? (SELECT 2) ?? 3;          SELECT $d;
+        $e = (SELECT 1) = 1 AND (SELECT 2) = 2;      SELECT $e;
+        $f = -(SELECT 1) < ~(SELECT 2);              SELECT $f;
+        SELECT (SELECT 1) BETWEEN (SELECT 0) AND (SELECT 2);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 Y_UNIT_TEST(UnionParenthesis) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
@@ -13210,7 +13559,7 @@ Y_UNIT_TEST(ReadsNamedNodeExpresionSubquery) {
 
 Y_UNIT_TEST(ReadsProjectionFromSubquery) {
     NSQLTranslation::TTranslationSettings s;
-    s.LangVer = NYql::MakeLangVersion(2025, 4);
+    s.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         SELECT (SELECT a FROM plato.x) FROM (SELECT * FROM plato.y);
@@ -13442,6 +13791,69 @@ Y_UNIT_TEST(FromQuotedTableWithImmediateCluster) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
     UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
     UNIT_ASSERT_STRING_CONTAINS(program, R"('((Right! yql_read0) '"/Root/Yql/Select" '()))");
+}
+
+Y_UNIT_TEST(FromQuotedTableWithImmediateClusterWithTablePrefixPath) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA YqlSelect = 'force';
+        PRAGMA TablePathPrefix = '/Root/Yql';
+        SELECT a, b FROM Select;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!"};
+
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"((Key '('table (String '"/Root/Yql/Select"))) (Void) '()))");
+}
+
+Y_UNIT_TEST(FromNamedNodeWithQuotedTableWithImmediateClusterWithTablePrefixPath) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA YqlSelect = 'force';
+        PRAGMA TablePathPrefix = '/Root/Yql';
+        $x = SELECT a FROM Select;
+        SELECT $x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"((Key '('table (String '"/Root/Yql/Select"))) (Void) '()))");
+}
+
+// The test checks that the prefix is not added for temporary tables.
+Y_UNIT_TEST(FromTmpTableWithImmediateClusterWithTablePrefixPath) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        PRAGMA YqlSelect = 'force';
+        PRAGMA TablePathPrefix = '/Root';
+        INSERT INTO @tmp (a) VALUES (1);
+        COMMIT;
+        SELECT a FROM @tmp;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!", "TempTable"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["TempTable"], 2);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"(TempTable '"tmp")");
 }
 
 Y_UNIT_TEST(FromTmpTableWithImmediateCluster) {
@@ -15143,18 +15555,6 @@ Y_UNIT_TEST(NoSyntaxAmbiguity) {
     )sql");
 }
 
-Y_UNIT_TEST(Columns) {
-    NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
-    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-
-    auto res = SqlToYqlWithSettings(R"sql(
-        WITH x(a) AS (SELECT 1) SELECT * FROM x;
-    )sql", settings);
-    UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "CTE columns are not implemented yet");
-}
-
 Y_UNIT_TEST(LinearVisibilityOK) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
@@ -15789,5 +16189,416 @@ Y_UNIT_TEST(OptionalNull) {
 }
 
 } // Y_UNIT_TEST_SUITE(NullAsTypeName)
+
+Y_UNIT_TEST_SUITE(GeneratedColumns) {
+
+Y_UNIT_TEST(CreateTableGeneratedVirtualByDefault) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                gen Int32 AS (5),
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"5" 'virtual)))#");
+    UNIT_ASSERT(!program.Contains("stored"));
+    UNIT_ASSERT(!program.Contains(R"#((Int32 '"5"))#"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedExplicitVirtual) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                gen Int32 AS (5) VIRTUAL,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"5" 'virtual)))#");
+    UNIT_ASSERT(!program.Contains("stored"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedStored) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                gen Int32 AS (5) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"5" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedAlwaysKeyword) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                gen Int32 GENERATED ALWAYS AS (5) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"5" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedWithoutAlways) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                id Uint32,
+                Col2 Uint32,
+                Col3 Uint32,
+                Col1 Uint32 AS (2 + 3),
+                PRIMARY KEY (id)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"2 + 3" 'virtual)))#");
+    UNIT_ASSERT(!program.Contains("stored"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedDeterministicExpr) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                gen Int32 AS (1 + 2) VIRTUAL,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"1 + 2" 'virtual)))#");
+    UNIT_ASSERT(!program.Contains("stored"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedNonDeterministicExpr) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                gen Uint64 AS (RandomNumber(1)) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"RandomNumber(1)" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedReferencesColumns) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                a Int32,
+                b Int32,
+                gen Int32 GENERATED ALWAYS AS (a + b) STORED,
+                PRIMARY KEY (a)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"a + b" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+}
+
+Y_UNIT_TEST(CreateTableMultipleGeneratedColumns) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                x Int32 AS (1) VIRTUAL,
+                y Int32 AS (2) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"1" 'virtual)))#");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"2" 'stored)))#");
+}
+
+Y_UNIT_TEST(AlterTableAddGeneratedVirtualColumn) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tbl ADD COLUMN gen Int32 AS (5);
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, "addColumns");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"5" 'virtual)))#");
+    UNIT_ASSERT(!program.Contains("stored"));
+}
+
+Y_UNIT_TEST(AlterTableAddGeneratedStoredColumn) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE tbl ADD COLUMN gen Int32 GENERATED ALWAYS AS (a + b) STORED;
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, "addColumns");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"a + b" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+    UNIT_ASSERT(!program.Contains("(Member row"));
+}
+
+Y_UNIT_TEST(AlterTableAddGeneratedColumnWithNamedLambda) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            $f = ($x) -> ($x * 2);
+            ALTER TABLE tbl ADD COLUMN gen Int32 GENERATED ALWAYS AS ($f(a)) STORED;
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, "addColumns");
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n$f = ($x) -> ($x * 2);\n" '"$f(a)" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedColumnWithNamedNodeRef) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            $factor = 10;
+            CREATE TABLE tbl (
+                key Uint32,
+                num Int32,
+                gen Int32 GENERATED ALWAYS AS (num * $factor) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n$factor = 10;\n" '"num * $factor" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+    UNIT_ASSERT(!program.Contains("Read"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedColumnWithSubqueryNamedNodeRef) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            $ids = (SELECT id FROM other);
+            CREATE TABLE tbl (
+                key Uint32,
+                num Int32,
+                gen Bool GENERATED ALWAYS AS (num IN $ids) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n$ids = (SELECT id FROM other);\n" '"num IN $ids" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+    UNIT_ASSERT(!program.Contains("Read"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedColumnWithInlineSubquery) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                num Int32,
+                gen Bool GENERATED ALWAYS AS (num IN (SELECT id FROM other)) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"num IN (SELECT id FROM other)" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+    UNIT_ASSERT(!program.Contains("Read"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedColumnWithScalarSubquery) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                key Uint32,
+                num Int32,
+                gen Int32 GENERATED ALWAYS AS ((SELECT MAX(id) FROM other)) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"(SELECT MAX(id) FROM other)" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+    UNIT_ASSERT(!program.Contains("Read"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedWithPragma) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            PRAGMA FlexibleTypes;
+            CREATE TABLE tbl (
+                key Uint32,
+                num Int32,
+                gen Int32 GENERATED ALWAYS AS (num / 2) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\nPRAGMA FlexibleTypes;\n" '"num / 2" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+}
+
+Y_UNIT_TEST(CreateTableGeneratedNestedPath) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE `a/b/tbl` (
+                key Uint32,
+                num Int32,
+                gen Int32 GENERATED ALWAYS AS (num / 2) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"num / 2" 'stored)))#");
+}
+
+Y_UNIT_TEST(AlterTableAddGeneratedColumnNestedPath) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLE `a/b/tbl` ADD COLUMN gen Int32 GENERATED ALWAYS AS (a + b) STORED;
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"a + b" 'stored)))#");
+}
+
+Y_UNIT_TEST(CreateTableStoreGeneratedColumnFails) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLESTORE tbl (
+                key Uint32 NOT NULL,
+                gen Int32 AS (5) STORED,
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "GENERATED ALWAYS AS columns are supported only for CREATE TABLE and ALTER TABLE");
+}
+
+Y_UNIT_TEST(CreateExternalTableGeneratedColumnFails) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE EXTERNAL TABLE tbl (
+                a Int32,
+                gen Int32 AS (a) STORED
+            ) WITH (
+                DATA_SOURCE="/Root/mydatasource",
+                LOCATION="/folder1/*"
+            );
+        )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "GENERATED ALWAYS AS columns are supported only for CREATE TABLE and ALTER TABLE");
+}
+
+Y_UNIT_TEST(AlterExternalTableAddGeneratedColumnFails) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER EXTERNAL TABLE tbl ADD COLUMN gen Int32 AS (5) STORED;
+        )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "GENERATED ALWAYS AS columns are supported only for CREATE TABLE and ALTER TABLE");
+}
+
+Y_UNIT_TEST(AlterTableStoreAddGeneratedColumnFails) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            ALTER TABLESTORE tbl ADD COLUMN gen Int32 AS (5) STORED;
+        )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "GENERATED ALWAYS AS columns are supported only for CREATE TABLE and ALTER TABLE");
+}
+
+Y_UNIT_TEST(CreateTableGeneratedColumnNonYdbProviderFails) {
+    auto res = SqlToYql(R"sql(
+            USE plato;
+            CREATE TABLE tbl (
+                a Int32,
+                gen Int32 AS (a) STORED,
+                PRIMARY KEY (a)
+            );
+        )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "GENERATED ALWAYS AS columns are supported only for the ydb provider");
+}
+
+Y_UNIT_TEST(CreateTableGeneratedColumnNonYdbProviderVirtualFails) {
+    auto res = SqlToYql(R"sql(
+            USE plato;
+            CREATE TABLE tbl (
+                key Uint32,
+                gen Int32 GENERATED ALWAYS AS (5),
+                PRIMARY KEY (key)
+            );
+        )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "GENERATED ALWAYS AS columns are supported only for the ydb provider");
+}
+
+Y_UNIT_TEST(AlterTableAddGeneratedColumnNonYdbProviderFails) {
+    auto res = SqlToYql(R"sql(
+            USE plato;
+            ALTER TABLE tbl ADD COLUMN gen Int32 AS (5) STORED;
+        )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "ALTER TABLE is not supported for yt provider");
+}
+
+Y_UNIT_TEST(CreateTableGeneratedStringFunction) {
+    auto res = SqlToYql(R"sql(
+            USE ydb;
+            CREATE TABLE tbl (
+                id Int32,
+                name String,
+                upper_name String GENERATED ALWAYS AS (String::AsciiToUpper(name)) STORED,
+                PRIMARY KEY (id)
+            );
+        )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    const auto program = GetPrettyPrint(res);
+    UNIT_ASSERT_STRING_CONTAINS(program, R"#('('generated '('"USE ydb;\n" '"String::AsciiToUpper(name)" 'stored)))#");
+    UNIT_ASSERT(!program.Contains("virtual"));
+}
+
+} // Y_UNIT_TEST_SUITE(GeneratedColumns)
 
 // NOLINTEND(misc-definitions-in-headers)

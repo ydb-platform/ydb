@@ -9,6 +9,7 @@ SRCS(
     chunked_memory_pool_allocator_ut.cpp
     chunked_memory_pool_output_ut.cpp
     erased_storage_ut.cpp
+    exact_ref_counted_cast_ut.cpp
     free_list_ut.cpp
     function_view_ut.cpp
     intrusive_ptr_ut.cpp

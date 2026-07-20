@@ -11,6 +11,8 @@
 
 namespace NKikimr::NRpcService {
 
+Ydb::StatusIds::StatusCode GrpcStatusToYdbStatus(grpc::StatusCode status);
+
 template<typename TResponse>
 class TPromiseWrapper {
 public:
@@ -261,11 +263,19 @@ public:
     void SetRuHeader(ui64) override {
     }
 
-    // Unimplemented methods
-    void ReplyWithRpcStatus(grpc::StatusCode, const TString&, const TString&) override {
-        ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
+    void ReplyWithRpcStatus(grpc::StatusCode status, const TString& reason, const TString& details) override {
+        if (reason) {
+            TBase::IssueManager.RaiseIssue(NYql::TIssue(reason));
+        }
+
+        if (details) {
+            TBase::IssueManager.RaiseIssue(NYql::TIssue(TStringBuilder() << "gRPC Details: " << details));
+        }
+
+        ReplyWithYdbStatus(GrpcStatusToYdbStatus(status));
     }
 
+    // Unimplemented methods
     void SetStreamingNotify(NYdbGrpc::IRequestContextBase::TOnNextReply&&) override {
         Y_ABORT("Unimplemented for local rpc");
     }
@@ -608,6 +618,10 @@ TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(ty
     auto localRpcCtx = std::make_shared<TLocalRpcCtx<TRpc, TCbWrapper>>(std::move(proto), [](const typename TRpc::TResponse&) {}, database, token, requestType, internalCall);
     auto localRpcStreamCtx = MakeIntrusive<TLocalRpcStreamCtx>(std::move(localRpcCtx));
     auto localRpcRequest = std::make_unique<TRpc>(localRpcStreamCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+    // The stream wrapper drops the base request's token (unlike DoLocalRpc), so set it here — system-user stream calls like the warmup sysview fetch must pass the KqpProxy warmup gate.
+    if (token && !token->empty()) {
+        localRpcRequest->SetInternalToken(MakeIntrusive<NACLib::TUserToken>(*token));
+    }
     auto actor = TRpc::CreateRpcActor(localRpcRequest.release(), args...);
     ctx.RegisterWithSameMailbox(actor);
 

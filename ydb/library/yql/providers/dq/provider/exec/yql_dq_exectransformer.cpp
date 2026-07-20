@@ -20,7 +20,6 @@
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/planner/execution_planner.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_control.h>
 
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
@@ -507,9 +506,9 @@ private:
             fileLink = State->FileStorage->PutFileStripped(path, md5);
         }
 
-        UploadCache_->ModulesMapping.emplace(objectId  + DqStrippedSuffied, path);
+        UploadCache_->ModulesMapping.emplace(objectId  + DqStrippedSuffied(), path);
 
-        return std::make_tuple(fileLink->GetPath(), objectId + DqStrippedSuffied);
+        return std::make_tuple(fileLink->GetPath(), objectId + DqStrippedSuffied());
     }
 
     std::tuple<TString, TString> GetPathAndObjectId(const TFilePathWithMd5& pathWithMd5) const {
@@ -523,7 +522,8 @@ private:
             pathWithMd5.Md5);
     }
 
-    bool BuildUploadList(
+    // Returns formatted error message if attachments exceed the limit; empty string otherwise.
+    TString BuildUploadList(
         TUploadList* uploadList,
         bool localRun,
         TString* lambda,
@@ -538,7 +538,7 @@ private:
         return ret;
     }
 
-    bool BuildUploadList(
+    TString BuildUploadList(
         TUploadList* uploadList,
         bool localRun,
         TExploringNodeVisitor& explorer,
@@ -582,7 +582,6 @@ private:
                 uploadList->emplace(f);
             }
         }
-        bool fallbackFlag = false;
         for (TNode* node : explorer.GetNodes()) {
             node->Freeze(typeEnv);
 
@@ -734,11 +733,17 @@ private:
 
         i64 dataLimit = static_cast<i64>(State->Settings->_MaxAttachmentsSize.Get().GetOrElse(TDqSettings::TDefault::MaxAttachmentsSize));
         if (sizeSum > dataLimit) {
-            YQL_CLOG(WARN, ProviderDq) << "Too much data: " << sizeSum << " > " << dataLimit;
-            fallbackFlag = true;
+            const auto filesCount = uploadList->size();
+            YQL_CLOG(WARN, ProviderDq) << "Too much data: " << filesCount << " file(s), " << sizeSum << " > " << dataLimit;
+            // Keep the "Too big attachment" prefix — analytics tools parse it.
+            return TStringBuilder()
+                << "Too big attachment: " << filesCount
+                << " file(s) attached with a total size of "
+                << sizeSum << " bytes, which exceeds the limit of "
+                << dataLimit << " bytes";
         }
 
-        return fallbackFlag;
+        return {};
     }
 
     TStatusCallbackPair GetLambda(
@@ -823,10 +828,8 @@ private:
         }
 
         const bool localRun = enableLocalRun && (!State->DqGateway || (!*untrustedUdfFlag && !State->TypeCtx->ForceDq && !hasGraphParams));
-        bool fallbackFlag = BuildUploadList(uploadList, localRun, explorer, typeEnv, files);
-
-        if (fallbackFlag) {
-            YQL_CLOG(TRACE, ProviderDq) << "Fallback: " << NCommon::ExprToPrettyString(ctx, *input);
+        if (auto error = BuildUploadList(uploadList, localRun, explorer, typeEnv, files)) {
+            YQL_CLOG(TRACE, ProviderDq) << "Fallback: " << error << ": " << NCommon::ExprToPrettyString(ctx, *input);
             return Fallback();
         } else {
             *lambda = SerializeRuntimeNode(root, typeEnv);
@@ -1272,6 +1275,18 @@ private:
         }
     }
 
+    static TString FormatTooManyStagesError(size_t count, size_t limit) {
+        return TStringBuilder()
+            << "The query plan is too complex: " << count << " stages exceeds the limit of " << limit
+            << ". Consider simplifying the query (e.g. reduce the number of joins, subqueries or unions).";
+    }
+
+    static TString FormatTooManyTasksError(size_t count, size_t limit) {
+        return TStringBuilder()
+            << "The query plan is too complex: " << count << " tasks exceeds the limit of " << limit
+            << ". Consider simplifying the query (e.g. reduce the number of joins, subqueries or unions).";
+    }
+
     TPublicIds::TPtr GetPublicIds(const TExprNode::TPtr& root) const {
         TPublicIds::TPtr publicIds = std::make_shared<TPublicIds>();
         VisitExpr(root, [&](const TExprNode::TPtr& node) {
@@ -1381,7 +1396,7 @@ private:
         const auto maxTasksPerOperation = State->Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 
         auto maxDataSizePerJob = settings->MaxDataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::MaxDataSizePerJob);
-        auto stagesCount = executionPlanner->StagesCount();
+        const auto stagesCount = executionPlanner->StagesCount();
 
         if (!executionPlanner->CanFallback()) {
             settings->FallbackPolicy = State->TypeCtx->DqFallbackPolicy = EFallbackPolicy::Never;
@@ -1389,16 +1404,19 @@ private:
 
         bool canFallback = (settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) != EFallbackPolicy::Never && !State->TypeCtx->ForceDq);
 
-        if (stagesCount > maxTasksPerOperation && canFallback) {
-            return SyncStatus(FallbackWithMessage(
-                pull.Ref(),
-                TStringBuilder()
-                << "Too many stages: "
-                << stagesCount << " > "
-                << maxTasksPerOperation, ctx, true));
+        // Each stage produces at least one task, so stagesCount is a lower bound
+        // for the total task count. Use it as a fast-path check before running
+        // the full execution planner.
+        if (stagesCount > maxTasksPerOperation) {
+            if (canFallback) {
+                return SyncStatus(FallbackWithMessage(
+                    pull.Ref(),
+                    TStringBuilder() << "Too many stages: " << stagesCount << " > " << maxTasksPerOperation,
+                    ctx, true));
+            }
+            ctx.AddError(TIssue(ctx.GetPosition(pull.Ref().Pos()), FormatTooManyStagesError(stagesCount, maxTasksPerOperation)));
+            return SyncError();
         }
-
-        YQL_ENSURE(stagesCount <= maxTasksPerOperation, "Too many stages: " << stagesCount << " > " << maxTasksPerOperation);
 
         try {
             while (!executionPlanner->PlanExecution(canFallback) && tasksPerStage > 1) {
@@ -1414,7 +1432,6 @@ private:
             return SyncStatus(FallbackWithMessage(pull.Ref(), err, ctx, true));
         }
 
-        bool fallbackFlag = false;
         if (executionPlanner->MaxDataSizePerJob() > maxDataSizePerJob && canFallback) {
             return SyncStatus(FallbackWithMessage(
                 pull.Ref(),
@@ -1426,24 +1443,28 @@ private:
 
         bool localRun = false;
         auto& tasks = executionPlanner->GetTasks();
-        if (tasks.size() > maxTasksPerOperation && canFallback) {
-            return SyncStatus(FallbackWithMessage(
-                pull.Ref(),
-                TStringBuilder()
-                << "Too many tasks: "
-                << tasks.size() << " > "
-                << maxTasksPerOperation, ctx, true));
+        if (tasks.size() > maxTasksPerOperation) {
+            if (canFallback) {
+                return SyncStatus(FallbackWithMessage(
+                    pull.Ref(),
+                    TStringBuilder() << "Too many tasks: " << tasks.size() << " > " << maxTasksPerOperation,
+                    ctx, true));
+            }
+            ctx.AddError(TIssue(ctx.GetPosition(pull.Ref().Pos()), FormatTooManyTasksError(tasks.size(), maxTasksPerOperation)));
+            return SyncError();
         }
 
-        YQL_ENSURE(tasks.size() <= maxTasksPerOperation);
-
+        TString tooBigAttachmentError;
         {
             TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
             TTypeEnvironment typeEnv(alloc);
             for (auto& t : tasks) {
                 TUploadList uploadList;
                 TString lambda = t.GetProgram().GetRaw();
-                fallbackFlag |= BuildUploadList(&uploadList, localRun, &lambda, typeEnv, files);
+                if (auto error = BuildUploadList(&uploadList, localRun, &lambda, typeEnv, files)) {
+                    tooBigAttachmentError = error;
+                    break;
+                }
                 t.MutableProgram()->SetRaw(lambda);
                 t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
                 *t.MutableProgram()->MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
@@ -1461,8 +1482,8 @@ private:
 
         MarkProgressStarted(publicIds->AllPublicIds, State->ProgressWriter);
 
-        if (fallbackFlag) {
-            return SyncStatus(FallbackWithMessage(pull.Ref(), "Too big attachment", ctx, true));
+        if (tooBigAttachmentError) {
+            return SyncStatus(FallbackWithMessage(pull.Ref(), tooBigAttachmentError, ctx, true));
         }
 
         IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(pull.Ref());
@@ -1938,7 +1959,7 @@ private:
             const auto maxTasksPerOperation = State->Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 
             auto maxDataSizePerJob = settings->MaxDataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::MaxDataSizePerJob);
-            auto stagesCount = executionPlanner->StagesCount();
+            const auto stagesCount = executionPlanner->StagesCount();
 
             if (!executionPlanner->CanFallback()) {
                 settings->FallbackPolicy = State->TypeCtx->DqFallbackPolicy = EFallbackPolicy::Never;
@@ -1946,16 +1967,18 @@ private:
 
             bool canFallback = (settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) != EFallbackPolicy::Never && !State->TypeCtx->ForceDq);
 
-            if (stagesCount > maxTasksPerOperation && canFallback) {
-                return FallbackWithMessage(
-                    *input,
-                    TStringBuilder()
-                    << "Too many stages: "
-                    << stagesCount << " > "
-                    << maxTasksPerOperation, ctx, false);
+            // Each stage produces at least one task, so stagesCount is a lower
+            // bound for the total task count. Use it as a fast-path check.
+            if (stagesCount > maxTasksPerOperation) {
+                if (canFallback) {
+                    return FallbackWithMessage(
+                        *input,
+                        TStringBuilder() << "Too many stages: " << stagesCount << " > " << maxTasksPerOperation,
+                        ctx, false);
+                }
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), FormatTooManyStagesError(stagesCount, maxTasksPerOperation)));
+                return IGraphTransformer::TStatus::Error;
             }
-
-            YQL_ENSURE(stagesCount <= maxTasksPerOperation);
 
             try {
                 while (!executionPlanner->PlanExecution(canFallback) && tasksPerStage > 1) {
@@ -1968,7 +1991,6 @@ private:
                 return FallbackWithMessage(*input, err, ctx, false);
             }
 
-            bool fallbackFlag = false;
             if (executionPlanner->MaxDataSizePerJob() > maxDataSizePerJob && canFallback) {
                 return FallbackWithMessage(
                     *input,
@@ -1979,24 +2001,28 @@ private:
             }
 
             auto& tasks = executionPlanner->GetTasks();
-            if (tasks.size() > maxTasksPerOperation && canFallback) {
-                return FallbackWithMessage(
-                    *input,
-                    TStringBuilder()
-                    << "Too many tasks: "
-                    << tasks.size() << " > "
-                    << maxTasksPerOperation, ctx, false);
+            if (tasks.size() > maxTasksPerOperation) {
+                if (canFallback) {
+                    return FallbackWithMessage(
+                        *input,
+                        TStringBuilder() << "Too many tasks: " << tasks.size() << " > " << maxTasksPerOperation,
+                        ctx, false);
+                }
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), FormatTooManyTasksError(tasks.size(), maxTasksPerOperation)));
+                return IGraphTransformer::TStatus::Error;
             }
 
-            YQL_ENSURE(tasks.size() <= maxTasksPerOperation);
-
+            TString tooBigAttachmentError;
             {
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
                 TTypeEnvironment typeEnv(alloc);
                 for (auto& t : tasks) {
                     TUploadList uploadList;
                     TString lambda = t.GetProgram().GetRaw();
-                    fallbackFlag |= BuildUploadList(&uploadList, false, &lambda, typeEnv, files);
+                    if (auto error = BuildUploadList(&uploadList, false, &lambda, typeEnv, files)) {
+                        tooBigAttachmentError = error;
+                        break;
+                    }
                     t.MutableProgram()->SetRaw(lambda);
                     t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
                     *t.MutableProgram()->MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
@@ -2012,8 +2038,8 @@ private:
                 }
             }
 
-            if (fallbackFlag) {
-                return FallbackWithMessage(*input, "Too big attachment", ctx, false);
+            if (tooBigAttachmentError) {
+                return FallbackWithMessage(*input, tooBigAttachmentError, ctx, false);
             }
 
             if (State->Metrics) {

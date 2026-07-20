@@ -105,6 +105,8 @@ public:
 
     void KillTopicPqrbTablet(const std::string& topicPath);
 
+    TIntrusivePtr<NMonitoring::TDynamicCounters> GetCounters(const TString& svc = "kqp", ui32 nodeIdx = 0);
+
     // External YDB recipe
 
     std::shared_ptr<NYdb::TDriver> GetExternalDriver();
@@ -204,10 +206,6 @@ public:
     // Should be called at most once
     static void SetupMockConnectorTableData(std::shared_ptr<NYql::NConnector::NTest::TConnectorClientMock> mockClient, const TMockConnectorReadSplitsSettings& settings);
 
-    // Other helpers
-
-    static std::function<void(const std::string&)> AstChecker(ui64 txCount, ui64 stagesCount);
-
 private:
     void EnsureNotInitialized(const std::string& info);
 
@@ -222,6 +220,7 @@ protected:
     TTestLogSettings LogSettings;
     bool InternalInitFederatedQuerySetupFactory = false;
     TVector<TString> StoragePoolTypes;
+    bool NeedsStatsCollectors = false;
     NYdb::NQuery::TClientSettings QueryClientSettings = NYdb::NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT);
     NYdb::NTopic::TTopicClientSettings TopicClientSettings = NYdb::NTopic::TTopicClientSettings().AuthToken(BUILTIN_ACL_ROOT);
 
@@ -270,7 +269,7 @@ public:
         std::optional<std::string> Ast;
         std::optional<std::string> Text;
         bool Run = true;
-        std::string Pool = "default";
+        std::string Pool = "";
         ui64 RetryCount = 0;
         std::optional<TInstant> LastFailAt;
         std::optional<TInstant> SuspendedUntil;

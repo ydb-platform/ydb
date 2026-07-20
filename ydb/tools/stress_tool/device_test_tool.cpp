@@ -16,6 +16,7 @@
 #include "device_test_tool_ddisk_test.h"
 #include "device_test_tool_ddisk_client_server.h"
 #include "device_test_tool_driveestimator.h"
+#include "device_test_tool_interconnect_test.h"
 #include "device_test_tool_pb_test.h"
 #include "device_test_tool_pdisk_test.h"
 #include "device_test_tool_trim_test.h"
@@ -167,6 +168,9 @@ int main(int argc, char **argv) {
         .RequiredArgument("PORT").StoreResult(&icPort).Hidden();
     opts.AddLongOption("num-server-devices", "number of devices per server (default 1)")
         .RequiredArgument("N").DefaultValue("1").Hidden();
+    bool useUring = false;
+    opts.AddLongOption("use-uring", "use io_uring transport for interconnect instead of epoll (Linux 5.19+)")
+        .StoreTrue(&useUring).NoArgument().Hidden();
 
     {
         const size_t kCol = 26;
@@ -190,7 +194,9 @@ int main(int argc, char **argv) {
             << row("ic-port PORT",
                    "interconnect port for server to listen on (server only)")
             << row("num-server-devices N",
-                   "number of devices per server (default 1)");
+                   "number of devices per server (default 1)")
+            << row("use-uring",
+                   "use io_uring transport for interconnect instead of epoll (Linux 5.19+)");
 
         opts.AddSection("DDisk client/server options", ddiskHelp);
     }
@@ -293,7 +299,7 @@ int main(int argc, char **argv) {
         if (serverMode) {
             InstallServerSignalHandler();
             auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
-            THolder<NKikimr::TPerfTest> test(new NKikimr::TDDiskServer<>(config, testProto, serverNodeId, clientNodeId, icPort));
+            THolder<NKikimr::TPerfTest> test(new NKikimr::TDDiskServer<>(config, testProto, serverNodeId, clientNodeId, icPort, useUring));
             test->SetPrinter(printer);
             test->RunTest();
             return 0;
@@ -330,7 +336,7 @@ int main(int argc, char **argv) {
                     overrideDDiskInFlight(testProto, inFlight);
                     for (ui32 run = 0; run < config.RunCount; ++run) {
                         THolder<NKikimr::TPerfTest> test(
-                            new NKikimr::TDDiskClient(config, testProto, clientNodeId, serverPeers, numServerDevices));
+                            new NKikimr::TDDiskClient(config, testProto, clientNodeId, serverPeers, numServerDevices, useUring));
                         test->SetPrinter(printer);
                         test->RunTest();
                     }
@@ -338,7 +344,7 @@ int main(int argc, char **argv) {
             } else {
                 for (ui32 run = 0; run < config.RunCount; ++run) {
                     THolder<NKikimr::TPerfTest> test(
-                        new NKikimr::TDDiskClient(config, testProto, clientNodeId, serverPeers, numServerDevices));
+                        new NKikimr::TDDiskClient(config, testProto, clientNodeId, serverPeers, numServerDevices, useUring));
                     test->SetPrinter(printer);
                     test->RunTest();
                 }
@@ -610,5 +616,16 @@ int main(int argc, char **argv) {
         }
     }
     printer->EndTest();
+
+    for (ui32 i = 0; i < protoTests.InterconnectTestListSize(); ++i) {
+        NDevicePerfTest::TInterconnectTest testProto = protoTests.GetInterconnectTestList(i);
+        for (ui32 run = 0; run < config.RunCount; ++run) {
+            THolder<NKikimr::TPerfTest> test(new NKikimr::TInterconnectTest(config, testProto));
+            test->SetPrinter(printer);
+            test->RunTest();
+        }
+    }
+    printer->EndTest();
+
     return 0;
 }

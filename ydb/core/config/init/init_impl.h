@@ -389,8 +389,6 @@ struct TCommonAppOptions {
     ui32 GRpcPublicPort = 0;
     ui32 GRpcsPublicPort = 0;
     ui32 KafkaPort = 0;
-    TString PGWireAddress = "";
-    ui32 PGWirePort = 0;
     TVector<TString> GRpcPublicAddressesV4;
     TVector<TString> GRpcPublicAddressesV6;
     TString GRpcPublicTargetNameOverride = "";
@@ -472,10 +470,6 @@ struct TCommonAppOptions {
         opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
         opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT").StoreResult(&GRpcsPublicPort);
         opts.AddLongOption("kafka-port", "enable kafka proxy to listen on port").OptionalArgument("PORT").StoreResult(&KafkaPort);
-        // Should be provided in yaml config: TLocalPgWireConfig.Address
-        opts.AddLongOption("pgwire-address", "set host for listen postgres protocol").RequiredArgument("ADDR").Hidden().StoreResult(&PGWireAddress);
-        // Should be provided in yaml config: TLocalPgWireConfig.ListeningPort
-        opts.AddLongOption("pgwire-port", "set port for listen postgres protocol").OptionalArgument("PORT").Hidden().StoreResult(&PGWirePort);
         // Should be provided in yaml config: TGRpcConfig.PublicAddressesV4
         opts.AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").Hidden().EmplaceTo(&GRpcPublicAddressesV4);
         // Should be provided in yaml config: TGRpcConfig.PublicAddressesV6
@@ -743,12 +737,6 @@ struct TCommonAppOptions {
             httpProxyConfig->SetEnabled(true);
             httpProxyConfig->SetPort(HttpProxyPort);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::HttpProxyConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
-        }
-        if (PGWireAddress) {
-            appConfig.MutableLocalPgWireConfig()->SetAddress(PGWireAddress);
-        }
-        if (PGWirePort) {
-            appConfig.MutableLocalPgWireConfig()->SetListeningPort(PGWirePort);
         }
         for (const auto& addr : GRpcPublicAddressesV4) {
             appConfig.MutableGRpcConfig()->AddPublicAddressesV4(addr);

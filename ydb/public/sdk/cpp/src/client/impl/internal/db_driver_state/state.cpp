@@ -17,6 +17,7 @@ namespace {
 
         url.assign(to, Quote(to, TStringBuf(url), safe));
     }
+
 }
 
 namespace NYdb::inline Dev {
@@ -58,13 +59,34 @@ TDbDriverState::TDbDriverState(
     Log.SetFormatter(GetPrefixLogFormatter(GetDatabaseLogPrefix(Database)));
 }
 
-void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider) {
-    CredentialsProvider = std::move(credentialsProvider);
+void TDbDriverState::InitCredentials(
+    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
+) {
+    Credentials = credentialsProviderFactory->CreateProviderAsync(weak_from_this()).Apply(
+        [](const NThreading::TFuture<TCredentialsProviderPtr>& future) {
+            TCredentials result{future.GetValue()};
 #ifndef YDB_GRPC_UNSECURE_AUTH
-    CallCredentials = grpc::MetadataCredentialsFromPlugin(
-        std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(CredentialsProvider)));
+            result.CallCredentials = grpc::MetadataCredentialsFromPlugin(
+                std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(result.Provider)));
 #endif
+            return result;
+        });
+    CredentialsReady = Credentials.IgnoreResult();
 }
+
+NThreading::TFuture<void> TDbDriverState::GetCredentialsReady() const {
+    return CredentialsReady;
+}
+
+std::shared_ptr<ICredentialsProvider> TDbDriverState::GetCredentialsProvider() const {
+    return Credentials.HasValue() ? Credentials.GetValue().Provider : nullptr;
+}
+
+#ifndef YDB_GRPC_UNSECURE_AUTH
+std::shared_ptr<grpc::CallCredentials> TDbDriverState::GetCallCredentials() const {
+    return Credentials.HasValue() ? Credentials.GetValue().CallCredentials : nullptr;
+}
+#endif
 
 bool TDbDriverState::AreClientTlsCredentialsValid() const {
     std::call_once(ClientTlsValidationOnceFlag_, [this]() {
@@ -189,53 +211,67 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
         }
     }
     TDbDriverStatePtr strongState;
-    for (;;) {
+    {
         std::unique_lock lock(Lock_);
-        {
+        Notify_.wait(lock, [&]() {
             auto state = States_.find(key);
-            if (state != States_.end()) {
-                auto strong = state->second.lock();
-                if (strong) {
-                    return strong;
-                } else {
-                    // We could find state record, but couldn't promote weak to shared
-                    // this means weak ptr already expired but dtor hasn't been
-                    // called yet. Likely other thread now is waiting on mutex to
-                    // remove expired record from hashmap. So give him chance
-                    // to do it after that we will be able to create new state
-                    lock.unlock();
-                    std::this_thread::yield();
-                    continue;
-                }
+            if (state == States_.end()) {
+                return true;
             }
+            strongState = state->second.lock();
+            if (strongState) {
+                return true;
+            }
+            return false;
+        });
+        if (strongState) {
+            return strongState;
         }
         {
             auto deleter = [this, key](TDbDriverState* p) {
                 {
                     std::unique_lock lock(Lock_);
                     States_.erase(key);
+                    Notify_.notify_all();
                 }
                 delete p;
             };
-            strongState = std::shared_ptr<TDbDriverState>(
-                new TDbDriverState(
-                    quotedDatabase,
-                    discoveryEndpoint,
-                    discoveryMode,
-                    sslCredentials,
-                    DiscoveryClient_),
-                deleter);
 
-            strongState->SetCredentialsProvider(
-                credentialsProviderFactory
-                    ? credentialsProviderFactory->CreateProvider(strongState)
-                    : CreateInsecureCredentialsProviderFactory()->CreateProvider(strongState));
+            auto [it, inserted] = States_.try_emplace(key); // creates empty weak_ptr
+            auto& weakState = it->second;
+            lock.unlock(); // temporarily release lock
 
-            if (discoveryMode != EDiscoveryMode::Off) {
-                DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
+            try {
+                Y_ABORT_UNLESS(inserted);
+                strongState = std::shared_ptr<TDbDriverState>(
+                    new TDbDriverState(
+                        quotedDatabase,
+                        discoveryEndpoint,
+                        discoveryMode,
+                        sslCredentials,
+                        DiscoveryClient_),
+                    deleter);
+
+                strongState->InitCredentials(
+                    credentialsProviderFactory
+                        ? std::move(credentialsProviderFactory)
+                        : CreateInsecureCredentialsProviderFactory());
+
+                if (discoveryMode != EDiscoveryMode::Off) {
+                    DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
+                }
+            } catch (...) {
+                lock.lock();
+                Y_ABORT_UNLESS(weakState.expired());
+                Y_ABORT_UNLESS(States_.erase(key));
+                Notify_.notify_all();
+                throw;
             }
-            Y_ABORT_UNLESS(States_.emplace(key, strongState).second);
-            break;
+
+            lock.lock(); // re-acquire lock
+            Y_ABORT_UNLESS(weakState.expired());
+            weakState = strongState; // reference remains valid
+            Notify_.notify_all();
         }
     }
 
@@ -272,7 +308,8 @@ void TDbDriverState::PostToResponseQueue(TPostTaskCb&& f) {
 }
 
 NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
-    TDbDriverState::ENotifyType type
+    TDbDriverState::ENotifyType type,
+    TNotificationCbRunner cbRunner
 ) {
     std::vector<std::weak_ptr<TDbDriverState>> states;
     {
@@ -289,7 +326,7 @@ NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
             std::lock_guard lock(strong->NotifyCbsLock);
             for (auto& cb : strong->NotifyCbs[static_cast<size_t>(type)]) {
                 if (cb) {
-                    auto future = cb();
+                    auto future = cbRunner ? cbRunner(cb) : cb();
                     if (!future.HasException()) {
                         results.push_back(future);
                     }
@@ -297,6 +334,9 @@ NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
                 }
             }
         }
+    }
+    if (results.empty()) {
+        return NThreading::MakeFuture();
     }
     return NThreading::WaitExceptionOrAll(results);
 }

@@ -333,4 +333,72 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
         ShouldSucceedOnLargeData<ECompressionCodec::Zstd>(1 << 20, std::make_pair(0, 3));
     }
 
+    Y_UNIT_TEST_WITH_COMPRESSION(BackupTableWithMultiColumnStatistics) {
+        TTestBasicRuntime runtime;
+
+        Backup(runtime, ToString(Codec), R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            MultiColumnStatistics { Name: "s1" ColumnNames: "value" Types: COUNT_MIN_SKETCH }
+        )", [](TTestBasicRuntime& runtime) {
+            UpdateRow(runtime, "Table", 1, "valueA");
+        });
+    }
+
+    Y_UNIT_TEST_WITH_COMPRESSION(BackupColumnTableWithMultiColumnStatistics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+            MultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto tableDesc = DescribePrivatePath(runtime, "/MyRoot/OlapTable", true, true);
+        TString pathSchema;
+        UNIT_ASSERT(google::protobuf::TextFormat::PrintToString(tableDesc.GetPathDescription(), &pathSchema));
+
+        TestBackup(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "OlapTable"
+            Table {
+                %s
+            }
+            S3Settings {
+                Endpoint: "localhost:%d"
+                Scheme: HTTP
+                Limits {
+                    MinWriteBatchSize: 0
+                }
+            }
+            ScanSettings {
+                RowsBatchSize: 128
+            }
+            Compression {
+                Codec: "%s"
+            }
+        )", pathSchema.c_str(), port, ToString(Codec).c_str()));
+        env.TestWaitNotification(runtime, txId);
+    }
+
 } // TBackupTests

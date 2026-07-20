@@ -2,7 +2,8 @@
 
 #include "direct_block_group.h"
 #include "partition_direct_events_private.h"
-#include "range_translate.h"
+#include "region_geometry.h"
+#include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
@@ -40,6 +41,7 @@ namespace {
 void DumpToFile(
     const TString& diskId,
     size_t index,
+    const TString& config,
     TMap<size_t, TDBGDumpResponse> debugDumps)
 {
     TVector<TDBGDumpResponse::TVChunkDump> dumps;
@@ -63,6 +65,9 @@ void DumpToFile(
 
     auto path = TStringBuilder() << dirPath << diskId << "." << index;
     TFile file(path, EOpenModeFlag::CreateAlways);
+
+    file.Write(config.data(), config.size());
+    file.Write("\n", 1);
 
     for (const auto& [dbgIndex, dump]: debugDumps) {
         file.Write(dump.Dump.data(), dump.Dump.size());
@@ -90,12 +95,7 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
     return result;
 }
 
-size_t RegionCount(ui64 blockCount, ui32 blockSize)
-{
-    return AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
-}
-
-TVector<std::shared_ptr<TRegion>> CreateRegions(
+TVector<TRegionPtr> CreateRegions(
     IPartitionDirectService* partitionDirectService,
     ui64 blockCount,
     ui32 blockSize,
@@ -104,8 +104,8 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     const TStorageConfig& storageConfig,
     NMonitoring::TDynamicCounterPtr counters)
 {
-    const size_t regionCount = RegionCount(blockCount, blockSize);
-    TVector<std::shared_ptr<TRegion>> regions(regionCount);
+    const size_t regionCount = CalcRegionCount(blockCount, blockSize);
+    TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
         NMonitoring::TDynamicCounterPtr regionCounters =
             counters->GetSubgroup("region", ToString(i));
@@ -179,12 +179,6 @@ TFastPathService::~TFastPathService()
         NKikimrServices::NBS_PARTITION,
         "TFastPathService::Destroy %s",
         DiskId.Quote().c_str());
-
-    // TODO. Should stop and destroy regions before TFastPathService
-    // destruction.
-    for (const auto& region: Regions) {
-        region->Stop();
-    }
 }
 
 NThreading::TFuture<void> TFastPathService::Run()
@@ -206,6 +200,22 @@ NThreading::TFuture<void> TFastPathService::Run()
     ScheduleDirtyMapDebugPrint();
 
     return NThreading::WaitAll(initialReadyFutures);
+}
+
+NThreading::TFuture<void> TFastPathService::Stop()
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TFastPathService::Stop %s",
+        DiskId.Quote().c_str());
+
+    TVector<NThreading::TFuture<void>> stopFutures;
+    for (const auto& region: Regions) {
+        stopFutures.push_back(region->Stop());
+    }
+
+    return NThreading::WaitAll(stopFutures);
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
@@ -361,11 +371,92 @@ void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
+void TFastPathService::QueryAddHost(
+    size_t directBlockGroupId,
+    size_t newHostIndex)
+{
+    auto event = std::make_unique<TEvPartitionDirectPrivate::TEvAddHostToDBG>(
+        directBlockGroupId,
+        newHostIndex);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
 ui64 TFastPathService::GenerateLsn()
 {
     const ui64 lsn = ++SequenceGenerator;
     MaybeTriggerPBufferCleanup(lsn);
     return lsn;
+}
+
+void TFastPathService::StopTablet(const TString& reason)
+{
+    // Just forward the signal to the actor thread.
+    auto event = std::make_unique<TEvPartitionDirectPrivate::TEvPoison>(reason);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
+TFastPathServiceInfo TFastPathService::GetMonInfo() const
+{
+    return {
+        .LsnCounter = SequenceGenerator.load(),
+        .LastSafeBarrier = LastSafeBarrier.load(),
+        .TotalVChunks =
+            Regions.size() * GetVChunksPerRegion(VolumeConfig->VChunkSize),
+        .DbgCount = DirectBlockGroups.size(),
+    };
+}
+
+NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
+    std::optional<size_t> dbgIndex) const
+{
+    TVector<NThreading::TFuture<TDbgSnapshot>> futures;
+    if (dbgIndex) {
+        if (*dbgIndex < DirectBlockGroups.size()) {
+            futures.push_back(DirectBlockGroups[*dbgIndex]->BuildMonSnapshot());
+        }
+    } else {
+        for (const auto& dbg: DirectBlockGroups) {
+            futures.push_back(dbg->BuildMonSnapshot());
+        }
+    }
+
+    return NThreading::WaitAll(futures).Apply(
+        [futures](const auto&)
+        {
+            TVector<TDbgSnapshot> snapshots;
+            snapshots.reserve(futures.size());
+            for (const auto& future: futures) {
+                snapshots.push_back(future.GetValue());
+            }
+            return snapshots;
+        });
+}
+
+NThreading::TFuture<std::optional<TVChunkSnapshot>>
+TFastPathService::GatherVChunkMonSnapshot(ui32 vchunkIndex) const
+{
+    const auto notFound =
+        MakeFuture<std::optional<TVChunkSnapshot>>(std::nullopt);
+
+    const size_t regionIndex =
+        GetRegionIndexByVChunk(*VolumeConfig, vchunkIndex);
+    if (regionIndex >= Regions.size()) {
+        return notFound;
+    }
+    const size_t vChunkIndexInRegion =
+        GetVChunkIndexInRegion(*VolumeConfig, vchunkIndex);
+    auto vchunk = Regions[regionIndex]->GetVChunk(vChunkIndexInRegion);
+    if (!vchunk) {
+        return notFound;
+    }
+
+    // The vchunk state is confined to its executor (the one of its DBG).
+    auto executor = vchunk->GetExecutor();
+    auto promise = NewPromise<std::optional<TVChunkSnapshot>>();
+    auto future = promise.GetFuture();
+    executor->ExecuteSimple([vchunk = std::move(vchunk), promise]() mutable
+                            { promise.SetValue(vchunk->BuildMonSnapshot()); });
+    return future;
 }
 
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
@@ -425,9 +516,13 @@ void TFastPathService::FinishPBufferCleanup()
 
     CleanupGather.Active.store(false);
 
-    if (!globalMin) {
+    if (!globalMin || *globalMin == 0) {
+        // 0 is the blocking bound: some vchunk has not finished restoring its
+        // dirty map, so its records are not accounted for yet. Skip the tick.
         return;
     }
+
+    LastSafeBarrier.store(*globalMin);
 
     const ui64 cleanupBound = *globalMin - 1;
     for (const auto& dbg: DirectBlockGroups) {
@@ -480,7 +575,11 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
     }
 
     try {
-        DumpToFile(DiskId, DumpCount, std::move(DebugDumps));
+        DumpToFile(
+            DiskId,
+            DumpCount,
+            StorageConfig->Dump(),
+            std::move(DebugDumps));
     } catch (const std::exception& e) {
         LOG_ERROR(
             *ActorSystem,
@@ -491,6 +590,13 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
 
     ScheduleDirtyMapDebugPrint();
     ++DumpCount;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+size_t CalcRegionCount(ui64 blockCount, ui32 blockSize)
+{
+    return AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

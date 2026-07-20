@@ -550,8 +550,8 @@ namespace {
 
     void CollectAdditiveInputLabels(const TCoEquiJoinTuple& joinTree, bool hasAny, THashMap<TStringBuf, bool>& isAdditiveByLabel) {
         auto settings = GetEquiJoinLinkSettings(joinTree.Options().Ref());
-        CollectAdditiveInputLabelsSide(joinTree, hasAny, isAdditiveByLabel, true, settings);
-        CollectAdditiveInputLabelsSide(joinTree, hasAny, isAdditiveByLabel, false, settings);
+        CollectAdditiveInputLabelsSide(joinTree, hasAny, isAdditiveByLabel, /*isLeft=*/true, settings);
+        CollectAdditiveInputLabelsSide(joinTree, hasAny, isAdditiveByLabel, /*isLeft=*/false, settings);
     }
 
     void CollectAdditiveInputLabelsSide(const TCoEquiJoinTuple& joinTree, bool hasAny, THashMap<TStringBuf, bool>& isAdditiveByLabel, bool isLeft, const TEquiJoinLinkSettings& settings) {
@@ -959,7 +959,8 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
     const TJoinLabels& labels,
     TExprNode& joins,
     const TJoinOptions& options,
-    TExprContext& ctx
+    TExprContext& ctx,
+    const TTypeAnnotationContext& typesCtx
 ) {
     auto position = ctx.GetPosition(positionHandle);
 
@@ -1049,7 +1050,7 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
 
     if (options.Flatten) {
         for (auto& x : flattenFields) {
-            if (const auto commonType = CommonType(positionHandle, x.second.AllTypes, ctx)) {
+            if (const auto commonType = CommonType(positionHandle, x.second.AllTypes, ctx, typesCtx)) {
                 const bool unwrap = ETypeAnnotationKind::Optional == commonType->GetKind() &&
                     std::any_of(x.second.AllTypes.cbegin(), x.second.AllTypes.cend(), [](const TTypeAnnotationNode* type) { return ETypeAnnotationKind::Optional != type->GetKind(); });
                 resultFields.emplace_back(ctx.MakeType<TItemExprType>(x.first, unwrap ? commonType->Cast<TOptionalExprType>()->GetItemType() : commonType));
@@ -1081,7 +1082,7 @@ IGraphTransformer::TStatus EquiJoinConstraints(
     TVector<TJoinState> joinsStates(labels.Inputs.size());
     TGLobalJoinState globalState;
     THashSet<TStringBuf> scope;
-    if (const auto parseStatus = ParseJoins(labels, joins, joinsStates, scope, globalState, false, ctx, &unique, &distinct, &streaming); parseStatus.Level != IGraphTransformer::TStatus::Ok) {
+    if (const auto parseStatus = ParseJoins(labels, joins, joinsStates, scope, globalState, /*strictKeys=*/false, ctx, &unique, &distinct, &streaming); parseStatus.Level != IGraphTransformer::TStatus::Ok) {
         return parseStatus;
     }
     return IGraphTransformer::TStatus::Ok;
@@ -1109,7 +1110,7 @@ bool IsRightJoinSideOptional(const TStringBuf& joinType) {
 
 THashMap<TStringBuf, bool> CollectAdditiveInputLabels(const TCoEquiJoinTuple& joinTree) {
     THashMap<TStringBuf, bool> result;
-    CollectAdditiveInputLabels(joinTree, false, result);
+    CollectAdditiveInputLabels(joinTree, /*hasAny=*/false, result);
     return result;
 }
 
@@ -1528,7 +1529,7 @@ TMap<TStringBuf, TVector<TStringBuf>> UpdateUsedFieldsInRenameMap(
 TVector<TEquiJoinParent> CollectEquiJoinOnlyParents(const TCoFlatMapBase& flatMap, const TParentsMap& parents)
 {
     TVector<TEquiJoinParent> result;
-    if (!CollectEquiJoinOnlyParents(flatMap.Ref(), nullptr, 2, result, nullptr, parents)) {
+    if (!CollectEquiJoinOnlyParents(flatMap.Ref(), /*prev=*/nullptr, 2, result, /*extractMembersInScope=*/nullptr, parents)) {
         result.clear();
     }
 
@@ -2167,7 +2168,7 @@ void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
     const TJoinLabels& labels, TSet<ui32>& inputs, TSet<TStringBuf>& usedFields) {
     usedFields.clear();
 
-    if (!HaveFieldsSubset(expr, row, usedFields, parentsMap, false)) {
+    if (!HaveFieldsSubset(expr, row, usedFields, parentsMap, /*allowDependsOn=*/false)) {
         const auto inputStructType = RemoveOptionalType(row.GetTypeAnn())->Cast<TStructExprType>();
         for (const auto& i : inputStructType->GetItems()) {
             usedFields.insert(i->GetName());
@@ -2244,6 +2245,92 @@ bool IsCachedJoinOption(TStringBuf name) {
 bool IsCachedJoinLinkOption(TStringBuf name) {
     static THashSet<TStringBuf> CachedJoinLinkOptions = {"shuffle_lhs_by", "shuffle_rhs_by"};
     return CachedJoinLinkOptions.contains(name);
+}
+
+bool ParentKeysSubsetOfChildKeys(TExprNode::TPtr parent, TExprNode::TPtr left, TExprNode::TPtr right) {
+    YQL_ENSURE(left->ChildrenSize() == right->ChildrenSize());
+    YQL_ENSURE(parent->ChildrenSize() % 2 == 0);
+    if (parent->ChildrenSize() > left->ChildrenSize()) {
+        return false;
+    }
+
+    THashSet<TString> childColumns;
+    for (ui32 i = 0; i < left->ChildrenSize(); i += 2) {
+        childColumns.insert(FullColumnName(left->Child(i)->Content(), left->Child(i + 1)->Content()));
+        childColumns.insert(FullColumnName(right->Child(i)->Content(), right->Child(i + 1)->Content()));
+    }
+
+    for (ui32 i = 0; i < parent->ChildrenSize(); i += 2) {
+        auto parentColumn = FullColumnName(parent->Child(i)->Content(), parent->Child(i + 1)->Content());
+        if (!childColumns.contains(parentColumn)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+TExprNode::TPtr PushAnyInEquiJoin(TExprContext& ctx, const TCoEquiJoinTuple& joinTree, const TExprNode::TPtr keyColumnsFromParent) {
+    auto settings = GetEquiJoinLinkSettings(joinTree.Options().Ref());
+    bool settingsChanged = false;
+    TStringBuf joinKind = joinTree.Type().Value();
+    auto result = joinTree.Ptr();
+
+    auto updateHints = [&settingsChanged] (TSet<TString>& hints) {
+        if (!hints.contains("any")) {
+            hints.insert("any");
+            settingsChanged = true;
+        }
+    };
+    bool parentKeysSubsetOfChildKeys = keyColumnsFromParent && ParentKeysSubsetOfChildKeys(keyColumnsFromParent, joinTree.LeftKeys().Ptr(), joinTree.RightKeys().Ptr());
+    if (parentKeysSubsetOfChildKeys) {
+        updateHints(settings.LeftHints);
+        updateHints(settings.RightHints);
+    }
+
+    auto left = joinTree.LeftScope();
+    if (!left.Maybe<TCoAtom>()) {
+        auto leftJoinTuple = left.Cast<TCoEquiJoinTuple>();
+        auto leftResult = leftJoinTuple.Ptr();
+
+        if (joinKind == "RightSemi" || joinKind == "RightOnly" || settings.LeftHints.contains("any")) {
+            if (!settings.LeftHints.contains("unique")) {
+                leftResult = PushAnyInEquiJoin(ctx, leftJoinTuple, joinTree.LeftKeys().Ptr());
+            }
+        } else if (parentKeysSubsetOfChildKeys) {
+            leftResult = PushAnyInEquiJoin(ctx, leftJoinTuple, joinTree.LeftKeys().Ptr());
+        } else {
+            leftResult = PushAnyInEquiJoin(ctx, leftJoinTuple);
+        }
+        if (leftResult != leftJoinTuple.Ptr()) {
+            result = ctx.ChangeChild(*result, TCoEquiJoinTuple::idx_LeftScope, std::move(leftResult));
+        }
+    }
+
+    auto right = joinTree.RightScope();
+    if (!right.Maybe<TCoAtom>()) {
+        auto rightJoinTuple = right.Cast<TCoEquiJoinTuple>();
+        auto rightResult = rightJoinTuple.Ptr();
+
+        if (joinKind == "LeftSemi" || joinKind == "LeftOnly" || settings.RightHints.contains("any")) {
+            if (!settings.RightHints.contains("unique")) {
+                rightResult = PushAnyInEquiJoin(ctx, rightJoinTuple, joinTree.RightKeys().Ptr());
+            }
+        } else if (parentKeysSubsetOfChildKeys) {
+            rightResult = PushAnyInEquiJoin(ctx, rightJoinTuple, joinTree.RightKeys().Ptr());
+        } else {
+            rightResult = PushAnyInEquiJoin(ctx, rightJoinTuple);
+        }
+
+        if (rightResult != rightJoinTuple.Ptr()) {
+            result = ctx.ChangeChild(*result, TCoEquiJoinTuple::idx_RightScope, std::move(rightResult));
+        }
+    }
+
+    if (settingsChanged) {
+        result = ctx.ChangeChild(*result, TCoEquiJoinTuple::idx_Options, BuildEquiJoinLinkSettings(settings, ctx));
+    }
+    return result;
 }
 
 void GetPruneKeysColumnsForJoinLeaves(const TCoEquiJoinTuple& joinTree, THashMap<TStringBuf, THashSet<TStringBuf>>& columnsForPruneKeysExtractor) {

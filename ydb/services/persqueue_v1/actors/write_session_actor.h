@@ -21,7 +21,7 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/aliases.h>
 #include <ydb/services/metadata/service.h>
-
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -156,7 +156,8 @@ private:
     void HandlePoison(TEvPQProxy::TEvDieCommand::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
 
-    void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
+    void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx,
+                      std::optional<Ydb::StatusIds::StatusCode> statusOverride = std::nullopt);
 
     void CheckFinish(const NActors::TActorContext& ctx);
 
@@ -266,7 +267,7 @@ private:
     TInstant LastACLCheckTimestamp;
     TInstant LogSessionDeadline;
 
-    NKikimrSchemeOp::TPersQueueGroupDescription Config;
+    TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
     // PQ tablet configuration that we get at the time of session initialization
     NKikimrPQ::TPQTabletConfig InitialPQTabletConfig;
     std::shared_ptr<NPQ::IPartitionChooser> Chooser;
@@ -277,6 +278,8 @@ private:
     TString ClientDC;
 
     TInstant LastSourceIdUpdate;
+
+    THashMap<ui64, TString> DeferredPublicationExtByInt;
 
     TVector<NPersQueue::TPQLabelsInfo> Aggr;
     NKikimr::NPQ::TMultiCounter SLITotal;

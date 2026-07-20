@@ -76,11 +76,11 @@ void TPqIoTestFixture::InitAsyncOutput(
     i64 freeSpace)
 {
     const THashMap<TString, TString> secureParams;
-
+    
     TPqGatewayServices pqServices(
             Driver,
             nullptr,
-            nullptr,
+            CredentialsFactory,
             std::make_shared<TPqGatewayConfig>(),
             nullptr
         );
@@ -94,7 +94,7 @@ void TPqIoTestFixture::InitAsyncOutput(
             0,
             secureParams,
             Driver,
-            nullptr,
+            CredentialsFactory,
             &actor.GetAsyncOutputCallbacks(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(std::move(pqServices)),

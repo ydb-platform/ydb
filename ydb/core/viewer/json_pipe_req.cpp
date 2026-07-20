@@ -4,6 +4,8 @@
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
+
 namespace NKikimr::NViewer {
 
 template<typename T>
@@ -460,6 +462,9 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
         }
     }
     SendRequest(viewerServiceId, ev, flags, nodeId, response.Span.GetTraceId());
+    if (flags & IEventHandle::FlagSubscribeOnSession) {
+        SubscriptionNodeIds.push_back(nodeId);
+    }
     return response;
 }
 
@@ -1076,28 +1081,29 @@ TRequestState TViewerPipeClient::GetRequest() const {
 }
 
 void TViewerPipeClient::ReplyAndPassAway(TString data, const TString& error) {
-    if (!ReplySent) {
-        if (Event) {
-            Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        } else if (HttpEvent) {
-            auto response = HttpEvent->Get()->Request->CreateResponseString(data);
-            Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response.Release()));
-        }
-        ReplySent = true;
-        if (error) {
-            Error = error;
-        }
-        if (Error.empty()) {
-            TStringBuf dataParser(data);
-            if (dataParser.NextTok(' ') == "HTTP/1.1") {
-                TStringBuf code = dataParser.NextTok(' ');
-                if (code.size() == 3 && code[0] != '2') {
-                    Error = dataParser.NextTok('\n');
-                }
+    if (PassedAway || ReplySent) {
+        return;
+    }
+    if (Event) {
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(data, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+    } else if (HttpEvent) {
+        auto response = HttpEvent->Get()->Request->CreateResponseString(data);
+        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response.Release()));
+    }
+    ReplySent = true;
+    if (error) {
+        Error = error;
+    }
+    if (Error.empty()) {
+        TStringBuf dataParser(data);
+        if (dataParser.NextTok(' ') == "HTTP/1.1") {
+            TStringBuf code = dataParser.NextTok(' ');
+            if (code.size() == 3 && code[0] != '2') {
+                Error = dataParser.NextTok('\n');
             }
         }
-        PassAway();
     }
+    PassAway();
 }
 
 TString TViewerPipeClient::GetHTTPOK(TString contentType, TString response, TInstant lastModified) {
@@ -1158,7 +1164,10 @@ void TViewerPipeClient::RequestDone(i32 requests) {
         return;
     }
     if (requests > DataRequests) {
-        BLOG_ERROR("Requests count mismatch: " << requests << " > " << DataRequests);
+        YDB_LOG_ERROR("Request count mismatch",
+            {"logPrefix", GetLogPrefix()},
+            {"request", requests},
+            {"dataRequests", DataRequests});
         if (Span) {
             Span.Event("Requests count mismatch");
         }
@@ -1196,7 +1205,11 @@ void TViewerPipeClient::Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
 }
 
 void TViewerPipeClient::Cancelled() {
-    BLOG_D("Request cancelled");
+    if (PassedAway) {
+        return;
+    }
+    YDB_LOG_DEBUG("Request cancelled",
+        {"logPrefix", GetLogPrefix()});
     AddEvent("Cancelled");
     PassAway();
 }
@@ -1349,6 +1362,9 @@ bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
 }
 
 void TViewerPipeClient::PassAway() {
+    if (PassedAway) {
+        return;
+    }
     AddEvent("PassAway");
     if (Span) {
         if (Error) {

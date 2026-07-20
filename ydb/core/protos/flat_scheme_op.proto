@@ -15,6 +15,7 @@ import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/sys_view_types.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
+import "ydb/core/protos/test_shard_control.proto";
 import "ydb/core/protos/yql_translation_settings.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/scheme/protos/type_info.proto";
@@ -214,6 +215,11 @@ message TPartitionConfig {
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
     reserved 26; // deprecated -> ByKeyFilterPrefixes
     repeated TByKeyFilterPrefix ByKeyFilterPrefixes = 27; // Bloom filters on PK prefixes
+    repeated uint32 DropByKeyFilterPrefixLengths = 28; // Bloom filter prefix lengths to drop
+    // For unique indexes - number of leading PK columns which should have unique values (for correct locking)
+    optional uint32 UniqueIndexKeySize = 29;
+    // For fulltext indexes - to determine if the table is an impl table of an index
+    optional ESpecialTableType SpecialTableType = 30;
 }
 
 message TByKeyFilterPrefix {
@@ -375,6 +381,12 @@ message TTableIncrementalBackupConfig {
     optional EConsistency Consistency = 2;
 }
 
+enum ESpecialTableType {
+    ESpecialTableTypeNone = 0;
+    ESpecialTableTypeFulltextCompact = 1;
+    ESpecialTableTypeFulltextCompactRelevance = 2;
+}
+
 message TTableDescription {
     optional string Name = 1;
     optional uint64 Id_Deprecated = 2; // LocalPathId, deprecated
@@ -433,8 +445,7 @@ message TTableDescription {
     // Coordinated schema version for backup operations - persisted with AlterData
     optional uint64 CoordinatedSchemaVersion = 49;
 
-    // For unique indexes - number of leading PK columns which should have unique values (for correct locking)
-    optional uint32 UniqueIndexKeySize = 50;
+    reserved 50;
 
     /**
      * The detailed metrics settings for the given table.
@@ -462,8 +473,11 @@ message TTableDescription {
      */
     optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
 
-    // For fulltext indexes - to determine if the table is an impl table of an index
-    optional EIndexType IndexImplType = 52;
+    reserved 52;
+
+    // Multi-column statistics.
+    repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 53;
+    repeated string DropMultiColumnStatistics = 54;
 }
 
 message TCompressionOptions {
@@ -648,6 +662,19 @@ message TOlapIndexDescription {
     }
 }
 
+enum EMultiColumnStatisticsType {
+    MULTI_COLUMN_STATISTICS_UNSPECIFIED = 0;
+    COUNT_MIN_SKETCH = 1;
+}
+
+// Multi-column table statistics
+message TMultiColumnStatisticsDescription {
+    optional string Name = 1;
+    repeated string ColumnNames = 2;
+    repeated uint32 ColumnIds = 3;
+    repeated EMultiColumnStatisticsType Types = 4;
+}
+
 enum EColumnTableEngine {
     COLUMN_ENGINE_NONE = 0;
     COLUMN_ENGINE_REPLACING_TIMESERIES = 1;
@@ -677,6 +704,8 @@ message TCompactionLevelConstructorContainer {
         optional uint64 Concurrency = 6;
         optional uint64 CompactionTaskMemoryLimit = 7;
         optional uint64 CompactionTaskPortionsCountLimit = 8;
+        optional bool CompactAtLevel = 9 [default = false];
+        optional uint64 SkipLevelMinBlobSize = 10;
     }
 
     message TOneLayer {
@@ -767,11 +796,17 @@ message TMetadataManagerConstructorContainer {
     }
 }
 
+message TInsertOptions {
+    optional bool BuildIndexesEnabled = 1 [default = false];
+    optional uint64 BuildIndexesMinBlobBytes = 2 [default = 0];
+}
+
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
+    optional TInsertOptions InsertOptions = 6;
 }
 
 message TColumnTableSchema {
@@ -817,6 +852,7 @@ message TColumnTableRequestedOptions {
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
+    optional TInsertOptions InsertOptions = 6;
 }
 
 message TAlterColumnTableSchema {
@@ -1071,6 +1107,8 @@ message TColumnTableDescription {
     optional string CopyFromTable = 16;
 
     optional bool IsBackup = 17;
+
+    repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 18;
 }
 
 message TAlterColumnTable {
@@ -1084,6 +1122,9 @@ message TAlterColumnTable {
 
     optional TAlterShards AlterShards = 6;
     optional TReshardColumnTable ReshardColumnTable = 7;
+
+    repeated TMultiColumnStatisticsDescription UpsertMultiColumnStatistics = 8;
+    repeated string DropMultiColumnStatistics = 9;
 }
 
 message TReshardColumnTable {
@@ -1094,7 +1135,7 @@ message TLoginCreateUser {
     optional string User = 1;
     optional string Password = 2 [(Ydb.sensitive) = true];
     optional bool CanLogin = 3 [default = true];
-    optional bool IsHashedPassword = 4 [default = false, deprecated = true];
+    reserved 4; reserved "IsHashedPassword";
     optional string HashedPassword = 5 [(Ydb.sensitive) = true];
 }
 
@@ -1102,7 +1143,7 @@ message TLoginModifyUser {
     optional string User = 1;
     optional string Password = 2 [(Ydb.sensitive) = true];
     optional bool CanLogin = 3;
-    optional bool IsHashedPassword = 4 [default = false, deprecated = true];
+    reserved 4; reserved "IsHashedPassword";
     optional string HashedPassword = 5 [(Ydb.sensitive) = true];
 }
 
@@ -1342,6 +1383,7 @@ enum EIndexType {
     EIndexTypeGlobalFulltextCompact = 11;
     EIndexTypeGlobalFulltextCompactRelevance = 12;
     EIndexTypeGlobalJsonCompact = 13;
+    EIndexTypeLocalCountMinSketch = 14;
 }
 
 enum EIndexState {
@@ -1773,6 +1815,27 @@ message TAlterSolomonVolume {
     optional TKeyValueStorageConfig StorageConfig = 5;
 }
 
+message TTestShardSetDescription {
+    optional string Name = 1; // mandatory
+    optional uint64 PathId = 2;
+    repeated uint64 TabletIds = 3; // do not set
+    optional uint64 Version = 4; // do not set
+    repeated NKikimrStoragePool.TChannelBind BoundChannels = 5;
+    repeated TTestShardDescription Shards = 6;
+}
+
+message TTestShardDescription {
+    optional uint64 ShardIdx = 1;
+    optional uint64 TabletId = 2;
+}
+
+message TCreateTestShardSet {
+    optional string Name = 1; // mandatory
+    optional uint32 Count = 2;
+    optional TKeyValueStorageConfig StorageConfig = 3;
+    optional NKikimrClient.TTestShardControlRequest.TCmdInitialize CmdInitialize = 4;
+}
+
 message TBlockStoreAssignOp {
     optional string Name = 1; // mandatory
     optional string NewMountToken = 2 [(Ydb.sensitive) = true]; // unset to unassign
@@ -2118,6 +2181,8 @@ message TModifyScheme {
 
     optional TCreateFullBackupOp CreateFullBackupOp = 95;
 
+    optional TCreateTestShardSet CreateTestShardSet = 96;
+
     // Some entries are grouped by semantics, so are out of order
 }
 
@@ -2190,6 +2255,7 @@ enum EPathType {
     EPathTypeSysView = 24;
     EPathTypeSecret = 25;
     EPathTypeStreamingQuery = 26;
+    EPathTypeTestShardSet = 27;
 }
 
 enum EPathSubType {
@@ -2203,6 +2269,7 @@ enum EPathSubType {
     EPathSubTypeLocalBloomFilterIndex = 7;
     EPathSubTypeLocalBloomNgramFilterIndex = 8;
     EPathSubTypeLocalMinMaxIndex = 9;
+    EPathSubTypeLocalCountMinSketchIndex = 10;
 }
 
 enum EPathState {
@@ -2257,6 +2324,7 @@ message TPathVersion {
     optional uint64 SysViewVersion = 32;
     optional uint64 SecretVersion = 33;
     optional uint64 StreamingQueryVersion = 34;
+    optional uint64 TestShardSetVersion = 35;
 }
 
 // Describes single path
@@ -2351,6 +2419,7 @@ message TPathDescription {
     optional TSysViewDescription SysViewDescription = 32;
     optional TSecretDescription SecretDescription = 33;
     optional TStreamingQueryDescription StreamingQueryDescription = 34;
+    optional TTestShardSetDescription TestShardSetDescription = 35;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB

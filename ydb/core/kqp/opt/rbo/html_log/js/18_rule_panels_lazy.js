@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════
-   Rule-level actions (fields, pinned columns, info toggles)
+   Rule-level actions (fields, pinned fields, info toggles)
    ══════════════════════════════════════════════════════════════ */
 
 var ruleInfoSurface = createVisualSurface({
@@ -194,6 +194,10 @@ function restoreInfoScrollSnapshot(container, snapshot) {
 }
 
 function ruleInfoTabSessionKey(si, gi, ri) {
+    if (typeof currentRuleSessionKey === 'function') {
+        var key = currentRuleSessionKey(ruleRef(si, gi, ri));
+        if (key) return key;
+    }
     var traceIndex = 0;
     try {
         traceIndex = Math.max(0, Number(traceRuntime().activeTraceIndex) || 0);
@@ -1302,7 +1306,7 @@ function renderPlainRuleTree(visualCtx, ref, query, searchScope) {
         scope: rendered.scope,
         showFields: rendered.showFields,
         showPinned: rendered.showPinned,
-        columns: nodeColumnRenderSignature(),
+        pinnedFields: pinnedFieldRenderSignature(),
         payloadState: rendered.payloadState
     };
     updateRuleFeatureButtons(ref.si, ref.gi, ref.ri);
@@ -1437,7 +1441,7 @@ function plainRuleTreeRenderNeeded(si, gi, ri, query, searchScope) {
            prev.scope !== renderScope ||
            prev.showFields !== effectiveRuleFeature(si, gi, ri, 'fields') ||
            prev.showPinned !== effectiveRuleFeature(si, gi, ri, 'pinned') ||
-           prev.columns !== nodeColumnRenderSignature() ||
+           prev.pinnedFields !== pinnedFieldRenderSignature() ||
            prev.payloadState !== currentRulePayloadState(si, gi, ri);
 }
 
@@ -1460,7 +1464,7 @@ function ruleTreeRenderNeeded(si, gi, ri, query, force, searchScope) {
         return prev.diffSide !== diffSide ||
                prev.showFields !== showFields ||
                prev.showPinned !== showPinned ||
-               prev.columns !== nodeColumnRenderSignature() ||
+               prev.pinnedFields !== pinnedFieldRenderSignature() ||
                prev.diffFields !== diffFieldSelectionSignature();
     }
 
@@ -1470,7 +1474,7 @@ function ruleTreeRenderNeeded(si, gi, ri, query, force, searchScope) {
            prev.scope !== renderScope ||
            prev.showFields !== showFields ||
            prev.showPinned !== showPinned ||
-           prev.columns !== nodeColumnRenderSignature() ||
+           prev.pinnedFields !== pinnedFieldRenderSignature() ||
            prev.payloadState !== currentRulePayloadState(si, gi, ri);
 }
 
@@ -2057,7 +2061,7 @@ function featureBulkStatus(feature) {
     var total = 0;
     var visible = 0;
 
-    if (feature === 'pinned' && pinnedColumnCount() === 0) {
+    if (feature === 'pinned' && pinnedFieldCount() === 0) {
         return { total: 0, visible: 0 };
     }
 
@@ -2110,52 +2114,62 @@ function updateBulkDetailControls() {
     }
 
     if (updateEmptyStageControls()) visibleRows++;
-    updateNodeColumnControls();
+    updatePinnedFieldControls();
     updateDiffFieldControls();
 
     var detailSection = document.querySelector('[data-settings-section="details"]');
     if (detailSection) detailSection.hidden = visibleRows === 0;
 }
 
-var NODE_COLUMNS_FILTER_MIN_FIELDS = 9;
+var PINNED_FIELDS_FILTER_MIN_FIELDS = 9;
 
-function nodeColumnRowHtml(field, checked) {
+function pinnedFieldRowHtml(field, checked) {
     var key = field && field.key ? String(field.key) : '';
     var label = field && field.label ? String(field.label) : key;
-    return '<label class="node-column-row">' +
-           '<input type="checkbox" data-trace-action="toggle-node-column" ' +
-           'data-node-column-key="' + htmlEscape(key) + '"' +
+    return '<label class="pinned-field-row">' +
+           '<input type="checkbox" data-trace-action="toggle-pinned-field" ' +
+           'data-pinned-field-key="' + htmlEscape(key) + '"' +
            (checked ? ' checked' : '') + '>' +
-           '<span class="node-column-label">' + htmlEscape(label) + '</span>' +
-           '<button type="button" class="node-column-only" ' +
-           'data-trace-action="solo-node-column" ' +
-           'data-node-column-key="' + htmlEscape(key) + '" ' +
-           'title="Show only this column">only</button>' +
+           '<span class="pinned-field-label">' + htmlEscape(label) + '</span>' +
+           '<button type="button" class="pinned-field-only" ' +
+           'data-trace-action="solo-pinned-field" ' +
+           'data-pinned-field-key="' + htmlEscape(key) + '" ' +
+           'title="Show only this field">only</button>' +
            '</label>';
 }
 
 function diffFieldRowHtml(field, checked) {
     var key = field && field.key ? String(field.key) : '';
     var label = field && field.label ? String(field.label) : key;
-    return '<label class="node-column-row">' +
+    return '<label class="pinned-field-row">' +
            '<input type="checkbox" data-trace-action="toggle-diff-field" ' +
            'data-diff-field-key="' + htmlEscape(key) + '"' +
            (checked ? ' checked' : '') + '>' +
-           '<span class="node-column-label">' + htmlEscape(label) + '</span>' +
-           '<button type="button" class="node-column-only" ' +
+           '<span class="pinned-field-label">' + htmlEscape(label) + '</span>' +
+           '<button type="button" class="pinned-field-only" ' +
            'data-trace-action="solo-diff-field" ' +
            'data-diff-field-key="' + htmlEscape(key) + '" ' +
            'title="Include only this field in diff">only</button>' +
            '</label>';
 }
 
-function nodeColumnPresetButtonHtml(preset, index) {
+function pinnedFieldPresetButtonHtml(preset, index) {
     var label = preset && preset.label ? String(preset.label) : '';
     if (!label) return '';
-    return '<button type="button" class="node-columns-action node-columns-preset" ' +
-           'data-trace-action="apply-node-column-preset" ' +
-           'data-node-column-preset-index="' + htmlEscape(String(index)) + '" ' +
-           'title="Apply column preset: ' + htmlEscape(label) + '">' +
+    return '<button type="button" class="pinned-fields-action pinned-fields-preset" ' +
+           'data-trace-action="apply-pinned-field-preset" ' +
+           'data-pinned-field-preset-index="' + htmlEscape(String(index)) + '" ' +
+           'title="Apply field preset: ' + htmlEscape(label) + '">' +
+           htmlEscape(label) + '</button>';
+}
+
+function diffFieldPresetButtonHtml(preset, index) {
+    var label = preset && preset.label ? String(preset.label) : '';
+    if (!label) return '';
+    return '<button type="button" class="diff-fields-action diff-fields-preset" ' +
+           'data-trace-action="apply-diff-field-preset" ' +
+           'data-diff-field-preset-index="' + htmlEscape(String(index)) + '" ' +
+           'title="Apply diff field preset: ' + htmlEscape(label) + '">' +
            htmlEscape(label) + '</button>';
 }
 
@@ -2167,15 +2181,15 @@ function diffFieldsActionButtonHtml(action, label, title, attrs) {
            htmlEscape(label) + '</button>';
 }
 
-function applyNodeColumnsFilter() {
-    var input = document.getElementById ? document.getElementById('node-columns-filter') : null;
-    var list = document.getElementById ? document.getElementById('node-columns-list') : null;
+function applyPinnedFieldsFilter() {
+    var input = document.getElementById ? document.getElementById('pinned-fields-filter') : null;
+    var list = document.getElementById ? document.getElementById('pinned-fields-list') : null;
     if (!list) return;
 
     var query = input && !input.hidden ? String(input.value || '').trim().toLowerCase() : '';
-    var rows = list.querySelectorAll('.node-column-row');
+    var rows = list.querySelectorAll('.pinned-field-row');
     for (var i = 0; i < rows.length; i++) {
-        var label = rows[i].querySelector('.node-column-label');
+        var label = rows[i].querySelector('.pinned-field-label');
         var text = label ? String(label.textContent || '').toLowerCase() : '';
         rows[i].hidden = !!query && text.indexOf(query) === -1;
     }
@@ -2187,20 +2201,20 @@ function applyDiffFieldsFilter() {
     if (!list) return;
 
     var query = input && !input.hidden ? String(input.value || '').trim().toLowerCase() : '';
-    var rows = list.querySelectorAll('.node-column-row');
+    var rows = list.querySelectorAll('.pinned-field-row');
     for (var i = 0; i < rows.length; i++) {
-        var label = rows[i].querySelector('.node-column-label');
+        var label = rows[i].querySelector('.pinned-field-label');
         var text = label ? String(label.textContent || '').toLowerCase() : '';
         rows[i].hidden = !!query && text.indexOf(query) === -1;
     }
 }
 
-function updateNodeColumnControls() {
-    var section = document.querySelector('[data-settings-section="node-columns"]');
-    var list = document.getElementById ? document.getElementById('node-columns-list') : null;
-    var menu = document.getElementById ? document.getElementById('node-columns-menu') : null;
-    var button = document.getElementById ? document.getElementById('node-columns-button') : null;
-    var summary = document.getElementById ? document.getElementById('node-columns-summary') : null;
+function updatePinnedFieldControls() {
+    var section = document.querySelector('[data-settings-section="pinned-fields"]');
+    var list = document.getElementById ? document.getElementById('pinned-fields-list') : null;
+    var menu = document.getElementById ? document.getElementById('pinned-fields-menu') : null;
+    var button = document.getElementById ? document.getElementById('pinned-fields-button') : null;
+    var summary = document.getElementById ? document.getElementById('pinned-fields-summary') : null;
     if (!section || !list) return;
 
     var fields = traceNodeFields();
@@ -2217,36 +2231,36 @@ function updateNodeColumnControls() {
         return;
     }
 
-    var active = activeNodeColumnKeys();
+    var active = activePinnedFieldKeys();
     var activeSet = {};
     for (var i = 0; i < active.length; i++) activeSet[active[i]] = true;
 
     var html = '';
     for (var f = 0; f < fields.length; f++) {
-        html += nodeColumnRowHtml(fields[f], !!activeSet[fields[f].key]);
+        html += pinnedFieldRowHtml(fields[f], !!activeSet[fields[f].key]);
     }
     list.innerHTML = html;
 
-    var filter = document.getElementById ? document.getElementById('node-columns-filter') : null;
+    var filter = document.getElementById ? document.getElementById('pinned-fields-filter') : null;
     if (filter) {
-        var filterVisible = fields.length >= NODE_COLUMNS_FILTER_MIN_FIELDS;
+        var filterVisible = fields.length >= PINNED_FIELDS_FILTER_MIN_FIELDS;
         filter.hidden = !filterVisible;
         if (!filterVisible) filter.value = '';
     }
-    applyNodeColumnsFilter();
+    applyPinnedFieldsFilter();
 
     if (summary) {
-        summary.textContent = nodeColumnsAreDefault()
+        summary.textContent = pinnedFieldsAreDefault()
             ? 'Default'
             : String(active.length) + ' / ' + String(fields.length);
     }
 
-    var presets = traceNodeColumnPresets();
-    var actions = section.querySelector('.node-columns-actions');
+    var presets = tracePinnedFieldPresets();
+    var actions = section.querySelector('.pinned-fields-actions');
     if (actions) {
         var actionHtml = '';
         for (var p = 0; p < presets.length; p++) {
-            actionHtml += nodeColumnPresetButtonHtml(presets[p], p);
+            actionHtml += pinnedFieldPresetButtonHtml(presets[p], p);
         }
         actions.innerHTML = actionHtml;
         actions.hidden = !actionHtml;
@@ -2287,7 +2301,7 @@ function updateDiffFieldControls() {
 
     var filter = document.getElementById ? document.getElementById('diff-fields-filter') : null;
     if (filter) {
-        var filterVisible = fields.length >= NODE_COLUMNS_FILTER_MIN_FIELDS;
+        var filterVisible = fields.length >= PINNED_FIELDS_FILTER_MIN_FIELDS;
         filter.hidden = !filterVisible;
         if (!filterVisible) filter.value = '';
     }
@@ -2302,6 +2316,10 @@ function updateDiffFieldControls() {
     var actions = section.querySelector('.diff-fields-actions');
     if (actions) {
         var actionHtml = '';
+        var presets = traceDiffFieldPresets();
+        for (var p = 0; p < presets.length; p++) {
+            actionHtml += diffFieldPresetButtonHtml(presets[p], p);
+        }
         actionHtml += diffFieldsActionButtonHtml(
             'set-all-diff-fields',
             'All',

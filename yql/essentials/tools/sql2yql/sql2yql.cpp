@@ -284,7 +284,7 @@ int BuildAST(int argc, char** argv) {
         }
         TVector<NYql::NPg::TExtensionDesc> extensions;
         NYql::PgExtensionsFromProto(*pgExtConfig, extensions);
-        NYql::NPg::RegisterExtensions(extensions, true,
+        NYql::NPg::RegisterExtensions(extensions, /*typesOnly=*/true,
                                       *NSQLTranslationPG::CreateExtensionSqlParser(),
                                       NKikimr::NMiniKQL::CreateExtensionLoader().get());
     });
@@ -302,8 +302,12 @@ int BuildAST(int argc, char** argv) {
 
     IOutputStream& out = outFile ? *outFile.Get() : Cout;
 
+    NSQLTranslation::TExtendedSqlFlags sqlFlags;
+    for (auto&& flag : std::move(flags)) {
+        sqlFlags[flag] = {};
+    }
     if (gatewaysConfig) {
-        NYql::TGatewaySQLFlags::FromTesting(*gatewaysConfig).CollectAllTo(flags);
+        sqlFlags = NYql::TGatewaySQLFlags::FromTesting(*gatewaysConfig).ToMap(std::move(sqlFlags));
     }
 
     if (!res.Has("query") && queryFiles.empty()) {
@@ -375,7 +379,7 @@ int BuildAST(int argc, char** argv) {
             settings.Arena = &arena;
             settings.LangVer = langVer;
             settings.ClusterMapping = clusterMapping;
-            settings.Flags = flags;
+            NSQLTranslation::ParseTranslationSettings(sqlFlags, settings);
             settings.SyntaxVersion = syntaxVersion;
             settings.AnsiLexer = res.Has("ansi-lexer");
             settings.WarnOnV0 = false;

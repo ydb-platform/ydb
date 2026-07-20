@@ -73,9 +73,6 @@ void TCommandExecuteSqlBase::DeclareScriptOptions(TClientCommand::TConfig& confi
 void TCommandExecuteSqlBase::DeclareCommonInputOptions(TClientCommand::TConfig& config) {
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
-    config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
-        .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
-        .Hidden();
     config.Opts->AddLongOption("results-ttl", "Amount of time to store script execution results on server "
         "(for async operations only). By default it is 86400s (24 hours).")
         .RequiredArgument("SECONDS").StoreResult(&ResultsTtl);
@@ -141,13 +138,7 @@ int TCommandExecuteSqlBase::ExecuteScriptAsync(TClientCommand::TConfig& config, 
     settings.ExecMode(NQuery::EExecMode::Execute);
     settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, NQuery::EStatsMode::None));
 
-    if (Syntax == "yql") {
-        settings.Syntax(NQuery::ESyntax::YqlV1);
-    } else if (Syntax == "pg") {
-        settings.Syntax(NQuery::ESyntax::Pg);
-    } else {
-        throw TMisuseException() << "Unknown syntax option \"" << Syntax << "\"";
-    }
+    settings.Syntax(NQuery::ESyntax::YqlV1);
     settings.ResultsTtl(ResultsTtl);
 
     if (!Parameters.empty() || InputParamStream) {
@@ -338,7 +329,7 @@ void TCommandSqlExperimental::Parse(TConfig& config) {
 }
 
 int TCommandSqlExperimental::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NQuery::TQueryClient client(driver);
     if (RunAsync || AsyncWait) {
         return ExecuteScriptAsync(config, driver, client);
@@ -360,13 +351,7 @@ int TCommandSqlExperimental::StreamExecuteQuery(NQuery::TQueryClient& client) {
         auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
         settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
     }
-    if (Syntax == "yql") {
-        settings.Syntax(NQuery::ESyntax::YqlV1);
-    } else if (Syntax == "pg") {
-        settings.Syntax(NQuery::ESyntax::Pg);
-    } else {
-        throw TMisuseException() << "Unknown syntax option \"" << Syntax << "\"";
-    }
+    settings.Syntax(NQuery::ESyntax::YqlV1);
     // Execute query without parameters
     auto asyncResult = client.StreamExecuteQuery(
         Query,
@@ -442,10 +427,6 @@ void TCommandSqlExperimental::SetCollectStatsMode(TString&& collectStatsMode) {
     CollectStatsMode = std::move(collectStatsMode);
 }
 
-void TCommandSqlExperimental::SetSyntax(TString&& syntax) {
-    Syntax = std::move(syntax);
-}
-
 TCommandSqlOperation::TCommandSqlOperation()
     : TClientCommandTree("sql-operation", {}, "Async script execution operations")
 {
@@ -482,7 +463,7 @@ void TCommandSqlOperationExecute::Parse(TConfig& config) {
 }
 
 int TCommandSqlOperationExecute::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NQuery::TQueryClient client(driver);
     return ExecuteScriptAsync(config, driver, client);
 }
@@ -522,7 +503,7 @@ void TCommandSqlOperationFetch::Parse(TConfig& config) {
 }
 
 int TCommandSqlOperationFetch::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
+    auto driver = CreateDriver(config);
     NQuery::TQueryClient queryClient(driver);
     NOperation::TOperationClient operationClient(driver);
     return WaitAndPrintResults(queryClient, operationClient, OperationId);
@@ -548,8 +529,6 @@ void TCommandSqlOperationGet::Parse(TConfig& config) {
 namespace {
     IOutputStream& operator<<(IOutputStream& out, NQuery::ESyntax syntax) {
         switch (syntax) {
-            case NQuery::ESyntax::Pg:
-                return out << "PostgreSQL";
             case NQuery::ESyntax::YqlV1:
                 return out << "YQL";
             default:
@@ -559,7 +538,8 @@ namespace {
 }
 
 int TCommandSqlOperationGet::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     NQuery::TScriptExecutionOperation operation = client
         .Get<NQuery::TScriptExecutionOperation>(OperationId)
         .GetValueSync();
@@ -602,7 +582,8 @@ TCommandSqlOperationWait::TCommandSqlOperationWait()
 {}
 
 int TCommandSqlOperationWait::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     if (WaitForCompletion(client, OperationId)) {
         std::string quotedId = "\"" + OperationId.ToString() + "\"";
         Cerr << "Operation completed." << Endl
@@ -619,7 +600,8 @@ TCommandSqlOperationCancel::TCommandSqlOperationCancel()
 {}
 
 int TCommandSqlOperationCancel::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Cancel(OperationId).GetValueSync());
     Cerr << "Operation cancelled. To forget operation: " << MakeSqlOperationCommand(config, "forget")
          << " \"" << OperationId.ToString() << "\"" << Endl;
@@ -631,7 +613,8 @@ TCommandSqlOperationForget::TCommandSqlOperationForget()
 {}
 
 int TCommandSqlOperationForget::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Forget(OperationId).GetValueSync());
     return EXIT_SUCCESS;
 }
@@ -658,7 +641,8 @@ void TCommandSqlOperationList::Parse(TConfig& config) {
 }
 
 int TCommandSqlOperationList::Run(TConfig& config) {
-    NOperation::TOperationClient client(CreateDriver(config));
+    auto driver = CreateDriver(config);
+    NOperation::TOperationClient client(driver);
     NOperation::TOperationsList<NQuery::TScriptExecutionOperation> operations = client.List<NQuery::TScriptExecutionOperation>(
         PageSize, PageToken)
         .GetValueSync();

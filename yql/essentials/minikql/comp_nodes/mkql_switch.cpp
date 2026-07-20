@@ -9,8 +9,7 @@
 
 #include <util/string/cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using NYql::EnsureDynamicCast;
 
@@ -33,7 +32,7 @@ struct TSwitchHandler {
 using TSwitchHandlersList = std::vector<TSwitchHandler, TMKQLAllocator<TSwitchHandler>>;
 
 class TState: public TComputationValue<TState> {
-    typedef TComputationValue<TState> TBase;
+    using TBase = TComputationValue<TState>;
 
 public:
     TState(TMemoryUsageInfo* memInfo, ui32 size)
@@ -42,8 +41,8 @@ public:
     {
     }
 
-    ui32 ChildReadIndex;
-    NUdf::EFetchStatus InputStatus = NUdf::EFetchStatus::Ok;
+    ui32 ChildReadIndex = 0;
+    bool IsFinished = false;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -51,20 +50,20 @@ class TLLVMFieldsStructureForState: public TLLVMFieldsStructure<TComputationValu
 private:
     using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
     llvm::IntegerType* IndexType;
-    llvm::IntegerType* StatusType;
+    llvm::IntegerType* IsFinishedType;
     const ui32 FieldsCount = 0;
 
 protected:
     using TBase::Context;
+
     ui32 GetFieldsCount() const {
         return FieldsCount;
     }
 
     std::vector<llvm::Type*> GetFields() {
         std::vector<llvm::Type*> result = TBase::GetFields();
-        result.emplace_back(IndexType);  // index
-        result.emplace_back(StatusType); // status
-
+        result.emplace_back(IndexType);      // index
+        result.emplace_back(IsFinishedType); // isFinished
         return result;
     }
 
@@ -77,14 +76,14 @@ public:
         return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
     }
 
-    llvm::Constant* GetStatus() {
+    llvm::Constant* GetIsFinished() {
         return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
     }
 
     TLLVMFieldsStructureForState(llvm::LLVMContext& context)
         : TBase(context)
         , IndexType(Type::getInt32Ty(context))
-        , StatusType(Type::getInt32Ty(context))
+        , IsFinishedType(Type::getInt8Ty(context))
         , FieldsCount(GetFields().size())
     {
     }
@@ -93,7 +92,7 @@ public:
 
 template <bool IsInputVariant, bool TrackRss>
 class TSwitchFlowWrapper: public TStatefulFlowCodegeneratorNode<TSwitchFlowWrapper<IsInputVariant, TrackRss>> {
-    typedef TStatefulFlowCodegeneratorNode<TSwitchFlowWrapper<IsInputVariant, TrackRss>> TBaseComputation;
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TSwitchFlowWrapper<IsInputVariant, TrackRss>>;
 
 private:
     class TFlowState: public TState {
@@ -117,10 +116,14 @@ private:
 
         NUdf::TUnboxedValuePod Get(ui32 i) const {
             if (Buffer.Size() == i) {
-                return NUdf::EFetchStatus::Finish == InputStatus ? NUdf::TUnboxedValuePod::MakeFinish() : NUdf::TUnboxedValuePod::MakeYield();
+                return IsFinished ? NUdf::TUnboxedValuePod::MakeFinish() : NUdf::TUnboxedValuePod::MakeYield();
             }
 
             return Buffer[i];
+        }
+
+        bool IsBufferConsumed() const {
+            return Buffer.Size() == Position;
         }
 
         void Clear() {
@@ -131,17 +134,16 @@ private:
             Position = 0U;
         }
 
-        NUdf::TUnboxedValuePod Handler(ui32, const TSwitchHandler& handler, TComputationContext& ctx) {
+        NUdf::TUnboxedValuePod Handler(const TSwitchHandler& handler, TComputationContext& ctx) {
             while (true) {
                 auto current = Get(Position);
                 if (current.IsSpecial()) {
-                    if (current.IsYield()) {
-                        ResetPosition();
-                    }
                     return current;
                 }
+
                 ++Position;
                 ui32 streamIndex = 0U;
+
                 if constexpr (IsInputVariant) {
                     streamIndex = current.GetVariantIndex();
                     current = current.GetVariantItem().Release();
@@ -150,7 +152,7 @@ private:
                 for (ui32 var = 0U; var < handler.InputIndices.size(); ++var) {
                     if (handler.InputIndices[var] == streamIndex) {
                         if (handler.InputIndices.size() > 1) {
-                            current = ctx.HolderFactory.CreateVariantHolder(current, var);
+                            current = ctx.HolderFactory.CreateVariantHolder(std::move(current), var);
                         }
 
                         return current;
@@ -159,6 +161,7 @@ private:
             }
         }
 
+    private:
         ui32 Position = 0U;
         TPagedUnboxedValueList Buffer;
     };
@@ -170,8 +173,7 @@ public:
         , MemLimit(memLimit)
         , Handlers(std::move(handlers))
     {
-        size_t handlersSize = Handlers.size();
-        for (ui32 handlerIndex = 0; handlerIndex < handlersSize; ++handlerIndex) {
+        for (ui32 handlerIndex = 0; handlerIndex < Handlers.size(); ++handlerIndex) {
             Handlers[handlerIndex].Item->SetGetter([stateIndex = mutables.CurValueIndex - 1, handlerIndex, this](TComputationContext& context) {
                 NUdf::TUnboxedValue& state = context.MutableValues[stateIndex];
                 if (state.IsInvalid()) {
@@ -179,7 +181,7 @@ public:
                 }
 
                 auto ptr = static_cast<TFlowState*>(state.AsBoxed().Get());
-                return ptr->Handler(handlerIndex, Handlers[handlerIndex], context);
+                return ptr->Handler(Handlers[handlerIndex], context);
             });
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -196,44 +198,46 @@ public:
         }
 
         auto ptr = static_cast<TFlowState*>(state.AsBoxed().Get());
-        if (ptr->InputStatus == NUdf::EFetchStatus::Yield) {
-            ptr->InputStatus = NUdf::EFetchStatus::Ok; // We should recheck input in new fetch iteration
-        }
-
+        bool hasDataInInput = true;
+        ui32 finishedHandlers = 0U;
         while (true) {
             if (ptr->ChildReadIndex == Handlers.size()) {
-                switch (ptr->InputStatus) {
-                    case NUdf::EFetchStatus::Ok:
-                        break;
-                    case NUdf::EFetchStatus::Yield:
-                        ptr->InputStatus = NUdf::EFetchStatus::Ok;
-                        return NUdf::TUnboxedValuePod::MakeYield();
-                    case NUdf::EFetchStatus::Finish:
-                        return NUdf::TUnboxedValuePod::MakeFinish();
+                if (finishedHandlers == Handlers.size()) {
+                    return NUdf::TUnboxedValuePod::MakeFinish();
+                }
+
+                if (!hasDataInInput) {
+                    return NUdf::TUnboxedValuePod::MakeYield();
                 }
 
                 const auto initUsage = MemLimit ? ctx.HolderFactory.GetMemoryUsed() : 0ULL;
 
                 do {
                     auto current = Flow->GetValue(ctx);
-                    if (current.IsFinish()) {
-                        ptr->InputStatus = NUdf::EFetchStatus::Finish;
-                        break;
-                    } else if (current.IsYield()) {
-                        ptr->InputStatus = NUdf::EFetchStatus::Yield;
+                    if (current.IsSpecial()) {
+                        hasDataInInput = false;
+                        ptr->IsFinished = current.IsFinish();
                         break;
                     }
+
                     ptr->Add(current.Release());
                 } while (!ctx.CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage));
 
                 ptr->ChildReadIndex = 0U;
                 ptr->PushStat(ctx.Stats);
+                finishedHandlers = 0U;
             }
 
-            const auto& handler = Handlers[ptr->ChildReadIndex];
+            const TSwitchHandler& handler = Handlers[ptr->ChildReadIndex];
             auto childRes = handler.NewItem->GetValue(ctx);
             if (childRes.IsSpecial()) {
+                if (childRes.IsYield() && !ptr->IsBufferConsumed()) {
+                    return NUdf::TUnboxedValuePod::MakeYield();
+                }
+
+                finishedHandlers += childRes.IsFinish();
                 ptr->ResetPosition();
+
                 if (++ptr->ChildReadIndex == Handlers.size()) {
                     ptr->Clear();
                 }
@@ -253,8 +257,10 @@ public:
 
             return childRes.Release();
         }
+
         MKQL_ENSURE(false, "Unreachable");
     }
+
 #ifndef MKQL_DISABLE_CODEGEN
 private:
     class TLLVMFieldsStructureForFlowState: public TLLVMFieldsStructureForState {
@@ -327,7 +333,6 @@ private:
         const auto posPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {fieldsStruct.This(), fieldsStruct.GetPosition()}, "pos_ptr", block);
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
-        const auto back = BasicBlock::Create(context, "back", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
@@ -340,12 +345,8 @@ private:
         const auto input = EmitFunctionCall<&TFlowState::Get>(valueType, {stateArg, pos}, ctx, block);
 
         const auto special = SwitchInst::Create(input, good, 2U, block);
-        special->addCase(GetYield(context), back);
+        special->addCase(GetYield(context), done);
         special->addCase(GetFinish(context), done);
-
-        block = back;
-        new StoreInst(ConstantInt::get(pos->getType(), 0), posPtr, block);
-        BranchInst::Create(done, block);
 
         block = done;
         ReturnInst::Create(context, input, block);
@@ -378,11 +379,11 @@ private:
     }
 
 public:
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const final {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto statusType = Type::getInt32Ty(context);
+        const auto isFinishedType = Type::getInt8Ty(context);
         const auto indexType = Type::getInt32Ty(context);
         TLLVMFieldsStructureForFlowState fieldsStruct(context);
         const auto stateType = StructType::get(context, fieldsStruct.GetFieldsArray());
@@ -392,7 +393,7 @@ public:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
-        const auto result = PHINode::Create(valueType, Handlers.size() + 2U, "result", exit);
+        const auto result = PHINode::Create(valueType, Handlers.size() + 3U, "result", exit);
 
         BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
@@ -409,22 +410,12 @@ public:
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
         const auto indexPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {fieldsStruct.This(), fieldsStruct.GetIndex()}, "index_ptr", block);
+        const auto isFinishedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {fieldsStruct.This(), fieldsStruct.GetIsFinished()}, "is_finished_ptr", block);
 
-        {
-            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {fieldsStruct.This(), fieldsStruct.GetStatus()}, "status_ptr", block);
-            const auto status = new LoadInst(statusType, statusPtr, "entry_status", block);
-            const auto isYield = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status,
-                                                 ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), "is_yield", block);
-            const auto resetOk = BasicBlock::Create(context, "reset_ok", ctx.Func);
-            const auto cont = BasicBlock::Create(context, "cont", ctx.Func);
-            BranchInst::Create(resetOk, cont, isYield, block);
-
-            block = resetOk;
-            new StoreInst(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), statusPtr, block);
-            BranchInst::Create(cont, block);
-
-            block = cont;
-        }
+        const auto hasDataPtr = new AllocaInst(Type::getInt1Ty(context), 0U, "has_data_ptr", &ctx.Func->getEntryBlock().back());
+        const auto finishedPtr = new AllocaInst(indexType, 0U, "finished_ptr", &ctx.Func->getEntryBlock().back());
+        new StoreInst(ConstantInt::get(Type::getInt1Ty(context), 1), hasDataPtr, block);
+        new StoreInst(ConstantInt::get(indexType, 0), finishedPtr, block);
 
         BranchInst::Create(more, block);
 
@@ -441,25 +432,22 @@ public:
         {
             block = next;
 
-            const auto rest = BasicBlock::Create(context, "rest", ctx.Func);
+            const auto live = BasicBlock::Create(context, "live", ctx.Func);
             const auto pull = BasicBlock::Create(context, "pull", ctx.Func);
             const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
+            const auto stop = BasicBlock::Create(context, "stop", ctx.Func);
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {fieldsStruct.This(), fieldsStruct.GetStatus()}, "last", block);
-
-            const auto last = new LoadInst(statusType, statusPtr, "last", block);
-
+            const auto finished = new LoadInst(indexType, finishedPtr, "finished", block);
+            const auto allFinished = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, finished, ConstantInt::get(finished->getType(), Handlers.size()), "all_finished", block);
             result->addIncoming(GetFinish(context), block);
-            const auto choise = SwitchInst::Create(last, pull, 2U, block);
-            choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), rest);
-            choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), exit);
+            BranchInst::Create(exit, live, allFinished, block);
 
-            block = rest;
-            new StoreInst(ConstantInt::get(last->getType(), static_cast<ui32>(NUdf::EFetchStatus::Ok)), statusPtr, block);
+            block = live;
+            const auto hasData = new LoadInst(Type::getInt1Ty(context), hasDataPtr, "has_data", block);
             result->addIncoming(GetYield(context), block);
-            BranchInst::Create(exit, block);
+            BranchInst::Create(pull, exit, hasData, block);
 
             block = pull;
 
@@ -470,16 +458,16 @@ public:
             block = loop;
 
             const auto item = GetNodeValue(Flow, ctx, block);
+            const auto special = IsSpecial(item, block, context);
 
+            BranchInst::Create(stop, good, special, block);
+
+            block = stop;
+            new StoreInst(ConstantInt::get(Type::getInt1Ty(context), 0), hasDataPtr, block);
             const auto finsh = IsFinish(item, block, context);
-            const auto yield = IsYield(item, block, context);
-            const auto special = BinaryOperator::CreateOr(finsh, yield, "special", block);
-
-            const auto fin = SelectInst::Create(finsh, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "fin", block);
-            const auto save = SelectInst::Create(yield, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), fin, "save", block);
-            new StoreInst(save, statusPtr, block);
-
-            BranchInst::Create(done, good, special, block);
+            const auto finshExt = CastInst::Create(Instruction::ZExt, finsh, isFinishedType, "finsh_ext", block);
+            new StoreInst(finshExt, isFinishedPtr, block);
+            BranchInst::Create(done, block);
 
             block = good;
 
@@ -493,6 +481,8 @@ public:
 
             EmitFunctionCall<&TFlowState::PushStat>(Type::getVoidTy(context), {stateArg, ctx.GetStat()}, ctx, block);
 
+            new StoreInst(ConstantInt::get(indexType, 0), finishedPtr, block);
+
             BranchInst::Create(more, block);
         }
 
@@ -500,10 +490,14 @@ public:
             block = full;
 
             const auto stub = BasicBlock::Create(context, "stub", ctx.Func);
-            const auto next = BasicBlock::Create(context, "next", ctx.Func);
+            const auto special = BasicBlock::Create(context, "special", ctx.Func);
+            const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
             const auto drop = BasicBlock::Create(context, "drop", ctx.Func);
 
             new UnreachableInst(context, stub);
+
+            const auto specialOutput = PHINode::Create(valueType, Handlers.size(), "special_output", special);
+
             const auto choise = SwitchInst::Create(index, stub, Handlers.size(), block);
 
             for (ui32 i = 0U; i < Handlers.size(); ++i) {
@@ -518,7 +512,8 @@ public:
 
                 if (const auto offset = Handlers[i].ResultVariantOffset) {
                     const auto good = BasicBlock::Create(context, (TString("good_") += ToString(i)).c_str(), ctx.Func);
-                    BranchInst::Create(next, good, IsSpecial(output, block, context), block);
+                    specialOutput->addIncoming(output, block);
+                    BranchInst::Create(special, good, IsSpecial(output, block, context), block);
                     block = good;
 
                     const auto unpack = Handlers[i].IsOutputVariant ? GetVariantParts(output, ctx, block) : std::make_pair(ConstantInt::get(indexType, 0), output);
@@ -527,12 +522,29 @@ public:
                     result->addIncoming(variant, block);
                     BranchInst::Create(exit, block);
                 } else {
+                    specialOutput->addIncoming(output, block);
                     result->addIncoming(output, block);
-                    BranchInst::Create(next, exit, IsSpecial(output, block, context), block);
+                    BranchInst::Create(special, exit, IsSpecial(output, block, context), block);
                 }
             }
 
-            block = next;
+            block = special;
+
+            const auto checkBuf = BasicBlock::Create(context, "check_buf", ctx.Func);
+            BranchInst::Create(checkBuf, skip, IsYield(specialOutput, block, context), block);
+
+            block = checkBuf;
+            const auto consumed = EmitFunctionCall<&TFlowState::IsBufferConsumed>(Type::getInt1Ty(context), {stateArg}, ctx, block);
+            result->addIncoming(GetYield(context), block);
+            BranchInst::Create(skip, exit, consumed, block);
+
+            block = skip;
+
+            const auto finsh = IsFinish(specialOutput, block, context);
+            const auto finshExt = CastInst::Create(Instruction::ZExt, finsh, indexType, "finsh_ext", block);
+            const auto finished = new LoadInst(indexType, finishedPtr, "finished", block);
+            const auto incFinished = BinaryOperator::CreateAdd(finished, finshExt, "inc_finished", block);
+            new StoreInst(incFinished, finishedPtr, block);
 
             const auto posPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {fieldsStruct.This(), fieldsStruct.GetPosition()}, "pos_ptr", block);
             new StoreInst(ConstantInt::get(indexType, 0), posPtr, block);
@@ -553,6 +565,7 @@ public:
         }
     }
 #endif
+
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TFlowState>(ctx.HolderFactory.GetPagePool(), Handlers.size());
@@ -590,6 +603,10 @@ private:
         {
         }
 
+        bool IsBufferConsumed() const {
+            return BufferIndex == Buffer->Size();
+        }
+
         void Reset(bool isFinished) {
             BufferIndex = InputIndex = 0U;
             IsFinished = isFinished;
@@ -598,7 +615,7 @@ private:
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
             for (;;) {
-                if (BufferIndex == Buffer->Size()) {
+                if (IsBufferConsumed()) {
                     return IsFinished ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
                 }
 
@@ -647,21 +664,24 @@ private:
             }
 
             ChildReadIndex = 0U;
+
             for (const auto& stream : ChildrenInStreams) {
-                stream->Reset(NUdf::EFetchStatus::Finish == InputStatus);
+                stream->Reset(IsFinished);
             }
         }
 
-        bool Get(NUdf::TUnboxedValue& result) {
-            if (ChildrenOutStreams[ChildReadIndex].Fetch(result) == NUdf::EFetchStatus::Ok) {
-                return true;
-            }
+        NUdf::EFetchStatus Get(NUdf::TUnboxedValue& result) {
+            return ChildrenOutStreams[ChildReadIndex].Fetch(result);
+        }
 
+        bool IsBufferConsumed() const {
+            return ChildrenInStreams[ChildReadIndex]->IsBufferConsumed();
+        }
+
+        void AdvanceReadIndex() {
             if (++ChildReadIndex == Handlers.size()) {
                 Buffer.Clear();
             }
-
-            return false;
         }
 
     protected:
@@ -700,37 +720,43 @@ private:
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (this->InputStatus == NUdf::EFetchStatus::Yield) {
-                this->InputStatus = NUdf::EFetchStatus::Ok; // We should recheck input in new fetch iteration
-            }
-
+            bool hasDataInInput = true;
+            ui32 finishedHandlers = 0U;
             for (;;) {
                 if (this->ChildReadIndex == this->Handlers.size()) {
-                    switch (this->InputStatus) {
-                        case NUdf::EFetchStatus::Ok:
-                            break;
-                        case NUdf::EFetchStatus::Yield:
-                            this->InputStatus = NUdf::EFetchStatus::Ok;
-                            return NUdf::EFetchStatus::Yield;
-                        case NUdf::EFetchStatus::Finish:
-                            return NUdf::EFetchStatus::Finish;
+                    if (finishedHandlers == this->Handlers.size()) {
+                        return NUdf::EFetchStatus::Finish;
                     }
 
-                    const auto initUsage = this->MemLimit ? this->Ctx.HolderFactory.GetMemoryUsed() : 0ULL;
+                    if (!hasDataInInput) {
+                        return NUdf::EFetchStatus::Yield;
+                    }
+
+                    const auto initUsage = MemLimit ? this->Ctx.HolderFactory.GetMemoryUsed() : 0ULL;
 
                     do {
                         NUdf::TUnboxedValue current;
-                        this->InputStatus = this->Stream.Fetch(current);
-                        if (NUdf::EFetchStatus::Ok != this->InputStatus) {
+                        const auto inputStatus = Stream.Fetch(current);
+                        if (NUdf::EFetchStatus::Ok != inputStatus) {
+                            hasDataInInput = false;
+                            this->IsFinished = inputStatus == NUdf::EFetchStatus::Finish;
                             break;
                         }
+
                         this->Add(std::move(current));
-                    } while (!this->Ctx.template CheckAdjustedMemLimit<TrackRss>(this->MemLimit, initUsage));
+                    } while (!this->Ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage));
 
                     this->Reset();
+                    finishedHandlers = 0;
                 }
 
-                if (!this->Get(result)) {
+                if (const NUdf::EFetchStatus status = this->Get(result); status != NUdf::EFetchStatus::Ok) {
+                    if (status == NUdf::EFetchStatus::Yield && !this->IsBufferConsumed()) {
+                        return NUdf::EFetchStatus::Yield;
+                    }
+
+                    finishedHandlers += status == NUdf::EFetchStatus::Finish;
+                    this->AdvanceReadIndex();
                     continue;
                 }
 
@@ -750,7 +776,7 @@ private:
         }
 
         const NUdf::TUnboxedValue Stream;
-        const ui64 MemLimit;
+        const ui64 MemLimit = 0;
     };
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -858,25 +884,15 @@ private:
         auto block = main;
 
         const auto indexPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {fieldsStruct.This(), fieldsStruct.GetIndex()}, "index_ptr", block);
+        const auto isFinishedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {fieldsStruct.This(), fieldsStruct.GetIsFinished()}, "is_finished_ptr", block);
 
         const auto itemPtr = new AllocaInst(valueType, 0U, "item_ptr", block);
         new StoreInst(ConstantInt::get(valueType, 0), itemPtr, block);
 
-        {
-            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {fieldsStruct.This(), fieldsStruct.GetStatus()}, "status_ptr", block);
-            const auto status = new LoadInst(statusType, statusPtr, "entry_status", block);
-            const auto isYield = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status,
-                                                 ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), "is_yield", block);
-            const auto resetOk = BasicBlock::Create(context, "reset_ok", ctx.Func);
-            const auto cont = BasicBlock::Create(context, "cont", ctx.Func);
-            BranchInst::Create(resetOk, cont, isYield, block);
-
-            block = resetOk;
-            new StoreInst(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), statusPtr, block);
-            BranchInst::Create(cont, block);
-
-            block = cont;
-        }
+        const auto hasDataPtr = new AllocaInst(Type::getInt1Ty(context), 0U, "has_data_ptr", block);
+        const auto finishedPtr = new AllocaInst(indexType, 0U, "finished_ptr", block);
+        new StoreInst(ConstantInt::get(Type::getInt1Ty(context), 1), hasDataPtr, block);
+        new StoreInst(ConstantInt::get(indexType, 0), finishedPtr, block);
 
         BranchInst::Create(more, block);
 
@@ -893,27 +909,28 @@ private:
         {
             block = next;
 
-            const auto rest = BasicBlock::Create(context, "rest", ctx.Func);
-            const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
+            const auto live = BasicBlock::Create(context, "live", ctx.Func);
             const auto pull = BasicBlock::Create(context, "pull", ctx.Func);
             const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
+            const auto stop = BasicBlock::Create(context, "stop", ctx.Func);
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto done = BasicBlock::Create(context, "done", ctx.Func);
+            const auto retFinish = BasicBlock::Create(context, "ret_finish", ctx.Func);
+            const auto retYield = BasicBlock::Create(context, "ret_yield", ctx.Func);
 
-            const auto statusPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {fieldsStruct.This(), fieldsStruct.GetStatus()}, "last", block);
+            const auto finished = new LoadInst(indexType, finishedPtr, "finished", block);
+            const auto allFinished = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, finished, ConstantInt::get(finished->getType(), Handlers.size()), "all_finished", block);
+            BranchInst::Create(retFinish, live, allFinished, block);
 
-            const auto last = new LoadInst(statusType, statusPtr, "last", block);
+            block = retFinish;
+            ReturnInst::Create(context, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), block);
 
-            const auto choise = SwitchInst::Create(last, pull, 2U, block);
-            choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), rest);
-            choise->addCase(ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), exit);
+            block = live;
+            const auto hasData = new LoadInst(Type::getInt1Ty(context), hasDataPtr, "has_data", block);
+            BranchInst::Create(pull, retYield, hasData, block);
 
-            block = rest;
-            new StoreInst(ConstantInt::get(last->getType(), static_cast<ui32>(NUdf::EFetchStatus::Ok)), statusPtr, block);
-            BranchInst::Create(exit, block);
-
-            block = exit;
-            ReturnInst::Create(context, last, block);
+            block = retYield;
+            ReturnInst::Create(context, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), block);
 
             block = pull;
 
@@ -926,11 +943,10 @@ private:
             block = loop;
 
             const auto fetch = CallBoxedValueFetch(stream, ctx, block, itemPtr);
-            new StoreInst(fetch, statusPtr, block);
 
             const auto ok = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, fetch, ConstantInt::get(fetch->getType(), static_cast<ui32>(NUdf::EFetchStatus::Ok)), "ok", block);
 
-            BranchInst::Create(good, done, ok, block);
+            BranchInst::Create(good, stop, ok, block);
 
             block = good;
 
@@ -939,9 +955,18 @@ private:
             const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, used, ctx, block);
             BranchInst::Create(done, loop, check, block);
 
+            block = stop;
+            new StoreInst(ConstantInt::get(Type::getInt1Ty(context), 0), hasDataPtr, block);
+            const auto finsh = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, fetch, ConstantInt::get(fetch->getType(), static_cast<ui32>(NUdf::EFetchStatus::Finish)), "finsh", block);
+            const auto finshExt = CastInst::Create(Instruction::ZExt, finsh, Type::getInt8Ty(context), "finsh_ext", block);
+            new StoreInst(finshExt, isFinishedPtr, block);
+            BranchInst::Create(done, block);
+
             block = done;
 
             EmitFunctionCall<&TValueBase::Reset>(Type::getVoidTy(context), {stateArg}, ctx, block);
+
+            new StoreInst(ConstantInt::get(indexType, 0), finishedPtr, block);
 
             BranchInst::Create(more, block);
         }
@@ -949,16 +974,44 @@ private:
         {
             block = full;
 
-            const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
             const auto stub = BasicBlock::Create(context, "stub", ctx.Func);
+            const auto special = BasicBlock::Create(context, "special", ctx.Func);
+            const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
+            const auto retOk = BasicBlock::Create(context, "ret_ok", ctx.Func);
 
-            ReturnInst::Create(context, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), exit);
             new UnreachableInst(context, stub);
+            ReturnInst::Create(context, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), retOk);
 
-            const auto has = EmitFunctionCall<&TValueBase::Get>(Type::getInt1Ty(context), {stateArg, valuePtr}, ctx, block);
+            const auto status = EmitFunctionCall<&TValueBase::Get>(statusType, {stateArg, valuePtr}, ctx, block);
+            const auto getOk = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(status->getType(), static_cast<ui32>(NUdf::EFetchStatus::Ok)), "get_ok", block);
 
-            BranchInst::Create(good, more, has, block);
+            BranchInst::Create(good, special, getOk, block);
+
+            block = special;
+
+            const auto checkBuf = BasicBlock::Create(context, "check_buf", ctx.Func);
+            const auto yieldExit = BasicBlock::Create(context, "yield_exit", ctx.Func);
+            const auto isYield = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(status->getType(), static_cast<ui32>(NUdf::EFetchStatus::Yield)), "is_yield", block);
+            BranchInst::Create(checkBuf, skip, isYield, block);
+
+            block = checkBuf;
+            const auto consumed = EmitFunctionCall<&TValueBase::IsBufferConsumed>(Type::getInt1Ty(context), {stateArg}, ctx, block);
+            BranchInst::Create(skip, yieldExit, consumed, block);
+
+            block = yieldExit;
+            ReturnInst::Create(context, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), block);
+
+            block = skip;
+            const auto isFin = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(status->getType(), static_cast<ui32>(NUdf::EFetchStatus::Finish)), "is_fin", block);
+            const auto finExt = CastInst::Create(Instruction::ZExt, isFin, indexType, "fin_ext", block);
+            const auto finished = new LoadInst(indexType, finishedPtr, "finished", block);
+            const auto incFinished = BinaryOperator::CreateAdd(finished, finExt, "inc_finished", block);
+            new StoreInst(incFinished, finishedPtr, block);
+
+            EmitFunctionCall<&TValueBase::AdvanceReadIndex>(Type::getVoidTy(context), {stateArg}, ctx, block);
+
+            BranchInst::Create(more, block);
 
             block = good;
 
@@ -982,7 +1035,7 @@ private:
                     ValueAddRef(EValueRepresentation::Any, variant, ctx, block);
                     ReturnInst::Create(context, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), block);
                 } else {
-                    choise->addCase(idx, exit);
+                    choise->addCase(idx, retOk);
                 }
             }
         }
@@ -1046,5 +1099,4 @@ IComputationNode* WrapSwitch(TCallable& callable, const TComputationNodeFactoryC
     THROW yexception() << "Expected flow or stream.";
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

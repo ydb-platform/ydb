@@ -141,6 +141,7 @@ struct Schema : NIceDb::Schema {
         struct OwnerActorId : Column<12, NScheme::NTypeIds::String> {}; // deprecated
         struct IncrementalBackupConfig : Column<13, NScheme::NTypeIds::String> {};
         struct DetailedMetricsSettings : Column<15, NScheme::NTypeIds::String> {};
+        struct MultiColumnStatistics : Column<16, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<TabId>;
         using TColumns = TableColumns<
@@ -158,7 +159,8 @@ struct Schema : NIceDb::Schema {
             IsTemporary,
             OwnerActorId,
             IncrementalBackupConfig,
-            DetailedMetricsSettings
+            DetailedMetricsSettings,
+            MultiColumnStatistics
         >;
     };
 
@@ -180,6 +182,7 @@ struct Schema : NIceDb::Schema {
         struct OwnerActorId :        Column<13, NScheme::NTypeIds::String> {}; // deprecated
         struct IncrementalBackupConfig : Column<14, NScheme::NTypeIds::String> {};
         struct DetailedMetricsSettings : Column<16, NScheme::NTypeIds::String> {};
+        struct MultiColumnStatistics :          Column<17, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -198,7 +201,8 @@ struct Schema : NIceDb::Schema {
             IsTemporary,
             OwnerActorId,
             IncrementalBackupConfig,
-            DetailedMetricsSettings
+            DetailedMetricsSettings,
+            MultiColumnStatistics
         >;
     };
 
@@ -836,6 +840,7 @@ struct Schema : NIceDb::Schema {
         struct AuditSettings : Column<30, NScheme::NTypeIds::String> {};
         struct ServerlessComputeResourcesMode : Column<31, NScheme::NTypeIds::Uint32> { using Type = EServerlessComputeResourcesMode; };
         struct ColumnTableColumnsLimit : Column<32, NScheme::NTypeIds::Uint64> {};
+        struct SmallBlobsQuotaExceeded : Column<33, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -870,7 +875,8 @@ struct Schema : NIceDb::Schema {
             ImportsLimit,
             AuditSettings,
             ServerlessComputeResourcesMode,
-            ColumnTableColumnsLimit
+            ColumnTableColumnsLimit,
+            SmallBlobsQuotaExceeded
         >;
     };
 
@@ -1811,9 +1817,10 @@ struct Schema : NIceDb::Schema {
         struct StandaloneSharding : Column<5, NScheme::NTypeIds::String> {}; // TColumnStoreSharding
         struct IsRestore : Column<6, NScheme::NTypeIds::Bool> {};
         struct IsReadOnly : Column<7, NScheme::NTypeIds::Bool> {};
+        struct MultiColumnStatistics : Column<8, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, StandaloneSharding, IsRestore, IsReadOnly>;
+        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, StandaloneSharding, IsRestore, IsReadOnly, MultiColumnStatistics>;
     };
 
     struct ColumnTablesAlters : Table<91> {
@@ -1823,9 +1830,10 @@ struct Schema : NIceDb::Schema {
         struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnTableSharding
         struct AlterBody : Column<5, NScheme::NTypeIds::String> {}; // TAlterColumnTable
         struct StandaloneSharding : Column<6, NScheme::NTypeIds::String> {}; // TColumnStoreSharding
+        struct MultiColumnStatistics : Column<7, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, AlterBody, StandaloneSharding>;
+        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, AlterBody, StandaloneSharding, MultiColumnStatistics>;
     };
 
     struct LoginKeys : Table<92> {
@@ -1840,7 +1848,7 @@ struct Schema : NIceDb::Schema {
     struct LoginSids : Table<93> {
         struct SidName : Column<1, NScheme::NTypeIds::String> {};
         struct SidType : Column<2, NScheme::NTypeIds::Uint64> { using Type = NLoginProto::ESidType::SidType; };
-        struct SidHash : Column<3, NScheme::NTypeIds::String> {};
+        struct SidHash : Column<3, NScheme::NTypeIds::String> {}; // deprecated
         struct LastSuccessfulAttempt : Column<4, NScheme::NTypeIds::Timestamp> {};
         struct LastFailedAttempt : Column<5, NScheme::NTypeIds::Timestamp> {};
         struct FailedAttemptCount : Column<6, NScheme::NTypeIds::Uint32> {using Type = ui32; static constexpr Type Default = 0;};
@@ -2609,6 +2617,80 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct SetColumnConstraint : Table<138> {
+        struct OperationId :            Column<1, NScheme::NTypeIds::Uint64>  { using Type = TIndexBuildId; };
+        struct TableOwnerId :           Column<2, NScheme::NTypeIds::Uint64>  { using Type = TOwnerId; };
+        struct TableLocalId :           Column<3, NScheme::NTypeIds::Uint64>  { using Type = TLocalPathId; };
+        // ColumnNames in protobuf format
+        struct SerializedColumnNames :  Column<4, NScheme::NTypeIds::String>  {};
+
+        struct ValidationFailed :       Column<5, NScheme::NTypeIds::Bool>    { static constexpr bool Default = false; };
+        struct OperationState :         Column<6, NScheme::NTypeIds::Uint32>  {};
+
+        // We dont want keep LockingNullWritesTxId/FinishingTxId/UnlockingTxId separately (look at struct IndexBuild : Table<69> for an explanation)
+        struct SubStateTxId :           Column<7, NScheme::NTypeIds::Uint64>  { using Type = TTxId; };
+        struct SubStateTxStatus :       Column<8, NScheme::NTypeIds::Uint32>  { using Type = NKikimrScheme::EStatus; };
+        struct SubStateTxDone :         Column<9, NScheme::NTypeIds::Bool>    {};
+
+        // LockTxId is persisted separately because it's needed in Unlocking phase
+        // to identify which lock to drop (LockGuard.OwnerTxId), even after SubStateTxId
+        // has been overwritten by subsequent phases.
+        struct LockTxId :               Column<10, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+
+        struct UserSID :                Column<11, NScheme::NTypeIds::Utf8>   {};
+        struct StartTime :              Column<12, NScheme::NTypeIds::Uint64> {};
+        struct EndTime :                Column<13, NScheme::NTypeIds::Uint64> {};
+
+        struct IsCancelled :            Column<14, NScheme::NTypeIds::Bool>   { static constexpr bool Default = false; };
+        struct CancellationReason :     Column<15, NScheme::NTypeIds::Utf8>   {};
+
+        using TKey = TableKey<OperationId>;
+        using TColumns = TableColumns<
+            OperationId,
+            TableOwnerId,
+            TableLocalId,
+            SerializedColumnNames,
+            ValidationFailed,
+            OperationState,
+            SubStateTxId,
+            SubStateTxStatus,
+            SubStateTxDone,
+            LockTxId,
+            UserSID,
+            StartTime,
+            EndTime,
+            IsCancelled,
+            CancellationReason
+        >;
+    };
+
+    struct SetColumnConstraintShardStatus : Table<139> {
+        struct OperationId :            Column<1, NScheme::NTypeIds::Uint64>  { using Type = TIndexBuildId; };
+        struct OwnerShardIdx :          Column<2, NScheme::NTypeIds::Uint64>  { using Type = TOwnerId; };
+        struct LocalShardIdx :          Column<3, NScheme::NTypeIds::Uint64>  { using Type = TLocalShardIdx; };
+        struct Status :                 Column<4, NScheme::NTypeIds::Uint32>  { using Type = NKikimrSetColumnConstraint::EValidateStatus; };
+        struct Issue :                  Column<5, NScheme::NTypeIds::Utf8>    { using Type = TString; };
+
+        using TKey = TableKey<OperationId, OwnerShardIdx, LocalShardIdx>;
+        using TColumns = TableColumns<
+            OperationId,
+            OwnerShardIdx,
+            LocalShardIdx,
+            Status,
+            Issue
+        >;
+    };
+
+    struct TestShardSet : Table<140> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct TestShards : Column<3, NScheme::NTypeIds::String> { using Type = TString; };
+        struct CmdInitialize : Column<4, NScheme::NTypeIds::String> { using Type = TString; };
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, AlterVersion, TestShards, CmdInitialize>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2744,7 +2826,10 @@ struct Schema : NIceDb::Schema {
         TablePartitionsByShardIdx,
         TablePartitionStatsByShardIdx,
         FullBackups,
-        FullBackupItems
+        FullBackupItems,
+        SetColumnConstraint,
+        SetColumnConstraintShardStatus,
+        TestShardSet
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;
@@ -2758,7 +2843,7 @@ struct Schema : NIceDb::Schema {
     static constexpr ui64 SysParam_TenantInitState = 9;
     static constexpr ui64 SysParam_ServerlessStorageLastBillTime = 10;
     static constexpr ui64 SysParam_MaxIncompatibleChange = 11;
-    static constexpr ui64 SysParam_IsOldArgonHashFormatMigrationCompleted = 12;
+    // static constexpr ui64 SysParam_IsOldArgonHashFormatMigrationCompleted = 12; deprecated
     static constexpr ui64 SysParam_TablePartitionsFormatSweepStatus = 13;
     static constexpr ui64 SysParam_TablePartitionsFormatSweepTarget = 14;
 

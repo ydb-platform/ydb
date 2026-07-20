@@ -1,12 +1,47 @@
 #include "fulltext.h"
 #include "fulltext_query.h"
+#include "table_index.h"
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/resource/resource.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
 
 namespace NKikimr::NFulltext {
 
 Y_UNIT_TEST_SUITE(NFulltext) {
+
+    // The compact rowid-mode doc-id layout: __ydb_row_id carries a dense seq in its low bits and a
+    // bit-reversed spread bucket in its high bits. RowIdFromSeq must be a bijection (SeqFromRowId is its
+    // left inverse) and consecutive seq values must spread across distinct high-bit buckets.
+    Y_UNIT_TEST(RowIdSeqRoundTrip) {
+        using namespace NKikimr::NTableIndex::NFulltext;
+
+        // Round-trip across a range, around the bucket-cycle boundary, and for large/high-bit seq values.
+        for (ui64 seq : xrange<ui64>(0, 5000)) {
+            UNIT_ASSERT_VALUES_EQUAL(SeqFromRowId(RowIdFromSeq(seq)), seq);
+        }
+        for (ui64 seq : {ui64(0), ui64(1), ui64((1ull << RowIdSpreadBits) - 1), ui64(1ull << RowIdSpreadBits),
+                         ui64(123456789), RowIdSeqMask - 1, RowIdSeqMask}) {
+            ui64 rowId = RowIdFromSeq(seq);
+            UNIT_ASSERT_VALUES_EQUAL_C(SeqFromRowId(rowId), seq, "seq=" << seq << " rowId=" << rowId);
+            // seq lives strictly in the low (64 - RowIdSpreadBits) bits.
+            UNIT_ASSERT_VALUES_EQUAL(seq & ~RowIdSeqMask, 0u);
+        }
+
+        // Injectivity + spread: a run of consecutive seq must map to distinct row ids, and the high-bit
+        // bucket must take many different values (not a monotonic tail) over a full bucket cycle.
+        THashSet<ui64> rowIds;
+        THashSet<ui64> buckets;
+        const ui64 cycle = 1ull << RowIdSpreadBits;
+        for (ui64 seq : xrange<ui64>(0, cycle)) {
+            ui64 rowId = RowIdFromSeq(seq);
+            UNIT_ASSERT(rowIds.insert(rowId).second);
+            buckets.insert(rowId >> (64 - RowIdSpreadBits));
+        }
+        // bit-reversal of the low RowIdSpreadBits is itself a bijection over [0, cycle), so every bucket appears.
+        UNIT_ASSERT_VALUES_EQUAL(buckets.size(), cycle);
+    }
 
     Y_UNIT_TEST(MultiDeltaReader1) {
         TDeltaWriter wr;
@@ -260,6 +295,9 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced-dog_cat", "0123,456@"}));
 
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced", "dog_cat", "0123,456"}));
+
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::ALPHANUMERIC);
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced", "dog", "cat", "0123", "456"}));
 
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
@@ -500,6 +538,45 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
         UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("foo bar", analyzers),
             (TVector<T>{{"foo bar", false}}));
+    }
+
+    Y_UNIT_TEST(WordBreakTest) {
+        // Generated from
+        // http://www.unicode.org/Public/12.1.0/ucd/auxiliary/WordBreakTest.txt
+        // and
+        // http://www.unicode.org/Public/12.1.0/ucd/auxiliary/WordBreakProperty.txt
+        TString tests = NResource::Find("word_break_test.json");
+        NJson::TJsonValue out;
+        ReadJsonTree(tests, &out, true);
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+        int ok = 0, failed = 0;
+        for (auto& test: out.GetArray()) {
+            TString in = test["input"].GetString();
+            TVector<TString> expected;
+            for (auto& token: test["tokens"].GetArray()) {
+                expected.push_back(token.GetString());
+            }
+            TVector<TString> out = Analyze(in, analyzers);
+            if (out != expected) {
+                Cerr << "Input: " << in << "\nTokens:";
+                for (auto& token: out) {
+                    Cerr << " " << token;
+                }
+                Cerr << "\nExpected:";
+                for (auto& token: expected) {
+                    Cerr << " " << token;
+                }
+                Cerr << "\n\n";
+                failed++;
+            } else {
+                ok++;
+            }
+        }
+        if (failed > 0) {
+            Cerr << "Ok " << ok << "/" << (ok+failed) << " tests\n";
+        }
+        UNIT_ASSERT(!failed);
     }
 }
 

@@ -16,6 +16,7 @@ This module (and all function/classes within this module) should be
 considered internal, and *not* a public API.
 
 """
+
 import copy
 import logging
 import socket
@@ -59,6 +60,23 @@ LEGACY_GLOBAL_STS_REGIONS = [
 # Maximum allowed length of the ``user_agent_appid`` config field. Longer
 # values result in a warning-level log message.
 USERAGENT_APPID_MAXLEN = 50
+
+VALID_REQUEST_CHECKSUM_CALCULATION_CONFIG = (
+    "when_supported",
+    "when_required",
+)
+VALID_RESPONSE_CHECKSUM_VALIDATION_CONFIG = (
+    "when_supported",
+    "when_required",
+)
+
+PRIORITY_ORDERED_SUPPORTED_PROTOCOLS = (
+    'json',
+    'rest-json',
+    'rest-xml',
+    'query',
+    'ec2',
+)
 
 
 class ClientArgsCreator:
@@ -200,7 +218,7 @@ class ClientArgsCreator:
         scoped_config,
     ):
         service_name = service_model.endpoint_prefix
-        protocol = service_model.metadata['protocol']
+        protocol = self._resolve_protocol(service_model)
         parameter_validation = True
         if client_config and not client_config.parameter_validation:
             parameter_validation = False
@@ -267,11 +285,22 @@ class ClientArgsCreator:
                     client_config.disable_request_compression
                 ),
                 client_context_params=client_config.client_context_params,
+                sigv4a_signing_region_set=(
+                    client_config.sigv4a_signing_region_set
+                ),
+                request_checksum_calculation=(
+                    client_config.request_checksum_calculation
+                ),
+                response_checksum_validation=(
+                    client_config.response_checksum_validation
+                ),
             )
         self._compute_retry_config(config_kwargs)
         self._compute_connect_timeout(config_kwargs)
         self._compute_user_agent_appid_config(config_kwargs)
         self._compute_request_compression_config(config_kwargs)
+        self._compute_sigv4a_signing_region_set_config(config_kwargs)
+        self._compute_checksum_config(config_kwargs)
         s3_config = self.compute_s3_config(client_config)
 
         is_s3_service = self._is_s3_service(service_name)
@@ -460,7 +489,7 @@ class ClientArgsCreator:
 
     def _set_global_sts_endpoint(self, endpoint_config, is_secure):
         scheme = 'https' if is_secure else 'http'
-        endpoint_config['endpoint_url'] = '%s://sts.amazonaws.com' % scheme
+        endpoint_config['endpoint_url'] = f'{scheme}://sts.amazonaws.com'
         endpoint_config['signing_region'] = 'us-east-1'
 
     def _resolve_endpoint(
@@ -576,25 +605,24 @@ class ClientArgsCreator:
     def _validate_min_compression_size(self, min_size):
         min_allowed_min_size = 1
         max_allowed_min_size = 1048576
-        if min_size is not None:
-            error_msg_base = (
-                f'Invalid value "{min_size}" for '
-                'request_min_compression_size_bytes.'
+        error_msg_base = (
+            f'Invalid value "{min_size}" for '
+            'request_min_compression_size_bytes.'
+        )
+        try:
+            min_size = int(min_size)
+        except (ValueError, TypeError):
+            msg = (
+                f'{error_msg_base} Value must be an integer. '
+                f'Received {type(min_size)} instead.'
             )
-            try:
-                min_size = int(min_size)
-            except (ValueError, TypeError):
-                msg = (
-                    f'{error_msg_base} Value must be an integer. '
-                    f'Received {type(min_size)} instead.'
-                )
-                raise botocore.exceptions.InvalidConfigError(error_msg=msg)
-            if not min_allowed_min_size <= min_size <= max_allowed_min_size:
-                msg = (
-                    f'{error_msg_base} Value must be between '
-                    f'{min_allowed_min_size} and {max_allowed_min_size}.'
-                )
-                raise botocore.exceptions.InvalidConfigError(error_msg=msg)
+            raise botocore.exceptions.InvalidConfigError(error_msg=msg)
+        if not min_allowed_min_size <= min_size <= max_allowed_min_size:
+            msg = (
+                f'{error_msg_base} Value must be between '
+                f'{min_allowed_min_size} and {max_allowed_min_size}.'
+            )
+            raise botocore.exceptions.InvalidConfigError(error_msg=msg)
 
         return min_size
 
@@ -767,3 +795,63 @@ class ClientArgsCreator:
                 f'maximum length of {USERAGENT_APPID_MAXLEN} characters.'
             )
         config_kwargs['user_agent_appid'] = user_agent_appid
+
+    def _compute_sigv4a_signing_region_set_config(self, config_kwargs):
+        sigv4a_signing_region_set = config_kwargs.get(
+            'sigv4a_signing_region_set'
+        )
+        if sigv4a_signing_region_set is None:
+            sigv4a_signing_region_set = self._config_store.get_config_variable(
+                'sigv4a_signing_region_set'
+            )
+        config_kwargs['sigv4a_signing_region_set'] = sigv4a_signing_region_set
+
+    def _compute_checksum_config(self, config_kwargs):
+        self._handle_checksum_config(
+            config_kwargs,
+            config_key="request_checksum_calculation",
+            valid_options=VALID_REQUEST_CHECKSUM_CALCULATION_CONFIG,
+        )
+        self._handle_checksum_config(
+            config_kwargs,
+            config_key="response_checksum_validation",
+            valid_options=VALID_RESPONSE_CHECKSUM_VALIDATION_CONFIG,
+        )
+
+    def _resolve_protocol(self, service_model):
+        # We need to ensure `protocols` exists in the metadata before attempting to
+        # access it directly since referencing service_model.protocols directly will
+        # raise an UndefinedModelAttributeError if protocols is not defined
+        if service_model.metadata.get('protocols'):
+            for protocol in PRIORITY_ORDERED_SUPPORTED_PROTOCOLS:
+                if protocol in service_model.protocols:
+                    return protocol
+            raise botocore.exceptions.UnsupportedServiceProtocolsError(
+                botocore_supported_protocols=PRIORITY_ORDERED_SUPPORTED_PROTOCOLS,
+                service_supported_protocols=service_model.protocols,
+                service=service_model.service_name,
+            )
+        # If a service does not have a `protocols` trait, fall back to the legacy
+        # `protocol` trait
+        return service_model.protocol
+
+    def _handle_checksum_config(
+        self,
+        config_kwargs,
+        config_key,
+        valid_options,
+    ):
+        value = config_kwargs.get(config_key)
+        if value is None:
+            value = self._config_store.get_config_variable(config_key)
+
+        if isinstance(value, str):
+            value = value.lower()
+
+        if value not in valid_options:
+            raise botocore.exceptions.InvalidChecksumConfigError(
+                config_key=config_key,
+                config_value=value,
+                valid_options=valid_options,
+            )
+        config_kwargs[config_key] = value

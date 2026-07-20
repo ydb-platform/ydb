@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         UNIT_ASSERT(saveResponse->Get()->Success);
 
         runtime.RunCall([&] {
-            DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, 1);
+            DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, TColumnTags(1u));
             return 0;
         });
         auto loadResponseA = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         UNIT_ASSERT_VALUES_EQUAL(*loadResponseA->Get()->Data, "dataA");
 
         runtime.RunCall([&] {
-            DispatchLoadStatisticsQuery(sender, 345, "/Root/Database", pathId, statType, 2);
+            DispatchLoadStatisticsQuery(sender, 345, "/Root/Database", pathId, statType, TColumnTags(2u));
             return 0;
         });
         auto loadResponseB = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
@@ -83,7 +83,94 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         UNIT_ASSERT(deleteResponse->Get()->Success);
 
         runtime.RunCall([&] {
-            DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, 1);
+            DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, TColumnTags(1u));
+            return 0;
+        });
+        auto loadResponseA = runtime.GrabEdgeEvent<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
+        UNIT_ASSERT(!loadResponseA->Get()->Success);
+    }
+
+    Y_UNIT_TEST(SimpleMultiColumn) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+
+        auto sender = runtime.AllocateEdgeActor(0);
+        runtime.Register(CreateStatisticsTableCreator(
+            std::make_unique<TEvStatistics::TEvStatTableCreationResponse>(), "/Root/Database"),
+            0, 0, TMailboxType::Simple, 0, sender);
+        runtime.GrabEdgeEventRethrow<TEvStatistics::TEvStatTableCreationResponse>(sender);
+
+        TPathId pathId(1, 1);
+        EStatType statType = EStatType::COUNT_MIN_SKETCH;
+        std::vector<TStatisticsItem> statItems;
+        statItems.emplace_back(std::vector<ui32>{1, 2}, statType, "dataA");
+        statItems.emplace_back(std::vector<ui32>{3, 4}, statType, "dataB");
+
+        runtime.Register(CreateSaveStatisticsQuery(sender, "/Root/Database",
+            pathId, std::move(statItems)),
+            0, 0, TMailboxType::Simple, 0, sender);
+        auto saveResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvSaveStatisticsQueryResponse>(sender);
+        UNIT_ASSERT(saveResponse->Get()->Success);
+
+        runtime.RunCall([&] {
+            DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, TColumnTags(std::vector<ui32>{1, 2}));
+            return 0;
+        });
+        auto loadResponseA = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
+        UNIT_ASSERT(loadResponseA->Get()->Success);
+        UNIT_ASSERT(loadResponseA->Get()->Data);
+        UNIT_ASSERT_VALUES_EQUAL(*loadResponseA->Get()->Data, "dataA");
+
+        runtime.RunCall([&] {
+            DispatchLoadStatisticsQuery(sender, 345, "/Root/Database", pathId, statType, TColumnTags(std::vector<ui32>{3, 4}));
+            return 0;
+        });
+        auto loadResponseB = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
+        UNIT_ASSERT(loadResponseB->Get()->Success);
+        UNIT_ASSERT(loadResponseB->Get()->Data);
+        UNIT_ASSERT_VALUES_EQUAL(*loadResponseB->Get()->Data, "dataB");
+
+        runtime.RunCall([&] {
+            DispatchLoadStatisticsQuery(sender, 567, "/Root/Database", pathId, statType, TColumnTags(std::vector<ui32>{2, 1}));
+            return 0;
+        });
+        auto loadResponseC = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
+        UNIT_ASSERT(!loadResponseC->Get()->Success);
+    }
+
+    Y_UNIT_TEST(DeleteMultiColumn) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+
+        auto sender = runtime.AllocateEdgeActor(0);
+        runtime.Register(CreateStatisticsTableCreator(
+            std::make_unique<TEvStatistics::TEvStatTableCreationResponse>(), "/Root/Database"),
+            0, 0, TMailboxType::Simple, 0, sender);
+        runtime.GrabEdgeEvent<TEvStatistics::TEvStatTableCreationResponse>(sender);
+
+        TPathId pathId(1, 1);
+        EStatType statType = EStatType::COUNT_MIN_SKETCH;
+        std::vector<TStatisticsItem> statItems;
+        statItems.emplace_back(std::vector<ui32>{1, 2}, statType, "dataA");
+        statItems.emplace_back(std::vector<ui32>{3, 4}, statType, "dataB");
+
+        runtime.Register(CreateSaveStatisticsQuery(sender, "/Root/Database",
+            pathId, std::move(statItems)),
+            0, 0, TMailboxType::Simple, 0, sender);
+        auto saveResponse = runtime.GrabEdgeEvent<TEvStatistics::TEvSaveStatisticsQueryResponse>(sender);
+        UNIT_ASSERT(saveResponse->Get()->Success);
+
+        runtime.Register(CreateDeleteStatisticsQuery(sender, "/Root/Database", pathId),
+            0, 0, TMailboxType::Simple, 0, sender);
+        auto deleteResponse = runtime.GrabEdgeEvent<TEvStatistics::TEvDeleteStatisticsQueryResponse>(sender);
+        UNIT_ASSERT(deleteResponse->Get()->Success);
+
+        runtime.RunCall([&] {
+            DispatchLoadStatisticsQuery(sender, 123, "/Root/Database", pathId, statType, TColumnTags(std::vector<ui32>{1, 2}));
             return 0;
         });
         auto loadResponseA = runtime.GrabEdgeEvent<TEvStatistics::TEvLoadStatisticsQueryResponse>(sender);
@@ -108,7 +195,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
             auto session = db.CreateSession().GetValueSync().GetSession();
 
             auto result = session.ExecuteDataQuery(R"(
-                SELECT * FROM `/Root/Database/.metadata/_statistics`;
+                SELECT * FROM `/Root/Database/.metadata/statistics_v2`;
             )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             status = result.GetStatus();
         };

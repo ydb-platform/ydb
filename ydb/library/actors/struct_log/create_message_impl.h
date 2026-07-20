@@ -3,7 +3,6 @@
 #include "key_name.h"
 #include "structured_message.h"
 
-#include <ydb/core/base/id_wrapper.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <util/generic/maybe.h>
@@ -46,6 +45,11 @@ public:
     class THasToStringMethod {
         // check the signature if it exists
         template <typename X> static constexpr decltype(static_cast<TString (X::*)() const>(&X::ToString), std::true_type{}) check(int);
+        template <typename X> static constexpr decltype(static_cast<const TString& (X::*)() const>(&X::ToString), std::true_type{}) check(int);
+        template <typename X> static constexpr decltype(static_cast<TStringBuf (X::*)() const>(&X::ToString), std::true_type{}) check(int);
+        template <typename X> static constexpr decltype(static_cast<std::string (X::*)() const>(&X::ToString), std::true_type{}) check(int);
+        template <typename X> static constexpr decltype(static_cast<const std::string& (X::*)() const>(&X::ToString), std::true_type{}) check(int);
+        template <typename X> static constexpr decltype(static_cast<std::string_view (X::*)() const>(&X::ToString), std::true_type{}) check(int);
         // in case when there is no such signature
         template <typename>   static constexpr std::false_type check(...);
     public:
@@ -182,7 +186,9 @@ public:
     // Native types support
     template <typename T, typename K = TKeyName>
     TCreateMessageArg(K&& name, const T& value) {
-        if constexpr (std::is_same<T, TStructuredMessage>::value) {
+        if constexpr (std::is_function<T>::value) {
+            static_assert(false, "It is not allowed to pass function into structured message");
+        } else if constexpr (std::is_same<T, TStructuredMessage>::value) {
             TCreateMessageGuard::GetBuildMessage().AppendSubMessage({std::move(name)}, value);
         } else if constexpr (THasToStructuredMessageMethod<std::decay_t<T>>::value) {
             auto message = value.ToStructuredMessage();

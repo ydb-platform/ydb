@@ -47,8 +47,11 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvWrite::TPtr ev) {
-        STLOG(PRI_TRACE, BS_DDISK, BSDD50, "TDDiskActor::Handle(TEvWrite)", (DDiskId, DDiskId),
-            (Sender, ev->Sender), (Cookie, ev->Cookie));
+        YDB_LOG_TRACE_COMP(BS_DDISK, "TDDiskActor::Handle(TEvWrite)",
+            {"marker", "BSDD50"},
+            {"DDiskId", DDiskId},
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie});
 
         if (!CheckQuery(*ev, &Counters.Interface.Write)) {
             return;
@@ -70,14 +73,50 @@ namespace NKikimr::NDDisk {
                     << " dataSize# " << data.size()
                     << " aligned# " << (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize == 0);
 
-                LOG_DEBUG_S(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK,
-                    "DDiskId#: " << DDiskId << ": " << ss.Str());
+                YDB_LOG_DEBUG_CTX_COMP(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "Dump DDiskId: payload must be contiguous and aligned",
+                    {"sectorSize", DiskFormat->SectorSize},
+                    {"contiguousSize", dataIter.ContiguousSize()},
+                    {"dataSize", data.size()},
+                    {"aligned", (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize == 0)},
+                    {"DDiskId", DDiskId});
 
                 SendReply(*ev, std::make_unique<TEvWriteResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                     ss.Str()));
                 Counters.Interface.Write.Request(0);
                 Counters.Interface.Write.Reply(false);
+                return;
+            }
+        }
+
+        if (record.ChecksumsSize() > 0) {
+            // Checksum validation is opt-in (see TEvWritePersistentBuffer for details); checked here,
+            // before any chunk allocation queueing or disk I/O, and the checksums are not persisted.
+            // Note: an event parked in PendingEventsForChunk below re-enters this handler in full once
+            // the chunk is allocated, so its checksums get validated twice. This is harmless (validation
+            // stays right next to the actual write) and intentional, not an oversight.
+            Y_ABORT_UNLESS(instr.PayloadId, "TEvWrite without a payload, but with checksums");
+            const TRope& payload = ev->Get()->GetPayload(*instr.PayloadId);
+            if (const auto result = ValidatePayloadChecksums(record, payload)) {
+                const bool isCorrupted = result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED;
+                Counters.Interface.Write.Request(0);
+                Counters.Interface.Write.Reply(false);
+                if (isCorrupted) {
+                    Counters.Checksums.ChecksumMismatch->Inc();
+                }
+                YDB_LOG_ERROR_COMP(NKikimrServices::BS_DDISK,
+                    (isCorrupted
+                        ? "TDDiskActor::Handle(TEvWrite) checksum mismatch"
+                        : "TDDiskActor::Handle(TEvWrite) checksum count mismatch"),
+                    {"marker", "BSDD52"},
+                    {"DDiskId", DDiskId},
+                    {"tabletId", creds.TabletId},
+                    {"vChunkIndex", selector.VChunkIndex},
+                    {"offsetInBytes", selector.OffsetInBytes},
+                    {"checksumCount", result->ChecksumCount},
+                    {"selectorSize", selector.Size},
+                    {"blockIdx", result->MismatchedBlockIdx ? static_cast<i64>(*result->MismatchedBlockIdx) : -1});
+                SendReply(*ev, std::make_unique<TEvWriteResult>(result->Status, result->ErrorReason));
                 return;
             }
         }
@@ -120,8 +159,10 @@ namespace NKikimr::NDDisk {
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD07,
-            "TDDiskActor::Handle(TEvChunkWriteRawResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        YDB_LOG_DEBUG_COMP(BS_DDISK, "TDDiskActor::Handle(TEvChunkWriteRawResult)",
+            {"marker", "BSDD07"},
+            {"DDiskId", DDiskId},
+            {"msg", msg});
 
         if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkWriteRawResult)")) {
             return;
@@ -141,8 +182,10 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvRead::TPtr ev) {
-        STLOG(PRI_TRACE, BS_DDISK, BSDD21,
-            "TDDiskActor::Handle(TEvRead)", (DDiskId, DDiskId), (Msg, ev->Get()->Record));
+        YDB_LOG_TRACE_COMP(BS_DDISK, "TDDiskActor::Handle(TEvRead)",
+            {"marker", "BSDD21"},
+            {"DDiskId", DDiskId},
+            {"msg", ev->Get()->Record});
 
         if (!CheckQuery(*ev, &Counters.Interface.Read)) {
             return;
@@ -193,8 +236,10 @@ namespace NKikimr::NDDisk {
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkReadRawResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD08,
-            "TDDiskActor::Handle(TEvChunkReadRawResult)", (DDiskId, DDiskId), (Msg, msg.ToString()));
+        YDB_LOG_DEBUG_COMP(BS_DDISK, "TDDiskActor::Handle(TEvChunkReadRawResult)",
+            {"marker", "BSDD08"},
+            {"DDiskId", DDiskId},
+            {"msg", msg});
 
         if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkReadRawResult)")) {
             return;
@@ -375,6 +420,10 @@ namespace NKikimr::NDDisk {
             }
             case EWakeupTag::WakeupProcessPersistentBufferBatchWrite: {
                 ProcessPersistentBufferBatchWrite();
+                break;
+            }
+            case EWakeupTag::WakeupProcessDeallocatePersistentBufferChunk: {
+                ProcessDeallocatePersistentBufferChunk(true);
                 break;
             }
         }

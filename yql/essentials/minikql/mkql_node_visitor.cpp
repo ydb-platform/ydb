@@ -555,7 +555,7 @@ void TExploringNodeVisitor::Walk(TNode* root, std::vector<TNode*>& nodeStack, co
 
     Stack_ = &nodeStack;
     Stack_->clear();
-    AddChildNode(nullptr, *root);
+    AddChildNode(/*parent=*/nullptr, *root);
     while (!Stack_->empty()) {
         auto node = Stack_->back();
 

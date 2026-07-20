@@ -24,7 +24,8 @@ LIBRARY()
         ydb/core/protos
         ydb/core/blobstorage/vdisk/common
         ydb/library/pdisk_io
-        library/cpp/containers/absl_flat_hash
+        library/cpp/containers/absl
+        contrib/libs/xxhash
     )
 
 END()

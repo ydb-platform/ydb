@@ -66,14 +66,14 @@ void ExecuteAllKernels(std::vector<arrow::Datum>& datums, const TArrowKernelsTop
 
 // Hand-made variant using WideFromBlocks (in order to test ListToBlocks by well-tested nodes rather than actual ListFromBlocks)
 TRuntimeNode ListFromBlocks(TProgramBuilder& pb, TRuntimeNode blockList) {
-    const auto wideBlocksStream = pb.FromFlow(pb.ExpandMap(pb.ToFlow(blockList), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+    const auto wideBlocksStream = pb.FromFlow(pb.ExpandMap(pb.ToFlow(blockList, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {
             pb.Member(item, "key"),
             pb.Member(item, "value"),
             pb.Member(item, NYql::BlockLengthColumnName)};
     }));
 
-    return pb.ForwardList(pb.NarrowMap(pb.ToFlow(pb.WideFromBlocks(wideBlocksStream)), [&](TRuntimeNode::TList items) -> TRuntimeNode {
+    return pb.ForwardList(pb.NarrowMap(pb.ToFlow(pb.WideFromBlocks(wideBlocksStream), {}), [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return pb.NewStruct({{"key", items[0]},
                              {"value", items[1]}});
     }));
@@ -81,13 +81,13 @@ TRuntimeNode ListFromBlocks(TProgramBuilder& pb, TRuntimeNode blockList) {
 
 // Hand-made variant using WideToBlocks (in order to test ListFromBlocks by well-tested nodes rather than actual ListToBlocks)
 TRuntimeNode ListToBlocks(TProgramBuilder& pb, TRuntimeNode list) {
-    const auto wideBlocksStream = pb.WideToBlocks(pb.FromFlow(pb.ExpandMap(pb.ToFlow(list), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+    const auto wideBlocksStream = pb.WideToBlocks(pb.FromFlow(pb.ExpandMap(pb.ToFlow(list, {}), [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {
             pb.Member(item, "key"),
             pb.Member(item, "value")};
     })));
 
-    return pb.Collect(pb.NarrowMap(pb.ToFlow(wideBlocksStream), [&](TRuntimeNode::TList items) -> TRuntimeNode {
+    return pb.Collect(pb.NarrowMap(pb.ToFlow(wideBlocksStream, {}), [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return pb.NewStruct({{"key", items[0]},
                              {"value", items[1]},
                              {NYql::BlockLengthColumnName, items[2]}});
@@ -142,7 +142,7 @@ Y_UNIT_TEST_LLVM(TestEmpty) {
 
     const auto type = NTest::ConvertToMinikqlType<ui64>(pb);
     const auto list = pb.NewEmptyList(type);
-    const auto sourceFlow = pb.ToFlow(list);
+    const auto sourceFlow = pb.ToFlow(list, {});
     const auto flowAfterBlocks = pb.FromBlocks(pb.ToBlocks(sourceFlow));
     const auto pgmReturn = pb.ForwardList(flowAfterBlocks);
 
@@ -158,7 +158,7 @@ Y_UNIT_TEST_LLVM(TestSimple) {
     TVector<ui64> data(dataCount);
     std::iota(data.begin(), data.end(), 0ULL);
     const auto list = NTest::ConvertValueToLiteralNode(pb, data);
-    const auto sourceFlow = pb.ToFlow(list);
+    const auto sourceFlow = pb.ToFlow(list, {});
     const auto flowAfterBlocks = pb.FromBlocks(pb.ToBlocks(sourceFlow));
     const auto pgmReturn = pb.ForwardList(flowAfterBlocks);
 
@@ -174,12 +174,12 @@ Y_UNIT_TEST_LLVM(TestWideToBlocks) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui64, ui64>>{{1, 10}, {2, 20}, {3, 30}});
-    const auto flow = pb.ToFlow(list);
+    const auto flow = pb.ToFlow(list, {});
 
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
     });
-    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
+    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)), {});
     const auto narrowBlocksFlow = pb.NarrowMap(wideBlocksFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[1];
     });
@@ -258,16 +258,16 @@ void TestChunked(bool withBlockExpand) {
             std::string small(smallStrSize, 'A' + i);
 
             items.push_back(NTest::ConvertValueToLiteralNode(pb, std::tuple<ui64, bool, TStringBuf, NTest::TUtf8>{
-                                                                     ui64(i), true, TStringBuf(big), NTest::TUtf8{TStringBuf(small)}}));
+                                                                     ui64(i), true, TStringBuf(big), NTest::TUtf8{TString(small)}}));
         } else {
             items.push_back(NTest::ConvertValueToLiteralNode(pb, std::tuple<ui64, bool, TStringBuf, NTest::TUtf8>{
-                                                                     ui64(i), false, TStringBuf(""), NTest::TUtf8{TStringBuf("")}}));
+                                                                     ui64(i), false, TStringBuf(""), NTest::TUtf8{TString("")}}));
         }
     }
 
     const auto list = pb.NewList(tupleType, std::move(items));
 
-    auto node = pb.ToFlow(list);
+    auto node = pb.ToFlow(list, {});
     node = pb.ExpandMap(node, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U), pb.Nth(item, 3U)};
     });
@@ -276,10 +276,10 @@ void TestChunked(bool withBlockExpand) {
         node = pb.BlockExpandChunked(node);
         // WideTakeBlocks won't work on chunked blocks
         node = pb.WideTakeBlocks(node, NTest::ConvertValueToLiteralNode(pb, ui64(19)));
-        node = pb.ToFlow(pb.WideFromBlocks(node));
+        node = pb.ToFlow(pb.WideFromBlocks(node), {});
     } else {
         // WideFromBlocks should support chunked blocks
-        node = pb.ToFlow(pb.WideFromBlocks(node));
+        node = pb.ToFlow(pb.WideFromBlocks(node), {});
         node = pb.Take(node, NTest::ConvertValueToLiteralNode(pb, ui64(19)));
     }
     node = pb.NarrowMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode {
@@ -299,9 +299,9 @@ void TestChunked(bool withBlockExpand) {
         if (i % 2 == 0) {
             storedBig.push_back(TString(bigStrSize, '0' + i));
             storedSmall.push_back(TString(smallStrSize, 'A' + i));
-            expected.push_back(TRow{ui64(i), true, TStringBuf(storedBig.back()), NTest::TUtf8{TStringBuf(storedSmall.back())}});
+            expected.push_back(TRow{ui64(i), true, TStringBuf(storedBig.back()), NTest::TUtf8{TString(storedSmall.back())}});
         } else {
-            expected.push_back(TRow{ui64(i), false, TStringBuf(""), NTest::TUtf8{TStringBuf("")}});
+            expected.push_back(TRow{ui64(i), false, TStringBuf(""), NTest::TUtf8{TString("")}});
         }
     }
 
@@ -368,7 +368,7 @@ Y_UNIT_TEST_LLVM(TestReplicateScalar) {
 
     const auto listOfReplicated = pb.NewList(replicatedType, {replicated});
 
-    const auto flowOfReplicated = pb.ToFlow(listOfReplicated);
+    const auto flowOfReplicated = pb.ToFlow(listOfReplicated, {});
 
     const auto flowAfterBlocks = pb.FromBlocks(flowOfReplicated);
     const auto pgmReturn = pb.ForwardList(flowAfterBlocks);
@@ -385,7 +385,7 @@ Y_UNIT_TEST_LLVM(TestBlockFunc) {
     const auto ui64BlockType = pb.NewBlockType(ui64Type, TBlockType::EShape::Many);
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui64, ui64>>{{1, 10}, {2, 20}, {3, 30}});
-    const auto flow = pb.ToFlow(list);
+    const auto flow = pb.ToFlow(list, {});
 
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
@@ -394,7 +394,7 @@ Y_UNIT_TEST_LLVM(TestBlockFunc) {
     const auto sumWideStream = pb.WideMap(wideBlocksStream, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
         return {pb.BlockFunc("Add", ui64BlockType, {items[0], items[1]})};
     });
-    const auto sumNarrowFlow = pb.NarrowMap(pb.ToFlow(sumWideStream), [&](TRuntimeNode::TList items) -> TRuntimeNode {
+    const auto sumNarrowFlow = pb.NarrowMap(pb.ToFlow(sumWideStream, {}), [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[0];
     });
     const auto pgmReturn = pb.Collect(pb.FromBlocks(sumNarrowFlow));
@@ -417,7 +417,7 @@ Y_UNIT_TEST_LLVM(TestBlockFuncWithNullables) {
                                                                {TMaybe<ui64>{}, TMaybe<ui64>{}},
                                                                {TMaybe<ui64>(10), TMaybe<ui64>(20)},
                                                            });
-    const auto flow = pb.ToFlow(list);
+    const auto flow = pb.ToFlow(list, {});
 
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
@@ -426,7 +426,7 @@ Y_UNIT_TEST_LLVM(TestBlockFuncWithNullables) {
     const auto sumWideStream = pb.WideMap(wideBlocksStream, [&](TRuntimeNode::TList items) -> TRuntimeNode::TList {
         return {pb.BlockFunc("Add", ui64OptBlockType, {items[0], items[1]})};
     });
-    const auto sumNarrowFlow = pb.NarrowMap(pb.ToFlow(sumWideStream), [&](TRuntimeNode::TList items) -> TRuntimeNode {
+    const auto sumNarrowFlow = pb.NarrowMap(pb.ToFlow(sumWideStream, {}), [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[0];
     });
     const auto pgmReturn = pb.Collect(pb.FromBlocks(sumNarrowFlow));
@@ -443,7 +443,7 @@ Y_UNIT_TEST_LLVM(TestBlockFuncWithNullableScalar) {
     const auto ui64OptBlockType = pb.NewBlockType(optionalUi64Type, TBlockType::EShape::Many);
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TMaybe<ui64>>{TMaybe<ui64>(10), TMaybe<ui64>(20), TMaybe<ui64>(30)});
-    const auto flow = pb.ToFlow(list);
+    const auto flow = pb.ToFlow(list, {});
     const auto blocksFlow = pb.ToBlocks(flow);
 
     THolder<IComputationGraph> graph;
@@ -489,7 +489,7 @@ Y_UNIT_TEST_LLVM(TestBlockFuncWithScalar) {
     const auto leftScalar = pb.AsScalar(NTest::ConvertValueToLiteralNode(pb, ui64(1000)));
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui64>{10, 20, 30});
-    const auto flow = pb.ToFlow(list);
+    const auto flow = pb.ToFlow(list, {});
     const auto blocksFlow = pb.ToBlocks(flow);
     const auto sumBlocksFlow = pb.Map(blocksFlow, [&](TRuntimeNode item) -> TRuntimeNode {
         return {pb.BlockFunc("Add", ui64BlockType, {leftScalar, {pb.BlockFunc("Add", ui64BlockType, {item, rightScalar})}})};
@@ -505,11 +505,11 @@ Y_UNIT_TEST_LLVM(TestWideFromBlocks) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui64>{10, 20, 30});
-    const auto flow = pb.ToFlow(list);
+    const auto flow = pb.ToFlow(list, {});
 
     const auto blocksFlow = pb.ToBlocks(flow);
     const auto wideFlow = pb.ExpandMap(blocksFlow, [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item, pb.AsScalar(NTest::ConvertValueToLiteralNode(pb, ui64(3ULL)))}; });
-    const auto wideFlow2 = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(wideFlow)));
+    const auto wideFlow2 = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(wideFlow)), {});
     const auto narrowFlow = pb.NarrowMap(wideFlow2, [&](TRuntimeNode::TList items) -> TRuntimeNode { return items.front(); });
 
     const auto pgmReturn = pb.Collect(narrowFlow);
@@ -532,13 +532,13 @@ Y_UNIT_TEST_LLVM(TestWideToAndFromBlocks) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<ui64, ui64>>{{1, 10}, {2, 20}, {3, 30}});
-    const auto flow = pb.ToFlow(list);
+    const auto flow = pb.ToFlow(list, {});
 
     const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
     });
-    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)));
-    const auto wideFlow2 = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(wideBlocksFlow)));
+    const auto wideBlocksFlow = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(wideFlow)), {});
+    const auto wideFlow2 = pb.ToFlow(pb.WideFromBlocks(pb.FromFlow(wideBlocksFlow)), {});
     const auto narrowFlow = pb.NarrowMap(wideFlow2, [&](TRuntimeNode::TList items) -> TRuntimeNode {
         return items[1];
     });

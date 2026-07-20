@@ -131,7 +131,20 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
             TPathId pathId = *--itCandidate;
             Self->CleanDroppedPathsCandidates.erase(itCandidate);
             TPathElement::TPtr path = Self->PathsById.at(pathId);
-            if (path->DbRefCount == 0 && path->Dropped()) {
+            if (path->DbRefCount == 0 && path->Dropped() && path->AllChildrenCount > 0) {
+                // fail fast: a restart recomputes the counters and heals the drift
+                Y_VERIFY_S(Self->TolerateOrphanedPaths,
+                    "TTxCleanDroppedPaths: dropped path with children, DbRefCount is miscounted"
+                    << ", PathId# " << pathId
+                    << ", AllChildrenCount# " << path->AllChildrenCount
+                    << ", at schemeshard: " << Self->TabletID());
+                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxCleanDroppedPaths: skip dropped path with children, DbRefCount is miscounted"
+                    << ", PathId# " << pathId
+                    << ", AllChildrenCount# " << path->AllChildrenCount
+                    << ", at schemeshard: " << Self->TabletID());
+                ++SkippedCount;
+            } else if (path->DbRefCount == 0 && path->Dropped()) {
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxCleanDroppedPaths: PersistRemovePath for PathId# " << pathId
                     << ", at schemeshard: "<< Self->TabletID());

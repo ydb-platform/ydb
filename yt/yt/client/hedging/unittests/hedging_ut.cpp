@@ -20,8 +20,10 @@
 #include <library/cpp/testing/gtest/gtest.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/vector.h>
 #include <util/random/random.h>
 #include <util/stream/output.h>
+#include <util/stream/str.h>
 #include <util/string/printf.h>
 
 #include <atomic>
@@ -576,6 +578,85 @@ TEST(THedgingClientTest, ResponseFromFirstClientWhenReplicationLagUpdaterFails)
     EXPECT_EQ(queryResultWithCleanedPenalty.Value().AsStringBuf(), clientResult1.AsStringBuf());
 }
 
+// One row of the hedging simulation: the scenario inputs (whether local lags + per-10 error rates of
+// the two remotes) and the measured request distribution over `iterations` requests.
+struct TSimRow
+{
+    bool Lagging;
+    int Remote1Errors;   // failures per 10 requests
+    int Remote2Errors;
+    int ServedLocal;
+    int ServedRemote1;
+    int ServedRemote2;
+    int Failed;
+    int PrimaryLocal;
+    int PrimaryRemote1;
+    int PrimaryRemote2;
+    int Total;           // backend requests actually run = primary + every hedge that fired
+};
+
+// Renders a row as one aligned line for diagnostics (the canon is stored as structs, not text).
+TString FormatSimRow(const TSimRow& row)
+{
+    return Sprintf("%5s %3d %3d -> %5d %7d %7d %6d || %5d %7d %7d || %5d",
+        row.Lagging ? "true" : "false",
+        row.Remote1Errors, row.Remote2Errors,
+        row.ServedLocal, row.ServedRemote1, row.ServedRemote2, row.Failed,
+        row.PrimaryLocal, row.PrimaryRemote1, row.PrimaryRemote2, row.Total);
+}
+
+// Renders a row as a C++ aggregate initializer so a re-canonization run can be pasted into the canon.
+TString FormatSimRowAsInitializer(const TSimRow& row)
+{
+    return Sprintf("    {%-5s, %d, %2d,   %3d, %3d, %3d, %2d,   %3d, %3d, %3d,   %3d},",
+        row.Lagging ? "true" : "false",
+        row.Remote1Errors, row.Remote2Errors,
+        row.ServedLocal, row.ServedRemote1, row.ServedRemote2, row.Failed,
+        row.PrimaryLocal, row.PrimaryRemote1, row.PrimaryRemote2, row.Total);
+}
+
+// Compares a measured row to its canon. The scenario inputs (lagging + error rates) must match exactly;
+// the measured counts may drift by `tolerance` because hedges fire on a real timer. Returns the list of
+// offending fields (empty => match), e.g. " total(canon=124 actual=130 delta=6)".
+TString DiffSimRow(const TSimRow& canon, const TSimRow& actual, int tolerance)
+{
+    struct TField
+    {
+        TStringBuf Name;
+        int Canon;
+        int Actual;
+        int Tolerance;
+    };
+    const TField fields[] = {
+        {"lagging",   canon.Lagging,        actual.Lagging,        0},
+        {"r1err",     canon.Remote1Errors,  actual.Remote1Errors,  0},
+        {"r2err",     canon.Remote2Errors,  actual.Remote2Errors,  0},
+        {"local",     canon.ServedLocal,    actual.ServedLocal,    tolerance},
+        {"remote1",   canon.ServedRemote1,  actual.ServedRemote1,  tolerance},
+        {"remote2",   canon.ServedRemote2,  actual.ServedRemote2,  tolerance},
+        {"failed",    canon.Failed,         actual.Failed,         tolerance},
+        {"primLocal", canon.PrimaryLocal,   actual.PrimaryLocal,   tolerance},
+        {"primR1",    canon.PrimaryRemote1, actual.PrimaryRemote1, tolerance},
+        {"primR2",    canon.PrimaryRemote2, actual.PrimaryRemote2, tolerance},
+        {"total",     canon.Total,          actual.Total,          tolerance},
+    };
+
+    TStringStream offenders;
+    for (const auto& field : fields) {
+        int delta = field.Actual - field.Canon;
+        if (delta < 0) {
+            delta = -delta;
+        }
+        if (delta > field.Tolerance) {
+            offenders << " " << field.Name << "(canon=" << field.Canon
+                << " actual=" << field.Actual << " delta=" << delta << ")";
+        }
+    }
+    return offenders.Str();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 // Checks the served-by distribution over 100 requests, "local fresh" vs "local lagging" crossed
 // with the second remote's error rate (the first always fails 1/10). A fresh local serves everything;
 // a lagging local gets LagPenalty (42), above the remote slots (+10/+20), so it sorts last and - since
@@ -583,12 +664,13 @@ TEST(THedgingClientTest, ResponseFromFirstClientWhenReplicationLagUpdaterFails)
 // heavily banned. Hedging is capped at 20% of requests (HedgingRatioLimit), so the total-requests
 // column shows backend load held down once the cap is hit.
 //
-// Determinism: per-request error flags + a fixed lag penalty + a seeded tie-break, so background hedge
-// tasks never affect the outcome.
+// Determinism: per-request error flags + a fixed lag penalty + a seeded tie-break keep the outcome
+// stable, but hedges still fire on a real timer, so the counts drift by ~1 between runs; each measured
+// row is therefore compared to the canon field by field with a small tolerance (scenario inputs exact).
 //
-// The expected table is inlined below (no golden file, so the test stays CMake/opensource-friendly).
-// To re-canonize after an intended change, run the test and paste the "actual" block it prints on
-// mismatch verbatim between the R"(...)".
+// The expected rows are inlined below as a TSimRow vector (no golden file, so the test stays
+// CMake/opensource-friendly). To re-canonize after an intended change, run the test and paste the
+// initializer block it prints on mismatch into `expectedRows`.
 TEST(THedgingClientTest, HedgingSimulation)
 {
     NYPath::TYPath path = "/test/1234";
@@ -637,7 +719,7 @@ TEST(THedgingClientTest, HedgingSimulation)
         return static_cast<int>(x % 10) < per10;
     };
 
-    TString table = "localLagging remote1Err remote2Err -> local remote1 remote2 failed || primLocal primR1 primR2 || total\n";
+    TVector<TSimRow> rows;
     // Local is either fresh or lagging; remote1 always fails 1/10, remote2 sweeps 0/10 .. 10/10.
     for (bool localLagging : {false, true}) {
         for (int remote2ErrorsPer10 = 0; remote2ErrorsPer10 <= 10; ++remote2ErrorsPer10) {
@@ -707,50 +789,74 @@ TEST(THedgingClientTest, HedgingSimulation)
                 }
             }
 
-            table += Sprintf("%12s %10d %10d -> %5d %7d %7d %6d || %5d %7d %7d || %5d\n",
-                localLagging ? "true" : "false",
-                remote1ErrorsPer10,
-                remote2ErrorsPer10,
-                servedLocal,
-                servedRemote1,
-                servedRemote2,
-                failed,
-                primaryLocal,
-                primaryRemote1,
-                primaryRemote2,
-                totalRequests->load());
+            rows.push_back(TSimRow{
+                .Lagging = localLagging,
+                .Remote1Errors = remote1ErrorsPer10,
+                .Remote2Errors = remote2ErrorsPer10,
+                .ServedLocal = servedLocal,
+                .ServedRemote1 = servedRemote1,
+                .ServedRemote2 = servedRemote2,
+                .Failed = failed,
+                .PrimaryLocal = primaryLocal,
+                .PrimaryRemote1 = primaryRemote1,
+                .PrimaryRemote2 = primaryRemote2,
+                .Total = totalRequests->load(),
+            });
         }
     }
 
-    const TString expectedTable = R"(localLagging remote1Err remote2Err -> local remote1 remote2 failed || primLocal primR1 primR2 || total
-       false          1          0 ->   100       0       0      0 ||   100       0       0 ||   100
-       false          1          1 ->   100       0       0      0 ||   100       0       0 ||   100
-       false          1          2 ->   100       0       0      0 ||   100       0       0 ||   100
-       false          1          3 ->   100       0       0      0 ||   100       0       0 ||   100
-       false          1          4 ->   100       0       0      0 ||   100       0       0 ||   100
-       false          1          5 ->   100       0       0      0 ||   100       0       0 ||   100
-       false          1          6 ->   100       0       0      0 ||   100       0       0 ||   100
-       false          1          7 ->   100       0       0      0 ||   100       0       0 ||   100
-       false          1          8 ->   100       0       0      0 ||   100       0       0 ||   100
-       false          1          9 ->   100       0       0      0 ||   100       0       0 ||   100
-       false          1         10 ->   100       0       0      0 ||   100       0       0 ||   100
-        true          1          0 ->     0      41      59      0 ||     0      44      56 ||   103
-        true          1          1 ->     0      45      55      0 ||     0      44      56 ||   107
-        true          1          2 ->     0      47      53      0 ||     0      44      56 ||   109
-        true          1          3 ->     0      52      47      1 ||     0      44      56 ||   115
-        true          1          4 ->     0      63      34      3 ||     0      49      51 ||   124
-        true          1          5 ->     0      64      28      8 ||     0      49      51 ||   125
-        true          1          6 ->     0      73      22      5 ||     0      58      42 ||   125
-        true          1          7 ->     0      82      11      7 ||     0      68      32 ||   124
-        true          1          8 ->     0      82      11      7 ||     0      68      32 ||   124
-        true          1          9 ->     1      93       0      6 ||     0      95       5 ||   110
-        true          1         10 ->     1      93       0      6 ||     0      95       5 ||   110
-)";
-    // On mismatch print the raw table so it can be pasted between R"( and )" to re-canonize.
-    if (table != expectedTable) {
-        Cerr << "\n--- actual simulation table (paste to re-canonize) ---\n" << table;
+    // lagging, r1err, r2err,   local, remote1, remote2, failed,   primLocal, primR1, primR2,   total
+    const TVector<TSimRow> expectedRows = {
+        {false, 1,  0,   100,   0,   0,  0,   100,   0,   0,   100},
+        {false, 1,  1,   100,   0,   0,  0,   100,   0,   0,   100},
+        {false, 1,  2,   100,   0,   0,  0,   100,   0,   0,   100},
+        {false, 1,  3,   100,   0,   0,  0,   100,   0,   0,   100},
+        {false, 1,  4,   100,   0,   0,  0,   100,   0,   0,   100},
+        {false, 1,  5,   100,   0,   0,  0,   100,   0,   0,   100},
+        {false, 1,  6,   100,   0,   0,  0,   100,   0,   0,   100},
+        {false, 1,  7,   100,   0,   0,  0,   100,   0,   0,   100},
+        {false, 1,  8,   100,   0,   0,  0,   100,   0,   0,   100},
+        {false, 1,  9,   100,   0,   0,  0,   100,   0,   0,   100},
+        {false, 1, 10,   100,   0,   0,  0,   100,   0,   0,   100},
+        {true , 1,  0,     0,  41,  59,  0,     0,  44,  56,   103},
+        {true , 1,  1,     0,  45,  55,  0,     0,  44,  56,   107},
+        {true , 1,  2,     0,  47,  53,  0,     0,  44,  56,   109},
+        {true , 1,  3,     0,  52,  47,  1,     0,  44,  56,   115},
+        {true , 1,  4,     0,  63,  34,  3,     0,  49,  51,   124},
+        {true , 1,  5,     0,  64,  28,  8,     0,  49,  51,   125},
+        {true , 1,  6,     0,  73,  22,  5,     0,  58,  42,   125},
+        {true , 1,  7,     0,  82,  11,  7,     0,  68,  32,   124},
+        {true , 1,  8,     0,  82,  11,  7,     0,  68,  32,   124},
+        {true , 1,  9,     1,  93,   0,  6,     0,  95,   5,   110},
+        {true , 1, 10,     1,  93,   0,  6,     0,  95,   5,   110},
+    };
+
+    ASSERT_EQ(rows.size(), expectedRows.size());
+
+    // Counts drift by ~1 run to run (hedges fire on a real timer), so tolerate small per-cell deltas
+    // instead of requiring exact equality.
+    constexpr int tolerance = 2;
+    TStringStream diff;
+    for (size_t rowIndex = 0; rowIndex < expectedRows.size(); ++rowIndex) {
+        TString rowDiff = DiffSimRow(expectedRows[rowIndex], rows[rowIndex], tolerance);
+        if (!rowDiff.empty()) {
+            diff << "- " << FormatSimRow(expectedRows[rowIndex]) << "  (canon)\n";
+            diff << "+ " << FormatSimRow(rows[rowIndex]) << "  (actual)\n";
+            diff << "   diff:" << rowDiff << "\n";
+        }
     }
-    EXPECT_EQ(table, expectedTable);
+
+    if (!diff.Empty()) {
+        // Print every actual row as an initializer so it can be pasted back into `expectedRows`.
+        Cerr << "\n--- actual simulation rows (paste to re-canonize) ---\n";
+        for (const auto& row : rows) {
+            Cerr << FormatSimRowAsInitializer(row) << "\n";
+        }
+        Cerr << "--- diff (canon vs actual) ---\n" << diff.Str();
+    }
+    EXPECT_TRUE(diff.Empty())
+        << "simulation rows differ from the canon by more than " << tolerance << " per cell:\n"
+        << diff.Str();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

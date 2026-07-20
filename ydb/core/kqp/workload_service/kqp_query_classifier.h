@@ -11,6 +11,8 @@
 
 namespace NKikimr::NKqp {
 
+struct TUserRequestContext;
+
 struct TClassifyContext {
     const TString PoolId;
     const TString AppName;
@@ -77,7 +79,7 @@ public:
 
     /// Refines classification once the query plan is available
     [[nodiscard]]
-    virtual TPostCompileClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) = 0;
+    virtual TPostCompileClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery, const TUserRequestContext& userRequestContext) = 0;
 
     /// Get the current classification state
     [[nodiscard]]

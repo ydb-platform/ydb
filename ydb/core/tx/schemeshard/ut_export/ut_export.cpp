@@ -5352,4 +5352,42 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"resource_id\":\"DATABASE_ID_VAL\"");
         UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"schema\":\"ydb.serverless.requests.v1\"");
     }
+
+    Y_UNIT_TEST(ShouldNotWriteBillRecordOnColumnTableCommonDb) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        TVector<TString> billRecords;
+        Runtime().SetObserverFunc([&billRecords](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            billRecords.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        Run(Runtime(), Env(), TVector<TString>{}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/User/ColumnTable"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()), Ydb::StatusIds::SUCCESS, "/MyRoot/User", false, "", "", {}, false, {
+            R"(
+                Name: "ColumnTable"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            )"
+        });
+
+        UNIT_ASSERT(billRecords.empty());
+    }
 }

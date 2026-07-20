@@ -55,7 +55,7 @@ namespace {
 
     private:
         TIntrusivePtr<TLeapTimeProvider> Leap_;
-        TIntrusivePtr<ITimeProvider> Provider_;
+        TIntrusivePtr<ITimeProvider> Previous_;
     };
 
     class TBufferedCerr: TNonCopyable {

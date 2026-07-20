@@ -32,6 +32,32 @@ namespace {
         std::atomic<i64> Offset = 0;
     };
 
+    // Install before actor system start; restore the previous provider after actors
+    // are stopped (declare this before setup so dtor runs after setup). Avoids
+    // TSAN data race on TAppData::TimeProvider swap vs concurrent actor reads
+    // (#40339 / #47065).
+    class TScopedLeapTimeProvider: TNonCopyable {
+    public:
+        TScopedLeapTimeProvider()
+            : Leap_(MakeIntrusive<TLeapTimeProvider>())
+            , Previous_(Leap_)
+        {
+            DoSwap(TAppData::TimeProvider, Previous_);
+        }
+
+        ~TScopedLeapTimeProvider() {
+            DoSwap(TAppData::TimeProvider, Previous_);
+        }
+
+        TLeapTimeProvider* operator->() const {
+            return Leap_.Get();
+        }
+
+    private:
+        TIntrusivePtr<TLeapTimeProvider> Leap_;
+        TIntrusivePtr<ITimeProvider> Previous_;
+    };
+
     class TBufferedCerr: TNonCopyable {
     public:
         TBufferedCerr()
@@ -1454,12 +1480,9 @@ Y_UNIT_TEST(DoubleSplit_ReadAfterFirstWrite) {
 void SingleGroupAvailableEventuallyImpl(TDuration pause) {
     constexpr size_t N = 7;
     UNIT_ASSERT(N >= 5);
-    const auto leapTimeProvider = MakeIntrusive<TLeapTimeProvider>();
+    TScopedLeapTimeProvider leapTimeProvider;
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
-    for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
-        runtime.GetAppData(i).TimeProvider = leapTimeProvider;
-    }
     CreateSetupFIFOTopic(setup, "/Root/topic1");
 
     TPartitionSplitter splitter;
@@ -1778,7 +1801,7 @@ static void VerifyWriteStatuses(
 
 static void RunDedupTest(const TString& testName, const std::vector<TDedupStage>& stages, TDuration writeDuration = TDuration::Zero()) {
     UNIT_ASSERT_C(!stages.empty(), "RunDedupTest: no stages");
-    const auto leapTimeProvider = MakeIntrusive<TLeapTimeProvider>();
+    TScopedLeapTimeProvider leapTimeProvider;
     auto setup = CreateSetup();
     setup->GetServer().EnableLogs({
             NKikimrServices::PERSQUEUE,
@@ -1786,9 +1809,6 @@ static void RunDedupTest(const TString& testName, const std::vector<TDedupStage>
         NActors::NLog::PRI_DEBUG
     );
     auto& runtime = setup->GetRuntime();
-    for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
-        runtime.GetAppData(i).TimeProvider = leapTimeProvider;
-    }
     CreateSetupFIFOTopic(setup, "/Root/topic1");
     TPartitionSplitter splitter;
     TMap<TString, TVector<TWriteResult>> messagesByDedupId;
@@ -2164,13 +2184,10 @@ static void RunRepeatedDedupWithSplits(TStringBuf testName, TDuration writePause
     const TString groupId = "group-X";
     const TString dedupId = "dedupA";
 
-    const auto leapTimeProvider = MakeIntrusive<TLeapTimeProvider>();
+    TScopedLeapTimeProvider leapTimeProvider;
     auto setup = CreateSetup();
     setup->GetServer().EnableLogs({NKikimrServices::PERSQUEUE}, NActors::NLog::PRI_DEBUG);
     auto& runtime = setup->GetRuntime();
-    for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
-        runtime.GetAppData(i).TimeProvider = leapTimeProvider;
-    }
     CreateSetupFIFOTopic(setup, "/Root/topic1");
 
     TPartitionSplitter splitter;

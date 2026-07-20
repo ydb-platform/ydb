@@ -23,14 +23,18 @@ void TClassifierSettings::TParser::operator()(TString* setting) const {
 }
 
 void TClassifierSettings::TParser::operator()(std::optional<TString>* setting) const {
-    *setting = Value;
+    if (Value.empty()) {
+        setting->reset();
+    } else {
+        *setting = Value;
+    }
 }
 
 void TClassifierSettings::TParser::operator()(std::optional<TRegexPredicate>* setting) const {
     if (Value.empty()) {
         setting->reset();
     } else {
-        *setting = TRegexPredicate::Compile(Value);
+        *setting = TRegexPredicate::FromGlob(Value);
     }
 }
 

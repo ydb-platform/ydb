@@ -39,4 +39,4 @@ Protocol layers (each has its own `AGENTS.md`):
 `./ya make --build relwithdebinfo -tA ydb/core/persqueue` (or a narrower `ut/`).
 Monorepo rules: [`agents/CODESTYLE.md`](../../agents/CODESTYLE.md) ·
 [`agents/GUIDE.md`](../../agents/GUIDE.md) ·
-[`agents/GTEST_PREFFER.md`](../../agents/GTEST_PREFFER.md).
+[`agents/GTEST_PREFER.md`](../../agents/GTEST_PREFER.md).

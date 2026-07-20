@@ -6,7 +6,7 @@ Follow the testing style of the module you are modifying.
 
 - Place tests in a `ut/` subdirectory next to the code under test.
 - Name test source files `*_ut.cpp`.
-- Declare the test module in `ya.make` with `GTEST()` / `GTEST_FOR(...)`, or
+- Declare the test module in `ya.make` with `GTEST()`, or
   `UNITTEST()` / `UNITTEST_FOR(...)` when matching existing tests in that `ut/`.
 - Register C++ test sources in `SRCS()`.
 

@@ -24,11 +24,14 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         auto var = VarNode->GetValue(compCtx);
 
-        if (IsOptional && !var) {
-            return NUdf::TUnboxedValuePod();
+        if constexpr (IsOptional) {
+            if (!var) {
+                return NUdf::TUnboxedValuePod();
+            }
+            return var.Release().GetVariantItem().Release().MakeOptional();
+        } else {
+            return var.Release().GetVariantItem().Release();
         }
-
-        return var.Release().GetVariantItem().Release();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -40,7 +43,7 @@ public:
         const auto var = GetNodeValue(VarNode, ctx, block);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        if (IsOptional) {
+        if constexpr (IsOptional) {
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto none = BasicBlock::Create(context, "none", ctx.Func);
 
@@ -66,12 +69,20 @@ public:
         const uint64_t init[] = {0xFFFFFFFFFFFFFFFFULL, 0x3FFFFFFFFFFFFFFULL};
         const auto mask = ConstantInt::get(valueType, APInt(128, 2, init));
         const auto clean = BinaryOperator::CreateAnd(var, mask, "clean", block);
-        new StoreInst(clean, pointer, block);
+        if constexpr (IsOptional) {
+            new StoreInst(MakeOptional(context, clean, block), pointer, block);
+        } else {
+            new StoreInst(clean, pointer, block);
+        }
         ValueAddRef(this->RepresentationKind_, pointer, ctx, block);
         BranchInst::Create(done, block);
 
         block = box;
         CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetVariantItem>(pointer, var, ctx.Codegen, block);
+        if constexpr (IsOptional) {
+            const auto load = new LoadInst(valueType, pointer, "load", block);
+            new StoreInst(MakeOptional(context, load, block), pointer, block);
+        }
         BranchInst::Create(done, block);
 
         block = done;

@@ -210,13 +210,14 @@ TMaybe<TString> ParseLegacyReadPayload(const TString& raw) {
 TMaybe<TString> TryReadFirstTopicMessage(
     NPersQueue::TTestServer& server,
     const TString& topicShortName,
-    TDuration timeout = TDuration::Seconds(30))
+    TDuration timeout = TDuration::Seconds(30),
+    ui32 partitionId = 0)
 {
     const TString topic = "rt3.dc1--" + topicShortName;
     const TInstant deadline = TInstant::Now() + timeout;
     while (TInstant::Now() < deadline) {
         THolder<NMsgBusProxy::TBusPersQueue> request = TRequestReadPQ{
-            topic, 0, 0, 100, "user", 0}.GetRequest();
+            topic, partitionId, 0, 100, "user", 0}.GetRequest();
         request.Get()->Record.SetTicket("root@builtin");
 
         const auto response = server.AnnoyingClient->CallPersQueueGRPC(request->Record);
@@ -718,8 +719,59 @@ std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> MakeTopicServiceStub(
     return Ydb::Topic::V1::TopicService::NewStub(channel);
 }
 
+TString MakeLegacyStreamWriteTopicPath(const TString& topicShortName) {
+    return "/Root/PQ/rt3.dc1--" + topicShortName;
+}
+
+void AssertPartitionsOnSameTablet(
+    NPersQueue::TTestServer& server,
+    const TString& topicShortName,
+    const TVector<ui32>& partitionIds)
+{
+    UNIT_ASSERT(!partitionIds.empty());
+
+    const auto response = server.AnnoyingClient->Ls(MakeLegacyStreamWriteTopicPath(topicShortName));
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetSchemeStatus(), NKikimrScheme::StatusSuccess);
+
+    THashMap<ui32, ui64> tabletByPartition;
+    for (const auto& partition : response->Record.GetPathDescription().GetPersQueueGroup().GetPartitions()) {
+        tabletByPartition[partition.GetPartitionId()] = partition.GetTabletId();
+    }
+
+    UNIT_ASSERT(tabletByPartition.contains(partitionIds.front()));
+    const ui64 expectedTabletId = tabletByPartition.at(partitionIds.front());
+    for (const ui32 partitionId : partitionIds) {
+        UNIT_ASSERT(tabletByPartition.contains(partitionId));
+        UNIT_ASSERT_VALUES_EQUAL(tabletByPartition.at(partitionId), expectedTabletId);
+    }
+}
+
 void CreateLegacyStreamWriteTopic(NPersQueue::TTestServer& server, const TString& topicShortName, ui32 partitions = 2) {
-    server.AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--" + topicShortName, partitions);
+    const TString fullName = "rt3.dc1--" + topicShortName;
+    auto pqClient = NYdb::NPersQueue::TPersQueueClient(*server.AnnoyingClient->GetDriver());
+    auto settings = NYdb::NPersQueue::TCreateTopicSettings()
+        .PartitionsCount(partitions)
+        .PartitionsPerTablet(Max(partitions, 2u));
+    settings.ReadRules({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName("user")});
+
+    TString path = fullName;
+    if (!path.StartsWith("/Root")) {
+        path = TStringBuilder() << "/Root/PQ/" << fullName;
+    }
+
+    auto result = pqClient.CreateTopic(path, settings);
+    result.Wait();
+    UNIT_ASSERT_C(result.GetValue().IsSuccess(), result.GetValue().GetIssues().ToString());
+    server.AnnoyingClient->AddTopic(fullName);
+
+    if (partitions >= 2) {
+        TVector<ui32> partitionIds(Reserve(partitions));
+        for (ui32 partitionId = 0; partitionId < partitions; ++partitionId) {
+            partitionIds.push_back(partitionId);
+        }
+        AssertPartitionsOnSameTablet(server, topicShortName, partitionIds);
+    }
 }
 
 void AssertStreamWriteSuccess(const Ydb::Topic::StreamWriteMessage::FromServer& response) {
@@ -2003,6 +2055,70 @@ Y_UNIT_TEST(PublishAfterStreamWriteClearsRegistryAndMakesDataVisible) {
     const auto message = TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName);
     UNIT_ASSERT(message.Defined());
     UNIT_ASSERT_VALUES_EQUAL(*message, TString(payload));
+}
+
+Y_UNIT_TEST(PublishAfterStreamWriteToTwoPartitionsMakesDataVisible) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-two-partitions-topic", "ext-two-partitions");
+    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
+
+    constexpr TStringBuf payload0 = "deferred-payload-part-0";
+    constexpr TStringBuf payload1 = "deferred-payload-part-1";
+    {
+        auto session = fixture.OpenWriteStream("producer-part-0", 0);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            TString(payload0),
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+    {
+        auto session = fixture.OpenWriteStream("producer-part-1", 1);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            TString(payload1),
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const auto publishOutcome = CallPublish(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT(publishOutcome.RpcStatus.ok());
+    UNIT_ASSERT(publishOutcome.Operation.ready());
+    UNIT_ASSERT_VALUES_EQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 0u);
+
+    const auto message0 = TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName, TDuration::Seconds(30), 0);
+    const auto message1 = TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName, TDuration::Seconds(30), 1);
+    UNIT_ASSERT(message0.Defined());
+    UNIT_ASSERT(message1.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(*message0, TString(payload0));
+    UNIT_ASSERT_VALUES_EQUAL(*message1, TString(payload1));
+}
+
+Y_UNIT_TEST(CancelAfterStreamWriteToTwoPartitionsClearsRegistryWithoutData) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled("finalize-cancel-two-partitions-topic", "ext-cancel-two-partitions");
+    GrantPublicationRegistryDelete(fixture.Server, "root@builtin");
+
+    {
+        auto session = fixture.OpenWriteStream("producer-cancel-0", 0);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            "deferred-payload-cancel-0",
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+    {
+        auto session = fixture.OpenWriteStream("producer-cancel-1", 1);
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            1,
+            "deferred-payload-cancel-1",
+            std::make_pair(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const auto cancelOutcome = CallCancelPublication(*fixture.DeferredStub, "/Root", fixture.IntPublicationId);
+    UNIT_ASSERT(cancelOutcome.RpcStatus.ok());
+    UNIT_ASSERT(cancelOutcome.Operation.ready());
+    UNIT_ASSERT_VALUES_EQUAL(cancelOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 0u);
+
+    UNIT_ASSERT(!TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName, TDuration::Seconds(2), 0).Defined());
+    UNIT_ASSERT(!TryReadFirstTopicMessage(fixture.Server, fixture.TopicShortName, TDuration::Seconds(2), 1).Defined());
 }
 
 Y_UNIT_TEST(CancelAfterStreamWriteClearsRegistryWithoutData) {

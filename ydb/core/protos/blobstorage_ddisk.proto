@@ -61,6 +61,13 @@ message TReplyStatus {
         // The request can't be executed right now, the caller must retry later. Possible causes:
         // - chunk deletion requested while chunk allocation is in progress
         BUSY = 11;
+
+        // The sender-supplied per-block payload checksum does not match the checksum recomputed
+        // over the received payload before writing. The write was not performed.
+        // Not retryable as-is: resending the same payload/checksums will fail identically, since the
+        // mismatch is in data the sender itself provided. The sender must treat this as data corruption
+        // and recover upstream (e.g. resend from a known-good source) rather than blindly retry.
+        CORRUPTED = 12;
     }
 }
 
@@ -154,6 +161,12 @@ message TEvWrite {
     TQueryCredentials Credentials = 1;
     TBlockSelector Selector = 2;
     TWriteInstruction Instruction = 3;
+
+    // Sender-computed checksum per MinSectorSize (4 KiB) block of the payload, in order. Each value is a
+    // raw XXH3_64(data) over that block only: no tablet/vchunk identity or salt is mixed in (this is a
+    // transport-level checksum, distinct from the on-disk integrity checksums DDisk itself may compute
+    // and store). Optional: if empty, no checksum validation is performed.
+    repeated fixed64 Checksums = 4;
 }
 
 message TEvWriteResult {
@@ -171,6 +184,9 @@ message TEvReadResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
     TReadResult ReadResult = 3;
+    // Reserved for checksum piggybacking: same raw XXH3_64(data) per MinSectorSize block of ReadResult
+    // payload as TEvWrite.Checksums, no identity/salt mixed in; not filled yet.
+    repeated fixed64 Checksums = 4;
 }
 
 message TEvDeleteTabletChunks {
@@ -188,6 +204,12 @@ message TEvWritePersistentBuffer {
     TBlockSelector Selector = 2;
     uint64 Lsn = 3;
     TWriteInstruction Instruction = 4;
+
+    // Sender-computed checksum per MinSectorSize (4 KiB) block of the payload, in order. Each value is a
+    // raw XXH3_64(data) over that block only: no tablet/vchunk identity or salt is mixed in (this is a
+    // transport-level checksum, distinct from the on-disk integrity checksums DDisk itself may compute
+    // and store). Optional: if empty, no checksum validation is performed.
+    repeated fixed64 Checksums = 5;
 }
 
 message TEvWritePersistentBufferResult {
@@ -212,6 +234,13 @@ message TEvWritePersistentBuffers {
     TWriteInstruction Instruction = 4;
     repeated TDDiskId PersistentBufferIds = 5;
     uint32 ReplyTimeoutMicroseconds = 6;
+
+    // Sender-computed checksum per MinSectorSize (4 KiB) block of the payload, in order. Each value is a
+    // raw XXH3_64(data) over that block only: no tablet/vchunk identity or salt is mixed in (this is a
+    // transport-level checksum, distinct from the on-disk integrity checksums DDisk itself may compute
+    // and store). Optional: if empty, no checksum validation is performed. Forwarded as-is to every
+    // fanned-out TEvWritePersistentBuffer sent to each PersistentBufferIds entry.
+    repeated fixed64 Checksums = 7;
 }
 
 message TEvWritePersistentBuffersResult {
@@ -238,6 +267,9 @@ message TEvReadPersistentBufferResult {
     uint64 VChunkIndex = 4;
     uint32 OffsetInBytes = 5;
     uint32 SizeInBytes = 6;
+    // Reserved for checksum piggybacking: same raw XXH3_64(data) per MinSectorSize block of ReadResult
+    // payload as TEvWritePersistentBuffer.Checksums, no identity/salt mixed in; not filled yet.
+    repeated fixed64 Checksums = 7;
 }
 
 message TSegmentResult {

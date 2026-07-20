@@ -108,6 +108,7 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     library/cpp/random_provider
+    library/cpp/svnversion
     library/cpp/time_provider
     ydb/core/audit/audit_config
     ydb/core/base/generated
@@ -126,7 +127,6 @@ PEERDIR(
     ydb/library/ydb_issue
     ydb/public/api/protos/out
     yql/essentials/minikql
-    yql/essentials/types/binary_json
     library/cpp/deprecated/atomic
     library/cpp/json
 )
@@ -152,6 +152,7 @@ IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
 RECURSE_FOR_TESTS(
     ut
     ut_auth
+    ut_backtrace
     ut_board_subscriber
 )
 ENDIF()

@@ -38,7 +38,11 @@ struct IPartitionDirectService
     virtual void UpdateVChunkConfig(
         const NStorage::NPartitionDirect::TVChunkConfig& cfg) = 0;
 
-    virtual void RequestAddHost(size_t directBlockGroupId) = 0;
+    // Query the addition of a new host to the group. The request is idempotent
+    // and can be repeated multiple times.
+    virtual void QueryAddHost(
+        size_t directBlockGroupId,
+        size_t newHostIndex) = 0;
 
     // Generates the next tablet-wide write LSN. Called by a vchunk on its
     // executor thread when it starts processing a write, so generation and

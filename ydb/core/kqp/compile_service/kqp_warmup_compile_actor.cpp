@@ -416,7 +416,7 @@ private:
     }
 
     void HandleCheckTopology() {
-        auto rm = TryGetKqpResourceManager(SelfId().NodeId());
+        auto rm = GetKqpResourceManager();
         if (!rm || !rm->GetInitialBoardSyncDone()) {
             Schedule(TopologyCheckInterval, new TEvPrivate::TEvCheckTopology());
             return;

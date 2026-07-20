@@ -285,10 +285,6 @@ public:
     virtual TVector<ui32> GetInitialBoardNodeIds() const = 0;
 
     virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() = 0;
-
-    virtual ui32 GetNodeId() {
-        return 0;
-    }
 };
 
 
@@ -324,12 +320,11 @@ struct TKqpProxySharedResources {
 };
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-    TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker = {},
+    const TIntrusivePtr<TKqpCounters>& counters, NActors::TActorId resourceBroker = {},
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources = nullptr,
-    ui32 nodeId = 0, TDuration warmupDeadline = TDuration::Zero());
+    TDuration warmupDeadline = TDuration::Zero());
 
-std::shared_ptr<NResourceManager::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());
-std::shared_ptr<NResourceManager::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());
+std::shared_ptr<NResourceManager::IKqpResourceManager> GetKqpResourceManager();
 
 } // namespace NKikimr::NKqp
 

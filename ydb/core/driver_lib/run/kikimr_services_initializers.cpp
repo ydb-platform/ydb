@@ -2443,11 +2443,10 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         }
 
         // Create resource manager
-        auto rm = NKqp::CreateKqpResourceManagerActor(Config.GetTableServiceConfig().GetResourceManager(), nullptr,
-            {}, kqpProxySharedResources, NodeId, warmupDeadline);
+        auto resourceManager = NKqp::CreateKqpResourceManagerActor(Config.GetTableServiceConfig().GetResourceManager(), nullptr, {}, kqpProxySharedResources, warmupDeadline);
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpRmServiceID(NodeId),
-            TActorSetupCmd(rm, TMailboxType::HTSwap, appData->UserPoolId)));
+            TActorSetupCmd(resourceManager, TMailboxType::HTSwap, appData->UserPoolId)));
 
         // We need to keep YqlLoggerScope alive as long as something may be trying to log
         GlobalObjects.AddGlobalObject(std::make_shared<NYql::NLog::YqlLoggerScope>(

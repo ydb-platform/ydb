@@ -512,10 +512,6 @@ public:
         MaxNonParallelDataQueryTasksLimit.store(config.GetMaxNonParallelDataQueryTasksLimit());
     }
 
-    ui32 GetNodeId() override {
-        return SelfId.NodeId();
-    }
-
     void FireResourcesPublishing() {
         bool prev = PublishScheduled.test_and_set();
         if (!prev) {
@@ -593,19 +589,13 @@ public:
 
     // state for resource info exchanger
     std::shared_ptr<TResourceSnapshotState> ResourceSnapshotState;
-    TActorId ResourceInfoExchanger = TActorId();
+    TActorId ResourceInfoExchanger;
 
     absl::flat_hash_map<std::pair<TString, TString>, TIntrusivePtr<TMemoryResource>, THash<std::pair<TString, TString>>> MemoryNamedPools;
 };
 
-struct TResourceManagers {
-    std::weak_ptr<TKqpResourceManager> Default;
-
-    TMutex Lock;
-    std::unordered_map<ui32, std::weak_ptr<TKqpResourceManager>> ByNodeId;
-};
-
-TResourceManagers ResourceManagers;
+TMutex ResourceManagerLock;
+std::weak_ptr<TKqpResourceManager> ResourceManagerSingleton;
 
 } // namespace
 
@@ -619,11 +609,9 @@ public:
     }
 
     TKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-        TIntrusivePtr<TKqpCounters> counters, const TActorId& resourceBrokerId,
-        std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources, ui32 nodeId,
-        TDuration warmupDeadline)
-        : NodeId(nodeId)
-        , Config(config)
+        const TIntrusivePtr<TKqpCounters>& counters, const TActorId& resourceBrokerId,
+        std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources, TDuration warmupDeadline)
+        : Config(config)
         , ResourceBrokerId(resourceBrokerId ? resourceBrokerId : MakeResourceBrokerID())
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
         , WarmupInProgress(warmupDeadline > TDuration::Zero())
@@ -639,11 +627,10 @@ public:
 
         ResourceManager->Registered(Config, sys, SelfId());
 
-        with_lock (ResourceManagers.Lock) {
-            if (ResourceManagers.Default.expired()) { // There can be several managers in tests
-                ResourceManagers.Default = ResourceManager;
+        with_lock (ResourceManagerLock) {
+            if (ResourceManagerSingleton.expired()) { // There can be several managers in tests
+                ResourceManagerSingleton = ResourceManager;
             }
-            ResourceManagers.ByNodeId[NodeId] = ResourceManager;
         }
     }
 
@@ -1024,7 +1011,6 @@ private:
     }
 
 private:
-    const ui32 NodeId;
     NKikimrConfig::TTableServiceConfig::TResourceManager Config;
 
     const TActorId ResourceBrokerId;
@@ -1056,41 +1042,15 @@ private:
 
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-    TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker,
-    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources, ui32 nodeId, TDuration warmupDeadline)
+    const TIntrusivePtr<TKqpCounters>& counters, NActors::TActorId resourceBroker,
+    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources, TDuration warmupDeadline)
 {
-    return new NResourceManager::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources), nodeId, warmupDeadline);
+    return new NResourceManager::TKqpResourceManagerActor(config, counters, resourceBroker, std::move(kqpProxySharedResources), warmupDeadline);
 }
 
-std::shared_ptr<NResourceManager::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> _nodeId) {
-    if (auto rm = TryGetKqpResourceManager(_nodeId)) {
-        return rm;
-    }
-
-    ui32 nodeId = _nodeId ? *_nodeId : TActivationContext::ActorSystem()->NodeId;
-    if (auto rm = TryGetKqpResourceManager(nodeId)) {
-        return rm;
-    }
-
-    Y_ABORT("KqpResourceManager not ready yet, node #%" PRIu32, nodeId);
-}
-
-std::shared_ptr<NResourceManager::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> _nodeId) {
-    ui32 nodeId = _nodeId ? *_nodeId : TActivationContext::ActorSystem()->NodeId;
-    std::shared_ptr<NResourceManager::TKqpResourceManager> rm = NResourceManager::ResourceManagers.Default.lock();
-    if (Y_LIKELY(rm && rm->GetNodeId() == nodeId)) {
-        return rm;
-    }
-
-    // for tests only
-    with_lock (NResourceManager::ResourceManagers.Lock) {
-        auto it = NResourceManager::ResourceManagers.ByNodeId.find(nodeId);
-        if (it != NResourceManager::ResourceManagers.ByNodeId.end()) {
-            return it->second.lock();
-        }
-    }
-
-    return nullptr;
+std::shared_ptr<NResourceManager::IKqpResourceManager> GetKqpResourceManager() {
+    TGuard lock(NResourceManager::ResourceManagerLock);
+    return NResourceManager::ResourceManagerSingleton.lock();
 }
 
 } // namespace NKikimr::NKqp

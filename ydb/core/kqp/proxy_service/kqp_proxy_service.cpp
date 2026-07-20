@@ -1051,9 +1051,9 @@ public:
                 && WarmupApplicable
                 && PeerProxyNodeResources.size() <= 1)
             {
-                auto rm = TryGetKqpResourceManager(SelfId().NodeId());
-                fastPoll = !rm || !rm->GetInitialBoardSyncDone()
-                    || rm->GetInitialBoardNodeIds().size() > 1;
+                auto resourceManager = GetKqpResourceManager();
+                fastPoll = !resourceManager || !resourceManager->GetInitialBoardSyncDone()
+                    || resourceManager->GetInitialBoardNodeIds().size() > 1;
             }
             if (fastPoll) {
                 d = TDuration::Seconds(2);

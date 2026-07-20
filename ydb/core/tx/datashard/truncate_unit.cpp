@@ -52,7 +52,7 @@ EExecutionStatus TTruncateUnit::Execute(
     const auto version = truncate.GetTableSchemaVersion();
     Y_ENSURE(version);
 
-    YDB_LOG_TRACE_CTX(actorCtx, "TTruncateUnit::Execute. Changing SchemaVersion. TableId New SchemaVersion TxId",
+    YDB_LOG_TRACE_CTX(actorCtx, "TTruncateUnit::Execute: changing schema version",
         {"localPathId", pathId.LocalPathId},
         {"version", version},
         {"txId", op->GetTxId()});
@@ -61,7 +61,7 @@ EExecutionStatus TTruncateUnit::Execute(
     Y_ENSURE(DataShard.GetUserTables().contains(tableId));
     auto localTid = DataShard.GetUserTables().at(tableId)->LocalTid;
 
-    YDB_LOG_DEBUG_CTX(actorCtx, "TTruncateUnit::Execute - About to TRUNCATE TABLE at TxId",
+    YDB_LOG_DEBUG_CTX(actorCtx, "TTruncateUnit::Execute: about to truncate table",
         {"tabletId", DataShard.TabletID()},
         {"tableId", tableId},
         {"localTid", localTid},
@@ -109,7 +109,7 @@ EExecutionStatus TTruncateUnit::Execute(
     DataShard.SysLocksTable().ApplyLocks();
     DataShard.SubscribeNewLocks(actorCtx);
 
-    YDB_LOG_DEBUG_CTX(actorCtx, "TTruncateUnit::Execute - Finished successfully. TableId TxId - Operation COMPLETED",
+    YDB_LOG_DEBUG_CTX(actorCtx, "TTruncateUnit::Execute: finished successfully",
         {"tableId", tableId},
         {"txId", op->GetTxId()});
 

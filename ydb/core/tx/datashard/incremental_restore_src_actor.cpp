@@ -122,7 +122,7 @@ public:
                 .SetReadAhead(readAheadLo, readAheadHi)
                 .SetReadPrio(TScanOptions::EReadPrio::Low));
 
-        YDB_LOG_INFO_CTX(ctx, "TIncrementalRestoreSrcActor[ started scan task at tablet",
+        YDB_LOG_INFO_CTX(ctx, "TIncrementalRestoreSrcActor: started scan task",
             {"selfId", SelfId()},
             {"scanTaskId", ScanTaskId},
             {"subOpTxId", SubOpTxId},
@@ -139,7 +139,7 @@ private:
             return;
         }
 
-        YDB_LOG_INFO_CTX(ctx, "TIncrementalRestoreSrcActor[ scan finished",
+        YDB_LOG_INFO_CTX(ctx, "TIncrementalRestoreSrcActor: scan finished",
             {"selfId", SelfId()},
             {"subOpTxId", SubOpTxId},
             {"success", msg->Success},
@@ -207,8 +207,8 @@ namespace NKikimr::NDataShard {
 void TDataShard::Handle(TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPtr& ev,
                         const TActorContext& ctx) {
     const auto& rec = ev->Get()->Record;
-    YDB_LOG_INFO_CTX(ctx, "TEvIncrementalRestoreSrcCreateRequest received at tablet",
-        {"tabletID", TabletID()},
+    YDB_LOG_INFO_CTX(ctx, "TIncrementalRestoreSrcActor: TEvIncrementalRestoreSrcCreateRequest received",
+        {"tabletId", TabletID()},
         {"operationId", rec.GetOperationId()},
         {"subOpTxId", rec.GetSubOpTxId()},
         {"shardIdx", rec.GetShardIdx()},

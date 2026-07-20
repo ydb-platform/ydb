@@ -162,7 +162,7 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
     TDuration duration = TAppData::TimeProvider->Now() - op->GetReceivedAt();
     res->Record.SetProposeLatency(duration.MilliSeconds());
 
-    YDB_LOG_TRACE_CTX(ctx, "Propose transaction complete txid at tablet send to client, ms, ms",
+    YDB_LOG_TRACE_CTX(ctx, "TFinishProposeUnit::CompleteRequest: propose transaction complete, sending result to client",
         {"txId", op->GetTxId()},
         {"tabletId", DataShard.TabletID()},
         {"execLatency", res->Record.GetExecLatency()},

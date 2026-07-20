@@ -70,7 +70,7 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
         const auto& kqpLocks = writeTx->GetKqpLocks() ? writeTx->GetKqpLocks().value() : NKikimrDataEvents::TKqpLocks{};
         KqpFillOutReadSets(op->OutReadSets(), kqpLocks, true, DataShard.SysLocksTable(), tabletId);
     } catch (const TNotReadyTabletException&) {
-        YDB_LOG_CRIT_CTX(ctx, "Unexpected TNotReadyTabletException exception at build out rs");
+        YDB_LOG_CRIT_CTX(ctx, "TBuildWriteOutRSUnit::Execute: unexpected TNotReadyTabletException while building out readset");
         return OnTabletNotReady(*writeOp, txc, ctx);
     } catch (const yexception& e) {
         YDB_LOG_CRIT_CTX(ctx, "Exception while preparing out-readsets for KQP transaction",

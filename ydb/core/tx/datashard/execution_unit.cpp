@@ -212,8 +212,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
             BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        YDB_LOG_NOTICE_CTX(ctx, "",
-            {"err", err});
+        YDB_LOG_NOTICE_CTX(ctx, "TExecutionUnit::CheckRejectDataTx: wrong shard state",
+            {"errorMessage", err});
 
         op->Abort();
         return true;
@@ -230,14 +230,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        YDB_LOG_NOTICE_CTX(ctx, "",
-            {"err", err});
-
-        op->Abort();
-        return true;
-    }
-
-    if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) {
+        YDB_LOG_NOTICE_CTX(ctx, "TExecutionUnit::CheckRejectDataTx: tablet is restarting",
+            {"errorMessage", err});
         TString err = TStringBuilder()
                 << "Can't execute at blocked shard: " << " tablet id: " << DataShard.TabletID();
 
@@ -269,15 +263,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
                 ->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
         }
 
-        YDB_LOG_NOTICE_CTX(ctx, "",
-            {"err", err});
-
-        op->Abort();
-        return true;
-    }
-
-    return false;
-}
+        YDB_LOG_NOTICE_CTX(ctx, "TExecutionUnit::CheckRejectDataTx: cannot execute write tx at replicated table",
+            {"errorMessage", err});
 
 bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
     if (DataShard.GetState() == TShardState::SplitSrcWaitForNoTxInFlight ||

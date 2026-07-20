@@ -101,8 +101,8 @@ public:
                 << " tx " << op->GetTxId()
                 << " at blocked shard " << DataShard.TabletID();
 
-            YDB_LOG_NOTICE_CTX(ctx, "",
-                {"err", err});
+            YDB_LOG_NOTICE_CTX(ctx, "TCheckDistributedEraseTxUnit::Execute: cannot propose tx at blocked shard",
+                {"errorMessage", err});
             return buildUnsuccessfulResult(
                 err,
                 NKikimrTxDataShard::TEvProposeTransactionResult::ERROR,
@@ -112,7 +112,7 @@ public:
 
         BuildResult(op)->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
 
-        YDB_LOG_DEBUG_CTX(ctx, "Prepared transaction txId at tablet",
+        YDB_LOG_DEBUG_CTX(ctx, "TCheckDistributedEraseTxUnit::Execute: prepared transaction",
             {"opKind", op->GetKind()},
             {"txId", op->GetTxId()},
             {"tabletId", DataShard.TabletID()});

@@ -120,8 +120,8 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
-            YDB_LOG_NOTICE_CTX(ctx, "",
-                {"err", err});
+            YDB_LOG_NOTICE_CTX(ctx, "TCheckWriteUnit::Execute: cannot propose tx at blocked shard",
+                {"errorMessage", err});
 
             return EExecutionStatus::Executed;
         }
@@ -135,7 +135,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                 DataShard.GetProcessingParams() ? DataShard.GetProcessingParams()->GetCoordinators() : google::protobuf::RepeatedField<ui64>{}
             }
             ));
-        YDB_LOG_DEBUG_CTX(ctx, "Prepared write transaction at tablet",
+        YDB_LOG_DEBUG_CTX(ctx, "TCheckWriteUnit::Execute: prepared write transaction",
             {"operation", *op},
             {"tabletId", DataShard.TabletID()});
     }

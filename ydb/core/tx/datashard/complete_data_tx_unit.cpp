@@ -87,7 +87,7 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
 
     if (DataShard.GetDataTxProfileLogThresholdMs()
         && duration.MilliSeconds() >= DataShard.GetDataTxProfileLogThresholdMs()) {
-        YDB_LOG_WARN_CTX(ctx, "",
+        YDB_LOG_WARN_CTX(ctx, "TCompleteOperationUnit::CompleteOperation: slow transaction execution profile",
             {"executionProfile", op->ExecutionProfileLogString(DataShard.TabletID())});
     }
 

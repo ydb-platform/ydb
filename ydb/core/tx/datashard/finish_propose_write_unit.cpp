@@ -159,7 +159,7 @@ void TFinishProposeWriteUnit::CompleteRequest(TOperation::TPtr op, const TActorC
 
     TDuration duration = TAppData::TimeProvider->Now() - op->GetReceivedAt();
 
-    YDB_LOG_TRACE_CTX(ctx, "Propose transaction complete txid at tablet send to client, propose ms",
+    YDB_LOG_TRACE_CTX(ctx, "TFinishProposeWriteUnit::CompleteRequest: propose transaction complete, sending result to client",
         {"txId", op->GetTxId()},
         {"tabletId", DataShard.TabletID()},
         {"latency", duration.MilliSeconds()},

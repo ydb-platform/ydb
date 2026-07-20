@@ -32,9 +32,9 @@ void TKeyValidator::AddReadRange(const TTableId& tableId, const TVector<NTable::
         columnOps.emplace_back(std::move(op));
     }
 
-    YDB_LOG_TRACE("--",
-        {"addReadRange", DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry)},
-        {"table", tableId});
+    YDB_LOG_TRACE("Adding read range to key validator",
+        {"readRange", DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry)},
+        {"tableId", tableId});
 
     auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columnOps, itemsLimit, 0 /* bytesLimit */, reverse);
 
@@ -55,9 +55,9 @@ void TKeyValidator::AddWriteRange(const TTableId& tableId, const TTableRange& ra
         columnOps.emplace_back(std::move(op));
     }
 
-    YDB_LOG_TRACE("--",
-        {"addWriteRange", DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry)},
-        {"table", tableId});
+    YDB_LOG_TRACE("Adding write range to key validator",
+        {"writeRange", DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry)},
+        {"tableId", tableId});
 
     auto rowOp = isPureEraseOp ? TKeyDesc::ERowOperation::Erase : TKeyDesc::ERowOperation::Update;
     auto desc = MakeHolder<TKeyDesc>(tableId, range, rowOp, keyTypes, columnOps);

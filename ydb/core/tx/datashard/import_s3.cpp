@@ -649,7 +649,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void AllocateResource() {
-        YDB_LOG_DEBUG("[Import]",
+        YDB_LOG_DEBUG("[Import] Submitting resource broker task",
             {"logPrefix", LogPrefix()});
 
         const auto* appData = AppData();
@@ -665,7 +665,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Handle(TEvResourceBroker::TEvResourceAllocated::TPtr& ev) {
-        YDB_LOG_INFO("[Import]",
+        YDB_LOG_INFO("[Import] Resource broker task allocated",
             {"logPrefix", LogPrefix()},
             {"taskId", ev->Get()->TaskId});
 
@@ -691,7 +691,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Restart() {
-        YDB_LOG_NOTICE("[Import]",
+        YDB_LOG_NOTICE("[Import] Restarting import",
             {"logPrefix", LogPrefix()},
             {"attempt", Attempt});
 
@@ -706,7 +706,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void HeadObject(const TString& key) {
-        YDB_LOG_DEBUG("[Import]",
+        YDB_LOG_DEBUG("[Import] Sending HeadObject request",
             {"logPrefix", LogPrefix()},
             {"key", key});
 
@@ -717,7 +717,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void GetObject(const TString& key, const std::pair<ui64, ui64>& range) {
-        YDB_LOG_DEBUG("[Import]",
+        YDB_LOG_DEBUG("[Import] Sending GetObject request",
             {"logPrefix", LogPrefix()},
             {"key", key},
             {"range", range.first},
@@ -731,7 +731,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
-        YDB_LOG_DEBUG("[Import]",
+        YDB_LOG_DEBUG("[Import] Received HeadObject response",
             {"logPrefix", LogPrefix()},
             {"ev", ev->Get()->ToString()});
 
@@ -742,10 +742,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             case S3Errors::NO_SUCH_KEY:
                 break;
             default:
-                YDB_LOG_ERROR("[Import]",
-                    {"logPrefix", LogPrefix()},
-                    {"error", result});
-                return RetryOrFinish(result.GetError());
+                YDB_LOG_ERROR("[Import] HeadObject request failed",
             }
 
             CompressionCodec = NBackupRestoreTraits::NextCompressionCodec(CompressionCodec);
@@ -793,13 +790,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             // Encrypted file can not have zero length
             const TString error = TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
                 << ": file is corrupted";
-            YDB_LOG_ERROR("[Import]",
-                {"logPrefix", LogPrefix()},
-                {"error", error});
-            return Finish(false, error);
-        }
-
-        if (Checksum) {
+            YDB_LOG_ERROR("[Import] Import data file is corrupted",
             HeadObject(ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None)));
             this->Become(&TThis::StateDownloadChecksum);
         } else {
@@ -808,11 +799,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Handle(TEvDataShard::TEvS3DownloadInfo::TPtr& ev) {
-        YDB_LOG_DEBUG("[Import]",
-            {"logPrefix", LogPrefix()},
-            {"ev", ev->Get()->ToString()});
-
-        const auto& info = ev->Get()->Info;
+        YDB_LOG_DEBUG("[Import] Received S3 download info",
         if (!info.DataETag) {
             this->Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {
                 ETag, ProcessedBytes, WrittenBytes, WrittenRows, ProcessedChecksumState, DownloadState
@@ -1064,7 +1051,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     // --- Direct part import (EnableDataShardDirectPartImport) ---
 
     void BeginDirectImport() {
-        YDB_LOG_INFO("[Import]",
+        YDB_LOG_INFO("[Import] Beginning direct import",
             {"logPrefix", LogPrefix()});
         this->Send(DataShard, new TEvDataShard::TEvS3DirectWriteBegin(TxId, TableInfo.GetId()));
     }
@@ -1133,7 +1120,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         info.WrittenRows = WrittenRows;
         info.ProcessedChecksumState = ProcessedChecksumState;
 
-        YDB_LOG_INFO("[Import]",
+        YDB_LOG_INFO("[Import] Direct import completed",
             {"logPrefix", LogPrefix()},
             {"writtenBytes", WrittenBytes},
             {"writtenRows", WrittenRows});

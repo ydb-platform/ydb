@@ -49,13 +49,13 @@ bool TPlanQueueUnit::IsReadyToExecute(TOperation::TPtr op) const
 TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
 {
     if (Pipeline.OutOfOrderLimits()) {
-        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at out-of-order limits exceeded",
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit::FindReadyOperation: out-of-order limits exceeded",
             {"tabletId", DataShard.TabletID()});
         return nullptr;
     }
 
     if (!OpsInFly.size()) {
-        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at has no attached operations",
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit::FindReadyOperation: has no attached operations",
             {"tabletId", DataShard.TabletID()});
         return nullptr;
     }
@@ -65,7 +65,7 @@ TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
     auto op = Pipeline.GetNextPlannedOp(step, txId);
 
     if (!op) {
-        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at couldn't find next planned operation after",
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit::FindReadyOperation: couldn't find next planned operation",
             {"tabletId", DataShard.TabletID()},
             {"step", step},
             {"txId", txId});
@@ -73,21 +73,21 @@ TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
     }
 
     if (op->IsInProgress()) {
-        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at found next planned operation which is already in progress",
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit::FindReadyOperation: found next planned operation is already in progress",
             {"tabletId", DataShard.TabletID()},
             {"operation", *op});
         return nullptr;
     }
 
     if (!Pipeline.CanRunOp(*op)) {
-        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at cannot run found next planned operation",
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit::FindReadyOperation: cannot run found next planned operation",
             {"tabletId", DataShard.TabletID()},
             {"operation", *op});
         return nullptr;
     }
 
     if (op->GetCurrentUnit() != Kind) {
-        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit at found next planned operation is executing on unit",
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TPlanQueueUnit::FindReadyOperation: found next planned operation is executing on another unit",
             {"tabletId", DataShard.TabletID()},
             {"operation", *op},
             {"currentUnit", op->GetCurrentUnit()});

@@ -124,7 +124,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
     else {
         ui64 consumed = tx->GetDataTx()->GetTxSize() + engine->GetMemoryAllocated();
         if (MaybeRequestMoreTxMemory(consumed, txc)) {
-            YDB_LOG_TRACE_CTX(ctx, "Operation at requested more memory",
+            YDB_LOG_TRACE_CTX(ctx, "TExecuteDataTxUnit::Execute: requested more memory",
                 {"operation", *op},
                 {"tabletId", DataShard.TabletID()},
                 {"requestedMemory", txc.GetRequestedMemory()});
@@ -179,7 +179,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
             throw;
         }
     } catch (const TMemoryLimitExceededException&) {
-        YDB_LOG_TRACE_CTX(ctx, "Operation at exceeded memory limit and requests more for the next try",
+        YDB_LOG_TRACE_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: exceeded memory limit and requests more for the next try",
             {"operation", *op},
             {"tabletId", DataShard.TabletID()},
             {"memoryLimit", txc.GetMemoryLimit()},
@@ -196,7 +196,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 
         return EExecutionStatus::Restart;
     } catch (const TNotReadyTabletException&) {
-        YDB_LOG_TRACE_CTX(ctx, "Tablet is not ready for execution",
+        YDB_LOG_TRACE_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: tablet is not ready for execution",
             {"tabletId", DataShard.TabletID()},
             {"operation", *op});
 
@@ -207,7 +207,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 
         return EExecutionStatus::Restart;
     } catch (const TRollbackAndWaitException&) {
-        YDB_LOG_TRACE_CTX(ctx, "Tablet needs to wait for dependencies",
+        YDB_LOG_TRACE_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: tablet needs to wait for dependencies",
             {"tabletId", DataShard.TabletID()},
             {"operation", *op});
 
@@ -277,17 +277,17 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
 
         switch (engineResult) {
             case IEngineFlat::EResult::ResultTooBig:
-                YDB_LOG_ERROR_CTX(ctx, "",
+                YDB_LOG_ERROR_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: result too big",
                     {"errorMessage", errorMessage});
                 break;
             case IEngineFlat::EResult::Cancelled:
-                YDB_LOG_NOTICE_CTX(ctx, "",
+                YDB_LOG_NOTICE_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: execution cancelled",
                     {"errorMessage", errorMessage});
                 Y_ENSURE(tx->GetDataTx()->CanCancel());
                 break;
             default:
                 if (op->IsReadOnly() || op->IsImmediate()) {
-                    YDB_LOG_CRIT_CTX(ctx, "",
+                    YDB_LOG_CRIT_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: unexpected execution error",
                         {"errorMessage", errorMessage});
                 } else {
                     // TODO: Kill only current datashard tablet.
@@ -316,7 +316,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
         op->ChangeRecords() = std::move(tx->GetDataTx()->GetCollectedChanges());
     }
 
-    YDB_LOG_TRACE_CTX(ctx, "Executed operation at tablet with status",
+    YDB_LOG_TRACE_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: executed operation with status",
         {"operation", *op},
         {"tabletId", DataShard.TabletID()},
         {"resultStatus", result->GetStatus()});
@@ -379,7 +379,7 @@ void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorConte
 
     for (const auto& lock : locks) {
         if (lock.IsError()) {
-            YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Lock is not set for at lock",
+            YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "TExecuteDataTxUnit::AddLocksToResult: lock is not set",
                 {"operation", *op},
                 {"tabletId", DataShard.TabletID()},
                 {"lock", lock});

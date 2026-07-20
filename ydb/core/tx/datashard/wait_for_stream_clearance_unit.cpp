@@ -202,8 +202,8 @@ void TWaitForStreamClearanceUnit::Abort(const TString &err,
         tx->SetScanSnapshotId(0);
     }
 
-    YDB_LOG_NOTICE_CTX(ctx, "",
-        {"err", err});
+    YDB_LOG_NOTICE_CTX(ctx, "TWaitForStreamClearanceUnit::Abort: aborting operation",
+        {"errorMessage", err});
 
     op->ResetWaitingForStreamClearanceFlag();
 }

@@ -153,7 +153,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     const auto version = alterTableTx.GetTableSchemaVersion();
     Y_ENSURE(version);
 
-    YDB_LOG_INFO_CTX(ctx, "Trying to ALTER TABLE at version",
+    YDB_LOG_INFO_CTX(ctx, "TAlterTableUnit::Execute: trying to alter table",
         {"tabletId", DataShard.TabletID()},
         {"version", version});
 

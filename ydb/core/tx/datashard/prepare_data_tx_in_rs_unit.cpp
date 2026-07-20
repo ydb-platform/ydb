@@ -79,7 +79,7 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
                                              TVector<TRSData>()));
         }
     } catch (const TMemoryLimitExceededException &) {
-        YDB_LOG_TRACE_CTX(ctx, "Operation at exceeded memory limit and requests more for the next try",
+        YDB_LOG_TRACE_CTX(ctx, "TPrepareDataTxInRSUnit::Execute: exceeded memory limit and requests more for the next try",
             {"operation", *op},
             {"tabletId", DataShard.TabletID()},
             {"memoryLimit", txc.GetMemoryLimit()},
@@ -92,7 +92,7 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
 
         return EExecutionStatus::Restart;
     } catch (const TNotReadyTabletException&) {
-        YDB_LOG_TRACE_CTX(ctx, "Tablet is not ready for execution",
+        YDB_LOG_TRACE_CTX(ctx, "TPrepareDataTxInRSUnit::Execute: tablet is not ready for execution",
             {"tabletId", DataShard.TabletID()},
             {"operation", *op});
 

@@ -241,8 +241,8 @@ void TReadTableScanUnit::Abort(const TString &err,
         tx->SetScanTask(0);
     }
 
-    YDB_LOG_NOTICE_CTX(ctx, "",
-        {"err", err});
+    YDB_LOG_NOTICE_CTX(ctx, "TReadTableScanUnit::Abort: aborting operation",
+        {"errorMessage", err});
 
     op->ResetWaitingForScanFlag();
 }

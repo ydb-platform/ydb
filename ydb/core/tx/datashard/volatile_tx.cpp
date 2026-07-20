@@ -853,7 +853,7 @@ namespace NKikimr::NDataShard {
         ui64 dstTabletId = record.GetTabletDest();
 
         if (dstTabletId != Self->TabletID()) {
-            YDB_LOG_WARN("Unexpected readset from to at tablet",
+            YDB_LOG_WARN("Unexpected readset from participant",
                 {"srcTabletId", srcTabletId},
                 {"dstTabletId", dstTabletId},
                 {"tabletId", Self->TabletID()});
@@ -874,7 +874,7 @@ namespace NKikimr::NDataShard {
             if (record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA) {
                 Y_ENSURE(!(record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET),
                     "Unexpected FLAG_EXPECT_READSET + FLAG_NO_DATA in ProcessReadSet");
-                YDB_LOG_TRACE("Processed readset without data from to at tablet",
+                YDB_LOG_TRACE("TVolatileTxManager::ProcessReadSet: processed readset without data",
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
                     {"tabletId", Self->TabletID()});
@@ -886,7 +886,7 @@ namespace NKikimr::NDataShard {
             Y_ENSURE(ok, "Failed to parse readset from " << srcTabletId << " to " << dstTabletId);
 
             if (data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
-                YDB_LOG_TRACE("Processed readset with decision from to at tablet",
+                YDB_LOG_TRACE("TVolatileTxManager::ProcessReadSet: processed readset with decision",
                     {"decision", ui32(data.GetDecision())},
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
@@ -895,11 +895,11 @@ namespace NKikimr::NDataShard {
             }
 
             if (record.GetStep() != info->Version.Step) {
-                YDB_LOG_TRACE("Processed readset from to with step expecting treating like abort due to divergence at tablet",
+                YDB_LOG_TRACE("TVolatileTxManager::ProcessReadSet: readset step mismatch, treating like abort due to divergence",
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
-                    {"step", record.GetStep()},
-                    {"step", info->Version.Step},
+                    {"receivedStep", record.GetStep()},
+                    {"expectedStep", info->Version.Step},
                     {"tabletId", Self->TabletID()});
                 return false;
             }

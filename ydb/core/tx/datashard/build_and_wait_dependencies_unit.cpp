@@ -104,7 +104,7 @@ EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
                 if (DataShard.TryCaptureTxCache(mem)) {
                     tx->SetTxCacheUsage(mem);
                 } else {
-                    YDB_LOG_INFO_CTX(ctx, "TBuildAndWaitDependenciesUnit at released data for tx",
+                    YDB_LOG_INFO_CTX(ctx, "TBuildAndWaitDependenciesUnit::Execute: released data for tx",
                         {"tabletId", DataShard.TabletID()},
                         {"txId", tx->GetTxId()});
 

@@ -143,15 +143,15 @@ public:
                 BuildResult(op)->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);
                 op->Abort(EExecutionUnitKind::FinishPropose);
 
-                YDB_LOG_NOTICE_CTX(ctx, "",
-                    {"err", err});
+                YDB_LOG_NOTICE_CTX(ctx, "TCheckSnapshotTxUnit::Execute: cannot propose tx at blocked shard",
+                    {"errorMessage", err});
 
                 return EExecutionStatus::Executed;
             }
 
             BuildResult(op)->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
 
-            YDB_LOG_DEBUG_CTX(ctx, "Prepared transaction txId at tablet",
+            YDB_LOG_DEBUG_CTX(ctx, "TCheckSnapshotTxUnit::Execute: prepared transaction",
                 {"opKind", op->GetKind()},
                 {"txId", op->GetTxId()},
                 {"tabletId", DataShard.TabletID()});

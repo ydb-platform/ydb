@@ -58,7 +58,7 @@ private:
 
     STATEFN(StateWork) {
         YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             HFunc(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk, Handle);

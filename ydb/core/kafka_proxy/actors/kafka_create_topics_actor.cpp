@@ -61,7 +61,7 @@ NActors::IActor* CreateKafkaCreateTopicsActor(
 
 void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
     YDB_LOG_DEBUG("Dump logPrefix, inputLogMessage",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"inputLogMessage", InputLogMessage()});
 
     if (Message->ValidateOnly) {
@@ -173,7 +173,7 @@ void TKafkaCreateTopicsActor::Handle(const NKikimr::NPQ::NSchema::TEvSchemaRespo
     auto eventPtr = ev->Release();
 
     YDB_LOG_DEBUG("Create topics actor. Topic's response received",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"path", eventPtr->Path},
         {"status", std::to_string(eventPtr->Status)});
 

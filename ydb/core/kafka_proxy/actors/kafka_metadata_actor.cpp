@@ -64,7 +64,7 @@ void TKafkaMetadataActor::HandleDiscoveryError(TEvDiscovery::TEvError::TPtr& ev)
     PendingResponses--;
     HaveError = true;
     YDB_LOG_ERROR("Port discovery failed for database with error request",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"databasePath", Context->DatabasePath},
         {"error", ev->Get()->Error},
         {"correlationId", CorrelationId});
@@ -96,7 +96,7 @@ void TKafkaMetadataActor::ProcessDiscoveryData(TEvDiscovery::TEvDiscoveryData::T
     }
     if (!ok) {
         YDB_LOG_ERROR("Port discovery failed, unable to parse discovery response for request",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"correlationId", CorrelationId});
         HaveError = true;
         return;
@@ -153,7 +153,7 @@ void TKafkaMetadataActor::AddTopic(const TString& topic, ui64 index) {
 
 TActorId TKafkaMetadataActor::SendTopicRequest(const TString& topic) {
     YDB_LOG_DEBUG("Describe partitions locations for topic for user",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"topic", topic},
         {"userName", GetUsernameOrAnonymous(Context)});
 
@@ -248,13 +248,13 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
 
     if (actorIter.IsEnd()) {
         YDB_LOG_CRIT("Got unexpected location response, ignoring. Expect malformed/incompled reply",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         return RespondIfRequired(ctx);
     }
 
     if (actorIter->second.empty()) {
         YDB_LOG_CRIT("Corrupted state (empty actorId in mapping). Ignored location response, expect incomplete reply",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         return RespondIfRequired(ctx);
     }
 
@@ -263,7 +263,7 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
         Ydb::StatusIds::StatusCode status = locationResponse->Status;
         if (status == Ydb::StatusIds::SUCCESS) {
             YDB_LOG_DEBUG("Describe topic location finishied successful",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"topicName", topic.Name});
             PendingTopicResponses.emplace(index, locationResponse);
         } else if (status == Ydb::StatusIds::SCHEME_ERROR
@@ -272,14 +272,14 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
                 && TopicСreationAttempts.find(*topic.Name) == TopicСreationAttempts.end()
             ) {
             YDB_LOG_DEBUG("Sending create topic' request",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"topicName", topic.Name});
             TopicСreationAttempts.insert(*topic.Name);
             PendingResponses++;
             SendCreateTopicsRequest(*topic.Name, index, ctx);
         } else {
             YDB_LOG_ERROR("Describe topic location finishied with error",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"topicName", topic.Name},
                 {"code", locationResponse->Status},
                 {"issues", locationResponse->Issues.ToOneLineString()});
@@ -372,7 +372,7 @@ void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
             if (topicNodes.empty()) {
                     // Already tried YDB discovery. Throw error
                     YDB_LOG_ERROR("Could not discovery kafka port for topic",
-                        {"logPrefix", LogPrefix()},
+                        {LogPrefix()},
                         {"topicName", topic.Name});
                     AddTopicError(topic, EKafkaErrors::LISTENER_NOT_FOUND);
             } else {

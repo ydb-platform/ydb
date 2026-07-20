@@ -22,7 +22,7 @@ void KafkaReadSessionProxyActor::DoHandle(TRequest& ev, const TString& event) {
     if constexpr (handlePending) {
         if (Context->ReadSession.PendingBalancingMode.has_value()) {
             YDB_LOG_DEBUG("DoHandle with pending balance mode",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"event", event});
             auto response = CreateChangeResponse(*ev->Get()->Request);
             Send(Context->ConnectionId, new TEvKafka::TEvResponse(ev->Get()->CorrelationId, response, EKafkaErrors::REBALANCE_IN_PROGRESS));
@@ -31,7 +31,7 @@ void KafkaReadSessionProxyActor::DoHandle(TRequest& ev, const TString& event) {
     }
 
     YDB_LOG_DEBUG("DoHandle",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"event", event});
     switch (Context->ReadSession.BalancingMode) {
         case EBalancingMode::Native:
@@ -47,11 +47,11 @@ void KafkaReadSessionProxyActor::DoHandle(TRequest& ev, const TString& event) {
 
 void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvJoinGroupRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvKafka::TEvJoinGroupRequest",
-        {"logPrefix", LogPrefix()});
+        {LogPrefix()});
     Context->ReadSession.BalancingMode = Context->ReadSession.PendingBalancingMode.value_or(GetBalancingMode(*ev->Get()->Request));
     Context->ReadSession.PendingBalancingMode.reset();
     YDB_LOG_DEBUG("Balancing",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"mode", Context->ReadSession.BalancingMode});
 
     DoHandle<false>(ev, "TEvKafka::TEvJoinGroupRequest");
@@ -71,7 +71,7 @@ void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvLeaveGroupRequest::TPtr& ev
 
 void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvFetchRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvKafka::TEvFetchRequest",
-        {"logPrefix", LogPrefix()});
+        {LogPrefix()});
     Register(CreateKafkaFetchActor(Context, ev->Get()->CorrelationId, ev->Get()->Request));
 }
 

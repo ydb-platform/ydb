@@ -247,7 +247,7 @@ void TKafkaSaslAuthActor::SendResponse() {
     responseToClient->ErrorMessage = "";
 
     YDB_LOG_DEBUG("Authentication first step finished. FirstServerMessage='",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"authResponse", AuthResponse});
 
     auto evResponse = std::make_unique<TEvKafka::TEvResponse>(CorrelationId, responseToClient, EKafkaErrors::NONE_ERROR);
@@ -269,7 +269,7 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::Status
         authenticationFailureReason << (errorMessage ? " " + errorMessage : "")
             << (details ? " " + details : "");
         YDB_LOG_ERROR("Authentication failure",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"authenticationFailureReason", authenticationFailureReason});
         const auto& securityConfig = AppData()->DomainsConfig.GetSecurityConfig();
         TStringBuilder responseErrorMessage;
@@ -284,7 +284,7 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::Status
         Send(Context->ConnectionId, authResult);
     } else {
         YDB_LOG_DEBUG("Authentication success. Database=' FolderId=' ServiceAccountId=' DatabaseId=' Coordinator=' ResourcePath='",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"databasePath", DatabasePath},
             {"folderId", FolderId},
             {"serviceAccountId", ServiceAccountId},

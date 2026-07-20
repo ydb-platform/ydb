@@ -67,7 +67,7 @@ void TKafkaListOffsetsActor::HandleMissingTopicName(const TListOffsetsRequestDat
 
 TActorId TKafkaListOffsetsActor::SendOffsetsRequest(const TListOffsetsRequestData::TListOffsetsTopic& topic, const NActors::TActorContext&) {
     YDB_LOG_DEBUG("ListOffsets actor: Get offsets for topic for user",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"topicName", topic.Name},
         {"userName", GetUsernameOrAnonymous(Context)});
 
@@ -91,7 +91,7 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
     Y_DEBUG_ABORT_UNLESS(it != TopicsRequestsInfo.end());
     if (it == TopicsRequestsInfo.end()) {
         YDB_LOG_CRIT("ListOffsets actor: received unexpected TEvTopicOffsetsResponse. Ignoring",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         return RespondIfRequired(ctx);
     }
 
@@ -111,7 +111,7 @@ void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev,
             auto it = responseFromPQPartitionsMap.find(partitionRequestInfo.PartitionId);
             if (it == responseFromPQPartitionsMap.end()) {
                 YDB_LOG_CRIT("ListOffsets actor: partition not found. Expect malformed/incompled reply",
-                    {"logPrefix", LogPrefix()});
+                    {LogPrefix()});
                 continue;
             }
             auto& responseFromPQPartition = it->second;

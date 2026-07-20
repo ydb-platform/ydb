@@ -56,7 +56,7 @@ public:
         , TimestampType(timestampType)
     {
         YDB_LOG_DEBUG("Alter configs actor",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"databaseName", databaseName},
             {"topicPath", TopicPath});
     };
@@ -123,7 +123,7 @@ NActors::IActor* CreateKafkaAlterConfigsActor(
 void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
     YDB_LOG_DEBUG("Dump logPrefix, inputLogMessage",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"inputLogMessage", InputLogMessage()});
 
     if (Message->ValidateOnly) {
@@ -275,7 +275,7 @@ void TKafkaAlterConfigsActor::ProcessValidateOnly(const NActors::TActorContext& 
     }
 
     YDB_LOG_DEBUG("KLACK TKafkaAlterConfigsActor::ProcessValidateOnly: CorrelationId",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"correlationId", CorrelationId});
     Send(Context->ConnectionId,
         new TEvKafka::TEvResponse(CorrelationId, response, NONE_ERROR));

@@ -144,7 +144,7 @@ public:
         MemberId = JoinGroupRequestData->MemberId.value_or("");
 
         YDB_LOG_DEBUG_COMP(NKikimrServices::KAFKA_PROXY, "JOIN_GROUP request",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"memberId", MemberId});
 
         if (JoinGroupRequestData->SessionTimeoutMs) {

@@ -73,7 +73,7 @@ namespace NKafka {
                     }
                 } catch (const yexception& y) {
                     YDB_LOG_CRIT_COMP(NKikimrServices::KAFKA_PROXY, "Critical error happened",
-                        {"logPrefix", LogPrefix()},
+                        {LogPrefix()},
                         {"reason", y.what()});
                     if (EndTxnRequestPtr) {
                         SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::UNKNOWN_SERVER_ERROR, y.what());

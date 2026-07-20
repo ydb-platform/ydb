@@ -35,7 +35,7 @@ public:
 private:
     STATEFN(StateWork) {
         YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvKafka::TEvAuthRequest, HandleAuthRequest);
@@ -46,7 +46,7 @@ private:
 
     STATEFN(StateResolveDatabase) {
         YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
@@ -56,7 +56,7 @@ private:
 
     STATEFN(StateResolveSharedDatabase) {
         YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
@@ -66,7 +66,7 @@ private:
 
     STATEFN(StateSaslPlainLogin) {
         YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             HFunc(NSasl::TEvSasl::TEvSaslPlainLoginResponse, HandleLoginResult);
@@ -78,7 +78,7 @@ private:
 
     STATEFN(StateSaslScramLogin) {
         YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             hFunc(NSasl::TEvSasl::TEvSaslScramFirstServerResponse, HandleFirstLoginResponse);
@@ -91,7 +91,7 @@ private:
 
     STATEFN(StateTicketResolve) {
         YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"event", (*ev.Get()).GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);

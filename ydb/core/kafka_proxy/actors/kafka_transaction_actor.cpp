@@ -25,7 +25,7 @@ namespace NKafka {
 
     void TTransactionActor::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext&){
         YDB_LOG_DEBUG("Received ADD_PARTITIONS_TO_TXN request",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         VALIDATE_PRODUCER_IN_REQUEST(TAddPartitionsToTxnResponseData);
 
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
@@ -41,14 +41,14 @@ namespace NKafka {
     // Thus we can just ignore this request.
     void TTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext&) {
         YDB_LOG_DEBUG("Received ADD_OFFSETS_TO_TXN request",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         VALIDATE_PRODUCER_IN_REQUEST(TAddOffsetsToTxnResponseData);
         SendOkResponse<TAddOffsetsToTxnResponseData>(ev);
     }
 
     void TTransactionActor::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext&) {
         YDB_LOG_DEBUG("Received TXN_OFFSET_COMMIT request",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         VALIDATE_PRODUCER_IN_REQUEST(TTxnOffsetCommitResponseData);
 
         // save offsets for future use
@@ -85,7 +85,7 @@ namespace NKafka {
     */
     void TTransactionActor::Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx) {
         YDB_LOG_DEBUG("Received END_TXN request",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         VALIDATE_PRODUCER_IN_REQUEST(TEndTxnResponseData);
 
         bool txnAborted = !ev->Get()->Request->Committed;
@@ -110,7 +110,7 @@ namespace NKafka {
 
     void TTransactionActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
         YDB_LOG_DEBUG("KQP session created",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
             Die(ctx);
@@ -124,11 +124,11 @@ namespace NKafka {
 
     void TTransactionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         YDB_LOG_DEBUG("Received query response from KQP for request",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"lastSentToKqpRequest", GetAsStr(LastSentToKqpRequest)});
         if (auto error = GetErrorFromYdbResponse(ev)) {
             YDB_LOG_WARN(error,
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"error", error});
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());
             Die(ctx);
@@ -153,14 +153,14 @@ namespace NKafka {
     void TTransactionActor::StartKqpSession(const TActorContext& ctx) {
         Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
         YDB_LOG_DEBUG("Sending create session request to KQP for database",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"databasePath", DatabasePath});
         Kqp->SendCreateSessionRequest(ctx);
     }
 
     void TTransactionActor::SendToKqpValidationRequests(const TActorContext& ctx) {
         YDB_LOG_DEBUG("Sending select request to KQP for database",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"databasePath", DatabasePath});
         Kqp->SendYqlRequest(
             GetYqlWithTablesNames(),
@@ -186,12 +186,12 @@ namespace NKafka {
     void TTransactionActor::SendFailResponse(TAutoPtr<TEventHandle<EventType>>& evHandle, EKafkaErrors errorCode, const TString& errorMessage) {
         if (errorMessage) {
             YDB_LOG_WARN("Sending fail response with error",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"code", errorCode},
                 {"reason", errorMessage});
         } else {
             YDB_LOG_WARN("Sending fail response with error",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"code", errorCode});
         }
 
@@ -203,7 +203,7 @@ namespace NKafka {
     void TTransactionActor::SendOkResponse(TAutoPtr<TEventHandle<EventType>>& evHandle) {
         auto& kafkaRequest = evHandle->Get()->Request;
         YDB_LOG_DEBUG("Sending OK response to with correlationId and transactionalId",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"connectionId", evHandle->Get()->ConnectionId},
             {"correlationId", evHandle->Get()->CorrelationId},
             {"transactionalId", TransactionalId});
@@ -214,7 +214,7 @@ namespace NKafka {
     // helper methods
     void TTransactionActor::Die(const TActorContext &ctx) {
         YDB_LOG_DEBUG("Dying",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         if (Kqp) {
             Kqp->CloseKqpSession(ctx);
         }
@@ -320,7 +320,7 @@ namespace NKafka {
         if (expectedResultsSize != resultsSize) {
             TString error = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected " << expectedResultsSize << ", got " << resultsSize << ".";
             YDB_LOG_WARN(error,
-                {"logPrefix", LogPrefix()});
+                {LogPrefix()});
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
             Die(ctx);
             return;
@@ -333,14 +333,14 @@ namespace NKafka {
         } catch (const yexception& y) {
             TString error = TStringBuilder() << "Error parsing producer state response from KQP. Reason: " << y.what();
             YDB_LOG_WARN(error,
-                {"logPrefix", LogPrefix()});
+                {LogPrefix()});
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
             Die(ctx);
             return;
         }
         if (auto error = GetErrorInProducerState(producerState)) {
             YDB_LOG_WARN(error,
-                {"logPrefix", LogPrefix()});
+                {LogPrefix()});
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
             Die(ctx);
             return;
@@ -351,7 +351,7 @@ namespace NKafka {
             std::unordered_map<TString, i32> consumerGenerationsByName = ParseConsumersGenerations(response);
             if (auto error = GetErrorInConsumersStates(consumerGenerationsByName)) {
                 YDB_LOG_WARN(error,
-                    {"logPrefix", LogPrefix()});
+                    {LogPrefix()});
                 SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
                 Die(ctx);
                 return;
@@ -359,7 +359,7 @@ namespace NKafka {
         }
 
         YDB_LOG_DEBUG("Validated producer and consumers states. Everything is alright, adding kafka operations to transaction",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         auto kqpTxnId = response.Record.GetResponse().GetTxMeta().id();
         // finally everything is valid and we can add kafka operations to transaction and attempt to commit
         SendAddKafkaOperationsToTxRequest(kqpTxnId);
@@ -367,7 +367,7 @@ namespace NKafka {
 
     void TTransactionActor::HandleAddKafkaOperationsResponse(const TString& kqpTransactionId, const TActorContext& ctx) {
         YDB_LOG_DEBUG("Successfully added kafka operations to transaction. Committing transaction",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         Kqp->SetTxId(kqpTransactionId);
         Kqp->CommitTx(++KqpCookie, ctx);
         LastSentToKqpRequest = EKafkaTxnKqpRequests::COMMIT;
@@ -375,7 +375,7 @@ namespace NKafka {
 
     void TTransactionActor::HandleCommitResponse(const TActorContext& ctx) {
         YDB_LOG_DEBUG("Successfully committed transaction. Sending ok and dying",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         SendOkResponse<TEndTxnResponseData>(EndTxnRequestPtr);
         Die(ctx);
     }

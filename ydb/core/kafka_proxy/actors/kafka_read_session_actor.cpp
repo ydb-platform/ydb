@@ -26,7 +26,7 @@ NStructuredLog::TStructuredMessage TKafkaReadSessionActor::LogPrefix() {
 
 void TKafkaReadSessionActor::Die(const TActorContext& ctx) {
     YDB_LOG_DEBUG("PassAway",
-        {"logPrefix", LogPrefix()});
+        {LogPrefix()});
     for (auto& [topicName, topicInfo] : TopicsInfo) {
         NTabletPipe::CloseClient(ctx, topicInfo.PipeClient);
     }
@@ -36,7 +36,7 @@ void TKafkaReadSessionActor::Die(const TActorContext& ctx) {
 void TKafkaReadSessionActor::HandleWakeup(TEvKafka::TEvWakeup::TPtr, const TActorContext& ctx) {
     if (CheckHeartbeatIsExpired()) {
         YDB_LOG_DEBUG("Heartbeat expired",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         CloseReadSession(ctx);
         return;
     }
@@ -247,7 +247,7 @@ void TKafkaReadSessionActor::SendJoinGroupResponseOk(const TActorContext&, ui64 
 
 void TKafkaReadSessionActor::SendJoinGroupResponseFail(const TActorContext&, ui64 corellationId, EKafkaErrors error, TString message) {
     YDB_LOG_CRIT("JOIN_GROUP failed",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"reason", message});
     TJoinGroupResponseData::TPtr response = std::make_shared<TJoinGroupResponseData>();
 
@@ -277,7 +277,7 @@ void TKafkaReadSessionActor::SendSyncGroupResponseOk(const TActorContext& ctx, u
 
 void TKafkaReadSessionActor::SendSyncGroupResponseFail(const TActorContext&, ui64 corellationId, EKafkaErrors error, TString message) {
     YDB_LOG_CRIT("SYNC_GROUP failed",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"reason", message});
     TSyncGroupResponseData::TPtr response = std::make_shared<TSyncGroupResponseData>();
 
@@ -297,7 +297,7 @@ void TKafkaReadSessionActor::SendLeaveGroupResponseOk(const TActorContext&, ui64
 
 void TKafkaReadSessionActor::SendLeaveGroupResponseFail(const TActorContext&, ui64 corellationId, EKafkaErrors error, TString message) {
     YDB_LOG_CRIT("LEAVE_GROUP failed",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"reason", message});
     TLeaveGroupResponseData::TPtr response = std::make_shared<TLeaveGroupResponseData>();
 
@@ -315,7 +315,7 @@ void TKafkaReadSessionActor::SendHeartbeatResponseOk(const TActorContext&, ui64 
 void TKafkaReadSessionActor::SendHeartbeatResponseFail(const TActorContext&, ui64 corellationId, EKafkaErrors error, TString message) {
     THeartbeatResponseData::TPtr response = std::make_shared<THeartbeatResponseData>();
     YDB_LOG_CRIT("HEARTBEAT failed",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"reason", message});
     response->ErrorCode = error;
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, error));
@@ -351,7 +351,7 @@ bool TKafkaReadSessionActor::TryFillTopicsToRead(const TMessagePtr<TJoinGroupReq
         for (auto topic: result->Topics) {
             if (topic.has_value()) {
                 YDB_LOG_DEBUG("JOIN_GROUP requested topic",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"toRead", topic});
 
                 auto normalizedTopicName = NormalizePath(Context->DatabasePath, topic.value());
@@ -368,7 +368,7 @@ bool TKafkaReadSessionActor::TryFillTopicsToRead(const TMessagePtr<TJoinGroupReq
 TConsumerProtocolAssignment TKafkaReadSessionActor::BuildAssignmentAndInformBalancerIfRelease(const TActorContext& ctx) {
     TConsumerProtocolAssignment assignment;
     YDB_LOG_DEBUG("SYNC_GROUP topics to assign",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"count", TopicPartitions.size()});
     for (auto& [topicName, partitions] : TopicPartitions) {
         auto topicInfoIt = TopicsInfo.find(topicName);
@@ -396,11 +396,11 @@ TConsumerProtocolAssignment TKafkaReadSessionActor::BuildAssignmentAndInformBala
         partitions.ToRelease.clear();
 
         YDB_LOG_DEBUG("SYNC_GROUP partitions",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"assigned", finalPartitionsToRead.size()});
         for (auto part: finalPartitionsToRead) {
             YDB_LOG_DEBUG("SYNC_GROUP assigned partition",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"number", part});
             topicPartition.Partitions.push_back(part);
             partitions.ReadingNow.emplace(part);
@@ -488,7 +488,7 @@ void TKafkaReadSessionActor::HandleBalancerError(TEvPersQueue::TEvError::TPtr& e
 
 void TKafkaReadSessionActor::HandleAuthOk(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG("JOIN_GROUP auth success. Topics",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"count", ev->Get()->TopicAndTablets.size()});
 
     for (const auto& [name, t] : ev->Get()->TopicAndTablets) {
@@ -530,7 +530,7 @@ TActorId TKafkaReadSessionActor::CreatePipeClient(ui64 tabletId, const TActorCon
 
 void TKafkaReadSessionActor::RegisterBalancerSession(const TString& topic, const TActorId& pipe, const TVector<ui32>& groups, const TActorContext& ctx) {
     YDB_LOG_INFO("Register session",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"topic", topic});
     auto request = MakeHolder<TEvPersQueue::TEvRegisterReadSession>();
 
@@ -550,7 +550,7 @@ void TKafkaReadSessionActor::RegisterBalancerSession(const TString& topic, const
 void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG("Partition lock is coming from PQRB",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"topic", record.GetTopic()},
         {"partition", record.GetPartition()});
 
@@ -566,7 +566,7 @@ void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition:
     auto converterIter = FullPathToConverter.find(NPersQueue::NormalizeFullPath(path));
     if (converterIter == FullPathToConverter.end()) {
         YDB_LOG_INFO("Ignored ev lock path not recognized",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"topic", record.GetTopic()},
             {"partition", record.GetPartition()});
         return;
@@ -577,7 +577,7 @@ void TKafkaReadSessionActor::HandleLockPartition(TEvPersQueue::TEvLockPartition:
     auto topicInfoIt = TopicsInfo.find(topicName);
     if (topicInfoIt == TopicsInfo.end() || (topicInfoIt->second.PipeClient != ActorIdFromProto(record.GetPipeClient()))) {
         YDB_LOG_INFO("Ignored ev lock topic is unknown",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"topic", record.GetTopic()},
             {"partition", record.GetPartition()});
         return;
@@ -593,7 +593,7 @@ void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePart
     const auto& record = ev->Get()->Record;
     const ui32 group = record.HasGroup() ? record.GetGroup() : 0;
     YDB_LOG_DEBUG("Partition release is coming from PQRB",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"topic", record.GetTopic()},
         {"group", group});
 
@@ -608,7 +608,7 @@ void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePart
 
     if (topicInfoIt->second.PipeClient != ActorIdFromProto(record.GetPipeClient())) {
         YDB_LOG_INFO("Ignored ev release topic is unknown",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"topic", record.GetTopic()});
         return;
     }
@@ -657,14 +657,14 @@ void TKafkaReadSessionActor::HandleReleasePartition(TEvPersQueue::TEvReleasePart
     }
 
     YDB_LOG_INFO("Ignored ev release partition isn`t locked",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"topic", record.GetTopic()},
         {"partitionToRelease", partitionToRelease});
 }
 
 void TKafkaReadSessionActor::InformBalancerAboutPartitionRelease(const TString& topic, ui64 partition, const TActorContext& ctx) {
     YDB_LOG_INFO("Released",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"topic", topic},
         {"partition", partition});
     auto request = MakeHolder<TEvPersQueue::TEvPartitionReleased>();

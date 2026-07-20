@@ -37,7 +37,7 @@ void TKafkaFindCoordinatorActor::SendResponseOkAndDie(const TString& host, i32 p
 
     for (auto coordinatorKey: Message->CoordinatorKeys) {
         YDB_LOG_INFO("FIND_COORDINATOR incoming request",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"group", coordinatorKey});
 
         TFindCoordinatorResponseData::TCoordinator coordinator;
@@ -56,7 +56,7 @@ void TKafkaFindCoordinatorActor::SendResponseOkAndDie(const TString& host, i32 p
     response->NodeId = nodeId;
 
     YDB_LOG_DEBUG("FIND_COORDINATOR response",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"host", host},
         {"port", port},
         {"nodeId", nodeId});
@@ -70,7 +70,7 @@ void TKafkaFindCoordinatorActor::SendResponseFailAndDie(EKafkaErrors error, cons
 
     for (auto coordinatorKey: Message->CoordinatorKeys) {
         YDB_LOG_CRIT("FIND_COORDINATOR request failed",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"reason", message});
 
         TFindCoordinatorResponseData::TCoordinator coordinator;

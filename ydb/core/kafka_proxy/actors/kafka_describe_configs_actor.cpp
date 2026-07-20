@@ -108,7 +108,7 @@ void TKafkaDescribeTopicActor::HandleCacheNavigateResponse(NKikimr::TEvTxProxySc
 void TKafkaDescribeConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
     YDB_LOG_DEBUG("Dump logPrefix, inputLogMessage",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"inputLogMessage", InputLogMessage()});
 
 

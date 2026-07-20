@@ -52,7 +52,7 @@ namespace NKafka {
         TablesInited++;
         if (TablesInited == TABLES_COUNT) {
             YDB_LOG_DEBUG("All tables are prepared",
-                {"logPrefix", LogPrefix()});
+                {LogPrefix()});
         }
     };
 
@@ -63,11 +63,11 @@ namespace NKafka {
         if (it == ProducersByTransactionalId.end() || it->second.Id != deadActorProducerState) {
             // new actor was already registered, we can just ignore this event
             YDB_LOG_DEBUG("Received TEvTransactionActorDied for transactionalId but producer has already been reinitialized with new epoch or deleted. Ignoring this event",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"transactionalId", ev->Get()->TransactionalId});
         } else {
             YDB_LOG_DEBUG("Received TEvTransactionActorDied for transactionalId and producerId and producerEpoch Erasing info about this actor",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"transactionalId", ev->Get()->TransactionalId},
                 {"producerStateId", ev->Get()->ProducerState.Id},
                 {"producerStateEpoch", ev->Get()->ProducerState.Epoch});
@@ -78,11 +78,11 @@ namespace NKafka {
 
     void TTransactionsCoordinator::Handle(TEvents::TEvPoison::TPtr&, const TActorContext& ctx) {
         YDB_LOG_DEBUG("Got poison pill, killing all transaction actors",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         for (auto& [transactionalId, txnActorId]: TxnActorByTransactionalId) {
             ctx.Send(txnActorId, new TEvents::TEvPoison());
             YDB_LOG_DEBUG("Sent poison pill to transaction actor for transactionalId",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"transactionalId", transactionalId});
         }
         PassAway();
@@ -90,7 +90,7 @@ namespace NKafka {
 
     void TTransactionsCoordinator::PassAway() {
         YDB_LOG_DEBUG("Killing myself",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         TBase::PassAway();
     };
 
@@ -101,7 +101,7 @@ namespace NKafka {
     void TTransactionsCoordinator::HandleTransactionalRequest(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx) {
         EventType* ev = evHandle->Get();
         YDB_LOG_DEBUG("Received message for transactionalId and ApiKey",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"transactionalId", *ev->Request->TransactionalId},
             {"apiKey", ev->Request->ApiKey()});
 
@@ -122,7 +122,7 @@ namespace NKafka {
     template<class ErrorResponseType, class RequestType>
     void TTransactionsCoordinator::SendProducerFencedResponse(TMessagePtr<RequestType> kafkaRequest, const TString& error, const TTransactionalRequest& txnRequestDetails) {
         YDB_LOG_WARN(error,
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         std::shared_ptr<ErrorResponseType> response = NKafkaTransactions::BuildResponse<ErrorResponseType>(kafkaRequest, EKafkaErrors::PRODUCER_FENCED);
         Send(txnRequestDetails.ConnectionId, new TEvKafka::TEvResponse(txnRequestDetails.CorrelationId, response, EKafkaErrors::PRODUCER_FENCED));
     };
@@ -140,13 +140,13 @@ namespace NKafka {
                                       producerInstance.TxnTimeoutMs, ev->ResourceDatabasePath ? ev->ResourceDatabasePath : ev->DatabasePath));
             TxnActorByTransactionalId[*ev->Request->TransactionalId] = txnActorId;
             YDB_LOG_DEBUG("Registered TTransactionActor with id for transactionalId and ApiKey",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"txnActorId", txnActorId},
                 {"transactionalId", *ev->Request->TransactionalId},
                 {"apiKey", ev->Request->ApiKey()});
         }
         YDB_LOG_DEBUG("Forwarded message to TTransactionActor with id for transactionalId and ApiKey",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"txnActorId", txnActorId},
             {"transactionalId", *ev->Request->TransactionalId},
             {"apiKey", ev->Request->ApiKey()});

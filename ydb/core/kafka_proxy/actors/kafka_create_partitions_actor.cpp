@@ -226,7 +226,7 @@ public:
         , PartionsNumber(partitionsNumber)
     {
         YDB_LOG_DEBUG("Create partitions actor",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"databaseName", databaseName},
             {"topicPath", TopicPath},
             {"partitionsNumber", PartionsNumber});
@@ -261,7 +261,7 @@ NActors::IActor* CreateKafkaCreatePartitionsActor(
 
 void TKafkaCreatePartitionsActor::Bootstrap(const NActors::TActorContext& ctx) {
     YDB_LOG_DEBUG("Dump logPrefix, inputLogMessage",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"inputLogMessage", InputLogMessage()});
 
     if (Message->ValidateOnly) {

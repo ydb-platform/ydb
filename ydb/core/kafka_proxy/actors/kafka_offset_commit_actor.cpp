@@ -17,7 +17,7 @@ NActors::NStructuredLog::TStructuredMessage TKafkaOffsetCommitActor::LogPrefix()
 
 void TKafkaOffsetCommitActor::Die(const TActorContext& ctx) {
     YDB_LOG_DEBUG("PassAway",
-        {"logPrefix", LogPrefix()});
+        {LogPrefix()});
     ctx.Send(AuthInitActor, new TEvents::TEvPoisonPill());
     for (const auto& tabletToPipePair: TabletIdToPipe) {
         NTabletPipe::CloseClient(ctx, tabletToPipePair.second);
@@ -30,7 +30,7 @@ void TKafkaOffsetCommitActor::Die(const TActorContext& ctx) {
 
 void TKafkaOffsetCommitActor::Handle(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_CRIT("Auth failed",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"reason", ev->Get()->Reason});
     Error = ConvertErrorCode(ev->Get()->ErrorCode);
     if (Error == GROUP_ID_NOT_FOUND && Context->Config.GetAutoCreateConsumersEnable()) {
@@ -99,11 +99,11 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlte
     NYdb::TStatus& result = ev->Get()->Result;
     if (result.GetStatus() == NYdb::EStatus::SUCCESS) {
         YDB_LOG_DEBUG("Handling TEvAlterTopicResponse. \n",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"status", result.GetStatus()});
     } else {
         YDB_LOG_INFO("Handling TEvAlterTopicResponse. \n",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"status", result.GetStatus()});
     }
     PendingResponses--;
@@ -120,7 +120,7 @@ void TKafkaOffsetCommitActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev
 
     if (msg->Status != NKikimrProto::OK) {
         YDB_LOG_CRIT("Pipe to tablet is dead",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"status", ev->Get()->Status});
         ProcessPipeProblem(msg->TabletId, ctx);
     }
@@ -128,7 +128,7 @@ void TKafkaOffsetCommitActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev
 
 void TKafkaOffsetCommitActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_CRIT("Pipe to tablet is destroyed",
-        {"logPrefix", LogPrefix()});
+        {LogPrefix()});
     ProcessPipeProblem(ev->Get()->TabletId, ctx);
 }
 
@@ -149,7 +149,7 @@ void TKafkaOffsetCommitActor::ProcessPipeProblem(ui64 tabletId, const TActorCont
 
 void TKafkaOffsetCommitActor::SendGenerationCheckRequest(const TActorContext& ctx) {
     YDB_LOG_DEBUG("Sending generation check KQP request",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"group", Message->GroupId.value()},
         {"generationId", Message->GenerationId});
 
@@ -167,7 +167,7 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TP
     const auto& record = ev->Get()->Record;
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
         YDB_LOG_CRIT("Generation check KQP query failed",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"group", Message->GroupId.value()},
             {"status", record.GetYdbStatus()});
         Error = UNKNOWN_SERVER_ERROR;
@@ -192,7 +192,7 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TP
     auto tableGeneration = parser.ColumnParser("generation").GetUint64();
     if (tableGeneration != static_cast<ui64>(Message->GenerationId)) {
         YDB_LOG_INFO("Generation mismatch",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"group", Message->GroupId.value()},
             {"expected", Message->GenerationId},
             {"got", tableGeneration});
@@ -202,7 +202,7 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TP
     }
 
     YDB_LOG_DEBUG("Generation check passed",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"group", Message->GroupId.value()},
         {"generation", tableGeneration});
 
@@ -211,7 +211,7 @@ void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TP
 
 void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG("Auth success. Topics",
-        {"logPrefix", LogPrefix()},
+        {LogPrefix()},
         {"count", ev->Get()->TopicAndTablets.size()});
     TopicAndTablets = std::move(ev->Get()->TopicAndTablets);
 
@@ -227,7 +227,7 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
 void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
     if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
         YDB_LOG_ERROR("Failed to create KQP session",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         Error = EKafkaErrors::UNKNOWN_SERVER_ERROR;
         SendFailedForAllPartitions(Error, ctx);
         return;
@@ -281,7 +281,7 @@ void TKafkaOffsetCommitActor::SendCommits(const TActorContext& ctx) {
 
             PendingResponses++;
             YDB_LOG_DEBUG("Send commit request",
-                {"logPrefix", LogPrefix()},
+                {LogPrefix()},
                 {"group", Message->GroupId.value()},
                 {"topic", topicIt->second.TopicNameConverter->GetPrimaryPath()},
                 {"partition", partitionRequest.PartitionIndex},
@@ -305,7 +305,7 @@ void TKafkaOffsetCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const 
     requestInfo->second.Done = true;
     if (ev->Get()->Record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
         YDB_LOG_CRIT("Commit offset error",
-            {"logPrefix", LogPrefix()},
+            {LogPrefix()},
             {"status", EErrorCode_Name(ev->Get()->Record.GetErrorCode())},
             {"reason", ev->Get()->Record.GetErrorReason()});
     }
@@ -360,7 +360,7 @@ void TKafkaOffsetCommitActor::SendAuthRequest(const NActors::TActorContext& ctx)
     auto topicsToConverter = topicHandler->GetReadTopicsList(topicsToResolve, false, Context->DatabasePath);
     if (!topicsToConverter.IsValid) {
         YDB_LOG_CRIT("Commit offsets failed. topicsToConverter is not valid",
-            {"logPrefix", LogPrefix()});
+            {LogPrefix()});
         Error = INVALID_REQUEST;
         SendFailedForAllPartitions(Error, ctx);
         return;

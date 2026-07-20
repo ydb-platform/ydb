@@ -166,6 +166,13 @@ void TSolomonExporter::Stop()
     EncodingOffloadThreadPool_->Shutdown();
 }
 
+void TSolomonExporter::Reconfigure(const TSolomonExporterDynamicConfigPtr& dynamicConfig)
+{
+    auto config = Config_->ApplyDynamic(dynamicConfig);
+    OffloadThreadPool_->SetThreadCount(config->ThreadPoolSize);
+    OffloadThreadPool_->SetPollingPeriod(config->ThreadPoolPollingPeriod);
+}
+
 void TSolomonExporter::TransferSensors()
 {
     std::vector<std::pair<TFuture<TSharedRef>, TIntrusivePtr<TRemoteProcess>>> remoteFutures;

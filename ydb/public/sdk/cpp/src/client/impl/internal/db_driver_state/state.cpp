@@ -59,13 +59,34 @@ TDbDriverState::TDbDriverState(
     Log.SetFormatter(GetPrefixLogFormatter(GetDatabaseLogPrefix(Database)));
 }
 
-void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider) {
-    CredentialsProvider = std::move(credentialsProvider);
+void TDbDriverState::InitCredentials(
+    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
+) {
+    Credentials = credentialsProviderFactory->CreateProviderAsync(weak_from_this()).Apply(
+        [](const NThreading::TFuture<TCredentialsProviderPtr>& future) {
+            TCredentials result{future.GetValue()};
 #ifndef YDB_GRPC_UNSECURE_AUTH
-    CallCredentials = grpc::MetadataCredentialsFromPlugin(
-        std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(CredentialsProvider)));
+            result.CallCredentials = grpc::MetadataCredentialsFromPlugin(
+                std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(result.Provider)));
 #endif
+            return result;
+        });
+    CredentialsReady = Credentials.IgnoreResult();
 }
+
+NThreading::TFuture<void> TDbDriverState::GetCredentialsReady() const {
+    return CredentialsReady;
+}
+
+std::shared_ptr<ICredentialsProvider> TDbDriverState::GetCredentialsProvider() const {
+    return Credentials.HasValue() ? Credentials.GetValue().Provider : nullptr;
+}
+
+#ifndef YDB_GRPC_UNSECURE_AUTH
+std::shared_ptr<grpc::CallCredentials> TDbDriverState::GetCallCredentials() const {
+    return Credentials.HasValue() ? Credentials.GetValue().CallCredentials : nullptr;
+}
+#endif
 
 bool TDbDriverState::AreClientTlsCredentialsValid() const {
     std::call_once(ClientTlsValidationOnceFlag_, [this]() {
@@ -231,10 +252,10 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                         DiscoveryClient_),
                     deleter);
 
-                strongState->SetCredentialsProvider(
+                strongState->InitCredentials(
                     credentialsProviderFactory
-                        ? credentialsProviderFactory->CreateProvider(strongState)
-                        : CreateInsecureCredentialsProviderFactory()->CreateProvider(strongState));
+                        ? std::move(credentialsProviderFactory)
+                        : CreateInsecureCredentialsProviderFactory());
 
                 if (discoveryMode != EDiscoveryMode::Off) {
                     DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);

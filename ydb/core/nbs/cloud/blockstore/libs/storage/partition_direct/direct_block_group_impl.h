@@ -145,7 +145,7 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
-    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
 
     // IHostStateController implementation
     void SetHostState(
@@ -153,7 +153,7 @@ public:
         EHostState oldState,
         EHostState newState) override;
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
-    void QueryAddHost() override;
+    void QueryAddHost(THostIndex newHostIndex) override;
 
 private:
     friend struct TDBGFixture;
@@ -180,19 +180,18 @@ private:
         [[nodiscard]] TString DebugPrint() const;
     };
 
+    [[nodiscard]] size_t GetHostCount() const;
+    void AddDDiskAndPBufferConnection(
+        THostIndex host,
+        const NKikimr::NBsController::TDDiskId& ddiskId,
+        const NKikimr::NBsController::TDDiskId& pbufferId);
     void DoEstablishConnections();
-    void DoEstablishConnection(size_t index, EConnectionType connectionType);
-
-    // Live AddHost: grow all vchunks and the Oracle to the new connection.
-    void SyncHostsWithConnections();
-
-    // Catch one vchunk / the Oracle up to the current connection count.
-    void GrowVChunkToConnections(TVChunk& vChunk);
-    void GrowOracleToConnections();
-
+    void DoEstablishConnection(
+        THostIndex hostIndex,
+        EConnectionType connectionType);
     void OnConnectionEstablished(
         EConnectionType connectionType,
-        size_t index,
+        THostIndex hostIndex,
         ui64 seqNo,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
     void ReEstablishConnection(
@@ -251,13 +250,11 @@ private:
     void Thinking();
     void ScheduleOracleThinking();
 
-    [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
-
     void HandleBlockedGeneration(THostIndex hostIndex, TStringBuf context);
 
-    TDBGDumpResponse DoDebugPrintDirtyMap();
+    [[nodiscard]] TDBGDumpResponse DoDebugPrintDirtyMap() const;
 
-    TDbgSnapshot DoBuildMonSnapshot();
+    [[nodiscard]] TDbgSnapshot DoBuildMonSnapshot() const;
 
     [[nodiscard]] TConnectionSnapshot MakeConnectionSnapshot(
         size_t hostIndex) const;

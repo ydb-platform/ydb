@@ -74,7 +74,6 @@ public:
         NKikimr::TTabletStorageInfo* info);
 
     ~TPartitionActor() override;
-    void PassAway() override;
 
     static constexpr ui32 LogComponent = NKikimrServices::NBS_PARTITION;
     using TCounters = TPartitionCounters;
@@ -111,11 +110,6 @@ private:
     void CreateBSControllerPipeClient(const NActors::TActorContext& ctx);
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
-
-    void SendAllocateDDiskForAddHost(
-        const NActors::TActorContext& ctx,
-        size_t dbgId,
-        THostIndex newHostIndex);
 
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::
@@ -172,14 +166,18 @@ private:
     // request is invalid; true if it may proceed.
     bool ValidateAddHostToDBGRequest(
         const NActors::TActorContext& ctx,
-        size_t dbgId);
-
+        size_t dbgId,
+        THostIndex newHostIndex);
     void RejectAddHost(
         const NActors::TActorContext& ctx,
         size_t dbgId,
         const TString& message);
+    void SendAllocateDDiskForAddHost(
+        const NActors::TActorContext& ctx,
+        size_t dbgId,
+        THostIndex newHostIndex);
 
-    TTabletInfo MakeMonTabletInfo();
+    [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
 
     void Start(
         const NActors::TActorContext& ctx,

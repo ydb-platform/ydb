@@ -14,11 +14,7 @@ SRCS(
     ydb_benchmark.cpp
     ydb_bridge.cpp
     ydb_cluster.cpp
-<<<<<<< HEAD
-=======
     ydb_database_attribute.cpp
-    ydb_config.cpp
->>>>>>> 8c4027d82ae ([Console, ConfigsDispatcher, YDB CLI] Implement database yaml config selectors (#44420))
     ydb_debug.cpp
     ydb_diagnostics.cpp
     ydb_diagnostics.h

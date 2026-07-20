@@ -19,12 +19,9 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
-<<<<<<< HEAD
-#include <ydb/core/config/init/init.h>
-=======
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/protobuf/json/util.h>
->>>>>>> e1ba7f0175c (Introduce cluster-opaque TAppConfig::PrivateDatabaseConfig (#43238))
+#include <ydb/core/config/init/init.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
@@ -1151,39 +1148,14 @@ THashMap<ui32, TConfigsDispatcher::TParsedOpaqueConfig> TConfigsDispatcher::Pars
                 result.emplace(kind, std::move(entry));
             }
             catch (const std::exception& e) {
-                YDB_LOG_ERROR("Error parsing opaque config",
-                    {"kind", kind},
-                    {"name", name},
-                    {"error", e.what()});
+                BLOG_ERROR("Error parsing opaque config [#" << kind << ":" << name << "]: " << e.what());
             }
             catch (...) {
-                YDB_LOG_ERROR("Error parsing opaque config",
-                    {"kind", kind},
-                    {"name", name},
-                    {"error", "unknown exception"});
+                BLOG_ERROR("Error parsing opaque config [#" << kind << ":" << name << "]: unknown exception");
             }
         }
-<<<<<<< HEAD
-        TParsedOpaqueConfig entry;
-        entry.RawJson = NJson::WriteJson(section, /*formatOutput=*/ false);
-        if (entry.RawJson.empty()) {
-            continue;   // empty section — treated as "no config"
-        }
-        try {
-            entry.Parsed = parser(entry.RawJson);
-        }
-        catch (const std::exception& e) {
-            BLOG_ERROR("Error parsing opaque config [#" << kind << ":" << name << "]: " << e.what());
-        }
-        catch (...) {
-            BLOG_ERROR("Error parsing opaque config [#" << kind << ":" << name << "]: unknown exception");
-        }
-        result.emplace(kind, std::move(entry));
-=======
     } catch (const std::exception& e) {
-        YDB_LOG_ERROR("Error parsing resolved YAML config",
-            {"error", e.what()});
->>>>>>> 4f171f297d8 ([Console, YAML Config, YDB CLI] Fixes from AI review (#46337))
+        BLOG_ERROR("Error parsing resolved YAML config: " << e.what());
     }
     return result;
 }

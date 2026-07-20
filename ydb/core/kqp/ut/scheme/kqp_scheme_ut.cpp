@@ -12789,12 +12789,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // Dedicated, enabled
         settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Shared, enabled
         settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery("CREATE RESOURCE POOL test WITH (CONCURRENT_QUERY_LIMIT=10);", settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
@@ -12883,6 +12887,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
         // Create with sample rank
         auto result = session.ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL CLASSIFIER ClassifierRank42 WITH (
@@ -12957,6 +12966,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
         // Explicit rank
         auto query = R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
@@ -12987,6 +13001,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         const auto nodeIdx = ydb->GetServerlessTenantInfo().NodeIdx;
         const auto& serverlessTenant = ydb->GetSettings().GetServerlessTenantName();
+        ydb->ExecuteQueryRetry("Wait EnableResourcePools on Serverless", R"(
+            CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);)",
+            NWorkload::TQueryRunnerSettings()
+                .PoolId("")
+                .Database(serverlessTenant)
+                .NodeIndex(nodeIdx)
+        );
         ydb->ExecuteQueryRetry("Wait EnableResourcePoolsOnServerless", R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
                 RANK=20,
@@ -13014,6 +13035,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
 
         {
             auto query = R"(
@@ -13046,6 +13072,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
 
         // Create sample pool
         {
@@ -13104,6 +13135,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
         auto query = R"(
             ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
                 SET (RESOURCE_POOL = "test", RANK = 100),
@@ -13123,6 +13159,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery("CREATE RESOURCE POOL test_pool WITH (CONCURRENT_QUERY_LIMIT=10);").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
 
         {
             auto query = R"(

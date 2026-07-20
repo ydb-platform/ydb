@@ -83,7 +83,7 @@ public:
         , Lead(std::move(lead))
         , Clusters(std::move(clusters))
     {
-        YDB_LOG_INFO("Create",
+        YDB_LOG_INFO("Scan actor created",
             {"debug", Debug()});
 
         InForeign = request.GetSkipOverlapForeign();
@@ -97,7 +97,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        YDB_LOG_INFO("Prepare",
+        YDB_LOG_INFO("Scan actor prepared",
             {"debug", Debug()});
 
         Driver = driver;
@@ -136,11 +136,11 @@ public:
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            YDB_LOG_NOTICE("Done",
+            YDB_LOG_NOTICE("Scan completed successfully",
                 {"debug", Debug()},
                 {"responseRecord", ToShortDebugString(Response->Record)});
         } else {
-            YDB_LOG_ERROR("Failed",
+            YDB_LOG_ERROR("Scan failed",
                 {"debug", Debug()},
                 {"responseRecord", ToShortDebugString(Response->Record)});
         }
@@ -168,7 +168,7 @@ public:
     EScan Seek(TLead& lead, ui64 seq) final
     {
         YDB_LOG_TRACE("Seek",
-            {"seq", seq},
+            {"seekSequence", seq},
             {"debug", Debug()});
 
         lead = Lead;
@@ -195,7 +195,7 @@ public:
 
     EScan Exhausted() final
     {
-        YDB_LOG_TRACE("Exhausted",
+        YDB_LOG_TRACE("Scan range exhausted",
             {"debug", Debug()});
 
         return EScan::Final;
@@ -205,9 +205,9 @@ protected:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             default:
-                YDB_LOG_ERROR("StateWork unexpected event",
-                    {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString()},
+                YDB_LOG_ERROR("Unexpected event in scan actor",
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"eventDetails", ev->ToString()},
                     {"debug", Debug()});
         }
     }
@@ -296,9 +296,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, c
         auto response = MakeHolder<TEvDataShard::TEvRecomputeKMeansResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        YDB_LOG_NOTICE("Starting TRecomputeKMeansScan row version",
+        YDB_LOG_NOTICE("Starting K-means recompute scan",
             {"tabletId", TabletID()},
-            {"requestRecord", ToShortDebugString(request)},
+            {"request", ToShortDebugString(request)},
             {"rowVersion", rowVersion});
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -315,9 +315,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, c
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                YDB_LOG_ERROR("Rejecting TRecomputeKMeansScan bad request with response",
+                YDB_LOG_ERROR("Rejecting invalid K-means recompute scan request",
                     {"tabletId", TabletID()},
-                    {"requestRecord", ToShortDebugString(request)},
+                    {"request", ToShortDebugString(request)},
                     {"responseRecord", ToShortDebugString(response->Record)});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;

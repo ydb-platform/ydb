@@ -140,7 +140,7 @@ public:
 
         NextCheckpointAtBytes = ScanSettings.GetMaxCheckpointBytes();
 
-        YDB_LOG_INFO("Create",
+        YDB_LOG_INFO("Scan actor created",
             {"debug", Debug()});
 
         const bool toBuild = (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
@@ -159,7 +159,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        YDB_LOG_INFO("Prepare",
+        YDB_LOG_INFO("Scan actor prepared",
             {"debug", Debug()});
 
         Driver = driver;
@@ -195,11 +195,11 @@ public:
         }
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            YDB_LOG_NOTICE("Done",
+            YDB_LOG_NOTICE("Scan completed successfully",
                 {"debug", Debug()},
                 {"responseRecord", Response->Record.ShortDebugString()});
         } else {
-            YDB_LOG_ERROR("Failed",
+            YDB_LOG_ERROR("Scan failed",
                 {"debug", Debug()},
                 {"responseRecord", Response->Record.ShortDebugString()});
         }
@@ -226,7 +226,7 @@ public:
 
     EScan PageFault() final
     {
-        YDB_LOG_TRACE("PageFault",
+        YDB_LOG_TRACE("Page fault",
             {"debug", Debug()});
         return EScan::Feed;
     }
@@ -234,7 +234,7 @@ public:
     EScan Seek(TLead& lead, ui64 seq) final
     {
         YDB_LOG_TRACE("Seek",
-            {"seq", seq},
+            {"seekSequence", seq},
             {"debug", Debug()});
 
         if (IsExhausted) {
@@ -269,7 +269,7 @@ public:
 
     EScan Exhausted() final
     {
-        YDB_LOG_TRACE("Exhausted",
+        YDB_LOG_TRACE("Scan range exhausted",
             {"debug", Debug()});
 
         IsExhausted = true;
@@ -285,16 +285,16 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                YDB_LOG_ERROR("StateWork unexpected event",
-                    {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString()},
+                YDB_LOG_ERROR("Unexpected event in scan actor",
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"eventDetails", ev->ToString()},
                     {"debug", Debug()});
         }
     }
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/)
     {
-        YDB_LOG_DEBUG("Retry upload",
+        YDB_LOG_DEBUG("Retrying row upload",
             {"debug", Debug()});
 
         Uploader.RetryUpload();
@@ -302,9 +302,9 @@ protected:
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
-        YDB_LOG_DEBUG("Handle TEvUploadRowsResponse",
+        YDB_LOG_DEBUG("Received row upload response",
             {"debug", Debug()},
-            {"sender", ev->Sender});
+            {"senderActorId", ev->Sender});
 
         if (!Driver) {
             return;
@@ -334,14 +334,14 @@ protected:
         }
 
         if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
-            YDB_LOG_NOTICE("Got retriable error",
+            YDB_LOG_NOTICE("Row upload failed with retriable error",
                 {"debug", Debug()},
                 {"uploadStatus", Uploader.GetUploadStatus()});
             ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
-        YDB_LOG_NOTICE("Got error, abort scan",
+        YDB_LOG_NOTICE("Row upload failed, aborting scan",
             {"debug", Debug()},
             {"uploadStatus", Uploader.GetUploadStatus()});
 
@@ -468,9 +468,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         auto response = MakeHolder<TEvDataShard::TEvReshuffleKMeansResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        YDB_LOG_NOTICE("Starting TReshuffleKMeansScan row version",
+        YDB_LOG_NOTICE("Starting K-means reshuffle scan",
             {"tabletId", TabletID()},
-            {"requestRecord", ToShortDebugString(request)},
+            {"request", ToShortDebugString(request)},
             {"rowVersion", rowVersion});
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
@@ -487,9 +487,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                YDB_LOG_ERROR("Rejecting TReshuffleKMeansScan bad request with response",
+                YDB_LOG_ERROR("Rejecting invalid K-means reshuffle scan request",
                     {"tabletId", TabletID()},
-                    {"requestRecord", ToShortDebugString(request)},
+                    {"request", ToShortDebugString(request)},
                     {"responseRecord", response->Record.ShortDebugString()});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;

@@ -50,7 +50,7 @@ public:
         , ScanTags(BuildTags(tableInfo, targetIndexColumns))
         , IndexColumnNames(targetIndexColumns.begin(), targetIndexColumns.end())
     {
-        YDB_LOG_INFO("Create",
+        YDB_LOG_INFO("Scan actor created",
             {"debug", Debug()});
     }
 
@@ -58,14 +58,14 @@ public:
         Scheme = std::move(scheme);
         MakeTypeInfos();
 
-        YDB_LOG_INFO("Prepare",
+        YDB_LOG_INFO("Scan actor prepared",
             {"debug", Debug()});
         return {EScan::Feed, {}};
     }
 
     EScan Seek(TLead& lead, ui64 seq) override {
         YDB_LOG_TRACE("Seek",
-            {"seq", seq},
+            {"seekSequence", seq},
             {"debug", Debug()});
 
         lead.To(ScanTags, {}, NTable::ESeek::Lower);
@@ -128,13 +128,13 @@ public:
         }
 
         if (rec.GetStatus() == NKikimrIndexBuilder::DONE) {
-            YDB_LOG_NOTICE("Done",
+            YDB_LOG_NOTICE("Scan completed successfully",
                 {"debug", Debug()},
-                {"record", ToShortDebugString(rec)});
+                {"responseRecord", ToShortDebugString(rec)});
         } else {
-            YDB_LOG_ERROR("Failed",
+            YDB_LOG_ERROR("Scan failed",
                 {"debug", Debug()},
-                {"record", ToShortDebugString(rec)});
+                {"responseRecord", ToShortDebugString(rec)});
         }
 
         TActivationContext::Send(ResponseActorId, std::move(response));
@@ -142,7 +142,7 @@ public:
     }
 
     EScan Exhausted() override {
-        YDB_LOG_TRACE("Exhausted",
+        YDB_LOG_TRACE("Scan range exhausted",
             {"debug", Debug()});
 
         return EScan::Final;
@@ -257,7 +257,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
         auto response = MakeHolder<TEvDataShard::TEvValidateUniqueIndexResponse>();
         FillScanResponseCommonFields(*response, request.GetId(), TabletID(), seqNo);
 
-        YDB_LOG_NOTICE("Starting TValidateUniqueIndexScan",
+        YDB_LOG_NOTICE("Starting unique index validation scan",
             {"tabletId", TabletID()},
             {"request", request.ShortDebugString()});
 
@@ -274,7 +274,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                YDB_LOG_ERROR("Rejecting TValidateUniqueIndexScan bad request with response",
+                YDB_LOG_ERROR("Rejecting invalid unique index validation scan request",
                     {"tabletId", TabletID()},
                     {"request", request.ShortDebugString()},
                     {"responseRecord", ToShortDebugString(response->Record)});

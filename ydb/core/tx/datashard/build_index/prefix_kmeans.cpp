@@ -156,7 +156,7 @@ public:
         , DeferredSettings(request.GetSettings())
         , DeferredRounds(request.GetNeedsRounds())
     {
-        YDB_LOG_INFO("Create",
+        YDB_LOG_INFO("Scan actor created",
             {"debug", Debug()});
         NextCheckpointAtBytes = ScanSettings.GetMaxCheckpointBytes();
 
@@ -224,7 +224,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        YDB_LOG_INFO("Prepare",
+        YDB_LOG_INFO("Scan actor prepared",
             {"debug", Debug()});
 
         Driver = driver;
@@ -260,11 +260,11 @@ public:
         }
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            YDB_LOG_NOTICE("Done",
+            YDB_LOG_NOTICE("Scan completed successfully",
                 {"debug", Debug()},
                 {"responseRecord", Response->Record.ShortDebugString()});
         } else {
-            YDB_LOG_ERROR("Failed",
+            YDB_LOG_ERROR("Scan failed",
                 {"debug", Debug()},
                 {"responseRecord", Response->Record.ShortDebugString()});
         }
@@ -291,7 +291,7 @@ public:
 
     EScan PageFault() final
     {
-        YDB_LOG_TRACE("PageFault",
+        YDB_LOG_TRACE("Page fault",
             {"debug", Debug()});
         return EScan::Feed;
     }
@@ -299,7 +299,7 @@ public:
     EScan Seek(TLead& lead, ui64 seq) final
     {
         YDB_LOG_TRACE("Seek",
-            {"seq", seq},
+            {"seekSequence", seq},
             {"debug", Debug()});
 
         if (IsExhausted) {
@@ -351,7 +351,7 @@ public:
 
     EScan Exhausted() final
     {
-        YDB_LOG_TRACE("Exhausted",
+        YDB_LOG_TRACE("Scan range exhausted",
             {"debug", Debug()});
 
         if (!FinishPrefix()) {
@@ -371,16 +371,16 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                YDB_LOG_ERROR("StateWork unexpected event",
-                    {"type", ev->GetTypeRewrite()},
-                    {"event", ev->ToString()},
+                YDB_LOG_ERROR("Unexpected event in scan actor",
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"eventDetails", ev->ToString()},
                     {"debug", Debug()});
         }
     }
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/)
     {
-        YDB_LOG_DEBUG("Retry upload",
+        YDB_LOG_DEBUG("Retrying row upload",
             {"debug", Debug()});
 
         Uploader.RetryUpload();
@@ -388,9 +388,9 @@ protected:
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
-        YDB_LOG_DEBUG("Handle TEvUploadRowsResponse",
+        YDB_LOG_DEBUG("Received row upload response",
             {"debug", Debug()},
-            {"sender", ev->Sender});
+            {"senderActorId", ev->Sender});
 
         if (!Driver) {
             return;
@@ -421,14 +421,14 @@ protected:
         }
 
         if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
-            YDB_LOG_NOTICE("Got retriable error",
+            YDB_LOG_NOTICE("Row upload failed with retriable error",
                 {"debug", Debug()},
                 {"uploadStatus", Uploader.GetUploadStatus()});
             ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
-        YDB_LOG_NOTICE("Got error, abort scan",
+        YDB_LOG_NOTICE("Row upload failed, aborting scan",
             {"debug", Debug()},
             {"uploadStatus", Uploader.GetUploadStatus()});
 
@@ -466,15 +466,15 @@ protected:
         if (FinishPrefixImpl()) {
             PendingCheckpointKey = Prefix;
             StartNewPrefix();
-            YDB_LOG_TRACE("FinishPrefix finished",
+            YDB_LOG_TRACE("Prefix K-means iteration finished",
                 {"debug", Debug()});
             return true;
         } else {
             IsFirstPrefixFeed = false;
 
             if (IsPrefixRowsValid) {
-                YDB_LOG_TRACE("FinishPrefix not finished, manually feeding saved rows",
-                    {"prefixRows", PrefixRows.GetRows()},
+                YDB_LOG_TRACE("Prefix K-means iteration incomplete, replaying cached rows",
+                    {"cachedPrefixRowCount", PrefixRows.GetRows()},
                     {"debug", Debug()});
                 for (ui64 iteration = 0; ; iteration++) {
                     for (const auto& [key, row_] : *PrefixRows.GetRowsData()) {
@@ -484,18 +484,18 @@ protected:
                     if (FinishPrefixImpl()) {
                         PendingCheckpointKey = Prefix;
                         StartNewPrefix();
-                        YDB_LOG_TRACE("FinishPrefix finished in iterations",
+                        YDB_LOG_TRACE("Prefix K-means iteration finished after replay",
                             {"iteration", iteration},
                             {"debug", Debug()});
                         return true;
                     } else {
-                        YDB_LOG_TRACE("FinishPrefix not finished in iterations",
+                        YDB_LOG_TRACE("Prefix K-means iteration still incomplete after replay",
                             {"iteration", iteration},
                             {"debug", Debug()});
                     }
                 }
             } else {
-                YDB_LOG_TRACE("FinishPrefix not finished, rescanning rows",
+                YDB_LOG_TRACE("Prefix K-means iteration incomplete, rescan required",
                     {"debug", Debug()});
             }
 
@@ -702,7 +702,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
         auto response = MakeHolder<TEvDataShard::TEvPrefixKMeansResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        YDB_LOG_NOTICE("Starting TPrefixKMeansScan row version",
+        YDB_LOG_NOTICE("Starting prefix K-means scan",
             {"tabletId", TabletID()},
             {"request", request.ShortDebugString()},
             {"rowVersion", rowVersion});
@@ -721,7 +721,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                YDB_LOG_ERROR("Rejecting TPrefixKMeansScan bad request with response",
+                YDB_LOG_ERROR("Rejecting invalid prefix K-means scan request",
                     {"tabletId", TabletID()},
                     {"request", request.ShortDebugString()},
                     {"responseRecord", response->Record.ShortDebugString()});

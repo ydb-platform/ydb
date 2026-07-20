@@ -286,7 +286,7 @@ private:
     }
 
     void StartUploadRowsInternal() {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "TBatchRowsUploader StartUploadRowsInternal",
+        YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Starting batch row upload",
             {"debug", Debug()});
 
         Y_ENSURE(Uploading);
@@ -361,8 +361,8 @@ void FillScanResponseCommonFields(TResponse& response, ui64 scanId, ui64 tabletI
 template<typename TResponse>
 inline void FailScan(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::TSeqNo seqNo, const std::exception& exc, const TString& logScanType)
 {
-    YDB_LOG_ERROR_COMP(NKikimrServices::BUILD_INDEX, "Unhandled exception",
-        {"logScanType", logScanType},
+    YDB_LOG_ERROR_COMP(NKikimrServices::BUILD_INDEX, "Unhandled exception in build index scan",
+        {"scanType", logScanType},
         {"tabletId", tabletId},
         {"exceptionType", TypeName(exc)},
         {"exceptionMessage", exc.what()},

@@ -4,10 +4,10 @@
 #include "schema_propose.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
-#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/services/lib/actors/consumers_advanced_monitoring_settings.h>
+
+#include <util/generic/hash.h>
 
 #include <expected>
 #include <map>
@@ -49,6 +49,29 @@ TResult ValidatePartitionStrategy(const NKikimrPQ::TPQTabletConfig& config);
 TResult ValidateConfig(
     const NKikimrPQ::TPQTabletConfig& config,
     const EOperation operation
+);
+
+void BumpTopicConfigVersion(NKikimrPQ::TPQTabletConfig& config);
+void UpdateConsumerVersion(
+    NKikimrPQ::TPQTabletConfig_TConsumer& consumer,
+    const NKikimrPQ::TPQTabletConfig& config
+);
+
+struct TConsumerVersionInfo {
+    ui64 ModificationVersion = 0;
+    TString DlqTopicPath;
+};
+
+using TConsumerVersionInfoByName = THashMap<TString, TConsumerVersionInfo>;
+
+TConsumerVersionInfoByName CollectConsumerVersionInfo(
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TString& database
+);
+void ApplyConsumerVersionUpdates(
+    NKikimrPQ::TPQTabletConfig& config,
+    const TConsumerVersionInfoByName& oldConsumerInfoByName,
+    const TString& database
 );
 
 TResult ValidateConsumersConfig(

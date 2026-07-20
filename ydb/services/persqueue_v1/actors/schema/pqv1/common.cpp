@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 
@@ -112,6 +113,8 @@ TResult AddConsumerImpl(
     if (consumersAdvancedMonitoringSettings) {
         consumersAdvancedMonitoringSettings->UpdateConsumerConfig(rr.consumer_name(), *consumer);
     }
+
+    UpdateConsumerVersion(*consumer, *config);
 
     return {};
 }

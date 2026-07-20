@@ -427,6 +427,7 @@ message TPQTabletConfig {
         optional uint32 MetricsLevel = 21;
         // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
         optional string MonitoringProjectId = 22;
+        optional uint64 ModificationVersion = 23 [default = 0];
     }
 
     repeated TConsumer Consumers = 37;
@@ -514,6 +515,9 @@ message TPQTabletConfig {
     optional string SqsCloudId = 46 [default = ""];
     optional string SqsFolderId = 47 [default = ""];
     optional bool SqsExportMetrics = 48 [default = false];
+
+    // Incremented on each topic alter via Topic API / PQv1. Used for DLQ ACL checks.
+    optional uint64 TopicConfigVersion = 49 [default = 0];
 }
 
 message THeartbeat {

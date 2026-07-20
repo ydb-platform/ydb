@@ -772,7 +772,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             *topicSettings->mutable_read_from() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(readFromTimestamp.MilliSeconds());
             req.mutable_init_request()->set_consumer("user");
 
-            Y_ENSURE(readStream->Write(req));
+            UNIT_ASSERT(readStream->Write(req));
             UNIT_ASSERT(readStream->Read(&resp));
             Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
             UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
@@ -792,7 +792,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             assignId = resp.start_partition_session_request().partition_session().partition_session_id();
 
             req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
-            Y_ENSURE(readStream->Write(req));
+            UNIT_ASSERT(readStream->Write(req));
         }
 
         // send status request, await status
@@ -801,7 +801,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::StreamReadMessage::FromServer resp;
 
             req.mutable_partition_session_status_request()->set_partition_session_id(assignId);
-            Y_ENSURE(readStream->Write(req));
+            UNIT_ASSERT(readStream->Write(req));
 
             UNIT_ASSERT(readStream->Read(&resp));
             UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kPartitionSessionStatusResponse, resp);
@@ -818,7 +818,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             req.Clear();
             req.mutable_read_request()->set_bytes_size(800_MB);
-            Y_ENSURE(readStream->Write(req));
+            UNIT_ASSERT(readStream->Write(req));
         }
 
         if (hasData) {
@@ -845,7 +845,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             do {
                 req.Clear();
                 req.mutable_partition_session_status_request()->set_partition_session_id(assignId);
-                Y_ENSURE(readStream->Write(req));
+                UNIT_ASSERT(readStream->Write(req));
                 UNIT_ASSERT(readStream->Read(&resp));
                 UNIT_ASSERT(resp.server_message_case() != Ydb::Topic::StreamReadMessage::FromServer::kReadResponse);
             } while (resp.server_message_case() != Ydb::Topic::StreamReadMessage::FromServer::kPartitionSessionStatusResponse || resp.partition_session_status_response().read_offset() == 0);
@@ -6081,6 +6081,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       ServiceType: "data-streams"
       Version: 0
       Type: CONSUMER_TYPE_STREAMING
+      ModificationVersion: 0
     }
     Consumers {
       Name: "consumer"
@@ -6096,8 +6097,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       Version: 567
       Important: true
       Type: CONSUMER_TYPE_STREAMING
+      ModificationVersion: 2
     }
     ContentBasedDeduplication: false
+    TopicConfigVersion: 5
   }
   ErrorCode: OK
 }

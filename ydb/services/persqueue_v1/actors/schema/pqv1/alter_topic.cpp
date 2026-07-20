@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
+#include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/schema/alter_topic_operation.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
@@ -35,6 +36,9 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
 
         const auto& pqConfig = AppData()->PQConfig;
         const auto& sourceTabletConfig = sourceConfig.GetPQTabletConfig();
+
+        const auto oldConsumerInfoByName = NPQ::NSchema::CollectConsumerVersionInfo(sourceTabletConfig, Database);
+
         for (const auto& readRule : Request.settings().read_rules()) {
             const auto consumerName = NPersQueue::ConvertNewConsumerName(readRule.consumer_name(), pqConfig);
             for (const auto& existingConsumer : sourceTabletConfig.GetConsumers()) {
@@ -56,6 +60,10 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         }
 
         auto& targetTabletConfig = *targetConfig.MutablePQTabletConfig();
+        targetTabletConfig.SetTopicConfigVersion(sourceTabletConfig.GetTopicConfigVersion());
+        NPQ::NSchema::BumpTopicConfigVersion(targetTabletConfig);
+        NPQ::NSchema::ApplyConsumerVersionUpdates(targetTabletConfig, oldConsumerInfoByName, Database);
+
         targetTabletConfig.SetLocalDC(sourceTabletConfig.GetLocalDC());
         targetTabletConfig.SetDC(sourceTabletConfig.GetDC());
         targetTabletConfig.SetProducer(sourceTabletConfig.GetProducer());

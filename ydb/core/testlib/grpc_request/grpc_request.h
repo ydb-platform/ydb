@@ -37,9 +37,11 @@ public:
             TString topicPath,
             TString databaseName,
             std::shared_ptr<TResultHolder<TRes>> resultHolder,
-            NActors::TActorId notifyActor = {}
+            NActors::TActorId notifyActor = {},
+            TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr
         )
         : Request(request)
+        , UserToken(std::move(userToken))
         , TopicPath(topicPath)
         , DatabaseName(databaseName)
         , ResultHolder(resultHolder)

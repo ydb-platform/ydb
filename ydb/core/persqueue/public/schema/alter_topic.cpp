@@ -3,10 +3,10 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
-#include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+
+#include <vector>
 
 namespace NKikimr::NPQ::NSchema {
 
@@ -96,7 +96,8 @@ TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::A
 TResult ApplyChangesInt(
     const Ydb::Topic::AlterTopicRequest& request,
     NKikimrSchemeOp::TPersQueueGroupDescription& config,
-    bool isCdcStream
+    bool isCdcStream,
+    const TString& database
 ) {
     #define CHECK_CDC  if (isCdcStream) {\
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Full alter of cdc stream is forbidden #" << __LINE__};\
@@ -256,6 +257,9 @@ TResult ApplyChangesInt(
 
     const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes();
 
+    const auto oldConsumerInfoByName = CollectConsumerVersionInfo(*pqTabletConfig, database);
+    BumpTopicConfigVersion(*pqTabletConfig);
+
     std::vector<std::pair<bool, Ydb::Topic::Consumer>> consumers;
 
     i32 dropped = 0;
@@ -330,6 +334,7 @@ TResult ApplyChangesInt(
             return result;
         }
     }
+    ApplyConsumerVersionUpdates(*pqTabletConfig, oldConsumerInfoByName, database);
     if (auto errorCode = consumersAdvancedMonitoringSettings.CheckForUnknownConsumers(error); errorCode != Ydb::StatusIds::SUCCESS) {
         return {errorCode, std::move(error)};
     }
@@ -368,8 +373,9 @@ TResult ApplyChangesInt(
 }
 
 struct TAlterTopicStrategy: public IAlterTopicStrategy {
-    TAlterTopicStrategy(Ydb::Topic::AlterTopicRequest&& request)
-        : Request(std::move(request))
+    TAlterTopicStrategy(TString database, Ydb::Topic::AlterTopicRequest&& request)
+        : Database(std::move(database))
+        , Request(std::move(request))
     {
     }
 
@@ -386,20 +392,22 @@ struct TAlterTopicStrategy: public IAlterTopicStrategy {
     ) override {
         CopyConfig(targetConfig, sourceConfig);
 
-        return ApplyChangesInt(Request, targetConfig, topicInfo.CdcStream);
+        return ApplyChangesInt(Request, targetConfig, topicInfo.CdcStream, Database);
     }
 
+    const TString Database;
     Ydb::Topic::AlterTopicRequest Request;
 };
 
 } // namespace
 
 NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlterTopicSettings&& settings) {
+    const TString database = std::move(settings.Database);
     return CreateAlterTopicOperationActor(parentId, {
-        .Database = std::move(settings.Database),
+        .Database = database,
         .PeerName = std::move(settings.PeerName),
         .UserToken = std::move(settings.UserToken),
-        .Strategy = std::make_unique<TAlterTopicStrategy>(std::move(settings.Request)),
+        .Strategy = std::make_unique<TAlterTopicStrategy>(database, std::move(settings.Request)),
         .IfExists = settings.IfExists,
         .PrepareOnly = settings.PrepareOnly,
         .Cookie = settings.Cookie

@@ -116,6 +116,11 @@ namespace {
 
     }
 
+    bool CreateDlqTopic(NYdb::TDriver& driver, const TString& dlqTopicName = "DeadLetterQueue") {
+        NYdb::NTopic::TCreateTopicSettings settings;
+        return CreateTopic(driver, dlqTopicName, settings);
+    }
+
     TMaybe<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent> GetNextDataMessage(const std::shared_ptr<NYdb::NTopic::IReadSession>& reader, TInstant deadline) {
         while (true) {
             reader->WaitEvent().Wait(deadline);
@@ -204,7 +209,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
             const TString topicName = "ExampleQueueName";
             const TString consumer = "ydb-sqs-consumer";
 
-            Y_ENSURE(CreateTopic(driver, topicName, consumer));
+            UNIT_ASSERT(CreateTopic(driver, topicName, consumer));
 
             const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
             auto queueName = topicName;
@@ -232,7 +237,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
             auto driver = MakeDriver(*this);
             const TString consumer = "user_consumer";
             const TString queueName = "ExampleQueueName";
-            Y_ENSURE(CreateTopic(driver, queueName, consumer));
+            UNIT_ASSERT(CreateTopic(driver, queueName, consumer));
             const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", queueName.size(), queueName.c_str(), consumer.size(), consumer.c_str());
             const TString requestQueueName = queueName + "@" + consumer;
             auto json = GetQueueUrlXml({
@@ -258,7 +263,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
                 auto driver = MakeDriver(*this);
                 TVector<TString> queueUrls;
                 for (size_t i = 0; i < numOfExampleQueues; ++i) {
-                    Y_ENSURE(CreateTopic(driver, std::format("ExampleQueue-{}", i), "mlp-consumer"));
+                    UNIT_ASSERT(CreateTopic(driver, std::format("ExampleQueue-{}", i), "mlp-consumer"));
                 }
 
                 bool multiConsumerTopic = CreateTopic(driver, "AnotherQueue", NYdb::NTopic::TCreateTopicSettings()
@@ -271,11 +276,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
                         .KeepMessagesOrder(false)
                         .DefaultProcessingTimeout(TDuration::Seconds(20))
                     .EndAddConsumer());
-                Y_ENSURE(multiConsumerTopic);
+                UNIT_ASSERT(multiConsumerTopic);
 
                 bool regularTopic = CreateTopic(driver, "RegularTopic", NYdb::NTopic::TCreateTopicSettings()
                     .BeginAddConsumer("regular-consumer").EndAddConsumer());
-                Y_ENSURE(regularTopic);
+                UNIT_ASSERT(regularTopic);
             }
             json = ListQueuesXml({});
             UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), numOfExampleQueues + 2);
@@ -1082,6 +1087,9 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         auto consumerName = [](int i) { return std::format("ydb-sqs-consumer-{}", i); };
         auto queueUrlForConsumer = [&](int i) { return std::format("/v1/{}/{}/{}/{}/{}/{}", database.size(), database.c_str(), topicName.size(), topicName.c_str(), consumerName(i).size(), consumerName(i).c_str()); };
         const TDuration retentionPeriod = TDuration::Hours(10);
+        if (params.Dlq) {
+            UNIT_ASSERT(CreateDlqTopic(driver));
+        }
         {
             NYdb::NTopic::TCreateTopicSettings settings;
             settings.RetentionPeriod(retentionPeriod);
@@ -1105,7 +1113,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
                 consumer.EndAddConsumer();
 
             }
-            Y_ENSURE(CreateTopic(driver, topicName, settings));
+            UNIT_ASSERT(CreateTopic(driver, topicName, settings));
         }
 
         {
@@ -1497,7 +1505,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         const TString topicName = "ExistingTopic";
         const TString consumerName = "ydb-sqs-consumer";
 
-        Y_ENSURE(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
+        UNIT_ASSERT(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
             .BeginAddSharedConsumer(consumerName)
                 .KeepMessagesOrder(false)
                 .DefaultProcessingTimeout(TDuration::Seconds(30))
@@ -1517,7 +1525,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         const TString topicName = "ExistingTopicStreaming";
         const TString consumerName = "regular-consumer";
 
-        Y_ENSURE(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
+        UNIT_ASSERT(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
             .BeginAddConsumer(consumerName)  // Regular consumer, not shared
             .EndAddConsumer()));
 
@@ -1532,7 +1540,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         const TString topicName = "ExistingTopicNoConsumer";
         const TString consumerName = "ydb-sqs-consumer";
 
-        Y_ENSURE(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
+        UNIT_ASSERT(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
             .RetentionPeriod(TDuration::Hours(24))
             .BeginAddConsumer("other-consumer")
             .EndAddConsumer()));
@@ -1551,7 +1559,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         const TDuration topicRetention = TDuration::Hours(24);
         const TDuration queueRetention = TDuration::Hours(48);
 
-        Y_ENSURE(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
+        UNIT_ASSERT(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
             .RetentionPeriod(topicRetention)
             .BeginAddConsumer("other-consumer")
             .EndAddConsumer()));
@@ -1611,7 +1619,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
             for (int i = 0; i < nConsumers; ++i) {
                 settings.BeginAddSharedConsumer(consumerName(i)).KeepMessagesOrder(false).DefaultProcessingTimeout(TDuration::Seconds(20)).EndAddConsumer();
             }
-            Y_ENSURE(CreateTopic(driver, queueName, settings));
+            UNIT_ASSERT(CreateTopic(driver, queueName, settings));
         }
         auto client = TTopicClient(driver);
         for (int consumerRemains = nConsumers; consumerRemains >= 0; --consumerRemains) {
@@ -1710,7 +1718,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         auto driver = MakeDriver(*this);
         const TString topicName = "SetAttrsTopicNoConsumer";
 
-        Y_ENSURE(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
+        UNIT_ASSERT(CreateTopic(driver, topicName, NYdb::NTopic::TCreateTopicSettings()
             .BeginAddConsumer("other-consumer")
             .EndAddConsumer()));
 
@@ -1824,7 +1832,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         const int nMessages = 5;
         const TString queueName = "queueName";
         const TString consumer = "consumer-3";
-        Y_ENSURE(CreateTopic(driver, queueName, consumer));
+        UNIT_ASSERT(CreateTopic(driver, queueName, consumer));
 
         auto describeAndCountUncommited = [&]() {
             auto desc = client.DescribeConsumer(queueName, consumer, NYdb::NTopic::TDescribeConsumerSettings{}.IncludeStats(true)).GetValueSync();
@@ -1872,7 +1880,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         const TString topicName = "ExampleQueueName";
         const TString consumer = "ydb-sqs-consumer";
 
-        Y_ENSURE(CreateTopic(driver, topicName, consumer));
+        UNIT_ASSERT(CreateTopic(driver, topicName, consumer));
 
         const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
         auto queueName = topicName;
@@ -1900,7 +1908,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         auto driver = MakeDriver(*this);
         const TString consumer = "user_consumer";
         const TString queueName = "ExampleQueueName";
-        Y_ENSURE(CreateTopic(driver, queueName, consumer));
+        UNIT_ASSERT(CreateTopic(driver, queueName, consumer));
         const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", queueName.size(), queueName.c_str(), consumer.size(), consumer.c_str());
         const TString requestQueueName = queueName + "@" + consumer;
         auto json = GetQueueUrlXml({
@@ -2013,7 +2021,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         const TString topicName = "ExampleQueueName";
         const TString consumer = "ydb-sqs-consumer";
 
-        Y_ENSURE(CreateTopic(driver, topicName, consumer));
+        UNIT_ASSERT(CreateTopic(driver, topicName, consumer));
 
         const TString queueUrl = std::format("/v1/5//Root/{}/{}/{}/{}", topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
         auto queueName = topicName;

@@ -336,6 +336,11 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
     ReadSession->Close(TDuration::MilliSeconds(10));
 }
 
+void CreateEmptyTopic(TTopicClient& client, const TString& topicName) {
+    auto status = client.CreateTopic(topicName, TCreateTopicSettings()).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+}
+
 Y_UNIT_TEST_SUITE(BasicUsage) {
     Y_UNIT_TEST(CreateTopicWithCustomName) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
@@ -430,6 +435,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "deadLetterQueue-topic");
 
         TCreateTopicSettings topics;
         topics.BeginAddConsumer()
@@ -586,6 +592,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "deadLetterQueue-topic");
 
         {
             TCreateTopicSettings topics;
@@ -606,6 +613,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto status = client.CreateTopic("topic_name", topics).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
         }
+
+        CreateEmptyTopic(client, "deadLetterQueue-topic-new");
 
         {
             TAlterTopicSettings topics;
@@ -644,6 +653,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "deadLetterQueue-topic");
 
         {
             TCreateTopicSettings topics;
@@ -702,6 +712,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "deadLetterQueue-topic");
 
         {
             TCreateTopicSettings topics;
@@ -776,6 +787,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
         }
 
+        CreateEmptyTopic(client, "dlq-topic");
+
         {
             TAlterTopicSettings topics;
             topics.BeginAlterConsumer()
@@ -808,6 +821,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "dlq-topic");
 
         {
             TCreateTopicSettings topics;
@@ -828,6 +842,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto status = client.CreateTopic("topic_name", topics).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
         }
+
+        CreateEmptyTopic(client, "dlq-topic-new");
 
         {
             TAlterTopicSettings topics;

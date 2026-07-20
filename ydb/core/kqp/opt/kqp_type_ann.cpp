@@ -2511,7 +2511,7 @@ TStatus AnnotateReadTableVectorIndex(const TExprNode::TPtr& node, TExprContext& 
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
     // PrefixRows (the per-prefix-group root cluster rows) is an optional last child.
-    if (!EnsureMinMaxArgsCount(*node, 6, 7, ctx)) {
+    if (!EnsureMinMaxArgsCount(*node, 5, 6, ctx)) {
         return TStatus::Error;
     }
 
@@ -2564,7 +2564,7 @@ TStatus AnnotateVectorSearchConnection(const TExprNode::TPtr& node, TExprContext
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
     // HasPrefix is an optional last child (prefixed index).
-    if (!EnsureMinMaxArgsCount(*node, 7, 8, ctx)) {
+    if (!EnsureMinMaxArgsCount(*node, 6, 7, ctx)) {
         return TStatus::Error;
     }
 

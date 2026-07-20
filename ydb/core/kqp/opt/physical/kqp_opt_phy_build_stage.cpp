@@ -367,7 +367,6 @@ TExprBase KqpBuildReadTableVectorIndexStage(TExprBase node, TExprContext& ctx, c
         .Index(read.Index())
         .Columns(read.Columns())
         .TopK(read.TopK())
-        .IsDesc(read.IsDesc())
         .HasPrefix(ctx.NewAtom(pos, hasPrefix ? "true" : "false"))
         .Done();
 

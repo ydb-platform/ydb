@@ -441,9 +441,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             });
         }
 
-        // The new vector search actor (EnableVectorSearchActor) produces identical per-table read
-        // stats to the legacy StreamLookup path for these queries, so the expectations below are
-        // shared across both TWIN variants.
         { // 5a. SELECT VIEW vector_idx
             // SELECT Key
             checkSelect(Q_(R"(

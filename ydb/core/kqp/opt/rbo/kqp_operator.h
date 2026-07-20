@@ -69,12 +69,15 @@ enum ESortDir : ui32 { None = 0x00, Asc = 0x01, Desc = 0x02 };
 // engaged empty value.
 struct TOperatorAnalysisProps {
     void Clear() {
+        LiveInByChild.reset();
         LiveOut.reset();
         Aliases.reset();
         NameConstraints.reset();
         InRootAliasRegion = false;
     }
 
+    // Requirements per child edge; LiveOut is their union at the output.
+    std::optional<TVector<TInfoUnitSet>> LiveInByChild;
     std::optional<TInfoUnitSet> LiveOut;
     std::optional<TPlanAliases::TAliasMap> Aliases;
     std::optional<TPlanNameConstraints> NameConstraints;
@@ -167,8 +170,7 @@ public:
     virtual ~ILivenessContext() = default;
 
     virtual const TInfoUnitSet& GetLiveOut(IOperator* op) const = 0;
-    virtual bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& columns) = 0;
-    virtual bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TInfoUnitSet& columns) = 0;
+    virtual void AddLiveInput(IOperator* op, ui32 childIndex, const TInfoUnitSet& columns) = 0;
     virtual void AddExpressionDeps(const TExpression& expr, TInfoUnitSet& target) = 0;
 };
 

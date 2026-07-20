@@ -2729,8 +2729,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
-                PRAGMA ydb.OptValidateStreamingConstraints = "false"; -- Unsupported multi-output with switch due to S3 sink
-
                 $rows = SELECT * FROM `{pq_source}`.`{input_topic}`;
 
                 INSERT INTO `{pq_source}`.`{output_topic1}` SELECT Data || "-A" AS X FROM $rows;

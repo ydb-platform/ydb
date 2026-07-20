@@ -1023,6 +1023,11 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.BlockVariant(payloadValue, node.Child(1)->Content(), type);
     });
 
+    AddCallable("BlockVariantItem", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto blockVariantValue = MkqlBuildExpr(*node.Child(0), ctx);
+        return ctx.ProgramBuilder.BlockVariantItem(blockVariantValue);
+    });
+
     AddCallable("Visit", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto variantObj = MkqlBuildExpr(node.Head(), ctx);
         const auto type = node.Head().GetTypeAnn()->Cast<TVariantExprType>();

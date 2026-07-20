@@ -51,6 +51,7 @@ jobs:
 
           params=(
             --stat
+            --link-threads 12
             -DCONSISTENT_DEBUG
             --no-dir-outputs
             --build-all

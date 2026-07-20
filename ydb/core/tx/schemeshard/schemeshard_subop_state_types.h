@@ -33,6 +33,7 @@ enum ETxState {
     CopyTableBarrier = 139,
     ProposedCopySequence = 140,
     ProposedMoveSequence = 141,
+    RollingUpdateParts = 142,
     Done = 240,
     Aborted = 250,
 };

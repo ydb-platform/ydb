@@ -5629,6 +5629,10 @@ bool TSchemeShard::IsSchemeShardConfigured() const {
 }
 
 void TSchemeShard::Die(const TActorContext &ctx) {
+    // Invalidate raw SchemeShard pointers held by same-mailbox operation actors
+    // before any tablet state is torn down.
+    OperationLifetimeTokens.clear();
+
     ctx.Send(SchemeBoardPopulator, new TEvents::TEvPoisonPill());
     ctx.Send(TxAllocatorClient, new TEvents::TEvPoisonPill());
     ctx.Send(SysPartitionStatsCollector, new TEvents::TEvPoisonPill());
@@ -5805,6 +5809,9 @@ void TSchemeShard::StateInit(STFUNC_SIG) {
         HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
         HFunc(TEvPrivate::TEvConsoleConfigsTimeout, Handle);
 
+        // The rolling actor restarted by TTxInit may finish before StateWork is activated.
+        HFuncTraced(TEvPrivate::TEvSolomonRollingUpdateDone, Handle);
+
         // These may arrive during StateInit after a reboot; re-dispatch happens in TTxInit.
         IgnoreFunc(TEvDataShard::TEvIncrementalRestoreShardProgress);
         IgnoreFunc(TEvTabletPipe::TEvClientConnected);
@@ -5880,6 +5887,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         //operation schedule msg
         HFuncTraced(TEvPrivate::TEvProgressOperation, Handle);
+        HFuncTraced(TEvPrivate::TEvSolomonRollingUpdateDone, Handle);
 
         //coordination distributed transactions msg
         HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);
@@ -6216,6 +6224,7 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
     }
 
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RemoveTx for txid " << opId);
+    InvalidateOperationLifetimeToken(opId);
     auto pathId = txState->TargetPathId;
 
     PersistRemoveTx(db, opId, *txState);
@@ -6757,6 +6766,18 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TAct
 
     Y_ABORT_UNLESS(ev->Get()->TxPartId != InvalidSubTxId);
     Execute(CreateTxOperationProgress(TOperationId(txId, ev->Get()->TxPartId)), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvSolomonRollingUpdateDone::TPtr& ev, const TActorContext& ctx) {
+    const auto opId = ev->Get()->OperationId;
+    if (!Operations.contains(opId.GetTxId())) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Got TEvPrivate::TEvSolomonRollingUpdateDone"
+                   << " for unknown txId " << opId.GetTxId());
+        return;
+    }
+
+    Execute(CreateTxOperationReply(opId, ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx)

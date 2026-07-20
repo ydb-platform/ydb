@@ -228,6 +228,25 @@ public:
 
     static const TSchemeLimits DefaultLimits;
 
+    struct TOperationLifetimeToken {};
+
+    // Same-mailbox helper actors keep raw SchemeShard pointers. Operation
+    // tokens are invalidated when an operation is removed or explicitly
+    // cancelled, and all tokens are invalidated before SchemeShard teardown.
+    THashMap<TOperationId, std::shared_ptr<TOperationLifetimeToken>> OperationLifetimeTokens;
+
+    std::weak_ptr<TOperationLifetimeToken> GetOperationLifetimeToken(TOperationId operationId) {
+        auto& token = OperationLifetimeTokens[operationId];
+        if (!token) {
+            token = std::make_shared<TOperationLifetimeToken>();
+        }
+        return token;
+    }
+
+    void InvalidateOperationLifetimeToken(TOperationId operationId) {
+        OperationLifetimeTokens.erase(operationId);
+    }
+
     TIntrusivePtr<TChannelProfiles> ChannelProfiles;
 
     TTableProfiles TableProfiles;
@@ -1352,6 +1371,7 @@ public:
     void Handle(TEvSchemeShard::TEvCancelTx::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvSolomonRollingUpdateDone::TPtr& ev, const TActorContext& ctx);
 
     // Incremental Restore event handlers
     void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);

@@ -2,7 +2,7 @@
 # are described in documentaion https://ydb.tech/en/docs/deploy/configuration/config
 
 yaml_config_enabled: true
-erasure: mirror-3-dc # erasue is the parameter that describes
+erasure: mirror-3-dc # erasure is the parameter that describes
                       # the fault tolerance mode of the cluster.
                       # See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
 fail_domain_type: disk

@@ -110,10 +110,10 @@ class YdbClient:
         )
 
     @classmethod
-    def from_driver_config(cls, endpoint: str, database: str, token: str = "root@builtin", enable_discovery: bool = True) -> Self:
-        driver_config = ydb.DriverConfig(
-            endpoint, database, auth_token=token, disable_discovery=not enable_discovery
-        )
+    def from_driver_config(
+        cls, endpoint: str, database: str, token: str = "root@builtin", enable_discovery: bool = True
+    ) -> Self:
+        driver_config = ydb.DriverConfig(endpoint, database, auth_token=token, disable_discovery=not enable_discovery)
         driver = ydb.Driver(driver_config)
         return cls(driver, True)
 
@@ -139,7 +139,7 @@ class YdbClient:
                 SOURCE_TYPE = 'Ydb',
                 LOCATION = '{endpoint}',
                 DATABASE_NAME = '{database}',
-                SHARED_READING = '{str(shared_reading)}',
+                {"SHARED_READING = 'TRUE'," if shared_reading else ""}
                 AUTH_METHOD = 'NONE'
             );
         ''')
@@ -209,6 +209,7 @@ class YdbClient:
                 result.extend(_read_batch())
             return result
 
+
 class Kikimr:
     def __init__(self, config: KikimrConfigGenerator, timeout_seconds: int = 240, enable_discovery: bool = True):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
@@ -221,8 +222,12 @@ class Kikimr:
         self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", f"/{config.domain_name}")
         self.ydb_client = self._setup_ydb_client(self.endpoint, enable_discovery)
 
-        self.external_endpoint = Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
-        self.external_ydb_client = self._setup_ydb_client(self.external_endpoint, enable_discovery)
+        if os.getenv("YDB_ENDPOINT") is None or os.getenv("YDB_DATABASE") is None:
+            self.external_endpoint = None
+            self.external_ydb_client = None
+        else:
+            self.external_endpoint = Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
+            self.external_ydb_client = self._setup_ydb_client(self.external_endpoint, enable_discovery)
 
     @staticmethod
     def _setup_ydb_client(endpoint: Endpoint, enable_discovery: bool) -> YdbClient:
@@ -232,8 +237,9 @@ class Kikimr:
             enable_discovery=enable_discovery,
         )
 
-    def stop(self):
-        self.external_ydb_client.stop()
+    def stop(self) -> None:
+        if self.external_ydb_client is not None:
+            self.external_ydb_client.stop()
         self.ydb_client.stop()
         self.cluster.stop()
 

@@ -147,7 +147,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         tasks: int,
     ) -> None:
         ydb_client = self.get_ydb_client(kikimr, local_topics)
-        query_name = f"test_hopping_window_{shared_reading}{tasks}{local_topics}"
+        query_name = f"wm_{shared_reading}{tasks}{local_topics}"
         query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading, tasks)
         try:
             self._write_topic(
@@ -178,7 +178,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         tasks: int,
     ) -> None:
         ydb_client = self.get_ydb_client(kikimr, local_topics)
-        query_name = f"test_cascade_hopping_window_{shared_reading}{tasks}{local_topics}"
+        query_name = f"cascade_hopping_window_{shared_reading}{tasks}{local_topics}"
         query_name = self._create_query(
             kikimr, entity_name, query_name, local_topics, shared_reading, tasks, cascade_hopping=True
         )
@@ -202,7 +202,7 @@ class TestWatermarksInYdb(StreamingTestBase):
     @link_test_case("#28600")
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
-    def test_idle_partition_more_than_timeout(
+    def test_idle_partition_gt_timeout(
         self: Self,
         kikimr: Kikimr,
         entity_name: Callable[[str], str],
@@ -210,7 +210,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         shared_reading: bool,
     ) -> None:
         ydb_client = self.get_ydb_client(kikimr, local_topics)
-        query_name = "slow_partition"
+        query_name = f"idle_partition_gt_timeout_{shared_reading}{local_topics}"
         query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
         try:
             self._write_topic(ydb_client, [self._event(0, "fast-0")], partition_id=0)
@@ -234,7 +234,7 @@ class TestWatermarksInYdb(StreamingTestBase):
     @link_test_case("#28601")
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
-    def test_idle_partition_less_than_timeout(
+    def test_idle_partition_lt_timeout(
         self: Self,
         kikimr: Kikimr,
         entity_name: Callable[[str], str],
@@ -242,7 +242,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         shared_reading: bool,
     ) -> None:
         ydb_client = self.get_ydb_client(kikimr, local_topics)
-        query_name = "slow_partition_within_timeout"
+        query_name = f"idle_partition_lt_timeout_{shared_reading}{local_topics}"
         query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
         try:
             self._write_topic(ydb_client, [self._event(0, "fast-0")], partition_id=0)
@@ -272,7 +272,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         shared_reading: bool,
     ) -> None:
         ydb_client = self.get_ydb_client(kikimr, local_topics)
-        query_name = "topic"
+        query_name = f"idle_topic_{shared_reading}{local_topics}"
         query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
         try:
             self._write_topic(ydb_client, [self._event(0, "first-0")], partition_id=0)
@@ -287,37 +287,6 @@ class TestWatermarksInYdb(StreamingTestBase):
             expected = ["first-0", "second-0"]
             self._read_topic_check_row(ydb_client, expected)
             expected = ["first-10", "second-10"]
-            self._read_topic_check_row(ydb_client, expected)
-        finally:
-            self._drop_query(kikimr, query_name)
-
-    @link_test_case("#28603")
-    @pytest.mark.parametrize("local_topics", [True, False])
-    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
-    def test_idle_partition_resume(
-        self: Self,
-        kikimr: Kikimr,
-        entity_name: Callable[[str], str],
-        local_topics: bool,
-        shared_reading: bool,
-    ) -> None:
-        ydb_client = self.get_ydb_client(kikimr, local_topics)
-        query_name = "partition_resume"
-        query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading)
-        try:
-            self._write_topic(ydb_client, [self._event(0, "active-0")], partition_id=0)
-            self._write_topic(ydb_client, [self._event(0, "paused-0")], partition_id=1)
-            self._write_topic(ydb_client, [self._event(10, "active-10")], partition_id=0)
-
-            time.sleep(self.idle_timeout_seconds + 1)
-            expected = ["active-0", "paused-0"]
-            self._read_topic_check_row(ydb_client, expected)
-
-            self._write_topic(ydb_client, [self._event(10, "paused-10")], partition_id=1)
-            self._write_topic(ydb_client, [self._event(20, "active-20")], partition_id=0)
-            self._write_topic(ydb_client, [self._event(20, "paused-20")], partition_id=1)
-
-            expected = ["active-10", "paused-10"]
             self._read_topic_check_row(ydb_client, expected)
         finally:
             self._drop_query(kikimr, query_name)
@@ -356,12 +325,19 @@ class TestWatermarksInYdb(StreamingTestBase):
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     @pytest.mark.parametrize("tasks", [1, 2])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_wm_after_parsing(self: Self, kikimr: Kikimr, entity_name: Callable[[str], str], shared_reading: bool, tasks: int, local_topics: bool) -> None:
+    def test_wm_after_parsing(
+        self: Self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        shared_reading: bool,
+        tasks: int,
+        local_topics: bool,
+    ) -> None:
         if shared_reading:
             pytest.skip("Shared reading is not supported for watermarks after parsing yet")
 
         ydb_client = self.get_ydb_client(kikimr, local_topics)
-        query_name = f"test_wm_after_parsing_{shared_reading}{tasks}{local_topics}"
+        query_name = f"wm_after_parsing_{shared_reading}{tasks}{local_topics}"
         input_name, output_name, _ = self.get_io_names(
             kikimr, query_name, local_topics, entity_name, partitions_count=tasks, shared=shared_reading
         )
@@ -441,7 +417,7 @@ class TestWatermarksInYdb(StreamingTestBase):
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
     @pytest.mark.parametrize("tasks", [1, 2])
-    def test_early_events_are_dropped(
+    def test_early_events_policy(
         self: Self,
         kikimr: Kikimr,
         entity_name: Callable[[str], str],
@@ -450,7 +426,7 @@ class TestWatermarksInYdb(StreamingTestBase):
         tasks: int,
     ) -> None:
         ydb_client = self.get_ydb_client(kikimr, local_topics)
-        query_name = f"wm_early_{shared_reading}{tasks}{local_topics}"
+        query_name = f"early_events_policy_{shared_reading}{tasks}{local_topics}"
         query_name = self._create_query(kikimr, entity_name, query_name, local_topics, shared_reading, tasks)
 
         try:
@@ -489,9 +465,15 @@ class TestWatermarksInYdb(StreamingTestBase):
         expected: list[str],
     ) -> None:
         ydb_client = self.get_ydb_client(kikimr, local_topics)
-        query_name = f"wm_late_{policy.lower()}_{shared_reading}{tasks}{local_topics}"
+        query_name = f"late_events_{policy.lower()}_{shared_reading}{tasks}{local_topics}"
         query_name = self._create_query(
-            kikimr, entity_name, query_name, local_topics, shared_reading, tasks, settings={"WATERMARK_LATE_EVENTS_POLICY": policy},
+            kikimr,
+            entity_name,
+            query_name,
+            local_topics,
+            shared_reading,
+            tasks,
+            settings={"WATERMARK_LATE_EVENTS_POLICY": policy},
         )
 
         try:

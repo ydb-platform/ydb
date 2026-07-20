@@ -2543,7 +2543,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             This test covers the first scenario.        
 
             For a standalone CopyTable, it is fine to fail the request and tell the user that the table is currently locked
-            by another long-running operation.In that scenario, CopyTable is a single explicit operation that the user can simply retry.
+            by another long-running operation. In that scenario, CopyTable is a single explicit operation that the user can simply retry.
             This is also the case where CopyTable is expected to check whether the table is locked by other schema operations.
         */
 
@@ -2671,6 +2671,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
                 IsBackup: true
             }
         )");
+        env.TestWaitNotification(runtime, copyTx);
 
         TestDescribeResult(DescribePath(runtime, copyTablePath), {NLs::PathExist});
 
@@ -2790,7 +2791,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
     }
 
     Y_UNIT_TEST(SetNotNullWithUsualSchemeOperation) {
-        // As example of 'usual' scheme operation, there is gotten TRUNCATE TABLE
+        // As an example of a 'usual' scheme operation, this test uses TRUNCATE TABLE.
 
         TTestBasicRuntime runtime;
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);

@@ -10,7 +10,7 @@
 
 #include <util/random/random.h>
 
-#if defined(NDEBUGG)
+#if defined(NDEBUG)
 #define LOG_T(stream)
 #else
 #define LOG_T(stream) LOG_TRACE_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)

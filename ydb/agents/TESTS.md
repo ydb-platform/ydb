@@ -6,8 +6,9 @@ C++ unit tests: [`GTEST_PREFFER.md`](GTEST_PREFFER.md).
 ## C++ unit tests
 
 - Place tests in a `ut/` subdirectory next to the code under test.
+- Name test source files `*_ut.cpp`.
 - Declare the test module in `ya.make` with `GTEST()` / `GTEST_FOR(...)`, or
-  `UNITTEST()` / `UNITTEST_FOR(...)` when matching existing tests in the module.
+  `UNITTEST()` / `UNITTEST_FOR(...)` when matching existing tests in that `ut/`.
 - Register C++ test sources in `SRCS()`.
 
 ## Python tests

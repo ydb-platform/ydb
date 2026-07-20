@@ -5346,7 +5346,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
             Runtime().DispatchEvents(opts);
         }
 
-        UNIT_ASSERT(!billRecords.empty());
+        UNIT_ASSERT_VALUES_EQUAL(billRecords.size(), 1);
         UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"cloud_id\":\"CLOUD_ID_VAL\"");
         UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"folder_id\":\"FOLDER_ID_VAL\"");
         UNIT_ASSERT_STRING_CONTAINS(billRecords[0], "\"resource_id\":\"DATABASE_ID_VAL\"");

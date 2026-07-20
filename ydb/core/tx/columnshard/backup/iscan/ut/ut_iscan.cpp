@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(IScan) {
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
         NTestUtils::CreateBucket("test", s3Client);
 
-        TRuntimePtr runtime(new TTestBasicRuntime(1, true));
+        TRuntimePtr runtime(new TTestBasicRuntime());
         runtime->SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         SetupTabletServices(*runtime);
 
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(IScan) {
     }
 
     Y_UNIT_TEST(ShouldRejectParquetExportWithEncryption) {
-        TRuntimePtr runtime(new TTestBasicRuntime(1, true));
+        TRuntimePtr runtime(new TTestBasicRuntime());
         SetupTabletServices(*runtime);
         runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
 

@@ -31,7 +31,15 @@ bool TTxSetDown::SetDown(NIceDb::TNiceDb& db) {
         }
         return true;
     }
-    return false;
+    // setting Down = false on a non-existent node is considered a no-op and thus successful
+    if (Down) {
+        return false;
+    } else {
+        if (Forward) {
+            SideEffects.Send(Source, new TEvHive::TEvSetDownReply(), 0, Cookie);
+        }
+        return true;
+    }
 }
 
 bool TTxSetDown::Execute(TTransactionContext& txc, const TActorContext&) {
@@ -46,7 +54,7 @@ bool TTxSetDown::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxSetDown::Complete(const TActorContext& ctx) {
-    BLOG_D("THive::TTxSetDown(" << NodeId << ")::Complete");
+    BLOG_D("THive::TTxSetDown(" << NodeId << ")::Complete SideEffects: " << SideEffects);
     SideEffects.Complete(ctx);
 }
 

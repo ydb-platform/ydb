@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Sequence
 
 from ..rbo_verifier.ir import SnapshotError
-from .model import InconclusiveReplay, ReplayError, load_json, load_snapshot, prepare_case
+from .case import load_json, load_snapshot, prepare_case
+from .model import InconclusiveReplay, ReplayError
 from .runner import Target, run_replay
 
 

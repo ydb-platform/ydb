@@ -404,6 +404,10 @@ auditable two-way `UNIFORM_PARTITIONS` creation.
 
 Replay namespaces are deliberately retained for diagnosis and are printed in
 the JSON result. The tool never deletes an existing or generated YDB object.
+Its audit boundary is split by responsibility: `case.py` validates the
+certificate and witness, `materialize.py` renders the isolated catalog and
+read-only query, `observation.py` decodes real results, and `runner.py` contains
+the external mutation boundary.
 
 ```bash
 ./ya make --build relwithdebinfo -tA \

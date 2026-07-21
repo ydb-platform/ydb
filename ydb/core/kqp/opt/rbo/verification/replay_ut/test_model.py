@@ -9,18 +9,21 @@ from pathlib import Path
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import parse_snapshot
 from ydb.core.kqp.opt.rbo.verification.inspector.plan import snapshot_digest
-from ydb.core.kqp.opt.rbo.verification.replay.model import (
-    InconclusiveReplay,
-    ReplayError,
-    compare_results,
+from ydb.core.kqp.opt.rbo.verification.replay.case import (
     load_json,
-    optimizer_mode,
-    parse_result,
     prepare_case,
+    table_path,
+)
+from ydb.core.kqp.opt.rbo.verification.replay.materialize import (
     render_import,
     rewrite_read_only_query,
-    table_path,
     target_bundle,
+)
+from ydb.core.kqp.opt.rbo.verification.replay.model import InconclusiveReplay, ReplayError
+from ydb.core.kqp.opt.rbo.verification.replay.observation import (
+    compare_results,
+    optimizer_mode,
+    parse_result,
 )
 from ydb.core.kqp.opt.rbo.verification.replay.runner import Target, run_replay
 

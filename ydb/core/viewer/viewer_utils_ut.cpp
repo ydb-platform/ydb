@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-using namespace NKikimr::NViewer;
+namespace NKikimr::NViewer {
 
 Y_UNIT_TEST_SUITE(GetDatabaseParam) {
 
@@ -45,4 +45,11 @@ Y_UNIT_TEST(PostWithBodyWithEmptyDatabaseField) {
     UNIT_ASSERT(GetDatabaseParam(params, "POST", R"({"database":"","query":"SELECT 1"})").empty());
 }
 
-} // Y_UNIT_TEST_SUITE(GetDatabaseParam)
+Y_UNIT_TEST(PostWithBodyWithMalformedPostBody) {
+    TCgiParameters params;
+    UNIT_ASSERT(GetDatabaseParam(params, "POST", R"({"database":"db")").empty());
+}
+
+}
+
+} // namespace NKikimr::NViewer

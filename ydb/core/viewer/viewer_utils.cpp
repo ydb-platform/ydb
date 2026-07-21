@@ -16,6 +16,7 @@ TString GetDatabaseParam(const TCgiParameters& params, const TStringBuf& method,
     if (NJson::ReadJsonTree(body, &requestData)) {
         return requestData["database"].GetString();
     }
+    // "database" param is never sent via application/x-www-form-urlencoded bodies, so we don't need to check for it
     return {};
 }
 

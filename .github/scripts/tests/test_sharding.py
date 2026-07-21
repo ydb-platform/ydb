@@ -21,6 +21,7 @@ from choose_shard_count import (  # noqa: E402
     choose_shard_count,
     enrich_plan_timing_estimate,
     estimate_critical_path_minutes,
+    min_shards_for_wall_budget,
 )
 from estimate_runner_capacity import compute_max_new_runners  # noqa: E402
 from filter_graph_for_shard import filter_for_shard  # noqa: E402
@@ -571,6 +572,20 @@ class ChooseShardCountTest(unittest.TestCase):
 
     def test_max_shards_bound(self):
         self.assertEqual(self._choose(250, max_shards=6), 6)
+
+    def test_min_shards_for_wall_budget(self):
+        self.assertEqual(min_shards_for_wall_budget(0, threads=1), 1)
+        self.assertEqual(min_shards_for_wall_budget(240 * 60, threads=1), 1)
+        self.assertEqual(min_shards_for_wall_budget(241 * 60, threads=1), 2)
+        self.assertEqual(min_shards_for_wall_budget(1000 * 60, threads=1), 5)
+
+    def test_wall_budget_floor_overrides_capacity_and_peak(self):
+        # 1000 min single-job -> wall floor ceil(1000/240)=5.
+        self.assertEqual(self._choose(1000, max_shards=2), 5)
+        self.assertEqual(self._choose(1000, is_peak=True), 5)
+        # Below the 4h budget the old peak/capacity caps still apply.
+        self.assertEqual(self._choose(250, is_peak=True), 4)
+        self.assertEqual(self._choose(250, max_shards=2), 2)
 
     def test_estimate_critical_path_minutes(self):
         self.assertAlmostEqual(estimate_critical_path_minutes([5200.0, 4800.0], 52), 5200.0 / 60.0 / 52.0)

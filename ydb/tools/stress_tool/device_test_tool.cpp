@@ -263,7 +263,7 @@ int main(int argc, char **argv) {
     }
 
     const bool pathsProvided = !paths.empty();
-    
+
     // For client mode, and for server mode when running as an interconnect
     // responder (no real devices), paths can be empty; use a dummy for TPerfTestConfig.
     if ((clientMode || serverMode) && paths.empty()) {
@@ -350,6 +350,14 @@ int main(int argc, char **argv) {
                         return 1;
                     }
                 }
+                for (const auto& peer : serverPeers) {
+                    if (peer.NodeId == clientNodeId) {
+                        Cerr << "Error: --client NODE_ID (" << clientNodeId
+                             << ") collides with server NodeId " << peer.NodeId
+                             << "; client NodeId must differ from all server NodeIds" << Endl;
+                        return 1;
+                    }
+                }
 
                 auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
                 for (ui32 run = 0; run < config.RunCount; ++run) {
@@ -391,6 +399,14 @@ int main(int argc, char **argv) {
                     serverPeers.push_back({static_cast<ui32>(i + 1), host, port});
                 } catch (const yexception& ex) {
                     Cerr << "Error: --endpoint #" << (i + 1) << ": " << ex.what() << Endl;
+                    return 1;
+                }
+            }
+            for (const auto& peer : serverPeers) {
+                if (peer.NodeId == clientNodeId) {
+                    Cerr << "Error: --client NODE_ID (" << clientNodeId
+                         << ") collides with server NodeId " << peer.NodeId
+                         << "; client NodeId must differ from all server NodeIds" << Endl;
                     return 1;
                 }
             }

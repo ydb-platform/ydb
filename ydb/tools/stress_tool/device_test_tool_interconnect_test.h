@@ -260,7 +260,7 @@ struct TInterconnectTest : public TPerfTest {
                 Printer->PrintResults();
                 InterconnectResultsPrintedEvent.Signal();
             }
-        } catch (yexception ex) {
+        } catch (yexception& ex) {
             LastException = ex;
             IsLastExceptionSet = true;
             VERBOSE_COUT(ex.what());
@@ -521,7 +521,7 @@ struct TInterconnectClient : public TPerfTest {
                 Printer->PrintResults();
                 InterconnectResultsPrintedEvent.Signal();
             }
-        } catch (yexception ex) {
+        } catch (yexception& ex) {
             LastException = ex;
             IsLastExceptionSet = true;
             VERBOSE_COUT(ex.what());

@@ -10,12 +10,13 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.8.1)
+VERSION(2.8.2)
 
-ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/archive/R_2_8_1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/libexpat/libexpat/archive/R_2_8_2.tar.gz)
 
 PEERDIR(
     contrib/libs/libc_compat
+    library/cpp/sanitizer/include
 )
 
 ADDINCL(

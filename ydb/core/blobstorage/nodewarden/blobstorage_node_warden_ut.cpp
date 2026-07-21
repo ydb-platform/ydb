@@ -3,6 +3,7 @@
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
@@ -21,6 +22,7 @@
 #include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <atomic>
 #include <functional>
 
 const bool STRAND_PDISK = true;
@@ -486,6 +488,66 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         ~TBlockUpdates() {
             Runtime->SetObserverFunc(PrevObserver);
         }
+    };
+
+    template<class TEvType>
+    class TSilentBlockEvents : public std::deque<typename TEvType::TPtr> {
+    public:
+        using TEventPtr = typename TEvType::TPtr;
+
+        TSilentBlockEvents(TTestActorRuntime& runtime,
+                std::function<bool(const TEventPtr&)> condition)
+            : Runtime(runtime)
+            , Condition(std::move(condition))
+            , Holder(Runtime.AddObserver<TEvType>([this](TEventPtr& ev) {
+                Process(ev);
+            }))
+        {}
+
+        TSilentBlockEvents& Unblock(size_t count = Max<size_t>()) {
+            while (!this->empty() && count > 0) {
+                auto& ev = this->front();
+                if (!Stopped) {
+                    UnblockedOnce.insert(ev.Get());
+                }
+                const ui32 nodeIdx = ev->GetRecipientRewrite().NodeId() - Runtime.GetFirstNodeId();
+                Runtime.Send(ev.Release(), nodeIdx, true);
+                this->pop_front();
+                BlockedCount.fetch_sub(1, std::memory_order_release);
+                --count;
+            }
+            return *this;
+        }
+
+        bool HasEvents() const {
+            return BlockedCount.load(std::memory_order_acquire) != 0;
+        }
+
+        TSilentBlockEvents& Stop() {
+            UnblockedOnce.clear();
+            Holder.Remove();
+            Stopped = true;
+            return *this;
+        }
+
+    private:
+        void Process(TEventPtr& ev) {
+            if (UnblockedOnce.erase(ev.Get())) {
+                return;
+            }
+            if (!Condition || Condition(ev)) {
+                this->emplace_back(std::move(ev));
+                BlockedCount.fetch_add(1, std::memory_order_release);
+            }
+        }
+
+    private:
+        TTestActorRuntime& Runtime;
+        std::function<bool(const TEventPtr&)> Condition;
+        TTestActorRuntime::TEventObserverHolder Holder;
+        THashSet<IEventHandle*> UnblockedOnce;
+        std::atomic<size_t> BlockedCount = 0;
+        bool Stopped = false;
     };
 
     CUSTOM_UNIT_TEST(TestSyncLogLimitControlsPassedToVDiskConfig) {
@@ -1193,6 +1255,138 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         // Now give it some time to bootstrap
         runtime.SimulateSleep(TDuration::Seconds(10));
         return realNodeWarden;
+    }
+
+    CUSTOM_UNIT_TEST(TestDestroyRejectsLatePostWipeYardInit) {
+        return;
+
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, "", nullptr);
+
+        const ui32 nodeId = runtime.GetNodeId(0);
+        const ui32 pdiskId = 0;
+        const ui32 vdiskSlotId = 0;
+        const TActorId nodeWardenId = MakeBlobStorageNodeWardenID(nodeId);
+        const ui32 groupId = TGroupID(EGroupConfigurationType::Static, DOMAIN_ID, 0).GetRaw();
+        const TVDiskID vdiskId(groupId, 1, 0, 0, 0);
+
+        NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk baseVDisk;
+        VDiskIDFromVDiskID(vdiskId, baseVDisk.MutableVDiskID());
+        auto *location = baseVDisk.MutableVDiskLocation();
+        location->SetNodeID(nodeId);
+        location->SetPDiskID(pdiskId);
+        location->SetPDiskGuid(1);
+        location->SetVDiskSlotID(vdiskSlotId);
+
+        std::atomic<ui64> wipeSlayRound = 0;
+        std::atomic<int> wipeSlayStatus = -1;
+        std::atomic<bool> destroyRequested = false;
+        std::atomic<int> destroySlayStatus = -1;
+        auto slayResultObserver = runtime.AddObserver<NPDisk::TEvSlayResult>(
+            [&](NPDisk::TEvSlayResult::TPtr& ev) {
+                const auto& msg = *ev->Get();
+                if (msg.PDiskId != pdiskId || msg.VSlotId != vdiskSlotId ||
+                        !msg.VDiskId.SameExceptGeneration(vdiskId)) {
+                    return;
+                }
+
+                if (destroyRequested.load(std::memory_order_acquire)) {
+                    destroySlayStatus.store(msg.Status, std::memory_order_release);
+                } else if (msg.Status == NKikimrProto::OK || msg.Status == NKikimrProto::ALREADY) {
+                    wipeSlayStatus.store(msg.Status, std::memory_order_release);
+                    wipeSlayRound.store(msg.SlayOwnerRound, std::memory_order_release);
+                }
+            });
+        TSilentBlockEvents<NPDisk::TEvYardInit> delayedYardInit(runtime,
+            [&](const NPDisk::TEvYardInit::TPtr& ev) {
+                const auto& msg = *ev->Get();
+                const ui64 completedWipeRound = wipeSlayRound.load(std::memory_order_acquire);
+                return completedWipeRound != 0 && msg.SlotId == vdiskSlotId &&
+                    msg.VDisk.SameExceptGeneration(vdiskId) &&
+                    msg.OwnerRound > completedWipeRound;
+            });
+        TBlockEvents<TEvBlobStorage::TEvControllerNodeReport> wipedReports(runtime,
+            [=](const TEvBlobStorage::TEvControllerNodeReport::TPtr& ev) {
+                for (const auto& report : ev->Get()->Record.GetVDiskReports()) {
+                    const auto& slot = report.GetVSlotId();
+                    if (slot.GetNodeId() == nodeId && slot.GetPDiskId() == pdiskId &&
+                            slot.GetVSlotId() == vdiskSlotId &&
+                            report.GetPhase() == NKikimrBlobStorage::TEvControllerNodeReport::WIPED) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+        TBlockEvents<NStorage::TEvNodeConfigInvokeOnRoot> destroyedReports(runtime,
+            [=](const NStorage::TEvNodeConfigInvokeOnRoot::TPtr& ev) {
+                if (!ev->Get()->Record.HasStaticVDiskSlain()) {
+                    return false;
+                }
+                const auto& slot = ev->Get()->Record.GetStaticVDiskSlain().GetVSlotId();
+                return slot.GetNodeId() == nodeId && slot.GetPDiskId() == pdiskId &&
+                    slot.GetVSlotId() == vdiskSlotId;
+            });
+
+        const auto sendVDiskUpdate = [&](const auto& vdisk) {
+            auto update = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(
+                NKikimrProto::OK, nodeId);
+            update->Record.MutableServiceSet()->AddVDisks()->CopyFrom(vdisk);
+            runtime.Send(new IEventHandle(nodeWardenId, TActorId(), update.release()));
+        };
+
+        auto wipeVDisk = baseVDisk;
+        wipeVDisk.SetDoWipe(true);
+        sendVDiskUpdate(wipeVDisk);
+
+        runtime.WaitFor("WIPE Slay result", [&] {
+            return wipeSlayRound.load(std::memory_order_acquire) != 0;
+        },
+            TDuration::Seconds(30));
+        const auto terminalWipeStatus = static_cast<NKikimrProto::EReplyStatus>(
+            wipeSlayStatus.load(std::memory_order_acquire));
+        UNIT_ASSERT_C(terminalWipeStatus == NKikimrProto::OK ||
+                terminalWipeStatus == NKikimrProto::ALREADY,
+            "unexpected terminal WIPE status# "
+                << NKikimrProto::EReplyStatus_Name(terminalWipeStatus));
+
+        runtime.WaitFor("WIPED report", [&] { return !wipedReports.empty(); },
+            TDuration::Seconds(30));
+        runtime.WaitFor("post-WIPE YardInit", [&] { return delayedYardInit.HasEvents(); },
+            TDuration::Seconds(30));
+
+        auto destroyVDisk = baseVDisk;
+        destroyVDisk.SetDoDestroy(true);
+        destroyRequested.store(true, std::memory_order_release);
+        sendVDiskUpdate(destroyVDisk);
+
+        runtime.WaitFor("DESTROY Slay result", [&] {
+            return destroySlayStatus.load(std::memory_order_acquire) != -1;
+        },
+            TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(destroySlayStatus.load(std::memory_order_acquire),
+            NKikimrProto::ALREADY);
+
+        runtime.WaitFor("DESTROYED report", [&] { return !destroyedReports.empty(); },
+            TDuration::Seconds(30));
+
+        const TActorId lateVDiskActor = delayedYardInit.front()->Sender;
+        const ui64 lateOwnerRound = delayedYardInit.front()->Get()->OwnerRound;
+        std::atomic<int> lateYardInitStatus = -1;
+        auto lateYardInitResultObserver = runtime.AddObserver<NPDisk::TEvYardInitResult>(
+            [&](NPDisk::TEvYardInitResult::TPtr& ev) {
+                if (ev->GetRecipientRewrite() == lateVDiskActor) {
+                    lateYardInitStatus.store(ev->Get()->Status, std::memory_order_release);
+                }
+            });
+        delayedYardInit.Stop().Unblock(1);
+
+        runtime.WaitFor("late YardInit result", [&] {
+            return lateYardInitStatus.load(std::memory_order_acquire) != -1;
+        },
+            TDuration::Seconds(30));
+        UNIT_ASSERT_C(lateYardInitStatus.load(std::memory_order_acquire) != NKikimrProto::OK,
+            "PDisk accepted late TEvYardInit with OwnerRound# " << lateOwnerRound
+            << " after NodeWarden reported DESTROYED");
     }
 
     void UpdateInferPDiskSlotCountSettings(TTestBasicRuntime& runtime, TActorId realNodeWarden,

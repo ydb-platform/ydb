@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch suite-level duration p50 from YDB test_results for shard planning."""
+"""Fetch suite-level duration p90 from YDB test_results for shard planning."""
 from __future__ import annotations
 
 import os
@@ -9,7 +9,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", "analytics"))
 from ydb_wrapper import YDBWrapper  # noqa: E402
 
 MAX_DAYS_BACK = 180
-DEFAULT_DAYS_BACK = 3
+DEFAULT_DAYS_BACK = 14
 SUITE_IN_CLAUSE_THRESHOLD = 50
 
 
@@ -23,7 +23,31 @@ def _decode_value(value: object) -> str:
     return str(value)
 
 
-def get_suite_duration_p50(
+def expand_suite_path_prefixes(suite_paths: list[str]) -> list[str]:
+    """Include parent folders so longest-prefix history match can resolve."""
+    expanded: set[str] = set()
+    for path in suite_paths:
+        cleaned = path.strip().rstrip("/")
+        if not cleaned:
+            continue
+        parts = cleaned.split("/")
+        for index in range(1, len(parts) + 1):
+            expanded.add("/".join(parts[:index]))
+    return sorted(expanded)
+
+
+def suite_related_to_requested(suite_folder: str, requested: set[str]) -> bool:
+    """True if suite_folder equals a requested path or is a prefix/child of one."""
+    if suite_folder in requested:
+        return True
+    prefix = suite_folder + "/"
+    for path in requested:
+        if path.startswith(prefix) or suite_folder.startswith(path + "/"):
+            return True
+    return False
+
+
+def get_suite_duration_p90(
     suite_paths: list[str],
     days_back: int,
     build_type: str,
@@ -31,11 +55,12 @@ def get_suite_duration_p50(
     *,
     in_clause_threshold: int = SUITE_IN_CLAUSE_THRESHOLD,
 ) -> dict[str, float]:
-    """Return {suite_folder: p50_total_duration_sec} for suites with history.
+    """Return {suite_folder: p90_total_duration_sec} for suites with history.
 
-    Duration per suite is p50 over job runs of SUM(test durations) in that suite.
-    If len(suite_paths) < in_clause_threshold, filter in SQL; otherwise fetch all
-    matching rows for branch/build_type and filter client-side.
+    Duration per suite is p90 over job runs of SUM(test durations) in that suite.
+    If len(suite_paths) < in_clause_threshold, filter in SQL (including parent
+    prefixes); otherwise fetch all matching rows for branch/build_type and keep
+    suites related to the request by prefix so longest-prefix match works.
     """
     if not suite_paths:
         return {}
@@ -48,11 +73,12 @@ def get_suite_duration_p50(
         )
         days_back = MAX_DAYS_BACK
 
-    requested = set(suite_paths)
-    use_in_clause = len(suite_paths) < in_clause_threshold
+    requested = {path.strip().rstrip("/") for path in suite_paths if path.strip()}
+    lookup_paths = expand_suite_path_prefixes(sorted(requested))
+    use_in_clause = len(lookup_paths) < in_clause_threshold
     suite_filter = ""
     if use_in_clause:
-        suite_filter = f"AND suite_folder IN [{_sql_string_list(suite_paths)}]"
+        suite_filter = f"AND suite_folder IN [{_sql_string_list(lookup_paths)}]"
 
     with YDBWrapper(silent=True) as ydb_wrapper:
         if not ydb_wrapper.check_credentials():
@@ -61,8 +87,9 @@ def get_suite_duration_p50(
 
         test_runs_table = ydb_wrapper.get_table_path("test_results")
         print(
-            f"Querying suite duration p50 for {len(suite_paths)} suites "
-            f"({'IN clause' if use_in_clause else 'wide scan + client filter'}): "
+            f"Querying suite duration p90 for {len(requested)} suites "
+            f"({'IN clause' if use_in_clause else 'wide scan + prefix filter'}, "
+            f"lookup_keys={len(lookup_paths)}): "
             f"build_type={build_type}, branch={branch}, days_back={days_back}",
             file=sys.stderr,
         )
@@ -71,7 +98,7 @@ def get_suite_duration_p50(
     PRAGMA AnsiInForEmptyOrNullableItemsCollections;
     SELECT
         suite_folder,
-        PERCENTILE(run_suite_duration, 0.5) AS p50_sec
+        PERCENTILE(run_suite_duration, 0.9) AS p90_sec
     FROM (
         SELECT
             suite_folder,
@@ -98,20 +125,24 @@ def get_suite_duration_p50(
     GROUP BY
         suite_folder;
 """
-        rows = ydb_wrapper.execute_scan_query(query, query_name="shard_plan_suite_duration_p50")
+        rows = ydb_wrapper.execute_scan_query(query, query_name="shard_plan_suite_duration_p90")
         results: dict[str, float] = {}
         for row in rows:
             suite_folder = _decode_value(row["suite_folder"])
-            if not use_in_clause and suite_folder not in requested:
+            if not use_in_clause and not suite_related_to_requested(suite_folder, requested):
                 continue
-            p50 = row["p50_sec"]
-            if p50 is None:
+            p90 = row["p90_sec"]
+            if p90 is None:
                 continue
-            results[suite_folder] = float(p50)
+            results[suite_folder] = float(p90)
 
         print(
-            f"Retrieved suite duration p50 for {len(results)} suites "
-            f"out of {len(suite_paths)} requested",
+            f"Retrieved suite duration p90 for {len(results)} suites "
+            f"(requested {len(requested)} paths, days_back={days_back})",
             file=sys.stderr,
         )
         return results
+
+
+# Backward-compatible alias (shard planning now uses p90).
+get_suite_duration_p50 = get_suite_duration_p90

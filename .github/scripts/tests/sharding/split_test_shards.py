@@ -25,6 +25,7 @@ def load_suite_weights(path: Path | None) -> dict[str, float]:
     size_weights = data.get("size_weights") or {}
     small_weight = float(size_weights.get("small", 60))
     medium_weight = float(size_weights.get("medium", 600))
+    large_weight = float(size_weights.get("large", 3600))
     weights: dict[str, float] = {}
     for suite in data.get("suites") or []:
         path_value = str(suite.get("path") or "").strip()
@@ -35,8 +36,13 @@ def load_suite_weights(path: Path | None) -> dict[str, float]:
             continue
         small_count = int(suite.get("small_test_count") or 0)
         medium_count = int(suite.get("medium_test_count") or 0)
-        if small_count or medium_count:
-            weights[path_value] = small_count * small_weight + medium_count * medium_weight
+        large_count = int(suite.get("large_test_count") or 0)
+        if small_count or medium_count or large_count:
+            weights[path_value] = (
+                small_count * small_weight
+                + medium_count * medium_weight
+                + large_count * large_weight
+            )
         else:
             weights[path_value] = float(suite.get("test_count") or 1)
     return weights
@@ -65,7 +71,13 @@ def load_durations(path: Path | None) -> dict[str, float]:
             full_name = (row.get("full_name") or row.get("test") or "").strip()
             if not full_name:
                 continue
-            raw = row.get("duration_sec") or row.get("duration") or row.get("p50_sec") or "0"
+            raw = (
+                row.get("duration_sec")
+                or row.get("duration")
+                or row.get("p90_sec")
+                or row.get("p50_sec")
+                or "0"
+            )
             try:
                 durations[full_name] = float(raw)
             except ValueError:

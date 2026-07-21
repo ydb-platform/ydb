@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Plan graph-replay sharding by partitioning graph.result UIDs across runners.
 
-Bin-packs individual result UIDs by history p50 weights (longest prefix match
-on node paths, split evenly when many nodes share a path). Each shard keeps the
-full graph and runs a subset of ``graph.result`` via filter_graph_for_shard.
+Bin-packs individual result UIDs by history p90 weights (longest prefix match
+on node paths; p90 split across UIDs matched to the same history key). Missing
+history falls back to size-based weights (small for lint/import_test, medium
+otherwise). Each shard keeps the full graph and runs a subset of
+``graph.result`` via filter_graph_for_shard.
 
 Used for increment cuts (``increment_graph``) and full PR-check scope
 (``full_graph``).
@@ -29,14 +31,15 @@ from choose_shard_count import (  # noqa: E402
     enrich_plan_timing_estimate,
     is_peak_hour_utc,
 )
-from get_test_duration_estimates import DEFAULT_DAYS_BACK, get_suite_duration_p50  # noqa: E402
+from get_test_duration_estimates import DEFAULT_DAYS_BACK, get_suite_duration_p90  # noqa: E402
 from graph_plan_utils import (  # noqa: E402
-    component_weight,
+    DEFAULT_SIZE_WEIGHTS,
     connected_components,
     extract_node_path,
     graph_nodes_by_uid,
+    load_test_sizes_from_context,
+    plan_uid_weights,
     result_uids,
-    uid_weights,
     validate_graph,
 )
 
@@ -74,30 +77,35 @@ def build_plan(
     graph: dict[str, Any],
     shard_count: int,
     *,
-    duration_p50: dict[str, float],
-    default_weight: float = 600.0,
+    duration_p90: dict[str, float],
+    size_weights: dict[str, float] | None = None,
+    size_by_uid: dict[str, str] | None = None,
     plan_mode: str = "increment_graph",
     threads: int = 52,
+    days_back: int | None = None,
+    build_type: str | None = None,
+    branch: str | None = None,
 ) -> dict[str, Any]:
     nodes_by_uid = graph_nodes_by_uid(graph)
     uids = result_uids(graph)
-    per_uid = uid_weights(
+    per_uid, weighting_stats = plan_uid_weights(
         uids,
         nodes_by_uid,
-        duration_p50,
-        default_weight=default_weight,
+        duration_p90,
+        size_weights=size_weights,
+        size_by_uid=size_by_uid,
     )
     total_weight = sum(per_uid.values())
     buckets, loads = bin_pack_uids(per_uid, shard_count)
     components = connected_components(uids, nodes_by_uid)
     assignments: dict[str, int] = {}
     shards: list[dict[str, Any]] = []
-    for shard_id, uids in enumerate(buckets):
-        if not uids:
+    for shard_id, shard_uids in enumerate(buckets):
+        if not shard_uids:
             continue
         sample_paths: list[str] = []
         seen_paths: set[str] = set()
-        for uid in uids:
+        for uid in shard_uids:
             assignments[uid] = shard_id
             path = extract_node_path(nodes_by_uid.get(uid, {}))
             if path and path not in seen_paths:
@@ -108,12 +116,23 @@ def build_plan(
             {
                 "id": shard_id,
                 "tests": [],
-                "graph_uids": uids,
-                "result_node_count": len(uids),
+                "graph_uids": shard_uids,
+                "result_node_count": len(shard_uids),
                 "balance_weight": round(loads[shard_id], 1),
                 "sample_paths": sample_paths[:8],
             }
         )
+
+    weighting = dict(weighting_stats)
+    weighting["max_shard_weight_ratio"] = (
+        round(max(loads) / total_weight, 3) if total_weight else 0.0
+    )
+    if days_back is not None:
+        weighting["days_back"] = days_back
+    if build_type is not None:
+        weighting["build_type"] = build_type
+    if branch is not None:
+        weighting["branch"] = branch
 
     plan = {
         "plan_mode": plan_mode,
@@ -122,11 +141,7 @@ def build_plan(
         "total_graph_nodes": len(result_uids(graph)),
         "total_components": len(components),
         "total_weight": round(total_weight, 1),
-        "weighting": {
-            "mode": "graph_uid_history_p50_lpt",
-            "history_suite_count": len(duration_p50),
-            "max_shard_weight_ratio": round(max(loads) / total_weight, 3) if total_weight else 0.0,
-        },
+        "weighting": weighting,
         "uid_assignments": assignments,
         "shards": shards,
     }
@@ -152,10 +167,28 @@ def main() -> int:
     parser.add_argument("--days-back", type=int, default=DEFAULT_DAYS_BACK)
     parser.add_argument("--threads", type=int, default=52)
     parser.add_argument(
+        "--context",
+        type=Path,
+        default=None,
+        help="Optional context.json to read per-test SIZE when cmds lack --test-size",
+    )
+    parser.add_argument(
         "--default-weight-sec",
         type=float,
-        default=600.0,
-        help="Fallback weight when no history prefix matches",
+        default=DEFAULT_SIZE_WEIGHTS["medium"],
+        help="Fallback weight for medium tests when history is missing",
+    )
+    parser.add_argument(
+        "--small-weight-sec",
+        type=float,
+        default=DEFAULT_SIZE_WEIGHTS["small"],
+        help="Fallback weight for small tests when history is missing",
+    )
+    parser.add_argument(
+        "--large-weight-sec",
+        type=float,
+        default=DEFAULT_SIZE_WEIGHTS["large"],
+        help="Fallback weight for large tests when history is missing",
     )
     parser.add_argument(
         "--plan-mode",
@@ -175,6 +208,12 @@ def main() -> int:
         help="Override current UTC hour (for tests)",
     )
     args = parser.parse_args()
+
+    size_weights = {
+        "small": float(args.small_weight_sec),
+        "medium": float(args.default_weight_sec),
+        "large": float(args.large_weight_sec),
+    }
 
     graph = json.loads(args.graph.read_text(encoding="utf-8"))
     validate_graph(graph)
@@ -197,9 +236,18 @@ def main() -> int:
         print("Empty increment graph: shard_count=0", file=sys.stderr)
         return 0
 
+    size_by_uid: dict[str, str] = {}
+    if args.context is not None:
+        if not args.context.is_file():
+            print(f"warning: context not found: {args.context}", file=sys.stderr)
+        else:
+            context = json.loads(args.context.read_text(encoding="utf-8"))
+            size_by_uid = load_test_sizes_from_context(context)
+            print(f"Loaded test sizes from context for {len(size_by_uid)} tests", file=sys.stderr)
+
     unique_paths = collect_unique_paths(graph)
     try:
-        duration_p50 = get_suite_duration_p50(
+        duration_p90 = get_suite_duration_p90(
             unique_paths,
             args.days_back,
             args.build_type,
@@ -207,15 +255,18 @@ def main() -> int:
         )
     except Exception as exc:
         print(f"warning: duration history lookup failed: {exc}", file=sys.stderr)
-        duration_p50 = {}
+        duration_p90 = {}
 
     preview_nodes = graph_nodes_by_uid(graph)
-    preview_components = connected_components(result_uids(graph), preview_nodes)
-    preview_weights = [
-        component_weight(component, preview_nodes, duration_p50, default_weight=args.default_weight_sec)[0]
-        for component in preview_components
-    ]
-    total_weight = sum(preview_weights)
+    preview_uids = result_uids(graph)
+    preview_weights, _ = plan_uid_weights(
+        preview_uids,
+        preview_nodes,
+        duration_p90,
+        size_weights=size_weights,
+        size_by_uid=size_by_uid,
+    )
+    total_weight = sum(preview_weights.values())
 
     if args.shard_count == "auto":
         hour = args.now_utc_hour if args.now_utc_hour is not None else datetime.now(timezone.utc).hour
@@ -237,19 +288,27 @@ def main() -> int:
     plan = build_plan(
         graph,
         shard_count,
-        duration_p50=duration_p50,
-        default_weight=args.default_weight_sec,
+        duration_p90=duration_p90,
+        size_weights=size_weights,
+        size_by_uid=size_by_uid,
         plan_mode=args.plan_mode,
         threads=args.threads,
+        days_back=args.days_back,
+        build_type=args.build_type,
+        branch=args.branch,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     loads = Counter(plan["uid_assignments"].values())
+    weighting = plan.get("weighting") or {}
     print(
         f"Graph replay plan ({args.plan_mode}): {plan['shard_count']} shards, "
         f"{plan['total_graph_nodes']} nodes, {plan['total_components']} components, "
         f"weight={plan['total_weight']}, "
+        f"history_uids={weighting.get('history_uid_count', 0)}, "
+        f"size_fallback_uids="
+        f"{int(weighting.get('size_small_uid_count', 0)) + int(weighting.get('size_medium_uid_count', 0)) + int(weighting.get('size_large_uid_count', 0))}, "
         f"est. critical path ~{plan.get('estimated_critical_path_min', 0):.1f} min -> {args.output}",
         file=sys.stderr,
     )

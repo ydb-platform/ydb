@@ -24,6 +24,7 @@ _TOTAL_SUITES_RE = re.compile(r"^Total\s+(\d+)\s+suites?\s*$", re.IGNORECASE)
 _TOTAL_TESTS_RE = re.compile(r"^Total\s+(\d+)\s+tests?\s*$", re.IGNORECASE)
 SIZE_WEIGHT_SMALL = 60
 SIZE_WEIGHT_MEDIUM = 600
+SIZE_WEIGHT_LARGE = 3600
 
 
 def normalize_target_prefix(prefix: str | None) -> str | None:
@@ -77,19 +78,26 @@ class SuiteInfo:
     sizes: set[str] = field(default_factory=set)
     small_test_count: int = 0
     medium_test_count: int = 0
+    large_test_count: int = 0
     test_names: list[str] = field(default_factory=list)
 
     @property
     def test_count(self) -> int:
-        return self.small_test_count + self.medium_test_count
+        return self.small_test_count + self.medium_test_count + self.large_test_count
 
     @property
     def weight(self) -> int:
-        return self.small_test_count * SIZE_WEIGHT_SMALL + self.medium_test_count * SIZE_WEIGHT_MEDIUM
+        return (
+            self.small_test_count * SIZE_WEIGHT_SMALL
+            + self.medium_test_count * SIZE_WEIGHT_MEDIUM
+            + self.large_test_count * SIZE_WEIGHT_LARGE
+        )
 
 
 def _increment_test_count(suite: SuiteInfo, active_sizes: set[str]) -> None:
-    if "medium" in active_sizes:
+    if "large" in active_sizes:
+        suite.large_test_count += 1
+    elif "medium" in active_sizes:
         suite.medium_test_count += 1
     else:
         # No [size:*] tag defaults to small (same as ya SIZE(SMALL) semantics).
@@ -211,6 +219,7 @@ def build_summary(
         "size_weights": {
             "small": SIZE_WEIGHT_SMALL,
             "medium": SIZE_WEIGHT_MEDIUM,
+            "large": SIZE_WEIGHT_LARGE,
         },
         "reported_suites": reported_suites,
         "reported_tests": reported_tests,
@@ -221,6 +230,7 @@ def build_summary(
                 "sizes": sorted(suite.sizes) if suite.sizes else ["small"],
                 "small_test_count": suite.small_test_count,
                 "medium_test_count": suite.medium_test_count,
+                "large_test_count": suite.large_test_count,
                 "test_count": suite.test_count,
                 "weight": suite.weight,
             }

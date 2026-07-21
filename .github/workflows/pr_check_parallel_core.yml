@@ -282,7 +282,7 @@ jobs:
           SHARD_PROFILE: ${{ inputs.shard_profile }}
           BUILD_PRESET: ${{ inputs.build_preset }}
           HISTORY_BRANCH: ${{ inputs.history_branch }}
-          HISTORY_DAYS_BACK: "3"
+          HISTORY_DAYS_BACK: "14"
           TEST_THREADS: "52"
           DISABLE_PEAK_CAP: ${{ inputs.disable_peak_cap && '1' || '' }}
           # For the pool-capacity estimator (estimate_runner_capacity.py).
@@ -315,7 +315,7 @@ jobs:
             --title "$plan_title" \
             >> "$GITHUB_STEP_SUMMARY"
           if [ -f shard_plan_out/list_summary.json ]; then
-            jq -r '.weighting | if .mode == "graph_uid_history_p50_lpt" then "Graph UID weights: \(.history_suite_count // 0) suites matched, max shard share \(.max_shard_weight_ratio // 0)" elif .mode == "graph_path_history_p50_longest_match" then "Graph history weights: \(.history_suite_count // 0) suites matched" else "History weights: \(.history_suite_count // 0)/\(.history_suite_count + .size_fallback_suite_count) suites from p50 (\(.branch // "main"), \(.days_back // 3)d)" end' \
+            jq -r '.weighting | if (.mode == "graph_uid_history_p90_lpt" or .mode == "graph_uid_history_p50_lpt") then "Graph UID weights: \(.history_suite_count // 0) suites matched, max shard share \(.max_shard_weight_ratio // 0)" elif .mode == "graph_path_history_p50_longest_match" then "Graph history weights: \(.history_suite_count // 0) suites matched" else "History weights: \(.history_suite_count // 0)/\(.history_suite_count + .size_fallback_suite_count) suites from p90 (\(.branch // "main"), \(.days_back // 14)d)" end' \
               shard_plan_out/list_summary.json >> "$GITHUB_STEP_SUMMARY" || true
           fi
           jq -r '"Estimated wall time (slowest shard): ~\(.estimated_critical_path_min // 0) min (\(.estimate_threads // 52) threads, max shard weight \(.estimated_max_shard_weight_sec // 0)s)"' \

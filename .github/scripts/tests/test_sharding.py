@@ -25,7 +25,12 @@ from choose_shard_count import (  # noqa: E402
 )
 from estimate_runner_capacity import compute_max_new_runners  # noqa: E402
 from filter_graph_for_shard import filter_for_shard  # noqa: E402
-from graph_plan_utils import assign_result_uids_to_shards, load_graph  # noqa: E402
+from graph_plan_utils import (  # noqa: E402
+    assign_result_uids_to_shards,
+    extract_node_path,
+    load_graph,
+    plan_uid_weights,
+)
 from render_artifacts_nav import render_nav_html  # noqa: E402
 from render_shard_plan_summary import render as render_shard_plan_summary  # noqa: E402
 
@@ -272,7 +277,10 @@ class ShardingToolsTest(unittest.TestCase):
                 summary_data["total_weight"],
                 sum(item["weight"] for item in summary_data["suites"]),
             )
-            self.assertEqual(summary_data["size_weights"], {"small": 60, "medium": 600})
+            self.assertEqual(
+                summary_data["size_weights"],
+                {"small": 60, "medium": 600, "large": 3600},
+            )
 
     def test_filter_suites_by_increment_graph(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -471,10 +479,10 @@ class ShardingToolsTest(unittest.TestCase):
             )
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
 
-            def fake_p50(paths, _days, _build, _branch, **kwargs):
+            def fake_p90(paths, _days, _build, _branch, **kwargs):
                 return {path: 100.0 for path in paths}
 
-            with patch.object(ahsw, "get_suite_duration_p50", side_effect=fake_p50):
+            with patch.object(ahsw, "get_suite_duration_p90", side_effect=fake_p90):
                 updated = ahsw.apply_history_weights(
                     summary,
                     list_log=FIXTURES / "ya_test_list_olap.log",
@@ -703,6 +711,53 @@ class FilterGraphForShardTest(unittest.TestCase):
             self.assertIn("estimated_critical_path_min", plan)
             self.assertEqual(plan["estimate_threads"], 52)
 
+    def test_extract_node_path_prefers_kv_path_over_clang_format_input(self):
+        node = {
+            "uid": "test-lint",
+            "kv": {"path": "yql/essentials/udfs/common/compress_base/clang_format"},
+            "inputs": [
+                "$(SOURCE_ROOT)/tools/cpp_style_checker/wrapper.py",
+                "$(SOURCE_ROOT)/yql/essentials/.clang-format",
+                "$(SOURCE_ROOT)/yql/essentials/udfs/common/compress_base",
+            ],
+            "outputs": [
+                "$(BUILD_ROOT)/yql/essentials/udfs/common/compress_base/test-results/clang_format/meta.json",
+            ],
+        }
+        self.assertEqual(
+            extract_node_path(node),
+            "yql/essentials/udfs/common/compress_base",
+        )
+
+    def test_plan_uid_weights_splits_history_by_matched_suite(self):
+        nodes = {
+            "a": {
+                "uid": "a",
+                "target_properties": {"module_dir": "ydb/tests/foo"},
+                "cmds": [{"cmd_args": ["run_test", "--test-size", "medium"]}],
+            },
+            "b": {
+                "uid": "b",
+                "target_properties": {"module_dir": "ydb/tests/foo/child"},
+                "cmds": [{"cmd_args": ["run_test", "--test-size", "medium"]}],
+            },
+            "large": {
+                "uid": "large",
+                "target_properties": {"module_dir": "ydb/tests/bar"},
+                "cmds": [{"cmd_args": ["run_test", "--test-size", "large"]}],
+            },
+        }
+        weights, stats = plan_uid_weights(
+            ["a", "b", "large"],
+            nodes,
+            {"ydb/tests/foo": 100.0},
+        )
+        self.assertEqual(weights["a"], 50.0)
+        self.assertEqual(weights["b"], 50.0)
+        self.assertEqual(weights["large"], 3600.0)
+        self.assertEqual(stats["history_uid_count"], 2)
+        self.assertEqual(stats["size_large_uid_count"], 1)
+
     def test_split_graph_result_balances_large_connected_component(self):
         graph = {
             "conf": {},
@@ -737,7 +792,7 @@ class FilterGraphForShardTest(unittest.TestCase):
                 str(graph_path),
                 "--shard-count",
                 "4",
-                "--default-weight-sec",
+                "--small-weight-sec",
                 "10",
                 "-o",
                 str(plan_path),

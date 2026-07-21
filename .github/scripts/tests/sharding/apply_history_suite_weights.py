@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replace size-based suite weights with YDB suite duration p50 when history exists."""
+"""Replace size-based suite weights with YDB suite duration p90 when history exists."""
 from __future__ import annotations
 
 import argparse
@@ -15,7 +15,7 @@ if str(_TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(_TESTS_DIR))
 
 from extract_suites_from_ya_test_list import parse_ya_test_list  # noqa: E402
-from get_test_duration_estimates import DEFAULT_DAYS_BACK, get_suite_duration_p50  # noqa: E402
+from get_test_duration_estimates import DEFAULT_DAYS_BACK, get_suite_duration_p90  # noqa: E402
 
 
 def apply_history_weights(
@@ -36,10 +36,10 @@ def apply_history_weights(
     suite_paths = [suite.path for suite in suites]
 
     try:
-        duration_p50 = get_suite_duration_p50(suite_paths, days_back, build_type, branch)
+        duration_p90 = get_suite_duration_p90(suite_paths, days_back, build_type, branch)
     except Exception as exc:
         print(f"warning: duration history lookup failed: {exc}", file=sys.stderr)
-        duration_p50 = {}
+        duration_p90 = {}
 
     suite_meta: dict[str, dict] = {}
     history_suites = 0
@@ -47,8 +47,8 @@ def apply_history_weights(
     total_weight = 0.0
 
     for suite in suites:
-        if suite.path in duration_p50:
-            weight = duration_p50[suite.path]
+        if suite.path in duration_p90:
+            weight = duration_p90[suite.path]
             source = "history"
             history_suites += 1
             history_tests = suite.test_count
@@ -65,7 +65,7 @@ def apply_history_weights(
             "weight_source": source,
             "history_test_count": history_tests,
             "size_fallback_test_count": size_fallback_tests,
-            "history_p50_sec": duration_p50.get(suite.path),
+            "history_p90_sec": duration_p90.get(suite.path),
         }
 
     updated_suites = []
@@ -78,25 +78,25 @@ def apply_history_weights(
             item["weight_source"] = meta["weight_source"]
             item["history_test_count"] = meta["history_test_count"]
             item["size_fallback_test_count"] = meta["size_fallback_test_count"]
-            if meta.get("history_p50_sec") is not None:
-                item["history_p50_sec"] = meta["history_p50_sec"]
+            if meta.get("history_p90_sec") is not None:
+                item["history_p90_sec"] = meta["history_p90_sec"]
         updated_suites.append(item)
 
     summary = dict(summary)
     summary["suites"] = updated_suites
     summary["total_weight"] = total_weight
     summary["weighting"] = {
-        "mode": "suite_history_p50_with_size_fallback",
+        "mode": "suite_history_p90_with_size_fallback",
         "build_type": build_type,
         "branch": branch,
         "days_back": days_back,
         "history_suite_count": history_suites,
         "size_fallback_suite_count": size_fallback_suites,
         "history_test_count": sum(
-            suite.test_count for suite in suites if suite.path in duration_p50
+            suite.test_count for suite in suites if suite.path in duration_p90
         ),
         "size_fallback_test_count": sum(
-            suite.test_count for suite in suites if suite.path not in duration_p50
+            suite.test_count for suite in suites if suite.path not in duration_p90
         ),
     }
     return summary
@@ -137,7 +137,6 @@ def main() -> int:
         days_back=args.days_back,
     )
     args.summary_json.write_text(json.dumps(updated, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
     weighting = updated.get("weighting") or {}
     print(
         f"Updated suite weights: history_suites={weighting.get('history_suite_count', 0)}, "

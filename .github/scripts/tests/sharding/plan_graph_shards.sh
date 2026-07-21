@@ -46,18 +46,33 @@ if [ -n "${MAX_SHARDS:-}" ]; then
   SPLIT_EXTRA_ARGS+=(--no-peak-cap)
 fi
 
+CONTEXT_JSON="${CONTEXT_JSON:-}"
+if [ -z "$CONTEXT_JSON" ]; then
+  # Usual layout: graph.json and context.json sit next to each other.
+  candidate="$(dirname "$GRAPH_JSON")/context.json"
+  if [ -f "$candidate" ]; then
+    CONTEXT_JSON="$candidate"
+  fi
+fi
+
 run_split() {
   local count="$1"
+  local split_args=(
+    "$GRAPH_JSON"
+    --shard-count "$count"
+    --profile "${SHARD_PROFILE:-pr}"
+    --plan-mode "$PLAN_MODE"
+    -o "$PLAN_FILE"
+    --build-type "${BUILD_PRESET:-relwithdebinfo}"
+    --branch "${HISTORY_BRANCH:-main}"
+    --days-back "${HISTORY_DAYS_BACK:-14}"
+    --threads "$TEST_THREADS"
+  )
+  if [ -n "$CONTEXT_JSON" ] && [ -f "$CONTEXT_JSON" ]; then
+    split_args+=(--context "$CONTEXT_JSON")
+  fi
   python3 "$SCRIPT_DIR/split_graph_result.py" \
-    "$GRAPH_JSON" \
-    --shard-count "$count" \
-    --profile "${SHARD_PROFILE:-pr}" \
-    --plan-mode "$PLAN_MODE" \
-    -o "$PLAN_FILE" \
-    --build-type "${BUILD_PRESET:-relwithdebinfo}" \
-    --branch "${HISTORY_BRANCH:-main}" \
-    --days-back "${HISTORY_DAYS_BACK:-3}" \
-    --threads "$TEST_THREADS" \
+    "${split_args[@]}" \
     "${SPLIT_EXTRA_ARGS[@]}"
 }
 

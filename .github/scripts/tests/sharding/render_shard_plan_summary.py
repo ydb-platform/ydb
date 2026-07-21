@@ -43,6 +43,27 @@ def render(plan: dict, title: str = "Shard plan") -> str:
         if total_weight is not None:
             total_line += f", weight {total_weight}"
         lines.append(total_line)
+        weighting = plan.get("weighting") or {}
+        if weighting:
+            hist = weighting.get("history_uid_count")
+            small = weighting.get("size_small_uid_count")
+            medium = weighting.get("size_medium_uid_count")
+            large = weighting.get("size_large_uid_count")
+            days = weighting.get("days_back")
+            bits = []
+            if hist is not None:
+                bits.append(f"history_uids={hist}")
+            if small is not None or medium is not None or large is not None:
+                bits.append(
+                    "size_fallback_uids="
+                    f"{int(small or 0) + int(medium or 0) + int(large or 0)}"
+                    f" (small={int(small or 0)}, medium={int(medium or 0)}, "
+                    f"large={int(large or 0)})"
+                )
+            if days is not None:
+                bits.append(f"days_back={days}")
+            if bits:
+                lines.append("**Weighting:** " + ", ".join(bits))
         load_column = "Weight"
         lines.append("")
         lines.append(f"| Shard | Graph nodes | {load_column} | Sample paths |")

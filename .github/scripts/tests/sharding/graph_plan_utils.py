@@ -12,8 +12,37 @@ _BUILD_ROOT_PATH_RE = re.compile(
     r"^\$\((?:BUILD_ROOT|SOURCE_ROOT)\)/"
     r"((?:ydb|yql|library|contrib|yt)/(?:[^/$]+(?:/[^/$]+)*))"
 )
+_TEST_RESULTS_OUT_RE = re.compile(
+    r"^\$\((?:BUILD_ROOT|SOURCE_ROOT)\)/"
+    r"((?:ydb|yql|library|contrib|yt)/(?:[^/$]+(?:/[^/$]+)*))/test-results/"
+)
+_DOTFILE_LEAF_RE = re.compile(r"(?:^|/)\.[^/]+$")
+_SOURCE_FILE_LEAF_RE = re.compile(
+    r"\.(?:py|pyi|json|ya?ml|toml|md|txt|proto|cpp|h|c|cc|hh|hpp|inc|sh)$",
+    re.IGNORECASE,
+)
 
-DEFAULT_SIZE_WEIGHTS = {"small": 60, "medium": 600}
+# Leaf names that ya puts after the suite folder in kv.path / test-results/.
+_TEST_KIND_LEAVES = frozenset(
+    {
+        "unittest",
+        "py3test",
+        "py2test",
+        "pytest",
+        "gtest",
+        "flake8",
+        "clang_format",
+        "black",
+        "import_test",
+    }
+)
+_CONTEXT_SIZE_RE = re.compile(rb"SIZE\x94\x8c.([A-Z]+)\x94")
+
+DEFAULT_SIZE_WEIGHTS = {
+    "small": 60.0,
+    "medium": 600.0,
+    "large": 3600.0,
+}
 
 
 def validate_graph(graph: dict[str, Any]) -> None:
@@ -55,18 +84,90 @@ def dependency_uids_in_result(node: dict[str, Any], result_set: set[str]) -> lis
     return deps
 
 
+def strip_test_kind_leaf(path: str) -> str:
+    """Drop ya test-kind leaf (unittest/flake8/...) so path aligns with suite_folder."""
+    cleaned = path.strip().rstrip("/")
+    if "/" not in cleaned:
+        return cleaned
+    parent, leaf = cleaned.rsplit("/", 1)
+    if leaf in _TEST_KIND_LEAVES:
+        return parent
+    return cleaned
+
+
+def extract_node_test_size(node: dict[str, Any]) -> str | None:
+    """Read ya ``--test-size`` from graph node cmds (small/medium/large)."""
+    for cmd in node.get("cmds") or []:
+        if not isinstance(cmd, dict):
+            continue
+        args = cmd.get("cmd_args") or []
+        for index, arg in enumerate(args):
+            if arg == "--test-size" and index + 1 < len(args):
+                size = str(args[index + 1]).strip().lower()
+                if size in DEFAULT_SIZE_WEIGHTS:
+                    return size
+    return None
+
+
+def load_test_sizes_from_context(context: dict[str, Any] | None) -> dict[str, str]:
+    """Extract SIZE(SMALL|MEDIUM|LARGE) from ya context.json test blobs."""
+    if not context:
+        return {}
+    tests = context.get("tests")
+    if not isinstance(tests, dict):
+        return {}
+    sizes: dict[str, str] = {}
+    for uid, payload in tests.items():
+        if isinstance(payload, bytes):
+            raw = payload
+        elif isinstance(payload, str):
+            raw = payload.encode("latin1", errors="ignore")
+        else:
+            continue
+        match = _CONTEXT_SIZE_RE.search(raw)
+        if not match:
+            continue
+        size = match.group(1).decode("ascii", errors="ignore").lower()
+        if size in DEFAULT_SIZE_WEIGHTS:
+            sizes[str(uid)] = size
+    return sizes
+
+
 def extract_node_path(node: dict[str, Any]) -> str | None:
+    """Best-effort suite folder for a graph result node.
+
+    Priority:
+    1. target_properties.module_dir
+    2. kv.path (strip unittest/flake8/... leaf)
+    3. outputs .../suite/test-results/...
+    4. SOURCE/BUILD_ROOT inputs, skipping dotfiles and source filenames
+    """
     target_props = node.get("target_properties") or {}
     module_dir = target_props.get("module_dir")
     if isinstance(module_dir, str) and module_dir.strip():
-        return module_dir.strip()
+        return module_dir.strip().rstrip("/")
+
+    kv_path = (node.get("kv") or {}).get("path")
+    if isinstance(kv_path, str) and kv_path.strip():
+        return strip_test_kind_leaf(kv_path)
+
+    for out in node.get("outputs") or []:
+        if not isinstance(out, str):
+            continue
+        match = _TEST_RESULTS_OUT_RE.match(out)
+        if match:
+            return match.group(1)
 
     for inp in node.get("inputs") or []:
         if not isinstance(inp, str):
             continue
         match = _BUILD_ROOT_PATH_RE.match(inp)
-        if match:
-            return match.group(1)
+        if not match:
+            continue
+        path = match.group(1)
+        if _DOTFILE_LEAF_RE.search(path) or _SOURCE_FILE_LEAF_RE.search(path):
+            continue
+        return strip_test_kind_leaf(path)
     return None
 
 
@@ -102,87 +203,177 @@ def connected_components(result: list[str], nodes_by_uid: dict[str, dict[str, An
 
 def longest_history_match(
     path: str,
-    duration_p50: dict[str, float],
-    *,
-    default_weight: float = 600.0,
+    duration_p90: dict[str, float],
 ) -> tuple[float, str, str | None]:
     best_suite: str | None = None
-    best_p50: float | None = None
-    for suite, p50 in duration_p50.items():
+    best_p90: float | None = None
+    for suite, p90 in duration_p90.items():
         if path == suite or path.startswith(f"{suite}/"):
             if best_suite is None or len(suite) > len(best_suite):
                 best_suite = suite
-                best_p50 = float(p50)
-    if best_suite is not None and best_p50 is not None:
-        return best_p50, "history", best_suite
-    return default_weight, "fallback", None
+                best_p90 = float(p90)
+    if best_suite is not None and best_p90 is not None:
+        return best_p90, "history", best_suite
+    return 0.0, "fallback", None
 
 
-def uid_weight(
+def resolve_node_test_size(
     uid: str,
-    nodes_by_uid: dict[str, dict[str, Any]],
-    duration_p50: dict[str, float],
+    node: dict[str, Any],
     *,
-    path_counts: Counter[str] | None = None,
-    default_weight: float = 600.0,
-) -> float:
-    """Estimate one result node weight (history p50 split evenly within a path)."""
-    node = nodes_by_uid.get(uid)
-    if not node:
-        return default_weight
-    path = extract_node_path(node)
-    if not path:
-        return default_weight
-    weight, _, _ = longest_history_match(path, duration_p50, default_weight=default_weight)
-    if path_counts is not None:
-        count = path_counts.get(path, 1)
-        if count > 1:
-            return weight / count
-    return weight
+    size_by_uid: dict[str, str] | None = None,
+) -> str:
+    """Return small/medium/large; default small (ya SIZE(SMALL) semantics)."""
+    size = extract_node_test_size(node)
+    if size is None and size_by_uid is not None:
+        size = size_by_uid.get(uid)
+    if size in DEFAULT_SIZE_WEIGHTS:
+        return size
+    return "small"
+
+
+def fallback_weight_for_node(
+    uid: str,
+    node: dict[str, Any],
+    *,
+    size_weights: dict[str, float] | None = None,
+    size_by_uid: dict[str, str] | None = None,
+) -> tuple[float, str]:
+    """Size-based fallback when suite history is missing."""
+    weights = size_weights or DEFAULT_SIZE_WEIGHTS
+    size = resolve_node_test_size(uid, node, size_by_uid=size_by_uid)
+    return float(weights.get(size, DEFAULT_SIZE_WEIGHTS["small"])), f"size_{size}"
+
+
+def plan_uid_weights(
+    uids: list[str],
+    nodes_by_uid: dict[str, dict[str, Any]],
+    duration_p90: dict[str, float],
+    *,
+    size_weights: dict[str, float] | None = None,
+    size_by_uid: dict[str, str] | None = None,
+) -> tuple[dict[str, float], dict[str, Any]]:
+    """Weight result UIDs for LPT packing.
+
+    History: longest suite_folder prefix match; p90 is split across all UIDs that
+    matched that same history key (not once per distinct child path).
+
+    Fallback: ya test size (small/medium/large) from graph ``--test-size`` or
+    context SIZE; missing size defaults to small.
+    """
+    weights_cfg = dict(DEFAULT_SIZE_WEIGHTS)
+    if size_weights:
+        weights_cfg.update(size_weights)
+
+    path_by_uid: dict[str, str | None] = {}
+    match_by_uid: dict[str, tuple[float, str, str | None]] = {}
+    history_uid_counts: Counter[str] = Counter()
+
+    for uid in uids:
+        node = nodes_by_uid.get(uid) or {}
+        path = extract_node_path(node)
+        path_by_uid[uid] = path
+        if not path:
+            match_by_uid[uid] = (0.0, "fallback", None)
+            continue
+        p90, source, suite = longest_history_match(path, duration_p90)
+        match_by_uid[uid] = (p90, source, suite)
+        if source == "history" and suite is not None:
+            history_uid_counts[suite] += 1
+
+    per_uid: dict[str, float] = {}
+    source_counts: Counter[str] = Counter()
+    history_weight = 0.0
+    fallback_weight = 0.0
+    missing_path = 0
+
+    for uid in uids:
+        node = nodes_by_uid.get(uid) or {}
+        p90, source, suite = match_by_uid[uid]
+        if source == "history" and suite is not None:
+            weight = p90 / max(history_uid_counts[suite], 1)
+            per_uid[uid] = weight
+            history_weight += weight
+            source_counts["history"] += 1
+            continue
+
+        if path_by_uid[uid] is None:
+            missing_path += 1
+        weight, fb_source = fallback_weight_for_node(
+            uid,
+            node,
+            size_weights=weights_cfg,
+            size_by_uid=size_by_uid,
+        )
+        per_uid[uid] = weight
+        fallback_weight += weight
+        source_counts[fb_source] += 1
+
+    stats = {
+        "mode": "graph_uid_history_p90_lpt",
+        "history_suite_count": len(duration_p90),
+        "history_uid_count": int(source_counts.get("history", 0)),
+        "size_small_uid_count": int(source_counts.get("size_small", 0)),
+        "size_medium_uid_count": int(source_counts.get("size_medium", 0)),
+        "size_large_uid_count": int(source_counts.get("size_large", 0)),
+        "missing_path_uid_count": missing_path,
+        "history_weight": round(history_weight, 1),
+        "fallback_weight": round(fallback_weight, 1),
+        "size_weights": {k: float(v) for k, v in sorted(weights_cfg.items())},
+    }
+    return per_uid, stats
 
 
 def uid_weights(
     uids: list[str],
     nodes_by_uid: dict[str, dict[str, Any]],
-    duration_p50: dict[str, float],
+    duration_p90: dict[str, float],
     *,
     default_weight: float = 600.0,
+    size_weights: dict[str, float] | None = None,
+    size_by_uid: dict[str, str] | None = None,
 ) -> dict[str, float]:
-    path_counts: Counter[str] = Counter()
-    for uid in uids:
-        path = extract_node_path(nodes_by_uid.get(uid, {}))
-        if path:
-            path_counts[path] += 1
-    return {
-        uid: uid_weight(
-            uid,
-            nodes_by_uid,
-            duration_p50,
-            path_counts=path_counts,
-            default_weight=default_weight,
-        )
-        for uid in uids
-    }
+    """Compatibility wrapper around :func:`plan_uid_weights`."""
+    weights_cfg = dict(size_weights or DEFAULT_SIZE_WEIGHTS)
+    if size_weights is None and default_weight != DEFAULT_SIZE_WEIGHTS["medium"]:
+        weights_cfg["medium"] = float(default_weight)
+    weights, _ = plan_uid_weights(
+        uids,
+        nodes_by_uid,
+        duration_p90,
+        size_weights=weights_cfg,
+        size_by_uid=size_by_uid,
+    )
+    return weights
 
 
 def component_weight(
     component: list[str],
     nodes_by_uid: dict[str, dict[str, Any]],
-    duration_p50: dict[str, float],
+    duration_p90: dict[str, float],
     *,
     default_weight: float = 600.0,
+    size_weights: dict[str, float] | None = None,
+    size_by_uid: dict[str, str] | None = None,
 ) -> tuple[float, dict[str, float]]:
-    per_path: dict[str, float] = {}
-    for uid in component:
-        node = nodes_by_uid.get(uid)
-        if not node:
-            continue
-        path = extract_node_path(node)
-        if not path or path in per_path:
-            continue
-        weight, _, _ = longest_history_match(path, duration_p50, default_weight=default_weight)
-        per_path[path] = weight
-    return sum(per_path.values()), per_path
+    """Sum planned weights for UIDs in a component (same rules as packing)."""
+    weights_cfg = dict(size_weights or DEFAULT_SIZE_WEIGHTS)
+    if size_weights is None and default_weight != DEFAULT_SIZE_WEIGHTS["medium"]:
+        weights_cfg["medium"] = float(default_weight)
+    # History split must use the component alone only when this is the full
+    # result set; callers that need global split should use plan_uid_weights.
+    per_uid = uid_weights(
+        component,
+        nodes_by_uid,
+        duration_p90,
+        size_weights=weights_cfg,
+        size_by_uid=size_by_uid,
+    )
+    per_path: dict[str, float] = defaultdict(float)
+    for uid, weight in per_uid.items():
+        path = extract_node_path(nodes_by_uid.get(uid, {})) or uid
+        per_path[path] += weight
+    return sum(per_uid.values()), dict(per_path)
 
 
 def filter_graph_result(graph: dict[str, Any], allowed_uids: set[str]) -> dict[str, Any]:

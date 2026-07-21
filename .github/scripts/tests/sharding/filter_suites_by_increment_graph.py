@@ -18,7 +18,8 @@ def filter_list_summary(summary: dict, increment_paths: set[str]) -> dict:
         "total_suites": len(filtered),
         "total_tests": total_tests,
         "total_weight": total_weight,
-        "size_weights": summary.get("size_weights") or {"small": 60, "medium": 600},
+        "size_weights": summary.get("size_weights")
+        or {"small": 60, "medium": 600, "large": 3600},
         "reported_suites": summary.get("reported_suites"),
         "reported_tests": summary.get("reported_tests"),
         "increment_filtered": True,

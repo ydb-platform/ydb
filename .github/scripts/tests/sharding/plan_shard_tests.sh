@@ -38,7 +38,7 @@ python3 "$SCRIPT_DIR/apply_history_suite_weights.py" \
   --target-prefix "$TARGET_PREFIX" \
   --build-type "${BUILD_PRESET:-relwithdebinfo}" \
   --branch "${HISTORY_BRANCH:-main}" \
-  --days-back "${HISTORY_DAYS_BACK:-3}"
+  --days-back "${HISTORY_DAYS_BACK:-14}"
 
 echo "Weighting: $(jq -c '.weighting' "$FILTERED_SUMMARY")"
 

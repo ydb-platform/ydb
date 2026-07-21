@@ -95,6 +95,10 @@ void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
         NTabletPipe::CloseClient(ctx, pipe.second.PipeActor);
     }
     TabletPipes.clear();
+    while (!PartitionsLocationQueue.empty()) {
+        SendPartitionsLocationError(PartitionsLocationQueue.front().Sender, ctx);
+        PartitionsLocationQueue.pop_front();
+    }
     if (PartitionsScaleManager) {
         PartitionsScaleManager->Die(ctx);
     }
@@ -158,6 +162,8 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
 
     auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
     ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
+
+    ProcessPartitionsLocationQueue(ctx);
 }
 
 void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext &ctx) {
@@ -170,7 +176,15 @@ void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TA
             }
             break;
         }
+        case PARTITIONS_LOCATION_WAKEUP_TAG: {
+            PartitionsLocationWakeupScheduled = false;
+            ProcessExpiredPartitionsLocationRequests(ctx);
+            ProcessPartitionsLocationQueue(ctx);
+            SchedulePartitionsLocationWakeup(ctx);
+            break;
+        }
         default: {
+            ProcessExpiredPartitionsLocationRequests(ctx);
             GetStat(ctx); //TODO: do it only on signals from outerspace right now
             CleanupReceiveAttemptPartitions(ctx);
             auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
@@ -406,6 +420,10 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
     }
     else
         PQ_LOG_I("TEvClientConnected Pipe is not found, TabletId " << tabletId);
+
+    if (AllPartitionPipesReady()) {
+        ProcessPartitionsLocationQueue(ctx);
+    }
 }
 
 void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext& ctx)
@@ -598,13 +616,79 @@ void TPersQueueReadBalancer::GetStat(const TActorContext& ctx) {
 }
 
 void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
-    auto* evResponse = new TEvPersQueue::TEvGetPartitionsLocationResponse();
-    evResponse->Record.SetStatus(false);
-    ctx.Send(ev->Sender, evResponse);
+    EnqueuePartitionsLocationRequest(ev, ctx);
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
-    const auto& request = ev->Get()->Record;
+void TPersQueueReadBalancer::SendPartitionsLocationError(const TActorId& sender, const TActorContext& ctx) {
+    auto response = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
+    response->Record.SetStatus(false);
+    ctx.Send(sender, response.release());
+}
+
+bool TPersQueueReadBalancer::AllPartitionPipesReady() const {
+    if (!PipesRequested.empty() || TabletPipes.size() < TabletsInfo.size()) {
+        return false;
+    }
+    for (const auto& [_, partitionInfo] : PartitionsInfo) {
+        auto iter = TabletPipes.find(partitionInfo.TabletId);
+        if (iter == TabletPipes.end() || !iter->second.NodeId || !iter->second.Generation) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void TPersQueueReadBalancer::SchedulePartitionsLocationWakeup(const TActorContext& ctx) {
+    if (PartitionsLocationWakeupScheduled || PartitionsLocationQueue.empty()) {
+        return;
+    }
+    const auto now = TAppData::TimeProvider->Now();
+    const auto& deadline = PartitionsLocationQueue.front().Deadline;
+    const auto delay = deadline > now ? deadline - now : TDuration::Zero();
+    PartitionsLocationWakeupScheduled = true;
+    ctx.Schedule(delay, new TEvents::TEvWakeup(PARTITIONS_LOCATION_WAKEUP_TAG));
+}
+
+void TPersQueueReadBalancer::EnqueuePartitionsLocationRequest(
+    TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev,
+    const TActorContext& ctx
+) {
+    PartitionsLocationQueue.push_back(TPartitionsLocationRequest{
+        .Sender = ev->Sender,
+        .Record = std::move(ev->Get()->Record),
+        .Deadline = TAppData::TimeProvider->Now() + PartitionsLocationRequestTimeout,
+    });
+    PQ_LOG_D("Enqueue GetPartitionsLocation request, queueSize=" << PartitionsLocationQueue.size()
+            << " deadline=" << PartitionsLocationQueue.back().Deadline);
+    SchedulePartitionsLocationWakeup(ctx);
+}
+
+void TPersQueueReadBalancer::ProcessExpiredPartitionsLocationRequests(const TActorContext& ctx) {
+    const auto now = TAppData::TimeProvider->Now();
+    while (!PartitionsLocationQueue.empty() && PartitionsLocationQueue.front().Deadline <= now) {
+        PQ_LOG_D("GetPartitionsLocation request expired, sender=" << PartitionsLocationQueue.front().Sender);
+        SendPartitionsLocationError(PartitionsLocationQueue.front().Sender, ctx);
+        PartitionsLocationQueue.pop_front();
+    }
+}
+
+void TPersQueueReadBalancer::ProcessPartitionsLocationQueue(const TActorContext& ctx) {
+    ProcessExpiredPartitionsLocationRequests(ctx);
+    while (!PartitionsLocationQueue.empty()) {
+        auto& request = PartitionsLocationQueue.front();
+        if (!TryRespondPartitionsLocation(request.Sender, request.Record, ctx)) {
+            break;
+        }
+        PartitionsLocationQueue.pop_front();
+    }
+    SchedulePartitionsLocationWakeup(ctx);
+}
+
+bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
+    const TActorId& sender,
+    const NKikimrPQ::TGetPartitionsLocation& request,
+    const TActorContext& ctx
+) {
     auto evResponse = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
 
     auto addPartitionToResponse = [&](ui64 partitionId, ui64 tabletId) {
@@ -614,6 +698,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr
         auto iter = TabletPipes.find(tabletId);
         if (iter == TabletPipes.end()) {
             GetPipeClient(tabletId, ctx);
+            return false;
+        }
+        if (!iter->second.NodeId || !iter->second.Generation) {
             return false;
         }
 
@@ -628,36 +715,38 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr
         return true;
     };
 
-    auto sendError = [&]() {
-        auto response = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
-        response->Record.SetStatus(false);
-        ctx.Send(ev->Sender, response.release());
-    };
-
     if (request.PartitionsSize() == 0) {
-        if (!PipesRequested.empty() || TabletPipes.size() < TabletsInfo.size()) {
-            // Do not have all pipes connected.
-            return sendError();
+        if (!AllPartitionPipesReady()) {
+            return false;
         }
         for (const auto& [partitionId, partitionInfo] : PartitionsInfo) {
             if (!addPartitionToResponse(partitionId, partitionInfo.TabletId)) {
-                return sendError();
+                return false;
             }
         }
     } else {
         for (const auto& partitionInRequest : request.GetPartitions()) {
             auto partitionInfoIter = PartitionsInfo.find(partitionInRequest);
             if (partitionInfoIter == PartitionsInfo.end()) {
-                return sendError();
+                SendPartitionsLocationError(sender, ctx);
+                return true; // answered with error, drop from queue
             }
             if (!addPartitionToResponse(partitionInRequest, partitionInfoIter->second.TabletId)) {
-                return sendError();
+                return false;
             }
         }
     }
 
     evResponse->Record.SetStatus(true);
-    ctx.Send(ev->Sender, evResponse.release());
+    ctx.Send(sender, evResponse.release());
+    return true;
+}
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx) {
+    if (TryRespondPartitionsLocation(ev->Sender, ev->Get()->Record, ctx)) {
+        return;
+    }
+    EnqueuePartitionsLocationRequest(ev, ctx);
 }
 
 
@@ -1096,6 +1185,7 @@ STFUNC(TPersQueueReadBalancer::StateInit) {
         HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
+        HFunc(TEvents::TEvWakeup, HandleWakeup);
         // MLP
         hFunc(TEvPQ::TEvMLPGetPartitionRequest, Handle);
         HFunc(TEvPQ::TEvMLPConsumerStatus, Handle);

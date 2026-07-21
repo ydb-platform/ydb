@@ -120,6 +120,13 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
 
     void HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
+    void EnqueuePartitionsLocationRequest(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
+    void ProcessExpiredPartitionsLocationRequests(const TActorContext& ctx);
+    void ProcessPartitionsLocationQueue(const TActorContext& ctx);
+    bool TryRespondPartitionsLocation(const TActorId& sender, const NKikimrPQ::TGetPartitionsLocation& request, const TActorContext& ctx);
+    bool AllPartitionPipesReady() const;
+    void SchedulePartitionsLocationWakeup(const TActorContext& ctx);
+    void SendPartitionsLocationError(const TActorId& sender, const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr&, const TActorContext&);
 
@@ -279,6 +286,17 @@ private:
 
     std::deque<TAutoPtr<TEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
     std::deque<TAutoPtr<TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
+
+    static constexpr TDuration PartitionsLocationRequestTimeout = TDuration::Seconds(5);
+    static constexpr ui64 PARTITIONS_LOCATION_WAKEUP_TAG = 11;
+
+    struct TPartitionsLocationRequest {
+        TActorId Sender;
+        NKikimrPQ::TGetPartitionsLocation Record;
+        TInstant Deadline;
+    };
+    std::deque<TPartitionsLocationRequest> PartitionsLocationQueue;
+    bool PartitionsLocationWakeupScheduled = false;
 
     using TMLPRequests = std::variant<
         TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr

@@ -1172,6 +1172,76 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
+    Y_UNIT_TEST(ExportsLosslessMixedIntegerStaticSqlIn) {
+        for (const bool useAsList : {false, true}) {
+            TExportTestContext ctx;
+            const auto* int32Type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* optionalInt64 = ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            const auto* optionalBool = ScalarType(ctx, NUdf::EDataSlot::Bool, true);
+            TExprNode::TListType items = {
+                TypedLiteral(ctx, "Int32", "-1", int32Type),
+                TypedLiteral(ctx, "Int32", "2", int32Type),
+            };
+            auto collection = useAsList
+                ? TypedStaticAsList(ctx, std::move(items), int32Type)
+                : TypedStaticTuple(ctx, std::move(items), int32Type);
+
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedSqlIn(
+                    ctx,
+                    std::move(collection),
+                    TypedMember(ctx, "a.x", optionalInt64),
+                    SqlInOptions(ctx, {}),
+                    optionalBool),
+                true);
+
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "in");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["items"][0]["type"].GetStringSafe(),
+                "Int32");
+        }
+    }
+
+    Y_UNIT_TEST(HeterogeneousStaticSqlInTupleFailsClosed) {
+        TExportTestContext ctx;
+        const auto* int32Type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+        const auto* uint32Type = ScalarType(ctx, NUdf::EDataSlot::Uint32);
+        const auto* optionalInt64 = ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+        const auto* optionalBool = ScalarType(ctx, NUdf::EDataSlot::Bool, true);
+        TExprNode::TListType items;
+        for (ui32 index = 0; index < 3; ++index) {
+            items.push_back(TypedLiteral(ctx, "Int32", ToString(index), int32Type));
+            items.push_back(TypedLiteral(ctx, "Uint32", ToString(index), uint32Type));
+        }
+        const auto* tupleType = ctx.ExprCtx.MakeType<TTupleExprType>(
+            TTypeAnnotationNode::TListType{
+                int32Type,
+                uint32Type,
+                int32Type,
+                uint32Type,
+                int32Type,
+                uint32Type,
+            });
+        auto collection = ctx.ExprCtx.NewList(TPositionHandle(), std::move(items));
+        collection->SetTypeAnn(tupleType);
+
+        const auto result = ExportMapExpressionResult(
+            ctx,
+            "a",
+            TypedSqlIn(
+                ctx,
+                std::move(collection),
+                TypedMember(ctx, "a.x", optionalInt64),
+                SqlInOptions(ctx, {}),
+                optionalBool),
+            true);
+
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "must have one item type");
+    }
+
     Y_UNIT_TEST(StaticSqlInAcceptsMaximumCollectionSize) {
         TExportTestContext ctx;
         const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
@@ -1262,8 +1332,8 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     Y_UNIT_TEST(StaticSqlInTypesAndResultNullabilityFailClosed) {
         const TVector<TString> expectedReasons = {
             "item is nullable",
-            "different lookup type",
-            "tuple annotation does not match",
+            "not equality-compatible",
+            "collection annotation",
             "result nullability does not match",
             "result is not Bool",
         };
@@ -1272,6 +1342,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             const auto* intType = ScalarType(ctx, NUdf::EDataSlot::Int32);
             const auto* optionalInt = ScalarType(ctx, NUdf::EDataSlot::Int32, true);
             const auto* int64Type = ScalarType(ctx, NUdf::EDataSlot::Int64);
+            const auto* uint64Type = ScalarType(ctx, NUdf::EDataSlot::Uint64);
             const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
 
             TExprNode::TPtr item;
@@ -1283,7 +1354,9 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     item = TypedCallable(ctx, "Nothing", {}, optionalInt);
                     break;
                 case 1:
-                    item = TypedLiteral(ctx, "Int64", "1", int64Type);
+                    item = TypedLiteral(ctx, "Uint64", "1", uint64Type);
+                    annotatedItemType = uint64Type;
+                    lookupType = int64Type;
                     break;
                 case 2:
                     item = TypedLiteral(ctx, "Int32", "1", intType);

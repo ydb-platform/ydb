@@ -67,6 +67,12 @@ def integer_comparison_compatible(left: str, right: str) -> bool:
     return signed_width > unsigned_width
 
 
+def equality_comparison_compatible(left: str, right: str) -> bool:
+    """Whether ordinary equality compares both scalar values without loss."""
+
+    return left == right or integer_comparison_compatible(left, right)
+
+
 def family(scalar_type: str) -> str:
     if scalar_type == VOID:
         return "unit"

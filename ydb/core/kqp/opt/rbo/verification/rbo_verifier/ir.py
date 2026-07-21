@@ -16,6 +16,7 @@ from .types import (
     DATE,
     MAX_DATE,
     VOID,
+    equality_comparison_compatible,
     family,
     integer_comparison_compatible,
     is_ordered_type,
@@ -901,15 +902,21 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
 
     if expr.kind == "in":
         lookup = _infer_expr(expr.args[0], columns, f"{path}.lookup")
+        item_name = None
         for index, item_expr in enumerate(expr.args[1:]):
             item_path = f"{path}.items[{index}]"
             item = _infer_expr(item_expr, columns, item_path)
             if item.nullable:
                 _fail(item_path, "IN items must be non-nullable")
-            if item.name != lookup.name:
+            if item_name is None:
+                item_name = item.name
+            elif item.name != item_name:
+                _fail(item_path, f"IN items must have one type, starting with {item_name!r}")
+            if not equality_comparison_compatible(lookup.name, item.name):
                 _fail(
                     item_path,
-                    f"IN item type mismatch: expected {lookup.name!r}, got {item.name!r}",
+                    "IN item is not equality-compatible with its lookup: "
+                    f"{lookup.name!r} and {item.name!r}",
                 )
         return ValueType(BOOL, lookup.nullable)
 
@@ -918,7 +925,7 @@ def _infer_expr(expr: Expr, columns: Mapping[str, Column], path: str) -> ValueTy
         right = _infer_expr(expr.args[1], columns, f"{path}.right")
         compatible_integers = integer_comparison_compatible(left.name, right.name)
         compatible_dates = left.name == DATE and right.name == DATE
-        if left.name != right.name and not compatible_integers:
+        if not equality_comparison_compatible(left.name, right.name):
             label = "equality" if expr.kind == "eq" else "comparison"
             _fail(path, f"{label} type mismatch: {left.name!r} and {right.name!r}")
         if expr.kind != "eq" and not (compatible_integers or compatible_dates):

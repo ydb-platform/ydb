@@ -425,6 +425,10 @@ bool IntegerComparisonCompatible(TStringBuf left, TStringBuf right) {
     return signedWidth > unsignedWidth;
 }
 
+bool EqualityComparisonCompatible(TStringBuf left, TStringBuf right) {
+    return left == right || IntegerComparisonCompatible(left, right);
+}
+
 bool OrderingComparisonCompatible(TStringBuf left, TStringBuf right) {
     return IntegerComparisonCompatible(left, right) ||
         (left == "Date" && right == "Date");
@@ -562,8 +566,7 @@ void CheckOpaqueCallable(const TExprNode& node) {
         }
         const TString leftType = ScalarTypeName(*node.Child(0));
         const TString rightType = ScalarTypeName(*node.Child(1));
-        if (leftType != rightType &&
-            !IntegerComparisonCompatible(leftType, rightType))
+        if (!EqualityComparisonCompatible(leftType, rightType))
         {
             Unsupported(TStringBuilder()
                 << "Opaque comparison operand types differ: "
@@ -893,6 +896,8 @@ NJson::TJsonValue ExportExprNode(
         if (!collection.GetTypeAnn()) {
             Unsupported("SqlIn static collection has no type annotation");
         }
+        TVector<TString> annotatedItemTypes;
+        annotatedItemTypes.reserve(collection.ChildrenSize());
         if (collection.IsList()) {
             if (collection.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Tuple) {
                 Unsupported("SqlIn raw static collection is not typed as a tuple");
@@ -903,9 +908,21 @@ NJson::TJsonValue ExportExprNode(
             }
             for (const auto* itemType : tupleType->GetItems()) {
                 bool nullable = false;
-                if (TypeName(itemType, &nullable) != lookupType || nullable) {
-                    Unsupported("SqlIn static tuple annotation does not match its lookup type");
+                const TString type = TypeName(itemType, &nullable);
+                if (nullable) {
+                    Unsupported("SqlIn static tuple item annotation is nullable");
                 }
+                if (!EqualityComparisonCompatible(lookupType, type)) {
+                    Unsupported("SqlIn static tuple item is not equality-compatible with its lookup");
+                }
+                annotatedItemTypes.push_back(type);
+            }
+            if (std::any_of(
+                annotatedItemTypes.begin(),
+                annotatedItemTypes.end(),
+                [&](const TString& type) { return type != annotatedItemTypes.front(); }))
+            {
+                Unsupported("SqlIn static tuple must have one item type");
             }
         } else {
             if (collection.GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
@@ -913,18 +930,28 @@ NJson::TJsonValue ExportExprNode(
             }
             bool nullable = false;
             const auto* itemType = collection.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-            if (TypeName(itemType, &nullable) != lookupType || nullable) {
-                Unsupported("SqlIn AsList item type does not match its lookup type");
+            const TString type = TypeName(itemType, &nullable);
+            if (nullable) {
+                Unsupported("SqlIn AsList item annotation is nullable");
             }
+            if (!EqualityComparisonCompatible(lookupType, type)) {
+                Unsupported("SqlIn AsList item is not equality-compatible with its lookup");
+            }
+            annotatedItemTypes.assign(collection.ChildrenSize(), type);
         }
 
         auto items = JsonArray();
-        for (const auto& item : collection.Children()) {
+        for (size_t index = 0; index < collection.ChildrenSize(); ++index) {
+            const auto& item = *collection.Child(index);
             bool nullable = false;
-            if (ScalarTypeName(*item, &nullable) != lookupType || nullable) {
-                Unsupported("SqlIn item is nullable or has a different lookup type");
+            const TString type = ScalarTypeName(item, &nullable);
+            if (nullable) {
+                Unsupported("SqlIn item is nullable");
             }
-            items.AppendValue(ExportExprNode(*item, rowArgument, visibleColumns));
+            if (type != annotatedItemTypes[index]) {
+                Unsupported("SqlIn item type does not match its collection annotation");
+            }
+            items.AppendValue(ExportExprNode(item, rowArgument, visibleColumns));
         }
 
         const auto& options = *node.Child(2);
@@ -942,10 +969,11 @@ NJson::TJsonValue ExportExprNode(
             if (name == "tableSource") {
                 Unsupported("SqlIn tableSource collections are unsupported");
             }
-            // For a nonempty, non-null, exact-type collection, ANSI and legacy IN
-            // have the same 3VL result.  The other accepted flags control warnings,
-            // representation, or optimizer bookkeeping only.  tableSource is
-            // rejected above because it changes how collection items are extracted.
+            // For a nonempty, non-null collection with one losslessly comparable
+            // item type, ANSI and legacy IN have the same 3VL result. The other
+            // accepted flags control warnings, representation, or optimizer
+            // bookkeeping only. tableSource is rejected above because it changes
+            // how collection items are extracted.
             if (name != "ansi" && name != "warnNoAnsi" &&
                 name != "isCompact" && name != "nullsProcessed")
             {
@@ -1000,8 +1028,7 @@ NJson::TJsonValue ExportExprNode(
             }
             const TString leftType = ScalarTypeName(*node.Child(0));
             const TString rightType = ScalarTypeName(*node.Child(1));
-            if (leftType != rightType &&
-                !IntegerComparisonCompatible(leftType, rightType))
+            if (!EqualityComparisonCompatible(leftType, rightType))
             {
                 Unsupported(TStringBuilder()
                     << node.Content() << " comparison operand types differ: "

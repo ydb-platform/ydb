@@ -708,8 +708,12 @@ void TNodeWarden::Handle(NPDisk::TEvSlayResult::TPtr ev) {
     }
     switch (msg.Status) {
         case NKikimrProto::NOTREADY: {
+            // Keep the short NOTREADY retry separate from the slower insurance retry scheduled by
+            // IssueSlay. Both carry the current round, so whichever retry issues a new request first
+            // makes the other timer stale.
             Schedule(TDuration::Seconds(1),
-                new TEvPrivate::TEvRetrySlay(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId, it->second.Round));
+                new TEvPrivate::TEvRetrySlay(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId, it->second.Round,
+                    TEvPrivate::TEvRetrySlay::EReason::NOTREADY));
             break;
         }
 
@@ -775,11 +779,23 @@ void TNodeWarden::Handle(TEvPrivate::TEvRetrySlay::TPtr& ev) {
     const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VDiskSlotId);
     if (const auto it = SlayInFlight.find(vslotId);
             it != SlayInFlight.end() && it->second.Round == msg->Round) {
-        YDB_LOG_WARN_COMP(BS_NODE, "Retrying unconfirmed PDisk slay",
-            {"marker", "NW111"},
-            {"VDiskId", it->second.VDiskId},
-            {"VSlotId", vslotId},
-            {"round", msg->Round});
+        switch (msg->Reason) {
+            case TEvPrivate::TEvRetrySlay::EReason::NOTREADY:
+                YDB_LOG_INFO_COMP(BS_NODE, "Retrying PDisk slay after NOTREADY",
+                    {"marker", "NW111"},
+                    {"VDiskId", it->second.VDiskId},
+                    {"VSlotId", vslotId},
+                    {"round", msg->Round});
+                break;
+
+            case TEvPrivate::TEvRetrySlay::EReason::UNCONFIRMED:
+                YDB_LOG_WARN_COMP(BS_NODE, "Retrying unconfirmed PDisk slay",
+                    {"marker", "NW111"},
+                    {"VDiskId", it->second.VDiskId},
+                    {"VSlotId", vslotId},
+                    {"round", msg->Round});
+                break;
+        }
         IssueSlay(vslotId, it->second);
     }
 }

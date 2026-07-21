@@ -37,6 +37,7 @@ namespace NKikimr::NStorage {
     constexpr ui32 ProxyConfigurationTimeoutMilliseconds = 200;
     constexpr TDuration BackoffMin = TDuration::MilliSeconds(20);
     constexpr TDuration BackoffMax = TDuration::Seconds(5);
+    constexpr TDuration SlayRetryInitialDelay = TDuration::Seconds(5);
     constexpr const char *MockDevicesPath = "/Berkanavt/kikimr/testing/mock_devices.txt";
     constexpr const char *YamlConfigFileName = "config.yaml";
     constexpr const char *StorageConfigFileName = "storage.yaml";
@@ -214,16 +215,23 @@ namespace NKikimr::NStorage {
             };
 
             struct TEvRetrySlay : TEventLocal<TEvRetrySlay, EvRetrySlay> {
+                enum class EReason {
+                    UNCONFIRMED,
+                    NOTREADY,
+                };
+
                 ui32 NodeId;
                 ui32 PDiskId;
                 ui32 VDiskSlotId;
                 ui64 Round;
+                EReason Reason;
 
-                TEvRetrySlay(ui32 nodeId, ui32 pdiskId, ui32 vdiskSlotId, ui64 round)
+                TEvRetrySlay(ui32 nodeId, ui32 pdiskId, ui32 vdiskSlotId, ui64 round, EReason reason)
                     : NodeId(nodeId)
                     , PDiskId(pdiskId)
                     , VDiskSlotId(vdiskSlotId)
                     , Round(round)
+                    , Reason(reason)
                 {}
             };
         };
@@ -543,7 +551,7 @@ namespace NKikimr::NStorage {
             TVDiskID VDiskId;
             ESlayAction Action;
             ui64 Round = 0;
-            TDuration RetryDelay = TDuration::Seconds(5);
+            TDuration RetryDelay = SlayRetryInitialDelay;
         };
 
         std::map<TVSlotId, TSlayInFlight> SlayInFlight;

@@ -1222,6 +1222,78 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         VDiskIDFromVDiskID(vdiskId, record.Config.MutableVDiskID());
     }
 
+    CUSTOM_UNIT_TEST(TestUnconfirmedSlayIsRetriedByTimer) {
+        TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
+        const TActorId nodeWardenId = SetupNodeWardenForSlayTest(runtime);
+        const ui32 nodeId = 1;
+        const ui32 pdiskId = 2004;
+        const ui32 vdiskSlotId = 7;
+        const NStorage::TNodeWarden::TVSlotId vslotId(nodeId, pdiskId, vdiskSlotId);
+        const TVDiskID vdiskId(100504, 12, 0, 0, 0);
+        const TActorId pdiskActor = runtime.AllocateEdgeActor(nodeId);
+        runtime.RegisterService(MakeBlobStoragePDiskID(nodeId, pdiskId), pdiskActor);
+
+        runtime.WrapInActorContext(nodeWardenId, [&](IActor *actor) {
+            auto& nodeWarden = *dynamic_cast<NStorage::TNodeWarden*>(actor);
+            auto [it, inserted] = nodeWarden.SlayInFlight.emplace(vslotId,
+                NStorage::TNodeWarden::TSlayInFlight{vdiskId, NStorage::TNodeWarden::ESlayAction::WIPE});
+            UNIT_ASSERT(inserted);
+            nodeWarden.IssueSlay(vslotId, it->second);
+        });
+
+        auto first = runtime.WaitForEdgeActorEvent<NPDisk::TEvSlay>(pdiskActor, false);
+        auto retry = runtime.WaitForEdgeActorEvent<NPDisk::TEvSlay>(pdiskActor, false);
+        UNIT_ASSERT_VALUES_EQUAL(retry->Get()->VDiskId, vdiskId);
+        UNIT_ASSERT_UNEQUAL(retry->Get()->SlayOwnerRound, first->Get()->SlayOwnerRound);
+
+        runtime.WrapInActorContext(nodeWardenId, [&](IActor *actor) {
+            auto& nodeWarden = *dynamic_cast<NStorage::TNodeWarden*>(actor);
+            nodeWarden.SlayInFlight.erase(vslotId);
+        });
+    }
+
+    CUSTOM_UNIT_TEST(TestNotReadySlayRetryMakesInsuranceTimerStale) {
+        TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
+        const TActorId nodeWardenId = SetupNodeWardenForSlayTest(runtime);
+        const ui32 nodeId = 1;
+        const ui32 pdiskId = 2005;
+        const ui32 vdiskSlotId = 8;
+        const NStorage::TNodeWarden::TVSlotId vslotId(nodeId, pdiskId, vdiskSlotId);
+        const TVDiskID vdiskId(100505, 13, 0, 0, 0);
+        const TActorId pdiskActor = runtime.AllocateEdgeActor(nodeId);
+        const TActorId probeActor = runtime.AllocateEdgeActor(nodeId);
+        runtime.RegisterService(MakeBlobStoragePDiskID(nodeId, pdiskId), pdiskActor);
+
+        runtime.WrapInActorContext(nodeWardenId, [&](IActor *actor) {
+            auto& nodeWarden = *dynamic_cast<NStorage::TNodeWarden*>(actor);
+            auto [it, inserted] = nodeWarden.SlayInFlight.emplace(vslotId,
+                NStorage::TNodeWarden::TSlayInFlight{vdiskId, NStorage::TNodeWarden::ESlayAction::WIPE});
+            UNIT_ASSERT(inserted);
+            nodeWarden.IssueSlay(vslotId, it->second);
+        });
+
+        auto first = runtime.WaitForEdgeActorEvent<NPDisk::TEvSlay>(pdiskActor, false);
+        runtime.Send(new IEventHandle(nodeWardenId, pdiskActor,
+            new NPDisk::TEvSlayResult(NKikimrProto::NOTREADY, 0, vdiskId,
+                first->Get()->SlayOwnerRound, pdiskId, vdiskSlotId, "PDisk is initializing")), nodeId);
+
+        auto retry = runtime.WaitForEdgeActorEvent<NPDisk::TEvSlay>(pdiskActor, false);
+        UNIT_ASSERT_UNEQUAL(retry->Get()->SlayOwnerRound, first->Get()->SlayOwnerRound);
+
+        runtime.Schedule(TDuration::Seconds(5),
+            new IEventHandle(probeActor, nodeWardenId, new TEvents::TEvWakeup), nullptr, nodeId);
+        auto next = runtime.WaitForEdgeActorEvent({pdiskActor, probeActor});
+        UNIT_ASSERT_VALUES_EQUAL(next->GetTypeRewrite(), TEvents::TEvWakeup::EventType);
+
+        runtime.WrapInActorContext(nodeWardenId, [&](IActor *actor) {
+            auto& nodeWarden = *dynamic_cast<NStorage::TNodeWarden*>(actor);
+            const auto it = nodeWarden.SlayInFlight.find(vslotId);
+            UNIT_ASSERT(it != nodeWarden.SlayInFlight.end());
+            UNIT_ASSERT_VALUES_EQUAL(it->second.Round, retry->Get()->SlayOwnerRound);
+            nodeWarden.SlayInFlight.erase(it);
+        });
+    }
+
     CUSTOM_UNIT_TEST(TestSlayRetryKeepsOperationIdentity) {
         TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
         const TActorId nodeWardenId = SetupNodeWardenForSlayTest(runtime);
@@ -1286,6 +1358,31 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         UNIT_ASSERT_UNEQUAL(replay->Get()->SlayOwnerRound, first->Get()->SlayOwnerRound);
     }
 
+    CUSTOM_UNIT_TEST(TestVDiskWithSlayInFlightIsNotStartedAfterFailedPDiskRestart) {
+        TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
+        const TActorId nodeWardenId = SetupNodeWardenForSlayTest(runtime);
+        const ui32 nodeId = 1;
+        const ui32 pdiskId = 2006;
+        const ui32 vdiskSlotId = 9;
+        const NStorage::TNodeWarden::TVSlotId vslotId(nodeId, pdiskId, vdiskSlotId);
+        const TVDiskID vdiskId(100506, 14, 0, 0, 0);
+
+        runtime.WrapInActorContext(nodeWardenId, [&](IActor *actor) {
+            auto& nodeWarden = *dynamic_cast<NStorage::TNodeWarden*>(actor);
+            auto& record = nodeWarden.LocalVDisks[vslotId];
+            SetSlayTestVDisk(record, nodeId, pdiskId, vdiskSlotId, vdiskId);
+            nodeWarden.SlayInFlight.emplace(vslotId,
+                NStorage::TNodeWarden::TSlayInFlight{vdiskId, NStorage::TNodeWarden::ESlayAction::WIPE});
+            nodeWarden.PDiskRestartInFlight[pdiskId] = false;
+
+            nodeWarden.OnPDiskRestartFinished(pdiskId, NKikimrProto::ERROR);
+
+            UNIT_ASSERT(!record.RuntimeData);
+            UNIT_ASSERT(nodeWarden.SlayInFlight.contains(vslotId));
+            UNIT_ASSERT(!nodeWarden.PDiskRestartInFlight.contains(pdiskId));
+        });
+    }
+
     CUSTOM_UNIT_TEST(TestSlayCompletesWhenPDiskIsAlreadyMissing) {
         TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
         const TActorId nodeWardenId = SetupNodeWardenForSlayTest(runtime);
@@ -1320,9 +1417,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             UNIT_ASSERT(!nodeWarden.LocalVDisks.contains(destroyVSlotId));
             UNIT_ASSERT(!nodeWarden.SlayInFlight.contains(destroyVSlotId));
 
+            nodeWarden.LocalVDisks[wipeVSlotId].UnderlyingPDiskDestroyed = true;
             nodeWarden.ApplyLocalVDiskInfo(wipeVDisk);
             UNIT_ASSERT(nodeWarden.LocalVDisks.contains(wipeVSlotId));
             UNIT_ASSERT(!nodeWarden.SlayInFlight.contains(wipeVSlotId));
+            UNIT_ASSERT(!nodeWarden.LocalVDisks.at(wipeVSlotId).UnderlyingPDiskDestroyed);
         });
     }
 

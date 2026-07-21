@@ -535,6 +535,7 @@ namespace NKikimr::NStorage {
                 PoisonLocalVDisk(record);
                 SlayInFlight.erase(vslotId);
                 SendVDiskReport(vslotId, record.GetVDiskId(), NKikimrBlobStorage::TEvControllerNodeReport::WIPED);
+                record.UnderlyingPDiskDestroyed = false;
             } else {
                 Slay(record, ESlayAction::WIPE);
             }
@@ -557,18 +558,24 @@ namespace NKikimr::NStorage {
             {"slayInFlight", SlayInFlight.contains(vslotId)});
 
         if (auto it = SlayInFlight.find(vslotId); it != SlayInFlight.end()) {
-            Y_DEBUG_ABORT_UNLESS(it->second.VDiskId.SameExceptGeneration(vdiskId));
-            if (it->second.VDiskId.SameExceptGeneration(vdiskId)) {
-                const bool upgradeToDestroy = action == ESlayAction::DESTROY &&
-                    it->second.Action != ESlayAction::DESTROY;
-                it->second.VDiskId = vdiskId;
-                if (action == ESlayAction::DESTROY) {
-                    it->second.Action = ESlayAction::DESTROY;
-                }
-                if (upgradeToDestroy) {
-                    it->second.RetryDelay = TDuration::Seconds(5);
-                    IssueSlay(vslotId, it->second);
-                }
+            if (!it->second.VDiskId.SameExceptGeneration(vdiskId)) {
+                YDB_LOG_ERROR("Slay VDiskId mismatch",
+                    {"marker", "NW113"},
+                    {"existingVDiskId", it->second.VDiskId},
+                    {"incomingVDiskId", vdiskId},
+                    {"VSlotId", vslotId});
+                return;
+            }
+
+            const bool upgradeToDestroy = action == ESlayAction::DESTROY &&
+                it->second.Action != ESlayAction::DESTROY;
+            it->second.VDiskId = vdiskId;
+            if (action == ESlayAction::DESTROY) {
+                it->second.Action = ESlayAction::DESTROY;
+            }
+            if (upgradeToDestroy) {
+                it->second.RetryDelay = SlayRetryInitialDelay;
+                IssueSlay(vslotId, it->second);
             }
         } else {
             PoisonLocalVDisk(vdisk);
@@ -588,7 +595,8 @@ namespace NKikimr::NStorage {
         Send(MakeBlobStoragePDiskID(vslotId.NodeId, vslotId.PDiskId),
             new NPDisk::TEvSlay(slay.VDiskId, round, vslotId.PDiskId, vslotId.VDiskSlotId));
         Schedule(slay.RetryDelay,
-            new TEvPrivate::TEvRetrySlay(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId, round));
+            new TEvPrivate::TEvRetrySlay(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId, round,
+                TEvPrivate::TEvRetrySlay::EReason::UNCONFIRMED));
         slay.RetryDelay = Min(slay.RetryDelay * 2, TDuration::Minutes(1));
     }
 

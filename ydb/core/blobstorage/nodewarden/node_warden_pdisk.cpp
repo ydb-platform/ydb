@@ -437,7 +437,7 @@ namespace NKikimr::NStorage {
             // Slay state owns the original VDisk identity, so it can be replayed even when a deleted VDisk
             // has already been removed from LocalVDisks.
             for (auto it = SlayInFlight.lower_bound(from); it != SlayInFlight.end() && it->first <= to; ++it) {
-                it->second.RetryDelay = TDuration::Seconds(5);
+                it->second.RetryDelay = SlayRetryInitialDelay;
                 IssueSlay(it->first, it->second);
             }
 
@@ -456,7 +456,7 @@ namespace NKikimr::NStorage {
         } else {
             for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
                 auto& [key, value] = *it;
-                if (!value.RuntimeData) {
+                if (!value.RuntimeData && !SlayInFlight.contains(key)) {
                     StartLocalVDiskActor(value);
                 }
             }

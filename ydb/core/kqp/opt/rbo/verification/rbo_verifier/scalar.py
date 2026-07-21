@@ -67,6 +67,19 @@ class Encoder:
             arguments = tuple(self.evaluate(argument, row) for argument in expression.args)
             return self._and(arguments) if expression.kind == "and" else self._or(arguments)
 
+        if expression.kind == "in":
+            lookup = self.evaluate(expression.args[0], row)
+            items = tuple(self.evaluate(item, row) for item in expression.args[1:])
+            comparisons = tuple(
+                Value(
+                    BOOL,
+                    smt.or_(lookup.is_null, item.is_null),
+                    smt.eq(lookup.value, item.value),
+                )
+                for item in items
+            )
+            return self._or(comparisons)
+
         if expression.kind in {"eq", "lt", "lte", "gt", "gte"}:
             left = self.evaluate(expression.args[0], row)
             right = self.evaluate(expression.args[1], row)

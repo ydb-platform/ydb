@@ -47,6 +47,11 @@ class ExpressionRendererTest(unittest.TestCase):
             (ir.Expr(kind="or", args=(one,)), 'or(args=[literal(type="Int64", value=1)])'),
             (ir.Expr(kind="not", args=(one,)), 'not(arg=literal(type="Int64", value=1))'),
             (
+                ir.Expr(kind="in", args=(_column("x"), one, two)),
+                'in(lookup=column("x"), items=[literal(type="Int64", value=1), '
+                'literal(type="Int64", value=2)])',
+            ),
+            (
                 ir.Expr(kind="eq", args=(one, two), null_safe=True),
                 'eq(left=literal(type="Int64", value=1), '
                 'right=literal(type="Int64", value=2), null_safe=true)',
@@ -107,6 +112,8 @@ class ExpressionRendererTest(unittest.TestCase):
             render_expression(ir.Expr(kind="future"))
         with self.assertRaisesRegex(InspectionError, "exactly two arguments"):
             render_expression(ir.Expr(kind="eq", args=(_literal(),)))
+        with self.assertRaisesRegex(InspectionError, "between 1 and 512 items"):
+            render_expression(ir.Expr(kind="in", args=(_column(),)))
 
 
 class OperatorRendererTest(unittest.TestCase):

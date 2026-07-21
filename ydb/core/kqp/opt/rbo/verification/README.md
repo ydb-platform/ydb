@@ -8,9 +8,10 @@ are recorded in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md).
 
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
-ordered Sort/TopSort/Merge, pushed OLAP-filter, and benchmark-dashboard parts of
-M4. Separate normalized-plan, concrete-counterexample inspection, and isolated
-real-YDB replay tools are also implemented. A real-host transformation-prefix capture
+ordered Sort/TopSort/Merge, pushed OLAP-filter, restricted static `IN`, and
+benchmark-dashboard parts of M4. Separate normalized-plan,
+concrete-counterexample inspection, and isolated real-YDB replay tools are also
+implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
 Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Hermetic solver packaging remains a future milestone.
@@ -60,8 +61,17 @@ using the signed two's-complement representative for `Int8` through `Int64`.
 This narrow rule was added when TPC-DS q88 exposed a spurious witness between
 source arithmetic constants and optimizer-folded literals.
 
-Scalar syntax outside the explicit Boolean, equality, ordering, and integer
-arithmetic core is represented by a shared typed uninterpreted function when
+Static `SqlIn` is exact for a deliberately narrow shape: a direct raw tuple or
+`AsList` with 1..512 recursively supported, non-null items whose scalar type is
+identical to the lookup type. It evaluates as the SQL three-valued OR of
+ordinary equalities, so only a nullable lookup can make the Boolean result
+nullable. `ansi`, `warnNoAnsi`, `isCompact`, and `nullsProcessed` normalize to
+the same node under this gate. Dynamic, empty, oversized, nullable, mixed-type,
+`tableSource`, malformed-option, and unknown-option forms fail closed.
+
+Scalar syntax outside the explicit Boolean, equality, ordering, integer
+arithmetic, and restricted static-membership core is represented by a shared
+typed uninterpreted function when
 the C++ exporter can positively audit it as deterministic and total. The
 current reviewed opaque families are scalar comparisons; `Just`, `Exists`,
 `Coalesce`, and `If`; `SafeCast`; and non-failing `Convert`. YQL has no complete
@@ -268,7 +278,9 @@ final pushed OLAP predicate and requires the normal bounded proof. The benchmark
 test loads the exact `TPCDS_YQL` schema and q96 source used by the new-RBO suite,
 checks its split `COUNT(*)`, pushed predicates, four-table join, and StageGraph,
 and proves the two-row/two-task obligation with a query-specific 60-second
-solver budget. All tests always require strict decoding and SMT construction. Set
+solver budget. A nullable-String `IN ('first', 'second')` test exercises the
+restricted static-membership path through the real host and constructs the
+normal obligation. All tests always require strict decoding and SMT construction. Set
 `RBO_Z3` to additionally require `VERIFIED_BOUNDED`; M2b will replace that
 opt-in path with a hermetic solver dependency.
 

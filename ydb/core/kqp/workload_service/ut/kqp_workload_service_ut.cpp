@@ -2192,7 +2192,6 @@ Y_UNIT_TEST_SUITE(HasPredicatesClassifierFeatureFlagDisabled) {
 Y_UNIT_TEST_SUITE(HasPredicatesFeatureFlagEnabled) {
 
     Y_UNIT_TEST(CreateWithHasFullScanSucceeds) {
-        // Default TYdbSetupSettings has EnableAdvancedResourcePoolClassifiers = true.
         auto ydb = TYdbSetupSettings().Create();
 
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(

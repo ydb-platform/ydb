@@ -73,7 +73,9 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
     // The topic path lands in tx.Tables (B walk).
     Y_UNIT_TEST_F(DirectTopicMatches, TStreamingTestFixture) {
         InternalInitFederatedQuerySetupFactory = true;
-        SetupAppConfig().MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        auto& featureFlags = *SetupAppConfig().MutableFeatureFlags();
+        featureFlags.SetEnableTopicsSqlIoOperations(true);
+        featureFlags.SetEnableHasPredicatesInResourcePoolClassifiers(true);
 
         constexpr TStringBuf topicName = "test_topic";
         CreateTopic(std::string(topicName), std::nullopt, /*local*/ true);

@@ -622,6 +622,13 @@ namespace NKikimr::NStorage {
         ) {
         if (!automaticManagement) {
             ss->CopyFrom(oldConfig);
+            for (const auto& rg : oldConfig.GetRingGroups()) {
+                for (const auto& ring : rg.GetRing()) {
+                    for (ui32 nodeId : ring.GetNode()) {
+                        usedNodes.insert(nodeId);
+                    }
+                }
+            }
             return true;
         }
         std::map<TBridgePileId, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
@@ -638,6 +645,13 @@ namespace NKikimr::NStorage {
             TStateStoragePerPileGenerator generator(nodesByDataCenter, SelfHealNodesState, pileId, usedNodes, oldConfig, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
             generator.AddRingGroup(ss);
             goodConfig &= generator.IsGoodConfig();
+        }
+        if (ss->RingGroupsSize() == 0) {
+            // nodesToUse was non-empty, but none of the specified node IDs exist in baseConfig
+            // (e.g. StateStorageSelfHealAllowedNodes referencing decommissioned nodes); avoid
+            // returning a bogus empty state storage config that would trigger a destructive
+            // full reconfiguration.
+            return false;
         }
         return goodConfig;
     }

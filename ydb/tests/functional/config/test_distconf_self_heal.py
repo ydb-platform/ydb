@@ -334,3 +334,51 @@ class TestKiKiMRDistConfSelfHealAutomaticManagementDisabled(KiKiMRDistConfSelfHe
         # automatic management for this subsystem is disabled.
         unchanged_config = get_ring_group(self.do_request_config(), configName)
         assert_eq(unchanged_config, bad_config)
+
+
+class TestKiKiMRDistConfSelfHealMixedAutomaticManagement(KiKiMRDistConfSelfHealTest):
+    # Verifies the mixed scenario: automatic management is disabled for one subsystem
+    # (StateStorage) while enabled for the other two (StateStorageBoard, SchemeBoard). Self-heal
+    # must heal the enabled subsystems while leaving the disabled one untouched, exercising the
+    # interaction with the shared usedNodes/nodesToReplace state in SelfHealStateStorage.
+    erasure = Erasure.MIRROR_3_DC
+    nodes_count = 9
+    rgOffset = 1
+
+    disabled_config_name = "StateStorage"
+
+    self_management_extra_options = {
+        "automatic_state_storage_management": False,
+        "automatic_state_storage_board_management": True,
+        "automatic_scheme_board_management": True,
+    }
+
+    def check_failed(self, req, message):
+        resp = self.do_request(req)
+        assert_that(resp.get("ErrorReason", "").startswith(message), {"Response": resp, "Expected": message})
+
+    def do_test(self, configName):
+        self.do_bad_config(configName)
+        bad_config = get_ring_group(self.do_request_config(), configName)
+
+        logger.info(
+            "Start SelfHeal with mixed automatic management (disabled for %s) for %s",
+            self.disabled_config_name, configName)
+
+        if configName == self.disabled_config_name:
+            self.check_failed(
+                {"SelfHealStateStorage": {"WaitForConfigStep": 1, "ForceHeal": True}},
+                "Current configuration is recommended. Nothing to self-heal.")
+            time.sleep(5)
+
+            # The disabled subsystem's config must remain completely untouched, even though the
+            # other subsystems are actively being healed around it.
+            unchanged_config = get_ring_group(self.do_request_config(), configName)
+            assert_eq(unchanged_config, bad_config)
+        else:
+            logger.info(self.do_request({"SelfHealStateStorage": {"WaitForConfigStep": 1, "ForceHeal": True}}))
+            time.sleep(10)
+
+            rg = get_ring_group(self.do_request_config(), configName)
+            assert_eq(rg["NToSelect"], 9)
+            assert_eq(len(rg["Ring"]), 9)

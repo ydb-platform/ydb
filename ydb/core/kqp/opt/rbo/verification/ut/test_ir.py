@@ -80,6 +80,50 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "unsupported scalar type 'int'"):
             parse_snapshot(value)
 
+    def test_aggregate_contract_is_strict_and_typed(self):
+        value = minimal_snapshot()
+        value["plan"]["nodes"][-1] = {
+            "id": "aggregate",
+            "op": "aggregate",
+            "input": "scan",
+            "keys": [],
+            "aggregates": [
+                {
+                    "input": "a.k",
+                    "function": "count",
+                    "output": "result",
+                    "type": "Uint64",
+                    "nullable": False,
+                    "distinct": False,
+                    "unwrap": False,
+                }
+            ],
+            "phase": "undefined",
+            "distinct_all": False,
+        }
+        value["plan"]["root"] = "aggregate"
+        value["plan"]["output"] = ["result"]
+        snapshot = parse_snapshot(value)
+        self.assertEqual(
+            [(column.name, column.type, column.nullable) for column in snapshot.output_schema()],
+            [("result", "Uint64", False)],
+        )
+
+        wrong_type = copy.deepcopy(value)
+        wrong_type["plan"]["nodes"][-1]["aggregates"][0]["type"] = "Int64"
+        with self.assertRaisesRegex(SnapshotError, "count output must"):
+            parse_snapshot(wrong_type)
+
+        unknown_field = copy.deepcopy(value)
+        unknown_field["plan"]["nodes"][-1]["aggregates"][0]["state"] = "opaque"
+        with self.assertRaisesRegex(SnapshotError, "unknown fields: state"):
+            parse_snapshot(unknown_field)
+
+        bad_phase = copy.deepcopy(value)
+        bad_phase["plan"]["nodes"][-1]["phase"] = "partial"
+        with self.assertRaisesRegex(SnapshotError, "unsupported aggregate phase"):
+            parse_snapshot(bad_phase)
+
     def test_incomplete_stage_graph_is_rejected(self):
         value = copy.deepcopy(minimal_snapshot())
         value["stage_graph"] = {"stages": []}

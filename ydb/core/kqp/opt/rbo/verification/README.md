@@ -5,8 +5,9 @@ This directory contains the standalone bounded-equivalence checker described in
 a bounded input database on which their result bags differ.
 
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
-hooks, and the first M3 StageGraph routing slice. `CaptureSemanticSnapshotCatalogV1` records
-the initial query-level catalog once, and `ExportSemanticSnapshotV1`
+hooks, the M3 StageGraph routing slice, and the first M4 aggregate slice.
+`CaptureSemanticSnapshotCatalogV1` records the initial query-level catalog once,
+and `ExportSemanticSnapshotV1`
 deterministically lowers supported RBO operators without doing file I/O. An
 optional sink on `TKqlTransformContext` receives the initial snapshot before the
 first RBO stage and the final snapshot immediately before physical generation.
@@ -44,6 +45,37 @@ Merge order, including `nulls_first`, is preserved in the semantic snapshot.
 The current root contract compares bags, so verification returns `UNSUPPORTED`
 for Merge rather than discard order. Ordered result comparison is added together
 with Sort in M4.
+
+The aggregate subset covers grouped and scalar `count` and integer `sum`, NULL
+grouping and inputs, and optimizer-generated intermediate/final phases. Signed
+inputs widen to `Int64`, unsigned inputs widen to `Uint64`, and both sums use
+the runtime's exact 64-bit modular overflow. A column-storage source is split
+into symbolic source tasks before a pushed intermediate aggregate executes.
+`distinct`, `DistinctAll`, `unwrap`, min/max, average, and variance currently
+return `UNSUPPORTED` rather than use an approximation.
+
+Aggregate nodes preserve ordered keys and traits, output type/nullability, and
+phase explicitly:
+
+```json
+{
+  "id": "n1",
+  "op": "aggregate",
+  "input": "n0",
+  "keys": ["t.k"],
+  "aggregates": [{
+    "input": "t.v",
+    "function": "count",
+    "output": "cnt",
+    "type": "Uint64",
+    "nullable": false,
+    "distinct": false,
+    "unwrap": false
+  }],
+  "phase": "intermediate",
+  "distinct_all": false
+}
+```
 
 ## StageGraph v1 shape
 

@@ -86,7 +86,7 @@ public:
     TSemanticSnapshotPairCaptureV1(const TSemanticSnapshotPairCaptureV1&) = delete;
     TSemanticSnapshotPairCaptureV1& operator=(const TSemanticSnapshotPairCaptureV1&) = delete;
 
-    void CaptureInitial(TOpRoot& root, const TRBOContext& ctx) noexcept;
+    void CaptureInitial(TOpRoot& root, TRBOContext& ctx) noexcept;
     void CaptureFinal(TOpRoot& root, const TRBOContext& ctx) noexcept;
 
 private:

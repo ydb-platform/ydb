@@ -3,6 +3,7 @@ import io
 import os
 import subprocess
 import unittest
+from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
 from itertools import product
 from unittest import mock
@@ -13,8 +14,21 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     stage_task_counts,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import cli
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import relation as relation_model
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import verify as verifier
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
+    Database,
+    Evaluator as RelationEvaluator,
+)
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
+    Encoder as ScalarEncoder,
+    Value,
+)
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.stages import (
+    Evaluator as StageEvaluator,
+    Router,
+)
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import (
     Problem,
     SchemaMismatch,
@@ -329,6 +343,129 @@ def serial_then_parallel_stage_snapshot(staged):
             ["result"],
             stages,
             edges,
+        )
+    )
+
+
+def aggregate_stage_snapshot(
+    function,
+    grouped,
+    staged,
+    final_function=None,
+    final_phase="final",
+    nullable_input=False,
+    nullable_key=False,
+    shuffle_key="a.k",
+    input_type="Int64",
+):
+    output_type = (
+        "Uint64"
+        if function == "count" or input_type.startswith("Uint")
+        else "Int64"
+    )
+    final_function = final_function or ("sum" if staged else function)
+    keys = ["a.k"] if grouped else []
+    logical_nullable = function == "sum" and (nullable_input or not grouped)
+    aggregate = {
+        "id": "aggregate",
+        "op": "aggregate",
+        "input": "a",
+        "keys": keys,
+        "aggregates": [
+            {
+                "input": "a.x",
+                "function": function,
+                "output": "result",
+                "type": output_type,
+                "nullable": logical_nullable,
+                "distinct": False,
+                "unwrap": False,
+            }
+        ],
+        "phase": "undefined",
+        "distinct_all": False,
+    }
+    nodes = [copy.deepcopy(SCAN_A), aggregate]
+    stages = None
+    edges = None
+    root = "aggregate"
+    if staged:
+        partial = copy.deepcopy(aggregate)
+        partial.update(id="partial", phase="intermediate")
+        partial["aggregates"][0].update(
+            output="_state",
+            nullable=(function == "sum" and nullable_input),
+        )
+        final = copy.deepcopy(aggregate)
+        final.update(id="final", input="partial", phase=final_phase)
+        final["aggregates"][0].update(
+            input="_state",
+            function=final_function,
+            nullable=(function == "sum" and (nullable_input or not grouped)),
+        )
+        nodes = [copy.deepcopy(SCAN_A), partial, final]
+        stages = [
+            _stage("source", ["a", "partial"], [], ["partial"], "column"),
+            _stage("root", ["final"], ["partial"], ["final"]),
+        ]
+        connection = (
+            {
+                "kind": "hash_shuffle",
+                "keys": [shuffle_key],
+                "hash_function": "HashV1",
+                "use_spilling": False,
+            }
+            if grouped
+            else {"kind": "union_all", "parallel": False}
+        )
+        edges = [_edge("aggregate_edge", "source", "root", 0, 0, **connection)]
+        root = "final"
+    schema_value = _stage_schema("A")
+    schema_value["tables"][0]["columns"][1]["type"] = input_type
+    if nullable_key:
+        schema_value["tables"][0]["columns"][0]["nullable"] = True
+    if nullable_input:
+        schema_value["tables"][0]["columns"][1]["nullable"] = True
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            schema_value,
+            nodes,
+            root,
+            (["a.k"] if grouped else []) + ["result"],
+            stages,
+            edges,
+        )
+    )
+
+
+def partial_only_count_snapshot():
+    aggregate = {
+        "id": "partial",
+        "op": "aggregate",
+        "input": "a",
+        "keys": [],
+        "aggregates": [
+            {
+                "input": "a.x",
+                "function": "count",
+                "output": "result",
+                "type": "Uint64",
+                "nullable": False,
+                "distinct": False,
+                "unwrap": False,
+            }
+        ],
+        "phase": "intermediate",
+        "distinct_all": False,
+    }
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            _stage_schema("A"),
+            [copy.deepcopy(SCAN_A), aggregate],
+            "partial",
+            ["result"],
+            [_stage("source", ["a", "partial"], [], ["partial"], "column")],
+            [],
         )
     )
 
@@ -653,7 +790,7 @@ def _restricted_domain_has_model(script):
     def collect(term):
         if term.operation == "symbol":
             symbols[term.atom] = term.sort
-        elif term.operation == "int":
+        elif term.operation == "int" and -2 <= term.atom <= 2:
             integer_literals.add(term.atom)
         for argument in term.arguments:
             collect(argument)
@@ -682,6 +819,10 @@ def _restricted_domain_has_model(script):
             return evaluate(branch, constants, functions)
         if term.operation == "+":
             return sum(evaluate(argument, constants, functions) for argument in term.arguments)
+        if term.operation == "mod":
+            return evaluate(term.arguments[0], constants, functions) % evaluate(
+                term.arguments[1], constants, functions
+            )
         if term.operation.startswith("f_"):
             key = (
                 term.operation,
@@ -707,6 +848,322 @@ def _restricted_domain_has_model(script):
         if choose_functions(dict(zip(names, values)), {}):
             return True
     return False
+
+
+def _evaluate_ground_term(term, constants, function_value=None):
+    if term.operation == "symbol":
+        return constants[term.atom]
+    if term.operation in {"bool", "int"}:
+        return term.atom
+    if term.operation == "not":
+        return not _evaluate_ground_term(term.arguments[0], constants, function_value)
+    if term.operation == "and":
+        return all(
+            _evaluate_ground_term(argument, constants, function_value)
+            for argument in term.arguments
+        )
+    if term.operation == "or":
+        return any(
+            _evaluate_ground_term(argument, constants, function_value)
+            for argument in term.arguments
+        )
+    if term.operation == "=":
+        return _evaluate_ground_term(
+            term.arguments[0], constants, function_value
+        ) == _evaluate_ground_term(
+            term.arguments[1], constants, function_value
+        )
+    if term.operation == "ite":
+        branch = (
+            term.arguments[1]
+            if _evaluate_ground_term(term.arguments[0], constants, function_value)
+            else term.arguments[2]
+        )
+        return _evaluate_ground_term(branch, constants, function_value)
+    if term.operation == "+":
+        return sum(
+            _evaluate_ground_term(argument, constants, function_value)
+            for argument in term.arguments
+        )
+    if term.operation == "mod":
+        return _evaluate_ground_term(
+            term.arguments[0], constants, function_value
+        ) % _evaluate_ground_term(
+            term.arguments[1], constants, function_value
+        )
+    if term.operation.startswith("f_") and function_value is not None:
+        return function_value(
+            term.operation,
+            tuple(
+                _evaluate_ground_term(argument, constants, function_value)
+                for argument in term.arguments
+            ),
+        )
+    raise AssertionError(f"non-ground SMT operation {term.operation!r}")
+
+
+class AggregateConcreteDifferentialTest(unittest.TestCase):
+    def test_partial_sum_canonicalization_preserves_64_bit_wrapping(self):
+        cases = (
+            ("Int64", ((1 << 63) - 1, 1), -(1 << 63)),
+            ("Int64", (-(1 << 63), -1), (1 << 63) - 1),
+            ("Uint64", ((1 << 64) - 1, 1), 0),
+        )
+        for scalar_type, inputs, expected in cases:
+            with self.subTest(scalar_type=scalar_type, inputs=inputs):
+                raw_terms = tuple(
+                    smt.symbol(f"partial_{scalar_type}_{index}", smt.INT)
+                    for index in range(len(inputs))
+                )
+                partials = tuple(
+                    relation_model._wrap_sum(raw, scalar_type)
+                    for raw in raw_terms
+                )
+                lifted = relation_model._wrap_sum(
+                    smt.add(
+                        *(
+                            relation_model._unwrap_sum(
+                                Value(scalar_type, smt.FALSE, partial)
+                            )
+                            for partial in partials
+                        )
+                    ),
+                    scalar_type,
+                )
+                constants = {
+                    raw.atom: concrete for raw, concrete in zip(raw_terms, inputs)
+                }
+                self.assertEqual(_evaluate_ground_term(lifted, constants), expected)
+
+    def test_symbolic_aggregate_matches_independent_tiny_reference(self):
+        cases = (
+            ("count", "Int64"),
+            ("sum", "Int8"),
+            ("sum", "Int64"),
+            ("sum", "Uint8"),
+            ("sum", "Uint64"),
+        )
+        bounds = {
+            "Int8": (-(1 << 7), (1 << 7) - 1),
+            "Int64": (-(1 << 63), (1 << 63) - 1),
+            "Uint8": (0, (1 << 8) - 1),
+            "Uint64": (0, (1 << 64) - 1),
+        }
+        for (function, input_type), grouped, nullable_input in product(
+            cases, (False, True), (False, True)
+        ):
+            nullable_keys = (False, True) if grouped else (False,)
+            for nullable_key in nullable_keys:
+                with self.subTest(
+                    function=function,
+                    input_type=input_type,
+                    grouped=grouped,
+                    nullable_input=nullable_input,
+                    nullable_key=nullable_key,
+                ):
+                    snapshot = aggregate_stage_snapshot(
+                        function,
+                        grouped,
+                        False,
+                        nullable_input=nullable_input,
+                        nullable_key=nullable_key,
+                        input_type=input_type,
+                    )
+                    script = smt.Script()
+                    database = Database(snapshot, 2, script)
+                    relation = RelationEvaluator(
+                        snapshot, database, ScalarEncoder(script)
+                    ).root()
+                    key_values = (None, 0, 1) if nullable_key else (0, 1)
+                    minimum, maximum = bounds[input_type]
+                    concrete_values = tuple(dict.fromkeys((minimum, 0, 1, maximum)))
+                    input_values = (
+                        (None,) + concrete_values
+                        if nullable_input
+                        else concrete_values
+                    )
+                    states = (None,) + tuple(product(key_values, input_values))
+                    for rows in product(states, repeat=2):
+                        constants = self._constants(database, rows)
+                        actual = self._symbolic_bag(relation, constants)
+                        expected = self._reference_bag(
+                            function,
+                            grouped,
+                            rows,
+                            input_type.startswith("Uint"),
+                        )
+                        self.assertEqual(actual, expected, rows)
+
+    def test_split_stage_aggregate_matches_independent_task_reference(self):
+        states = (None,) + tuple(
+            product((None, 0, 1), (None, -1, 0, 1))
+        )
+        for function, grouped in product(("count", "sum"), (False, True)):
+            with self.subTest(function=function, grouped=grouped):
+                snapshot = aggregate_stage_snapshot(
+                    function,
+                    grouped,
+                    True,
+                    nullable_input=True,
+                    nullable_key=True,
+                )
+                script = smt.Script()
+                database = Database(snapshot, 2, script)
+                router = Router(script)
+                relation = StageEvaluator(
+                    snapshot,
+                    database,
+                    ScalarEncoder(script),
+                    router,
+                ).root()
+                for rows, placements in product(
+                    product(states, repeat=2),
+                    product((False, True), repeat=2),
+                ):
+                    constants = self._constants(database, rows)
+                    for slot, placement in enumerate(placements):
+                        source_task = router.source_task("A", slot)
+                        constants[source_task.atom] = placement
+                    actual = self._symbolic_bag(
+                        relation,
+                        constants,
+                        self._hash_choice,
+                    )
+                    expected = self._split_reference_bag(
+                        function,
+                        grouped,
+                        rows,
+                        placements,
+                    )
+                    self.assertEqual(actual, expected, (rows, placements))
+
+    @staticmethod
+    def _constants(database, rows):
+        result = {}
+        for witness, state in zip(database.witness["A"], rows):
+            result[witness.present.atom] = state is not None
+            key, value = (0, 0) if state is None else state
+            for name, concrete in (("k", key), ("x", value)):
+                cell = witness.cells[name]
+                if cell.is_null.operation == "symbol":
+                    result[cell.is_null.atom] = concrete is None
+                result[cell.value.atom] = 0 if concrete is None else concrete
+        return result
+
+    @staticmethod
+    def _symbolic_bag(relation, constants, function_value=None):
+        result = Counter()
+        for row in relation.rows:
+            if not _evaluate_ground_term(row.present, constants, function_value):
+                continue
+            values = []
+            for column in relation.columns:
+                value = row.values[column.name]
+                values.append(
+                    None
+                    if _evaluate_ground_term(value.is_null, constants, function_value)
+                    else _evaluate_ground_term(value.value, constants, function_value)
+                )
+            result[tuple(values)] += 1
+        return result
+
+    @staticmethod
+    def _reference_bag(function, grouped, slots, unsigned_sum):
+        rows = [row for row in slots if row is not None]
+        groups = {}
+        if grouped:
+            for key, value in rows:
+                groups.setdefault(key, []).append(value)
+        else:
+            groups[()] = [value for _, value in rows]
+
+        result = Counter()
+        for key, values in groups.items():
+            non_null = [value for value in values if value is not None]
+            if function == "count":
+                aggregate = len(non_null)
+            elif not non_null:
+                aggregate = None
+            else:
+                total = sum(non_null)
+                aggregate = (
+                    total % (1 << 64)
+                    if unsigned_sum
+                    else ((total + (1 << 63)) % (1 << 64)) - (1 << 63)
+                )
+            prefix = (key,) if grouped else ()
+            result[prefix + (aggregate,)] += 1
+        return result
+
+    @staticmethod
+    def _hash_choice(_function, arguments):
+        is_null, value = arguments
+        return False if is_null else bool(value % 2)
+
+    @classmethod
+    def _split_reference_bag(cls, function, grouped, slots, placements):
+        source_tasks = [[], []]
+        for row, task in zip(slots, placements):
+            if row is not None:
+                source_tasks[int(task)].append(row)
+        partials = [
+            cls._concrete_aggregate(function, grouped, rows, "intermediate")
+            for rows in source_tasks
+        ]
+
+        if grouped:
+            final_inputs = [[], []]
+            for task_rows in partials:
+                for key, value in task_rows:
+                    final_inputs[int(False if key is None else bool(key % 2))].append(
+                        (key, value)
+                    )
+        else:
+            final_inputs = [[row for task_rows in partials for row in task_rows]]
+
+        outputs = []
+        for rows in final_inputs:
+            outputs.extend(
+                cls._concrete_aggregate(
+                    "sum",
+                    grouped,
+                    rows,
+                    "final",
+                    coalesce_empty=function == "count",
+                )
+            )
+        return Counter(
+            (key, value) if grouped else (value,)
+            for key, value in outputs
+        )
+
+    @staticmethod
+    def _concrete_aggregate(
+        function,
+        grouped,
+        rows,
+        phase,
+        coalesce_empty=False,
+    ):
+        groups = {}
+        if grouped:
+            for key, value in rows:
+                groups.setdefault(key, []).append(value)
+        elif rows or phase != "intermediate":
+            groups[None] = [value for _, value in rows]
+
+        result = []
+        for key, values in groups.items():
+            non_null = [value for value in values if value is not None]
+            if function == "count":
+                aggregate = len(non_null)
+            elif not non_null:
+                aggregate = 0 if coalesce_empty else None
+            else:
+                total = sum(non_null)
+                aggregate = ((total + (1 << 63)) % (1 << 64)) - (1 << 63)
+            result.append((key, aggregate))
+        return result
 
 
 class RestrictedModelSmokeTest(unittest.TestCase):
@@ -762,6 +1219,126 @@ class RestrictedModelSmokeTest(unittest.TestCase):
 
 
 class StageGraphRestrictedModelTest(unittest.TestCase):
+    def test_split_count_and_sum_match_logical_aggregation(self):
+        for function, grouped, nullable_input in product(
+            ("count", "sum"), (False, True), (False, True)
+        ):
+            with self.subTest(
+                function=function,
+                grouped=grouped,
+                nullable_input=nullable_input,
+            ):
+                logical = aggregate_stage_snapshot(
+                    function, grouped, False, nullable_input=nullable_input
+                )
+                staged = aggregate_stage_snapshot(
+                    function, grouped, True, nullable_input=nullable_input
+                )
+                self.assertEqual(
+                    stage_task_counts(staged),
+                    {"source": 2, "root": 2 if grouped else 1},
+                )
+                self.assertFalse(
+                    _restricted_domain_has_model(
+                        build_problem(logical, staged, 1).script
+                    )
+                )
+
+    def test_integer_sum_uses_exact_64_bit_wrapping(self):
+        logical = aggregate_stage_snapshot("sum", False, False)
+        staged = aggregate_stage_snapshot("sum", False, True)
+        self.assertIn("(mod ", build_problem(logical, staged, 1).formula())
+
+    def test_wrong_grouped_aggregate_shuffle_key_has_a_two_row_witness(self):
+        for function in ("count", "sum"):
+            with self.subTest(function=function):
+                logical = aggregate_stage_snapshot(
+                    function,
+                    True,
+                    False,
+                    nullable_input=True,
+                    nullable_key=True,
+                )
+                corrupted = aggregate_stage_snapshot(
+                    function,
+                    True,
+                    True,
+                    nullable_input=True,
+                    nullable_key=True,
+                    shuffle_key="_state",
+                )
+                self.assertTrue(
+                    _restricted_domain_has_model(
+                        build_problem(logical, corrupted, 2).script
+                    )
+                )
+
+    def test_corrupt_count_final_function_has_a_witness(self):
+        logical = aggregate_stage_snapshot("count", False, False)
+        corrupted = aggregate_stage_snapshot(
+            "count", False, True, final_function="count"
+        )
+        self.assertTrue(
+            _restricted_domain_has_model(build_problem(logical, corrupted, 2).script)
+        )
+
+    def test_corrupt_count_final_phase_has_an_empty_input_witness(self):
+        logical = aggregate_stage_snapshot("count", False, False)
+        corrupted = aggregate_stage_snapshot(
+            "count", False, True, final_phase="intermediate"
+        )
+        self.assertTrue(
+            _restricted_domain_has_model(build_problem(logical, corrupted, 0).script)
+        )
+
+    def test_dropped_final_count_has_an_empty_input_witness(self):
+        logical = aggregate_stage_snapshot("count", False, False)
+        self.assertTrue(
+            _restricted_domain_has_model(
+                build_problem(logical, partial_only_count_snapshot(), 0).script
+            )
+        )
+
+    def test_unmodeled_aggregate_traits_fail_closed(self):
+        value = aggregate_stage_snapshot("count", False, False)
+        for field, replacement, message in (
+            ("distinct", True, "distinct aggregate"),
+            ("unwrap", True, "unwrapped aggregate"),
+            ("function", "min", "not modeled: min"),
+        ):
+            with self.subTest(field=field):
+                trait = value.plan.nodes[-1].aggregates[0]
+                raw = _snapshot_with_stage_graph(
+                    _stage_schema("A"),
+                    [
+                        copy.deepcopy(SCAN_A),
+                        {
+                            "id": "aggregate",
+                            "op": "aggregate",
+                            "input": "a",
+                            "keys": [],
+                            "aggregates": [
+                                {
+                                    "input": trait.input,
+                                    "function": replacement if field == "function" else trait.function,
+                                    "output": trait.output,
+                                    "type": trait.output_type,
+                                    "nullable": trait.output_nullable,
+                                    "distinct": replacement if field == "distinct" else trait.distinct,
+                                    "unwrap": replacement if field == "unwrap" else trait.unwrap,
+                                }
+                            ],
+                            "phase": "undefined",
+                            "distinct_all": False,
+                        },
+                    ],
+                    "aggregate",
+                    ["result"],
+                )
+                snapshot = parse_snapshot(raw)
+                with self.assertRaisesRegex(VerificationError, message):
+                    build_logical_kernel_problem_for_tests(snapshot, snapshot, 1)
+
     def test_two_task_map_and_hash_shuffle_preserve_rows(self):
         logical = passthrough_stage_snapshot()
         connections = [
@@ -1021,6 +1598,106 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
 
 @unittest.skipUnless(SOLVER, "set RBO_Z3 to run solver integration tests")
 class VerificationTest(unittest.TestCase):
+    def test_split_count_and_sum_are_bounded_equivalent(self):
+        for function, grouped, nullable_input in product(
+            ("count", "sum"), (False, True), (False, True)
+        ):
+            with self.subTest(
+                function=function,
+                grouped=grouped,
+                nullable_input=nullable_input,
+            ):
+                logical = aggregate_stage_snapshot(
+                    function, grouped, False, nullable_input=nullable_input
+                )
+                staged = aggregate_stage_snapshot(
+                    function, grouped, True, nullable_input=nullable_input
+                )
+                result = solve(
+                    build_problem(logical, staged, 1, 10_000),
+                    SOLVER,
+                    1,
+                    10_000,
+                )
+                self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_grouped_nullable_sum_is_verified_at_two_rows_and_tasks(self):
+        logical = aggregate_stage_snapshot(
+            "sum", True, False, nullable_input=True, nullable_key=True
+        )
+        staged = aggregate_stage_snapshot(
+            "sum", True, True, nullable_input=True, nullable_key=True
+        )
+        result = solve(
+            build_problem(logical, staged, 2, 30_000),
+            SOLVER,
+            2,
+            30_000,
+        )
+        self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_wrong_grouped_aggregate_shuffle_key_has_a_solver_counterexample(self):
+        for function in ("count", "sum"):
+            with self.subTest(function=function):
+                logical = aggregate_stage_snapshot(
+                    function,
+                    True,
+                    False,
+                    nullable_input=True,
+                    nullable_key=True,
+                )
+                corrupted = aggregate_stage_snapshot(
+                    function,
+                    True,
+                    True,
+                    nullable_input=True,
+                    nullable_key=True,
+                    shuffle_key="_state",
+                )
+                result = solve(
+                    build_problem(logical, corrupted, 2, 10_000),
+                    SOLVER,
+                    2,
+                    10_000,
+                )
+                self.assertEqual(result.status, "COUNTEREXAMPLE")
+
+    def test_corrupt_count_final_function_has_a_solver_counterexample(self):
+        logical = aggregate_stage_snapshot("count", False, False)
+        corrupted = aggregate_stage_snapshot(
+            "count", False, True, final_function="count"
+        )
+        result = solve(
+            build_problem(logical, corrupted, 2, 10_000),
+            SOLVER,
+            2,
+            10_000,
+        )
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+
+    def test_corrupt_count_final_phase_has_a_solver_counterexample(self):
+        logical = aggregate_stage_snapshot("count", False, False)
+        corrupted = aggregate_stage_snapshot(
+            "count", False, True, final_phase="intermediate"
+        )
+        result = solve(
+            build_problem(logical, corrupted, 0, 10_000),
+            SOLVER,
+            0,
+            10_000,
+        )
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+
+    def test_dropped_final_count_has_a_solver_counterexample(self):
+        logical = aggregate_stage_snapshot("count", False, False)
+        result = solve(
+            build_problem(logical, partial_only_count_snapshot(), 0, 10_000),
+            SOLVER,
+            0,
+            10_000,
+        )
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+
     def test_matching_stage_shuffles_are_bounded_equivalent(self):
         logical = local_join_stage_snapshot()
         staged = local_join_stage_snapshot(

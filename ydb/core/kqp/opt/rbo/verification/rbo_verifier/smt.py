@@ -179,6 +179,16 @@ def add(*terms: Term) -> Term:
     return Term(INT, "+", tuple(terms))
 
 
+def mod(term: Term, modulus: int) -> Term:
+    _require(term, INT)
+    if type(modulus) is not int or modulus <= 0:
+        raise SmtError("modulus must be a positive integer")
+    if term.operation == "int":
+        assert isinstance(term.atom, int)
+        return int_value(term.atom % modulus)
+    return Term(INT, "mod", (term, int_value(modulus)))
+
+
 def _require(term: Term, sort: str) -> None:
     if not isinstance(term, Term):
         raise SmtError(f"expected an SMT term, got {type(term).__name__}")

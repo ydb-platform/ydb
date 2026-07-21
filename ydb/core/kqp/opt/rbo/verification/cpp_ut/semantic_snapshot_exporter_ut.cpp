@@ -83,7 +83,8 @@ TIntrusivePtr<TOpRead> MakeRead(
     TExportTestContext& ctx,
     const TKikimrTableDescription& table,
     const TString& alias,
-    const TVector<TString>& columns)
+    const TVector<TString>& columns,
+    NYql::EStorageType storage = NYql::EStorageType::RowStorage)
 {
     const auto pos = TPositionHandle();
     TVector<TInfoUnit> outputs;
@@ -96,7 +97,7 @@ TIntrusivePtr<TOpRead> MakeRead(
         alias,
         columns,
         outputs,
-        NYql::EStorageType::RowStorage,
+        storage,
         NOpt::BuildTableMeta(table, pos, ctx.ExprCtx).Ptr(),
         nullptr,
         nullptr,
@@ -105,6 +106,29 @@ TIntrusivePtr<TOpRead> MakeRead(
         ESortDir::None,
         TPhysicalOpProps{},
         pos);
+}
+
+struct TOutputTypeSpec {
+    TString Name;
+    NUdf::EDataSlot Slot;
+    bool Nullable = false;
+};
+
+void SetOutputType(
+    TExportTestContext& ctx,
+    IOperator& op,
+    const TVector<TOutputTypeSpec>& outputs)
+{
+    TVector<const TItemExprType*> items;
+    for (const auto& output : outputs) {
+        const TTypeAnnotationNode* type = ctx.ExprCtx.MakeType<TDataExprType>(output.Slot);
+        if (output.Nullable) {
+            type = ctx.ExprCtx.MakeType<TOptionalExprType>(type);
+        }
+        items.push_back(ctx.ExprCtx.MakeType<TItemExprType>(output.Name, type));
+    }
+    op.Type = ctx.ExprCtx.MakeType<TListExprType>(
+        ctx.ExprCtx.MakeType<TStructExprType>(std::move(items)));
 }
 
 const NJson::TJsonValue& FindNode(const NJson::TJsonValue& snapshot, TStringBuf operation) {
@@ -356,6 +380,224 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(
             EqualityColumns(conjuncts[1]),
             (std::pair<TString, TString>{"a.flag", "b.flag"}));
+    }
+
+    Y_UNIT_TEST(ExportsAggregateTraitsTypesAndSplitPhases) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {
+            {"k", "Int64", true},
+            {"x", "Int64", true},
+        });
+        auto read = MakeRead(
+            ctx,
+            table,
+            "a",
+            {"k", "x"},
+            NYql::EStorageType::ColumnStorage);
+        SetOutputType(ctx, *read, {
+            {"a.k", NUdf::EDataSlot::Int64},
+            {"a.x", NUdf::EDataSlot::Int64},
+        });
+        const auto pos = TPositionHandle();
+        auto partial = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.x"), "count", TInfoUnit("_state"))},
+            TVector<TInfoUnit>{TInfoUnit("a.k")},
+            EOpPhase::Intermediate,
+            false,
+            pos);
+        SetOutputType(ctx, *partial, {
+            {"a.k", NUdf::EDataSlot::Int64},
+            {"_state", NUdf::EDataSlot::Uint64},
+        });
+        auto final = MakeIntrusive<TOpAggregate>(
+            partial,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("_state"), "sum", TInfoUnit("result"))},
+            TVector<TInfoUnit>{TInfoUnit("a.k")},
+            EOpPhase::Final,
+            false,
+            pos);
+        SetOutputType(ctx, *final, {
+            {"a.k", NUdf::EDataSlot::Int64},
+            {"result", NUdf::EDataSlot::Uint64},
+        });
+        TOpRoot root(final, pos, {"a.k", "result"});
+
+        auto& graph = root.PlanProps.StageGraph;
+        const ui32 source = graph.AddSourceStage(NYql::EStorageType::ColumnStorage);
+        const ui32 consumer = graph.AddStage();
+        read->Props.StageId = source;
+        partial->Props.StageId = source;
+        final->Props.StageId = consumer;
+        auto shuffle = MakeIntrusive<TShuffleConnection>(
+            TVector<TInfoUnit>{TInfoUnit("a.k")},
+            graph.GetOutputIndex(source));
+        shuffle->HashFuncType = NYql::NDq::EHashShuffleFuncType::HashV1;
+        graph.Connect(
+            source,
+            consumer,
+            shuffle);
+
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        TVector<const NJson::TJsonValue*> aggregates;
+        for (const auto& node : snapshot["plan"]["nodes"].GetArraySafe()) {
+            if (node["op"].GetStringSafe() == "aggregate") {
+                aggregates.push_back(&node);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(aggregates.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL((*aggregates[0])["phase"].GetStringSafe(), "intermediate");
+        UNIT_ASSERT_VALUES_EQUAL((*aggregates[1])["phase"].GetStringSafe(), "final");
+        UNIT_ASSERT_VALUES_EQUAL(Strings((*aggregates[0])["keys"]), TVector<TString>{"a.k"});
+
+        const auto& partialTrait = (*aggregates[0])["aggregates"][0];
+        UNIT_ASSERT_VALUES_EQUAL(partialTrait["input"].GetStringSafe(), "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(partialTrait["function"].GetStringSafe(), "count");
+        UNIT_ASSERT_VALUES_EQUAL(partialTrait["output"].GetStringSafe(), "_state");
+        UNIT_ASSERT_VALUES_EQUAL(partialTrait["type"].GetStringSafe(), "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(partialTrait["nullable"].GetBooleanSafe(), false);
+        UNIT_ASSERT_VALUES_EQUAL(partialTrait["distinct"].GetBooleanSafe(), false);
+        UNIT_ASSERT_VALUES_EQUAL(partialTrait["unwrap"].GetBooleanSafe(), false);
+
+        const auto& finalTrait = (*aggregates[1])["aggregates"][0];
+        UNIT_ASSERT_VALUES_EQUAL(finalTrait["input"].GetStringSafe(), "_state");
+        UNIT_ASSERT_VALUES_EQUAL(finalTrait["function"].GetStringSafe(), "sum");
+        UNIT_ASSERT_VALUES_EQUAL(finalTrait["output"].GetStringSafe(), "result");
+        UNIT_ASSERT_VALUES_EQUAL(finalTrait["type"].GetStringSafe(), "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL((*aggregates[1])["distinct_all"].GetBooleanSafe(), false);
+    }
+
+    Y_UNIT_TEST(PreservesNonDefaultAggregateTraitFlags) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {
+            {"x", "Int64", false},
+            {"y", "Int64", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"x", "y"});
+        SetOutputType(ctx, *read, {
+            {"a.x", NUdf::EDataSlot::Int64, true},
+            {"a.y", NUdf::EDataSlot::Int64, true},
+        });
+        const auto pos = TPositionHandle();
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(
+                    TInfoUnit("a.x"),
+                    "sum",
+                    TInfoUnit("distinct_result"),
+                    true,
+                    false),
+                TOpAggregationTraits(
+                    TInfoUnit("a.y"),
+                    "sum",
+                    TInfoUnit("unwrap_result"),
+                    false,
+                    true),
+            },
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetOutputType(ctx, *aggregate, {
+            {"distinct_result", NUdf::EDataSlot::Int64, true},
+            {"unwrap_result", NUdf::EDataSlot::Int64, true},
+        });
+        TOpRoot root(aggregate, pos, {"distinct_result", "unwrap_result"});
+
+        const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& node = FindNode(snapshot, "aggregate");
+        const auto& traits = node["aggregates"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(traits.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(traits[0]["input"].GetStringSafe(), "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(traits[0]["output"].GetStringSafe(), "distinct_result");
+        UNIT_ASSERT_VALUES_EQUAL(traits[0]["nullable"].GetBooleanSafe(), true);
+        UNIT_ASSERT_VALUES_EQUAL(traits[0]["distinct"].GetBooleanSafe(), true);
+        UNIT_ASSERT_VALUES_EQUAL(traits[0]["unwrap"].GetBooleanSafe(), false);
+        UNIT_ASSERT_VALUES_EQUAL(traits[1]["input"].GetStringSafe(), "a.y");
+        UNIT_ASSERT_VALUES_EQUAL(traits[1]["output"].GetStringSafe(), "unwrap_result");
+        UNIT_ASSERT_VALUES_EQUAL(traits[1]["nullable"].GetBooleanSafe(), true);
+        UNIT_ASSERT_VALUES_EQUAL(traits[1]["distinct"].GetBooleanSafe(), false);
+        UNIT_ASSERT_VALUES_EQUAL(traits[1]["unwrap"].GetBooleanSafe(), true);
+
+        auto distinctAll = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.x"), "distinct", TInfoUnit("a.x"))},
+            TVector<TInfoUnit>{TInfoUnit("a.x")},
+            EOpPhase::Undefined,
+            true,
+            pos);
+        SetOutputType(ctx, *distinctAll, {
+            {"a.x", NUdf::EDataSlot::Int64, true},
+        });
+        TOpRoot distinctRoot(distinctAll, pos, {"a.x"});
+        const auto distinctSnapshot = ParseSupported(
+            ExportSemanticSnapshotV1(distinctRoot, ctx.RboCtx));
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNode(distinctSnapshot, "aggregate")["distinct_all"].GetBooleanSafe(),
+            true);
+    }
+
+    Y_UNIT_TEST(AggregateTypeAnnotationMismatchFailsClosed) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {
+            {"k", "Int64", true},
+            {"x", "Int64", true},
+        });
+        auto read = MakeRead(ctx, table, "a", {"k", "x"});
+        SetOutputType(ctx, *read, {
+            {"a.k", NUdf::EDataSlot::Int64},
+            {"a.x", NUdf::EDataSlot::Int64},
+        });
+        const auto pos = TPositionHandle();
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.x"), "count", TInfoUnit("result"))},
+            TVector<TInfoUnit>{TInfoUnit("a.k")},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        TOpRoot root(aggregate, pos, {"a.k", "result"});
+
+        SetOutputType(ctx, *aggregate, {
+            {"result", NUdf::EDataSlot::Uint64},
+        });
+        auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "omits IU a.k");
+
+        SetOutputType(ctx, *aggregate, {
+            {"a.k", NUdf::EDataSlot::Int64},
+            {"result", NUdf::EDataSlot::Uint64},
+            {"ghost", NUdf::EDataSlot::Int64},
+        });
+        result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "field count");
+
+        SetOutputType(ctx, *aggregate, {
+            {"a.k", NUdf::EDataSlot::Uint64},
+            {"result", NUdf::EDataSlot::Uint64},
+        });
+        result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "key output type");
+
+        SetOutputType(ctx, *aggregate, {
+            {"a.k", NUdf::EDataSlot::Int64},
+            {"result", NUdf::EDataSlot::Uint64},
+        });
+        aggregate->Props.OutputIUs = TVector<TInfoUnit>{
+            TInfoUnit("result"),
+            TInfoUnit("a.k"),
+        };
+        result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "output IU order");
     }
 
     Y_UNIT_TEST(UnsupportedOperatorFailsClosed) {
@@ -1035,6 +1277,37 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(
             initialTables[0]["columns"].GetArraySafe().size(),
             finalTables[0]["columns"].GetArraySafe().size());
+    }
+
+    Y_UNIT_TEST(InitialPairCaptureMaterializesAggregateTypesInsideFailClosedPath) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {
+            {"k", "Int64", true},
+            {"x", "Int32", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"k", "x"});
+        const auto pos = TPositionHandle();
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.x"), "count", TInfoUnit("result"))},
+            TVector<TInfoUnit>{TInfoUnit("a.k")},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        TOpRoot root(aggregate, pos, {"a.k", "result"});
+        UNIT_ASSERT(!aggregate->GetTypeAnn());
+
+        TRecordingSemanticSnapshotSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(root, ctx.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 1);
+        const auto snapshot = ParseSupported(sink.Results[0]);
+        UNIT_ASSERT(aggregate->GetTypeAnn());
+        const auto& trait = FindNode(snapshot, "aggregate")["aggregates"][0];
+        UNIT_ASSERT_VALUES_EQUAL(trait["type"].GetStringSafe(), "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(trait["nullable"].GetBooleanSafe(), false);
     }
 
     Y_UNIT_TEST(PairCaptureRejectsAStagedInitialBoundary) {

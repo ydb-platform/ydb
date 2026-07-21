@@ -123,6 +123,15 @@ bool HasStageGraphState(TOpRoot& root) {
     return hasStageId;
 }
 
+bool HasAggregate(TOpRoot& root) {
+    bool result = false;
+    THashSet<const IOperator*> visited;
+    VisitOperators(root.GetInput(), visited, [&](IOperator& op) {
+        result = result || op.GetKind() == EOperator::Aggregate;
+    });
+    return result;
+}
+
 NJson::TJsonValue JsonArray() {
     return NJson::TJsonValue(NJson::JSON_ARRAY);
 }
@@ -372,6 +381,38 @@ THashSet<TString> OutputNames(IOperator& op) {
     return result;
 }
 
+const TStructExprType* OutputStructType(IOperator& op) {
+    const auto* annotation = op.GetTypeAnn();
+    if (!annotation || annotation->GetKind() != ETypeAnnotationKind::List) {
+        Unsupported(TStringBuilder() << op.GetExplainName() << " has no list type annotation");
+    }
+    const auto* item = annotation->Cast<TListExprType>()->GetItemType();
+    if (item->GetKind() != ETypeAnnotationKind::Struct) {
+        Unsupported(TStringBuilder() << op.GetExplainName() << " output is not a struct");
+    }
+    return item->Cast<TStructExprType>();
+}
+
+const TTypeAnnotationNode* OutputType(IOperator& op, TStringBuf name) {
+    const auto* result = OutputStructType(op)->FindItemType(name);
+    if (!result) {
+        Unsupported(TStringBuilder() << op.GetExplainName() << " output type omits IU " << name);
+    }
+    return result;
+}
+
+TString Phase(EOpPhase phase) {
+    switch (phase) {
+        case EOpPhase::Undefined:
+            return "undefined";
+        case EOpPhase::Intermediate:
+            return "intermediate";
+        case EOpPhase::Final:
+            return "final";
+    }
+    Unsupported("Unknown operator phase");
+}
+
 class TPlanExporter {
 public:
     TPlanExporter(
@@ -579,6 +620,101 @@ private:
                 node["op"] = "filter";
                 node["input"] = children[0];
                 node["predicate"] = ExportExpr(filter.FilterExpr, inputNames);
+                return node;
+            }
+
+            case EOperator::Aggregate: {
+                if (children.size() != 1) {
+                    Unsupported("Aggregate must have one input");
+                }
+                auto& aggregate = static_cast<TOpAggregate&>(base);
+                const auto inputNames = OutputNames(*aggregate.GetInput());
+                const auto outputNames = OutputNames(aggregate);
+                const auto traits = aggregate.GetAggregationTraits();
+                if (traits.empty()) {
+                    Unsupported("Aggregate has no traits");
+                }
+
+                auto keys = JsonArray();
+                THashSet<TString> expectedOutputs;
+                TVector<TString> expectedOutputOrder;
+                THashSet<TString> seenKeys;
+                for (const auto& key : aggregate.GetKeyColumns()) {
+                    const TString name = key.GetFullName();
+                    if (name.empty() || !inputNames.contains(name) || !seenKeys.insert(name).second) {
+                        Unsupported(TStringBuilder() << "Invalid Aggregate key " << name);
+                    }
+                    keys.AppendValue(name);
+                    if (!aggregate.IsDistinctAll()) {
+                        expectedOutputs.insert(name);
+                        expectedOutputOrder.push_back(name);
+                        bool inputNullable = false;
+                        bool outputNullable = false;
+                        const TString inputType = TypeName(
+                            OutputType(*aggregate.GetInput(), name),
+                            &inputNullable);
+                        const TString outputType = TypeName(
+                            OutputType(aggregate, name),
+                            &outputNullable);
+                        if (inputType != outputType || inputNullable != outputNullable) {
+                            Unsupported(TStringBuilder()
+                                << "Aggregate key output type disagrees with input IU " << name);
+                        }
+                    }
+                }
+
+                auto aggregates = JsonArray();
+                for (const auto& trait : traits) {
+                    const TString input = trait.OriginalColName.GetFullName();
+                    const TString output = trait.ResultColName.GetFullName();
+                    if (input.empty() || !inputNames.contains(input) || output.empty() ||
+                        !expectedOutputs.insert(output).second || trait.AggFunction.empty())
+                    {
+                        Unsupported(TStringBuilder() << "Invalid Aggregate trait " << output);
+                    }
+                    expectedOutputOrder.push_back(output);
+                    bool nullable = false;
+                    const TString type = TypeName(OutputType(aggregate, output), &nullable);
+                    auto item = JsonMap();
+                    item["input"] = input;
+                    item["function"] = trait.AggFunction;
+                    item["output"] = output;
+                    item["type"] = type;
+                    item["nullable"] = nullable;
+                    item["distinct"] = trait.Distinct;
+                    item["unwrap"] = trait.Unwrap;
+                    aggregates.AppendValue(std::move(item));
+                }
+                const auto& actualOutputIUs = aggregate.GetOutputIUs();
+                if (actualOutputIUs.size() != expectedOutputOrder.size()) {
+                    Unsupported("Aggregate output IU count does not match keys and traits");
+                }
+                for (size_t index = 0; index < expectedOutputOrder.size(); ++index) {
+                    if (actualOutputIUs[index].GetFullName() != expectedOutputOrder[index]) {
+                        Unsupported("Aggregate output IU order does not match keys and traits");
+                    }
+                }
+                const auto* outputStruct = OutputStructType(aggregate);
+                if (outputStruct->GetItems().size() != expectedOutputs.size()) {
+                    Unsupported("Aggregate output type field count does not match output IUs");
+                }
+                for (const auto* item : outputStruct->GetItems()) {
+                    const TString name(item->GetName());
+                    if (!expectedOutputs.contains(name)) {
+                        Unsupported(TStringBuilder() << "Unexpected Aggregate output type field " << name);
+                    }
+                    TypeName(item->GetItemType());
+                }
+                if (expectedOutputs.size() != outputNames.size()) {
+                    Unsupported("Aggregate output IUs do not match keys and traits");
+                }
+
+                node["op"] = "aggregate";
+                node["input"] = children[0];
+                node["keys"] = std::move(keys);
+                node["aggregates"] = std::move(aggregates);
+                node["phase"] = Phase(aggregate.GetAggregationPhase());
+                node["distinct_all"] = aggregate.IsDistinctAll();
                 return node;
             }
 
@@ -1589,7 +1725,7 @@ TSemanticSnapshotPairCaptureV1::TSemanticSnapshotPairCaptureV1(
 
 void TSemanticSnapshotPairCaptureV1::CaptureInitial(
     TOpRoot& root,
-    const TRBOContext& ctx) noexcept
+    TRBOContext& ctx) noexcept
 {
     if (!Sink) {
         return;
@@ -1615,6 +1751,12 @@ void TSemanticSnapshotPairCaptureV1::CaptureInitial(
                 CatalogFailure = std::move(catalog.UnsupportedReason);
                 result.UnsupportedReason = CatalogFailure;
             } else {
+                if (HasAggregate(root)) {
+                    root.RecomputeOutputIUsSubtree();
+                    if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
+                        Unsupported("RBO type annotation failed for the initial semantic snapshot");
+                    }
+                }
                 Catalog.emplace(std::move(catalog.Catalog));
                 auto snapshot = ExportSemanticSnapshotV1(root, ctx, *Catalog);
                 result.Json = std::move(snapshot.Json);

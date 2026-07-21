@@ -4,9 +4,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_cdc_stream_common.h"
 
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -15,10 +13,10 @@ namespace NCdc {
 namespace {
 
 class TPropose: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "RotateCdcStream TPropose"
-            << " opId# " << OperationId << " ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "RotateCdcStream TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -29,7 +27,10 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"tabletId", context.SS->TabletID()},
+            {"debugHint", DebugHint()}
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -44,8 +45,11 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
+            {"tabletId", context.SS->TabletID()},
+            {"debugHint", DebugHint()},
+            {"step", step}
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -126,10 +130,14 @@ public:
         const auto& newStreamName = newStreamDesc.GetName();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        LOG_N("TRotateCdcStream Propose"
-            << ": opId# " << OperationId
-            << ", oldStream# " << workingDir << "/" << oldStreamName
-            << ", newStream# " << workingDir << "/" << newStreamName);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStream Propose",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"oldStream", workingDir},
+            {"oldStreamName", oldStreamName},
+            {"newStream", workingDir},
+            {"newStreamName", newStreamName}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
@@ -412,14 +420,18 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TRotateCdcStream AbortPropose"
-            << ": opId# " << OperationId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStream AbortPropose",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId}
+        );
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TRotateCdcStream AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << txId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStream AbortUnsafe",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"txId", txId}
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 
@@ -520,10 +532,16 @@ public:
         const auto& oldStreamName = op.GetOldStreamName();
         const auto& newStreamName = op.GetNewStream().GetStreamDescription().GetName();
 
-        LOG_N("TRotateCdcStreamAtTable Propose"
-            << ": opId# " << OperationId
-            << ", oldStream# " << workingDir << "/" << tableName << "/" << oldStreamName
-            << ", newStream# " << workingDir << "/" << tableName << "/" << newStreamName);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStreamAtTable Propose",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"oldStream", workingDir},
+            {"tableName", tableName},
+            {"oldStreamName", oldStreamName},
+            {"newStream", workingDir},
+            {"dupTableName", tableName},
+            {"newStreamName", newStreamName}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
@@ -663,14 +681,18 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TRotateCdcStreamAtTable AbortPropose"
-            << ": opId# " << OperationId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStreamAtTable AbortPropose",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId}
+        );
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TRotateCdcStreamAtTable AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << txId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TRotateCdcStreamAtTable AbortUnsafe",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"txId", txId}
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 }; // TRotateCdcStreamAtTable
@@ -720,9 +742,11 @@ ISubOperation::TPtr CreateRotateCdcStreamAtTable(TOperationId id, TTxState::ETxS
 TVector<ISubOperation::TPtr> CreateRotateCdcStream(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStream);
 
-    LOG_D("CreateRotateCdcStream"
-        << ": opId# " << opId
-        << ", tx# " << tx.ShortDebugString());
+    YDB_LOG_DEBUG_CTX(context.Ctx, "CreateRotateCdcStream",
+        {"tabletId", context.SS->TabletID()},
+        {"opId", opId},
+        {"tx", tx.ShortDebugString()}
+    );
 
     const auto acceptExisted = !tx.GetFailOnExist();
     const auto& op = tx.GetRotateCdcStream();

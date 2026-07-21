@@ -16,6 +16,8 @@
 #include <ydb/core/test_tablet/events.h>
 #include <ydb/core/tx/tx_processing.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 template <typename T>
@@ -87,7 +89,8 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
 #define DefaultHandleReply(NS, TEvType, ...) \
     bool ISubOperationState::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
         const auto msg = LogMessage(DebugReply(ev), context, false); \
-        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg); \
+        YDB_LOG_CRIT_CTX(context.Ctx, "HandleReply " #NS " " #TEvType, \
+            {"msg", msg}); \
         Y_FAIL_S(msg); \
     } \
     \
@@ -95,10 +98,14 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
         const bool ignore = MsgToIgnore.contains(NS::TEvType::EventType); \
         const auto msg = LogMessage(DebugReply(ev), context, ignore); \
         if (ignore) { \
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg << " debug: " << DebugHint()); \
+            YDB_LOG_INFO_CTX(context.Ctx, "HandleReply " #NS " " #TEvType, \
+                {"msg", msg}, \
+                {"debugHint", DebugHint()}); \
             return false; \
         } \
-        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg << " debug: " << DebugHint()); \
+        YDB_LOG_CRIT_CTX(context.Ctx, "HandleReply " #NS " " #TEvType, \
+            {"msg", msg}, \
+            {"debugHint", DebugHint()}); \
         Y_FAIL_S(msg); \
     } \
     \
@@ -109,8 +116,8 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
     SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
 #undef DefaultHandleReply
 
-void TSubOperationState::IgnoreMessages(TString debugHint, TSet<ui32> mgsIds) {
-    LogHint = debugHint;
+void TSubOperationState::IgnoreMessages(NActors::NStructuredLog::TStructuredMessage debugHint, TSet<ui32> mgsIds) {
+    LogHint = std::move(debugHint);
     MsgToIgnore.swap(mgsIds);
 }
 

@@ -7,6 +7,7 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_allocator_client/actor_client.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NBackground {
 
@@ -17,7 +18,9 @@ private:
     NActors::TActorId TxAllocatorClient;
 
     void SendCurrentTxToSS() {
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("chain_tx", SessionLogic->GetTxData().GetTransactions()[SessionLogic->GetStepForExecute()].DebugString());
+        YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "SendCurrentTxToSS",
+            {"chainTx", SessionLogic->GetTxData().GetTransactions()[SessionLogic->GetStepForExecute()].DebugString()}
+        );
         auto evModification = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(SessionLogic->GetCurrentTxIdVerified(), (ui64)TabletId);
         *evModification->Record.AddTransaction() = SessionLogic->GetTxData().GetTransactions()[SessionLogic->GetStepForExecute()];
         NActors::TActivationContext::AsActorContext().Send(TabletActorId, evModification.release());
@@ -53,7 +56,9 @@ public:
     }
 
     STATEFN(StateInProgress) {
-        const NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_BACKGROUND)("SelfId", SelfId())("TabletId", TabletId);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_BACKGROUND,
+            {"selfId", SelfId()},
+            {"tabletId", TabletId});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvTxAllocatorClient::TEvAllocateResult, Handle);

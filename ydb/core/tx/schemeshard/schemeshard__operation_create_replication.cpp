@@ -6,10 +6,7 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
 
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_W(stream) LOG_WARN_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -112,10 +109,10 @@ static constexpr TReplicationStrategy ReplicationStrategy;
 static constexpr TTransferStrategy TransferStrategy;
 
 class TConfigureParts: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateReplication TConfigureParts"
-            << " opId# " << OperationId << " ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCreateReplication TConfigureParts"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -128,7 +125,10 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"tabletId", context.SS->TabletID()},
+            {"debugHint", DebugHint()}
+        );
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -148,8 +148,11 @@ public:
             const auto tabletId = context.SS->ShardInfos.at(shard.Idx).TabletID;
 
             if (tabletId == InvalidTabletId) {
-                LOG_D(DebugHint() << "Shard is not created yet"
-                    << ": shardIdx# " << shard.Idx);
+                YDB_LOG_DEBUG_CTX(context.Ctx, "Shard is not created yet",
+                    {"tabletId", context.SS->TabletID()},
+                    {"debugHint", DebugHint()},
+                    {"shardIdx", shard.Idx}
+                );
                 context.OnComplete.WaitShardCreated(shard.Idx, OperationId);
             } else {
                 auto ev = MakeHolder<NReplication::TEvController::TEvCreateReplication>();
@@ -175,9 +178,12 @@ public:
                     location.SetMonitoringProjectId(it->second);
                 }
 
-                LOG_D(DebugHint() << "Send TEvCreateReplication to controller"
-                    << ": tabletId# " << tabletId
-                    << ", ev# " << ev->ToString());
+                YDB_LOG_DEBUG_CTX(context.Ctx, "Send TEvCreateReplication to controller",
+                    {"tabletId", context.SS->TabletID()},
+                    {"debugHint", DebugHint()},
+                    {"replicationTabletId", tabletId},
+                    {"ev", ev->ToString()}
+                );
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, pathId, ev.Release());
             }
 
@@ -188,7 +194,11 @@ public:
     }
 
     bool HandleReply(NReplication::TEvController::TEvCreateReplicationResult::TPtr& ev, TOperationContext& context) override {
-        LOG_I(DebugHint() << "HandleReply " << ev->Get()->ToString());
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply",
+            {"tabletId", context.SS->TabletID()},
+            {"debugHint", DebugHint()},
+            {"message", ev->Get()->ToString()}
+        );
 
         const auto tabletId = TTabletId(ev->Get()->Record.GetOrigin());
         const auto status = ev->Get()->Record.GetStatus();
@@ -198,9 +208,12 @@ public:
         case NKikimrReplication::TEvCreateReplicationResult::ALREADY_EXISTS:
             break;
         default:
-            LOG_W(DebugHint() << "Ignoring unexpected TEvCreateReplicationResult"
-                << " tabletId# " << tabletId
-                << " status# " << static_cast<int>(status));
+            YDB_LOG_WARN_CTX(context.Ctx, "Ignoring unexpected TEvCreateReplicationResult",
+                {"tabletId", context.SS->TabletID()},
+                {"debugHint", DebugHint()},
+                {"replicationTabletId", tabletId},
+                {"status", static_cast<int>(status)}
+            );
             return false;
         }
 
@@ -211,7 +224,10 @@ public:
 
         const auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         if (!txState->ShardsInProgress.erase(shardIdx)) {
-            LOG_W(DebugHint() << "Ignoring duplicate TEvCreateReplicationResult");
+            YDB_LOG_WARN_CTX(context.Ctx, "Ignoring duplicate TEvCreateReplicationResult",
+                {"tabletId", context.SS->TabletID()},
+                {"debugHint", DebugHint()}
+            );
             return false;
         }
 
@@ -234,10 +250,10 @@ private:
 }; // TConfigureParts
 
 class TPropose: public TSubOperationState {
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateReplication TPropose"
-            << " opId# " << OperationId << " ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCreateReplication TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -251,7 +267,10 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"tabletId", context.SS->TabletID()},
+            {"debugHint", DebugHint()}
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -264,8 +283,11 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
+            {"tabletId", context.SS->TabletID()},
+            {"debugHint", DebugHint()},
+            {"step", step}
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -368,9 +390,12 @@ public:
         const auto& acl = Transaction.GetModifyACL().GetDiffACL();
         const auto acceptExisted = !Transaction.GetFailOnExist();
 
-        LOG_N("TCreateReplication Propose"
-            << ": opId# " << OperationId
-            << ", path# " << workingDir << "/" << name);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateReplication Propose",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"path", workingDir},
+            {"name", name}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
 
@@ -546,9 +571,11 @@ public:
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_N("TCreateReplication AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << txId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateReplication AbortUnsafe",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"txId", txId}
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 

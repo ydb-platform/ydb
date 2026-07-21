@@ -9,6 +9,8 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -21,7 +23,11 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
         Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
         auto& buildInfo = *buildInfoPtr->get();
-        LOG_I("Change state from " << buildInfo.State << " to " << state);
+        YDB_LOG_INFO("Change state",
+            {"logPrefix", LogPrefix},
+            {"buildState", buildInfo.State},
+            {"state", state}
+        );
         if (state == TIndexBuildInfo::EState::Rejected ||
             state == TIndexBuildInfo::EState::Cancelled ||
             state == TIndexBuildInfo::EState::Done) {
@@ -41,7 +47,11 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         const auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(operationId);
         Y_VERIFY_S(operationInfoPtr, "SetColumnConstraintOperations has no " << operationId);
         auto& operationInfo = *operationInfoPtr->get();
-        LOG_I("Change SetColumnConstraint state from " << ToString(operationInfo.OperationState) << " to " << ToString(state));
+        YDB_LOG_INFO("Change SetColumnConstraint state",
+            {"logPrefix", LogPrefix},
+            {"operationState", ToString(operationInfo.OperationState)},
+            {"state", ToString(state)}
+        );
         if (state == TSetColumnConstraintOperationInfo::EOperationState::Done) {
             operationInfo.EndTime = TAppData::TimeProvider->Now();
         }
@@ -136,24 +146,28 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         }
 
         if (!cloud_id || !folder_id || !database_id) {
-            LOG_I("ApplyBill: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain"
-                  << ", build index operation: " << buildId
-                  << ", domain: " << domain.PathString()
-                  << ", domainId: " << buildInfo.DomainPathId
-                  << ", tableId: " << buildInfo.TablePathId
-                  << ", not billed usage: " << toBill);
+            YDB_LOG_INFO("ApplyBill: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain build index not billed",
+                {"logPrefix", LogPrefix},
+                {"operation", buildId},
+                {"domain", domain.PathString()},
+                {"domainId", buildInfo.DomainPathId},
+                {"tableId", buildInfo.TablePathId},
+                {"usage", toBill}
+            );
             continue;
         }
 
         if (!Self->IsServerlessDomain(domain)) {
-            LOG_I("ApplyBill: unable to make a bill, domain is not a serverless db"
-                  << ", build index operation: " << buildId
-                  << ", domain: " << domain.PathString()
-                  << ", domainId: " << buildInfo.DomainPathId
-                  << ", IsDomainSchemeShard: " << Self->IsDomainSchemeShard
-                  << ", ParentDomainId: " << Self->ParentDomainId
-                  << ", ResourcesDomainId: " << domain.DomainInfo()->GetResourcesDomainId()
-                  << ", not billed usage: " << toBill);
+            YDB_LOG_INFO("ApplyBill: unable to make a bill, domain is not a serverless db build index not billed",
+                {"logPrefix", LogPrefix},
+                {"operation", buildId},
+                {"domain", domain.PathString()},
+                {"domainId", buildInfo.DomainPathId},
+                {"isDomainSchemeShard", Self->IsDomainSchemeShard},
+                {"parentDomainId", Self->ParentDomainId},
+                {"resourcesDomainId", domain.DomainInfo()->GetResourcesDomainId()},
+                {"usage", toBill}
+            );
             continue;
         }
 
@@ -182,11 +196,14 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             .Usage(TBillRecord::RequestUnits(requestUnits, startPeriod, endPeriod))
             .ToString();
 
-        LOG_N("ApplyBill: make a bill, id#" << buildId
-            << ", billRecord: " << billRecord
-            << ", toBill: " << toBill
-            << ", explain: " << requestUnitsExplain
-            << ", buildInfo: " << buildInfo);
+        YDB_LOG_NOTICE("ApplyBill: make a bill",
+            {"logPrefix", LogPrefix},
+            {"id", buildId},
+            {"billRecord", billRecord},
+            {"toBill", toBill},
+            {"explain", requestUnitsExplain},
+            {"buildInfo", buildInfo}
+        );
 
         auto request = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
         // send message at Complete stage
@@ -199,7 +216,10 @@ void TSchemeShard::TIndexBuilder::TTxBase::Send(TActorId dst, THolder<IEventBase
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::AllocateTxId(TIndexBuildId buildId) {
-    LOG_D("AllocateTxId " << buildId);
+    YDB_LOG_DEBUG("AllocateTxId",
+        {"logPrefix", LogPrefix},
+        {"buildId", buildId}
+    );
     Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(buildId));
 }
 
@@ -374,9 +394,11 @@ void TSchemeShard::TIndexBuilder::TTxBase::SendNotificationsIfFinished(TIndexBui
         return;
     }
 
-    LOG_T("TIndexBuildInfo SendNotifications: "
-          << ": id# " << indexInfo.Id
-          << ", subscribers count# " << indexInfo.Subscribers.size());
+    YDB_LOG_TRACE("TIndexBuildInfo SendNotifications: subscribers",
+        {"logPrefix", LogPrefix},
+        {"id", indexInfo.Id},
+        {"count", indexInfo.Subscribers.size()}
+    );
 
     TSet<TActorId> toAnswer;
     toAnswer.swap(indexInfo.Subscribers);
@@ -519,19 +541,39 @@ bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransaction
             ? buildInfoPtr->get()
             : nullptr;
 
-        LOG_E("Unhandled exception, id#"
-            << (BuildId == InvalidIndexBuildId ? TString("<no id>") : TStringBuilder() << BuildId)
-            << " " << TypeName(originalExc) << ": " << originalExc.what() << Endl
-            << TBackTrace::FromCurrentException().PrintToString()
-            << ", TIndexBuildInfo: " << (buildInfo ? TStringBuilder() << (*buildInfo) : TString("<no build info>")));
+        TStringBuilder buildIdStr;
+        if (BuildId == InvalidIndexBuildId) {
+            buildIdStr << "<no id>";
+        } else {
+            buildIdStr << BuildId;
+        }
+
+        TStringBuilder buildInfoStr;
+        if (buildInfo) {
+            buildInfoStr << *buildInfo;
+        } else {
+            buildIdStr << "<no build info>";
+        }
+
+        YDB_LOG_ERROR("Unhandled exception",
+            {"logPrefix", LogPrefix},
+            {"buildId", buildIdStr},
+            {"exceptionType", TypeName(originalExc)},
+            {"exceptionMessage", originalExc.what()},
+            {"backtrace", TBackTrace::FromCurrentException().PrintToString()},
+            {"buildInfo", buildInfoStr}
+        );
 
         OnUnhandledException(txc, ctx, buildInfo, originalExc);
 
         return true;
     } catch (const std::exception& handleExc) {
-        LOG_E("OnUnhandledException throws unhandled exception "
-            << TypeName(handleExc) << ": " << handleExc.what() << Endl
-            << TBackTrace::FromCurrentException().PrintToString());
+        YDB_LOG_ERROR("OnUnhandledException throws unhandled exception",
+            {"logPrefix", LogPrefix},
+            {"exceptionType", TypeName(handleExc)},
+            {"exceptionMessage", handleExc.what()},
+            {"backtrace", TBackTrace::FromCurrentException().PrintToString()}
+        );
         return false;
     }
 }

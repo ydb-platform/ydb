@@ -13,8 +13,10 @@ class TEmptyPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder() << "TEmptyPropose, operationId " << OperationId << ", ";
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TEmptyPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -28,8 +30,10 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << "ProgressState, operation type " << TTxState::TypeName(txState->TxType));
+        YDB_LOG_INFO_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState operation type",
+            {"debugHint", DebugHint()},
+            {"txType", TTxState::TypeName(txState->TxType)}
+        );
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
 
@@ -47,10 +51,10 @@ private:
     TString OperationName;
     TTxState::ETxState NextState;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << OperationName << "::TWaitCopyTableBarrier"
-                << " operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", TStringBuilder() << OperationName << "::TWaitCopyTableBarrier"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -70,10 +74,11 @@ public:
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
-                               << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet# " << ssId);
+        YDB_LOG_INFO_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply TEvPrivate::TEvCompleteBarrier",
+            {"debugHint", DebugHint()},
+            {"msg", ev->Get()->ToString()},
+            {"tablet", ssId}
+        );
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -88,9 +93,10 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << "ProgressState, operation type "
-                            << TTxState::TypeName(txState->TxType));
+        YDB_LOG_INFO_CTX_COMP(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "ProgressState operation type",
+            {"debugHint", DebugHint()},
+            {"txType", TTxState::TypeName(txState->TxType)}
+        );
 
         context.OnComplete.Barrier(OperationId, "CopyTableBarrier");
         return false;

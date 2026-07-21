@@ -29,9 +29,10 @@ inline bool ConvertOlapIndexToCreationConfig(
         for (ui32 colId : indexProto.GetBloomFilter().GetColumnIds()) {
             auto it = columnIdToName.find(colId);
             if (it == columnIdToName.end()) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "ConvertOlapIndexToCreationConfig: BloomFilter column ID " << colId
-                    << " not found in columnIdToName map for index '" << indexProto.GetName() << "'");
+                YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: BloomFilter column ID not found in columnIdToName map for index",
+                    {"colId", colId},
+                    {"indexName", indexProto.GetName()}
+                );
                 return false;
             }
             config.AddKeyColumnNames(it->second);
@@ -42,9 +43,10 @@ inline bool ConvertOlapIndexToCreationConfig(
         config.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter);
         auto it = columnIdToName.find(indexProto.GetBloomNGrammFilter().GetColumnId());
         if (it == columnIdToName.end()) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "ConvertOlapIndexToCreationConfig: BloomNGrammFilter column ID " << indexProto.GetBloomNGrammFilter().GetColumnId()
-                << " not found in columnIdToName map for index '" << indexProto.GetName() << "'");
+            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: BloomNGrammFilter column ID not found in columnIdToName map for index",
+                {"columnId", indexProto.GetBloomNGrammFilter().GetColumnId()},
+                {"indexName", indexProto.GetName()}
+            );
             return false;
         }
         config.AddKeyColumnNames(it->second);
@@ -53,11 +55,12 @@ inline bool ConvertOlapIndexToCreationConfig(
     } else if (indexProto.HasMinMaxIndex()) {
         config.SetType(NKikimrSchemeOp::EIndexTypeLocalMinMax);
         auto it = columnIdToName.find(indexProto.GetMinMaxIndex().GetColumnId());
-        
+
         if (it == columnIdToName.end()) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "ConvertOlapIndexToCreationConfig: MinMaxIndex column ID " << indexProto.GetMinMaxIndex().GetColumnId()
-                << " not found in columnIdToName map for index '" << indexProto.GetName() << "'");
+            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: MinMaxIndex column ID not found in columnIdToName map for index",
+                {"columnId", indexProto.GetMinMaxIndex().GetColumnId()},
+                {"indexName", indexProto.GetName()}
+            );
             return false;
         }
         config.AddKeyColumnNames(it->second);
@@ -67,17 +70,19 @@ inline bool ConvertOlapIndexToCreationConfig(
         for (ui32 colId : indexProto.GetCountMinSketch().GetColumnIds()) {
             auto it = columnIdToName.find(colId);
             if (it == columnIdToName.end()) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "ConvertOlapIndexToCreationConfig: CountMinSketch column ID " << colId
-                    << " not found in columnIdToName map for index '" << indexProto.GetName() << "'");
+                YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: CountMinSketch column ID not found in columnIdToName map for index",
+                    {"colId", colId},
+                    {"indexName", indexProto.GetName()}
+                );
                 return false;
             }
             config.AddKeyColumnNames(it->second);
         }
         return true;
     }
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "ConvertOlapIndexToCreationConfig: Unrecognized index type for index '" << indexProto.GetName() << "'");
+    YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToCreationConfig: Unrecognized index type for index",
+        {"indexName", indexProto.GetName()}
+    );
     return false;
 }
 
@@ -100,9 +105,10 @@ inline bool ConvertOlapIndexToRequested(
             for (ui32 colId : src.GetBloomFilter().GetColumnIds()) {
                 auto it = columnIdToName.find(colId);
                 if (it == columnIdToName.end()) {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "ConvertOlapIndexToRequested: BloomFilter column ID " << colId
-                        << " not found in columnIdToName map for index '" << src.GetName() << "'");
+                    YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToRequested: BloomFilter column ID not found in columnIdToName map for index",
+                        {"colId", colId},
+                        {"indexName", src.GetName()}
+                    );
                     return false;
                 }
                 bf->AddColumnNames(it->second);
@@ -120,9 +126,10 @@ inline bool ConvertOlapIndexToRequested(
             if (src.GetBloomNGrammFilter().HasColumnId()) {
                 auto it = columnIdToName.find(src.GetBloomNGrammFilter().GetColumnId());
                 if (it == columnIdToName.end()) {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "ConvertOlapIndexToRequested: BloomNGrammFilter column ID " << src.GetBloomNGrammFilter().GetColumnId()
-                        << " not found in columnIdToName map for index '" << src.GetName() << "'");
+                    YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToRequested: BloomNGrammFilter column ID not found in columnIdToName map for index",
+                        {"columnId", src.GetBloomNGrammFilter().GetColumnId()},
+                        {"indexName", src.GetName()}
+                    );
                     return false;
                 }
                 nf->SetColumnName(it->second);
@@ -155,9 +162,10 @@ inline bool ConvertOlapIndexToRequested(
             if (src.GetMinMaxIndex().HasColumnId()) {
                 auto it = columnIdToName.find(src.GetMinMaxIndex().GetColumnId());
                 if (it == columnIdToName.end()) {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "ConvertOlapIndexToRequested: MinMaxIndex column ID " << src.GetMinMaxIndex().GetColumnId()
-                        << " not found in columnIdToName map for index '" << src.GetName() << "'");
+                    YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToRequested: MinMaxIndex column ID not found in columnIdToName map for index",
+                        {"columnId", src.GetMinMaxIndex().GetColumnId()},
+                        {"indexName", src.GetName()}
+                    );
                     return false;
                 }
                 min_max->SetColumnName(it->second);
@@ -169,9 +177,10 @@ inline bool ConvertOlapIndexToRequested(
             for (ui32 colId : src.GetCountMinSketch().GetColumnIds()) {
                 auto it = columnIdToName.find(colId);
                 if (it == columnIdToName.end()) {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "ConvertOlapIndexToRequested: CountMinSketch column ID " << colId
-                        << " not found in columnIdToName map for index '" << src.GetName() << "'");
+                    YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "ConvertOlapIndexToRequested: CountMinSketch column ID not found in columnIdToName map for index",
+                        {"colId", colId},
+                        {"indexName", src.GetName()}
+                    );
                     return false;
                 }
                 sketch->AddColumnNames(it->second);
@@ -180,8 +189,7 @@ inline bool ConvertOlapIndexToRequested(
         }
         case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex:
         case NKikimrSchemeOp::TOlapIndexDescription::IMPLEMENTATION_NOT_SET:
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                Sprintf("ConvertOlapIndexToRequested: unimplemented olap index type '%s'", src.GetClassName().c_str()));
+            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, Sprintf("ConvertOlapIndexToRequested: unimplemented olap index type '%s'", src.GetClassName().c_str()));
             return false;
     }
 
@@ -253,8 +261,7 @@ inline bool ConvertRequestedIndexToCreationConfig(
         }
         case NKikimrSchemeOp::TOlapIndexRequested::IMPLEMENTATION_NOT_SET:
         case NKikimrSchemeOp::TOlapIndexRequested::kMaxIndex:
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                Sprintf("ConvertRequestedIndexToCreationConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str()));
+            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, Sprintf("ConvertRequestedIndexToCreationConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str()));
             return false;
     }
 
@@ -329,8 +336,7 @@ inline bool ConvertRequestedIndexToAlteringConfig(
         }
 
         default: {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                Sprintf("ConvertRequestedIndexToAlteringConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str()));
+            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, Sprintf("ConvertRequestedIndexToAlteringConfig: unimplemented olap index type '%s'", indexProto.GetClassName().c_str()));
             return false;
         }
     }
@@ -443,8 +449,7 @@ inline bool ConvertCreationConfigToRequested(
             return true;
         }
         default:
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                Sprintf("ConvertCreationConfigToRequested: unimplemented index type '%s'", EIndexType_Name(config.GetType()).c_str()));
+            YDB_LOG_ERROR_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, Sprintf("ConvertCreationConfigToRequested: unimplemented index type '%s'", EIndexType_Name(config.GetType()).c_str()));
             return false;
     }
 

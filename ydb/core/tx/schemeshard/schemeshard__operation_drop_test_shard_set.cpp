@@ -4,6 +4,8 @@
 
 #include <ydb/core/base/subdomain.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -49,10 +51,11 @@ class TDropTestShardSet : public TSubOperation {
             const TStepId step = TStepId(ev->Get()->StepId);
             const TTabletId ssId = context.SS->SelfTabletId();
 
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       DebugHint() << " HandleReply TEvOperationPlan"
-                                   << ", step: " << step
-                                   << ", at schemeshard: " << ssId);
+            YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
+                {"debugHint", DebugHint()},
+                {"step", step},
+                {"schemeshard", ssId}
+            );
 
             TTxState* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);
@@ -101,9 +104,10 @@ class TDropTestShardSet : public TSubOperation {
         bool ProgressState(TOperationContext& context) override {
             const TTabletId ssId = context.SS->SelfTabletId();
 
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       DebugHint() << " ProgressState"
-                                   << ", at schemeshard: " << ssId);
+            YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+                {"debugHint", DebugHint()},
+                {"schemeshard", ssId}
+            );
 
             TTxState* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);
@@ -113,10 +117,10 @@ class TDropTestShardSet : public TSubOperation {
             return false;
         }
 
-        TString DebugHint() const override {
-            return TStringBuilder()
-                << "TDropTestShardSet::TPropose"
-                << " OperationId# " << OperationId;
+        NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+            return YDB_LOG_CREATE_MESSAGE(
+                {"operationKind", "TDropTestShardSet::TPropose"},
+                {"operationId", OperationId});
         }
     };
 
@@ -143,12 +147,13 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropTestShardSet Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId
-                         << ", drop: " << drop.ShortDebugString());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropTestShardSet Propose",
+            {"path", parentPathStr},
+            {"name", name},
+            {"opId", OperationId},
+            {"schemeshard", ssId},
+            {"drop", drop.ShortDebugString()}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -225,11 +230,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropTestShardSet AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->SelfTabletId());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropTestShardSet AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->SelfTabletId()}
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }

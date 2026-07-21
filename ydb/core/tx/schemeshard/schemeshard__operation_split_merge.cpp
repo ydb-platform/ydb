@@ -6,6 +6,8 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -15,10 +17,10 @@ class TConfigureDestination: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TSplitMerge TConfigureDestination"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TSplitMerge TConfigureDestination"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -31,11 +33,12 @@ public:
     bool HandleReply(TEvDataShard::TEvInitSplitMergeDestinationAck::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvInitSplitMergeDestinationAck"
-                               << ", operationId: " << OperationId
-                               << ", at schemeshard: " << ssId
-                               << " message# " << ev->Get()->Record.ShortDebugString());
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvInitSplitMergeDestinationAck",
+            {"debugHint", DebugHint()},
+            {"operationId", OperationId},
+            {"schemeshard", ssId},
+            {"message", ev->Get()->Record.ShortDebugString()}
+        );
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -47,17 +50,19 @@ public:
         TTabletId tabletId = TTabletId(ev->Get()->Record.GetTabletId());
         TShardIdx idx = context.SS->MustGetShardIdx(tabletId);
         if (!idx) {
-            LOG_ERROR(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                      "Tablet %" PRIu64 " is not known in TxId %" PRIu64,
-                      tabletId, OperationId.GetTxId());
+            YDB_LOG_ERROR_CTX(context.Ctx, "Tablet is not known in TxId",
+                {"tabletId", tabletId},
+                {"txId", OperationId.GetTxId()}
+            );
             return false;
         }
 
         if (!context.SS->ShardInfos.contains(idx)) {
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       DebugHint() << " Got InitSplitMergeDestinationAck"
-                       << " for unknown shard idx " << idx
-                       << " tabletId " << tabletId);
+            YDB_LOG_INFO_CTX(context.Ctx, "Got InitSplitMergeDestinationAck for unknown shard idx tabletId",
+                {"debugHint", DebugHint()},
+                {"idx", idx},
+                {"tabletId", tabletId}
+            );
             return false;
         }
 
@@ -78,10 +83,10 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "TSplitMerge TConfigureDestination ProgressState"
-                       << ", operationId: " << OperationId
-                       << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "TSplitMerge TConfigureDestination ProgressState",
+            {"operationId", OperationId},
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -133,12 +138,12 @@ public:
 
             TTabletId datashardId = context.SS->ShardInfos[shard.Idx].TabletID;
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Initializing scheme "
-                            << "on dst datashard: " << datashardId
-                            << " splitOp: " << OperationId
-                            << " alterVersion: " << alterVersion
-                            << " at tablet: " << context.SS->TabletID());
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Initializing scheme on dst",
+                {"datashard", datashardId},
+                {"splitOp", OperationId},
+                {"alterVersion", alterVersion},
+                {"tablet", context.SS->TabletID()}
+            );
 
             const ui32 rangeIdx = getDstRangeIdx(datashardId);
             const auto& rangeDescr = splitDescr.GetDestinationRanges(rangeIdx);
@@ -185,10 +190,10 @@ class TTransferData: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TSplitMerge TTransferData"
-                << " operationId# " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TSplitMerge TTransferData"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -201,11 +206,12 @@ public:
     bool HandleReply(TEvDataShard::TEvSplitAck::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvSplitAck"
-                               << ", at schemeshard: " << ssId
-                               << ", OperationCookie: " << ev->Get()->Record.GetOperationCookie()
-                               << ", TabletId: " << ev->Get()->Record.GetTabletId());
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvSplitAck",
+            {"debugHint", DebugHint()},
+            {"schemeshard", ssId},
+            {"operationCookie", ev->Get()->Record.GetOperationCookie()},
+            {"tabletId", ev->Get()->Record.GetTabletId()}
+        );
 
         NIceDb::TNiceDb db(context.GetDB());
 
@@ -217,17 +223,19 @@ public:
         auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
         auto srcShardIdx = context.SS->GetShardIdx(tabletId);
         if (!srcShardIdx) {
-            LOG_ERROR(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                      "Tablet %" PRIu64 " is not known in TxId %" PRIu64,
-                      tabletId, OperationId.GetTxId());
+            YDB_LOG_ERROR_CTX(context.Ctx, "Tablet is not known in TxId",
+                {"tabletId", tabletId},
+                {"txId", OperationId.GetTxId()}
+            );
             return false;
         }
 
         if (!context.SS->ShardInfos.contains(srcShardIdx)) {
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       DebugHint() << " Got SplitAck for unknown shard"
-                       << " idx " << srcShardIdx
-                       << " tabletId " << tabletId);
+            YDB_LOG_INFO_CTX(context.Ctx, "Got SplitAck for unknown shard idx tabletId",
+                {"debugHint", DebugHint()},
+                {"srcShardIdx", srcShardIdx},
+                {"tabletId", tabletId}
+            );
             return false;
         }
 
@@ -357,9 +365,10 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -375,10 +384,12 @@ public:
 
             auto datashardId = context.SS->ShardInfos[shard.Idx].TabletID;
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " Starting split on src datashard " << datashardId
-                        << " splitOpId# " << OperationId
-                        << " at tablet " << context.SS->TabletID());
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Starting split on src datashard at tablet",
+                {"debugHint", DebugHint()},
+                {"datashardId", datashardId},
+                {"splitOpId", OperationId},
+                {"tabletId", context.SS->TabletID()}
+            );
 
             auto event = MakeHolder<TEvDataShard::TEvSplit>(ui64(OperationId.GetTxId()));
 
@@ -397,10 +408,10 @@ class TNotifySrc: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TSplitMerge TNotifySrc"
-                << ", operationId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TSplitMerge TNotifySrc"},
+            {"operationId", OperationId});
     }
 public:
     TNotifySrc(TOperationId id)
@@ -414,10 +425,11 @@ public:
         auto ssId = context.SS->SelfTabletId();
         auto tabletId = TTabletId(ev->Get()->Record.GetTabletId());
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvSplitPartitioningChangedAck"
-                               << ", from datashard: " << tabletId
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvSplitPartitioningChangedAck",
+            {"debugHint", DebugHint()},
+            {"datashard", tabletId},
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -427,17 +439,19 @@ public:
 
         auto idx = context.SS->GetShardIdx(tabletId);
         if (!idx) {
-            LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Datashard is not listed in tablet to shard map"
-                            << ", datashard: " << tabletId
-                            << ", opId: " << OperationId);
+            YDB_LOG_ERROR_CTX(context.Ctx, "Datashard is not listed in tablet to shard map",
+                {"datashard", tabletId},
+                {"opId", OperationId}
+            );
             return false;
         }
 
         if (!txState->ShardsInProgress.contains(idx)) {
             // TODO: verify that this is a repeated event from known Src shard, not a random one
-            LOG_INFO(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "Got SplitPartitioningChangedAck from shard %" PRIu64 " that is not a  part ot Tx %" PRIu64, tabletId, OperationId.GetTxId());
+            YDB_LOG_INFO_CTX(context.Ctx, "Got SplitPartitioningChangedAck from shard that is not a part ot Tx",
+                {"tabletId", tabletId},
+                {"txId", OperationId.GetTxId()}
+            );
             return false;
         }
 
@@ -460,9 +474,10 @@ public:
         //We just want notify Src shard that it should reject all new transactions and return SchemeChanged error
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"schemeshard", ssId}
+        );
 
         TTxState* txState = context.SS->TxInFlight.FindPtr(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -482,18 +497,22 @@ public:
             }
 
             if (!context.SS->ShardInfos.contains(shard.Idx) || context.SS->ShardDeleter.Has(shard.Idx)) {
-                LOG_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                          "Src datashard idx %" PRIu64 " for splitOp# %" PRIu64 " is already deleted or is intended to at tablet %" PRIu64,
-                          shard.Idx, OperationId.GetTxId(), context.SS->TabletID());
+                YDB_LOG_DEBUG_CTX(context.Ctx, "Src datashard idx for is already deleted or is intended to at tablet",
+                    {"shardIdx", shard.Idx},
+                    {"splitOp", OperationId.GetTxId()},
+                    {"tabletId", context.SS->TabletID()}
+                );
                 continue;
             }
 
             auto datashardId = context.SS->ShardInfos[shard.Idx].TabletID;
 
             needToNotifySrc = true;
-            LOG_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                      "Notify src datashard %" PRIu64 " on partitioning changed splitOp# %" PRIu64 " at tablet %" PRIu64,
-                      datashardId, OperationId.GetTxId(), context.SS->TabletID());
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Notify src datashard on partitioning changed at tablet",
+                {"datashardId", datashardId},
+                {"splitOp", OperationId.GetTxId()},
+                {"tabletId", context.SS->TabletID()}
+            );
 
             THolder<TEvDataShard::TEvSplitPartitioningChanged> event = MakeHolder<TEvDataShard::TEvSplitPartitioningChanged>(ui64(OperationId.GetTxId()));
 
@@ -823,25 +842,27 @@ public:
             pathId = context.SS->MakeLocalId(TLocalPathId(info.GetTableLocalId()));
         }
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TSplitMerge Propose"
-            << ", tableStr: " << info.GetTablePath()
-            << ", tableId: " << pathId
-            << ", opId: " << OperationId
-            << ", at schemeshard: " << ssId
-            << ", request: " << info.ShortDebugString());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TSplitMerge Propose",
+            {"tableStr", info.GetTablePath()},
+            {"tableId", pathId},
+            {"opId", OperationId},
+            {"schemeshard", ssId},
+            {"request", info.ShortDebugString()}
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         auto setResultError = [&](NKikimrScheme::EStatus status, const TString& error) {
             result->SetError(status, error);
-            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TSplitMerge Propose failed " << status << " " << error
-                << ", tableStr: " << info.GetTablePath()
-                << ", tableId: " << pathId
-                << ", opId: " << OperationId
-                << ", at schemeshard: " << ssId
-                << ", request: " << info.ShortDebugString());
+            YDB_LOG_WARN_CTX(context.Ctx, "TSplitMerge Propose failed",
+                {"status", status},
+                {"error", error},
+                {"tableStr", info.GetTablePath()},
+                {"tableId", pathId},
+                {"opId", OperationId},
+                {"schemeshard", ssId},
+                {"request", info.ShortDebugString()}
+            );
         };
 
         TString errStr;
@@ -989,11 +1010,12 @@ public:
             setResultError(NKikimrScheme::StatusNotAvailable,
                              Sprintf("Split/Merge operation involves too many parts: %" PRIu64, totalSrcPartCount));
 
-            LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "Cannot start split/merge operation"
-                           << " for table \"" << info.GetTablePath() << "\" (id " << path.Base()->PathId << ")"
-                           << " at tablet " << context.SS->TabletID()
-                           << " because the operation involves too many parts: " << totalSrcPartCount);
+            YDB_LOG_CRIT_CTX(context.Ctx, "Cannot start split/merge operation for table (id at tablet because the operation involves too many",
+                {"tablePath", info.GetTablePath()},
+                {"pathId", path.Base()->PathId},
+                {"tabletId", context.SS->TabletID()},
+                {"parts", totalSrcPartCount}
+            );
             return result;
         }
 
@@ -1108,14 +1130,14 @@ public:
 
         SetState(NextState());
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TSplitMerge Propose accepted"
-            << ", tableStr: " << info.GetTablePath()
-            << ", tableId: " << pathId
-            << ", opId: " << OperationId
-            << ", at schemeshard: " << ssId
-            << ", op: " << op.SplitDescription->ShortDebugString()
-            << ", request: " << info.ShortDebugString());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TSplitMerge Propose accepted",
+            {"tableStr", info.GetTablePath()},
+            {"tableId", pathId},
+            {"opId", OperationId},
+            {"schemeshard", ssId},
+            {"op", op.SplitDescription->ShortDebugString()},
+            {"request", info.ShortDebugString()}
+        );
 
         return result;
     }
@@ -1125,11 +1147,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TSplitMerge AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TSplitMerge AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()}
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);

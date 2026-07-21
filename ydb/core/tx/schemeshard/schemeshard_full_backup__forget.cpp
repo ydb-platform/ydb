@@ -3,6 +3,8 @@
 
 #include <ydb/core/backup/impl/logging.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONTINUOUS_BACKUP
+
 // Precondition: the row must be in a terminal state and the control op must not be in flight; we refuse to delete in-flight rows because AbortUnsafe expects the row to exist for cleanup.
 
 namespace NKikimr::NSchemeShard {
@@ -35,7 +37,10 @@ public:
             issue.set_message(errorMessage);
         }
 
-        LOG_D("Reply " << Response->Record.ShortDebugString());
+        YDB_LOG_DEBUG("Reply",
+            {"logPrefix", GetLogPrefix()},
+            {"responseRecord", Response->Record.ShortDebugString()}
+        );
 
         SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
@@ -43,7 +48,10 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        LOG_D("Execute " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Execute",
+            {"logPrefix", GetLogPrefix()},
+            {"record", record.ShortDebugString()}
+        );
 
         Response = MakeHolder<TEvBackup::TEvForgetFullBackupResponse>(record.GetTxId());
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);

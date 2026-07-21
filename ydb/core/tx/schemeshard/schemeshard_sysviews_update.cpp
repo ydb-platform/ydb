@@ -2,6 +2,8 @@
 
 #include <ydb/core/sys_view/common/events.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 TString TModifySysViewRequestInfo::DebugString() const {
@@ -121,10 +123,11 @@ public:
                 Y_UNREACHABLE();
             }
 
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "SysViewsRosterUpdate# " << ctx.SelfID.ToString() <<
-                " at schemeshard: " << SelfTabletId <<
-                " Send TEvModifySchemeTransaction: " << request->Record.ShortDebugString());
+            YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Send",
+                {"sysViewsRosterUpdate", ctx.SelfID},
+                {"schemeshard", SelfTabletId},
+                {"TEvModifySchemeTransaction", request->Record.ShortDebugString()}
+            );
 
             AwaitingModifySchemeRequests.emplace(txId, std::move(requestInfo));
             Send(SelfActorId, request.Release());
@@ -142,8 +145,9 @@ public:
             cFunc(NSysView::TEvSysView::TEvRosterUpdateFinished::EventType, PassAway);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TSysViewsRosterUpdate StateUpdateSysViewFolder unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "TSysViewsRosterUpdate StateUpdateSysViewFolder unexpected event 0x%08x",
+                    {"eventType", ev->GetTypeRewrite()}
+                );
         }
     }
 
@@ -151,11 +155,11 @@ private:
 
     void SubscribeToCompletion(TTxId txId) const {
         const auto& ctx = TlsActivationContext->AsActorContext();
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "SysViewsRosterUpdate# " << ctx.SelfID.ToString() <<
-            " at schemeshard: " << SelfTabletId <<
-            " Send TEvNotifyTxCompletion" <<
-            ", txId " << txId);
+        YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Send TEvNotifyTxCompletion",
+            {"sysViewsRosterUpdate", ctx.SelfID},
+            {"schemeshard", SelfTabletId},
+            {"txId", txId}
+        );
 
 
         Send(SelfActorId, new TEvSchemeShard::TEvNotifyTxCompletion(static_cast<ui64>(txId)));
@@ -167,12 +171,12 @@ private:
         const TTxId txId(record.GetTxId());
         const auto& modifyInfo = AwaitingModifySchemeRequests.at(txId);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "SysViewsRosterUpdate# " << ctx.SelfID.ToString() <<
-            " at schemeshard: " << SelfTabletId <<
-            " Handle TEvModifySchemeTransactionResult" <<
-            ", " << modifyInfo.DebugString() <<
-            ", status: " << status);
+        YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Handle TEvModifySchemeTransactionResult",
+            {"sysViewsRosterUpdate", ctx.SelfID},
+            {"schemeshard", SelfTabletId},
+            {"modifyInfo", modifyInfo.DebugString()},
+            {"status", status}
+        );
 
         switch (status) {
         case NKikimrScheme::StatusSuccess:
@@ -182,21 +186,22 @@ private:
             SubscribeToCompletion(txId);
             break;
         default:
-            LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "SysViewsRosterUpdate# " << ctx.SelfID.ToString() <<
-                " at schemeshard: " << SelfTabletId <<
-                ", failed to " << modifyInfo.DebugString() <<
-                ", reason: " << record.GetReason());
+            YDB_LOG_ERROR_CTX(ctx, "TSysViewsRosterUpdate modify scheme transaction failed",
+                {"sysViewsRosterUpdate", ctx.SelfID},
+                {"schemeshard", SelfTabletId},
+                {"modifyInfo", modifyInfo.DebugString()},
+                {"reason", record.GetReason()}
+            );
 
             AwaitingModifySchemeRequests.erase(txId);
             break;
         }
 
         if (AwaitingModifySchemeRequests.empty()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "SysViewsRosterUpdate# " << ctx.SelfID.ToString() <<
-                " at schemeshard: " << SelfTabletId <<
-                " Send TEvRosterUpdateFinished");
+            YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Send TEvRosterUpdateFinished",
+                {"sysViewsRosterUpdate", ctx.SelfID},
+                {"schemeshard", SelfTabletId}
+            );
             Send(ctx.SelfID, new NSysView::TEvSysView::TEvRosterUpdateFinished());
         }
     }
@@ -206,19 +211,19 @@ private:
         const TTxId txId(record.GetTxId());
         const auto& modifyInfo = AwaitingModifySchemeRequests.at(txId);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "SysViewsRosterUpdate# " << ctx.SelfID.ToString() <<
-            " at schemeshard: " << SelfTabletId <<
-            " Handle TEvNotifyTxCompletionResult" <<
-            ", " << modifyInfo.DebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Handle TEvNotifyTxCompletionResult",
+            {"sysViewsRosterUpdate", ctx.SelfID},
+            {"schemeshard", SelfTabletId},
+            {"modifyInfo", modifyInfo.DebugString()}
+        );
 
         AwaitingModifySchemeRequests.erase(txId);
 
         if (AwaitingModifySchemeRequests.empty()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "SysViewsRosterUpdate# " << ctx.SelfID.ToString() <<
-                " at schemeshard: " << SelfTabletId <<
-                " Send TEvRosterUpdateFinished");
+            YDB_LOG_DEBUG_CTX(ctx, "TSysViewsRosterUpdate Send TEvRosterUpdateFinished",
+                {"sysViewsRosterUpdate", ctx.SelfID},
+                {"schemeshard", SelfTabletId}
+            );
             Send(ctx.SelfID, new NSysView::TEvSysView::TEvRosterUpdateFinished());
         }
     }

@@ -3,6 +3,8 @@
 
 #include <ydb/core/backup/impl/logging.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONTINUOUS_BACKUP
+
 namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
@@ -32,7 +34,10 @@ public:
             issue.set_message(errorMessage);
         }
 
-        LOG_D("Reply " << Response->Record.ShortDebugString());
+        YDB_LOG_DEBUG("Reply",
+            {"logPrefix", GetLogPrefix()},
+            {"responseRecord", Response->Record.ShortDebugString()}
+        );
 
         SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
@@ -40,14 +45,20 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        LOG_D("Execute " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Execute",
+            {"logPrefix", GetLogPrefix()},
+            {"record", record.ShortDebugString()}
+        );
 
         Response = MakeHolder<TEvBackup::TEvForgetBackupCollectionRestoreResponse>();
         Response->Record.SetTxId(record.GetTxId());
 
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
-            LOG_I("FORGET DEBUG: Database not resolved: " << record.GetDatabaseName());
+            YDB_LOG_INFO("FORGET DEBUG: Database not",
+                {"logPrefix", GetLogPrefix()},
+                {"resolved", record.GetDatabaseName()}
+            );
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
                 TStringBuilder() << "Database " << record.GetDatabaseName() << " is not found"
@@ -118,11 +129,17 @@ public:
 
         // Clean up IncrementalRestoreState table
         db.Table<Schema::IncrementalRestoreState>().Key(restoreId).Delete();
-        LOG_I("Cleaned up IncrementalRestoreState for operation: " << restoreId);
+        YDB_LOG_INFO("Cleaned up IncrementalRestoreState",
+            {"logPrefix", GetLogPrefix()},
+            {"operation", restoreId}
+        );
 
         // Clean up IncrementalRestoreOperations table
         db.Table<Schema::IncrementalRestoreOperations>().Key(restoreId).Delete();
-        LOG_I("Cleaned up IncrementalRestoreOperations for operation: " << restoreId);
+        YDB_LOG_INFO("Cleaned up IncrementalRestoreOperations",
+            {"logPrefix", GetLogPrefix()},
+            {"operation", restoreId}
+        );
 
         auto opIt = Self->IncrementalRestoreOperationToState.begin();
         while (opIt != Self->IncrementalRestoreOperationToState.end()) {
@@ -133,7 +150,10 @@ public:
                 ++opIt;
             }
         }
-        LOG_I("Cleaned up remaining mappings for operation: " << restoreId);
+        YDB_LOG_INFO("Cleaned up remaining mappings",
+            {"logPrefix", GetLogPrefix()},
+            {"operation", restoreId}
+        );
 
         Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
 

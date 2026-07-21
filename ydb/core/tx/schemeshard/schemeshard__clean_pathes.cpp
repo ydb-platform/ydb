@@ -1,5 +1,7 @@
 #include "schemeshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -37,11 +39,11 @@ struct TSchemeShard::TTxCleanTables : public TTransactionBase<TSchemeShard> {
 
     void Complete(const TActorContext &ctx) override {
         if (RemovedCount) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "TTxCleanTables Complete"
-                           << ", done PersistRemoveTable for " << RemovedCount << " tables"
-                           << ", left " << TablesToClean.size()
-                           << ", at schemeshard: "<< Self->TabletID());
+            YDB_LOG_WARN_CTX(ctx, "TTxCleanTables complete: PersistRemoveTable for remaining tables",
+                {"removedCount", RemovedCount},
+                {"tablesToCleanCount", TablesToClean.size()},
+                {"schemeshard", Self->TabletID()}
+            );
         }
 
         if (TablesToClean) {
@@ -85,11 +87,11 @@ struct TSchemeShard::TTxCleanBlockStoreVolumes : public TTransactionBase<TScheme
 
     void Complete(const TActorContext& ctx) override {
         if (RemovedCount) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "TTxCleanBlockStoreVolumes Complete"
-                           << ", done PersistRemoveBlockStoreVolume for " << RemovedCount << " volumes"
-                           << ", left " << BlockStoreVolumesToClean.size()
-                           << ", at schemeshard: "<< Self->TabletID());
+            YDB_LOG_WARN_CTX(ctx, "TTxCleanBlockStoreVolumes complete: PersistRemoveBlockStoreVolume for remaining volumes",
+                {"removedCount", RemovedCount},
+                {"blockStoreVolumesToCleanCount", BlockStoreVolumesToClean.size()},
+                {"schemeshard", Self->TabletID()}
+            );
         }
 
         if (BlockStoreVolumesToClean) {
@@ -116,11 +118,10 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxCleanDroppedPaths Execute"
-                         << ", " << Self->CleanDroppedPathsCandidates.size()
-                         << " paths in candidate queue"
-                         << ", at schemeshard: "<< Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedPaths Execute paths in candidate queue",
+            {"cleanDroppedPathsCandidatesCount", Self->CleanDroppedPathsCandidates.size()},
+            {"schemeshard", Self->TabletID()}
+        );
 
         Y_ABORT_UNLESS(Self->CleanDroppedPathsInFly);
 
@@ -138,16 +139,17 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
                     << ", PathId# " << pathId
                     << ", AllChildrenCount# " << path->AllChildrenCount
                     << ", at schemeshard: " << Self->TabletID());
-                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxCleanDroppedPaths: skip dropped path with children, DbRefCount is miscounted"
-                    << ", PathId# " << pathId
-                    << ", AllChildrenCount# " << path->AllChildrenCount
-                    << ", at schemeshard: " << Self->TabletID());
+                YDB_LOG_ERROR_CTX(ctx, "TTxCleanDroppedPaths: skip dropped path with children, DbRefCount is miscounted",
+                    {"pathId", pathId},
+                    {"allChildrenCount", path->AllChildrenCount},
+                    {"schemeshard", Self->TabletID()}
+                );
                 ++SkippedCount;
             } else if (path->DbRefCount == 0 && path->Dropped()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxCleanDroppedPaths: PersistRemovePath for PathId# " << pathId
-                    << ", at schemeshard: "<< Self->TabletID());
+                YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedPaths: PersistRemovePath",
+                    {"pathId", pathId},
+                    {"schemeshard", Self->TabletID()}
+                );
                 Self->PersistRemovePath(db, path);
                 ++RemovedCount;
             } else {
@@ -165,12 +167,12 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
         Y_ABORT_UNLESS(Self->CleanDroppedPathsInFly);
 
         if (RemovedCount || SkippedCount) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxCleanDroppedPaths Complete"
-                           << ", done PersistRemovePath for " << RemovedCount << " paths"
-                           << ", skipped " << SkippedCount
-                           << ", left " << Self->CleanDroppedPathsCandidates.size() << " candidates"
-                           << ", at schemeshard: "<< Self->TabletID());
+            YDB_LOG_NOTICE_CTX(ctx, "TTxCleanDroppedPaths complete: PersistRemovePath for remaining candidates",
+                {"removedCount", RemovedCount},
+                {"skippedCount", SkippedCount},
+                {"cleanDroppedPathsCandidatesCount", Self->CleanDroppedPathsCandidates.size()},
+                {"schemeshard", Self->TabletID()}
+            );
         }
 
         if (!Self->CleanDroppedPathsCandidates.empty()) {
@@ -211,11 +213,10 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxCleanDroppedSubDomains Execute"
-                         << ", " << Self->CleanDroppedSubDomainsCandidates.size()
-                         << " paths in candidate queue"
-                         << ", at schemeshard: "<< Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedSubDomains Execute paths in candidate queue",
+            {"cleanDroppedSubDomainsCandidatesCount", Self->CleanDroppedSubDomainsCandidates.size()},
+            {"schemeshard", Self->TabletID()}
+        );
 
         Y_ABORT_UNLESS(Self->CleanDroppedSubDomainsInFly);
 
@@ -232,9 +233,10 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
                 path->AllChildrenCount == 0 &&
                 domain->GetInternalShards().empty())
             {
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxCleanDroppedPaths: PersistRemoveSubDomain for PathId# " << pathId
-                    << ", at schemeshard: "<< Self->TabletID());
+                YDB_LOG_DEBUG_CTX(ctx, "TTxCleanDroppedPaths: PersistRemoveSubDomain",
+                    {"pathId", pathId},
+                    {"schemeshard", Self->TabletID()}
+                );
                 Self->PersistRemoveSubDomain(db, pathId);
                 ++RemovedCount;
 
@@ -257,11 +259,11 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
         Y_ABORT_UNLESS(Self->CleanDroppedSubDomainsInFly);
 
         if (RemovedCount || SkippedCount) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxCleanDroppedSubDomains Complete"
-                << ", done PersistRemoveSubDomain for " << RemovedCount << " subdomains"
-                << ", skipped " << SkippedCount
-                << ", left " << Self->CleanDroppedSubDomainsCandidates.size() << " candidates"
-                << ", at schemeshard: "<< Self->TabletID()
+            YDB_LOG_NOTICE_CTX(ctx, "TTxCleanDroppedSubDomains complete: PersistRemoveSubDomain for remaining candidates",
+                {"removedCount", RemovedCount},
+                {"skippedCount", SkippedCount},
+                {"cleanDroppedSubDomainsCandidatesCount", Self->CleanDroppedSubDomainsCandidates.size()},
+                {"schemeshard", Self->TabletID()}
             );
 
         }

@@ -29,6 +29,8 @@
 
 #include <type_traits>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXPORT
+
 namespace NKikimr::NSchemeShard {
 
 template <class TDerived, class TSettings>
@@ -122,9 +124,10 @@ protected:
         const auto& result = ev->Get()->Result;
         TFileUpload& upload = Files.front();
 
-        LOG_D("Put file response " << upload.Path
-            << ", self: " << this->SelfId()
-            << ", result: " << result
+        YDB_LOG_DEBUG("Put file response",
+            {"uploadPath", upload.Path},
+            {"self", this->SelfId()},
+            {"result", result}
         );
 
         if (!result.IsSuccess()) {
@@ -224,9 +227,9 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
     void HandleSchemeDescription(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         const auto& describeResult = ev->Get()->GetRecord();
 
-        LOG_D("HandleSchemeDescription"
-            << ", self: " << this->SelfId()
-            << ", status: " << describeResult.GetStatus()
+        YDB_LOG_DEBUG("HandleSchemeDescription",
+            {"self", this->SelfId()},
+            {"status", describeResult.GetStatus()}
         );
 
         if (describeResult.GetStatus() != TEvSchemeShard::EStatus::StatusSuccess) {
@@ -303,10 +306,10 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
     }
 
     void Finish(bool success = true, const TString& error = TString()) {
-        LOG_I("Finish"
-            << ", self: " << this->SelfId()
-            << ", success: " << success
-            << ", error: " << error
+        YDB_LOG_INFO("Finish",
+            {"self", this->SelfId()},
+            {"success", success},
+            {"error", error}
         );
 
         this->Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(ExportId, ItemIdx, success, error));
@@ -478,10 +481,10 @@ private:
     }
 
     void OnFilesUploaded(bool success, const TString& error) override {
-        LOG_I("Finish uploading export metadata"
-            << ", self: " << this->SelfId()
-            << ", success: " << success
-            << ", error: " << error
+        YDB_LOG_INFO("Finish uploading export metadata",
+            {"self", this->SelfId()},
+            {"success", success},
+            {"error", error}
         );
 
         this->Send(SchemeShard, new TEvPrivate::TEvExportUploadMetadataResult(ExportId, success, error));

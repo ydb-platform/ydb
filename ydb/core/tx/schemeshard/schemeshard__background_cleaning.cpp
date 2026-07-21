@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -75,15 +77,16 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
     }
 
     auto ctx = ActorContext();
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RunBackgroundCleaning "
-        "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
-        << ", pathId# " << pathId
-        << ", ownerId# " << info->TempDirOwnerActorId
-        << ", next wakeup# " << BackgroundCleaningQueue->GetWakeupDelta()
-        << ", rate# " << BackgroundCleaningQueue->GetRate()
-        << ", in queue# " << BackgroundCleaningQueue->Size() << " cleaning events"
-        << ", running# " << BackgroundCleaningQueue->RunningSize() << " cleaning events"
-        << " at schemeshard " << TabletID());
+    YDB_LOG_INFO_CTX(ctx, "Next in cleaning events cleaning events at schemeshard",
+        {"dir", JoinPath({info->WorkingDir, info->Name})},
+        {"pathId", pathId},
+        {"ownerId", info->TempDirOwnerActorId},
+        {"wakeup", BackgroundCleaningQueue->GetWakeupDelta()},
+        {"rate", BackgroundCleaningQueue->GetRate()},
+        {"queue", BackgroundCleaningQueue->Size()},
+        {"running", BackgroundCleaningQueue->RunningSize()},
+        {"tabletID", TabletID()}
+    );
 
     auto traverseResult = Traverse(info->WorkingDir, info->Name, this);
 
@@ -101,11 +104,10 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
     for (const auto& objectPathId : traverseResult.Objects) {
         const auto txId = GetCachedTxId(ctx);
         if (txId == InvalidTxId) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Out of txIds "
-                    "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
-                    << ". Only " << state.ObjectsToDrop << " objects"
-                    << " will be removed during current iteration."
-                    << " Background cleaning will be finished later." );
+            YDB_LOG_WARN_CTX(ctx, "Only objects will be removed during current iteration. Background cleaning will be finished later",
+                {"dir", JoinPath({info->WorkingDir, info->Name})},
+                {"objectsToDrop", state.ObjectsToDrop}
+            );
             state.NeedToRetryLater = true;
             break;
         }
@@ -149,9 +151,11 @@ NOperationQueue::EStartStatus TSchemeShard::StartBackgroundCleaning(const TPathI
                 modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropView);
                 break;
             default:
-                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Error in RunBackgroundCleaning "
-                    "for temp dir# " << JoinPath({info->WorkingDir, info->Name}) << ": "
-                    << ToString(objectPath.Base()->PathType) << " is not expected here `" << objectPath.PathString() << "`.");
+                YDB_LOG_ERROR_CTX(ctx, "Is not expected here ` `",
+                    {"dir", JoinPath({info->WorkingDir, info->Name})},
+                    {"pathType", ToString(objectPath.Base()->PathType)},
+                    {"objectPath", objectPath.PathString()}
+                );
                 break;
         }
         if (!modifyScheme.HasOperationType()) {
@@ -189,11 +193,9 @@ bool TSchemeShard::ContinueBackgroundCleaning(const TPathId& pathId) {
         const auto txId = GetCachedTxId(ctx);
         if (txId == InvalidTxId) {
             auto info = ResolveTempDirInfo(pathId);
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Out of txIds "
-                    "for temp dir# " << (info
-                        ? JoinPath({info->WorkingDir, info->Name})
-                        : TString("not found"))
-                    << ". Background cleaning will be finished later." );
+            YDB_LOG_WARN_CTX(ctx, "Background cleaning will be finished later",
+                {"dir", (info                         ? JoinPath({info->WorkingDir, info->Name})                         : TString("not found"))}
+            );
             return false;
         }
 
@@ -253,12 +255,13 @@ void TSchemeShard::HandleBackgroundCleaningCompletionResult(const TTxId& txId) {
     Y_ABORT_UNLESS(BackgroundCleaningState.at(pathId).TxIds.contains(txId));
 
     auto ctx = ActorContext();
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Get BackgroundCleaning CompletionResult "
-        "for txId# " << txId
-        << ", next wakeup# " << BackgroundCleaningQueue->GetWakeupDelta()
-        << ", in queue# " << BackgroundCleaningQueue->GetRate() << " cleaning events"
-        << ", running# " << BackgroundCleaningQueue->RunningSize() << " cleaning events"
-        << " at schemeshard " << TabletID());
+    YDB_LOG_INFO_CTX(ctx, "Next in cleaning events cleaning events at schemeshard",
+        {"txId", txId},
+        {"wakeup", BackgroundCleaningQueue->GetWakeupDelta()},
+        {"queue", BackgroundCleaningQueue->GetRate()},
+        {"running", BackgroundCleaningQueue->RunningSize()},
+        {"tabletID", TabletID()}
+    );
 
     ContinueBackgroundCleaning(pathId);
 }
@@ -267,13 +270,14 @@ void TSchemeShard::OnBackgroundCleaningTimeout(const TPathId& pathId) {
     auto info = ResolveTempDirInfo(pathId);
 
     auto ctx = ActorContext();
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "BackgroundCleaning timeout "
-        "for temp dir# " << JoinPath({info->WorkingDir, info->Name})
-        << ", ownerId# " << info->TempDirOwnerActorId
-        << ", next wakeup# " << BackgroundCleaningQueue->GetWakeupDelta()
-        << ", in queue# " << BackgroundCleaningQueue->GetRate() << " cleaning events"
-        << ", running# " << BackgroundCleaningQueue->RunningSize() << " cleaning events"
-        << " at schemeshard " << TabletID());
+    YDB_LOG_INFO_CTX(ctx, "Next in cleaning events cleaning events at schemeshard",
+        {"dir", JoinPath({info->WorkingDir, info->Name})},
+        {"ownerId", info->TempDirOwnerActorId},
+        {"wakeup", BackgroundCleaningQueue->GetWakeupDelta()},
+        {"queue", BackgroundCleaningQueue->GetRate()},
+        {"running", BackgroundCleaningQueue->RunningSize()},
+        {"tabletID", TabletID()}
+    );
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvRetryNodeSubscribe::TPtr& ev, const TActorContext&) {
@@ -311,12 +315,13 @@ void TSchemeShard::RetryNodeSubscribe(ui32 nodeId) {
 
     retryState.RetryNumber++;
     auto ctx = ActorContext();
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Retry node subscribe BackgroundCleaning "
-        "for nodeId# " << nodeId
-        << ", count of retries# " << retryState.RetryNumber
-        << ", retries limit# " << BackgroundCleaningRetrySettings.GetMaxRetryNumber()
-        << ", last retry at# " << retryState.LastRetryAt
-        << " at schemeshard " << TabletID());
+    YDB_LOG_INFO_CTX(ctx, "Count of retries last retry at schemeshard",
+        {"nodeId", nodeId},
+        {"retries", retryState.RetryNumber},
+        {"limit", BackgroundCleaningRetrySettings.GetMaxRetryNumber()},
+        {"at", retryState.LastRetryAt},
+        {"tabletID", TabletID()}
+    );
 
     if (retryState.RetryNumber > BackgroundCleaningRetrySettings.GetMaxRetryNumber()) {
         for (const auto& ownerActorId : nodeState.Owners) {
@@ -367,10 +372,11 @@ bool TSchemeShard::CheckOwnerUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
     }
 
     auto ctx = ActorContext();
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Owner undelivered for BackgroundCleaning "
-        "for ownerActorId# " << ownerActorId
-        << ", undelivered reason# " << ev->Get()->Reason
-        << " at schemeshard " << TabletID());
+    YDB_LOG_INFO_CTX(ctx, "Undelivered at schemeshard",
+        {"ownerActorId", ownerActorId},
+        {"reason", ev->Get()->Reason},
+        {"tabletID", TabletID()}
+    );
 
     if (ev->Get()->Reason != TEvents::TEvUndelivered::EReason::ReasonActorUnknown) {
         RetryNodeSubscribe(ownerActorId.NodeId());
@@ -422,12 +428,13 @@ void TSchemeShard::HandleBackgroundCleaningTransactionResult(
     Y_ABORT_UNLESS(BackgroundCleaningState.at(pathId).TxIds.contains(txId));
 
     auto ctx = ActorContext();
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Get BackgroundCleaning TransactionResult "
-        "for txId# " << txId
-        << ", next wakeup# " << BackgroundCleaningQueue->GetWakeupDelta()
-        << ", in queue# " << BackgroundCleaningQueue->GetRate() << " cleaning events"
-        << ", running# " << BackgroundCleaningQueue->RunningSize() << " cleaning events"
-        << " at schemeshard " << TabletID());
+    YDB_LOG_INFO_CTX(ctx, "Next in cleaning events cleaning events at schemeshard",
+        {"txId", txId},
+        {"wakeup", BackgroundCleaningQueue->GetWakeupDelta()},
+        {"queue", BackgroundCleaningQueue->GetRate()},
+        {"running", BackgroundCleaningQueue->RunningSize()},
+        {"tabletID", TabletID()}
+    );
 
     const NKikimrScheme::TEvModifySchemeTransactionResult &record = result->Get()->Record;
 
@@ -459,9 +466,9 @@ void TSchemeShard::CleanBackgroundCleaningState(const TPathId& pathId) {
 
 void TSchemeShard::ClearTempDirsState() {
     auto ctx = ActorContext();
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "Clear TempDirsState with owners number: "
-        << TempDirsState.TempDirsByOwner.size());
+    YDB_LOG_INFO_CTX(ctx, "Clear TempDirsState with owners",
+        {"number", TempDirsState.TempDirsByOwner.size()}
+    );
 
     if (BackgroundCleaningQueue) {
         auto& nodeStates = TempDirsState.NodeStates;

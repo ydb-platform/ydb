@@ -6,6 +6,8 @@
 #include <ydb/library/login/login.h>
 #include <ydb/library/security/util.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -50,9 +52,9 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
     }
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxLogin Execute"
-                    << " at schemeshard: " << Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLogin Execute",
+            {"schemeshard", Self->TabletID()}
+        );
         NIceDb::TNiceDb db(txc.DB);
         if (Self->LoginProvider.IsItTimeToRotateKeys()) {
             RotateKeys(ctx, db);
@@ -83,10 +85,10 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
         }
 
         const TString& error = Result->Record.GetError();
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxLogin Complete"
-                    << ", with " << (error ? "error: " + error : "no errors")
-                    << ", at schemeshard: " << Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLogin Complete with",
+            {"error", (error ? error : TString("no errors"))},
+            {"schemeshard", Self->TabletID()}
+        );
 
         Self->Send(Request->Sender, std::move(Result), 0, Request->Cookie);
     }
@@ -99,7 +101,9 @@ private:
     }
 
     void RotateKeys(const TActorContext& ctx, NIceDb::TNiceDb& db) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxLogin RotateKeys at schemeshard: " << Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLogin RotateKeys",
+            {"schemeshard", Self->TabletID()}
+        );
         std::vector<ui64> keysExpired;
         std::vector<ui64> keysAdded;
         Self->LoginProvider.RotateKeys(keysExpired, keysAdded);

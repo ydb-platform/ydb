@@ -15,6 +15,8 @@
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/util/pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -1357,10 +1359,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_MaxIncompatibleChange, Self->MaxIncompatibleChange));
         if (Self->MaxIncompatibleChange > Schema::MaxIncompatibleChangeSupported) {
-            LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TTxInit, unsupported changes detected: MaxIncompatibleChange = " << Self->MaxIncompatibleChange <<
-                        ", MaxIncompatibleChangeSupported = " << Schema::MaxIncompatibleChangeSupported <<
-                        ", restarting!");
+            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit, unsupported changes detected: MaxIncompatibleChange MaxIncompatibleChangeSupported restarting!",
+                {"maxIncompatibleChange", Self->MaxIncompatibleChange},
+                {"maxIncompatibleChangeSupported", Schema::MaxIncompatibleChangeSupported}
+            );
             Self->BreakTabletAndRestart(ctx);
             Broken = true;
             return true;
@@ -1430,10 +1432,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 #undef RETURN_IF_NO_PRECHARGED
 
         if (!Self->IsSchemeShardConfigured()) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit, SS hasn't been configured yet"
-                             << ", state: " << (ui64)Self->InitState
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit, SS hasn't been configured yet",
+                {"state", (ui64)Self->InitState},
+                {"schemeshard", Self->TabletID()}
+            );
             return true;
         }
 
@@ -1465,10 +1467,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TTxInit for Paths"
-                             << ", read records: " << pathRows.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for Paths read",
+                {"records", pathRows.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             if (pathRows) {
                 // read Root
@@ -1493,11 +1495,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     const TPathId pathId = std::get<0>(rec);
                     const TPathId parentPathId = std::get<1>(rec);
                     if (pathId != Self->RootPathId() && !Self->PathsById.contains(parentPathId)) {
-                        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "TTxInit: parent path row is missing from the local database"
-                                << ", synthesizing an in-memory dropped placeholder parent"
-                                << ", pathId: " << pathId
-                                << ", parentPathId: " << parentPathId);
+                        YDB_LOG_ERROR_CTX(ctx, "TTxInit: parent path row is missing from the local database synthesizing an in-memory dropped placeholder parent",
+                            {"pathId", pathId},
+                            {"parentPathId", parentPathId}
+                        );
                         TPathElement::TPtr placeholder = new TPathElement(
                             parentPathId, Self->RootPathId(), Self->RootPathId(),
                             TStringBuilder() << "__orphan_placeholder_"
@@ -1563,10 +1564,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for UserAttributes"
-                             << ", read records: " << userAttrsRows.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for UserAttributes read",
+                {"records", userAttrsRows.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (auto& rec: userAttrsRows) {
                 TPathId pathId = std::get<0>(rec);
@@ -1589,10 +1590,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for UserAttributesAlterData"
-                             << ", read records: " << userAttrsRows.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for UserAttributesAlterData read",
+                {"records", userAttrsRows.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (auto& rec: userAttrsRows) {
                 TPathId pathId = std::get<0>(rec);
@@ -1895,10 +1896,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for Tables"
-                             << ", read records: " << tableRows.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for Tables read",
+                {"records", tableRows.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (const auto& rec: tableRows) {
                 TPathId pathId = std::get<0>(rec);
@@ -2195,10 +2196,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for Columns"
-                             << ", read records: " << columnRows.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for Columns read",
+                {"records", columnRows.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (const auto& rec: columnRows) {
                 TPathId pathId = std::get<0>(rec);
@@ -2257,10 +2258,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for ColumnsAlters"
-                             << ", read records: " << columnRows.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for ColumnsAlters read",
+                {"records", columnRows.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (const auto& rec: columnRows) {
                 TPathId pathId = std::get<0>(rec);
@@ -2317,21 +2318,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for Shards"
-                             << ", read records: " << shards.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for Shards read",
+                {"records", shards.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (auto& rec: shards) {
                 TShardIdx idx = std::get<0>(rec);
 
-                LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                             "TTxInit for Shards"
-                                << ", read: " << idx
-                                << ", tabletId: " << std::get<1>(rec)
-                                << ", PathId: " << std::get<2>(rec)
-                                << ", TabletType: " << TTabletTypes::TypeToStr(std::get<4>(rec))
-                                << ", at schemeshard: " << Self->TabletID());
+                YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for Shards",
+                    {"read", idx},
+                    {"tabletId", std::get<1>(rec)},
+                    {"pathId", std::get<2>(rec)},
+                    {"tabletType", TTabletTypes::TypeToStr(std::get<4>(rec))},
+                    {"schemeshard", Self->TabletID()}
+                );
 
                 Y_ABORT_UNLESS(!Self->ShardInfos.contains(idx));
                 TShardInfo& shard = Self->ShardInfos[idx];
@@ -2378,20 +2379,20 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxInit for Shared Shards"
-                        << ", read records: " << Self->SharedShards.size()
-                        << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for Shared Shards read",
+                {"records", Self->SharedShards.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (const auto& [shardIdx, paths]: Self->SharedShards) {
                 Y_ABORT_UNLESS(Self->ShardInfos.contains(shardIdx));
                 for (const auto& [path, lastTxId]: paths) {
-                    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "TTxInit for Shared Shards"
-                            << ", read: " << shardIdx
-                            << ", PathId: " << path
-                            << ", LastTxId: " << lastTxId
-                            << ", at schemeshard: " << Self->TabletID());
+                    YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for Shared Shards",
+                        {"read", shardIdx},
+                        {"pathId", path},
+                        {"lastTxId", lastTxId},
+                        {"schemeshard", Self->TabletID()}
+                    );
                 }
             }
         }
@@ -2426,10 +2427,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for TablePartitions"
-                             << ", read records: " << tablePartitions.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for TablePartitions read",
+                {"records", tablePartitions.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             TPathId prevTableId;
             TVector<TTableShardInfo> partitions;
@@ -2496,7 +2497,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for TablePartitionsByShardIdx" << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for TablePartitionsByShardIdx",
+                {"schemeshard", Self->TabletID()}
+            );
 
             auto flushPartitions = [this](const TPathId& tablePathId, TVector<TTableShardInfo>&& partitions) {
                 if (!tablePathId) {
@@ -2596,10 +2599,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for TableShardPartitionConfigs"
-                             << ", read records: " << tablePartitions.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for TableShardPartitionConfigs read",
+                {"records", tablePartitions.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (auto& rec: tablePartitions) {
                 TShardIdx shardIdx = std::get<0>(rec);
@@ -2854,10 +2857,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for ChannelsBinding"
-                             << ", read records: " << channelBindingRows.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for ChannelsBinding read",
+                {"records", channelBindingRows.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (auto& rec: channelBindingRows) {
                 TShardIdx shardIdx = std::get<0>(rec);
@@ -3246,10 +3249,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for TableIndexes"
-                             << ", read records: " << indexes.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for TableIndexes read",
+                {"records", indexes.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             // See KIKIMR-25153
             TVector<std::pair<TPathId, ui64>> migratedAlteredIndexes;
@@ -3347,10 +3350,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for TableIndexKeys"
-                             << ", read records: " << indexKeys.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for TableIndexKeys read",
+                {"records", indexKeys.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (const auto& rec: indexKeys) {
                 TPathId pathId = std::get<0>(rec);
@@ -3852,10 +3855,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for KesusInfos"
-                             << ", read records: " << kesusRows.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for KesusInfos read",
+                {"records", kesusRows.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (const auto& rec: kesusRows) {
                 const TPathId& pathId = std::get<0>(rec);
@@ -3888,10 +3891,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for KesusAlters"
-                             << ", read records: " << kesusAlterRows.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for KesusAlters read",
+                {"records", kesusAlterRows.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (const auto& rec: kesusAlterRows) {
                 const TPathId& pathId = std::get<0>(rec);
@@ -3959,13 +3962,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     const bool orphanTarget = !Self->PathsById.contains(txState.TargetPathId);
                     const bool orphanSource = bool(txState.SourcePathId) && !Self->PathsById.contains(txState.SourcePathId);
                     if (orphanTarget || orphanSource) {
-                        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "TTxInit for TxInFlight: " << (orphanTarget ? "target" : "source")
-                                << " path element not found, skipping tx restore and removing its rows"
-                                << ", txId: " << operationId.GetTxId()
-                                << ", partId: " << operationId.GetSubTxId()
-                                << ", TxType: " << TTxState::TypeName(txState.TxType)
-                                << ", pathId: " << (orphanTarget ? txState.TargetPathId : txState.SourcePathId));
+                        YDB_LOG_ERROR_CTX(ctx, "TTxInit for path element not found, skipping tx restore and removing its rows",
+                            {"txInFlight", (orphanTarget ? "target" : "source")},
+                            {"txId", operationId.GetTxId()},
+                            {"partId", operationId.GetSubTxId()},
+                            {"txType", TTxState::TypeName(txState.TxType)},
+                            {"pathId", (orphanTarget ? txState.TargetPathId : txState.SourcePathId)}
+                        );
                         Self->PersistRemoveTx(db, operationId, txState);
                         skippedOrphanTxs.insert(operationId);
                         skippedOrphanTxIds.insert(operationId.GetTxId());
@@ -4138,14 +4141,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     CdcStreamScansToResume.erase(txState.TargetPathId);
                 }
 
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "Adjusted PathState"
-                                << ", pathId: " << txState.TargetPathId
-                                << ", name: " << path->Name.data()
-                                << ", state: " <<  NKikimrSchemeOp::EPathState_Name(path->PathState)
-                                << ", txId: " << operationId.GetTxId()
-                                << ", TxType: " << TTxState::TypeName(txState.TxType)
-                                << ", LastTxId: " << path->LastTxId);
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Adjusted PathState",
+                    {"pathId", txState.TargetPathId},
+                    {"name", path->Name.data()},
+                    {"state", NKikimrSchemeOp::EPathState_Name(path->PathState)},
+                    {"txId", operationId.GetTxId()},
+                    {"txType", TTxState::TypeName(txState.TxType)},
+                    {"lastTxId", path->LastTxId}
+                );
 
                 if (!Self->Operations.contains(operationId.GetTxId())) {
                     Self->Operations[operationId.GetTxId()] = new TOperation(operationId.GetTxId());
@@ -4325,10 +4328,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for TxShards"
-                             << ", read records: " << txShardsRows.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for TxShards read",
+                {"records", txShardsRows.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (auto& rec: txShardsRows) {
                 TOperationId operationId = std::get<0>(rec);
@@ -4353,13 +4356,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         || ((txState->TxType == TTxState::TxAlterTable || txState->TxType == TTxState::TxCopyTable || txState->TxType == TTxState::TxReadOnlyCopyColumnTable) //KIKIMR-7723
                             && (txState->State == TTxState::Waiting || txState->State == TTxState::CreateParts)))
                     {
-                        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                                   "Already deleted shard in operation"
-                                       << ", shardIdx: " << shardIdx
-                                       << ", txId: " << operationId.GetTxId()
-                                       << ", TxType: " << TTxState::TypeName(txState->TxType)
-                                       << ", TxState: " << TTxState::StateName(txState->State)
-                                   );
+                        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Already deleted shard in operation",
+                            {"shardIdx", shardIdx},
+                            {"txId", operationId.GetTxId()},
+                            {"txType", TTxState::TypeName(txState->TxType)},
+                            {"txState", TTxState::StateName(txState->State)}
+                        );
                     } else {
                         Y_VERIFY_S(Self->ShardInfos.contains(shardIdx), "Unknown shard"
                                        << ", shardIdx: " << shardIdx
@@ -4487,10 +4489,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for ShardToDelete"
-                             << ", read records: " << shardsToDelete.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for ShardToDelete read",
+                {"records", shardsToDelete.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (auto& rec: shardsToDelete) {
                 OnComplete.DeleteShard(std::get<0>(rec));
@@ -4504,10 +4506,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for SystemShardToDelete"
-                             << ", read records: " << shardsToDelete.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for SystemShardToDelete read",
+                {"records", shardsToDelete.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (auto& rec: shardsToDelete) {
                 OnComplete.DeleteSystemShard(std::get<0>(rec));
@@ -4521,10 +4523,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for BackupSettings"
-                             << ", read records: " << backupSettings.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for BackupSettings read",
+                {"records", backupSettings.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (auto& rec: backupSettings) {
                 TPathId pathId = std::get<0>(rec);
@@ -4591,9 +4593,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         << ", pathId: " << pathId);
                 }
 
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Loaded backup settings"
-                                << ", pathId: " << pathId
-                                << ", tablename: " << tableName.data());
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Loaded backup settings",
+                    {"pathId", pathId},
+                    {"tablename", tableName.data()}
+                );
             }
         }
 
@@ -4622,9 +4625,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         << ", pathId: " << pathId);
                 }
 
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "Loaded restore task"
-                                << ", pathId: " << pathId);
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Loaded restore task",
+                    {"pathId", pathId}
+                );
 
                 if (!rowSet.Next()) {
                     return false;
@@ -4703,10 +4706,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for ShardBackupStatus"
-                             << ", read records: " << backupStatuses.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for ShardBackupStatus read",
+                {"records", backupStatuses.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             THashMap<TTxId, TShardBackupStatusRows> statusesByTxId;
             for (auto& rec: backupStatuses) {
@@ -4719,10 +4722,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for CompletedBackup"
-                             << ", read records: " << history.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for CompletedBackup read",
+                {"records", history.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             RestoreTablesToUnmark.clear();
 
@@ -4745,10 +4748,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 info.DataTotalSize = dataSize;
 
                 if (!Self->Tables.FindPtr(pathId) && !Self->ColumnTables.contains(pathId)) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                                "Skip record in CompletedBackups"
-                                    << ", pathId: " << pathId
-                                    << ", txid: " << txId);
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Skip record in CompletedBackups",
+                        {"pathId", pathId},
+                        {"txid", txId}
+                    );
                     continue;
                 }
 
@@ -4786,10 +4789,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     fillBackupInfo(tableInfo);
                 }
 
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "Loaded completed backup status"
-                                << ", pathId: " << pathId
-                                << ", txid: " << txId);
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Loaded completed backup status",
+                    {"pathId", pathId},
+                    {"txid", txId}
+                );
             }
         }
 
@@ -4893,12 +4896,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Add(1);
                 break;
             default:
-                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "dont know how to interpret tablet type"
-                         << ", type id: " << (ui32)si.second.TabletType
-                         << ", pathId: " << pathId
-                         << ", shardId: " << shardIdx
-                         << ", tabletId: " << tabletId);
+                YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Dont know how to interpret tablet type type",
+                    {"id", (ui32)si.second.TabletType},
+                    {"pathId", pathId},
+                    {"shardId", shardIdx},
+                    {"tabletId", tabletId}
+                );
                 break;
             }
         }
@@ -5031,22 +5034,22 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 return false;
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for Publications"
-                             << ", read records: " << publicationRows.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for Publications read",
+                {"records", publicationRows.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             for (auto& rec: publicationRows) {
                 TTxId txId = std::get<0>(rec);
                 TPathId pathId = std::get<1>(rec);
                 ui64 version = std::get<2>(rec);
 
-                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                             "Resume publishing for paths"
-                                 << ", tx: " << txId
-                                 << ", path id: " << pathId
-                                 << ", version: " << version
-                                 << ", at schemeshard: " << Self->TabletID());
+                YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Resume publishing for paths path",
+                    {"tx", txId},
+                    {"id", pathId},
+                    {"version", version},
+                    {"schemeshard", Self->TabletID()}
+                );
 
                 if (Self->Operations.contains(txId)) {
                     TOperation::TPtr operation = Self->Operations.at(txId);
@@ -5327,11 +5330,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 try {
                     fill(buildInfo);
                 } catch (const std::exception& exc) {
-                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX,
-                        "Init " << stepName << " unhandled exception, id#" << buildInfo.Id
-                        << " " << TypeName(exc) << ": " << exc.what() << Endl
-                        << TBackTrace::FromCurrentException().PrintToString()
-                        << ", TIndexBuildInfo: " << buildInfo);
+                    YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::BUILD_INDEX, "Init unhandled exception",
+                        {"stepName", stepName},
+                        {"id", buildInfo.Id},
+                        {"exceptionType", TypeName(exc)},
+                        {"exceptionMessage", exc.what()},
+                        {"backtrace", TBackTrace::FromCurrentException().PrintToString()},
+                        {"TIndexBuildInfo", buildInfo}
+                    );
 
                     // in-memory volatile state:
                     buildInfo.IsBroken = true;
@@ -5343,8 +5349,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
                 Y_ASSERT(buildInfoPtr);
                 if (!buildInfoPtr) {
-                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX,
-                        "Init " << stepName << " BuildInfo not found: id#" << id);
+                    YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::BUILD_INDEX, "Init BuildInfo not found",
+                        {"stepName", stepName},
+                        {"id", id}
+                    );
                     return;
                 }
                 auto& buildInfo = *buildInfoPtr->get();
@@ -5386,10 +5394,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "IndexBuild "
-                             << ", records: " << Self->IndexBuilds.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "IndexBuild",
+                {"records", Self->IndexBuilds.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             // read kmeans tree state
             {
@@ -5453,9 +5461,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
 
-                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                             "KMeansTreeSample records: " << sampleCount
-                             << ", at schemeshard: " << Self->TabletID());
+                YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "KMeansTreeSample",
+                    {"records", sampleCount},
+                    {"schemeshard", Self->TabletID()}
+                );
             }
 
             // read kmeans tree aggregated clusters
@@ -5512,9 +5521,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
                 fill();
 
-                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                             "KMeansTreeCluster records: " << clusterCount
-                             << ", at schemeshard: " << Self->TabletID());
+                YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "KMeansTreeCluster",
+                    {"records", clusterCount},
+                    {"schemeshard", Self->TabletID()}
+                );
             }
 
             // read index build columns
@@ -5692,8 +5702,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     auto* opPtr = loadedOperations.FindPtr(operationId);
                     if (!opPtr) {
-                        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "SetColumnConstraint shard status: operation not found, id# " << operationId);
+                        YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "SetColumnConstraint shard status: operation not found",
+                            {"id", operationId}
+                        );
                         if (!rowset.Next()) {
                             return false;
                         }
@@ -5719,10 +5730,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 OnComplete.ToProgress(id);
             }
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "SetColumnConstraint"
-                    << ", records: " << Self->SetColumnConstraintOperations.size()
-                    << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "SetColumnConstraint",
+                {"records", Self->SetColumnConstraintOperations.size()},
+                {"schemeshard", Self->TabletID()}
+            );
         }
 
         // Read snapshot tables
@@ -5750,11 +5761,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
             }
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "SnapshotTables: "
-                             << " snapshots: " << Self->SnapshotTables.size()
-                             << " tables: " << records
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "SnapshotTables",
+                {"snapshots", Self->SnapshotTables.size()},
+                {"tables", records},
+                {"schemeshard", Self->TabletID()}
+            );
 
 
             // read snapshot steps
@@ -5778,10 +5789,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
             }
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "SnapshotSteps: "
-                             << " snapshots: " << Self->SnapshotsStepIds.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "SnapshotSteps",
+                {"snapshots", Self->SnapshotsStepIds.size()},
+                {"schemeshard", Self->TabletID()}
+            );
         }
 
         // Read long locks
@@ -5805,10 +5816,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
             }
         }
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "LongLocks: "
-                         << " records: " << Self->LockedPaths.size()
-                         << ", at schemeshard: " << Self->TabletID());
+        YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "LongLocks",
+            {"records", Self->LockedPaths.size()},
+            {"schemeshard", Self->TabletID()}
+        );
 
         // Read sequences
         {
@@ -5999,14 +6010,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         for (auto& item : Self->Operations) {
             auto& operation = item.second;
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxInit for TxInFlight"
-                             << " execute ProgressState for all parts "
-                             << ", txId: " << operation->TxId
-                             << ", parts: " <<  operation->Parts.size()
-                             << ", await num: " << operation->WaitOperations.size()
-                             << ", dependent num: " << operation->DependentOperations.size()
-                             << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit for TxInFlight execute ProgressState for all parts",
+                {"txId", operation->TxId},
+                {"parts", operation->Parts.size()},
+                {"awaitNum", operation->WaitOperations.size()},
+                {"dependentNum", operation->DependentOperations.size()},
+                {"schemeshard", Self->TabletID()}
+            );
 
             if (operation->WaitOperations.size()) {
                 continue;
@@ -6110,12 +6120,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
 
-                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxInit loaded IncrementalRestoreState"
-                    << ", operationId: " << operationId
-                    << ", state: " << stateValue
-                    << ", currentIdx: " << currentIdx
-                    << ", at schemeshard: " << Self->TabletID());
+                YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit loaded IncrementalRestoreState",
+                    {"operationId", operationId},
+                    {"state", stateValue},
+                    {"currentIdx", currentIdx},
+                    {"schemeshard", Self->TabletID()}
+                );
 
                 if (!rowset.Next()) {
                     return false;
@@ -6152,11 +6162,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
 
-                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxInit loaded LongIncrementalRestoreOp"
-                        << ", txId: " << txId
-                        << ", operationId: " << opId
-                        << ", at schemeshard: " << Self->TabletID());
+                YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit loaded LongIncrementalRestoreOp",
+                    {"txId", txId},
+                    {"operationId", opId},
+                    {"schemeshard", Self->TabletID()}
+                );
 
                 if (!rowset.Next()) {
                     return false;
@@ -6191,10 +6201,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     op.GetBackupCollectionPathId().GetLocalId());
                 state.OriginalOperationId = operationId;
 
-                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxInit reconstructed IncrementalBackups for operation: " << operationId
-                    << ", backups count: " << state.IncrementalBackups.size()
-                    << ", at schemeshard: " << Self->TabletID());
+                YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit reconstructed IncrementalBackups for backups",
+                    {"operation", operationId},
+                    {"count", state.IncrementalBackups.size()},
+                    {"schemeshard", Self->TabletID()}
+                );
             }
         }
 
@@ -6263,10 +6274,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
                 if (!finalizeStillInFlight) {
-                    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TTxInit resetting Finalizing -> Running because finalize sub-op missing"
-                        << ", operationId: " << operationId
-                        << ", at schemeshard: " << Self->TabletID());
+                    YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit resetting Finalizing -> Running because finalize sub-op missing",
+                        {"operationId", operationId},
+                        {"schemeshard", Self->TabletID()}
+                    );
                     state.State = TIncrementalRestoreState::EState::Running;
                     db.Table<Schema::IncrementalRestoreState>().Key(operationId).Update(
                         NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(
@@ -6276,11 +6287,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             if (state.State == TIncrementalRestoreState::EState::Running ||
                 state.State == TIncrementalRestoreState::EState::Finalizing) {
-                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxInit resuming incremental restore operation: " << operationId
-                    << ", state: " << static_cast<ui32>(state.State)
-                    << ", currentIdx: " << state.CurrentIncrementalIdx
-                    << ", at schemeshard: " << Self->TabletID());
+                YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit resuming incremental restore",
+                    {"operation", operationId},
+                    {"state", static_cast<ui32>(state.State)},
+                    {"currentIdx", state.CurrentIncrementalIdx},
+                    {"schemeshard", Self->TabletID()}
+                );
 
                 Self->ReDispatchPathAIncrementalRestoreOnInit(operationId, state, ctx);
 
@@ -6518,10 +6530,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (!info->TablesToCompact.empty()) {
                     Self->AddForcedCompaction(info);
                 } else {
-                    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "empty tables to compact "
-                        << " for compaction: " << info->Id
-                        << ", at schemeshard: " << Self->TabletID());
+                    YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Empty tables to compact",
+                        {"compaction", info->Id},
+                        {"schemeshard", Self->TabletID()}
+                    );
                 }
 
                 if (!compactionsRowset.Next()) {
@@ -6546,17 +6558,19 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx); shardInfo && (*info)->TablesToCompact.contains(shardInfo->PathId)) {
                         Self->AddForcedCompactionShard(shardIdx, shardInfo->PathId, *info);
                     } else {
-                        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "unknown shardIdx " << shardIdx
-                            << " for compaction: " << compactionId
-                            << ", at schemeshard: " << Self->TabletID());
+                        YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unknown shardIdx",
+                            {"shardIdx", shardIdx},
+                            {"compaction", compactionId},
+                            {"schemeshard", Self->TabletID()}
+                        );
                         Self->ForgetForcedCompactionShard(shardIdx, *info);
                     }
                 } else {
-                    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "unknown forced compaction id " << compactionId
-                            << " for shardIdx: " << shardIdx
-                            << ", at schemeshard: " << Self->TabletID());
+                    YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unknown forced compaction id",
+                        {"compactionId", compactionId},
+                        {"shardIdx", shardIdx},
+                        {"schemeshard", Self->TabletID()}
+                    );
                     Self->ForgetForcedCompactionShard(shardIdx, nullptr);
                 }
 
@@ -6668,13 +6682,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             backupCollectionPathId.OwnerId = op.GetBackupCollectionPathId().GetOwnerId();
             backupCollectionPathId.LocalPathId = op.GetBackupCollectionPathId().GetLocalId();
 
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TTxInit detected orphaned incremental restore operation during recovery"
-                    << ", operationId: " << opId
-                    << ", txId: " << txId
-                    << ", backupCollectionPathId: " << backupCollectionPathId
-                    << ", scheduling TTxProgress to continue operation"
-                    << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_NOTICE_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxInit detected orphaned incremental restore operation during recovery scheduling TTxProgress to continue operation",
+                {"operationId", opId},
+                {"txId", txId},
+                {"backupCollectionPathId", backupCollectionPathId},
+                {"schemeshard", Self->TabletID()}
+            );
 
             TVector<TString> backupNames;
             for (const auto& name : op.GetIncrementalBackupTrimmedNames()) {

@@ -3,9 +3,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -15,10 +13,10 @@ using namespace NSchemeShard;
 class TPropose: public TSubOperationState {
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateView::TPropose"
-            << ", opId: " << OperationId;
+    NActors::NStructuredLog::TStructuredMessage DebugHint() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"operationKind", "TCreateView::TPropose"},
+            {"operationId", OperationId});
     }
 
 public:
@@ -27,7 +25,10 @@ public:
     {}
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << " ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"selfTabletId", context.SS->SelfTabletId()},
+            {"debugHint", DebugHint()}
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -40,8 +41,10 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << " HandleReply TEvPrivate::TEvOperationPlan"
-                << ", step: " << step
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvPrivate::TEvOperationPlan",
+            {"selfTabletId", context.SS->SelfTabletId()},
+            {"debugHint", DebugHint()},
+            {"step", step}
         );
 
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -112,15 +115,19 @@ public:
 
         const TString& name = viewDescription.GetName();
 
-        LOG_N("TCreateView Propose"
-                            << ", path: " << parentPathStr << "/" << name
-                            << ", opId: " << OperationId
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateView Propose",
+            {"selfTabletId", context.SS->SelfTabletId()},
+            {"path", parentPathStr},
+            {"name", name},
+            {"opId", OperationId}
         );
 
-        LOG_D("TCreateView Propose"
-                            << ", path: " << parentPathStr << "/" << name
-                            << ", opId: " << OperationId
-                            << ", viewDescription: " << viewDescription.ShortDebugString()
+        YDB_LOG_DEBUG_CTX(context.Ctx, "TCreateView Propose",
+            {"selfTabletId", context.SS->SelfTabletId()},
+            {"path", parentPathStr},
+            {"name", name},
+            {"opId", OperationId},
+            {"viewDescription", viewDescription.ShortDebugString()}
         );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -232,15 +239,17 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateView AbortPropose"
-            << ", opId: " << OperationId
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateView AbortPropose",
+            {"selfTabletId", context.SS->SelfTabletId()},
+            {"opId", OperationId}
         );
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TCreateView AbortUnsafe"
-                            << ", opId: " << OperationId
-                            << ", forceDropId: " << forceDropTxId
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateView AbortUnsafe",
+            {"selfTabletId", context.SS->SelfTabletId()},
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId}
         );
 
         context.OnComplete.DoneOperation(OperationId);

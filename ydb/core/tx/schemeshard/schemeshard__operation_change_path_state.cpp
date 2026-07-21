@@ -4,8 +4,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_states.h"
 
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -46,16 +45,17 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
-        
-        LOG_I("TChangePathStateOp Propose"
-            << ", opId: " << OperationId
+
+        YDB_LOG_INFO_CTX(context.Ctx, "TChangePathStateOp Propose",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId}
         );
 
         const auto& changePathState = tx.GetChangePathState();
         TString pathStr = JoinPath({tx.GetWorkingDir(), changePathState.GetPath()});
-        
+
         const TPath& path = TPath::Resolve(pathStr, context.SS);
-        
+
         {
             auto checks = path.Check();
             checks
@@ -69,17 +69,17 @@ public:
             }
         }
 
-        Y_VERIFY_S(!context.SS->FindTx(OperationId), 
+        Y_VERIFY_S(!context.SS->FindTx(OperationId),
             "TChangePathStateOp Propose: operation already exists"
             << ", opId: " << OperationId);
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxChangePathState, path.Base()->PathId);
-        
+
         txState.TargetPathId = path.Base()->PathId;
         txState.TargetPathTargetState = static_cast<NKikimrSchemeOp::EPathState>(changePathState.GetTargetState());
-        
+
         path.Base()->PathState = *txState.TargetPathTargetState;
         context.DbChanges.PersistPath(path.Base()->PathId);
-        
+
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
 
         txState.State = TTxState::Waiting;
@@ -91,15 +91,18 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TChangePathStateOp AbortPropose"
-            << ", opId: " << OperationId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TChangePathStateOp AbortPropose",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId}
+        );
         // Nothing to cleanup since Propose hasn't committed anything yet
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TChangePathStateOp AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", forceDropId: " << forceDropTxId
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TChangePathStateOp AbortUnsafe",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId}
         );
 
         context.OnComplete.DoneOperation(OperationId);
@@ -121,7 +124,7 @@ bool CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperati
     }
 
     const auto& changePathState = tx.GetChangePathState();
-    
+
     if (!changePathState.HasPath()) {
         result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Missing Path in ChangePathState")};
         return false;
@@ -134,7 +137,7 @@ bool CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperati
 
     TString pathStr = JoinPath({tx.GetWorkingDir(), changePathState.GetPath()});
     const TPath& path = TPath::Resolve(pathStr, context.SS);
-    
+
     {
         auto checks = path.Check();
         checks

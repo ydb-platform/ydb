@@ -723,11 +723,12 @@ message TransactionIdentity {
 
 // Identity of a deferred topic publication for StreamWrite.
 // int_publication_id is assigned by the server in BeginPublication.
-// ext_publication_id is repeated from BeginPublication on each write batch.
+// ext_publication_id is optional. When set, the server does not check that it
+// matches the value passed to BeginPublication.
 message DeferredPublishIdentity {
     uint64 int_publication_id = 1;
 
-    string ext_publication_id = 2 [(Ydb.length).le = 2048];
+    optional string ext_publication_id = 2 [(Ydb.length).le = 2048];
 }
 
 // Add offsets to transaction request sent from client to server.
